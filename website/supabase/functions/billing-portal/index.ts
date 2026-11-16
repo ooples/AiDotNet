@@ -88,10 +88,12 @@ async function portalConfiguration(s: Stripe, prices: Stripe.Price[]): Promise<s
 }
 
 async function liveSubscription(s: Stripe, customer: string): Promise<Stripe.Subscription | null> {
-  const subs = await s.subscriptions.list({ customer, status: "all", limit: 20, expand: ["data.items.data.price"] });
-  const live = subs.data.filter((x) => LIVE_STATUSES.has(x.status));
-  live.sort((a, b) => b.created - a.created);
-  return live[0] ?? null;
+  // Every page: the live subscription can sit behind any number of ended ones.
+  let newest: Stripe.Subscription | null = null;
+  for await (const x of s.subscriptions.list({ customer, status: "all", limit: 100, expand: ["data.items.data.price"] })) {
+    if (LIVE_STATUSES.has(x.status) && (!newest || x.created > newest.created)) newest = x;
+  }
+  return newest;
 }
 
 function summarize(sub: Stripe.Subscription | null) {

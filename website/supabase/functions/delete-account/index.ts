@@ -42,15 +42,24 @@ serve(async (req: Request) => {
   if (body.confirm !== "DELETE") return json({ error: "confirmation_required", message: "Type DELETE to confirm." }, 400);
 
   const admin = createClient(url, service);
-  const { data: profile } = await admin.from("profiles").select("stripe_customer_id").eq("id", user.id).maybeSingle();
+  // A failed lookup is not "no billing account": without the customer id we cannot prove nothing bills.
+  const { data: profile, error: profileError } = await admin.from("profiles").select("stripe_customer_id").eq("id", user.id).maybeSingle();
+  if (profileError) {
+    console.error(`delete-account: profile lookup failed for ${user.id}:`, profileError);
+    return json({ error: "profile_lookup_failed", message: "Could not check your billing account. Nothing was deleted; please try again." }, 503);
+  }
   const customer = profile?.stripe_customer_id as string | null | undefined;
   if (customer) {
     const key = Deno.env.get("STRIPE_SECRET_KEY");
     if (!key) return json({ error: "server_configuration_error" }, 500);
     const stripe = new Stripe(key, { apiVersion: "2023-10-16", httpClient: Stripe.createFetchHttpClient() });
     try {
-      const subs = await stripe.subscriptions.list({ customer, status: "all", limit: 20 });
-      if (subs.data.some((s) => BILLING_STATUSES.has(s.status) && !s.cancel_at_period_end)) {
+      // Every page: a billing subscription can sit behind any number of ended ones.
+      let billing = false;
+      for await (const s of stripe.subscriptions.list({ customer, status: "all", limit: 100 })) {
+        if (BILLING_STATUSES.has(s.status) && !s.cancel_at_period_end) { billing = true; break; }
+      }
+      if (billing) {
         return json({
           error: "active_subscription",
           message: "Cancel your subscription on the Billing page first, so you are not charged again. Then delete your account.",

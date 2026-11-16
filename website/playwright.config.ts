@@ -114,7 +114,9 @@ export default defineConfig({
     {
       name: 'journeys',
       testDir: './tests/e2e/journeys',
-      use: { viewport: { width: 1440, height: 900 } },
+      // No traces: these specs send the Supabase service key and the Stripe secret key in request
+      // headers, and a trace (embedded in the uploaded HTML report) records them in clear text.
+      use: { viewport: { width: 1440, height: 900 }, trace: 'off' },
     },
 
     // ---------- Authenticated projects ----------
@@ -132,6 +134,8 @@ export default defineConfig({
       testDir: './tests/e2e/admin',
       use: {
         viewport: { width: 1440, height: 900 },
+        // admin/user-management.spec.ts reads rows with the service key: no traces, as for journeys.
+        trace: 'off',
         storageState: ADMIN_STORAGE_STATE,
       },
       dependencies: ['admin.setup'],

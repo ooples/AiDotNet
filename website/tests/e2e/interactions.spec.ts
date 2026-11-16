@@ -94,7 +94,11 @@ test('homepage code tabs switch panels and selection state', async ({ page }, in
   }
 });
 
-for (const [path, ids] of [['/login/', ['github-login', 'google-login']], ['/signup/', ['github-signup', 'google-signup']]] as const) {
+// Login carries where to go after the callback; signup always lands on the default.
+for (const [path, ids, destination] of [
+  ['/login/', ['github-login', 'google-login'], '/account/'],
+  ['/signup/', ['github-signup', 'google-signup'], null],
+] as const) {
   test(`${path} OAuth buttons start the provider sign-in with our callback`, async ({ page, baseURL }, info) => {
     test.skip(desktopOnly(info.project.name), 'desktop only');
     for (const id of ids) {
@@ -109,7 +113,10 @@ for (const [path, ids] of [['/login/', ['github-login', 'google-login']], ['/sig
       await page.locator(`#${id}`).click();
       await expect.poll(() => authorize?.href, { timeout: 15_000 }).toBeTruthy();
       expect(authorize!.searchParams.get('provider')).toBe(provider);
-      expect(authorize!.searchParams.get('redirect_to')).toBe(`${new URL(baseURL!).origin}/auth/callback/`);
+      const callback = new URL(authorize!.searchParams.get('redirect_to')!);
+      expect(callback.origin).toBe(new URL(baseURL!).origin);
+      expect(callback.pathname).toBe('/auth/callback/');
+      expect(callback.searchParams.get('redirect')).toBe(destination);
       await page.unroute('**/auth/v1/authorize**');
     }
   });

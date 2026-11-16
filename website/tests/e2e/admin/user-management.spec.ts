@@ -60,14 +60,15 @@ test('admin edits a user: Cancel discards, Save persists role and tier', async (
 
 test('admin users list pages forward and back', async ({ page }) => {
   await page.goto('/admin/users/');
+  await expect(page.locator('#users-table')).toBeVisible({ timeout: 15_000 });
   const info = page.locator('#page-info');
-  await expect(info).not.toHaveText('', { timeout: 15_000 });
   const next = page.locator('#next-btn');
-  if (await next.isDisabled()) {
-    // One page of users: both buttons must be disabled, not dead-but-enabled.
-    await expect(page.locator('#prev-btn')).toBeDisabled();
+  // Pagination appears only past one page (20 users); a single page shows every user and no buttons.
+  if (!(await page.locator('#pagination').isVisible())) {
+    expect(await page.locator('#users-table tbody tr').count()).toBeLessThanOrEqual(20);
     return;
   }
+  await expect(info).toHaveText(/^Page 1 of \d+$/);
   const first = await info.textContent();
   await next.click();
   await expect(info).not.toHaveText(first!);

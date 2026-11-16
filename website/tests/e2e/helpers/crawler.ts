@@ -109,6 +109,32 @@ async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>)
 const BENIGN_EXTERNAL_STATUS = new Set([401, 403, 405, 429, 999]); // bot walls (GitHub, LinkedIn, X)
 
 // Runs in the page: tags every control with a replayable selector and a stable dedupe key.
+// The open modal, if any: a dialog, or a fixed layer covering most of the viewport. While one is
+// open only its own controls can be reached; the page behind it is covered.
+const ACTIVE_MODAL = () => {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const layers = Array.from(document.querySelectorAll('body *')).filter((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    if ((el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) === false) return false;
+    if (el.matches('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]')) return true;
+    const cs = getComputedStyle(el);
+    return cs.position === 'fixed' && r.width >= vw * 0.9 && r.height >= vh * 0.9 && !!el.querySelector('button, a, input, select');
+  });
+  return (layers[layers.length - 1] as Element | undefined) ?? null;
+};
+type ModalWindow = { __activeModal?: () => Element | null };
+
+/** The control exists, is laid out, and is not covered by a modal it is not part of. */
+const REACHABLE = (selector: string) => {
+  const el = document.querySelector(selector);
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0 || (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) === false) return false;
+  const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
+  return !modal || modal.contains(el);
+};
+
 const ENUMERATE = (path: string) => {
   const CONTROL = 'button, [role=button], [role=tab], [role=switch], [role=menuitem], [role=checkbox], input[type=submit], input[type=button], input[type=checkbox], input[type=radio], select, summary, a[href^="#"], a[href=""], a:not([href]), a[href^="javascript:"], [onclick]';
   const LAYOUT = 'header, nav, footer, #account-sidebar, aside, [data-layout]';
@@ -132,7 +158,9 @@ const ENUMERATE = (path: string) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) !== false;
   };
+  const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
   const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]')
+    && (!modal || modal.contains(el))
     && !(el.matches('input[type=checkbox][disabled]') && el.closest('li.task-list-item, .contains-task-list, li')));
   const links = Array.from(document.querySelectorAll('a')).map((a) => ({
     raw: a.getAttribute('href'),
@@ -149,7 +177,7 @@ const ENUMERATE = (path: string) => {
       // data-* values tell same-label controls apart (Subscribe on the Pro card vs the Enterprise card);
       // ids and counters in them are normalised so table rows still collapse to one control.
       const norm = (v: string) => v.replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*|\d+/gi, 'N');
-      const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && a.value.length < 40)
+      const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && !a.name.startsWith('data-crawl-') && a.value.length < 40)
         .map((a) => `[${a.name}=${norm(a.value)}]`).sort().join('');
       const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(label)}${data}`;
       return {
@@ -216,6 +244,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     }
     return route.continue();
   });
+  await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
   await page.addInitScript(() => {
     const w = window as unknown as { __fx: { mut: number; clip: number; open: number } };
     w.__fx = { mut: 0, clip: 0, open: 0 };
@@ -409,7 +438,17 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const download = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
     try {
       await loc.scrollIntoViewIfNeeded({ timeout: 3_000 });
-      await loc.click({ timeout: 5_000 });
+      if (c.tag === 'select') {
+        // Clicking a native select changes nothing; choosing another option fires input and change.
+        const next = await loc.evaluate((el) => {
+          const sel = el as HTMLSelectElement;
+          return Array.from(sel.options).findIndex((op, k) => k !== sel.selectedIndex && !op.disabled);
+        });
+        if (next < 0) { add(pg, c.key, 'select has no other enabled option to choose'); return 'same'; }
+        await loc.selectOption({ index: next }, { timeout: 5_000 });
+      } else {
+        await loc.click({ timeout: 5_000 });
+      }
     } catch (e) {
       const msg = String(e).split('\n').find((l) => /intercepts pointer|not visible|outside of the viewport|detached/.test(l)) ?? String(e).split('\n')[0];
       add(pg, c.key, `cannot be clicked: ${msg.trim().slice(0, 200)}`);
@@ -452,6 +491,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     return landedElsewhere ? 'nav' : 'same';
   }
 
+  async function reachable(selector: string) {
+    return page.evaluate(REACHABLE, selector).catch(() => false);
+  }
+
   async function explore(pg: string, path: string[], depth: number, doneOnPage: Set<string>) {
     const info = await page.evaluate(ENUMERATE, pg).catch(() => null);
     if (!info) return;
@@ -470,11 +513,12 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (exercised.has(c.key)) continue;
       doneOnPage.add(c.key);
       // Return to the state this control was found in: fresh page plus the clicks that revealed it.
-      if (new URL(page.url()).pathname !== pg || !(await page.locator(c.selector).first().isVisible().catch(() => false))) {
+      // A sibling's click may have opened a modal over this control: start again from a fresh page.
+      if (new URL(page.url()).pathname !== pg || !(await reachable(c.selector))) {
         if (!(await load(pg))) return;
         for (const step of path) await page.locator(step).first().click({ timeout: 5_000 }).catch(() => {});
         await page.waitForTimeout(300);
-        if (!(await page.locator(c.selector).first().isVisible().catch(() => false))) continue;
+        if (!(await reachable(c.selector))) continue;
       }
       const result = await act(pg, c);
       if (result === 'same' && depth < maxDepth) {
@@ -485,39 +529,45 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   }
 
   for (const seed of queue) { const f = familyOf(seed); if (f) familyVisits.set(f, (familyVisits.get(f) ?? 0) + 1); }
-  while (queue.length) {
-    const pg = queue.shift()!;
-    const started = Date.now();
-    if (!(await load(pg))) continue;
-    visited.push(pg);
-    const before = exercised.size;
-    await explore(pg, [], 0, new Set());
-    console.log(`[crawl ${tag}] ${pg}: ${exercised.size - before} controls in ${((Date.now() - started) / 1000).toFixed(1)}s (${queue.length} pages queued)`);
-  }
-
-  // ---- templated pages beyond the browser sample: fetch each, check every link on it ----
   const ANCHOR = /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
   const ID = /\bid\s*=\s*["']([^"']+)["']/gi;
   let fetched = 0;
-  while (httpOnly.length) {
-    const batch = httpOnly.splice(0);
-    await pool(batch, 16, async (pg) => {
-      const url = new URL(pg, origin).href;
-      const res = await request.get(url, { timeout: 30_000 }).catch(() => null);
-      fetched++;
-      pageStatus.set(url, res?.status() ?? 0);
-      if (!res || res.status() >= 400) { add(pg, '(page load)', res ? `HTTP ${res.status()}` : 'no response'); return; }
-      const html = await res.text();
-      const ids = [...html.matchAll(ID)].map((m) => m[1]);
-      const links: LinkInfo[] = [...html.matchAll(ANCHOR)].map((m) => {
-        const raw = m[1] ?? m[2] ?? '';
-        let href = raw;
-        try { href = new URL(raw.replace(/&amp;/g, '&'), url).href; } catch { /* reported below */ }
-        return { raw, href, label: m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 60), key: '' };
+  // A page fetched over HTTP can link to a new template family, which goes to the browser queue:
+  // keep going until both queues are empty.
+  while (queue.length || httpOnly.length) {
+    while (queue.length) {
+      const pg = queue.shift()!;
+      const started = Date.now();
+      if (!(await load(pg))) continue;
+      visited.push(pg);
+      const before = exercised.size;
+      await explore(pg, [], 0, new Set());
+      console.log(`[crawl ${tag}] ${pg}: ${exercised.size - before} controls in ${((Date.now() - started) / 1000).toFixed(1)}s (${queue.length} pages queued)`);
+    }
+
+    // ---- templated pages beyond the browser sample: fetch each, check every link on it ----
+    if (httpOnly.length) {
+      const batch = httpOnly.splice(0);
+      await pool(batch, 16, async (pg) => {
+        const url = new URL(pg, origin).href;
+        const res = await request.get(url, { timeout: 30_000 }).catch(() => null);
+        fetched++;
+        pageStatus.set(url, res?.status() ?? 0);
+        if (!res || res.status() >= 400) { add(pg, '(page load)', res ? `HTTP ${res.status()}` : 'no response'); await res?.dispose(); return; }
+        // The request context keeps every body until it is disposed; 12K pages would pile up.
+        let html: string;
+        try { html = await res.text(); } finally { await res.dispose(); }
+        const ids = [...html.matchAll(ID)].map((m) => m[1]);
+        const links: LinkInfo[] = [...html.matchAll(ANCHOR)].map((m) => {
+          const raw = m[1] ?? m[2] ?? '';
+          let href = raw;
+          try { href = new URL(raw.replace(/&amp;/g, '&'), url).href; } catch { /* reported below */ }
+          return { raw, href, label: m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 60), key: '' };
+        });
+        await harvestLinks(pg, links, ids);
       });
-      await harvestLinks(pg, links, ids);
-    });
-    console.log(`[crawl ${tag}] fetched ${fetched} templated pages over HTTP (${httpOnly.length} more queued)`);
+      console.log(`[crawl ${tag}] fetched ${fetched} templated pages over HTTP (${httpOnly.length} more queued)`);
+    }
   }
 
   // ---- link targets ----
@@ -525,14 +575,23 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   current = { page: '', control: '' };
   await pool([...internalLinks], 16, async ([url, pg]) => {
     const known = pageStatus.get(url) ?? pageStatus.get(url.endsWith('/') ? url : `${url}/`);
-    const status = known ?? (await request.get(url, { maxRedirects: 5, timeout: 30_000 }).catch(() => null))?.status() ?? 0;
+    let status = known;
+    if (status === undefined) {
+      const res = await request.get(url, { maxRedirects: 5, timeout: 30_000 }).catch(() => null);
+      status = res?.status() ?? 0;
+      await res?.dispose();
+    }
     if (status === 0 || status >= 400) add(pg, `link ${new URL(url).pathname}`, `target answered ${status ? `HTTP ${status}` : 'nothing'}`);
   });
   await pool([...externalLinks], 8, async ([url, pg]) => {
     let res = await request.head(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
-    if (!res || res.status() === 405 || res.status() === 404) res = await request.get(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
+    if (!res || res.status() === 405 || res.status() === 404) {
+      await res?.dispose();
+      res = await request.get(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
+    }
     if (!res) add(pg, `link ${url}`, 'external target unreachable');
     else if (res.status() >= 400 && !BENIGN_EXTERNAL_STATUS.has(res.status())) add(pg, `link ${url}`, `external target answered HTTP ${res.status()}`);
+    await res?.dispose();
   });
 
   // ---- coverage contract ----

@@ -626,7 +626,17 @@ static string ToMarkdown(XElement? el, Func<string, string?>? linker = null)
 // `lora_expert[i](input)` does not become a link to "input", and bare URLs (endpoint defaults
 // like http://localhost:9000/ or an API root) are shown as code instead of being autolinked into
 // links that go nowhere. An author who wants a link writes <see href="..."/>.
+// Code the author already marked as markdown code (a ``` fence or a `span`) is copied untouched:
+// `values[0]` must stay valid code, not become values\[0\].
 static string PlainText(string s)
+{
+    var code = Regex.Split(s, @"(```[\s\S]*?(?:```|$)|`[^`\n]+`)");
+    var whole = new StringBuilder();
+    for (int i = 0; i < code.Length; i++) whole.Append(i % 2 == 1 ? code[i] : ProseText(code[i]));
+    return whole.ToString();
+}
+
+static string ProseText(string s)
 {
     var parts = Regex.Split(s, @"(https?://[^\s<>()\[\]`'""]+)");
     var sb = new StringBuilder();

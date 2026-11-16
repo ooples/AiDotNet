@@ -24,6 +24,9 @@ export interface BillingState {
   status: string;
   hasBillingAccount: boolean;
   subscription: SubscriptionSummary | null;
+  /** Set when the profile or the subscription could not be read. The rest of the state is then a
+   *  guess: callers must not treat it as "no subscription" (that would offer a second checkout). */
+  error?: string;
 }
 
 export type PortalAction =
@@ -55,11 +58,17 @@ async function invoke<T>(body: Record<string, unknown>): Promise<{ data?: T; err
 export async function loadBillingState(): Promise<BillingState> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return { signedIn: false, tier: 'free', status: 'active', hasBillingAccount: false, subscription: null };
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('subscription_tier, subscription_status, stripe_customer_id')
     .eq('id', session.user.id)
     .single();
+  if (profileError || !profile) {
+    return {
+      signedIn: true, tier: 'free', status: 'unknown', hasBillingAccount: false, subscription: null,
+      error: 'Could not load your plan. Please refresh the page or email support@aidotnet.dev.',
+    };
+  }
   const state: BillingState = {
     signedIn: true,
     tier: normalizeTier(profile?.subscription_tier),
@@ -68,8 +77,9 @@ export async function loadBillingState(): Promise<BillingState> {
     subscription: null,
   };
   if (state.hasBillingAccount) {
-    const { data } = await invoke<{ subscription: SubscriptionSummary | null }>({ action: 'summary' });
-    state.subscription = data?.subscription ?? null;
+    const { data, error } = await invoke<{ subscription: SubscriptionSummary | null }>({ action: 'summary' });
+    if (error) state.error = `Could not load your subscription from Stripe. ${error}`;
+    else state.subscription = data?.subscription ?? null;
   }
   return state;
 }

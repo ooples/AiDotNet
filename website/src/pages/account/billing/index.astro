@@ -165,6 +165,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
     async function loadBilling() {
       const state = await loadBillingState();
       if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return; }
+      // What follows is then only the profile's view; say so rather than show it as the whole truth.
+      if (state.error) showError(state.error);
 
       const sub = state.subscription;
       // The live Stripe subscription wins over the profile mirror when they disagree.

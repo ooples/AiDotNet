@@ -41,6 +41,9 @@ async function openStripe(page: Page, click: () => Promise<void>) {
 }
 
 test.describe('Pro bought online', () => {
+  // Stripe's hosted portal plus webhook polls of up to 60 s each, in sequence: the default 30 s
+  // test timeout would end a test before its own waits ran out.
+  test.describe.configure({ timeout: 5 * 60_000 });
   let p: Persona;
   let licenseId: string;
   test.beforeAll(async ({ request }) => {
@@ -135,6 +138,16 @@ test.describe('Pro bought online', () => {
   test('account deletion is refused while the subscription still bills', async ({ page, request }) => {
     await signIn(page, p);
     await page.goto('/account/settings/');
+    await page.locator('#delete-account-btn').click();
+    await expect(page.locator('#delete-account-modal')).toBeVisible();
+    // Keyboard stays inside the dialog, Escape closes it, and focus goes back to the opener.
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press(i % 2 ? 'Tab' : 'Shift+Tab');
+      expect(await page.evaluate(() => !!document.activeElement?.closest('#delete-account-modal')), 'focus left the dialog').toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#delete-account-modal')).toBeHidden();
+    await expect(page.locator('#delete-account-btn')).toBeFocused();
     await page.locator('#delete-account-btn').click();
     await expect(page.locator('#delete-account-modal')).toBeVisible();
     await expect(page.locator('#delete-confirm-btn')).toBeDisabled();

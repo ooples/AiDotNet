@@ -378,9 +378,12 @@ const base = import.meta.env.BASE_URL;
         });
       }
 
-      loadBillingState().then((state) => {
+      // Clicks wait for this: a subscriber who clicks before it settles must not reach checkout.
+      let billingFailed = false;
+      const billingReady = loadBillingState().then((state) => {
         billing = state;
-        if (state.signedIn) {
+        if (state.error) { billingFailed = true; showError(state.error); }
+        if (state.signedIn && !state.error) {
           const current = state.subscription?.tier ?? state.tier;
           if (current !== 'free') {
             const sub = state.subscription;
@@ -395,7 +398,12 @@ const base = import.meta.env.BASE_URL;
           refreshPlanButtons();
         }
         document.body.dataset.planLoaded = 'true';
-      }).catch((e) => { console.error(e); document.body.dataset.planLoaded = 'true'; });
+      }).catch((e) => {
+        console.error(e);
+        billingFailed = true;
+        showError('Could not load your plan. Please refresh the page before buying or changing a plan.');
+        document.body.dataset.planLoaded = 'true';
+      });
 
       async function portalFromPricing(btn: HTMLButtonElement, mode: string, tier: string) {
         const label = btn.textContent;
@@ -411,6 +419,12 @@ const base = import.meta.env.BASE_URL;
         btn.addEventListener('click', async () => {
           const tier = (btn as HTMLElement).dataset.tier;
           if (!tier) return;
+          await billingReady;
+          // Unknown plan state: buying could create a second subscription, so nothing paid goes ahead.
+          if (billingFailed && tier !== 'community') {
+            showError('Could not load your current plan, so checkout is blocked to avoid billing you twice. Please refresh the page.');
+            return;
+          }
           const mode = (btn as HTMLElement).dataset.mode;
           if (mode === 'current') return;
           if (mode === 'change' || mode === 'cancel') {

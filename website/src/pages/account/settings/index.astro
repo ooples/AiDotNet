@@ -110,8 +110,9 @@ const base = import.meta.env.BASE_URL;
     </div>
   </div>
 
-  <div id="delete-account-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
-    <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 my-auto">
+  <!-- A native modal dialog: the browser keeps focus inside it, makes the page behind inert and closes it on Escape. -->
+  <dialog id="delete-account-modal" class="w-full max-w-md p-0 bg-transparent backdrop:bg-black/50" aria-labelledby="delete-account-title">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
       <h2 id="delete-account-title" class="text-lg font-semibold text-slate-900 dark:text-white">Delete your account?</h2>
       <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
         This permanently deletes your profile, API keys and usage history, and revokes every license key on the account,
@@ -125,7 +126,7 @@ const base = import.meta.env.BASE_URL;
         <button id="delete-confirm-btn" type="button" disabled class="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">Delete account</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <script>
     import { supabase } from '../../../lib/supabase';
@@ -230,24 +231,44 @@ const base = import.meta.env.BASE_URL;
     }
 
     // Delete account
-    const deleteModal = document.getElementById('delete-account-modal')!;
+    const deleteModal = document.getElementById('delete-account-modal') as HTMLDialogElement;
     const deleteInput = document.getElementById('delete-confirm-input') as HTMLInputElement;
     const deleteConfirm = document.getElementById('delete-confirm-btn') as HTMLButtonElement;
     const deleteError = document.getElementById('delete-account-error')!;
-    const closeDelete = () => { deleteModal.classList.add('hidden'); deleteInput.value = ''; deleteConfirm.disabled = true; deleteError.classList.add('hidden'); };
-    document.getElementById('delete-account-btn')?.addEventListener('click', () => {
-      deleteModal.classList.remove('hidden');
+    const deleteOpener = document.getElementById('delete-account-btn');
+    // Each opening is a new generation; a response for an earlier one must not touch this one.
+    let deleteGeneration = 0;
+    let deletePending = false;
+    const syncConfirm = () => {
+      deleteConfirm.disabled = deletePending || deleteInput.value.trim() !== 'DELETE';
+      deleteConfirm.textContent = deletePending ? 'Deleting…' : 'Delete account';
+    };
+    const closeDelete = () => { if (deleteModal.open) deleteModal.close(); };
+    // close() and Escape both end here: reset the form and give focus back to the opener.
+    deleteModal.addEventListener('close', () => {
+      deleteGeneration++;
+      deletePending = false;
+      deleteInput.value = '';
+      deleteError.classList.add('hidden');
+      syncConfirm();
+      deleteOpener?.focus();
+    });
+    deleteOpener?.addEventListener('click', () => {
+      deleteModal.showModal();
       deleteInput.focus();
     });
     document.getElementById('delete-cancel-btn')?.addEventListener('click', closeDelete);
-    deleteModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDelete(); });
-    deleteInput.addEventListener('input', () => { deleteConfirm.disabled = deleteInput.value.trim() !== 'DELETE'; });
+    deleteInput.addEventListener('input', syncConfirm);
     deleteConfirm.addEventListener('click', async () => {
-      deleteConfirm.disabled = true;
-      deleteConfirm.textContent = 'Deleting…';
+      if (deletePending || deleteInput.value.trim() !== 'DELETE') return;
+      const generation = deleteGeneration;
+      deletePending = true;
+      syncConfirm();
       deleteError.classList.add('hidden');
       const { error } = await supabase.functions.invoke('delete-account', { method: 'POST', body: { confirm: 'DELETE' } });
       if (error) {
+        // The dialog was closed (and maybe reopened) meanwhile: this answer belongs to a dialog that is gone.
+        if (generation !== deleteGeneration) return;
         let message = 'Your account could not be deleted. Please try again or email support@aidotnet.dev.';
         try {
           const payload = await (error as { context?: Response }).context?.json();
@@ -255,10 +276,11 @@ const base = import.meta.env.BASE_URL;
         } catch { /* keep the generic message */ }
         deleteError.textContent = message;
         deleteError.classList.remove('hidden');
-        deleteConfirm.textContent = 'Delete account';
-        deleteConfirm.disabled = false;
+        deletePending = false;
+        syncConfirm();
         return;
       }
+      // Deleted, even if the dialog was closed while waiting: the account is gone either way.
       await supabase.auth.signOut({ scope: 'local' });
       window.location.assign('/?account_deleted=1');
     });
