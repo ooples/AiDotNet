@@ -150,7 +150,8 @@
         "src/ComputerVision/Segmentation/Foundation/SamNetwork.cs",
         "src/ComputerVision/Segmentation/Foundation/SamTraining.cs",
         "src/NeuralNetworks/Layers/WordCharEmbeddingLayer.cs",
-        "src/VisionLanguage/Unified/Transfusion.Training.cs"
+        "src/VisionLanguage/Unified/Transfusion.Training.cs",
+        "src/VisionLanguage/Unified/Transfusion.cs"
       ]
     },
     {
@@ -167,9 +168,77 @@
       "owner": "this session and its agents (artifact_feed worker)",
       "scope": "Finance116 FirstLayerFeatureImportance negative TensorSlice length; bounded shared fix and independent regression",
       "files": [
-        "FirstLayerFeatureImportance shared source; exact path follows inspection"
+        "src/NeuralNetworks/NeuralNetworkBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/DenseFeatureImportanceTests.cs"
       ],
-      "status": "claimed; investigation underway"
+      "status": "Root-reviewed local commit 0e9ef8b6d35f529b30f7bf7fbad40c6a204f6d13; five regression cases added; UNVERIFIED pending consolidated normal build/tests. Not pushed or integrated."
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "scope": "Shared FeatureSelectorHelper.CopyFeature rank3/4 indexing defect",
+      "files": [
+        "src/Helpers/FeatureSelectorHelper.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Helpers/FeatureSelectorCopyReferenceTests.cs"
+      ],
+      "status": "CLAIMED; implementation approved after claim push205dc33d55. Consumer logical SubTensor feature views + Engine.TensorCopy; independent array-value oracle. No upstream SetSubTensor edits."
+    },
+    {
+      "owner": "Antigravity swarm (coordinator + fixer-1..4)",
+      "scope": "Wave 1 unclaimed shard batches: (1) ASR47 MelSpectrogram.ApplyMelFilterbank bin mismatch + RNNTransducer input-rank survey contract; (2) PINN44 PinnAutodiff.InputGradient empty tape + MultiFidelityPINN24 rank-1 concat + MultiScalePINN/DeepOperatorNetwork reference fixes (excluding owned HNN and unconfirmed Lagrangian); (3) TimeSeries non-ARIMAX GARCH/TBATS DivideByZero, DeepANT multi-step horizon shape, NLinear Half scaler accumulation, and ARModel untrained SetParameters (excluding owned ARIMAXModel.cs, TimeSeriesModelBase.cs, AdamOptimizer.cs); (4) Preprocessing FeatureSelection/PowerTransformer/HessianLLE & FejerKorovkinWavelet/TukeyWindow reference fixes (excluding CopyFeature/FeatureSelectorHelper.cs, StandardScaler.cs, and Tensors TensorCDist)",
+      "files": [
+        "src/Diffusion/Audio/MelSpectrogram.cs",
+        "src/Diffusion/Audio/ShortTimeFourierTransform.cs",
+        "src/Audio/SpeechRecognition/RNNTransducer.cs",
+        "src/PhysicsInformed/PinnAutodiff.cs",
+        "src/PhysicsInformed/PINNs/PhysicsInformedNeuralNetwork.cs",
+        "src/PhysicsInformed/PINNs/DeepRitzMethod.cs",
+        "src/PhysicsInformed/PINNs/DomainDecompositionPINN.cs",
+        "src/PhysicsInformed/PINNs/VariationalPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiFidelityPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiScalePINN.cs",
+        "src/PhysicsInformed/NeuralOperators/DeepOperatorNetwork.cs",
+        "src/TimeSeries/GARCHModel.cs",
+        "src/TimeSeries/TBATSModel.cs",
+        "src/TimeSeries/AnomalyDetection/DeepANT.cs",
+        "src/TimeSeries/NLinearModel.cs",
+        "src/TimeSeries/ARModel.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionTensorOps.cs",
+        "src/Preprocessing/FeatureSelection/Manifold/LLEBasedSelector.cs",
+        "src/Preprocessing/FeatureSelection/Fairness/FairFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/GameTheory/ShapleyFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/Online/AlphaInvesting.cs",
+        "src/Preprocessing/DimensionalityReduction/HessianLLE.cs",
+        "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs",
+        "src/WaveletFunctions/WaveletEngineOps.cs",
+        "src/WindowFunctions/TukeyWindow.cs"
+      ],
+      "status": "claimed; Wave 1 in progress across isolated fixer-1..4 + adversarial verifier-1..2 worktrees"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only Half embedding/CRF rounded-boundary reflection signature repair",
+      "files": [
+        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/Elementwise01NumericalRegressionTests.cs"
+      ],
+      "status": "claimed; root-reviewed bounded test-only repair underway"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only StandardScaler seven population-variance reference corrections",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/PreprocessingDeepMathIntegrationTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/ScalersDeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed test-only population-variance formulas/comments; preserve all tolerances, no production edits/builds."
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "scope": "Test-only DoRA four input-major Dense fixture packing corrections and rectangular control",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/LoRA/LoRADeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed DoRA fixture arrays plus independent rectangular control; preserve all four expected values/tolerances, no production edits/builds."
     }
   ],
   "verification": {
@@ -183,7 +252,8 @@
     "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
     "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified.",
     "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening.",
-    "artifact_feed": "33ae3b1c16 pushed to coordination branch:12fixtures,real99-test package evidence,5YAML and9consuming job bodies validated; GitHub preflight pending. Source repairs remain local awaiting combined tests."
+    "artifact_feed": "GitHub preflight 43954552578 PASSED at 05648e63e3f3b7e8f307f2cbaf14e055b987011f: all12 fixtures, immutable archive digest, run/artifact/manifest/package identity, all5 packaged TFMs, tested-packaged net10 binary SHA, and exact candidate package restore on Linux. Retain validated99 descriptor/run43940828211.",
+    "next_native_candidate": "PENDING PROPOSAL, no run yet: native commits a9a404390 + 627046d9ab on validated641be3d443ee base; existing99 mandatory CPU gates preserved plus26 Named/Arena mandatoryCPU cases proposed by cudaagent (125 total). Do not update consumer descriptor until GitHub all5TFM pack/tests pass and exact manifest is reviewed."
   },
   "decisions": [
     {
@@ -230,6 +300,11 @@
       "id": "sam-single-pass",
       "status": "approved",
       "decision": "User approved single-pass SAM interactive replay: true ignored padding mask, explicit draw inputs, tensor IoU/mask selection, preserve encoder gradients and original single encoding/decoder curriculum."
+    },
+    {
+      "id": "tts-overlap-combine-policy",
+      "status": "root-reviewed-integration-policy",
+      "decision": "Retain contributor UniAudio StopGradient. Retain contributor CosyVoice CompiledStepRandom plus our independent tests locally. Retain contributor Tortoise frozen speech/condition preprocessing; replace duplicate generator with root named output only after validation. No new overlapping owner-file edits."
     }
   ],
   "questions": [
@@ -309,6 +384,38 @@
       "finding": "Our claim (2a90796d2d) predates the 'Shared TTS feature/KL detach' claim (14fbcf3f06); our agents edited these three files on claude/2524-tts-replay before that claim appeared. Nothing from the owner has landed in them yet.",
       "proposed_fix": "Freeze both completed versions; root compares b11b995375 with local c5d6cdcc0e/4a4c59a7be/named-retention batch and chooses tested best/combo per explicit user instruction. No new overlapping edits.",
       "alternatives": "Owner takes our hunks as-is (diffs on claude/2524-tts-replay)."
+    },
+    {
+      "id": "owner-lossbalancer-signed-factory-state",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/Audio/Codecs/LossBalancer.cs and direct owner tests",
+      "finding": "Root review: mutable _lossesFor is outside the compiled node signature. Two TracedSurrogate calls on the same balancer can both execute the last factory. Probe does not execute Balance/EMA but does replace _lossesFor before signature acceptance. Node mutates EMA/Steps without ReplaysHostState. Tensor leaf rebinding and nested gradient ownership were inspected; no defect found in those areas. Existing new tests do not exercise compiled signatures/rebind.",
+      "proposed_fix": "Owner repairs signed factory/state identity and host-state declaration. Add compiled signature/rebind, two-factory isolation, probe-no-EMA, skipped/throw outcome, and stale-state regression cases. This session and its agents remain READ ONLY in owner files."
+    },
+    {
+      "id": "owner-glm-accepted-statistics-lifecycle",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/MultiModal/GLM4Voice*, GlmSpeechTokenizer.cs and direct owner tests",
+      "finding": "TrainingStatisticsByKey publishes forward arrays before optimizer acceptance. Unconditional UpdateCodebook(last) can advance EMA on skipped update. Probe can replace last metadata before signature acceptance; static arrays can leak stale recording on failure. Compiled arrays are heap copies: the compiled issue is accepted-outcome/probe metadata/state cleanup, not compiled-array arena aliasing. Eager arena lifetime still needs explicit validation.",
+      "proposed_fix": "Owner adopts successful-step named retained output contract using root-provided API after validation. Test probe/no EMA, skip/throw, recording cleanup, valid-mask handling, and no stale recording. Our agents remain READ ONLY in owner files."
+    },
+    {
+      "id": "upstream-setsubtensor-recursive-first-value",
+      "status": "pending-scope-decision",
+      "owner": "unclaimed",
+      "files": "AiDotNet.Tensors: Tensor.SetSubTensorRecursive",
+      "finding": "FeatureSelector read-only worker reports recursive SetSubTensor repeats _data[0] instead of copying each logical value; separate upstream defect. Not included in validated99 package or proposed125 extension.",
+      "proposed_fix": "Requires separate explicit scope decision. No upstream edits now; consumer fix uses logical SubTensor views and Engine.TensorCopy."
+    },
+    {
+      "id": "owner-dittotts-duplicate-codec-forward",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/FlowDiffusion/DiTToTTS.CodecTraining.cs",
+      "finding": "Root review: TrainCodec adds eager NoGrad CodecReconstruction(target).Generated.Clone before actual generator objective. This duplicates a training forward and may repeat quantizer state effects. Proper contracts/performance require avoiding duplicate forwards.",
+      "proposed_fix": "Owner should use the successful-step named retained output for intended pre-update handoff after API validation; no assertion changes. Our agents remain READ ONLY. Tortoise duplicate is separately covered by approved overlap reconciliation."
     }
   ],
   "question_protocol": [
@@ -318,7 +425,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T20:45:29.7832350Z",
+  "updated_utc": "2026-11-16T21:34:10.817775+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -335,5 +442,21 @@
       "status": "unclaimed; confirm contracts before edits",
       "scope": "Lagrangian12 fixture state16 versus configured4; CUPS13 parameter layout; DoRA4 initial magnitude/forward; FeatureSelector2 subtensor indexing; StandardScaler3 sample/population contract"
     }
-  ]
+  ],
+  "triage_evidence": {
+    "artifact_directory": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f",
+    "independent_generated_integration": "generated-integration-independent.json: exact394 independent test/message/stack/job entries from43 shards;959 additional fused continuity guards remain in existing shared rebind/hybrid scope.",
+    "remaining_main": "remaining-main-independent.json:18 independent entries from15 additional shards;123 guards. RNNTransducer declared rank2 vs Conv2D4 (job133444396189) and Half certification expected0.9306640625 actual0.93017578125 (133444393087) are unowned direct findings.",
+    "infrastructure": "Jobs133444365358,133444365391,133444365493,133444365611 have no TRX/log archive; check annotations explicitly report self-hosted runner lost communication. Last started step9 Download required build artifact; restore/tests never began. job-ID-metadata/check/annotations.json saved beside evidence.",
+    "reserved_for_joining_developer": [
+      "ASR47 shared MelSpectrogram.ApplyMelFilterbank bin mismatch; generated-integration-independent.json has exact19jobs/tests/stacks; currently UNCLAIMED.",
+      "PINN44 empty tape at PinnAutodiff.InputGradient163/Evaluate98 (D22,P11,VA11); exclude existing HNN4 ownership; UNCLAIMED.",
+      "MultiFidelityPINN24 rank1 concat axis1 at Forward102 job133444380715; UNCLAIMED.",
+      "Lagrangian12 input16 vs state4 at ForwardForTraining321 job133444379852; UNCLAIMED.",
+      "CUPS13 unresolved cascade-mask-rcnn parameter chunks job133444377748; UNCLAIMED.",
+      "DoRA4 independent exact forward/magnitude math failures job133444390036; UNCLAIMED.",
+      "StandardScaler3 sample/population expectation mismatches job133444390629; UNCLAIMED."
+    ],
+    "claimed_copyfeature": "Worker confirmed3 direct CopyFeature integration failures (including rank3/4). Claimed shared_replay_failures; new independent FeatureSelectorCopyReferenceTests.cs."
+  }
 }
