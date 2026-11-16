@@ -272,11 +272,13 @@
         "src/AiDotNet.Tensors/Engines/Compilation/ObjectiveSignature.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NoGradTrainingTraceTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/OperationReorderingPassTests.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
       ],
       "new_files": [
         "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
       ],
       "not_claimed": [
         "ClosureObjectiveGuard",
@@ -299,8 +301,47 @@
             "Blind18-file PR-head import",
             "Any consumer owner-file edits"
           ]
+        },
+        {
+          "id": "optimizer-enrollment-continuity",
+          "status": "CLAIMED; explicit user approval and root-reviewed disjoint ownership, both authors ACK. Claim publication after root docs review precedes dependent source edits.",
+          "scope": "Core enrollment mask and CPU/GPU/grouped/capture continuity using per-parameter accepted-update ages. Core owner is sole writer of CompiledTrainingPlan.cs and LazyTensorScope.cs plus agreed core tests. New GPU or grouped/capture source paths require precise additive claims before edits. Serialization owner owns format/checkpoint/CompiledStep metadata files; no source overlap.",
+          "core_owner": "this session/cuda_capture worker",
+          "serialization_owner": "this session/shared_replay_failures worker",
+          "artifact_status": "Held until enrollment, continuity, serialization and original required native gates pass; no new artifact pin or public release now.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+            "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
+          ],
+          "api_boundary": "Core exports/restores Parameter.AcceptedUpdates:long and initializes CompiledStep.RecordedUnderNoGrad:init bool through serializer-owned contracts. No direct edits by core to serializer-owned files. Extra metadata/helper/LazyNode changes beyond existing authorized scope require exact proposal first."
         }
       ]
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "repository": "ooples/AiDotNet.Tensors",
+      "scope": "User-approved NoGrad/checkpoint and optimizer enrollment continuity serialization, disjoint from core implementation. One writer per file; preserve typed plan metadata and accepted-update ages, explicit unsupported heterogeneous refusal before writes, no legacy adapters or unrelated client changes.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledStep.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/FusedOptimizerCheckpoint.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanWriter.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanReader.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/FusedOptimizerCheckpointSerializer.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+      ],
+      "new_files": [
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+      ],
+      "not_claimed": [
+        "CompiledTrainingPlan.cs",
+        "LazyTensorScope.cs",
+        "CompiledOptimizerEnrollmentTests.cs",
+        "GPU/grouped/capture core implementation files"
+      ],
+      "api_boundary": "Serializer declares/persists CompiledStep.RecordedUnderNoGrad:init bool and checkpoint Parameter.AcceptedUpdates:long; core owner exports/restores state without editing these files. Format/version and save-load behavior require root code review and independent uninterrupted/resumed oracles.",
+      "status": "CLAIMED; explicit user approval, root-reviewed exact split, both authors ACK; publish after root docs review before source edits."
     }
   ],
   "verification": {
@@ -322,7 +363,8 @@
     "title_infrastructure_retry": "Run43902661476 attempt2 SUCCESS on aidotnet-super-server-2, job133637244095, exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753; fresh API confirmed. Historical initial9-workflow completion snapshot5success/4failure remains retained; latest title check is clean.",
     "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning.",
     "consumer_correction_cohort": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
-    "native_current_cohort": "Original125 mandatory CPU cases remain all passing. Current native165 cohort:161passed,3failed,1skipped, with heterogeneous replay failures under investigation. Separate FP16 focused check4/4passed. No new native artifact is ready; retain the validated125 consumer package pin. Passing FP16 checks do not approve broader native optimizer work."
+    "native_current_cohort": "Original125 mandatory CPU cases remain all passing. Current native165 cohort:161passed,3failed,1skipped, with heterogeneous replay failures under investigation. Separate FP16 focused check4/4passed. No new native artifact is ready; retain the validated125 consumer package pin. Passing FP16 checks do not approve broader native optimizer work.",
+    "native_optimizer_repair": "Explicit user approval now recorded for proper enrollment/continuity and NoGrad/checkpoint persistence. Existing native165=161pass/3fail/1skip and separate FP16=4pass are diagnostic evidence, not artifact readiness. Capture artifact stays held until repair, root review, required CPU/GPU/grouped/capture and persistence checks, then all5TFM producer packaging/evidence validation."
   },
   "decisions": [
     {
@@ -389,6 +431,11 @@
       "id": "1764-bounded-no-grad-semantic-integration",
       "status": "root-approved within existing user-approved94TTS/upstream replay and compare/combine scope",
       "decision": "Adopt only necessary PR1764 six-production-file NoGrad semantic hunks plus eight NoGradTrainingTraceTests, preserving existing named outputs and heterogeneous replay. Two independent root reviews found the NoGrad approach correct, including prior-writer identity. PR head74b1166c, merge7fd8a02f are comparison references, not permission to replace current files. Other lifetime, LayerNorm and SIMD changes remain separate review items. Implementation and native artifact verification are still pending."
+    },
+    {
+      "id": "native-optimizer-enrollment-continuity",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "User approved proper native optimizer enrollment plus continuity repair, including core masks, CPU/GPU/grouped/capture per-parameter accepted-update ages and NoGrad/checkpoint persistence. No public release. The next capture artifact remains held until this repair and required verification pass; do not silently expand scope or weaken replay/optimizer checks."
     }
   ],
   "questions": [
@@ -546,11 +593,11 @@
     },
     {
       "id": "native-optimizer-expansion",
-      "status": "QUESTION PENDING; no approval",
+      "status": "APPROVED; explicit user interactive answer",
       "question": "Whether to authorize additional native optimizer work beyond already approved scopes. Root must obtain the material scope decision through interactive questions before dependent implementation.",
-      "constraint": "Existing typed-T backward and explicitly approved consumer Adam work do not imply approval for further native optimizer expansion. No new owner claim or implementation authorization is created by the FP16 checks.",
+      "constraint": "User explicitly authorized the proper bounded native optimizer enrollment and continuity repair. This approval is independent of the FP16 checks; it does not authorize unrelated optimizer, model, or client changes. Exact disjoint file claims and root review/publication precede dependent edits.",
       "finding": "Ordinary typed NoGrad plans lose RecordedUnderNoGrad metadata on Save/Load. Heterogeneous serialization explicitly refuses before writes, and that refusal test passes; these are distinct paths.",
-      "scope_under_discussion": "Proper enrollment continuation needs new plan/optimizer format metadata and per-parameter ages. A CPU/GPU grouped/capture audit may exceed3-6hours. No implementation approval yet; do not treat existing heterogeneous forward-data or NoGrad authorization as approval for this expansion."
+      "approved_scope": "Repair core enrollment masks and accepted-update continuity with per-parameter ages across CPU, GPU, grouped and capture paths; persist ordinary typed NoGrad/checkpoint metadata correctly with reviewed plan/optimizer format changes. Preserve explicit pre-write refusal for unsupported heterogeneous serialization. Core and serialization owners coordinate through a reviewed API; no overlapping source writers."
     }
   ],
   "question_protocol": [
@@ -560,7 +607,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T23:02:03.790812+00:00",
+  "updated_utc": "2026-11-16T23:11:51.664127+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
