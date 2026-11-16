@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 
@@ -20,10 +21,87 @@ public static class ActivationHelper
     /// matched to a PyTorch reference use this form.</remarks>
     internal static Tensor<T> ExactGelu<T>(Tensor<T> x, IEngine engine)
     {
+        // float on the plain CPU engine, outside a graph trace: one fused pass (and one fused backward) instead of
+        // the engine's erfc, which evaluates a double-precision series per element through a delegate and took a
+        // third of a wav2vec 2.0 BASE training step.
+        if (typeof(T) == typeof(float) && engine.GetType() == typeof(AiDotNet.Tensors.Engines.CpuEngine)
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            // A strided view is copied first when nothing records gradients (a frozen encoder, inference); on a tape
+            // it keeps the engine path, whose ops carry the view's gradient.
+            if (!x.IsContiguous && GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed)
+                return SlowExactGelu(x, engine);
+            return (Tensor<T>)(object)ExactGeluFloat((Tensor<float>)(object)(x.IsContiguous ? x : x.Contiguous()), engine);
+        }
+        return SlowExactGelu(x, engine);
+    }
+
+    private static Tensor<T> SlowExactGelu<T>(Tensor<T> x, IEngine engine)
+    {
         var ops = MathHelper.GetNumericOperations<T>();
         return engine.TensorMultiplyScalar(
             engine.TensorMultiply(x, engine.TensorErfc(engine.TensorMultiplyScalar(x, ops.FromDouble(-1 / Math.Sqrt(2))))),
             ops.FromDouble(0.5));
+    }
+
+    private const int GeluChunk = 1 << 15;
+
+    // x · Φ(x) for float, with erf from Abramowitz & Stegun 7.1.26 (absolute error below 1.5e-7, the form PyTorch's
+    // vectorized CPU erf uses). The backward is Φ(x) + x · φ(x).
+    private static Tensor<float> ExactGeluFloat(Tensor<float> x, IEngine engine)
+    {
+        var input = x.Data;
+        var output = new float[x.Length];
+        RunChunks(x.Length, (start, end) =>
+        {
+            var src = input.Span;
+            for (int i = start; i < end; i++)
+            {
+                float v = src[i];
+                output[i] = 0.5f * v * (1f + Erf(v * 0.70710678f));
+            }
+        });
+        var result = new Tensor<float>(output, x.Shape.ToArray());
+        DifferentiableOps.RecordUnary("ExactGelu", result, x, (gradOutput, inputs, _, _, eng, grads) =>
+        {
+            var g = gradOutput.Contiguous().Data;
+            var xs = inputs[0].Contiguous().Data;
+            var gradient = new float[g.Length];
+            RunChunks(g.Length, (start, end) =>
+            {
+                var gs = g.Span;
+                var vs = xs.Span;
+                for (int i = start; i < end; i++)
+                {
+                    float v = vs[i];
+                    float cdf = 0.5f * (1f + Erf(v * 0.70710678f));
+                    float pdf = 0.39894228f * (float)Math.Exp(-0.5f * v * v);
+                    gradient[i] = gs[i] * (cdf + v * pdf);
+                }
+            });
+            DifferentiableOps.AccumulateGrad(grads, inputs[0], new Tensor<float>(gradient, gradOutput.Shape.ToArray()), eng);
+        });
+        return result;
+    }
+
+    private static void RunChunks(int length, Action<int, int> body)
+    {
+        int chunks = (length + GeluChunk - 1) / GeluChunk;
+        if (chunks <= 1)
+        {
+            body(0, length);
+            return;
+        }
+        System.Threading.Tasks.Parallel.For(0, chunks, c => body(c * GeluChunk, Math.Min(length, (c + 1) * GeluChunk)));
+    }
+
+    private static float Erf(float x)
+    {
+        float a = Math.Abs(x);
+        float t = 1f / (1f + 0.3275911f * a);
+        float r = ((((1.061405429f * t - 1.453152027f) * t + 1.421413741f) * t - 0.284496736f) * t + 0.254829592f) * t;
+        float y = 1f - r * (float)Math.Exp(-a * a);
+        return x < 0 ? -y : y;
     }
 
     /// <summary>
