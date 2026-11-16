@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage.Unified;
 using Xunit;
@@ -212,6 +213,15 @@ public class TransfusionMixedObjectiveTests
         var initial = reference.GetParameters();
         var changedInitial = changed.GetParameters();
         Assert.Equal(initial.Length, changedInitial.Length);
+        // Five decoder-width normalizations contribute gamma and beta before any forward.
+        // Omitting them from discovery adds 5 * 2 * 32 parameters at the first training step.
+        var normalizations = reference.Layers.OfType<LayerNormalizationLayer<float>>().ToArray();
+        Assert.Equal(5, normalizations.Length);
+        foreach (var normalization in normalizations)
+        {
+            Assert.Equal(new[] { 32 }, normalization.GetInputShape());
+            Assert.Equal(64, normalization.GetParameters().Length);
+        }
         changed.SetParameters(initial);
 
         var image = Image(0.6);
