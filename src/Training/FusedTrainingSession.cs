@@ -761,6 +761,8 @@ internal sealed class FusedTrainingSession<T>
     // Drops every cached derived copy of the weights after the plan updated them in place.
     private static void InvalidateDerivedWeightCaches()
     {
+        // Captured diffusion inference graphs replay the weights they were captured against.
+        AiDotNet.Diffusion.NoisePredictors.InferenceGraphRegistry.ReleaseAll();
         (AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine)?.InvalidateAllWeightCaches();
         AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
     }

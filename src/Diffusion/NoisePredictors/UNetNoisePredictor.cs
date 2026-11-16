@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
-public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
+public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>, IInferenceGraphOwner
 {
 
     /// <summary>
@@ -491,16 +491,41 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
 
     /// <inheritdoc />
-    // #1650/#638 diffusion CUDA-graph capture (opt-in AIDOTNET_DIFFUSION_CUDA_GRAPH=1):
-    // captures the eager ForwardUNet into a CUDA graph once (warmup) and replays it per
-    // denoising step — collapsing the UNet's hundreds of kernel launches into one
-    // cuGraphLaunch. Per-instance; lazily created on first GPU forward.
+    // #1650/#638 diffusion CUDA-graph capture (on by default on a capture-capable CUDA engine;
+    // AIDOTNET_DIFFUSION_CUDA_GRAPH=0 opts out): captures the eager ForwardUNet into a CUDA graph once
+    // (warmup) and replays it per call — collapsing the UNet's hundreds of kernel launches into one
+    // cuGraphLaunch (DDPM b1: 20.4 ms eager -> 3.7 ms replayed). Per-instance; lazily created on first GPU
+    // forward. Its capture scope changes engine-wide state and a replay reads the weights it was captured
+    // against, so it is released before any training step (InferenceGraphRegistry.ReleaseAll from Train and
+    // the fused training session) and whenever the weights key below changes.
     private AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph? _residentGraph;
+    private long _residentGraphWeightsKey;
+    private readonly object _residentGraphLock = new object();
     // Read live each call (expression-bodied property), NOT cached at type-load — mirrors
     // DiffusionModelBase.PredictorStreamCapture so a test/harness that sets AIDOTNET_DIFFUSION_CUDA_GRAPH
     // after startup isn't stuck with a stale mutual-exclusion decision. A per-call env read is negligible.
-    private static bool DiffusionCudaGraphEnabled =>
-        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+    private static bool DiffusionCudaGraphEnabled => InferenceGraphRegistry.Enabled;
+
+    /// <inheritdoc />
+    void IInferenceGraphOwner.ReleaseInferenceGraph()
+    {
+        lock (_residentGraphLock)
+        {
+            _residentGraph?.Dispose();
+            _residentGraph = null;
+        }
+    }
+
+    // Identifies the weights a captured graph replays: the release generation plus every parameter tensor's identity
+    // and version, so a host-side write (SetParameters, a loaded checkpoint, an adapter swapped in) retires the graph.
+    private long InferenceGraphWeightsKey()
+    {
+        long key = InferenceGraphRegistry.Generation;
+        foreach (var parameter in EnumerateMaterializedModelParameters())
+            key = unchecked(key * 1_000_003L
+                + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(parameter) * 31L + parameter.Version);
+        return key;
+    }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
@@ -598,14 +623,28 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var captureEngine = DiffusionCudaGraphEnabled
             ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             : null;
-        if (captureEngine is not null && captureEngine.SupportsInferenceGraphCapture)
+        if (captureEngine is not null && evalForInference && captureEngine.SupportsInferenceGraphCapture)
         {
-            _residentGraph ??= new AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph(captureEngine);
             var capInputs = conditioning is not null
                 ? new[] { noisySample, timeEmbed, conditioning }
                 : new[] { noisySample, timeEmbed };
-            output = _residentGraph.Forward(capInputs, fwd =>
-                ForwardUNet(fwd[0], fwd[1], conditioning is not null ? fwd[2] : null));
+            long weightsKey = InferenceGraphWeightsKey();
+            lock (_residentGraphLock)
+            {
+                if (_residentGraph is not null && _residentGraphWeightsKey != weightsKey)
+                {
+                    _residentGraph.Dispose();
+                    _residentGraph = null;
+                }
+                if (_residentGraph is null)
+                {
+                    _residentGraph = new AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph(captureEngine);
+                    _residentGraphWeightsKey = weightsKey;
+                    InferenceGraphRegistry.Register(this);
+                }
+                output = _residentGraph.Forward(capInputs, fwd =>
+                    ForwardUNet(fwd[0], fwd[1], conditioning is not null ? fwd[2] : null));
+            }
         }
         else
         {
@@ -635,8 +674,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         if (disposing)
         {
-            _residentGraph?.Dispose();
-            _residentGraph = null;
+            lock (_residentGraphLock)
+            {
+                _residentGraph?.Dispose();
+                _residentGraph = null;
+            }
         }
         base.Dispose(disposing);
     }

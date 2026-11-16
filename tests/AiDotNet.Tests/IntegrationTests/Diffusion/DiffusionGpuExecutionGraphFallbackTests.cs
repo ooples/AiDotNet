@@ -140,8 +140,10 @@ public class DiffusionGpuExecutionGraphFallbackTests
             // scope when it's on — mutual exclusion). So the deferred-scope diagnostics are exercised only when
             // the env is OFF; the correctness check (1) runs for BOTH and proves whichever GPU-graph path is
             // active matches eager.
+            // On by default wherever the engine can capture; AIDOTNET_DIFFUSION_CUDA_GRAPH=0 opts out.
             bool predictorStreamCapture =
-                System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+                System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") != "0"
+                && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine { SupportsInferenceGraphCapture: true };
 
             DiffusionDeferredStepDiagnostics.Reset();
             opts.UseGpuExecutionGraph = true; // flip the SAME instance onto the GPU graph path
@@ -167,7 +169,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 // need a Tensors release newer than the published 0.102.17.)
                 var capEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
                 Assert.True(capEngine is not null && capEngine.SupportsInferenceGraphCapture,
-                    "Stream-capture mode (AIDOTNET_DIFFUSION_CUDA_GRAPH=1) ran but the engine does not support "
+                    "Stream-capture mode (the default) ran but the engine does not support "
                   + "inference-graph capture — the predictor would silently fall back to eager.");
             }
 

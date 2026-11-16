@@ -262,6 +262,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             ProfileUNetSections(model);
             var inference = BenchmarkInference(model);
             PrintReadbackSites("inference");
+            PostInferenceTrainingSteps(model, training is not null);
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
@@ -309,6 +310,22 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         }
         foreach (var kv in totals.OrderByDescending(kv => kv.Value))
             Console.WriteLine($"[unetprof] {kv.Value,9:F2} ms  {kv.Key}");
+    }
+
+    // AIDOTNET_POST_INFER_TRAIN_STEPS=N: N more device-synchronized training steps after inference, printed, to time the
+    // switch back from inference to training. Diagnostic only; nothing is added to the report.
+    private void PostInferenceTrainingSteps(IBenchmarkModel model, bool trained)
+    {
+        if (!trained || !int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_POST_INFER_TRAIN_STEPS"), out int steps)) return;
+        model.LoadSyntheticBatch(options.BatchSize);
+        for (int i = 0; i < steps; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            model.Backward();
+            model.Step();
+            BenchStats.SynchronizeDevice();
+            Console.WriteLine($"[bench] post-inference train step {i}: {sw.Elapsed.TotalMilliseconds:F1} ms, loss {model.LastLoss}");
+        }
     }
 
     private static void PrintReadbackSites(string phase)

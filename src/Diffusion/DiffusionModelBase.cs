@@ -1214,8 +1214,8 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     // Read the env LIVE each call (not a cached static): it's the mutual-exclusion switch between the predictor's
     // stream capture and the #642 deferred scope, so a value cached before the env is set could wrap a
     // stream-capturing PredictNoise in the deferred scope. A per-step env read is negligible. (CodeRabbit #671/#1650)
-    private static bool PredictorStreamCapture =>
-        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+    private static bool PredictorStreamCapture => NoisePredictors.InferenceGraphRegistry.Enabled
+        && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine { SupportsInferenceGraphCapture: true };
 
     private Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
     {
@@ -1430,6 +1430,9 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A captured inference graph keeps an engine-wide capture scope alive and replays the weights it was captured
+        // against: release every one before this step changes the weights.
+        NoisePredictors.InferenceGraphRegistry.ReleaseAll();
         _lastTrainingParameterGradients = null;
         _trainingGradientSurfaceUnavailable = false;
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
