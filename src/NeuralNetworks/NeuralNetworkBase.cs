@@ -5478,6 +5478,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     protected virtual double GradientValueClip => 0.0;
 
+    private bool? _hasCustomGradientClippingGroups;
+
+    // Whether this model overrides GradientClippingGroups, so a caller can skip collecting the tensors to ask it.
+    private bool HasCustomGradientClippingGroups()
+    {
+        if (_hasCustomGradientClippingGroups.HasValue)
+            return _hasCustomGradientClippingGroups.Value;
+
+        var groups = GetType().GetMethod(
+            nameof(GradientClippingGroups),
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        _hasCustomGradientClippingGroups =
+            groups is not null && groups.DeclaringType != typeof(NeuralNetworkBase<T>);
+        return _hasCustomGradientClippingGroups.Value;
+    }
+
     private bool? _hasCustomTrainableParameterSelection;
 
     private bool HasCustomTrainableParameterSelection()
@@ -17202,8 +17218,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Already inside a step of this network (a custom loss run from within its own training step): the eager path,
         // which takes no step lock.
         if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
-        if (GradientValueClip > 0.0 || GradientClippingGroups(CollectModelTrainableTensors()) is not null) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+        // The groups are asked only of a model that names any. Collecting the trainable tensors is not free of effect
+        // on a model whose lazily shaped layers have not seen an input yet: it allocates their weights early, and their
+        // seeded initialization then differs from the one the first forward alone gives. CLAP's patch-merging
+        // reductions started from different weights through this entry point than through every other one.
+        if (GradientValueClip > 0.0) return false;
+        if (HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
             return false;
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.
