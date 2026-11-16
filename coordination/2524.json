@@ -142,6 +142,26 @@
         ".github/workflows/tts-paper-contracts.yml",
         ".github/workflows/recurrent-foundations.yml"
       ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared SAM single-pass prompt replay, WordChar embedding shape, Transfusion declared parallel head widths",
+      "files": [
+        "src/NeuralNetworks/Architectures/SamNetwork.cs",
+        "src/NeuralNetworks/Training/SamTraining.cs",
+        "src/NeuralNetworks/Layers/WordCharEmbeddingLayer.cs",
+        "src/VisionLanguage/Unified/Transfusion.Training.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared GP prior test contracts and approved StudentT numerical integration; DEVA video option fixtures; VisionMamba pixel CE",
+      "files": [
+        "src/GaussianProcesses/StudentTGaussianProcess.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/GaussianProcessModelTestBase.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/DevaOptionFixture.cs",
+        "src/ComputerVision/Segmentation/Mamba/VisionMamba.cs"
+      ]
     }
   ],
   "verification": {
@@ -149,7 +169,7 @@
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
     "full_ci": "PR head remains35f; full cycle still running. Latest snapshot27main failed,39passed,15active112queued. All completed failures retained; new failures are triaged as they finish. Do not push PR branch until entire cycle completes.",
     "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
-    "upstream_lstm": "Producer4d9d0b323 passed normal all-five-TFM build/pack. Tests36passed1failed0skips: explicit OpenCL regression could not find runtime. Producer26791c1a5 now provisions verified PoCL runtime and allows CPU OpenCL; unchanged37tests/filter/assertions, GitHub run43925212863 queued. No public package or PR.",
+    "upstream_lstm": "Artifact-only run43940828211 at641be3d443ee passed all5TFM normal build/pack and99LSTM+typed-real-predicate+sparse-reduction cases, zero skips; tested/packaged binary identity verified. No public NuGet release. Named-retention extension is separate pending review/tests.",
     "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
     "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
     "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
@@ -186,13 +206,28 @@
       "id": "fp32-adam-state",
       "status": "approved",
       "decision": "User explicitly approved FP32 Adam state repair, including reset/checkpoint/reverse/copy continuity. Root review additionally requires persistent FP32 master weights and sub-Half-ULP accumulation regression."
+    },
+    {
+      "id": "tts-existing-overlap-integration",
+      "status": "approved",
+      "decision": "User: avoid all NEW overlapping work; for existing completed patches compare both implementations and choose the stronger version or a tested combination. Root fetched claude/2524-tts-replay b11b995375. Existing overlap frozen in UniAudioCodecTrainingModules.cs, CosyVoiceDifferentiableReward.cs and TortoiseTTS.cs; our consumer changes remain LOCAL/unpushed. Root will reconcile both diffs/tests before integration; no automatic dropping of either side."
+    },
+    {
+      "id": "gp-contract-and-numerics",
+      "status": "approved",
+      "decision": "User approved shared GP test contracts respecting fixed-prior StudentT, and separately approved bounded numerical quadrature/convergence repair with independent posterior oracles; no target normalization/legacy adapter."
+    },
+    {
+      "id": "sam-single-pass",
+      "status": "approved",
+      "decision": "User approved single-pass SAM interactive replay: true ignored padding mask, explicit draw inputs, tensor IoU/mask selection, preserve encoder gradients and original single encoding/decoder curriculum."
     }
   ],
   "questions": [
     {
       "id": "student-t-statistical-contract",
-      "status": "pending",
-      "question": "Industry standard: explicit GP prior/normalization policy. Root recommends shared GP test contracts with independent fixed-prior posterior oracles; alternative explicit GaussianProcessBase normalization. Awaiting user choice; no StudentT production edits."
+      "status": "approved",
+      "question": "User chose shared GP test contracts, then explicitly approved bounded numerical GP repair. Model prior preserved."
     },
     {
       "id": "tts-variance-bucketize",
@@ -259,11 +294,11 @@
     },
     {
       "id": "overlap-tts-detach-files",
-      "status": "pending",
+      "status": "integration-review",
       "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
       "files": "src/TextToSpeech/CodecBased/UniAudioCodecTrainingModules.cs (+2/-1), CosyVoiceDifferentiableReward.cs (+11/-7), TortoiseTTS.cs (+41/-15)",
       "finding": "Our claim (2a90796d2d) predates the 'Shared TTS feature/KL detach' claim (14fbcf3f06); our agents edited these three files on claude/2524-tts-replay before that claim appeared. Nothing from the owner has landed in them yet.",
-      "proposed_fix": "Owner's version wins: when the owner's detach fix lands, we merge it and drop our hunks in these three files, then rerun UniAudio/CosyVoice DiffRO/TorToiSe tests. Until then we make no further edits there.",
+      "proposed_fix": "Freeze both completed versions; root compares b11b995375 with local c5d6cdcc0e/4a4c59a7be/named-retention batch and chooses tested best/combo per explicit user instruction. No new overlapping edits.",
       "alternatives": "Owner takes our hunks as-is (diffs on claude/2524-tts-replay)."
     }
   ],
@@ -274,8 +309,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T19:54:12.184202Z",
+  "updated_utc": "2026-11-16T20:20:17.4704497Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
-  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
 }
