@@ -1185,8 +1185,17 @@ Assert-Contract ($compatCanceller -match "(?m)^    if: \`$\{\{ always\(\) && nee
     'a compat build failure cancels the coverage-everywhere shard matrix that feeds the map'
 $shardJobHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded')
 $shardNeeds = [regex]::Match($shardJobHeader, '(?m)^    needs: \[(?<needs>[^\]]*)\]\s*$')
-Assert-Contract ($shardNeeds.Success -and
-        @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -cnotcontains 'build-compat') `
+# The matrix may wait for the compat build (so an ordinary run never starts shards a red compat build
+# will throw away), but only if its own condition still lets a coverage-everywhere run proceed past a
+# compat failure: without !cancelled() a failed need skips the job before the condition is read.
+$shardIf = [regex]::Match($shardJobHeader, '(?m)^    if:[^
+]+').Value
+$waitsForCompat = $shardNeeds.Success -and
+    @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -ccontains 'build-compat'
+Assert-Contract ($shardNeeds.Success -and (-not $waitsForCompat -or (
+        $shardIf.Contains('!cancelled()') -and
+        $shardIf.Contains("needs.build.result == 'success'") -and
+        $shardIf.Contains("!(needs.build-compat.result == 'failure' && !inputs.collect_coverage_everywhere)")))) `
     'the shard matrix depends on the compat build, so a coverage run can no longer outlive its failure'
 
 # The source must outlive more than one weekly cycle, or a single lost run leaves nothing to rebuild from.

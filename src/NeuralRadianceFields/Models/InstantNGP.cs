@@ -1,4 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
+using AiDotNet.Tensors.Engines;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -676,21 +677,23 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     /// </remarks>
     private Tensor<T> MultiresolutionHashEncoding(Tensor<T> positions)
     {
-        // Prepare hash tables array and resolutions for Engine operation
         var hashTablesArray = new Tensor<T>[_numLevels];
-        var resolutions = new int[_numLevels];
-
         for (int level = 0; level < _numLevels; level++)
         {
             hashTablesArray[level] = _hashTables[level];
-            resolutions[level] = GetLevelResolution(level);
         }
+
+        // The paper's grid (Müller et al. 2022, Eq. 2-3): N_l = floor(N_min * b^l) with
+        // b = exp((ln N_max - ln N_min) / (L - 1)), positions scaled by N_l with no offset.
+        var (baseResolution, perLevelScale) = GetGridParameters();
+        const HashGridAlignment alignment = HashGridAlignment.Paper;
 
         // Normalize positions to [0, 1] range before encoding
         var normalizedPositions = NormalizePositionsToUnit(positions);
 
         // Use vectorized Engine implementation for CPU/GPU acceleration
-        var features = Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+        var features = Engine.MultiresolutionHashEncoding(
+            normalizedPositions, hashTablesArray, baseResolution, perLevelScale, _featuresPerLevel, alignment);
 
         // The engine op is not tape-recorded, so without this no loss gradient reaches the tables, which
         // are Instant-NGP's main parameters (Müller et al. 2022, Sec. 3). Route the feature gradient to
@@ -703,7 +706,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             (gradOutput, inputs, _, _, engine, grads) =>
             {
                 var tableGradients = engine.MultiresolutionHashEncodingBackward(
-                    normalizedPositions, inputs, resolutions, featuresPerLevel, gradOutput);
+                    normalizedPositions, inputs, baseResolution, perLevelScale, featuresPerLevel, gradOutput, alignment);
                 for (int level = 0; level < inputs.Length; level++)
                 {
                     AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
@@ -1152,16 +1155,15 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         return value;
     }
 
-    private int GetLevelResolution(int level)
+    /// <summary>N_min and the per-level growth factor b; a single level uses the finest resolution.</summary>
+    private (int BaseResolution, double PerLevelScale) GetGridParameters()
     {
         if (_numLevels <= 1)
         {
-            return _finestResolution;
+            return (_finestResolution, 1.0);
         }
 
-        double scale = Math.Exp(level * Math.Log((double)_finestResolution / _coarsestResolution) / (_numLevels - 1));
-        int resolution = (int)Math.Floor(_coarsestResolution * scale);
-        return Math.Max(1, resolution);
+        return (_coarsestResolution, Math.Exp(Math.Log((double)_finestResolution / _coarsestResolution) / (_numLevels - 1)));
     }
 
     private static int GetBitfieldLength(int cellCount)
