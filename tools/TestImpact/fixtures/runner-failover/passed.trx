@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010" id="11111111-1111-1111-1111-111111111111">
+  <Times creation="2026-11-16T12:00:00Z" start="2026-11-16T12:00:01Z" finish="2026-11-16T12:00:02Z" />
+  <Results>
+    <UnitTestResult executionId="22222222-2222-2222-2222-222222222222" testId="33333333-3333-3333-3333-333333333333" testName="Core.Example" outcome="Passed" />
+  </Results>
+  <ResultSummary outcome="Completed">
+    <Counters total="1" executed="1" passed="1" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" notExecuted="0" />
+  </ResultSummary>
+</TestRun>

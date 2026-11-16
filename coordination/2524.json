@@ -37,18 +37,49 @@
       "owner": "available for other contributor to claim",
       "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
       "starting_points": [
-        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs: detached target magnitudes and host-computed double norms",
-        "AlignTTS/flow/codec model host reads listed in TTS run43902661676"
+        "Remaining AlignTTS/flow/codec model host reads in TTS run43902661676; exclude all explicitly owned files."
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared STFT target-detach and wide target-norm replay repairs; reviewed and integrated447aa7ac78",
+      "files": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Approved bidirectional infrastructure-only runner failover and mandatory evidence reconciliation",
+      "files": [
+        ".github/workflows/sonarcloud.yml",
+        "tools/TestImpact/RunnerFailover.ps1",
+        "tools/TestImpact/New-RunnerFailoverPlan.ps1",
+        "tools/TestImpact/Resolve-RunnerFailoverResults.ps1",
+        "tools/TestImpact/Test-RunnerFailover.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit05 bounded reduction/fixture repair and observed stale MiniRocket ratchet; implementation next, root review required",
+      "files": [
+        "src/Helpers/TensorReductionHelper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/TensorSumOfSquaresDoubleTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/SumOfSquaresDoubleCallSiteTests.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
       ]
     }
   ],
   "verification": {
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
-    "full_ci": "Run43902662001 still running at PR head35f; all167shards selected, production+compat+pack passed. Four self-hosted runners lost communication during artifact downloads.",
-    "rebind": "Initial47focused:45pass2trajectoryfail; CPU->GPU promotion diagnosed and fixed by matching initial engine guard. Both exact-case no-build diagnostics pass; final normal build/test currently running with integratedWaveRNN.",
-    "upstream_lstm": "Pushed0c40e80c120bf2bff409d83a5afb600ca043f24f to AiDotNet.Tensors codex/2524-ci-coordination;37focusedtests passed0skips. Artifact-only workflow under review; no NuGet publication or PR.",
-    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips"
+    "full_ci": "Current35f main cycle still running; latest34passed18failed9active132queued. Exact new Unit05/07/09/10/11/13 failures collected for bounded repair; four runner-loss failures remain. PR branch untouched.",
+    "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
+    "upstream_lstm": "Producer4d9d0b323 passed normal all-five-TFM build/pack. Tests36passed1failed0skips: explicit OpenCL regression could not find runtime. Producer26791c1a5 now provisions verified PoCL runtime and allows CPU OpenCL; unchanged37tests/filter/assertions, GitHub run43925212863 queued. No public package or PR.",
+    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
+    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
+    "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
+    "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified."
   },
   "decisions": [
     {
@@ -70,6 +101,11 @@
       "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
       "status": "approved",
       "id": "merge"
+    },
+    {
+      "id": "runner-failover",
+      "status": "approved",
+      "decision": "One alternate-pool attempt for proven terminal infrastructure failure; visible intermediate attempts backed by mandatory fail-closed logical shard evidence gate. All required shards, exact SHA/artifact/definition/TRX checks preserved; real/unknown/test/compiler/analyzer/OOM/manual-cancel failures cannot be hidden. Queued-pool watchdog outside first batch."
     }
   ],
   "questions": [],
@@ -80,6 +116,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T17:02:27.1160444Z",
-  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination"
+  "updated_utc": "2026-11-16T18:10:43.9808867Z",
+  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
 }
