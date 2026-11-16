@@ -54,7 +54,12 @@ public partial class FireRedTTS<T>
         if (_options.Stage == FireRedTtsStage.MelCodec) return TrainMelCodec(sample, random);
         var objective = Objective(sample, training: true, random);
         var result = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), Optimizer());
-        if (_options.Stage == FireRedTtsStage.SpeechTokenizer) _tokenizerSteps++;
+        if (_options.Stage == FireRedTtsStage.SpeechTokenizer)
+        {
+            // The codebooks' EMA step, from the codes and encodings the step recorded (they take no gradient).
+            SpeechTokenizer.Quantizer.FinishUpdate(random);
+            _tokenizerSteps++;
+        }
         return result;
     }
 
@@ -83,7 +88,7 @@ public partial class FireRedTTS<T>
         FireRedTtsStage.TextToSpeech => GptObjective(sample, training, random),
         FireRedTtsStage.FlowDecoder => FlowObjective(sample, training, random),
         FireRedTtsStage.SpeechTokenizer => TokenizerObjective(sample, training, random),
-        FireRedTtsStage.MelCodec => CodecObjective(PrepareCodec(sample), training, random, null),
+        FireRedTtsStage.MelCodec => CodecObjective(PrepareCodec(sample), training, random, null, recordReconstruction: false),
         _ => AcousticObjective(sample, training, random),
     };
 
@@ -99,10 +104,25 @@ public partial class FireRedTTS<T>
         return (Engine.TensorNarrow(mel, 0, 0, frames), SpeakerOf(SpeakerRecording(sample)));
     }
 
+    // The reconstruction of the latest codec step that ran with values, by model: written by the node of
+    // RecordReconstruction when the step runs (eagerly or as a compiled plan's replay), taken by the discriminator's turn.
+    // A compiled plan does not hand its forward's values back, and its replay never reruns the objective's host code.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (T[] Values, int[] Shape)> ReconstructionByKey = new();
+    private static long _nextReconstructionKey;
+    private readonly long _reconstructionKey = System.Threading.Interlocked.Increment(ref _nextReconstructionKey);
+
+    private static Tensor<T> RecordReconstruction(Tensor<T> mel, long key)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("FireRedTtsCodecReconstruction", new[] { mel }, new[] { 1 }, (values, zero) =>
+        {
+            ReconstructionByKey[key] = (values[0].ToArray(), values[0].Shape.ToArray());
+            zero.AsWritableSpan().Clear();
+        });
+
     // The codec's generator loss: L1 mel reconstruction, the commitment loss and, with window starts, the LSGAN loss of
-    // the discriminator's score of the reconstruction; the reconstruction is handed out for the discriminator's turn.
+    // the discriminator's score of the reconstruction; with recordReconstruction a zero-valued node keeps the
+    // reconstruction for the discriminator's turn.
     private Func<Tensor<T>> CodecObjective((Tensor<T> Mel, Tensor<T> Speaker) target, bool training, Random random, int[]? starts,
-        Action<Tensor<T>>? reconstructed = null)
+        bool recordReconstruction)
     {
         var o = _options;
         return () =>
@@ -110,7 +130,6 @@ public partial class FireRedTTS<T>
             var codec = MelCodec;
             var (_, quantized, _, commitment) = codec.Quantizer.Forward(codec.Encode(target.Mel), update: training, random);
             var mel = codec.Decode(quantized, target.Speaker);
-            reconstructed?.Invoke(mel);
             int frames = target.Mel.Shape[0], channels = target.Mel.Shape[1];
             var l1 = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(mel, target.Mel)), null),
                 Ops.FromDouble(1.0 / ((double)frames * channels)));
@@ -120,6 +139,8 @@ public partial class FireRedTTS<T>
                 var score = MelDiscriminator.Forward(Engine.Reshape(mel, new[] { 1, frames, channels }), starts)!;
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(MeanSquareTo(score, 1), Ops.FromDouble(o.CodecAdversarialWeight)));
             }
+            if (recordReconstruction)
+                loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(RecordReconstruction(Engine.StopGradient(mel), _reconstructionKey), Ops.Zero));
             return loss;
         };
     }
@@ -141,13 +162,16 @@ public partial class FireRedTTS<T>
         var target = PrepareCodec(sample);
         int frames = target.Mel.Shape[0];
         bool adversarial = _options.CodecAdversarialWeight > 0 && _options.DiscriminatorWindows.All(w => w <= frames);
-        Tensor<T>? generated = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-            (_, _) => CodecObjective(target, training: true, random, adversarial ? WindowStarts(frames, random) : null, m => generated = m)(),
-            Optimizer());
-        if (adversarial && generated is not null)
+        // The windows are drawn before the objective, so a compiled plan's probe and trace of the step read the same.
+        var starts = adversarial ? WindowStarts(frames, random) : null;
+        var objective = CodecObjective(target, training: true, random, starts, recordReconstruction: adversarial);
+        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), Optimizer());
+        MelCodec.Quantizer.FinishUpdate(random);
+        if (adversarial)
         {
-            var fake = new Tensor<T>(generated._shape, new Vector<T>(generated.ToArray()));
+            if (!ReconstructionByKey.TryRemove(_reconstructionKey, out var generated))
+                throw new InvalidOperationException("The codec step recorded no reconstruction for the discriminator's turn.");
+            var fake = new Tensor<T>(generated.Shape, new Vector<T>(generated.Values));
             var realStarts = WindowStarts(frames, random);
             var fakeStarts = WindowStarts(frames, random);
             int channels = target.Mel.Shape[1];
@@ -320,13 +344,15 @@ public partial class FireRedTTS<T>
             mel = SpeakerMel(wave);
         }
         double gamma = DualDecodingWeight(_tokenizerSteps);
+        // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise; drawn before
+        // the objective, so a compiled plan's probe and trace of the step read the same slices.
+        var speakerInput = training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel;
         return () =>
         {
             foreach (var layer in _speakerLayers) layer.SetTrainingMode(training);
             var encoded = tokenizer.Encode(ssl);
             var (_, quantized, preQuantized, commitment) = tokenizer.Quantizer.Forward(encoded, update: training, random);
-            // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise.
-            var speaker = SpeakerEncoder.Forward(training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel);
+            var speaker = SpeakerEncoder.Forward(speakerInput);
             var (sslQ, melQ) = tokenizer.Reconstruct(quantized, speaker);
             var (sslP, melP) = tokenizer.Reconstruct(preQuantized, speaker);
             var ssLoss = Engine.TensorAdd(MeanSquare(sslQ, ssl), Engine.TensorMultiplyScalar(MeanSquare(sslP, ssl), Ops.FromDouble(gamma)));

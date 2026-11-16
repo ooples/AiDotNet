@@ -193,20 +193,62 @@ internal sealed class SpiritLmPitchQuantizer<T>
     /// </summary>
     public Tensor<T> TrainingLoss(Tensor<T> x, Random random)
     {
+        PrepareTrainingStep(x, random);
+        var loss = TrainingObjective(x);
+        FinishTrainingStep(random);
+        return loss;
+    }
+
+    /// <summary>Before a training step: Jukebox's codebook initialization from the first batch's latents (computed
+    /// without gradients), so the step's objective reads an initialized codebook.</summary>
+    public void PrepareTrainingStep(Tensor<T> x, Random random)
+    {
+        if (CodebookInitialized) return;
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        InitializeCodebook(Encode(x), random);
+    }
+
+    /// <summary>After a training step: the codebook's moving-average step from the latents and codes the step's
+    /// objective (<see cref="TrainingObjective"/>) recorded when it ran.</summary>
+    public void FinishTrainingStep(Random random)
+    {
+        if (!TrainingStatisticsByKey.TryRemove(_statisticsKey, out var recorded))
+            throw new InvalidOperationException("The pitch quantizer's training step recorded no codebook statistics.");
+        UpdateCodebook(recorded.Rows, recorded.Codes, random);
+    }
+
+    // The latents and codes of the latest training objective that ran with values, by quantizer: written by the node
+    // of TrainingObjective when it runs (eagerly or as a compiled plan's replay), taken once by FinishTrainingStep. The
+    // node captures only this quantizer's key, which a compiled plan can compare between steps.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (int[] Codes, double[][] Rows)> TrainingStatisticsByKey = new();
+    private static long _nextStatisticsKey;
+    private readonly long _statisticsKey = System.Threading.Interlocked.Increment(ref _nextStatisticsKey);
+
+    /// <summary>
+    /// The traced part of <see cref="TrainingLoss"/>: the loss through the straight-through bottleneck against the
+    /// current codebook. The nearest-code search is a node a compiled plan reruns on every replay; its 0/1 codes pick
+    /// the codebook rows by a matrix product, and a zero-valued node records the latents and codes for
+    /// <see cref="FinishTrainingStep"/>. Needs an initialized codebook (<see cref="PrepareTrainingStep"/>).
+    /// </summary>
+    public Tensor<T> TrainingObjective(Tensor<T> x)
+    {
+        if (!CodebookInitialized) throw new InvalidOperationException("Initialize the codebook first (PrepareTrainingStep).");
         var c = Configuration;
         var z = Encode(x);
-        int width = z.Shape[1], frames = z.Shape[2];
-        if (!CodebookInitialized) InitializeCodebook(z, random);
-        var codes = Nearest(z);
-        var quantized = new Tensor<T>(new[] { 1, width, frames });
-        for (int f = 0; f < frames; f++)
-            for (int i = 0; i < width; i++) quantized[0, i, f] = NumOps.FromDouble(Codebook[codes[f], i]);
-        UpdateCodebook(z, codes, random);
+        int width = z.Shape[1], frames = z.Shape[2], count = c.Codes;
+        var flat = new double[count * width];
+        Buffer.BlockCopy(Codebook, 0, flat, 0, flat.Length * sizeof(double));
+        var book = new Tensor<T>(new[] { count, width }, new Vector<T>(flat.Select(NumOps.FromDouble).ToArray()));
+        var zRows = _engine.TensorTranspose(_engine.Reshape(_engine.StopGradient(z), new[] { width, frames }));    // [frames, width]
+        var oneHot = AiDotNet.Training.CompiledStepHostValue<T>.Compute("SpiritLmPitchCodes", new[] { zRows, book },
+            new[] { frames, count }, static (values, result) => NearestOneHot(values[0], values[1], result));
+        var quantized = _engine.Reshape(_engine.TensorTranspose(_engine.TensorMatMul(oneHot, book)), new[] { 1, width, frames });
+        var statistics = RecordStatistics(new[] { zRows, oneHot }, _statisticsKey);
         var difference = _engine.TensorSubtract(quantized, z);
         var commit = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
             NumOps.FromDouble(1.0 / difference.Length));
         // z + sg(e − z): the decoder's input carries e forward and the gradient to z.
-        var straight = _engine.TensorAdd(z, new Tensor<T>(difference.Shape.ToArray(), difference.ToVector()));
+        var straight = _engine.TensorAdd(z, _engine.StopGradient(difference));
         var reconstruction = Decode(straight);
         int length = Math.Min(reconstruction.Shape[2], x.Shape[2]);
         var weights = new Tensor<T>(new[] { 1, 2, length });
@@ -219,8 +261,59 @@ internal sealed class SpiritLmPitchQuantizer<T>
             _engine.TensorSlice(reconstruction, new[] { 0, 0, 0 }, new[] { 1, 2, length }),
             _engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { 1, 2, length }))), weights);
         var recon = _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null, false), NumOps.FromDouble(1.0 / (2.0 * length)));
-        return _engine.TensorAdd(recon, _engine.TensorMultiplyScalar(commit, NumOps.FromDouble(c.CommitWeight)));
+        var loss = _engine.TensorAdd(recon, _engine.TensorMultiplyScalar(commit, NumOps.FromDouble(c.CommitWeight)));
+        // Zero, and no gradient: it records this step's latents and codes for the moving-average step.
+        return _engine.TensorAdd(loss, _engine.TensorMultiplyScalar(statistics, NumOps.Zero));
     }
+
+    // The nearest code of each latent row [frames, width] against the codebook [codes, width], as Nearest computes it
+    // (‖x‖² − 2x·k + ‖k‖², the first minimum), written as 0/1 rows [frames, codes].
+    private static void NearestOneHot(Tensor<T> latentRows, Tensor<T> book, Tensor<T> oneHot)
+    {
+        int frames = latentRows.Shape[0], width = latentRows.Shape[1], codes = book.Shape[0];
+        var z = latentRows.ToArray().Select(NumOps.ToDouble).ToArray();
+        var k = book.ToArray().Select(NumOps.ToDouble).ToArray();
+        var norms = new double[codes];
+        for (int j = 0; j < codes; j++)
+            for (int i = 0; i < width; i++) norms[j] += k[j * width + i] * k[j * width + i];
+        var one = NumOps.One;
+        var values = oneHot.AsWritableSpan();
+        values.Clear();
+        for (int f = 0; f < frames; f++)
+        {
+            double xx = 0;
+            for (int i = 0; i < width; i++) xx += z[f * width + i] * z[f * width + i];
+            double best = double.PositiveInfinity;
+            int code = 0;
+            for (int j = 0; j < codes; j++)
+            {
+                double dot = 0;
+                for (int i = 0; i < width; i++) dot += z[f * width + i] * k[j * width + i];
+                double distance = xx - 2 * dot + norms[j];
+                if (distance < best) { best = distance; code = j; }
+            }
+            values[f * codes + code] = one;
+        }
+    }
+
+    private static Tensor<T> RecordStatistics(Tensor<T>[] inputs, long key)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("SpiritLmPitchStatistics", inputs, new[] { 1 }, (values, zero) =>
+        {
+            int frames = values[0].Shape[0], width = values[0].Shape[1], codes = values[1].Shape[1];
+            var z = values[0].ToArray().Select(NumOps.ToDouble).ToArray();
+            var oneHot = values[1].ToArray().Select(NumOps.ToDouble).ToArray();
+            var rows = new double[frames][];
+            var picked = new int[frames];
+            for (int f = 0; f < frames; f++)
+            {
+                rows[f] = new double[width];
+                Array.Copy(z, f * width, rows[f], 0, width);
+                for (int j = 0; j < codes; j++)
+                    if (oneHot[f * codes + j] != 0) { picked[f] = j; break; }
+            }
+            TrainingStatisticsByKey[key] = (picked, rows);
+            zero.AsWritableSpan().Clear();
+        });
 
     // The latents as rows [frames, width].
     private static double[][] Rows(Tensor<T> z)
@@ -280,11 +373,10 @@ internal sealed class SpiritLmPitchQuantizer<T>
     }
 
     // Jukebox's update_k: k_sum and k_elem by EMA, codes with k_elem under 1 restarted from random latents.
-    private void UpdateCodebook(Tensor<T> z, int[] codes, Random random)
+    private void UpdateCodebook(double[][] rows, int[] codes, Random random)
     {
         int count = Configuration.Codes, width = Configuration.LatentDim;
         double mu = Configuration.Decay;
-        var rows = Rows(z);
         if (_codeSum is null || _codeCount is null)
         {
             // A loaded codebook continues from itself, one use per code (restore_k).

@@ -341,7 +341,11 @@ public partial class SpiritLM<T>
         var x = quantizer.Input(normalized, voiced.Take(frames).ToArray());
         var random = TrainingRandom;
         _trainedGroup = "pitch";
-        return TrainWithCustomObjective(x, x, (_, _) => quantizer.TrainingLoss(x, random), SpeechOptimizer("pitch"));
+        quantizer.PrepareTrainingStep(x, random);
+        var loss = TrainWithCustomObjective(x, x, (_, _) => quantizer.TrainingObjective(x), SpeechOptimizer("pitch"));
+        // Jukebox moves the codebook in the training forward; it takes no gradient, so it moves once the step has run.
+        quantizer.FinishTrainingStep(random);
+        return loss;
     }
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);

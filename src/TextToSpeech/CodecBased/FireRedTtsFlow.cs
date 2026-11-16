@@ -257,9 +257,28 @@ internal sealed class FireRedTtsFlow<T>
         var index = new Tensor<int>(new[] { frames }, new Vector<int>(Enumerable.Range(0, frames).Select(i => (int)Math.Floor(i * (double)n / frames)).ToArray()));
         var x = _engine.Reshape(_engine.TensorTranspose(_engine.TensorIndexSelect(encoded, index, 0)), new[] { 1, d, frames });
         foreach (var (conv, norm) in Regulator)
-            x = _engine.Mish(_engine.Reshape(norm.Forward(_engine.Reshape(conv.Forward(x), new[] { 1, d, 1, frames })), new[] { 1, d, frames }));
+            x = _engine.Mish(SingleGroupNorm(norm, conv.Forward(x)));
         x = RegulatorOutput.Forward(x);
         return EncoderProjection.Forward(_engine.TensorTranspose(_engine.Reshape(x, new[] { d, frames })));
+    }
+
+    /// <summary>
+    /// <c>GroupNorm(1, d)</c> of <c>[1, d, T]</c>: one mean and variance over every value, then the per-channel scale and
+    /// shift of <paramref name="norm"/>. Composed of engine ops so a compiled training plan records it; the engine's fused
+    /// group norm computes its value eagerly while a training plan is traced.
+    /// </summary>
+    private Tensor<T> SingleGroupNorm(GroupNormalizationLayer<T> norm, Tensor<T> x)
+    {
+        if (norm.NumGroups != 1) throw new InvalidOperationException("The regulator normalizes with one group.");
+        int c = x.Shape[1], t = x.Shape[2];
+        var flat = _engine.Reshape(x, new[] { c * t });
+        var centred = _engine.TensorSubtract(flat, _engine.TensorBroadcastTo(_engine.ReduceMean(flat, new[] { 0 }, keepDims: true), flat._shape));
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { 0 }, keepDims: true);
+        var deviation = _engine.TensorSqrt(_engine.TensorAddScalar(variance, norm.GetEpsilon()));
+        var normalized = _engine.Reshape(_engine.TensorDivide(centred, _engine.TensorBroadcastTo(deviation, flat._shape)), new[] { c, t });
+        var gamma = _engine.TensorBroadcastTo(_engine.Reshape(norm.GetGammaTensor(), new[] { c, 1 }), new[] { c, t });
+        var beta = _engine.TensorBroadcastTo(_engine.Reshape(norm.GetBetaTensor(), new[] { c, 1 }), new[] { c, t });
+        return _engine.Reshape(_engine.TensorAdd(_engine.TensorMultiply(normalized, gamma), beta), new[] { 1, c, t });
     }
 
     /// <summary>μ <c>[ratio · n, mel]</c> of the tokens given the prompt mel.</summary>
