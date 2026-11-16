@@ -394,12 +394,12 @@ internal sealed class FusedTrainingSession<T>
             if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2Regularization)
             {
                 if (request.ExcludesParametersFromWeightDecay?.Invoke() == true)
-                    return DeclineAndDropCommitted(
+                    return RejectUnsupportedConfiguration(
                         "L2 with parameters excluded from weight decay has no fused form; the eager tape applies it");
                 l2 = l2Regularization.GetOptions().Strength;
             }
             else
-                return DeclineAndDropCommitted("regularization " + regularization.GetType().Name
+                return RejectUnsupportedConfiguration("regularization " + regularization.GetType().Name
                     + " has no fused form; the eager tape applies it");
         }
 
@@ -411,7 +411,7 @@ internal sealed class FusedTrainingSession<T>
             ? clipping.TapeStepGradientClipNorm
             : 0.0;
         if (double.IsNaN(optimizerClip))
-            return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
+            return RejectUnsupportedConfiguration("optimizer clips gradients by value; the fused plan clips only by global norm");
         if (!isDistributed && optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
         // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
@@ -845,14 +845,15 @@ internal sealed class FusedTrainingSession<T>
         return FusedStepOutcome.Declined;
     }
 
-    // A condition that rules the fused path out for the whole run: a committed plan has to be dropped, since its
-    // moments cannot continue on the eager optimizer.
-    private FusedStepOutcome DeclineAndDropCommitted(string reason)
+    // Unsupported settings cannot transfer a committed plan's moments to the eager optimizer. Refuse this step
+    // without changing the plan, so restoring supported settings can continue the same optimizer trajectory.
+    private FusedStepOutcome RejectUnsupportedConfiguration(string reason)
     {
         if (IsCommitted)
         {
-            Warn("committed fused plan dropped: " + reason);
-            Reset(stickyDisable: true);
+            LastMissReason = reason;
+            LastFallbackException = new InvalidOperationException("Unsupported configuration after fused steps ran: " + reason);
+            return FusedStepOutcome.CommittedFailure;
         }
         return Decline(reason);
     }

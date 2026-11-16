@@ -2,10 +2,12 @@ using System;
 using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -28,16 +30,27 @@ public class CustomObjectiveFusedRoutingTests
 
     public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3, StepNoise }
 
+    private sealed class DeclaredHostReadLayer : ActivationLayer<float>
+    {
+        internal bool ReadsOnHost { get; set; }
+        internal DeclaredHostReadLayer() : base(new IdentityActivation<float>()) { }
+        internal override string? CompiledTrainingGraphBreakReason
+            => ReadsOnHost ? "objective explicitly reads its prediction on the host" : null;
+    }
+
     private sealed class ObjectiveNetwork : FeedForwardNeuralNetwork<float>
     {
-        private bool _declaredHostRead;
-        protected override bool SupportsFusedCompiledTraining => !_declaredHostRead && base.SupportsFusedCompiledTraining;
+        private readonly DeclaredHostReadLayer _hostReadLayer = new();
+        internal bool ClipComponents { get; set; }
+        internal int DeclaredObjectiveEvaluations { get; private set; }
+        protected override double GradientValueClip => ClipComponents ? 0.01 : base.GradientValueClip;
 
         internal ObjectiveNetwork(AdamOptimizer<float, Tensor<float>, Tensor<float>> optimizer) : base(
             new NeuralNetworkArchitecture<float>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
                 complexity: NetworkComplexity.Simple, inputSize: 6, outputSize: 2),
             optimizer, new MeanSquaredErrorLoss<float>())
         {
+            Layers.Add(_hostReadLayer);
         }
 
         // Everything per step reaches the objective through its arguments.
@@ -62,6 +75,13 @@ public class CustomObjectiveFusedRoutingTests
         // Explicitly declares the host work before requesting the training step.
         internal float HostReadStep(Tensor<float> x, Tensor<float> y)
             => WithDeclaredHostRead(() => UndeclaredHostReadStep(x, y), true);
+
+        internal float CountedDeclaredStep(Tensor<float> x, Tensor<float> y)
+            => WithDeclaredHostRead(() => TrainWithCustomLoss(x, prediction =>
+            {
+                DeclaredObjectiveEvaluations++;
+                return new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y);
+            }), true);
 
         internal float UndeclaredHostReadStep(Tensor<float> x, Tensor<float> y)
             => TrainWithCustomLoss(x, prediction =>
@@ -94,9 +114,9 @@ public class CustomObjectiveFusedRoutingTests
 
         private float WithDeclaredHostRead(Func<float> step, bool read)
         {
-            _declaredHostRead = read;
+            _hostReadLayer.ReadsOnHost = read;
             try { return step(); }
-            finally { _declaredHostRead = false; }
+            finally { _hostReadLayer.ReadsOnHost = false; }
         }
 
         // The declared-objective route CLAP and TensorModelTrainer use: a one-time replay check against eager.
@@ -247,6 +267,40 @@ public class CustomObjectiveFusedRoutingTests
             Assert.Contains("objective reads", error.ToString());
             Assert.Equal(before, model.GetParameters().ToArray());
             Assert.Equal(0, model.CustomOutsidePlanStepCount);
+        }
+        finally { options.EnableCompilation = previous; }
+    }
+
+    [Fact(Timeout = 120000)]
+    public void ADeclaredBreak_WithNewModelValueClipping_IsRefusedBeforeItsObjective()
+    {
+        var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        bool previous = options.EnableCompilation;
+        try
+        {
+            options.EnableCompilation = true;
+            using var model = new ObjectiveNetwork(NewOptimizer());
+            var x = Batch(0, 4, 6, 1.0);
+            var y = Batch(100, 4, 2, 0.5);
+            model.ArgumentObjectiveStep(x, y);
+            Assert.True(model.ObjectiveSessionCommitted);
+            var before = model.GetParameters().ToArray();
+            model.ClipComponents = true;
+
+            var error = Assert.Throws<InvalidOperationException>(() => model.CountedDeclaredStep(x, y));
+
+            Assert.Contains("clips model gradients by value", error.ToString());
+            Assert.Equal(0, model.DeclaredObjectiveEvaluations);
+            Assert.Equal(before, model.GetParameters().ToArray());
+            Assert.True(model.ObjectiveSessionCommitted);
+            Assert.Equal(1, model.CustomFusedStepCount);
+            Assert.Equal(0, model.CustomOutsidePlanStepCount);
+            Assert.Equal(0, model.CustomEagerStepCount);
+            model.ClipComponents = false;
+            model.CountedDeclaredStep(x, y);
+            Assert.Equal(1, model.DeclaredObjectiveEvaluations);
+            Assert.Equal(1, model.CustomOutsidePlanStepCount);
+            Assert.True(model.ObjectiveSessionCommitted);
         }
         finally { options.EnableCompilation = previous; }
     }
