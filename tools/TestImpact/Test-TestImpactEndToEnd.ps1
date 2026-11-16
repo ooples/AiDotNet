@@ -789,10 +789,10 @@ try {
         foreach ($case in @(
             @{ Name = 'benchmark-only'; Arguments = @{ Bench = '1.1.0' }; Escalate = $false; Shards = ''; Impact = 'BuildOnly'; Reason = 'build-only' },
             @{ Name = 'test-only'; Arguments = @{ Test = '1.1.0' }; Escalate = $false; Shards = 'Alpha,Always,Beta'; Impact = 'TestRoute'; Reason = 'selected' },
-            @{ Name = 'product'; Arguments = @{ Product = '1.1.0' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
-            @{ Name = 'product-beside-benchmark'; Arguments = @{ Bench = '1.1.0'; Product = '1.1.0' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
-            @{ Name = 'new-entry'; Arguments = @{ Extra = '    <PackageVersion Include="Brand.New" Version="1.0.0" />' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
-            @{ Name = 'property-edit'; Arguments = @{ Bench = '1.1.0'; Property = '    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' }
+            @{ Name = 'product'; Arguments = @{ Product = '1.1.0' }; Escalate = $true; Shards = 'Alpha,Always,Beta'; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'product-beside-benchmark'; Arguments = @{ Bench = '1.1.0'; Product = '1.1.0' }; Escalate = $true; Shards = 'Alpha,Always,Beta'; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'new-entry'; Arguments = @{ Extra = '    <PackageVersion Include="Brand.New" Version="1.0.0" />' }; Escalate = $true; Shards = 'Alpha,Always,Beta'; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'property-edit'; Arguments = @{ Bench = '1.1.0'; Property = '    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>' }; Escalate = $true; Shards = 'Alpha,Always,Beta'; Impact = 'FullValidation'; Reason = 'impact-unknown' }
         )) {
             Invoke-Git checkout --quiet --detach $packageBaseSha
             $packageArguments = $case.Arguments
