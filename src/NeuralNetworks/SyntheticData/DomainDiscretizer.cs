@@ -92,7 +92,7 @@ internal sealed class DomainDiscretizer<T>
                 var column = Tensor<T>.FromVector(data.GetColumn(j));
                 isCategorical[j] = true;
                 var declared = columns[j].Categories;
-                if (declared is not null && declared.Count > 0)
+                if (declared is not null && declared.Count > 0 && !columns[j].CategoriesInferredFromData)
                 {
                     // Public domain: the declared categories, decoded as their indices.
                     categoryValues[j] = engine.TensorArange<T>(0, declared.Count, 1);

@@ -877,7 +877,7 @@ internal sealed class TapeTrainingStepper<T>
             cause);
     }
 
-    private static IReadOnlyList<Tensor<T>> TrainedParameters(FusedTrainingStepRequest<T> request)
+    internal static IReadOnlyList<Tensor<T>> TrainedParameters(FusedTrainingStepRequest<T> request)
     {
         if (request.Selection is not null)
             return request.Selection;

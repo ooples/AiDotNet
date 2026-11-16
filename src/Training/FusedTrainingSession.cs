@@ -661,7 +661,8 @@ internal sealed class FusedTrainingSession<T>
             {
                 string reason = "fused compiled step ran (loss " + NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value)).ToString("G6")
                     + ") but did not persist a parameter update; the plan is decoupled from the model's live "
-                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)";
+                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)"
+                    + $" [persisted={persisted}, attached={attached}, sampled={probe?.Length}, gradientsObserved={gradientsObserved}, gradientNonZero={gradientNonZero}]";
                 Warn(reason);
                 if (IsCommitted)
                     Reset(stickyDisable: true);
@@ -975,26 +976,8 @@ internal sealed class FusedTrainingSession<T>
     // layer holds in children (a Swin block owns its bias table; its norms, attention and MLP are sub-layers), so the
     // plan's optimized tensors were not all "live" and a step that had updated the weights was reported as detached.
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
-    {
-        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        var parameters = new List<Tensor<T>>();
-        foreach (var layer in request.Layers)
-        {
-            if (layer is ILayer<T> composite)
-            {
-                TapeTrainingStep<T>.CollectLayerParameters(composite, parameters, seen, materializedOnly: false);
-            }
-            else
-            {
-                foreach (var parameter in layer.GetTrainableParameters())
-                    if (parameter is not null && seen.Add(parameter)) parameters.Add(parameter);
-            }
-        }
-        if (request.ExtraParameters is not null)
-            foreach (var parameter in request.ExtraParameters)
-                if (parameter is not null && seen.Add(parameter)) parameters.Add(parameter);
-        return parameters;
-    }
+        // Include composite children, exactly as the eager and compiled training steps do.
+        => TapeTrainingStepper<T>.TrainedParameters(request);
 
     // The #1822 persistence probe. Before the step it copies the first elements of every trained tensor (about
     // ChecksumTargetSamples in total, at least one per tensor) on whatever device holds the tensor; after the step it
