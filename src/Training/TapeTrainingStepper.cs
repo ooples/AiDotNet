@@ -920,6 +920,8 @@ internal sealed class TapeTrainingStepper<T>
         // A NaN norm is left alone rather than spread to every gradient as a NaN scale.
         if (double.IsNaN(norm) || double.IsInfinity(norm) || norm <= maxNorm) return;
         T scale = NumOps.FromDouble(maxNorm / (norm + 1e-6));
+        // A layer that published one of these by reference keeps the unclipped values before they are scaled in place.
+        NeuralNetworks.Layers.LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(gradients.Values);
         foreach (var gradient in gradients.Values)
             engine.TensorMultiplyScalarInPlace(gradient, scale);
     }

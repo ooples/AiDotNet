@@ -339,6 +339,79 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
     private Dictionary<Tensor<T>, Tensor<T>>? _publishedDeviceGradBuffers;
 
+    // The layers that publish a tape gradient by reference, by gradient tensor. A tape step's gradients are referenced
+    // because nothing writes them after publication, with one exception: a gradient clip scales them in place. The
+    // clip looks its tensors up here first (SnapshotPublishedGradientsBeforeInPlaceWrite), so only a step that clips
+    // pays for a copy. Weak keys: an entry goes with its gradient tensor.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Tensor<T>, List<LayerBase<T>>> ReferencedTapeGradients = new();
+
+    /// <summary>
+    /// Called by a gradient clip before it writes <paramref name="gradients"/> in place: every layer that published one
+    /// of them by reference takes a device copy first, so the published surface keeps the gradient the step computed.
+    /// </summary>
+    /// <remarks>
+    /// Without it the GPU engine published the clipped gradient (the layer still pointed at the tensor the clip
+    /// scaled) while the CPU engine, which copies on publish, published the unclipped one. The copies live in the
+    /// layer's reused device buffers, so a step that clips costs one device-to-device copy per parameter and no host
+    /// allocation after the first; a step that does not clip costs a table lookup per gradient. A surface that was
+    /// already read is on the host and is left alone.
+    /// </remarks>
+    internal static void SnapshotPublishedGradientsBeforeInPlaceWrite(IEnumerable<Tensor<T>> gradients)
+    {
+        foreach (var gradient in gradients)
+        {
+            if (gradient is null || !ReferencedTapeGradients.TryGetValue(gradient, out var layers)) continue;
+            LayerBase<T>[] holders;
+            lock (layers)
+            {
+                holders = layers.ToArray();
+                layers.Clear();
+            }
+            ReferencedTapeGradients.Remove(gradient);
+            foreach (var layer in holders) layer.SnapshotReferencedTapeGradient(gradient);
+        }
+    }
+
+    private void SnapshotReferencedTapeGradient(Tensor<T> gradient)
+    {
+        // Null once the surface was read (it is a host vector by then) or withdrawn by a later publish.
+        var pending = _pendingDeviceGradients;
+        if (pending is null) return;
+        List<Tensor<T>>? parameters = null;
+        foreach (var entry in pending)
+        {
+            if (ReferenceEquals(entry.Value, gradient)) (parameters ??= new List<Tensor<T>>()).Add(entry.Key);
+        }
+        if (parameters is null) return;
+        var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        foreach (var parameter in parameters)
+        {
+            var copy = CopyIntoPublishedDeviceBuffer(parameter, gradient);
+            // The clip runs inside the step's tape, which frees the step's device intermediates when it ends.
+            tape?.Retain(copy);
+            pending[parameter] = copy;
+        }
+    }
+
+    // A device copy of gradient in this layer's buffer for parameter, which is reused from one publish to the next.
+    private Tensor<T> CopyIntoPublishedDeviceBuffer(Tensor<T> parameter, Tensor<T> gradient)
+    {
+        // These snapshots survive the step's arena and are reused only after publication is withdrawn.
+        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var buffers = _publishedDeviceGradBuffers
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
+        {
+            copy?.Dispose();
+            copy = new Tensor<T>((int[])gradient._shape.Clone());
+            buffers[parameter] = copy;
+        }
+        Engine.TensorCopy(gradient, copy);
+        return copy;
+    }
+
     /// <summary>
     /// Gets the input shape for this layer.
     /// </summary>
@@ -7713,20 +7786,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             var published = gradient;
             if (ownership == GradientSourceOwnership.Caller)
             {
-                // These snapshots survive the step's arena and are reused only after publication is withdrawn.
-                using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
-                using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                buffers ??= _publishedDeviceGradBuffers
-                    ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
+                published = CopyIntoPublishedDeviceBuffer(parameter, gradient);
+                buffers = _publishedDeviceGradBuffers;
+            }
+            else
+            {
+                // Referenced, so a clip that scales this tensor in place must find this layer first.
+                var holders = ReferencedTapeGradients.GetOrCreateValue(gradient);
+                lock (holders)
                 {
-                    copy?.Dispose();
-                    copy = new Tensor<T>((int[])gradient._shape.Clone());
-                    buffers[parameter] = copy;
+                    if (!holders.Contains(this)) holders.Add(this);
                 }
-                Engine.TensorCopy(gradient, copy);
-                published = copy;
             }
             tape?.Retain(published);
             owned[parameter] = published;

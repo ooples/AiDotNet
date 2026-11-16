@@ -357,6 +357,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool canReuseNormInStep = false)
     {
         _clippedAheadNormSq = null;
+        // The clip scales the gradients in place; a layer that published one by reference keeps the unclipped values.
+        if (GradientOptions.EnableGradientClipping)
+            LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(gradients.Values);
         var context = new TapeStepContext<T>(parameters, gradients, NumOps.Zero);
         // A sparse embedding's rows join the dense dictionary first, so the norm counts them (as Adam's step does).
         if (GradientOptions.EnableGradientClipping)
@@ -3206,6 +3209,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _stepNoGrad = new NoGradScope<T>();
         try
         {
+            // The clip (here or in StepCore) scales the gradients in place; a layer that published one by reference
+            // keeps the unclipped values first.
+            if (!GradientsClippedAhead && GradientOptions.EnableGradientClipping)
+                LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(context.Gradients.Values);
             if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
