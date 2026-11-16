@@ -153,7 +153,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// - ν = 10: Mild robustness
     /// - ν > 30: Essentially Gaussian
     ///
-    /// The scale parameter is like the standard deviation in regular GP noise.
+    /// The scale parameter sets the Student-t likelihood width; its variance is nu * scale² / (nu - 2) for nu > 2.
     /// </para>
     /// </remarks>
     public StudentTGaussianProcess(
@@ -166,12 +166,18 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         double jitter = 1e-6)
     {
         if (kernel is null) throw new ArgumentNullException(nameof(kernel));
-        if (nu <= 0)
-            throw new ArgumentException("Degrees of freedom must be positive.", nameof(nu));
-        if (scale <= 0)
-            throw new ArgumentException("Scale must be positive.", nameof(scale));
-        if (damping <= 0 || damping > 1)
+        if (!(nu > 0) || double.IsInfinity(nu))
+            throw new ArgumentException("Degrees of freedom must be finite and positive.", nameof(nu));
+        if (!(scale > 0) || double.IsInfinity(scale))
+            throw new ArgumentException("Scale must be finite and positive.", nameof(scale));
+        if (!(damping > 0 && damping <= 1))
             throw new ArgumentException("Damping must be in (0, 1].", nameof(damping));
+        if (maxIterations <= 0)
+            throw new ArgumentException("Maximum EP iterations must be positive.", nameof(maxIterations));
+        if (!(tolerance > 0) || double.IsInfinity(tolerance))
+            throw new ArgumentException("Convergence tolerance must be finite and positive.", nameof(tolerance));
+        if (!(jitter >= 0) || double.IsInfinity(jitter))
+            throw new ArgumentException("Jitter must be finite and nonnegative.", nameof(jitter));
 
         _kernel = kernel;
         _nu = nu;
@@ -256,12 +262,24 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// so they have less influence on the predictions.
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// EP cannot form a proper posterior or cannot reach the configured fixed-point tolerance
+    /// within the iteration budget. A failed fit is not available for prediction.
+    /// </exception>
     public override void Fit(Matrix<T> X, Vector<T> y)
     {
         if (X is null) throw new ArgumentNullException(nameof(X));
         if (y is null) throw new ArgumentNullException(nameof(y));
         if (X.Rows != y.Length)
             throw new ArgumentException("Number of rows in X must match length of y.");
+        if (X.Rows == 0) throw new ArgumentException("At least one observation is required.", nameof(X));
+        for (int i = 0; i < y.Length; i++)
+        {
+            double target = _numOps.ToDouble(y[i]);
+            if (double.IsNaN(target) || double.IsInfinity(target))
+                throw new ArgumentException("Training targets must be finite.", nameof(y));
+        }
+        _isTrained = false;
 
         _X = X;
         _y = y;
@@ -270,45 +288,79 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         // Compute prior covariance matrix
         _K = ComputeKernelMatrix(X, X);
 
-        // Initialize EP site parameters
-        _sitePrecisions = Tensor<T>.CreateDefault(new[] { n }, _numOps.FromDouble(1e-6)).ToVector();
+        // Zero sites initialize exactly to the declared zero-mean prior.
+        _sitePrecisions = new Vector<T>(n);
         _siteNaturalMeans = new Vector<T>(n);
         _weights = Tensor<T>.CreateDefault(new[] { n }, _numOps.One).ToVector();
-
-        // Initialize posterior to prior
-        _posteriorMean = new Vector<T>(n);
-        _posteriorCov = _K.Clone();
-
-        // EP iterations
-        double prevLogZ = double.NegativeInfinity;
+        UpdatePosterior();
+        bool converged = false;
         for (int iter = 0; iter < _maxIterations; iter++)
         {
+            var oldPrecision = _sitePrecisions.Clone();
+            var oldNaturalMean = _siteNaturalMeans.Clone();
+            var oldWeights = _weights.Clone();
+            var oldMean = _posteriorMean!.Clone();
+            var oldCov = _posteriorCov!.Clone();
             double maxChange = 0;
-
-            // Update each site
+            for (int i = 0; i < n; i++) maxChange = Math.Max(maxChange, UpdateSite(i));
+            var proposedPrecision = _sitePrecisions.Clone();
+            var proposedNaturalMean = _siteNaturalMeans.Clone();
+            var proposedWeights = _weights.Clone();
+            // Negative Student-t sites are valid. Backtrack an update only if
+            // the combined Gaussian or a leave-one-out cavity is improper.
+            double fraction = 1;
+            while (true)
+            {
+                try
+                {
+                    UpdatePosterior();
+                    for (int i = 0; i < n; i++)
+                    {
+                        double variance = _numOps.ToDouble(_posteriorCov![i, i]);
+                        double cavity = 1 / variance - _numOps.ToDouble(_sitePrecisions[i]);
+                        if (!(variance > 0) || !(cavity > 0) || double.IsInfinity(variance) || double.IsInfinity(cavity))
+                            throw new InvalidOperationException("EP update produced an improper cavity.");
+                    }
+                    break;
+                }
+                catch (InvalidOperationException)
+                {
+                    fraction *= 0.5;
+                    if (fraction < 1e-8)
+                        throw new InvalidOperationException("EP could not find a proper damped posterior and cavities.");
+                    for (int i = 0; i < n; i++)
+                    {
+                        _sitePrecisions[i] = Blend(oldPrecision[i], proposedPrecision[i]);
+                        _siteNaturalMeans[i] = Blend(oldNaturalMean[i], proposedNaturalMean[i]);
+                        _weights[i] = Blend(oldWeights[i], proposedWeights[i]);
+                    }
+                }
+                T Blend(T previous, T proposed) => _numOps.FromDouble(_numOps.ToDouble(previous) +
+                    fraction * (_numOps.ToDouble(proposed) - _numOps.ToDouble(previous)));
+            }
+            // Likelihood values can barely change while the moments still
+            // move. Require both site and posterior fixed-point residuals.
+            double posteriorChange = 0;
             for (int i = 0; i < n; i++)
             {
-                double change = UpdateSite(i);
-                maxChange = Math.Max(maxChange, change);
+                double mean = _numOps.ToDouble(_posteriorMean![i]);
+                posteriorChange = Math.Max(posteriorChange,
+                    Math.Abs(mean - _numOps.ToDouble(oldMean[i])) / (1 + Math.Abs(mean)));
+                for (int j = 0; j < n; j++)
+                {
+                    double covariance = _numOps.ToDouble(_posteriorCov![i, j]);
+                    posteriorChange = Math.Max(posteriorChange,
+                        Math.Abs(covariance - _numOps.ToDouble(oldCov[i, j])) / (1 + Math.Abs(covariance)));
+                }
             }
-
-            // Update posterior
-            UpdatePosterior();
-
-            // Check convergence
-            double logZ = ComputeLogMarginalLikelihood();
-            if (Math.Abs(logZ - prevLogZ) < _tolerance)
+            if (maxChange < _tolerance && posteriorChange < _tolerance)
             {
-                break;
-            }
-            prevLogZ = logZ;
-
-            if (maxChange < _tolerance)
-            {
+                converged = true;
                 break;
             }
         }
-
+        if (!converged)
+            throw new InvalidOperationException($"Student-t EP did not converge within {_maxIterations} iterations.");
         _isTrained = true;
     }
 
@@ -334,14 +386,12 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         var y = _y;
 
         // Cavity distribution (posterior without site i)
-        double postPrecision = 1.0 / Math.Max(_numOps.ToDouble(_posteriorCov[i, i]), 1e-10);
+        double postPrecision = 1.0 / _numOps.ToDouble(_posteriorCov[i, i]);
         double sitePrecision = _numOps.ToDouble(_sitePrecisions[i]);
         double cavityPrecision = postPrecision - sitePrecision;
 
-        if (cavityPrecision <= 0)
-        {
-            cavityPrecision = 1e-6;
-        }
+        if (!(cavityPrecision > 0) || double.IsInfinity(cavityPrecision))
+            throw new InvalidOperationException("EP requires a finite positive cavity precision.");
 
         double postMean = _numOps.ToDouble(_posteriorMean[i]);
         double siteNaturalMean = _numOps.ToDouble(_siteNaturalMeans[i]);
@@ -349,19 +399,13 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
 
         // Compute tilted distribution moments via numerical integration
         double yi = _numOps.ToDouble(y[i]);
-        var (tiltedMean, tiltedVar, logZ) = ComputeTiltedMoments(
+        var (tiltedMean, tiltedVar) = ComputeTiltedMoments(
             yi, cavityMean, 1.0 / cavityPrecision);
 
         // Compute new site parameters
-        double tiltedPrecision = 1.0 / Math.Max(tiltedVar, 1e-10);
+        double tiltedPrecision = 1.0 / tiltedVar;
         double newSitePrecision = tiltedPrecision - cavityPrecision;
         double newSiteNaturalMean = tiltedPrecision * tiltedMean - cavityPrecision * cavityMean;
-
-        // Ensure positive site precision
-        if (newSitePrecision < 1e-10)
-        {
-            newSitePrecision = 1e-10;
-        }
 
         // Update weights (outlier detection)
         double residual = Math.Abs(yi - tiltedMean);
@@ -382,8 +426,10 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         _siteNaturalMeans[i] = _numOps.FromDouble(dampedNaturalMean);
         _weights[i] = _numOps.FromDouble(dampedWeight);
 
-        return Math.Abs(dampedPrecision - oldPrecision) +
-               Math.Abs(dampedNaturalMean - oldNaturalMean);
+        // A small damping factor makes the update small even far from a
+        // fixed point. Test the proposed moment match, before damping.
+        return Math.Abs(newSitePrecision - oldPrecision) / (1 + Math.Abs(newSitePrecision)) +
+               Math.Abs(newSiteNaturalMean - oldNaturalMean) / (1 + Math.Abs(newSiteNaturalMean));
     }
 
     /// <summary>
@@ -395,56 +441,107 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// with the Student-t likelihood. We compute its mean and variance using numerical integration.
     /// </para>
     /// </remarks>
-    private (double Mean, double Variance, double LogZ) ComputeTiltedMoments(
+    private (double Mean, double Variance) ComputeTiltedMoments(
         double y, double cavityMean, double cavityVar)
     {
-        // Use Gauss-Hermite quadrature
-        int numPoints = 20;
-        double[] nodes = new double[numPoints];
-        double[] weights = new double[numPoints];
-        GaussHermiteQuadrature(numPoints, nodes, weights);
-
-        double cavityStd = Math.Sqrt(cavityVar);
-        double z = 0, m1 = 0, m2 = 0;
-
-        for (int j = 0; j < numPoints; j++)
+        if (!(cavityVar > 0) || double.IsInfinity(cavityVar))
+            throw new InvalidOperationException("Tilted integration requires a finite positive cavity variance.");
+        double std = Math.Sqrt(cavityVar);
+        double location = (y - cavityMean) / std;
+        double width = _scale * Math.Sqrt(_nu) / std;
+        // Standardized cavity coordinates, with explicit splits around the
+        // likelihood peak. A narrow peak must not fall between fixed nodes.
+        var knots = new SortedSet<double>();
+        for (int k = -24; k <= 24; k++) knots.Add(k * 0.5);
+        void AddLikelihoodKnots()
         {
-            double f = cavityMean + cavityStd * Math.Sqrt(2) * nodes[j];
-            double logLik = StudentTLogPdf(y - f, _nu, _scale);
-            double w = weights[j] * Math.Exp(logLik);
-
-            z += w;
-            m1 += w * f;
-            m2 += w * f * f;
+            knots.Add(location);
+            for (double radius = Math.Max(width, 1e-12); radius < 24; radius *= 2)
+            {
+                knots.Add(location - radius);
+                knots.Add(location + radius);
+            }
         }
-
-        z /= Math.Sqrt(Math.PI);
-        m1 /= Math.Sqrt(Math.PI);
-        m2 /= Math.Sqrt(Math.PI);
-
-        if (z < 1e-100)
+        double LogWeight(double z)
         {
-            return (cavityMean, cavityVar, -100);
+            double residual = Math.Abs(y - (cavityMean + std * z));
+            double logRatio = residual == 0 ? double.NegativeInfinity :
+                Math.Log(residual) - Math.Log(_scale) - 0.5 * Math.Log(_nu);
+            double logKernel = logRatio > 0
+                ? 2 * logRatio + LogOnePlus(Math.Exp(-2 * logRatio))
+                : LogOnePlus(Math.Exp(2 * logRatio));
+            return -0.5 * z * z - 0.5 * (_nu + 1) * logKernel;
         }
-
-        double mean = m1 / z;
-        double variance = m2 / z - mean * mean;
-        variance = Math.Max(variance, 1e-10);
-
-        return (mean, variance, Math.Log(z));
+        if (Math.Abs(location) <= 12) AddLikelihoodKnots();
+        double logReference = double.NegativeInfinity;
+        foreach (double z in knots) logReference = Math.Max(logReference, LogWeight(z));
+        // For a very small scale an observation beyond the usual Gaussian
+        // window can still carry posterior mass. Include that mode as well.
+        if (!double.IsInfinity(location) && Math.Abs(location) > 12 &&
+            LogWeight(location) > logReference - 40)
+        {
+            AddLikelihoodKnots();
+            foreach (double z in knots) logReference = Math.Max(logReference, LogWeight(z));
+        }
+        double Integrand(double z, int moment)
+        {
+            double density = Math.Exp(LogWeight(z) - logReference);
+            return moment == 0 ? density : moment == 1 ? density * z : density * z * z;
+        }
+        var points = knots.ToArray();
+        double estimatedMass = 0;
+        for (int k = 1; k < points.Length; k++)
+        {
+            double left = points[k - 1], right = points[k], middle = left + (right - left) / 2;
+            estimatedMass += (right - left) *
+                (Integrand(left, 0) + 4 * Integrand(middle, 0) + Integrand(right, 0)) / 6;
+        }
+        if (!(estimatedMass > 0) || double.IsInfinity(estimatedMass))
+            throw new InvalidOperationException("Student-t tilted density could not be normalized.");
+        double Integrate(int moment)
+        {
+            double total = 0;
+            for (int k = 1; k < points.Length; k++)
+            {
+                double left = points[k - 1], right = points[k], middle = left + (right - left) / 2;
+                double fl = Integrand(left, moment), fm = Integrand(middle, moment), fr = Integrand(right, moment);
+                double estimate = (right - left) * (fl + 4 * fm + fr) / 6;
+                total += Refine(left, right, fl, fm, fr, estimate, 1e-11 * estimatedMass / points.Length, 24);
+            }
+            return total;
+            double Refine(double left, double right, double fl, double fm, double fr,
+                double estimate, double tolerance, int depth)
+            {
+                double middle = left + (right - left) / 2;
+                double lm = left + (middle - left) / 2, rm = middle + (right - middle) / 2;
+                double f1 = Integrand(lm, moment), f2 = Integrand(rm, moment);
+                double first = (middle - left) * (fl + 4 * f1 + fm) / 6;
+                double second = (right - middle) * (fm + 4 * f2 + fr) / 6;
+                double error = first + second - estimate;
+                if (Math.Abs(error) <= 15 * tolerance || lm == left || rm == right)
+                    return first + second + error / 15;
+                if (depth == 0)
+                    throw new InvalidOperationException("Student-t tilted moment quadrature did not converge.");
+                return Refine(left, middle, fl, f1, fm, first, tolerance / 2, depth - 1) +
+                    Refine(middle, right, fm, f2, fr, second, tolerance / 2, depth - 1);
+            }
+        }
+        double mass = Integrate(0);
+        double standardizedMean = Integrate(1) / mass;
+        double standardizedVariance = Integrate(2) / mass - standardizedMean * standardizedMean;
+        if (!(mass > 0) || !(standardizedVariance > 0) || double.IsInfinity(standardizedVariance))
+            throw new InvalidOperationException("Student-t tilted integration produced invalid moments.");
+        return (cavityMean + std * standardizedMean, cavityVar * standardizedVariance);
     }
 
-    /// <summary>
-    /// Computes the log PDF of the Student-t distribution.
-    /// </summary>
-    private double StudentTLogPdf(double x, double nu, double sigma)
+    // Compensate for the rounding in 1 + x. Here x is in [0, 1], so this
+    // provides log1p accuracy without relying on a newer framework Math API.
+    private static double LogOnePlus(double x)
     {
-        double z = x / sigma;
-        double logNorm = LogGamma((nu + 1) / 2) - LogGamma(nu / 2) -
-                         0.5 * Math.Log(nu * Math.PI) - Math.Log(sigma);
-        double logKernel = -((nu + 1) / 2) * Math.Log(1 + z * z / nu);
-        return logNorm + logKernel;
+        double sum = 1 + x;
+        return sum == 1 ? x : Math.Log(sum) * (x / (sum - 1));
     }
+
 
     /// <summary>
     /// Updates the posterior distribution from site parameters.
@@ -457,78 +554,30 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     private void UpdatePosterior()
     {
-        if (_K is null || _sitePrecisions is null || _siteNaturalMeans is null ||
-            _posteriorMean is null || _posteriorCov is null) return;
-
-        int n = _K.Rows;
-
-        // EP posterior (Rasmussen & Williams, GPML, Alg. 3.5, lines 7-8):
-        //   Σ = K - K (K + S̃⁻¹)⁻¹ K = K - Vᵀ V,  V = L⁻¹ S̃^½ K,  L = chol(I + S̃^½ K S̃^½)
-        //   μ = Σ ν̃
-        // The B = I + S̃^½ K S̃^½ form never inverts a site precision, so sites near zero are safe.
-        var engine = Engine;
-        var (prior, lower, sqrtTau) = EpFactor();
-        var V = LinalgDispatch<T>.SolveTriangular(
-            lower, engine.TensorMultiply(engine.TensorBroadcastTo(sqrtTau, new[] { n, n }), prior), upper: false);
-        var posteriorCov = engine.TensorSubtract(prior, engine.TensorMatMul(engine.TensorTranspose(V), V));
-        _posteriorCov = posteriorCov.ToMatrix();
-
-        var naturalMeans = Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 });
-        engine.TensorMatMul(posteriorCov, naturalMeans).AsSpan().CopyTo(_posteriorMean.AsWritableSpan());
-    }
-
-    /// <summary>
-    /// Prior covariance K (with jitter), L = chol(I + S̃^½ K S̃^½) and S̃^½ as an [n, 1] column,
-    /// where S̃ = diag(site precisions) clamped at zero.
-    /// </summary>
-    private (Tensor<T> Prior, Tensor<T> Lower, Tensor<T> SqrtTau) EpFactor()
-    {
-        if (_K is null || _sitePrecisions is null)
-            throw new InvalidOperationException("Model not properly initialized.");
-
+        if (_K is null || _sitePrecisions is null || _siteNaturalMeans is null) return;
         var engine = Engine;
         int n = _K.Rows;
         var prior = Tensor<T>.FromMatrix(GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(_jitter)));
-        var sqrtTau = engine.TensorSqrt(engine.TensorMax(Tensor<T>.FromVector(_sitePrecisions), _numOps.Zero))
-            .Reshape(new[] { n, 1 });
-        var outer = engine.TensorMatMul(sqrtTau, engine.TensorTranspose(sqrtTau));
-        var B = engine.TensorAdd(engine.TensorEye<T>(n), engine.TensorMultiply(prior, outer));
-
-        return (prior, CholeskyFactor(B), sqrtTau);
-    }
-
-    /// <summary>
-    /// Computes the log marginal likelihood approximation.
-    /// </summary>
-    private double ComputeLogMarginalLikelihood()
-    {
-        // Simplified approximation for convergence monitoring
-        if (_posteriorMean is null || _posteriorCov is null) return 0;
-        var y = FittedY;
-
-        // Σ_i log t_ν(y_i - m_i; σ_i) with σ_i = sqrt(v_i + scale²):
-        // log Γ((ν+1)/2) - log Γ(ν/2) - ½ log(νπ) - log σ_i - ((ν+1)/2) log(1 + z_i²/ν), z_i = (y_i - m_i)/σ_i
-        var engine = Engine;
-        int n = y.Length;
-        double logNormConstant = LogGamma((_nu + 1) / 2) - LogGamma(_nu / 2) - 0.5 * Math.Log(_nu * Math.PI);
-        var residuals = Tensor<T>.FromVector(engine.Subtract(y, _posteriorMean));
-        var sigma = engine.TensorSqrt(engine.TensorAddScalar(
-            engine.TensorDiagonal(Tensor<T>.FromMatrix(_posteriorCov)), _numOps.FromDouble(_scale * _scale)));
-        var z = engine.TensorDivide(residuals, sigma);
-        var logKernel = engine.TensorLog1p(engine.TensorDivideScalar(engine.TensorSquare(z), _numOps.FromDouble(_nu)));
-        T total = _numOps.Subtract(
-            _numOps.Subtract(_numOps.FromDouble(n * logNormConstant), engine.TensorSum(engine.TensorLog(sigma))),
-            _numOps.Multiply(_numOps.FromDouble((_nu + 1) / 2), engine.TensorSum(logKernel)));
-
-        // Convergence is monitored against the double tolerance.
-        return _numOps.ToDouble(total);
+        var priorLower = CholeskyFactor(prior);
+        var tau = Tensor<T>.FromVector(_sitePrecisions).Reshape(new[] { n, 1 });
+        // Whitened signed-site precision: B = I + L^T diag(tau) L.
+        // Unlike sqrt(tau), this represents legitimate negative EP sites.
+        var B = engine.TensorAdd(engine.TensorEye<T>(n),
+            engine.TensorMatMul(engine.TensorTranspose(priorLower),
+                engine.TensorMultiply(engine.TensorBroadcastTo(tau, new[] { n, n }), priorLower)));
+        var lower = CholeskyFactor(B);
+        var covariance = engine.TensorMatMul(priorLower,
+            LinalgDispatch<T>.CholeskySolve(engine.TensorTranspose(priorLower), lower, upper: false));
+        _posteriorCov = covariance.ToMatrix();
+        _posteriorMean = engine.TensorMatMul(covariance,
+            Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 })).Reshape(new[] { n }).ToVector();
     }
 
     /// <summary>
     /// Predicts the mean and variance for a single input point.
     /// </summary>
     /// <param name="x">The input feature vector.</param>
-    /// <returns>Tuple of (mean, variance).</returns>
+    /// <returns>Latent posterior mean (the predictive location) and observation variance. The variance is positive infinity when nu is at most two.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This predicts for a single point with uncertainty.
@@ -567,7 +616,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// Makes predictions with uncertainty estimates for multiple points.
     /// </summary>
     /// <param name="XNew">New input points as rows.</param>
-    /// <returns>Tuple of (mean predictions, predictive variances).</returns>
+    /// <returns>Latent posterior means and observation variances, including Student-t noise variance nu * scale² / (nu - 2). Variances are positive infinity for nu at most two.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This predicts the function value at new points.
@@ -585,25 +634,19 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         int n = _X.Rows;
         int nNew = XNew.Rows;
         var engine = Engine;
-
-        // EP predictive distribution (Rasmussen & Williams, GPML, Alg. 3.6):
-        //   z = S̃^½ L⁻ᵀ L⁻¹ S̃^½ K ν̃,  f̄* = k*ᵀ (ν̃ - z)
-        //   v = L⁻¹ S̃^½ k*,           V[f*] = k** - vᵀ v
-        // so the prediction follows the robust EP posterior, not a plain GP fit of y.
-        var (prior, lower, sqrtTau) = EpFactor();
-        var naturalMeans = Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 });
-        var scaledPriorMean = engine.TensorMultiply(sqrtTau, engine.TensorMatMul(prior, naturalMeans));
-        var z = engine.TensorMultiply(sqrtTau, LinalgDispatch<T>.CholeskySolve(scaledPriorMean, lower, upper: false));
-        var weights = engine.TensorSubtract(naturalMeans, z);
-
+        var prior = Tensor<T>.FromMatrix(GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(_jitter)));
+        var priorLower = CholeskyFactor(prior);
         var kStar = Tensor<T>.FromMatrix(ComputeKernelMatrix(XNew, _X));
-        var mean = engine.TensorMatMul(kStar, weights).Reshape(new[] { nNew }).ToVector();
+        var projection = LinalgDispatch<T>.CholeskySolve(engine.TensorTranspose(kStar), priorLower, upper: false);
+        var mean = engine.TensorMatMul(engine.TensorTranspose(projection),
+            Tensor<T>.FromVector(_posteriorMean).Reshape(new[] { n, 1 })).Reshape(new[] { nNew }).ToVector();
+        // Conditional-prior variance plus projected signed-site posterior.
+        var reduction = engine.ReduceSum(engine.TensorMultiply(engine.TensorTranspose(kStar), projection),
+            new[] { 0 }, keepDims: false);
+        var posteriorContribution = engine.ReduceSum(engine.TensorMultiply(projection,
+            engine.TensorMatMul(Tensor<T>.FromMatrix(_posteriorCov), projection)),
+            new[] { 0 }, keepDims: false);
 
-        // Variance prediction: k** - ||L⁻¹ S̃^½ k*||² + scale², floored at 1e-10
-        var scaledCross = engine.TensorMultiply(
-            engine.TensorBroadcastTo(sqrtTau, new[] { n, nNew }), engine.TensorTranspose(kStar));
-        var v = LinalgDispatch<T>.SolveTriangular(lower, scaledCross, upper: false);
-        var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
         var selfKernel = new Vector<T>(XNew.Rows);
         for (int ri = 0; ri < XNew.Rows; ri++)
         {
@@ -612,10 +655,14 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         }
 
         var kStarStar = Tensor<T>.FromVector(selfKernel);
-        var variance = engine.TensorMax(
-            engine.TensorAddScalar(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(_scale * _scale)),
-            NumericTolerance.Of<T>(1e-10)).ToVector();
-
+        // Student-t scale is not its standard deviation. Observation noise
+        // has no finite variance when nu <= 2, even if latent moments exist.
+        double noiseVariance = _nu > 2 ? _scale * _scale * (_nu / (_nu - 2)) : double.PositiveInfinity;
+        var latentVariance = engine.TensorAdd(engine.TensorSubtract(kStarStar, reduction), posteriorContribution);
+        if (!GaussianProcessEngineOps.AllFinite(latentVariance) ||
+            _numOps.LessThan(engine.TensorMinValue(latentVariance), _numOps.Zero))
+            throw new InvalidOperationException("Student-t EP produced an invalid predictive latent variance.");
+        var variance = engine.TensorAddScalar(latentVariance, _numOps.FromDouble(noiseVariance)).ToVector();
         return (mean, variance);
     }
 
@@ -645,118 +692,12 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     private static Vector<T> GetRow(Matrix<T> matrix, int row) => matrix.GetRow(row);
 
     /// <summary>
-    /// Lower Cholesky factor with every pivot floored at 1e-10:
-    /// L_jj = sqrt(max(K_jj - Σ_k L_jk², 1e-10)), so a kernel matrix that is not positive definite
-    /// still yields a usable factor instead of an exception.
+    /// Invalid EP candidates must be damped, rather than hidden by flooring
+    /// their Cholesky pivots.
     /// </summary>
-    private static Tensor<T> CholeskyDecomposition(Matrix<T> K)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var engine = AiDotNetEngine.Current;
-        T floor = NumericTolerance.Of<T>(1e-10);
-        var unclamped = GaussianProcessEngineOps.UnclampedCholesky(K, floor);
-        if (unclamped is not null)
-            return unclamped;
-
-        int n = K.Rows;
-        // Fallback: column-by-column factorization with the pivot floor applied as each pivot is formed.
-        var L = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            var rowI = L.GetRow(i);
-            for (int j = 0; j <= i; j++)
-            {
-                // Entries of row i at and past column j are still zero, so the full dot products are Σ_{k<j}.
-                T sum = engine.DotProduct(rowI, j == i ? rowI : L.GetRow(j));
-                if (i == j)
-                {
-                    rowI[j] = numOps.Sqrt(MathHelper.Max(numOps.Subtract(K[i, i], sum), floor));
-                }
-                else
-                {
-                    rowI[j] = numOps.Divide(numOps.Subtract(K[i, j], sum), L[j, j]);
-                }
-            }
-
-            L.SetRow(i, rowI);
-        }
-
-        return Tensor<T>.FromMatrix(L);
-    }
-
-    /// <summary>
-    /// Lower Cholesky factor of a symmetric matrix with every pivot floored at 1e-10.
-    /// </summary>
-    private static Tensor<T> CholeskyFactor(Tensor<T> matrix) => CholeskyDecomposition(matrix.ToMatrix());
-
-    /// <summary>
-    /// Computes log gamma function.
-    /// </summary>
-    private static double LogGamma(double x)
-    {
-        // Stirling's approximation for large x
-        if (x > 10)
-        {
-            return (x - 0.5) * Math.Log(x) - x + 0.5 * Math.Log(2 * Math.PI)
-                   + 1.0 / (12 * x) - 1.0 / (360 * x * x * x);
-        }
-
-        // Lanczos approximation for smaller values
-        double[] g = { 1.000000000000000174663, 5716.400188274341379136,
-            -14815.30426768413909044, 14291.49277657478554025,
-            -6348.160217641458813289, 1301.608286058321874105,
-            -108.1767053514369634679, 2.605696505611755827729 };
-
-        if (x < 0.5)
-        {
-            return Math.Log(Math.PI / Math.Sin(Math.PI * x)) - LogGamma(1 - x);
-        }
-
-        x -= 1;
-        double sum = g[0];
-        for (int i = 1; i < 8; i++)
-        {
-            sum += g[i] / (x + i);
-        }
-
-        double t = x + 7.5;
-        return 0.5 * Math.Log(2 * Math.PI) + (x + 0.5) * Math.Log(t) - t + Math.Log(sum);
-    }
-
-    /// <summary>
-    /// Gauss-Hermite quadrature nodes and weights.
-    /// </summary>
-    private static void GaussHermiteQuadrature(int n, double[] nodes, double[] weights)
-    {
-        // Precomputed values for n=20
-        if (n == 20)
-        {
-            double[] preNodes = {
-                -5.387480890011, -4.603682449550, -3.944764040115, -3.347854567384,
-                -2.788806058428, -2.254974002089, -1.738537712116, -1.234076215395,
-                -0.737473728545, -0.245340708301, 0.245340708301, 0.737473728545,
-                1.234076215395, 1.738537712116, 2.254974002089, 2.788806058428,
-                3.347854567384, 3.944764040115, 4.603682449550, 5.387480890011
-            };
-            double[] preWeights = {
-                2.229393645534e-13, 4.399340992273e-10, 1.086069370769e-7, 7.802556478532e-6,
-                2.283386360163e-4, 3.243773342238e-3, 2.481052088746e-2, 1.090172060200e-1,
-                2.866755053628e-1, 4.622436696006e-1, 4.622436696006e-1, 2.866755053628e-1,
-                1.090172060200e-1, 2.481052088746e-2, 3.243773342238e-3, 2.283386360163e-4,
-                7.802556478532e-6, 1.086069370769e-7, 4.399340992273e-10, 2.229393645534e-13
-            };
-            Array.Copy(preNodes, nodes, n);
-            Array.Copy(preWeights, weights, n);
-            return;
-        }
-
-        // Fallback: simple approximation
-        for (int i = 0; i < n; i++)
-        {
-            nodes[i] = -4 + 8.0 * i / (n - 1);
-            weights[i] = Math.Exp(-nodes[i] * nodes[i]) / n * 8;
-        }
-    }
+    private static Tensor<T> CholeskyFactor(Tensor<T> matrix) =>
+        GaussianProcessEngineOps.UnclampedCholesky(matrix.ToMatrix(), MathHelper.GetNumericOperations<T>().Zero)
+        ?? throw new InvalidOperationException("Student-t EP precision is not positive definite.");
 
     #endregion
 }
