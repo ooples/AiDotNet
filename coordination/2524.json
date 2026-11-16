@@ -46,6 +46,18 @@
       "files": [
         "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
       ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Approved bidirectional infrastructure-only runner failover and mandatory evidence reconciliation",
+      "files": [
+        ".github/workflows/sonarcloud.yml",
+        "tools/TestImpact/RunnerFailover.ps1",
+        "tools/TestImpact/New-RunnerFailoverPlan.ps1",
+        "tools/TestImpact/Resolve-RunnerFailoverResults.ps1",
+        "tools/TestImpact/Test-RunnerFailover.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1"
+      ]
     }
   ],
   "verification": {
@@ -76,6 +88,11 @@
       "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
       "status": "approved",
       "id": "merge"
+    },
+    {
+      "id": "runner-failover",
+      "status": "approved",
+      "decision": "One alternate-pool attempt for proven terminal infrastructure failure; visible intermediate attempts backed by mandatory fail-closed logical shard evidence gate. All required shards, exact SHA/artifact/definition/TRX checks preserved; real/unknown/test/compiler/analyzer/OOM/manual-cancel failures cannot be hidden. Queued-pool watchdog outside first batch."
     }
   ],
   "questions": [],
@@ -86,8 +103,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T17:16:50.4262735Z",
+  "updated_utc": "2026-11-16T17:20:37.1982205Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43915994443",
-  "failover": "User requested bidirectional runner-infrastructure failover; targeted evidence-gated vs full-cycle policy question pending. No implementation or check weakening yet."
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
 }
