@@ -252,47 +252,95 @@ public class ClosureObjectiveFusedTrainingTests
         }
     }
 
-    [Fact]
-    public void Host_read_inside_the_objective_never_replays_stale()
+    private sealed record LoggedRun(Tensor<double>[] Weights, int FusedSteps, int OutsidePlanSteps, int Compiles,
+        int PlanCount, bool Dynamic, int GeneratorNext);
+
+    /// <summary>
+    /// The objective of <see cref="Run"/>, reading its own loss on the host (logging) on the steps
+    /// <paramref name="readsOn"/> picks: no plan can replay such a step.
+    /// </summary>
+    private static LoggedRun RunLogged(bool compile, int steps, Func<int, bool> readsOn, Func<int, int>? batchOf = null,
+        int? noiseSeed = null)
     {
-        // The objective reads its loss on the host every other step (logging): those probes abort and the step
-        // compiles from its own trace; the weights still match eager exactly.
         var original = TensorCodecOptions.Current;
         try
         {
-            Tensor<double>[] RunLogged(bool compile, out int fused)
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            var weights = Clone(InitialWeights());
+            var optimizer = Adam();
+            int step = 0;
+            var noise = noiseSeed is { } n ? new Random(n) : null;
+            var inner = Objective(weights, () => step, batchOf ?? (_ => 8), noise);
+            double logged = 0;
+            Func<Tensor<double>> objective = () =>
             {
-                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
-                CompiledTapeTrainingStep<double>.Invalidate();
-                var weights = Clone(InitialWeights());
-                var optimizer = Adam();
-                int step = 0;
-                var inner = Objective(weights, () => step, _ => 8);
-                double logged = 0;
-                Func<Tensor<double>> objective = () =>
-                {
-                    var loss = inner();
-                    if (step % 2 == 1) logged += loss.ToArray()[0];
-                    return loss;
-                };
-                for (step = 0; step < 6; step++)
-                    TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer);
-                fused = TapeTrainingStepper<double>.ForOwner(optimizer).FusedStepCount;
-                Assert.False(double.IsNaN(logged));
-                return weights;
-            }
-
-            var eager = RunLogged(compile: false, out _);
-            var compiled = RunLogged(compile: true, out int fusedSteps);
-
-            Assert.Equal(6, fusedSteps);
-            AssertSameWeights(eager, compiled);
+                var loss = inner();
+                if (readsOn(step)) logged += loss.ToArray()[0];
+                return loss;
+            };
+            for (step = 0; step < steps; step++)
+                TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer);
+            Assert.False(double.IsNaN(logged));
+            var stepper = TapeTrainingStepper<double>.ForOwner(optimizer);
+            return new LoggedRun(weights, stepper.FusedStepCount, stepper.OutsidePlanStepCount,
+                compile ? CompiledTapeTrainingStep<double>.LastClosureCompileCount : 0,
+                CompiledTapeTrainingStep<double>.LastClosurePlanCount, CompiledTapeTrainingStep<double>.LastClosureIsDynamic,
+                noise?.Next() ?? 0);
         }
         finally
         {
             TensorCodecOptions.SetCurrent(original);
             CompiledTapeTrainingStep<double>.Invalidate();
         }
+    }
+
+    [Fact]
+    public void Host_read_inside_the_objective_never_replays_stale()
+    {
+        // The objective reads its loss on the host every other step (logging): those probes abort, so no plan replays
+        // them. Each runs on the eager tape with the plan's optimizer and compiles nothing; the steps between replay
+        // the one plan. The weights still match eager exactly.
+        var eager = RunLogged(compile: false, steps: 6, readsOn: s => s % 2 == 1);
+        var compiled = RunLogged(compile: true, steps: 6, readsOn: s => s % 2 == 1);
+
+        Assert.Equal(6, compiled.FusedSteps);
+        Assert.Equal(3, compiled.OutsidePlanSteps);
+        Assert.Equal(1, compiled.Compiles);
+        Assert.False(compiled.Dynamic, "one-off host reads must not stop the objective replaying its plan");
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Host_read_on_every_step_from_some_step_on_runs_outside_the_plan_and_replays_its_draws()
+    {
+        // From step 2 on every step reads on the host: no plan could replay any of them, so none is compiled. Each
+        // eager step reuses the draws its probe made, so the noise generator advances once per step, as eagerly.
+        var eager = RunLogged(compile: false, steps: 8, readsOn: s => s >= 2, noiseSeed: 7);
+        var compiled = RunLogged(compile: true, steps: 8, readsOn: s => s >= 2, noiseSeed: 7);
+
+        Assert.Equal(8, compiled.FusedSteps);
+        Assert.Equal(6, compiled.OutsidePlanSteps);
+        Assert.Equal(1, compiled.Compiles);
+        Assert.Equal(eager.GeneratorNext, compiled.GeneratorNext);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void A_lasting_change_of_structure_compiles_once_and_replays_the_new_plan()
+    {
+        // From step 2 on the batch is 5 rows for good: a matched probe with a new signature, which a plan can replay.
+        // It compiles once and every later step replays it; nothing runs outside the plans.
+        int[] batches = { 8, 8, 5, 5, 5, 5, 5, 5 };
+        var eager = RunLogged(compile: false, steps: batches.Length, readsOn: _ => false, batchOf: t => batches[t]);
+        var compiled = RunLogged(compile: true, steps: batches.Length, readsOn: _ => false, batchOf: t => batches[t]);
+
+        Assert.Equal(batches.Length, compiled.FusedSteps);
+        Assert.Equal(0, compiled.OutsidePlanSteps);
+        Assert.Equal(2, compiled.Compiles);
+        Assert.Equal(2, compiled.PlanCount);
+        Assert.False(compiled.Dynamic);
+        AssertSameWeights(eager.Weights, compiled.Weights);
     }
 
     [Fact]

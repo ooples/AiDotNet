@@ -853,13 +853,15 @@ internal sealed class FusedTrainingSession<T>
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
     // One training step of a committed plan's request on the eager tape, applied by the plan's optimizer. Its random
-    // draws are the step's own: the eager tape runs the objective for real. The gradients reach the model's gradient
+    // draws are the step's own: the ones the step's probe drew, then fresh ones past them. The gradients reach the model's gradient
     // surface first, as a fused step's do. False, with nothing applied, when the configured plan cannot take them.
     private static bool TryStepOutsideThePlan(FusedTrainingStepRequest<T> request,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients, out Tensor<T> loss)
     {
         var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
         Dictionary<Tensor<T>, Tensor<T>> gradients;
+        // The step's probe already drew its random values; the eager run takes those rather than drawing again.
+        using (CompiledTapeTrainingStep<T>.ReplayUnreplayableStepDraws())
         using (var tape = new GradientTape<T>(TrainingTapeOptions.Step))
         {
             loss = request.ComputeLoss(request.Forward(request.Input), request.Target);

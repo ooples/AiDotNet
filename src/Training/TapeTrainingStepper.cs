@@ -129,6 +129,12 @@ internal sealed class TapeTrainingStepper<T>
     /// <summary>Steps this stepper ran on the eager tape.</summary>
     public int EagerStepCount { get; private set; }
 
+    /// <summary>
+    /// Of <see cref="FusedStepCount"/>, the closure-objective steps no plan could replay: the eager tape took their
+    /// gradients and the fused plan's optimizer applied them.
+    /// </summary>
+    internal int OutsidePlanStepCount { get; private set; }
+
     /// <summary>Trains one batch and returns its loss.</summary>
     public T Step(FusedTrainingStepRequest<T> request)
     {
@@ -260,6 +266,7 @@ internal sealed class TapeTrainingStepper<T>
         }
 
         FusedStepCount++;
+        if (Session.LastStepRanOutsidePlan) OutsidePlanStepCount++;
         LastStepFused = true;
         return true;
     }

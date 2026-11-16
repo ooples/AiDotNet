@@ -117,6 +117,8 @@ public static class CompiledTapeTrainingStep<T>
         // The last call declined because no compiled plan can replay the closure objective this step (see
         // LastFallbackWasUnreplayableClosureStep).
         internal bool lastFallbackUnreplayableClosureStep;
+        // That step's probe draws, for the eager tape that runs it outside the plan.
+        internal CompiledStepRandom<T>.CaptureScope? unreplayableStepDraws;
         internal object? mpPlan;
         internal int[]? mpKey;
         [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
@@ -1318,6 +1320,28 @@ public static class CompiledTapeTrainingStep<T>
                     ReportClosureFallback(closure,
                         probe == ClosureGuardResult.Aborted ? ClosureFallbackReason.Aborted : ClosureFallbackReason.Unsignable,
                         reason);
+                    // A probe that fails (a host read, an op the probe cannot run, uncomparable state) yields no
+                    // signature, so a plan traced from this step could never be selected again: every later step that
+                    // can replay is found through a matched probe, and a lasting change of structure that a plan can
+                    // replay shows up as a matched probe with a new signature, which compiles once below. Once a plan
+                    // has trained, this step therefore does not trace and compile a plan only to run it once. The
+                    // eager tape takes its gradients and the configured plan's optimizer applies them (the session's
+                    // outside-plan step), and the next step probes again and replays. It does not count toward the
+                    // dynamic rule either, which would otherwise compile every later step from its own trace.
+                    if (configured is AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T>)
+                    {
+                        closure.RecordOutsidePlanStep(reason);
+                        CurrentState.lastFallbackUnreplayableClosureStep = true;
+                        CurrentState.unreplayableStepDraws = probeDraws;
+                        _lastFallbackException = new InvalidOperationException(
+                            "the closure objective cannot replay a compiled plan this step (" + probe + "): " + reason);
+                        Fd(_lastFallbackException.Message);
+                        t_lastClosurePlanCount = closure.PlanCount;
+                        t_lastClosureIsDynamic = closure.IsDynamic;
+                        t_lastClosureCompileCount = closure.Compiles;
+                        t_lastClosureOutsidePlanSteps = closure.OutsidePlanSteps;
+                        return false;
+                    }
                 }
 
                 closure.RecordStep(failed: entry is null, reason: reason);
@@ -1341,8 +1365,11 @@ public static class CompiledTapeTrainingStep<T>
             }
         }
 
+        if (compiledThisCall) closure.Compiles++;
         t_lastClosurePlanCount = closure.PlanCount;
         t_lastClosureIsDynamic = closure.IsDynamic;
+        t_lastClosureCompileCount = closure.Compiles;
+        t_lastClosureOutsidePlanSteps = closure.OutsidePlanSteps;
         plan = entry.Plan;
         // A different plan continues the configured one's optimizer (moments, step count) through the shape-switch
         // path below, exactly as a new batch shape does.
@@ -1394,6 +1421,27 @@ public static class CompiledTapeTrainingStep<T>
 
     /// <summary>Whether the last closure-objective step on this thread had given up caching (the dynamic rule).</summary>
     internal static bool LastClosureIsDynamic => t_lastClosureIsDynamic;
+
+    [ThreadStatic] private static int t_lastClosureCompileCount;
+    [ThreadStatic] private static int t_lastClosureOutsidePlanSteps;
+
+    /// <summary>Plans the last closure objective on this thread has traced and compiled (diagnostics and tests).</summary>
+    internal static int LastClosureCompileCount => t_lastClosureCompileCount;
+
+    /// <summary>Steps the last closure objective on this thread ran outside its plans (diagnostics and tests).</summary>
+    internal static int LastClosureOutsidePlanSteps => t_lastClosureOutsidePlanSteps;
+
+    /// <summary>
+    /// Replays, inside the scope it returns, the random draws the probe of the last step that no plan could replay
+    /// made, so the eager tape that runs that step consumes each generator once, as an eager step does. Null when the
+    /// probe drew nothing to hand back.
+    /// </summary>
+    internal static IDisposable? ReplayUnreplayableStepDraws()
+    {
+        var captured = CurrentState.unreplayableStepDraws;
+        CurrentState.unreplayableStepDraws = null;
+        return captured is null ? null : CompiledStepRandom<T>.ReplayDraws(captured);
+    }
 
     private static void ReportClosureFallback(ClosureObjectiveState<T> closure, ClosureFallbackReason kind, string? reason)
     {
@@ -1451,6 +1499,7 @@ public static class CompiledTapeTrainingStep<T>
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
         CurrentState.lastFallbackUnreplayableClosureStep = false;
+        CurrentState.unreplayableStepDraws = null;
 
         if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
