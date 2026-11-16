@@ -1,0 +1,611 @@
+import type { APIRequestContext, Page, Request, Response } from '@playwright/test';
+import { readdirSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { randomPassword, testUserEmail } from './backend';
+import { hasSession, signIn, type Persona } from './personas';
+
+// Exhaustive crawler for one persona: visits every page the persona can reach, checks every link,
+// and clicks every control, failing on anything a user would experience as broken.
+//
+// Links:     no href / "#" / "javascript:" (unless an in-page anchor to an element that exists);
+//            internal targets must answer < 400; external targets must not be 404/410/unreachable.
+// Controls:  each visible, enabled control is clicked (forms are filled first) and must DO
+//            something observable: navigate, open a popup or download, show a dialog, send a
+//            request, write the clipboard, or change what is on screen. While it runs there must be
+//            no page error, no console error, no error-looking alert, and no backend response
+//            >= 400 (signed-in personas) unless the test lists that exact case as expected.
+//            Controls revealed by a click (menus, modals) are explored too, depth-first.
+// Coverage:  a control the crawler cannot exercise (disabled and never enabled, or listed as
+//            dedicated) must be named in `dedicated` with the test that covers it, and every
+//            dedicated entry must match a control that exists, so the list cannot rot.
+//
+// Pages are discovered from src/pages and from links followed during the crawl, so new pages and
+// new controls are covered without editing this file.
+//
+// Templated page families (the ~12,000 API reference pages, docs, features, solutions) are opened
+// in the browser only for the first few pages of each family, since every page of a family has the
+// same controls. Every other page is still fetched, and every link on it checked, over plain HTTP
+// in parallel. That keeps a full-site crawl to minutes instead of hours.
+
+export interface Finding { page: string; control: string; problem: string }
+
+export interface CrawlOptions {
+  page: Page;
+  request: APIRequestContext;
+  origin: string;
+  persona: Persona | null;              // null = signed out
+  seeds: string[];
+  inScope: (path: string) => boolean;   // same-origin pages this persona should visit
+  /** Answer backend writes with a stub instead of sending them (admin: real customer data). */
+  stubWrites?: boolean;
+  /** Controls covered by a dedicated test instead: key regex -> the test that covers it. */
+  dedicated: Array<[RegExp, string] | [RegExp, string, { optional: true }]>;
+  /** Backend responses >= 400 that are the correct outcome of that control. */
+  expectedStatus?: Array<{ control: RegExp; url: RegExp; status: number }>;
+  /** Only exercise controls whose key is new (used for the mobile pass after the desktop pass). */
+  skipKeys?: Set<string>;
+  maxDepth?: number;
+  /** Browser visits per templated family; the rest are link-checked over HTTP. */
+  browserPagesPerFamily?: number;
+}
+
+export interface CrawlReport {
+  findings: Finding[];
+  pages: string[];
+  httpPages: number;
+  exercised: string[];
+  links: number;
+  keys: Set<string>;
+}
+
+export function staticRoutes(): string[] {
+  const root = join(process.cwd(), 'src', 'pages');
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!name.endsWith('.astro') || name.includes('[')) continue;
+      const rel = relative(root, full).split(sep).join('/').replace(/\.astro$/, '');
+      out.push((rel === 'index' ? '/' : `/${rel.replace(/(^|\/)index$/, '')}/`).replace(/\/+/g, '/'));
+    }
+  };
+  walk(root);
+  return out.sort();
+}
+
+interface ControlInfo {
+  key: string;
+  selector: string;
+  label: string;
+  tag: string;
+  type: string;
+  inForm: boolean;
+  disabled: boolean;
+  visible: boolean;
+}
+
+interface LinkInfo { raw: string | null; href: string; label: string; key: string }
+
+const SUPABASE_HOST = /\.supabase\.co$/;
+const FAMILY_ROOTS = /^\/(docs|features|solutions)\//;
+/** One template per family: /docs/reference/wiki/** -> /docs/reference/wiki/*, /docs/tutorials/x/ ->
+ *  /docs/tutorials/*, /features/x/ -> /features/*. Index pages (/docs/, /features/) are not in one. */
+export function familyOf(path: string): string | null {
+  if (!FAMILY_ROOTS.test(path)) return null;
+  const segs = path.split('/').filter(Boolean);
+  const depth = segs[0] === 'docs' ? Math.min(segs.length - 1, segs[1] === 'reference' && segs[2] === 'wiki' ? 3 : 2) : 1;
+  if (segs.length <= depth) return null;
+  return `/${segs.slice(0, depth).join('/')}/*`;
+}
+
+async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (i < items.length) await fn(items[i++]);
+  }));
+}
+const BENIGN_EXTERNAL_STATUS = new Set([401, 403, 405, 429, 999]); // bot walls (GitHub, LinkedIn, X)
+
+// Runs in the page: tags every control with a replayable selector and a stable dedupe key.
+// The open modal, if any: a dialog, or a fixed layer covering most of the viewport. While one is
+// open only its own controls can be reached; the page behind it is covered.
+const ACTIVE_MODAL = () => {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const layers = Array.from(document.querySelectorAll('body *')).filter((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return false;
+    if ((el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) === false) return false;
+    if (el.matches('dialog[open], [role=dialog], [role=alertdialog], [aria-modal=true]')) return true;
+    const cs = getComputedStyle(el);
+    return cs.position === 'fixed' && r.width >= vw * 0.9 && r.height >= vh * 0.9 && !!el.querySelector('button, a, input, select');
+  });
+  return (layers[layers.length - 1] as Element | undefined) ?? null;
+};
+type ModalWindow = { __activeModal?: () => Element | null };
+
+/** The control exists, is laid out, and is not covered by a modal it is not part of. */
+const REACHABLE = (selector: string) => {
+  const el = document.querySelector(selector);
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0 || (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) === false) return false;
+  const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
+  return !modal || modal.contains(el);
+};
+
+const ENUMERATE = (path: string) => {
+  const CONTROL = 'button, [role=button], [role=tab], [role=switch], [role=menuitem], [role=checkbox], input[type=submit], input[type=button], input[type=checkbox], input[type=radio], select, summary, a[href^="#"], a[href=""], a:not([href]), a[href^="javascript:"], [onclick]';
+  const LAYOUT = 'header, nav, footer, #account-sidebar, aside, [data-layout]';
+  const cssPath = (el: Element): string => {
+    if (el.id) return `#${CSS.escape(el.id)}`;
+    const parts: string[] = [];
+    let cur: Element | null = el;
+    while (cur && cur !== document.body) {
+      if (cur.id) { parts.unshift(`#${CSS.escape(cur.id)}`); break; }
+      const tag = cur.tagName.toLowerCase();
+      const parent: Element | null = cur.parentElement;
+      const same = parent ? Array.from(parent.children).filter((c) => c.tagName === cur!.tagName) : [];
+      parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(cur) + 1})` : tag);
+      cur = parent;
+    }
+    return parts.join(' > ');
+  };
+  const name = (el: Element) => ((el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title')
+    || (el as HTMLInputElement).value || el.getAttribute('name') || '') as string).replace(/\s+/g, ' ').trim().slice(0, 60);
+  const visible = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) !== false;
+  };
+  const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
+  const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]')
+    && (!modal || modal.contains(el))
+    && !(el.matches('input[type=checkbox][disabled]') && el.closest('li.task-list-item, .contains-task-list, li')));
+  const links = Array.from(document.querySelectorAll('a')).map((a) => ({
+    raw: a.getAttribute('href'),
+    href: (a as HTMLAnchorElement).href,
+    label: name(a),
+    key: '',
+  }));
+  return {
+    controls: controls.map((el) => {
+      // Pages built from one template (docs, feature and solution pages) share their controls.
+      const template = path.replace(/^\/(docs|features|solutions)\/.+/, '/$1/*');
+      const scope = el.closest(LAYOUT) ? 'layout' : template;
+      const label = name(el);
+      // data-* values tell same-label controls apart (Subscribe on the Pro card vs the Enterprise card);
+      // ids and counters in them are normalised so table rows still collapse to one control.
+      const norm = (v: string) => v.replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*|\d+/gi, 'N');
+      const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && !a.name.startsWith('data-crawl-') && a.value.length < 40)
+        .map((a) => `[${a.name}=${norm(a.value)}]`).sort().join('');
+      const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(label)}${data}`;
+      return {
+        key: `${scope} ${el.id ? `#${el.id}` : generic}`,
+        selector: cssPath(el),
+        label: label || cssPath(el),
+        tag: el.tagName.toLowerCase(),
+        type: (el.getAttribute('type') || '').toLowerCase(),
+        inForm: !!(el as HTMLButtonElement).form && ((el as HTMLButtonElement).type === 'submit'),
+        disabled: (el as HTMLButtonElement).disabled === true || el.getAttribute('aria-disabled') === 'true',
+        visible: visible(el),
+      };
+    }),
+    links,
+    ids: Array.from(document.querySelectorAll('[id]')).map((e) => e.id),
+  };
+};
+
+export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
+  const { page, request, origin } = o;
+  const findings: Finding[] = [];
+  const tag = o.persona?.kind ?? 'anon';
+  const add = (pg: string, control: string, problem: string) => {
+    findings.push({ page: pg, control, problem });
+    console.log(`[crawl ${tag}] FINDING ${pg} | ${control} -> ${problem}`);
+  };
+  const visited: string[] = [];
+  const queue = [...new Set(o.seeds)];
+  const queued = new Set(queue);
+  const exercised = new Set<string>();
+  const keys = new Set<string>();
+  const disabledSeen = new Map<string, string>();   // key -> page
+  const enabledSeen = new Set<string>();
+  const internalLinks = new Map<string, string>();  // url -> first page seen
+  const externalLinks = new Map<string, string>();
+  const maxDepth = o.maxDepth ?? 3;
+  const perFamily = o.browserPagesPerFamily ?? 3;
+  const familyVisits = new Map<string, number>();
+  const httpOnly: string[] = [];
+  const pageStatus = new Map<string, number>();   // url -> status, for pages fetched over HTTP
+
+  // ---- instrumentation shared by every action ----
+  const externalNavs: string[] = [];
+  const stubbed: string[] = [];
+  await page.route('**/*', async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.isNavigationRequest() && req.frame() === page.mainFrame() && url.origin !== origin) {
+      externalNavs.push(req.url());
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<title>external</title><p>external page (stubbed by crawler)</p>' });
+    }
+    if (o.stubWrites && SUPABASE_HOST.test(url.hostname) && req.method() !== 'GET' && req.method() !== 'HEAD'
+        && req.method() !== 'OPTIONS' && !url.pathname.startsWith('/auth/v1/token')) {
+      stubbed.push(`${req.method()} ${url.pathname}`);
+      // Answer like PostgREST would with return=representation: the written row(s) echoed back.
+      let body = '{"success":true}';
+      if (url.pathname.startsWith('/rest/')) {
+        let rows: unknown = {};
+        try { rows = req.postDataJSON() ?? {}; } catch { /* no body */ }
+        const list = (Array.isArray(rows) ? rows : [rows]).map((r) => ({ id: randomUUID(), ...(r as object) }));
+        body = JSON.stringify(/vnd\.pgrst\.object/.test(req.headers()['accept'] ?? '') ? list[0] : list);
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body });
+    }
+    return route.continue();
+  });
+  await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __fx: { mut: number; clip: number; open: number } };
+    w.__fx = { mut: 0, clip: 0, open: 0 };
+    new MutationObserver((list) => {
+      for (const m of list) if (!(m.type === 'attributes' && m.attributeName === 'style')) w.__fx.mut++;
+    }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    const clip = navigator.clipboard;
+    if (clip) {
+      const orig = clip.writeText?.bind(clip);
+      clip.writeText = async (t: string) => { w.__fx.clip++; try { await orig?.(t); } catch { /* headless */ } };
+      const origWrite = clip.write?.bind(clip);
+      if (origWrite) clip.write = async (d) => { w.__fx.clip++; try { await origWrite(d); } catch { /* headless */ } };
+    }
+    const origExec = document.execCommand.bind(document);
+    document.execCommand = (c: string, ...rest: unknown[]) => { if (c === 'copy') w.__fx.clip++; return origExec(c, ...(rest as [boolean, string])); };
+    const origOpen = window.open.bind(window);
+    window.open = (...a: Parameters<typeof window.open>) => { w.__fx.open++; return origOpen(...a); };
+  });
+
+  let current = { page: '', control: '' };
+  const dialogs: string[] = [];
+  page.on('dialog', async (d) => {
+    dialogs.push(`${d.type()}: ${d.message()}`);
+    if (d.type() === 'alert' && /error|fail|unable|could not|couldn't|try again|being configured|not configured|unavailable/i.test(d.message())) {
+      add(current.page, current.control, `alert shows a failure: "${d.message()}"`);
+    }
+    await (d.type() === 'alert' ? d.accept() : d.dismiss()).catch(() => {});
+  });
+  page.on('pageerror', (e) => add(current.page, current.control || '(page load)', `page error: ${e.message}`));
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const t = m.text();
+    if (/Failed to load resource: net::ERR_(ABORTED|BLOCKED)|favicon|stubbed by crawler/.test(t)) return;
+    // Failed responses are reported once, with their URL, by the response handler below.
+    if (/Failed to load resource: the server responded with a status of/.test(t)) return;
+    add(current.page, current.control || '(page load)', `console error: ${t.slice(0, 200)}`);
+  });
+
+  const signedIn = !!o.persona;
+  const pending: Request[] = [];
+  const responses: Response[] = [];
+  page.on('request', (r) => { if (['fetch', 'xhr', 'document', 'eventsource'].includes(r.resourceType())) pending.push(r); });
+  page.on('response', (r) => responses.push(r));
+
+  async function ensureSession() {
+    if (!o.persona) return;
+    if (page.url().startsWith(origin) && await hasSession(page).catch(() => false)) return;
+    await signIn(page, o.persona);
+  }
+
+  async function load(path: string): Promise<boolean> {
+    current = { page: path, control: '' };
+    await ensureSession();
+    responses.length = 0;
+    const res = await page.goto(path, { waitUntil: 'load' }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
+    if (!res) return false;
+    if (res.status() >= 400) { add(path, '(page load)', `HTTP ${res.status()}`); return false; }
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+    await revealAll();
+    const landed = new URL(page.url()).pathname;
+    if (signedIn && /^\/login\/?$/.test(landed) && path !== '/login/') {
+      add(path, '(page load)', 'a signed-in user was sent to the login page');
+      return false;
+    }
+    checkResponses(path, '(page load)');
+    return true;
+  }
+
+  // Scroll-triggered reveals start at opacity 0; scroll through so every section is shown.
+  async function revealAll() {
+    await page.evaluate(async () => {
+      const step = Math.max(200, Math.floor(window.innerHeight * 0.8));
+      for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      window.scrollTo(0, 0);
+    }).catch(() => {});
+    await page.waitForTimeout(400);
+  }
+
+  function checkResponses(pg: string, control: string) {
+    for (const r of responses.splice(0)) {
+      const u = new URL(r.url());
+      const ours = u.origin === origin || SUPABASE_HOST.test(u.hostname);
+      if (!ours || r.status() < 400) continue;
+      if (r.request().resourceType() === 'image' || r.request().resourceType() === 'font') { add(pg, control, `asset ${u.pathname} HTTP ${r.status()}`); continue; }
+      const expected = o.expectedStatus?.some((e) => e.control.test(`${pg} ${control}`) && e.url.test(u.pathname) && e.status === r.status());
+      // Signed out, an auth 4xx (wrong password, unconfirmed email) is the expected answer to a form.
+      const anonAuth = !signedIn && u.pathname.startsWith('/auth/v1/') && r.status() < 500;
+      if (!expected && !anonAuth) add(pg, control, `${r.request().method()} ${u.pathname} answered HTTP ${r.status()}`);
+    }
+  }
+
+  function enqueue(p: string) {
+    if (queued.has(p) || !o.inScope(p)) return;
+    queued.add(p);
+    const fam = familyOf(p);
+    const n = fam ? familyVisits.get(fam) ?? 0 : 0;
+    if (fam && n >= perFamily) { httpOnly.push(p); return; }
+    if (fam) familyVisits.set(fam, n + 1);
+    queue.push(p);
+  }
+
+  async function harvestLinks(pg: string, links: LinkInfo[], ids: string[]) {
+    for (const l of links) {
+      const raw = (l.raw ?? '').trim();
+      if (raw === '' || raw === '#' || raw.startsWith('javascript:')) {
+        add(pg, `link "${l.label}"`, `link goes nowhere (href="${l.raw ?? ''}")`);
+        continue;
+      }
+      if (raw.startsWith('#')) {
+        if (!ids.includes(decodeURIComponent(raw.slice(1)))) add(pg, `link "${l.label}"`, `in-page anchor ${raw} has no target element`);
+        continue;
+      }
+      if (raw.startsWith('mailto:')) {
+        if (!/^mailto:[^@\s]+@[^@\s]+\.[a-z]{2,}/i.test(raw)) add(pg, `link "${l.label}"`, `malformed ${raw}`);
+        continue;
+      }
+      if (raw.startsWith('tel:')) continue;
+      let u: URL;
+      try { u = new URL(l.href); } catch { add(pg, `link "${l.label}"`, `unparseable href ${raw}`); continue; }
+      u.hash = '';
+      if (u.origin === origin) {
+        if (!internalLinks.has(u.href)) internalLinks.set(u.href, pg);
+        const p = u.pathname.endsWith('/') || /\.[a-z0-9]+$/i.test(u.pathname) ? u.pathname : `${u.pathname}/`;
+        if (!/\.[a-z0-9]+$/i.test(p)) enqueue(p);
+      } else if (/^https?:$/.test(u.protocol)) {
+        if (!externalLinks.has(u.href)) externalLinks.set(u.href, pg);
+      }
+    }
+  }
+
+  async function snapshot() {
+    return page.evaluate(() => {
+      const w = window as unknown as { __fx?: { mut: number; clip: number; open: number } };
+      let visibleCount = 0;
+      for (const el of Array.from(document.querySelectorAll('body *'))) {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) visibleCount++;
+      }
+      const text = document.body.innerText;
+      let h = 0;
+      for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+      return {
+        url: location.href, visibleCount, textHash: h, htmlClass: document.documentElement.className,
+        mut: w.__fx?.mut ?? 0, clip: w.__fx?.clip ?? 0, open: w.__fx?.open ?? 0,
+      };
+    }).catch(() => null);
+  }
+
+  async function fillForm(selector: string) {
+    const formHandle = await page.locator(selector).evaluateHandle((el) => (el as HTMLButtonElement).form);
+    const fields = await formHandle.evaluate((f) => f ? Array.from((f as HTMLFormElement).elements).map((e, i) => {
+      const el = e as HTMLInputElement;
+      el.setAttribute('data-crawl-field', String(i));
+      return { i, tag: el.tagName.toLowerCase(), type: (el.type || '').toLowerCase(), value: el.value, required: el.required, name: `${el.name} ${el.id}` };
+    }) : []);
+    const password = randomPassword();
+    const email = testUserEmail('crawl');
+    for (const f of fields) {
+      const loc = page.locator(`[data-crawl-field="${f.i}"]`);
+      if (!(await loc.isVisible().catch(() => false))) continue;
+      if (f.tag === 'select') { await loc.selectOption({ index: 1 }).catch(() => {}); continue; }
+      if (f.type === 'checkbox') { if (f.required) await loc.check().catch(() => {}); continue; }
+      if (['submit', 'button', 'hidden', 'radio', 'file', 'reset'].includes(f.type) || f.tag === 'button' || f.tag === 'fieldset') continue;
+      if (f.value && f.type !== 'password') continue;
+      const v = f.type === 'email' ? email : f.type === 'password' ? password : f.type === 'number' ? '1'
+        : f.type === 'url' ? 'https://example.com' : f.type === 'date' ? '2030-01-01' : /name/i.test(f.name) ? 'E2E Crawler' : 'e2e crawler';
+      await loc.fill(v).catch(() => {});
+    }
+  }
+
+  // Clicks one control and reports what it did. Returns 'nav' when the page changed.
+  async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
+    current = { page: pg, control: c.key };
+    exercised.add(c.key);
+    console.log(`[crawl ${tag}]   click ${c.key}`);
+    const loc = page.locator(c.selector).first();
+    if (c.inForm) await fillForm(c.selector);
+    // Two idle snapshots: a signal that moves on its own (animation, clock) cannot count as an effect.
+    const idle = await snapshot();
+    await page.waitForTimeout(300);
+    const before = await snapshot();
+    if (!before || !idle) return 'nav';
+    const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount };
+    pending.length = 0;
+    responses.length = 0;
+    const navsBefore = externalNavs.length, dialogsBefore = dialogs.length;
+    const popup = page.context().waitForEvent('page', { timeout: 2_500 }).catch(() => null);
+    const download = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
+    try {
+      await loc.scrollIntoViewIfNeeded({ timeout: 3_000 });
+      if (c.tag === 'select') {
+        // Clicking a native select changes nothing; choosing another option fires input and change.
+        const next = await loc.evaluate((el) => {
+          const sel = el as HTMLSelectElement;
+          return Array.from(sel.options).findIndex((op, k) => k !== sel.selectedIndex && !op.disabled);
+        });
+        if (next < 0) { add(pg, c.key, 'select has no other enabled option to choose'); return 'same'; }
+        await loc.selectOption({ index: next }, { timeout: 5_000 });
+      } else {
+        await loc.click({ timeout: 5_000 });
+      }
+    } catch (e) {
+      const msg = String(e).split('\n').find((l) => /intercepts pointer|not visible|outside of the viewport|detached/.test(l)) ?? String(e).split('\n')[0];
+      add(pg, c.key, `cannot be clicked: ${msg.trim().slice(0, 200)}`);
+      return 'nav';
+    }
+    // Give the handler time to do something, then let its requests finish.
+    let after = before;
+    for (let t = 0; t < 12; t++) {
+      await page.waitForTimeout(250);
+      const s = await snapshot();
+      if (!s) { after = { ...before, url: 'navigated' }; break; }
+      after = s;
+      if (s.url !== before.url || (!noisy.mut && s.mut !== before.mut) || s.clip !== before.clip || pending.length || dialogs.length > dialogsBefore) break;
+    }
+    await Promise.race([
+      Promise.all(pending.map((r) => r.response().catch(() => null))),
+      page.waitForTimeout(10_000),
+    ]);
+    await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
+    const opened = (await popup) ?? null;
+    const dl = (await download) ?? null;
+    if (opened) await opened.close().catch(() => {});
+    const final = (await snapshot()) ?? after;
+    const effect = final.url !== before.url || after.url !== before.url || externalNavs.length > navsBefore
+      || !!opened || !!dl || dialogs.length > dialogsBefore || pending.length > 0
+      || final.clip > before.clip || final.open > before.open
+      || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
+      || (!noisy.count && final.visibleCount !== before.visibleCount)
+      || final.htmlClass !== before.htmlClass;
+    if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, request, dialog, clipboard or screen change)`);
+    checkResponses(pg, c.key);
+    for (const nav of externalNavs.slice(navsBefore)) {
+      if (!externalLinks.has(nav)) externalLinks.set(nav, `${pg} via ${c.key}`);
+    }
+    const landedElsewhere = final.url !== before.url || externalNavs.length > navsBefore;
+    if (landedElsewhere) {
+      const u = new URL(final.url.startsWith('http') ? final.url : before.url);
+      if (u.origin === origin) enqueue(u.pathname);
+    }
+    return landedElsewhere ? 'nav' : 'same';
+  }
+
+  async function reachable(selector: string) {
+    return page.evaluate(REACHABLE, selector).catch(() => false);
+  }
+
+  async function explore(pg: string, path: string[], depth: number, doneOnPage: Set<string>) {
+    const info = await page.evaluate(ENUMERATE, pg).catch(() => null);
+    if (!info) return;
+    await harvestLinks(pg, info.links, info.ids);
+    const todo = info.controls.filter((c) => {
+      keys.add(c.key);
+      if (c.disabled) { if (c.visible && !enabledSeen.has(c.key)) disabledSeen.set(c.key, pg); return false; }
+      if (!c.visible) return false;
+      enabledSeen.add(c.key);
+      disabledSeen.delete(c.key);
+      if (doneOnPage.has(c.key) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
+      if (o.dedicated.some(([re]) => re.test(c.key))) return false;
+      return true;
+    });
+    for (const c of todo) {
+      if (exercised.has(c.key)) continue;
+      doneOnPage.add(c.key);
+      // Return to the state this control was found in: fresh page plus the clicks that revealed it.
+      // A sibling's click may have opened a modal over this control: start again from a fresh page.
+      if (new URL(page.url()).pathname !== pg || !(await reachable(c.selector))) {
+        if (!(await load(pg))) return;
+        for (const step of path) await page.locator(step).first().click({ timeout: 5_000 }).catch(() => {});
+        await page.waitForTimeout(300);
+        if (!(await reachable(c.selector))) continue;
+      }
+      const result = await act(pg, c);
+      if (result === 'same' && depth < maxDepth) {
+        await explore(pg, [...path, c.selector], depth + 1, doneOnPage);
+      }
+      if (o.persona && !(await hasSession(page).catch(() => false))) await ensureSession();
+    }
+  }
+
+  for (const seed of queue) { const f = familyOf(seed); if (f) familyVisits.set(f, (familyVisits.get(f) ?? 0) + 1); }
+  const ANCHOR = /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
+  const ID = /\bid\s*=\s*["']([^"']+)["']/gi;
+  let fetched = 0;
+  // A page fetched over HTTP can link to a new template family, which goes to the browser queue:
+  // keep going until both queues are empty.
+  while (queue.length || httpOnly.length) {
+    while (queue.length) {
+      const pg = queue.shift()!;
+      const started = Date.now();
+      if (!(await load(pg))) continue;
+      visited.push(pg);
+      const before = exercised.size;
+      await explore(pg, [], 0, new Set());
+      console.log(`[crawl ${tag}] ${pg}: ${exercised.size - before} controls in ${((Date.now() - started) / 1000).toFixed(1)}s (${queue.length} pages queued)`);
+    }
+
+    // ---- templated pages beyond the browser sample: fetch each, check every link on it ----
+    if (httpOnly.length) {
+      const batch = httpOnly.splice(0);
+      await pool(batch, 16, async (pg) => {
+        const url = new URL(pg, origin).href;
+        const res = await request.get(url, { timeout: 30_000 }).catch(() => null);
+        fetched++;
+        pageStatus.set(url, res?.status() ?? 0);
+        if (!res || res.status() >= 400) { add(pg, '(page load)', res ? `HTTP ${res.status()}` : 'no response'); await res?.dispose(); return; }
+        // The request context keeps every body until it is disposed; 12K pages would pile up.
+        let html: string;
+        try { html = await res.text(); } finally { await res.dispose(); }
+        const ids = [...html.matchAll(ID)].map((m) => m[1]);
+        const links: LinkInfo[] = [...html.matchAll(ANCHOR)].map((m) => {
+          const raw = m[1] ?? m[2] ?? '';
+          let href = raw;
+          try { href = new URL(raw.replace(/&amp;/g, '&'), url).href; } catch { /* reported below */ }
+          return { raw, href, label: m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 60), key: '' };
+        });
+        await harvestLinks(pg, links, ids);
+      });
+      console.log(`[crawl ${tag}] fetched ${fetched} templated pages over HTTP (${httpOnly.length} more queued)`);
+    }
+  }
+
+  // ---- link targets ----
+  console.log(`[crawl ${tag}] checking ${internalLinks.size} internal and ${externalLinks.size} external link targets`);
+  current = { page: '', control: '' };
+  await pool([...internalLinks], 16, async ([url, pg]) => {
+    const known = pageStatus.get(url) ?? pageStatus.get(url.endsWith('/') ? url : `${url}/`);
+    let status = known;
+    if (status === undefined) {
+      const res = await request.get(url, { maxRedirects: 5, timeout: 30_000 }).catch(() => null);
+      status = res?.status() ?? 0;
+      await res?.dispose();
+    }
+    if (status === 0 || status >= 400) add(pg, `link ${new URL(url).pathname}`, `target answered ${status ? `HTTP ${status}` : 'nothing'}`);
+  });
+  await pool([...externalLinks], 8, async ([url, pg]) => {
+    let res = await request.head(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
+    if (!res || res.status() === 405 || res.status() === 404) {
+      await res?.dispose();
+      res = await request.get(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
+    }
+    if (!res) add(pg, `link ${url}`, 'external target unreachable');
+    else if (res.status() >= 400 && !BENIGN_EXTERNAL_STATUS.has(res.status())) add(pg, `link ${url}`, `external target answered HTTP ${res.status()}`);
+    await res?.dispose();
+  });
+
+  // ---- coverage contract ----
+  for (const [key, pg] of disabledSeen) {
+    if (!o.dedicated.some(([re]) => re.test(key))) add(pg, key, 'control is disabled and nothing in the crawl enabled it; cover it with a dedicated test and list it');
+  }
+  for (const [re, why, opts] of o.dedicated) {
+    if (!opts?.optional && ![...keys].some((k) => re.test(k))) add('(dedicated list)', String(re), `matches no control on any page (stale entry for: ${why})`);
+  }
+
+  await page.unroute('**/*');
+  return { findings, pages: visited, httpPages: fetched, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
+}
+
+export function formatFindings(f: Finding[]): string {
+  return f.map((x) => `  ${x.page} | ${x.control}\n      -> ${x.problem}`).join('\n');
+}

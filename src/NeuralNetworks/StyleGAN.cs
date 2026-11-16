@@ -538,11 +538,9 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         if (mix && styleSize >= 3)
             crossover = RandomHelper.ThreadSafeRandom.Next(1, Math.Max(2, styleSize / 2));
 
-        var mask = new Tensor<T>(new[] { batchSize, styleSize });
-        for (int row = 0; row < batchSize; row++)
-            for (int i = 0; i < crossover; i++)
-                mask[row, i] = NumOps.One;
-        return mask;
+        // 1 on the first `crossover` style columns of every row, 0 on the rest.
+        var coarseColumns = Engine.TensorLessThan(Engine.TensorArange<T>(0, styleSize, 1), NumOps.FromDouble(crossover));
+        return Engine.TensorTile(Engine.Reshape(coarseColumns, new[] { 1, styleSize }), new[] { batchSize, 1 });
     }
 
     /// <summary>

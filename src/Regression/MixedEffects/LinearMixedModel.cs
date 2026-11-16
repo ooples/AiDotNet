@@ -297,7 +297,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         {
             Intercept = fitted[0];
 
-            Coefficients = fitted.GetSubVector(1, fitted.Length - 1);
+            Coefficients = RegressionEngineOps2.Slice(fitted, 1, fitted.Length - 1);
         }
         else
         {

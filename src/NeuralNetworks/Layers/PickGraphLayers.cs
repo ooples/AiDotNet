@@ -252,8 +252,7 @@ public partial class PickGraphLayer<T> : LayerBase<T>, IShapeContract
         var adjacency = Engine.TensorAddScalar(Engine.Softmax(Engine.LeakyReLU(scores, NumOps.FromDouble(0.01)), 1), NumOps.FromDouble(1e-10));
 
         // Graph-learning loss.
-        var identity = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++) identity[i, i] = NumOps.One;
+        var identity = Engine.TensorEye<T>(n);
         var squared = Engine.ReduceSum(Engine.TensorMultiply(difference, difference), new[] { 2 }, keepDims: false);  // [N, N]
         var distance = Engine.TensorSubtract(Engine.TensorSqrt(Engine.TensorAdd(squared, identity)), identity);
         var distanceTerm = Engine.TensorMultiplyScalar(

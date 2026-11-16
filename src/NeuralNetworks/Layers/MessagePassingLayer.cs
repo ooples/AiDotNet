@@ -424,11 +424,8 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Scale by the scale factor
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        // Copy to tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        // Copy to tensor in bulk
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <inheritdoc/>

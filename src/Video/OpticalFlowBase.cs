@@ -269,33 +269,44 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
         int height = forwardFlow.Shape[1];
         int width = forwardFlow.Shape[2];
 
-        var consistency = new Tensor<T>([height, width]);
+        int pixels = height * width;
 
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double fwdDx = NumOps.ToDouble(forwardFlow.Data.Span[h * width + w]);
-                double fwdDy = NumOps.ToDouble(forwardFlow.Data.Span[height * width + h * width + w]);
+        // dx and dy planes of each flow, as [H, W]
+        var (fwdDx, fwdDy) = FlowPlanes(forwardFlow, height, width);
+        var (bwdDxAll, bwdDyAll) = FlowPlanes(backwardFlow, height, width);
 
-                // Target position in frame1
-                int tgtX = Math.Max(0, Math.Min((int)Math.Round(w + fwdDx), width - 1));
-                int tgtY = Math.Max(0, Math.Min((int)Math.Round(h + fwdDy), height - 1));
+        // Target position in frame1, rounded to the nearest pixel and clamped to the image
+        var (gridX, gridY) = Engine.TensorMeshgrid(
+            Engine.TensorArange<T>(0, width, 1), Engine.TensorArange<T>(0, height, 1));
+        var tgtX = Engine.TensorClamp(Engine.TensorRound(Engine.TensorAdd(gridX, fwdDx)),
+            NumOps.Zero, NumOps.FromDouble(width - 1));
+        var tgtY = Engine.TensorClamp(Engine.TensorRound(Engine.TensorAdd(gridY, fwdDy)),
+            NumOps.Zero, NumOps.FromDouble(height - 1));
+        // The flat index y * width + x is built in int: the clamped coordinates are exact in T, but their product
+        // and sum are not (a float rounds 23,040,001 to 23,040,000 and picks the neighbouring pixel).
+        var target = Engine.Reshape(
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(TensorCopyHelper.CastLogical<T, int>(tgtY), width), TensorCopyHelper.CastLogical<T, int>(tgtX)),
+            [pixels]);
 
-                // Backward flow at target position
-                double bwdDx = NumOps.ToDouble(backwardFlow.Data.Span[tgtY * width + tgtX]);
-                double bwdDy = NumOps.ToDouble(backwardFlow.Data.Span[height * width + tgtY * width + tgtX]);
+        // Backward flow at target position
+        var bwdDx = Engine.Reshape(
+            Engine.TensorIndexSelect(Engine.Reshape(bwdDxAll, [pixels]), target, 0), [height, width]);
+        var bwdDy = Engine.Reshape(
+            Engine.TensorIndexSelect(Engine.Reshape(bwdDyAll, [pixels]), target, 0), [height, width]);
 
-                // Round-trip error
-                double errX = fwdDx + bwdDx;
-                double errY = fwdDy + bwdDy;
-                double error = Math.Sqrt(errX * errX + errY * errY);
+        // Round-trip error
+        return Engine.TensorHypot(Engine.TensorAdd(fwdDx, bwdDx), Engine.TensorAdd(fwdDy, bwdDy));
+    }
 
-                consistency.Data.Span[h * width + w] = NumOps.FromDouble(error);
-            }
-        }
-
-        return consistency;
+    /// <summary>
+    /// The dx and dy planes of a flow field: the first two <c>height x width</c> blocks of its data.
+    /// </summary>
+    private (Tensor<T> Dx, Tensor<T> Dy) FlowPlanes(Tensor<T> flow, int height, int width)
+    {
+        int pixels = height * width;
+        var flat = Engine.Reshape(flow, [flow.Length]);
+        return (Engine.Reshape(Engine.TensorNarrow(flat, 0, 0, pixels), [height, width]),
+            Engine.Reshape(Engine.TensorNarrow(flat, 0, pixels, pixels), [height, width]));
     }
 
     /// <summary>
@@ -314,25 +325,11 @@ public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IS
             throw new ArgumentException("Estimated and ground truth flows must have the same spatial dimensions.");
         int height = estimatedFlow.Shape[1];
         int width = estimatedFlow.Shape[2];
-        double totalError = 0;
-        int count = height * width;
+        var (estDx, estDy) = FlowPlanes(estimatedFlow, height, width);
+        var (gtDx, gtDy) = FlowPlanes(groundTruthFlow, height, width);
 
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double estDx = NumOps.ToDouble(estimatedFlow.Data.Span[h * width + w]);
-                double estDy = NumOps.ToDouble(estimatedFlow.Data.Span[height * width + h * width + w]);
-                double gtDx = NumOps.ToDouble(groundTruthFlow.Data.Span[h * width + w]);
-                double gtDy = NumOps.ToDouble(groundTruthFlow.Data.Span[height * width + h * width + w]);
-
-                double errX = estDx - gtDx;
-                double errY = estDy - gtDy;
-                totalError += Math.Sqrt(errX * errX + errY * errY);
-            }
-        }
-
-        return NumOps.FromDouble(totalError / count);
+        return Engine.TensorMean(Engine.TensorHypot(
+            Engine.TensorSubtract(estDx, gtDx), Engine.TensorSubtract(estDy, gtDy)));
     }
 
     /// <inheritdoc />

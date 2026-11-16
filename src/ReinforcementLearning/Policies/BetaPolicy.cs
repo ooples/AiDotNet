@@ -199,34 +199,47 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            T logProb = NumOps.Zero;
+            return BetaLogDensity(output, action, _actionSize, _actionMin, _actionMax);
+        }
 
-            for (int i = 0; i < _actionSize; i++)
-            {
-                double alphaRaw = NumOps.ToDouble(output[i]);
-                double betaRaw = NumOps.ToDouble(output[_actionSize + i]);
+        /// <summary>
+        /// Log-density of <paramref name="action"/> under the Beta heads in <paramref name="output"/>
+        /// ([raw alpha | raw beta], alpha = softplus(raw) + 1), rescaled from [actionMin, actionMax] to [0, 1].
+        /// </summary>
+        /// <remarks>The unit action is clipped to [1e-7, 1 - 1e-7]; the upper bound is kept strictly below one in T
+        /// (1 - 1e-7 rounds to 1 in Half, where log(1 - x) would be -infinity at the action bound).</remarks>
+        internal static T BetaLogDensity(Vector<T> output, Vector<T> action, int actionSize, double actionMin, double actionMax)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNetEngine.Current;
+            T one = numOps.One;
 
-                double alpha = Softplus(alphaRaw) + 1.0;
-                double beta = Softplus(betaRaw) + 1.0;
+            // alpha, beta = softplus(raw) + 1 (> 1 for a well-behaved Beta)
+            var alpha = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(0, actionSize).AsTensor()), one);
+            var beta = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(actionSize, actionSize).AsTensor()), one);
 
-                // Rescale action from [actionMin, actionMax] to [0, 1]
-                double actionValue = NumOps.ToDouble(action[i]);
-                double x = (actionValue - _actionMin) / (_actionMax - _actionMin);
-                x = Math.Max(1e-7, Math.Min(1.0 - 1e-7, x));  // Clip to avoid log(0)
+            // Rescale action from [actionMin, actionMax] to [0, 1], clipped to avoid log(0)
+            T range = numOps.FromDouble(actionMax - actionMin);
+            var unit = engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(RLTensorOps.Head(action, actionSize).AsTensor(), numOps.FromDouble(actionMin)), range);
+            var x = engine.TensorClamp(unit, numOps.FromDouble(1e-7), RLTensorOps.BelowOne<T>(1e-7));
+            var oneMinusX = engine.TensorSubtract(engine.TensorFullLike(x, one), x);
 
-                // Beta distribution log probability
-                // log p(x) = (α-1)log(x) + (β-1)log(1-x) - log(B(α,β))
-                // where B(α,β) = Γ(α)Γ(β)/Γ(α+β)
-                double logBeta = LogGamma(alpha) + LogGamma(beta) - LogGamma(alpha + beta);
-                double betaLogProb = (alpha - 1) * Math.Log(x) + (beta - 1) * Math.Log(1 - x) - logBeta;
+            // Beta distribution log probability
+            // log p(x) = (α-1)log(x) + (β-1)log(1-x) - log(B(α,β))
+            // where B(α,β) = Γ(α)Γ(β)/Γ(α+β)
+            var logBeta = engine.TensorSubtract(
+                engine.TensorAdd(engine.TensorLgamma(alpha), engine.TensorLgamma(beta)),
+                engine.TensorLgamma(engine.TensorAdd(alpha, beta)));
+            var betaLogProb = engine.TensorSubtract(
+                engine.TensorAdd(
+                    engine.TensorMultiply(engine.TensorSubtractScalar(alpha, one), engine.TensorLog(x)),
+                    engine.TensorMultiply(engine.TensorSubtractScalar(beta, one), engine.TensorLog(oneMinusX))),
+                logBeta);
 
-                // Account for rescaling Jacobian
-                double rescaleLogProb = Math.Log(_actionMax - _actionMin);
-
-                logProb = NumOps.Add(logProb, NumOps.FromDouble(betaLogProb - rescaleLogProb));
-            }
-
-            return logProb;
+            // Account for rescaling Jacobian: log(actionMax - actionMin) per dimension
+            T rescaleLogProb = numOps.Multiply(numOps.FromDouble(actionSize), numOps.Log(range));
+            return numOps.Subtract(engine.TensorSum(betaLogProb), rescaleLogProb);
         }
 
         /// <summary>
@@ -301,21 +314,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
                     return d * v;
                 }
             }
-        }
-
-        private double LogGamma(double x)
-        {
-            // Stirling's approximation for log-gamma function
-            // Accurate for x > 1
-            if (x < 1.5)
-            {
-                // Use recursion: Γ(x+1) = x * Γ(x)
-                return Math.Log(x) + LogGamma(x + 1.0);
-            }
-
-            double logSqrt2Pi = 0.5 * Math.Log(2.0 * Math.PI);
-            return logSqrt2Pi + (x - 0.5) * Math.Log(x) - x +
-                   1.0 / (12.0 * x) - 1.0 / (360.0 * x * x * x);
         }
     }
 }

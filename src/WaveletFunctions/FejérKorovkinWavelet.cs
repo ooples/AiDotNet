@@ -170,14 +170,19 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public override T Calculate(T x)
     {
-        T result = NumOps.Zero;
-        for (int k = 0; k < _coefficients.Length; k++)
+        if (_coefficients.Length == 0)
         {
-            T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k));
-            result = NumOps.Add(result, NumOps.Multiply(_coefficients[k], ScalingFunction(shiftedX)));
+            return NumOps.Zero;
         }
 
-        return result;
+        var engine = AiDotNetEngine.Current;
+
+        // sum_k c[k] * phi(x - k) with the box scaling function phi(t) = 1 for 0 <= t < 1, else 0.
+        var shifts = engine.TensorArange<T>(0, _coefficients.Length, 1);
+        var shifted = engine.ScalarMinusTensor(x, shifts);
+        var notNegative = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(shifted, NumOps.Zero));
+        var box = engine.TensorMultiply(notNegative, engine.TensorLessThan(shifted, NumOps.One));
+        return engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromVector(_coefficients), box));
     }
 
     /// <summary>
@@ -215,25 +220,10 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
         }
 
         int outputLength = input.Length / 2;
-        var approximation = new Vector<T>(outputLength);
-        var detail = new Vector<T>(outputLength);
 
-        for (int i = 0; i < outputLength; i++)
-        {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
-
-            for (int j = 0; j < _order; j++)
-            {
-                int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(_scalingCoefficients[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(_waveletCoefficients[j], input[index]));
-            }
-
-            approximation[i] = approx;
-            detail[i] = det;
-        }
-
+        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, _scalingCoefficients, 2, outputLength);
+        var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, _waveletCoefficients, 2, outputLength);
         return (approximation, detail);
     }
 
@@ -348,36 +338,78 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
             throw new ArgumentException("Order must be an even number greater than or equal to 4.");
         }
 
+        var engine = AiDotNetEngine.Current;
         int n = order / 2;
-        var coefficients = new List<double>();
+        int count = 2 * n + 1;
 
-        for (int k = -n; k <= n; k++)
-        {
-            double coeff = 0;
-            for (int j = 1; j <= n; j++)
-            {
-                double theta = Math.PI * j / (2 * n + 1);
-                coeff += (1 - Math.Cos(theta)) * Math.Cos(2 * k * theta) / (2 * n + 1);
-            }
-            coefficients.Add(coeff);
-        }
+        // The coefficients are computed in double and converted once: their exact sum is zero, and the 1e-15 zero
+        // test only holds for double cancellation residue (float leaves ~1.5e-8, and dividing by it blows the
+        // coefficients up to ~1e6).
+        // c_k = sum_{j=1..n} (1 - cos(theta_j)) * cos(2 k theta_j) / (2n + 1), theta_j = pi j / (2n + 1), k = -n .. n
+        var theta = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(1, n + 1, 1), Math.PI), (double)count);
+        var twiceK = engine.TensorMultiplyScalar(engine.TensorArange<double>(-n, n + 1, 1), 2.0);
+        var weights = engine.ScalarMinusTensor(1.0, engine.TensorCos(theta));
+        var terms = engine.TensorMultiply(
+            engine.TensorCos(engine.TensorOuter(twiceK, theta)),
+            engine.TensorBroadcastTo(weights.Reshape(1, n), new[] { count, n }));
+        var coefficients = engine.ReduceSum(engine.TensorDivideScalar(terms, (double)count), new[] { 1 }, false);
 
-        // Normalize the coefficients - guard against division by zero
-        double sum = coefficients.Sum();
+        // Normalize coefficients (or fall back to a uniform filter when they sum to zero)
+        double sum = engine.TensorSum(coefficients);
         if (Math.Abs(sum) > 1e-15)
         {
-            coefficients = [.. coefficients.Select(c => c / sum)];
-        }
-        else
-        {
-            // If sum is zero, use uniform distribution to avoid NaN
-            int count = coefficients.Count;
-            coefficients = [.. Enumerable.Repeat(1.0 / count, count)];
+            return engine.TensorDivideScalar(coefficients, sum).Cast<T>().ToVector();
         }
 
-        // Convert to type T and return as Vector<T>
-        return new Vector<T>([.. coefficients.Select(c => NumOps.FromDouble(c))]);
+        return engine.TensorFullLike(coefficients, 1.0 / count).Cast<T>().ToVector();
     }
+
+    /// <summary>
+    /// Published Fejer-Korovkin scaling (low-pass) filters by length: fk4, fk6, fk8, fk14 and fk22 (Nielsen,
+    /// "On the construction and frequency localization of finite orthogonal quadrature filters", J. Approx. Theory
+    /// 108 (2001); the same values as MATLAB's <c>fejerkorovkin</c>). Copied from the low-pass halves of the
+    /// <c>fk4</c> .. <c>fk22</c> tables in wavelib's <c>src/wavefilt.c</c> (BSD-3, Rafat Hussain and Holger
+    /// Nahrstaedt). PyWavelets ships no Fejer-Korovkin family, and no fk18 table was found in a citable source.
+    /// </summary>
+    private static readonly Dictionary<int, double[]> PublishedScalingFilters = new Dictionary<int, double[]>
+    {
+        [4] = new[]
+        {
+            0.6539275555697651, 0.7532724928394872, 0.5317922877905981e-1,
+            -0.4616571481521770e-1,
+        },
+        [6] = new[]
+        {
+            0.4279150324223103, 0.8129196431369074, 0.3563695110701871,
+            -0.1464386812725773, -0.7717775740697006e-1, 0.4062581442323794e-1,
+        },
+        [8] = new[]
+        {
+            0.3492381118637999, 0.7826836203840648, 0.4752651350794712,
+            -0.9968332845057319e-1, -0.1599780974340301, 0.4310666810651625e-1,
+            0.4258163167758178e-1, -0.1900017885373592e-1,
+        },
+        [14] = new[]
+        {
+            0.2603717692913964, 0.6868914772395985, 0.6115546539595115,
+            0.5142165414211914e-1, -0.2456139281621916, -0.4857533908585527e-1,
+            0.1242825609215128, 0.2222673962246313e-1, -0.6399737303914167e-1,
+            -0.5074372549972850e-2, 0.2977971159037902e-1, -0.3297479152708717e-2,
+            -0.9270613374448239e-2, 0.3514100970435962e-2,
+        },
+        [22] = new[]
+        {
+            0.1938961077599566, 0.5894521909294277, 0.6700849629420265,
+            0.2156298491347700, -0.2280288557715772, -0.1644657152688429,
+            0.1115491437220700, 0.1101552649340661, -0.6608451679377920e-1,
+            -0.7184168192312605e-1, 0.4354236762555708e-1, 0.4477521218440976e-1,
+            -0.2974288074927414e-1, -0.2597087308902119e-1, 0.2028448606667798e-1,
+            0.1296424941108978e-1, -0.1288599056244363e-1, -0.4838432636440189e-2,
+            0.7173803165271690e-2, 0.3612855622194901e-3, -0.2676991638581043e-2,
+            0.8805773686384639e-3,
+        },
+    };
 
     /// <summary>
     /// Initializes the scaling and wavelet coefficients used for signal decomposition.
@@ -405,21 +437,25 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private void InitializeCoefficients()
     {
-        _scalingCoefficients = new Vector<T>(_order);
-        _waveletCoefficients = new Vector<T>(_order);
-
-        for (int k = 0; k < _order; k++)
+        var engine = AiDotNetEngine.Current;
+        if (PublishedScalingFilters.TryGetValue(_order, out var taps))
         {
-            double t = (k + 0.5) * Math.PI / _order;
-            double scalingCoeff = Math.Sqrt(2.0 / _order) * Math.Cos(t);
-            double waveletCoeff = Math.Sqrt(2.0 / _order) * Math.Sin(t);
-
-            _scalingCoefficients[k] = NumOps.FromDouble(scalingCoeff);
-            _waveletCoefficients[k] = NumOps.FromDouble(waveletCoeff);
+            // Published fk taps: an orthonormal scaling filter (sum sqrt(2), unit norm, orthogonal to its even shifts)
+            // with its quadrature-mirror high-pass, so Reconstruct inverts Decompose.
+            _scalingCoefficients = new Tensor<double>(taps, new[] { taps.Length }).Cast<T>().ToVector();
+            _waveletCoefficients = WaveletEngineOps<T>.QuadratureMirror(_scalingCoefficients);
+            return;
         }
 
-        NormalizeCoefficients(_scalingCoefficients);
-        NormalizeCoefficients(_waveletCoefficients);
+        // t_k = (k + 0.5) * pi / order; scaling sqrt(2 / order) * cos(t_k), wavelet sqrt(2 / order) * sin(t_k)
+        T amplitude = NumOps.FromDouble(Math.Sqrt(2.0 / _order));
+        var t = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(
+                engine.TensorAddScalar(engine.TensorArange<T>(0, _order, 1), NumOps.FromDouble(0.5)),
+                NumOps.FromDouble(Math.PI)),
+            NumOps.FromDouble(_order));
+        _scalingCoefficients = NormalizeCoefficients(engine.TensorMultiplyScalar(engine.TensorCos(t), amplitude).ToVector());
+        _waveletCoefficients = NormalizeCoefficients(engine.TensorMultiplyScalar(engine.TensorSin(t), amplitude).ToVector());
     }
 
     /// <summary>
@@ -444,26 +480,19 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// - Similarly, normalization "calibrates" the coefficients to ensure accurate analysis
     /// </para>
     /// </remarks>
-    private void NormalizeCoefficients(Vector<T> coefficients)
+    private static Vector<T> NormalizeCoefficients(Vector<T> coefficients)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < coefficients.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Square(coefficients[i]));
-        }
+        var engine = AiDotNetEngine.Current;
+        T sum = engine.DotProduct(coefficients, coefficients);
 
-        // If sum is zero or very small, skip normalization to avoid NaN
+        // Avoid division by zero
         if (NumOps.LessThanOrEquals(sum, NumOps.FromDouble(1e-15)))
         {
-            return;
+            return coefficients;
         }
 
         T normalizationFactor = NumOps.Sqrt(NumOps.Divide(NumOps.One, sum));
-
-        for (int i = 0; i < coefficients.Length; i++)
-        {
-            coefficients[i] = NumOps.Multiply(coefficients[i], normalizationFactor);
-        }
+        return engine.Multiply(coefficients, normalizationFactor);
     }
 
     /// <summary>
@@ -486,29 +515,15 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// Reconstruct(Decompose(signal)) should equal the original signal.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// Orders 4, 6, 8, 14 and 22 use the published Fejer-Korovkin filter banks, which are orthonormal, so this
+    /// inverts <see cref="Decompose"/> exactly. Other orders have no published taps; they keep the cosine/sine
+    /// filters, for which this is the adjoint of the analysis but not its inverse.
+    /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int outputLength = approximation.Length * 2;
-        var reconstructed = new Vector<T>(outputLength);
-
-        for (int i = 0; i < outputLength; i++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < _order; j++)
-            {
-                int approxIndex = (i - j + _order * outputLength) / 2;
-                if (approxIndex >= 0 && approxIndex < approximation.Length && (i - j + _order * outputLength) % 2 == 0)
-                {
-                    int revJ = _order - 1 - j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(_scalingCoefficients[revJ], approximation[approxIndex]));
-                    sum = NumOps.Add(sum, NumOps.Multiply(_waveletCoefficients[revJ], detail[approxIndex]));
-                }
-            }
-
-            reconstructed[i] = sum;
-        }
-
-        return reconstructed;
+        // Adjoint of the periodic analysis in Decompose:
+        // x[m] = sum_j h[j] * up(a)[(m - j) mod n] + g[j] * up(d)[(m - j) mod n].
+        return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, _scalingCoefficients, _waveletCoefficients);
     }
 }

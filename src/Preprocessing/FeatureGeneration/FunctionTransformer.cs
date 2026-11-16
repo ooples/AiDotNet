@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -30,8 +31,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly Func<Matrix<T>, Matrix<T>>? _func;
     private readonly Func<Matrix<T>, Matrix<T>>? _inverseFunc;
-    private readonly Func<double, double>? _elementFunc;
-    private readonly Func<double, double>? _inverseElementFunc;
+    private readonly Func<T, T>? _elementFunc;
+    private readonly Func<T, T>? _inverseElementFunc;
     private readonly bool _validate;
 
     private int _nInputFeatures;
@@ -73,8 +74,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="validate">If true, validates shapes.</param>
     /// <param name="columnIndices">The column indices to transform, or null for all columns.</param>
     public static FunctionTransformer<T> FromElementFunction(
-        Func<double, double> elementFunc,
-        Func<double, double>? inverseElementFunc = null,
+        Func<T, T> elementFunc,
+        Func<T, T>? inverseElementFunc = null,
         bool validate = true,
         int[]? columnIndices = null)
     {
@@ -83,8 +84,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     // Private constructor for element-wise functions
     private FunctionTransformer(
-        Func<double, double> elementFunc,
-        Func<double, double>? inverseElementFunc,
+        Func<T, T> elementFunc,
+        Func<T, T>? inverseElementFunc,
         bool validate,
         int[]? columnIndices)
         : base(columnIndices)
@@ -176,90 +177,44 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FunctionTransformer was not configured with an inverse function.");
     }
 
-    private Matrix<T> ApplyElementWise(Matrix<T> data, Func<double, double> func)
+    private Matrix<T> ApplyElementWise(Matrix<T> data, Func<T, T> func)
     {
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    result[i, j] = NumOps.FromDouble(func(value));
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        var engine = Engine;
+        return ApplyToColumns(data, GetColumnsToProcess(data.Columns),
+            subset => engine.TensorMap(Tensor<T>.FromMatrix(subset), func).ToMatrix());
     }
 
     private Matrix<T> ApplyToColumns(Matrix<T> data, int[] columnsToProcess, Func<Matrix<T>, Matrix<T>> func)
     {
-        // Extract columns to process
+        // Extract columns to process and apply the function to the subset
         int numRows = data.Rows;
-        int numColsToProcess = columnsToProcess.Length;
-        var subset = new T[numRows, numColsToProcess];
+        var transformedSubset = func(PreprocessingTensorOps.SelectColumns(data, columnsToProcess));
 
-        for (int i = 0; i < numRows; i++)
+        // Reconstruct full matrix: transformed column k goes back to its source column columnsToProcess[k] (the
+        // selection need not be sorted; a repeated index keeps its first transformed column), the others are kept
+        var subsetColumnOf = new Dictionary<int, int>(columnsToProcess.Length);
+        for (int k = 0; k < columnsToProcess.Length; k++)
         {
-            for (int j = 0; j < numColsToProcess; j++)
-            {
-                subset[i, j] = data[i, columnsToProcess[j]];
-            }
+            if (!subsetColumnOf.ContainsKey(columnsToProcess[k]))
+                subsetColumnOf[columnsToProcess[k]] = k;
         }
 
-        // Apply function to subset
-        var transformedSubset = func(new Matrix<T>(subset));
-
-        // Reconstruct full matrix
-        var result = new T[numRows, data.Columns];
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        var columns = new List<Tensor<T>>(data.Columns);
+        for (int j = 0; j < data.Columns; j++)
         {
-            int subsetCol = 0;
-            for (int j = 0; j < data.Columns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    result[i, j] = transformedSubset[i, subsetCol++];
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
+            columns.Add(subsetColumnOf.TryGetValue(j, out int subsetCol)
+                ? PreprocessingTensorOps.Column(transformedSubset, subsetCol)
+                : PreprocessingTensorOps.Column(data, j));
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
-    private Matrix<T> CopyMatrix(Matrix<T> data)
-    {
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
+    private static Matrix<T> CopyMatrix(Matrix<T> data) => data.Clone();
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
+    // Lifts a whole-tensor engine operation to the matrix-level function the transformer applies.
+    private static Func<Matrix<T>, Matrix<T>> MapMatrix(Func<Tensor<T>, Tensor<T>> operation) =>
+        matrix => operation(Tensor<T>.FromMatrix(matrix)).ToMatrix();
 
     /// <summary>
     /// Gets the output feature names after transformation.
@@ -274,9 +229,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Log()
     {
-        return FromElementFunction(
-            x => Math.Log(x),
-            x => Math.Exp(x));
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorExp(t)));
     }
 
     /// <summary>
@@ -284,9 +239,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Log1p()
     {
-        return FromElementFunction(
-            x => Math.Log(1 + x),
-            x => Math.Exp(x) - 1);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog1p(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorExpm1(t)));
     }
 
     /// <summary>
@@ -294,9 +249,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Sqrt()
     {
-        return FromElementFunction(
-            x => Math.Sqrt(x),
-            x => x * x);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorSqrt(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorSquare(t)));
     }
 
     /// <summary>
@@ -304,9 +259,9 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Exp()
     {
-        return FromElementFunction(
-            x => Math.Exp(x),
-            x => Math.Log(x));
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorExp(t)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorLog(t)));
     }
 
     /// <summary>
@@ -315,9 +270,12 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="power">The power to raise values to.</param>
     public static FunctionTransformer<T> Power(double power)
     {
-        return FromElementFunction(
-            x => Math.Pow(x, power),
-            x => Math.Pow(x, 1.0 / power));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T exponent = numOps.FromDouble(power);
+        T inverseExponent = numOps.FromDouble(1.0 / power);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorPower(t, exponent)),
+            MapMatrix(t => AiDotNetEngine.Current.TensorPower(t, inverseExponent)));
     }
 
     /// <summary>
@@ -325,8 +283,8 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Abs()
     {
-        return FromElementFunction(
-            x => Math.Abs(x),
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorAbs(t)),
             null); // No unique inverse for absolute value
     }
 
@@ -335,8 +293,16 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public static FunctionTransformer<T> Sign()
     {
-        return FromElementFunction(
-            x => Math.Sign(x),
+        return new FunctionTransformer<T>(
+            MapMatrix(t =>
+            {
+                // Math.Sign throws on NaN; keep that contract (NaN is the only value not equal to itself).
+                var engine = AiDotNetEngine.Current;
+                var ops = MathHelper.GetNumericOperations<T>();
+                if (t.Length > 0 && ops.LessThan(engine.TensorMinValue(engine.TensorEquals(t, t)), ops.One))
+                    throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
+                return engine.TensorSign(t);
+            }),
             null); // No inverse for sign function
     }
 
@@ -347,8 +313,11 @@ public class FunctionTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="max">Maximum value.</param>
     public static FunctionTransformer<T> Clip(double min, double max)
     {
-        return FromElementFunction(
-            x => Math.Max(min, Math.Min(max, x)),
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T lower = numOps.FromDouble(min);
+        T upper = numOps.FromDouble(max);
+        return new FunctionTransformer<T>(
+            MapMatrix(t => AiDotNetEngine.Current.TensorClampMin(AiDotNetEngine.Current.TensorClampMax(t, upper), lower)),
             null); // No inverse for clipping
     }
 }

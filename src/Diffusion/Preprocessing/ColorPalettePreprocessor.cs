@@ -44,37 +44,14 @@ public class ColorPalettePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data._shape;
-        int batch = shape[0];
-        int channels = Math.Min(shape[1], 3);
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        var engine = AiDotNetEngine.Current;
 
-        for (int b = 0; b < batch; b++)
-        {
-            // Uniform quantization: divide color space into _numColors levels per channel
-            double step = 1.0 / _numColors;
-
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < 3; c++)
-                    {
-                        int srcC = Math.Min(c, channels - 1);
-                        double val = NumOps.ToDouble(data[b, srcC, h, w]);
-
-                        // Quantize to nearest palette level
-                        double quantized = Math.Floor(val / step) * step + step * 0.5;
-                        quantized = Math.Min(1.0, Math.Max(0.0, quantized));
-
-                        result[b, c, h, w] = NumOps.FromDouble(quantized);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Uniform quantization: divide color space into _numColors levels per channel and
+        // quantize to the level centre, floor(v / step) * step + step / 2, clamped to [0, 1]
+        double step = 1.0 / _numColors;
+        var rgb = PreprocessorFilters.ToRgb(data);
+        var levels = engine.TensorFloor(engine.TensorDivideScalar(rgb, NumOps.FromDouble(step)));
+        var quantized = engine.TensorAddScalar(engine.TensorMultiplyScalar(levels, NumOps.FromDouble(step)), NumOps.FromDouble(step * 0.5));
+        return engine.TensorClamp(quantized, NumOps.Zero, NumOps.One);
     }
 }

@@ -204,6 +204,23 @@ public class SyntheticDataReferenceFixTests
         Assert.Equal(new[] { Math.Cos(4.0), -Math.Sin(4.0), Math.Sin(4.0), Math.Cos(4.0) }, rotation.ToArray(), new DoubleTolerance(1e-11));
     }
 
+    /// <summary>
+    /// A matrix with an infinite entry has an infinite norm. The scaling count log2(norm), cast to int, saturated, and
+    /// the squaring loop ran int.MaxValue matrix products: NOTEARS' h(W) hung on any adjacency whose square
+    /// overflowed. The exponential of such a matrix is not finite and returns at once.
+    /// </summary>
+    [Fact(Timeout = 30000)]
+    public async System.Threading.Tasks.Task MatrixExponential_OfANonFiniteMatrix_ReturnsNonFiniteWithoutSquaring()
+    {
+        foreach (double entry in new[] { double.PositiveInfinity, double.NaN })
+        {
+            var result = await System.Threading.Tasks.Task.Run(() => SyntheticTensorOps<double>.MatrixExponential(
+                new Tensor<double>(new[] { 0.0, entry, 0.0, 0.0 }, new[] { 2, 2 })));
+            Assert.Equal(4, result.Length);
+            Assert.Contains(result.ToArray(), value => double.IsNaN(value) || double.IsInfinity(value));
+        }
+    }
+
     [Fact]
     public void SmoteNc_MedianStd_AveragesTheTwoMiddleValues()
     {

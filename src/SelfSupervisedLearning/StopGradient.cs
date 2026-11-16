@@ -84,13 +84,10 @@ public static class StopGradient<T>
     {
         if (vector is null) throw new ArgumentNullException(nameof(vector));
 
-        var dataCopy = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            dataCopy[i] = vector[i];
-        }
+        var copy = new Vector<T>(vector.Length);
+        vector.AsSpan().CopyTo(copy.AsWritableSpan());
 
-        return new Vector<T>(dataCopy);
+        return copy;
     }
 
     /// <summary>

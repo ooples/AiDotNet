@@ -25,6 +25,8 @@ internal enum ClosureFallbackReason
 /// <para>At most <see cref="MaxPlans"/> plans are kept, least recently used evicted first. A signature change (the
 /// short last batch of an epoch) compiles a second plan that then continues the first one's optimizer; switching
 /// back replays the cached one.</para>
+/// <para>Only an explicitly permitted, caller-declared graph break uses eager gradients with the configured optimizer.
+/// Unexpected aborted or unsignable probes are errors; a missing replay contract never authorizes a hybrid step.</para>
 /// <para>Dynamic rule: an objective whose probe aborts, is unsignable, or misses the cache on more than
 /// <see cref="MaxEarlyFailures"/> of its first <see cref="ObservationSteps"/> steps stops probing and caching. Its
 /// steps still run as compiled plans traced from that step (never a stale replay, and the optimizer's moments carry
@@ -263,6 +265,22 @@ internal sealed class ClosureObjectiveState<T>
             if (StepsSeen <= ObservationSteps && ++EarlyFailures > MaxEarlyFailures)
                 IsDynamic = true;
         }
+    }
+
+    /// <summary>Plans traced and compiled for this objective.</summary>
+    internal int Compiles { get; set; }
+
+    /// <summary>Explicitly declared graph-break steps run on the eager tape through the configured plan's optimizer.</summary>
+    internal int OutsidePlanSteps { get; private set; }
+
+    /// <summary>
+    /// Counts a caller-declared graph break. It bypasses probing and compilation and does not count as a cache failure.
+    /// </summary>
+    internal void RecordOutsidePlanStep(string? reason)
+    {
+        StepsSeen++;
+        OutsidePlanSteps++;
+        LastReason = reason;
     }
 
     internal void MarkUnsignable(string reason) => UnsignableReason = reason;

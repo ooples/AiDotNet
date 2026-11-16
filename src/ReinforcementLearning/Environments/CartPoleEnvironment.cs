@@ -110,15 +110,8 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
         }
         else
         {
-            // One-hot encoded
-            actionIndex = 0;
-            for (int i = 1; i < action.Length; i++)
-            {
-                if (_numOps.ToDouble(action[i]) > _numOps.ToDouble(action[actionIndex]))
-                {
-                    actionIndex = i;
-                }
-            }
+            // One-hot encoded: first arg-max
+            actionIndex = RLTensorOps.ArgMax(action);
         }
 
         if (actionIndex < 0 || actionIndex >= ActionSpaceSize)
@@ -143,10 +136,12 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
         _thetaDot += _tau * thetaAcc;
         _steps++;
 
-        // Check termination conditions
-        bool done = _x < -_xThreshold || _x > _xThreshold ||
-                    _theta < -_thetaThresholdRadians || _theta > _thetaThresholdRadians ||
-                    _steps >= _maxSteps;
+        // Termination (the cart left the track or the pole fell) and truncation (the time limit, which Gymnasium's
+        // CartPole reports as truncated) both end the episode; only the latter is bootstrapped by the agents.
+        bool terminated = _x < -_xThreshold || _x > _xThreshold ||
+                          _theta < -_thetaThresholdRadians || _theta > _thetaThresholdRadians;
+        bool truncated = !terminated && _steps >= _maxSteps;
+        bool done = terminated || truncated;
 
         // Reward: +1 for each step the pole is balanced
         T reward = done ? _numOps.Zero : _numOps.One;
@@ -155,7 +150,8 @@ public class CartPoleEnvironment<T> : IEnvironment<T>
         {
             ["steps"] = _steps,
             ["x"] = _x,
-            ["theta"] = _theta
+            ["theta"] = _theta,
+            [EnvironmentInfoKeys.Truncated] = truncated
         };
 
         return (GetStateVector(), reward, done, info);

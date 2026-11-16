@@ -67,26 +67,30 @@ internal sealed class CosyVoice3Flow<T>
     /// <summary>The pre-lookahead residual followed by nearest repetition to two mel frames per token.</summary>
     internal Tensor<T> Encode(IReadOnlyList<int> tokens)
     {
-        var ids = new Tensor<T>(new[] { tokens.Count });
-        for (int i = 0; i < tokens.Count; i++) ids[i] = NumOps.FromDouble(tokens[i]);
+        var ids = new Tensor<int>(tokens.ToArray(), new[] { tokens.Count }).Cast<T>();
         var embedded = InputEmbedding.Forward(ids);
         var h = LookaheadConv1.Forward(Pad(Channels(embedded), 0, Options.Lookahead));
         h = _engine.LeakyReLU(h, NumOps.FromDouble(0.01));
         h = LookaheadConv2.Forward(Pad(h, 2, 0));
         var looked = _engine.TensorAdd(Rows(h), embedded);
-        var index = new Tensor<int>(new[] { MelFrames(tokens.Count) });
-        for (int i = 0; i < index.Length; i++) index[i] = i / Options.TokenMelRatio;
-        return _engine.TensorIndexSelect(looked, index, 0);
+        return _engine.TensorRepeatInterleave(looked, Options.TokenMelRatio, 0);
     }
 
     internal Tensor<T> ProjectSpeaker(Tensor<T> xvector)
     {
         if (xvector.Length != Options.SpeakerEmbeddingDim)
             throw new ArgumentException($"The speaker embedding needs {Options.SpeakerEmbeddingDim} values.", nameof(xvector));
-        double norm = 0;
-        for (int i = 0; i < xvector.Length; i++) norm += Math.Pow(NumOps.ToDouble(xvector[i]), 2);
-        norm = Math.Max(Math.Sqrt(norm), 1e-12);
-        var normalized = _engine.TensorMultiplyScalar(_engine.Reshape(xvector, new[] { 1, xvector.Length }), NumOps.FromDouble(1.0 / norm));
+        // F.normalize: x / max(||x||, 1e-12), computed as (x/p) / ||x/p|| with p the peak |x|. The norm itself is never
+        // formed (192 entries of 5000 have a norm beyond half precision), and ||x/p|| >= 1 so the floor cannot apply
+        // once p > 0; an all-zero vector stays zero.
+        var row = _engine.Reshape(xvector, new[] { 1, xvector.Length });
+        T peak = _engine.TensorMaxValue(_engine.TensorAbs(row));
+        var normalized = row;
+        if (NumOps.GreaterThan(peak, NumOps.Zero))
+        {
+            var scaled = _engine.TensorDivideScalar(row, peak);
+            normalized = _engine.TensorDivideScalar(scaled, NumOps.Sqrt(_engine.TensorSum(_engine.TensorMultiply(scaled, scaled))));
+        }
         return _engine.Reshape(SpeakerProjection.Forward(normalized), new[] { Options.DiTInputDim });
     }
 
@@ -104,6 +108,7 @@ internal sealed class CosyVoice3Flow<T>
         var zeroMu = _engine.TensorMultiplyScalar(mu, NumOps.Zero);
         var zeroSpeaker = _engine.TensorMultiplyScalar(speaker, NumOps.Zero);
         var zeroCondition = _engine.TensorMultiplyScalar(condition, NumOps.Zero);
+        T guidedWeight = NumOps.FromDouble(1 + Options.DiTInferenceCfgRate), unguidedWeight = NumOps.FromDouble(Options.DiTInferenceCfgRate);
         double time = span[0];
         for (int step = 0; step < steps; step++)
         {
@@ -111,8 +116,8 @@ internal sealed class CosyVoice3Flow<T>
             var conditional = Field(x, mu, speaker, condition, time, false, null, streaming);
             var unconditional = Field(x, zeroMu, zeroSpeaker, zeroCondition, time, false, null, streaming);
             var guided = _engine.TensorSubtract(
-                _engine.TensorMultiplyScalar(conditional, NumOps.FromDouble(1 + Options.DiTInferenceCfgRate)),
-                _engine.TensorMultiplyScalar(unconditional, NumOps.FromDouble(Options.DiTInferenceCfgRate)));
+                _engine.TensorMultiplyScalar(conditional, guidedWeight),
+                _engine.TensorMultiplyScalar(unconditional, unguidedWeight));
             x = _engine.TensorAdd(x, _engine.TensorMultiplyScalar(guided, NumOps.FromDouble(dt)));
             time = span[step + 1];
         }
@@ -131,14 +136,21 @@ internal sealed class CosyVoice3Flow<T>
         if (noise.Length != total * Options.MelChannels)
             throw new ArgumentException($"The noise needs {total * Options.MelChannels} values.", nameof(noise));
         var mu = Encode(promptTokens.Concat(tokens).ToList());
-        var condition = new Tensor<T>(new[] { total, Options.MelChannels });
-        if (promptMel is not null)
-            for (int f = 0; f < promptFrames; f++)
-                for (int m = 0; m < Options.MelChannels; m++) condition[f, m] = promptMel[f, m];
+        var condition = PromptCondition(promptMel, promptFrames, total);
         var noiseRows = _engine.TensorTranspose(_engine.Reshape(noise, new[] { Options.MelChannels, total }));
         var sampled = Sample(mu, ProjectSpeaker(xvector), condition, noiseRows, streaming);
         var generated = _engine.TensorSlice(sampled, new[] { promptFrames, 0 }, new[] { textFrames, Options.MelChannels });
         return _engine.Reshape(_engine.TensorTranspose(generated), new[] { 1, Options.MelChannels, textFrames });
+    }
+
+    // The condition [frames, mels]: the first promptFrames rows of the prompt mel, zeros after.
+    private Tensor<T> PromptCondition(Tensor<T>? promptMel, int promptFrames, int frames)
+    {
+        int mels = Options.MelChannels;
+        if (promptMel is null || promptFrames == 0) return new Tensor<T>(new[] { frames, mels });
+        var head = _engine.TensorSlice(promptMel, new[] { 0, 0 }, new[] { promptFrames, mels });
+        return promptFrames == frames ? head.Contiguous()
+            : _engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { frames - promptFrames, mels }) }, 0);
     }
 
     public Tensor<T> TrainingLoss(IReadOnlyList<int> tokens, Tensor<T> mel, Tensor<T> xvector, bool training, Random random)
@@ -151,9 +163,7 @@ internal sealed class CosyVoice3Flow<T>
         var mu = Encode(tokens);
         var speaker = ProjectSpeaker(xvector);
         int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(0.3 * frames) + 1);
-        var condition = new Tensor<T>(new[] { frames, Options.MelChannels });
-        for (int f = 0; f < prompt; f++)
-            for (int m = 0; m < Options.MelChannels; m++) condition[f, m] = target[f, m];
+        var condition = PromptCondition(target, prompt, frames);
         var noise = new Tensor<T>(new[] { frames, Options.MelChannels });
         for (int i = 0; i < noise.Length; i++)
             noise.SetFlat(i, NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble())));

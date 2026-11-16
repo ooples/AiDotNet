@@ -116,6 +116,21 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The two Navier-Cauchy residuals [N, 2], so the loss is their mean square rather than the square of the point-wise sum of squares.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            T lambdaPlus2Mu = NumOps.Add(_lambda, NumOps.Multiply(NumOps.FromDouble(2), _mu));
+            var first = e.TensorAdd(
+                e.TensorAdd(e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), lambdaPlus2Mu), e.TensorMultiplyScalar(D2(derivatives, 0, 1, 1), _mu)),
+                e.TensorMultiplyScalar(D2(derivatives, 1, 0, 1), _lambdaPlusMu));
+            var second = e.TensorAdd(
+                e.TensorAdd(e.TensorMultiplyScalar(D2(derivatives, 0, 0, 1), _lambdaPlusMu), e.TensorMultiplyScalar(D2(derivatives, 1, 0, 0), _mu)),
+                e.TensorMultiplyScalar(D2(derivatives, 1, 1, 1), lambdaPlus2Mu));
+            return e.TensorStack(new[] { e.TensorAddScalar(first, _bodyForceX), e.TensorAddScalar(second, _bodyForceY) }, 1);
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateSecondDerivatives(derivatives);

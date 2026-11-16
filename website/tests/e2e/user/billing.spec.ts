@@ -25,12 +25,7 @@ test.describe('Logged-in user — billing', () => {
     // the tier mapping in billing/index.astro has regressed.
     await expect(page.locator('#billing-plan')).toHaveText(/^(Free|Pro|Enterprise)$/);
 
-    // The upgrade CTA sits on every tier (its label changes), so assert
-    // the button exists rather than the text. For Free users the link
-    // points to /pricing/; for Pro it's still /pricing/ but the label is
-    // "Manage Plan"; for Enterprise the href is mailto:support.
-    const upgradeLink = page.locator('#billing-upgrade-btn');
-    await expect(upgradeLink).toBeVisible();
+    await expect(page.locator('#billing-change-plan')).toHaveText(/^(Upgrade|Change plan)$/);
 
     // FAQ details are collapsed by default. Expanding one proves the
     // native <details> behavior isn't broken by overriding CSS (which
@@ -43,38 +38,29 @@ test.describe('Logged-in user — billing', () => {
     expect(consoleErrors, 'billing page should emit zero console errors').toEqual([]);
   });
 
-  test('Stripe portal section is shown only for paying customers', async ({ page }) => {
+  test('every billing control leads somewhere real for this account', async ({ page }) => {
     await page.goto('/account/billing/');
+    await expect(page.locator('#billing-root')).toHaveAttribute('data-billing-loaded', 'true', { timeout: 20_000 });
+    await expect(page.locator('#billing-error')).toBeHidden();
+    const plan = (await page.locator('#billing-plan').textContent())?.trim();
+    const hasAccount = (await page.locator('#billing-root').getAttribute('data-billing-account')) === 'true';
 
-    // Wait on the explicit load-complete marker rather than text content,
-    // because "Free" is the pre-hydration default — a naive text-match
-    // on #billing-plan would pass before loadBilling() has actually read
-    // the profile. The data-billing-loaded flag is set last in
-    // loadBilling(), so once it flips we know the portal-section toggle
-    // has also run.
-    await expect(page.locator('#billing-root')).toHaveAttribute(
-      'data-billing-loaded',
-      'true',
-      { timeout: 10_000 },
-    );
-
-    const plan = await page.locator('#billing-plan').textContent();
-    const portalSectionHidden = await page.locator('#portal-section').evaluate((el) =>
-      el.classList.contains('hidden'),
-    );
-
-    if (plan?.trim() === 'Free') {
-      // Free users have no Stripe customer ID yet — the portal section
-      // must stay hidden so we don't render Manage-Subscription / View-
-      // Invoices links that go nowhere.
-      expect(portalSectionHidden).toBe(true);
+    if (hasAccount) {
+      // A Stripe customer: both portal controls must open a real Stripe portal session.
+      for (const id of ['#manage-subscription-btn', '#view-invoices-btn']) {
+        await Promise.all([page.waitForURL(/^https:\/\/billing\.stripe\.com\//, { timeout: 30_000 }), page.locator(id).click()]);
+        await page.goBack();
+        await expect(page.locator('#billing-root')).toHaveAttribute('data-billing-loaded', 'true', { timeout: 20_000 });
+      }
+    } else if (plan !== 'Free') {
+      // A paid plan with no Stripe customer: say how to change it instead of showing dead links.
+      await expect(page.locator('#portal-section')).toBeHidden();
+      await expect(page.locator('#billing-no-account')).toBeVisible();
     } else {
-      // Paying customers must see the portal links, and both links must
-      // resolve to a real (not "#") href once PUBLIC_STRIPE_PORTAL_URL is
-      // configured. If the build-time env is missing, the links degrade
-      // to "#" — we don't fail the test on that case because the portal
-      // URL is optional until the customer portal is formally opened.
-      expect(portalSectionHidden).toBe(false);
+      await expect(page.locator('#portal-section')).toBeHidden();
     }
+
+    await page.locator('#billing-change-plan').click();
+    await expect(page).toHaveURL(/\/pricing\/$/);
   });
 });

@@ -129,27 +129,18 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
         var featureSize = unlabeledPool.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
 
         // Compute uncertainty scores (using entropy)
-        var uncertaintyScores = new Vector<T>(numSamples);
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            uncertaintyScores[i] = ComputeEntropy(probs);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, ActiveLearningEngineOps.Tolerance<T>(1e-10));
 
         // Compute average similarity to pool
         var avgSimilarities = ComputeAverageSimilarities(unlabeledPool, numSamples, featureSize);
 
         // Combine: ID(x) = Uncertainty(x) × AvgSimilarity(x)^β
-        for (int i = 0; i < numSamples; i++)
-        {
-            var uncertainty = _numOps.ToDouble(uncertaintyScores[i]);
-            var avgSim = _numOps.ToDouble(avgSimilarities[i]);
-            var weightedSim = Math.Pow(avgSim, _beta);
-            scores[i] = _numOps.FromDouble(uncertainty * weightedSim);
-        }
+        var weightedSim = engine.TensorPower(avgSimilarities, _numOps.FromDouble(_beta));
+        var scores = engine.TensorMultiply(uncertaintyScores, weightedSim).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -169,260 +160,110 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
     /// <summary>
     /// Computes average similarity of each sample to all other samples in the pool.
     /// </summary>
-    private Vector<T> ComputeAverageSimilarities(Tensor<T> pool, int numSamples, int featureSize)
+    private Tensor<T> ComputeAverageSimilarities(Tensor<T> pool, int numSamples, int featureSize)
     {
-        var avgSimilarities = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
+        var engine = AiDotNetEngine.Current;
+        if (numSamples < 2)
         {
-            var totalSim = 0.0;
-            var count = 0;
-
-            for (int j = 0; j < numSamples; j++)
-            {
-                if (i != j)
-                {
-                    var sim = ComputeSimilarity(pool, i, j, featureSize);
-                    totalSim += sim;
-                    count++;
-                }
-            }
-
-            var avgSim = count > 0 ? totalSim / count : 0.0;
-            avgSimilarities[i] = _numOps.FromDouble(avgSim);
+            return new Tensor<T>(new[] { numSamples });
         }
 
-        return avgSimilarities;
+        var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+        var norms = _similarityMeasure is SimilarityMeasure.RBF or SimilarityMeasure.InverseEuclidean
+            ? null
+            : ActiveLearningEngineOps.RowNorms(rows);
+        var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, featureSize);
+        var totals = new List<Tensor<T>>();
+
+        for (int start = 0; start < numSamples; start += blockRows)
+        {
+            int count = Math.Min(blockRows, numSamples - start);
+            var similarities = ComputeSimilarityBlock(rows, norms, start, count);
+
+            // Exclude each sample's similarity to itself
+            var others = engine.TensorMaskedFill(similarities, ActiveLearningEngineOps.SelfMask(start, count, numSamples), _numOps.Zero);
+            totals.Add(engine.ReduceSum(others, new[] { 1 }, keepDims: false));
+        }
+
+        var total = engine.TensorConcatenate(totals.ToArray(), 0);
+        return engine.TensorDivideScalar(total, _numOps.FromDouble(numSamples - 1));
     }
 
     /// <summary>
-    /// Computes similarity between two samples based on configured measure.
+    /// Computes the similarity between rows [start, start + count) and every sample using the
+    /// configured measure.
     /// </summary>
-    private double ComputeSimilarity(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    /// <returns>A [count, numSamples] tensor.</returns>
+    private Tensor<T> ComputeSimilarityBlock(Tensor<T> rows, Tensor<T>? norms, int start, int count)
     {
-        return _similarityMeasure switch
+        switch (_similarityMeasure)
         {
-            SimilarityMeasure.Cosine => ComputeCosineSimilarity(pool, idx1, idx2, featureSize),
-            SimilarityMeasure.RBF => ComputeRBFSimilarity(pool, idx1, idx2, featureSize),
-            SimilarityMeasure.InverseEuclidean => ComputeInverseEuclidean(pool, idx1, idx2, featureSize),
-            _ => ComputeCosineSimilarity(pool, idx1, idx2, featureSize)
-        };
+            case SimilarityMeasure.RBF:
+                return ComputeRBFSimilarity(rows, start, count);
+            case SimilarityMeasure.InverseEuclidean:
+                return ComputeInverseEuclidean(rows, start, count);
+            default:
+                return ComputeCosineSimilarity(rows, norms ?? ActiveLearningEngineOps.RowNorms(rows), start, count);
+        }
     }
 
     /// <summary>
-    /// Computes cosine similarity between two samples.
+    /// Computes cosine similarity normalized to [0, 1].
     /// </summary>
-    private double ComputeCosineSimilarity(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private Tensor<T> ComputeCosineSimilarity(Tensor<T> rows, Tensor<T> norms, int start, int count)
     {
-        var dotProduct = _numOps.Zero;
-        var norm1 = _numOps.Zero;
-        var norm2 = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        var shape = new[] { count, n };
+        var blockNorms = engine.TensorSlice(norms, new[] { start }, new[] { count }).Reshape(new[] { count, 1 });
+        var normProduct = engine.TensorMultiply(
+            engine.TensorBroadcastTo(blockNorms, shape),
+            engine.TensorBroadcastTo(norms.Reshape(new[] { 1, n }), shape));
 
-        for (int i = 0; i < featureSize; i++)
-        {
-            var v1 = pool[start1 + i];
-            var v2 = pool[start2 + i];
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(v1, v2));
-            norm1 = _numOps.Add(norm1, _numOps.Multiply(v1, v1));
-            norm2 = _numOps.Add(norm2, _numOps.Multiply(v2, v2));
-        }
-
-        var normProduct = Math.Sqrt(_numOps.ToDouble(norm1)) * Math.Sqrt(_numOps.ToDouble(norm2));
-
-        if (normProduct < 1e-10)
-            return 0.0;
-
-        var cosineSim = _numOps.ToDouble(dotProduct) / normProduct;
-        // Normalize from [-1, 1] to [0, 1]
-        return (cosineSim + 1.0) / 2.0;
+        // Normalize from [-1, 1] to [0, 1]; pairs with a (near) zero norm get similarity 0
+        // (dot products of unit rows: a.b and |a| |b| overflow in Half)
+        var cosineSim = ActiveLearningEngineOps.CosineBlock(rows, norms, start, count);
+        var normalized = engine.TensorDivideScalar(engine.TensorAddScalar(cosineSim, _numOps.One), _numOps.FromDouble(2.0));
+        var degenerate = engine.TensorLessThan(normProduct, ActiveLearningEngineOps.Tolerance<T>(1e-10));
+        return engine.TensorWhere(degenerate, new Tensor<T>(shape), normalized);
     }
 
     /// <summary>
-    /// Computes RBF (Gaussian) kernel similarity.
+    /// Computes RBF (Gaussian) similarity: exp(-gamma * d^2).
     /// </summary>
-    private double ComputeRBFSimilarity(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private Tensor<T> ComputeRBFSimilarity(Tensor<T> rows, int start, int count)
     {
-        var dist = ComputeEuclideanDistanceDouble(pool, idx1, idx2, featureSize);
-        return Math.Exp(-_rbfGamma * dist * dist);
+        var engine = AiDotNetEngine.Current;
+        // exp(-sign(gamma) (sqrt(|gamma|) d)^2): scaling before squaring keeps d^2 from overflowing in Half
+        var scaled = engine.TensorMultiplyScalar(ActiveLearningEngineOps.DistanceBlock(rows, start, count), _numOps.FromDouble(Math.Sqrt(Math.Abs(_rbfGamma))));
+        var exponent = engine.TensorMultiplyScalar(engine.TensorMultiply(scaled, scaled), _numOps.FromDouble(_rbfGamma < 0 ? 1.0 : -1.0));
+        return engine.TensorExp(exponent);
     }
 
     /// <summary>
-    /// Computes inverse Euclidean distance similarity.
+    /// Computes inverse Euclidean similarity: 1 / (1 + d).
     /// </summary>
-    private double ComputeInverseEuclidean(Tensor<T> pool, int idx1, int idx2, int featureSize)
+    private Tensor<T> ComputeInverseEuclidean(Tensor<T> rows, int start, int count)
     {
-        var dist = ComputeEuclideanDistanceDouble(pool, idx1, idx2, featureSize);
-        return 1.0 / (1.0 + dist);
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance returning double.
-    /// </summary>
-    private double ComputeEuclideanDistanceDouble(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sumSquared = 0.0;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.ToDouble(pool[start1 + i]) - _numOps.ToDouble(pool[start2 + i]);
-            sumSquared += diff * diff;
-        }
-
-        return Math.Sqrt(sumSquared);
-    }
-
-    /// <summary>
-    /// Computes entropy for uncertainty estimation.
-    /// </summary>
-    private T ComputeEntropy(Vector<T> probabilities)
-    {
-        var entropy = _numOps.Zero;
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = _numOps.Add(probabilities[i], epsilon);
-            var logP = _numOps.FromDouble(Math.Log(_numOps.ToDouble(p)));
-            var term = _numOps.Multiply(p, logP);
-            entropy = _numOps.Subtract(entropy, term);
-        }
-
-        return entropy;
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
+        var engine = AiDotNetEngine.Current;
+        var dist = ActiveLearningEngineOps.DistanceBlock(rows, start, count);
+        return engine.TensorReciprocal(engine.TensorAddScalar(dist, _numOps.One));
     }
 
     /// <summary>
     /// Selects top-scoring samples without diversity consideration.
     /// </summary>
-    private int[] SelectTopScoring(Vector<T> scores, int batchSize)
+    private static int[] SelectTopScoring(Vector<T> scores, int batchSize)
     {
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
     /// Selects samples considering both information density and batch diversity.
     /// </summary>
-    private int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
+    private static int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
     {
-        var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, scores.Length));
-        var featureSize = pool.Length / pool.Shape[0];
-
-        while (selected.Count < batchSize && remaining.Count > 0)
-        {
-            var best = -1;
-            var bestCombinedScore = _numOps.MinValue;
-
-            foreach (var idx in remaining)
-            {
-                var idScore = scores[idx];
-                var diversityScore = selected.Count == 0
-                    ? _numOps.One
-                    : ComputeMinDistanceToSelected(pool, idx, selected, featureSize);
-
-                var combinedScore = _numOps.Multiply(idScore, diversityScore);
-
-                if (_numOps.GreaterThan(combinedScore, bestCombinedScore))
-                {
-                    bestCombinedScore = combinedScore;
-                    best = idx;
-                }
-            }
-
-            if (best >= 0)
-            {
-                selected.Add(best);
-                remaining.Remove(best);
-            }
-        }
-
-        return [.. selected];
-    }
-
-    /// <summary>
-    /// Computes minimum distance from a sample to already selected samples.
-    /// </summary>
-    private T ComputeMinDistanceToSelected(Tensor<T> pool, int sampleIdx, List<int> selected, int featureSize)
-    {
-        var minDist = _numOps.MaxValue;
-
-        foreach (var selIdx in selected)
-        {
-            var dist = ComputeEuclideanDistance(pool, sampleIdx, selIdx, featureSize);
-            if (_numOps.LessThan(dist, minDist))
-            {
-                minDist = dist;
-            }
-        }
-
-        return minDist;
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two samples.
-    /// </summary>
-    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sumSquared = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquared = _numOps.Add(sumSquared, squared);
-        }
-
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
+        return ActiveLearningEngineOps.SelectWithDiversity(scores, pool, batchSize);
     }
 
     /// <summary>
@@ -432,19 +273,6 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }

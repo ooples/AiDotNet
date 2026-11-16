@@ -106,11 +106,19 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly PhysicsInformedLoss<T> _physicsLoss;
+
+        // The boundary and initial-condition terms alone, for their per-point values and gradients.
+        private readonly PhysicsInformedLoss<T> _constraintLoss;
+
+        /// <summary>
+        /// The weighted PINN loss terms; derived PINNs build their objectives from it.
+        /// </summary>
+        protected PhysicsInformedLoss<T> PhysicsLoss => _physicsLoss;
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 
-        // Collocation points for PDE residual evaluation
-        private T[,]? _collocationPoints;
+        // Collocation points [numPoints, inputDim] where the PDE residual is enforced
+        private Tensor<T> _collocationPoints;
         private readonly int _numCollocationPoints;
 
         /// <summary>
@@ -120,11 +128,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="pdeSpecification">The PDE that the solution must satisfy.</param>
         /// <param name="boundaryConditions">Boundary conditions for the problem.</param>
         /// <param name="initialCondition">Initial condition for time-dependent problems (optional).</param>
-            /// <param name="optimizer">Optimization algorithm (Adam is recommended for PINNs).</param>
-        /// <param name="dataWeight">Weight for data loss component.</param>
-        /// <param name="pdeWeight">Weight for PDE residual loss (often needs tuning).</param>
-        /// <param name="boundaryWeight">Weight for boundary condition loss.</param>
-        /// <param name="initialWeight">Weight for initial condition loss.</param>
+        /// <param name="optimizer">Optimization algorithm (Adam is recommended for PINNs).</param>
+        /// <param name="options">The loss weights and collocation settings.</param>
         /// <remarks>
         /// For Beginners:
         /// When creating a PINN, you need to specify:
@@ -177,6 +182,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 _options.PdeWeight,
                 _options.BoundaryWeight,
                 _options.InitialWeight);
+            _constraintLoss = new PhysicsInformedLoss<T>(
+                null,
+                _boundaryConditions,
+                _initialCondition,
+                0.0,
+                0.0,
+                _options.BoundaryWeight,
+                _options.InitialWeight);
 
             if (optimizer == null)
             {
@@ -190,7 +203,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             InitializeLayers();
-            GenerateCollocationPoints();
+            _collocationPoints = GenerateCollocationPoints();
         }
 
         /// <summary>
@@ -227,158 +240,265 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// 4. Adaptive sampling: Add more points where error is high
         ///
         /// For this implementation, we use random sampling in the unit hypercube [0,1]^d.
-        /// You should scale these to your actual domain (e.g., x ∈ [-1, 1], t ∈ [0, 10]).
+        /// Use <see cref="SetCollocationPoints"/> to sample your actual domain (e.g., x in [-1, 1], t in [0, 10]).
         /// </remarks>
-        private void GenerateCollocationPoints()
+        private Tensor<T> GenerateCollocationPoints()
         {
             int inputDim = _pdeSpecification.InputDimension;
-            _collocationPoints = new T[_numCollocationPoints, inputDim];
-
             var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
-
-            for (int i = 0; i < _numCollocationPoints; i++)
-            {
-                for (int j = 0; j < inputDim; j++)
-                {
-                    // Random points in [0, 1]
-                    // In practice, you'd scale this to your actual domain
-                    _collocationPoints[i, j] = NumOps.FromDouble(random.NextDouble());
-                }
-            }
+            return Engine.TensorRandomUniformRange<T>(
+                new[] { _numCollocationPoints, inputDim }, NumOps.Zero, NumOps.One, random.Next());
         }
 
         /// <summary>
         /// Sets custom collocation points (for advanced users who want specific sampling).
         /// </summary>
         /// <param name="points">Collocation points [numPoints, inputDim].</param>
-        public void SetCollocationPoints(T[,] points)
+        public void SetCollocationPoints(Tensor<T> points)
         {
-            if (points.GetLength(1) != _pdeSpecification.InputDimension)
+            Guard.NotNull(points);
+            if (points.Rank != 2 || points.Shape[1] != _pdeSpecification.InputDimension)
             {
                 throw new ArgumentException(
-                    $"Collocation points must have {_pdeSpecification.InputDimension} dimensions.");
+                    $"Collocation points must be a [numPoints, {_pdeSpecification.InputDimension}] tensor.");
             }
+
             _collocationPoints = points;
         }
 
+        /// <summary>
+        /// Gets the collocation points the PDE residual is enforced at, [numPoints, inputDim].
+        /// </summary>
+        public Tensor<T> CollocationPoints => _collocationPoints;
 
-        private T ComputeAverageLoss(T[,]? dataInputs, T[,]? dataOutputs)
+        /// <summary>
+        /// The input-derivative order the PDE residual needs.
+        /// </summary>
+        protected int PdeDerivativeOrder =>
+            _pdeSpecification is PDEs.PDESpecificationBase<T> tapeSpec ? tapeSpec.DerivativeOrder : 2;
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// <para>
+        /// Raissi et al. (2019), Eq. 4: the loss is MSE_u + MSE_f. MSE_u fits the network to the training data passed
+        /// to <c>Train</c> (the paper's initial and boundary samples, and any measurements), and MSE_f is the mean
+        /// squared PDE residual at the collocation points, with the derivatives of u taken through the gradient
+        /// tape. Both terms are weighted by the options' DataWeight and PdeWeight. The configured boundary and initial
+        /// conditions add their residual terms, weighted by BoundaryWeight and InitialWeight, at every data or
+        /// collocation point they constrain (see <see cref="ComputeConstraintLoss"/>).
+        /// </para>
+        /// <para>
+        /// The PDE term needs a residual written with engine operations
+        /// (<see cref="PDEs.PDESpecificationBase{T}.ComputeTapeResidual"/>); every PDE in the library has one.
+        /// </para>
+        /// </remarks>
+        /// <summary>
+        /// Replaces the default Adam optimizer with one at <paramref name="learningRate"/>. A caller-supplied optimizer is
+        /// kept unchanged.
+        /// </summary>
+        private protected void UseDefaultOptimizerLearningRate(double learningRate)
         {
-            T totalLoss = NumOps.Zero;
-            int sampleCount = 0;
-
-            if ((dataInputs == null) != (dataOutputs == null))
+            if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
             {
-                throw new ArgumentException("Data inputs and outputs must both be provided or both be null.");
+                throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be finite and positive.");
             }
 
-            if (dataInputs != null && dataOutputs != null)
+            if (_usesDefaultOptimizer)
             {
-                if (dataInputs.GetLength(0) != dataOutputs.GetLength(0))
-                {
-                    throw new ArgumentException("Data input and output sample counts must match.");
-                }
-
-                if (dataInputs.GetLength(1) != _pdeSpecification.InputDimension)
-                {
-                    throw new ArgumentException(
-                        $"Data inputs must have {_pdeSpecification.InputDimension} dimensions.");
-                }
-
-                if (dataOutputs.GetLength(1) != _pdeSpecification.OutputDimension)
-                {
-                    throw new ArgumentException(
-                        $"Data outputs must have {_pdeSpecification.OutputDimension} dimensions.");
-                }
+                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
             }
-
-            if (_collocationPoints != null)
-            {
-                var collocationTensor = CreateBatchTensor(_collocationPoints);
-                var collocationOutputs = Forward(collocationTensor);
-                int outputDim = _pdeSpecification.OutputDimension;
-
-                if (collocationOutputs.Shape[1] != outputDim)
-                {
-                    throw new InvalidOperationException(
-                        $"Expected {outputDim} outputs from the network, got {collocationOutputs.Shape[1]}.");
-                }
-
-                int inputDim = _pdeSpecification.InputDimension;
-                var point = new Vector<T>(inputDim);
-                var output = new Vector<T>(outputDim);
-
-                for (int i = 0; i < _collocationPoints.GetLength(0); i++)
-                {
-                    for (int j = 0; j < inputDim; j++)
-                    {
-                        point[j] = _collocationPoints[i, j];
-                    }
-
-                    for (int j = 0; j < outputDim; j++)
-                    {
-                        output[j] = collocationOutputs[i, j];
-                    }
-
-                    var derivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                        this,
-                        point,
-                        _pdeSpecification.OutputDimension);
-
-                    T loss = _physicsLoss.ComputePhysicsLoss(output, null, derivatives, point);
-                    totalLoss = NumOps.Add(totalLoss, loss);
-                    sampleCount++;
-                }
-            }
-
-            if (dataInputs != null && dataOutputs != null)
-            {
-                var dataTensor = CreateBatchTensor(dataInputs);
-                var dataPredictions = Forward(dataTensor);
-                int outputDim = _pdeSpecification.OutputDimension;
-
-                if (dataPredictions.Shape[1] != outputDim)
-                {
-                    throw new InvalidOperationException(
-                        $"Expected {outputDim} outputs from the network, got {dataPredictions.Shape[1]}.");
-                }
-
-                var point = new Vector<T>(dataInputs.GetLength(1));
-                var target = new Vector<T>(dataOutputs.GetLength(1));
-                var output = new Vector<T>(outputDim);
-
-                for (int i = 0; i < dataInputs.GetLength(0); i++)
-                {
-                    for (int j = 0; j < point.Length; j++)
-                    {
-                        point[j] = dataInputs[i, j];
-                    }
-
-                    for (int j = 0; j < target.Length; j++)
-                    {
-                        target[j] = dataOutputs[i, j];
-                    }
-
-                    for (int j = 0; j < outputDim; j++)
-                    {
-                        output[j] = dataPredictions[i, j];
-                    }
-
-                    var derivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                        this,
-                        point,
-                        _pdeSpecification.OutputDimension);
-
-                    T loss = _physicsLoss.ComputePhysicsLoss(output, target, derivatives, point);
-                    totalLoss = NumOps.Add(totalLoss, loss);
-                    sampleCount++;
-                }
-            }
-
-            return sampleCount > 0
-                ? NumOps.Divide(totalLoss, NumOps.FromDouble(sampleCount))
-                : NumOps.Zero;
         }
+
+        protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        {
+            if (_pdeSpecification is not PDEs.PDESpecificationBase<T>)
+            {
+                throw new NotSupportedException(
+                    $"PINN training needs the PDE residual on the gradient tape; '{_pdeSpecification.Name}' does not " +
+                    "derive from PDESpecificationBase, so it has no ComputeTapeResidual.");
+            }
+
+            return new[]
+            {
+                new Training.TrainingObjective<T>(
+                    new[] { input, target, _collocationPoints },
+                    data => ComputeTrainingLoss(data[0], data[1], data[2]))
+            };
+        }
+
+        /// <summary>
+        /// The PINN objective MSE_u + MSE_f on the gradient tape.
+        /// </summary>
+        /// <param name="dataInputs">The data points [N_u, inputDim].</param>
+        /// <param name="dataTargets">The data values [N_u, outputDim].</param>
+        /// <param name="collocationPoints">The collocation points [N_f, inputDim].</param>
+        /// <returns>The scalar loss.</returns>
+        protected virtual Tensor<T> ComputeTrainingLoss(Tensor<T> dataInputs, Tensor<T> dataTargets, Tensor<T> collocationPoints)
+        {
+            var loss = _physicsLoss.ComputeTapeLoss(Forward(dataInputs), dataTargets);
+            var constraints = ComputeConstraintLoss(dataInputs, collocationPoints);
+            if (constraints is not null)
+            {
+                loss = Engine.TensorAdd(loss, Engine.Reshape(constraints, loss.Shape.ToArray()));
+            }
+
+            if (_options.PdeWeight == 0.0)
+            {
+                return loss;
+            }
+
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, collocationPoints, PdeDerivativeOrder, out var derivatives);
+            return Engine.TensorAdd(loss, _physicsLoss.ComputeTapePdeLoss(collocationPoints, outputs, derivatives));
+        }
+
+        /// <summary>
+        /// The configured boundary and initial-condition terms, BoundaryWeight * mean(r_bc^2) + InitialWeight *
+        /// mean((u - u_0)^2), over the data and collocation points that lie on a boundary or at the initial time, on the
+        /// gradient tape; null when no condition is configured or no point is constrained.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A condition's residual is a host callback over one point's values (see <see cref="IBoundaryCondition{T}"/>),
+        /// so it cannot be recorded itself. Its value and its gradient with respect to the point's outputs and
+        /// derivatives come from <see cref="PhysicsInformedLoss{T}.ComputePhysicsLossGradients"/> (the condition's
+        /// analytic gradient, or central differences of the callback), and the tape term is the first-order expansion
+        /// <c>sum_p [l_p + g_p . (y_p - y_p*)]</c> around the current values <c>y_p*</c>: its value is the loss, and its
+        /// gradient through the outputs and the tape derivatives reaches the weights. For the Dirichlet, Neumann and
+        /// initial conditions the residual is linear in y, so the expansion is exact.
+        /// </para>
+        /// <para>
+        /// Raissi et al. (2019) fit the initial and boundary data as part of MSE_u; the objective used to drop these
+        /// conditions, so BoundaryWeight and InitialWeight had no effect.
+        /// </para>
+        /// </remarks>
+        private Tensor<T>? ComputeConstraintLoss(Tensor<T> dataInputs, Tensor<T> collocationPoints)
+        {
+            if (_boundaryConditions.Length == 0 && _initialCondition is null)
+            {
+                return null;
+            }
+
+            var candidates = Engine.TensorConcatenate(new[] { dataInputs, collocationPoints }, 0);
+            int inputDim = candidates.Shape[1];
+            var hostPoints = candidates.ToArray();
+            var rows = new List<int>();
+            for (int p = 0; p < candidates.Shape[0]; p++)
+            {
+                var point = new Vector<T>(new ArraySegment<T>(hostPoints, p * inputDim, inputDim).ToArray());
+                if (_boundaryConditions.Any(bc => bc.IsOnBoundary(point))
+                    || (_initialCondition is not null && _initialCondition.IsAtInitialTime(point)))
+                {
+                    rows.Add(p);
+                }
+            }
+
+            if (rows.Count == 0)
+            {
+                return null;
+            }
+
+            var points = Engine.TensorIndexSelect(candidates, Vector<int>.Wrap(rows.ToArray()).AsTensor(), 0);
+            int order = Math.Min(2, Math.Max(1, PdeDerivativeOrder));
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, points, order, out var derivatives);
+            int count = rows.Count;
+            int outputDim = outputs.Shape[1];
+            var first = derivatives.FirstDerivatives;
+            var second = order >= 2 ? derivatives.SecondDerivatives : null;
+
+            var hostInputs = points.ToArray();
+            var hostOutputs = outputs.ToArray();
+            var hostFirst = first?.ToArray();
+            var hostSecond = second?.ToArray();
+            int firstSize = outputDim * inputDim;
+            int secondSize = firstSize * inputDim;
+            var outputGradients = new T[hostOutputs.Length];
+            var firstGradients = hostFirst is null ? null : new T[hostFirst.Length];
+            var secondGradients = hostSecond is null ? null : new T[hostSecond.Length];
+            var losses = new T[count];
+            for (int p = 0; p < count; p++)
+            {
+                var pointDerivatives = new PDEDerivatives<T>
+                {
+                    FirstDerivatives = hostFirst is null ? null : new Tensor<T>(
+                        new ArraySegment<T>(hostFirst, p * firstSize, firstSize).ToArray(), new[] { outputDim, inputDim }),
+                    SecondDerivatives = hostSecond is null ? null : new Tensor<T>(
+                        new ArraySegment<T>(hostSecond, p * secondSize, secondSize).ToArray(),
+                        new[] { outputDim, inputDim, inputDim }),
+                };
+                var gradient = _constraintLoss.ComputePhysicsLossGradients(
+                    new Vector<T>(new ArraySegment<T>(hostOutputs, p * outputDim, outputDim).ToArray()),
+                    null,
+                    pointDerivatives,
+                    new Vector<T>(new ArraySegment<T>(hostInputs, p * inputDim, inputDim).ToArray()));
+                losses[p] = gradient.Loss;
+                gradient.OutputGradients.ToArray().CopyTo(outputGradients, p * outputDim);
+                if (firstGradients is not null)
+                {
+                    gradient.FirstDerivatives.ToArray().CopyTo(firstGradients, p * firstSize);
+                }
+
+                if (secondGradients is not null)
+                {
+                    gradient.SecondDerivatives.ToArray().CopyTo(secondGradients, p * secondSize);
+                }
+            }
+
+            // sum_p g_p . y_p on the tape, and the constant sum_p (l_p - g_p . y_p*) that makes its value the loss.
+            var outputWeights = new Tensor<T>(outputGradients, outputs.Shape.ToArray());
+            var linear = Engine.ReduceSum(Engine.TensorMultiply(outputWeights, outputs), null);
+            var anchor = Engine.ReduceSum(Engine.TensorMultiply(outputWeights, new Tensor<T>(hostOutputs, outputs.Shape.ToArray())), null);
+            if (first is not null && hostFirst is not null && firstGradients is not null)
+            {
+                var weights = new Tensor<T>(firstGradients, first.Shape.ToArray());
+                linear = Engine.TensorAdd(linear, Engine.ReduceSum(Engine.TensorMultiply(weights, first), null));
+                anchor = Engine.TensorAdd(anchor, Engine.ReduceSum(
+                    Engine.TensorMultiply(weights, new Tensor<T>(hostFirst, first.Shape.ToArray())), null));
+            }
+
+            if (second is not null && hostSecond is not null && secondGradients is not null)
+            {
+                var weights = new Tensor<T>(secondGradients, second.Shape.ToArray());
+                linear = Engine.TensorAdd(linear, Engine.ReduceSum(Engine.TensorMultiply(weights, second), null));
+                anchor = Engine.TensorAdd(anchor, Engine.ReduceSum(
+                    Engine.TensorMultiply(weights, new Tensor<T>(hostSecond, second.Shape.ToArray())), null));
+            }
+
+            var lossSum = Engine.ReduceSum(new Tensor<T>(losses, new[] { count }), null);
+            var total = Engine.TensorAdd(linear, Engine.TensorSubtract(lossSum, anchor));
+            return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / count));
+        }
+
+        /// <summary>
+        /// The weighted residual term pde_weight * mean(f^2) of this network at <paramref name="points"/>.
+        /// </summary>
+        internal Tensor<T> ComputePdeLossAt(Tensor<T> points)
+        {
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, points, PdeDerivativeOrder, out var derivatives);
+            return _physicsLoss.ComputeTapePdeLoss(points, outputs, derivatives);
+        }
+
+        /// <summary>
+        /// The PDE residual f of this network at <paramref name="points"/>, [N], on the gradient tape.
+        /// </summary>
+        internal Tensor<T> ComputeResidualAt(Tensor<T> points, out Tensor<T> outputs)
+        {
+            if (_pdeSpecification is not PDEs.PDESpecificationBase<T> tapeSpec)
+            {
+                throw new NotSupportedException(
+                    $"'{_pdeSpecification.Name}' has no tape-differentiable residual (PDESpecificationBase.ComputeTapeResidual).");
+            }
+
+            outputs = PinnAutodiff<T>.Evaluate(Forward, points, tapeSpec.DerivativeOrder, out var derivatives);
+            return tapeSpec.ComputeTapeResidual(points, outputs, derivatives);
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The PDE term differentiates the network with respect to its inputs inside the step, a nested backward the
+        /// compile-once plan cannot replay; the eager tape re-runs it every step.
+        /// </remarks>
+        protected override bool SupportsFusedCompiledTraining => false;
 
         /// <summary>
         /// Performs a forward pass through the network.
@@ -400,53 +520,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return output;
         }
 
-        private Tensor<T> CreateBatchTensor(T[,] inputs)
-        {
-            int rows = inputs.GetLength(0);
-            int cols = inputs.GetLength(1);
-            var tensor = new Tensor<T>(new int[] { rows, cols });
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    tensor[i, j] = inputs[i, j];
-                }
-            }
-
-            return tensor;
-        }
-
-        /// <summary>
-        /// Evaluates the network at a single point.
-        /// </summary>
-        private T[] EvaluateAtPoint(T[] inputs)
-        {
-            var inputTensor = new Tensor<T>(new int[] { 1, inputs.Length });
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                inputTensor[0, i] = inputs[i];
-            }
-
-            var outputTensor = Forward(inputTensor);
-
-            T[] result = new T[outputTensor.Shape[1]];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = outputTensor[0, i];
-            }
-
-            return result;
-        }
-
         /// <summary>
         /// Gets the solution at a specific point in the domain.
         /// </summary>
         /// <param name="point">The point coordinates (x, y, t, etc.).</param>
         /// <returns>The solution value(s) at that point.</returns>
-        public T[] GetSolution(T[] point)
+        public Vector<T> GetSolution(Vector<T> point)
         {
-            return EvaluateAtPoint(point);
+            Guard.NotNull(point);
+            var output = Forward(Engine.Reshape(Tensor<T>.FromVector(point), new[] { 1, point.Length }));
+            return output.ToVector();
         }
 
         /// <summary>
@@ -454,15 +537,44 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         /// <param name="point">The point coordinates.</param>
         /// <returns>The PDE residual (should be close to zero for a good solution).</returns>
-        public T EvaluatePDEResidual(T[] point)
+        /// <remarks>The derivatives of the network are exact, taken through the gradient tape.</remarks>
+        public T EvaluatePDEResidual(Vector<T> point)
         {
-            T[] output = EvaluateAtPoint(point);
-            var derivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                this,
-                point,
-                _pdeSpecification.OutputDimension);
+            Guard.NotNull(point);
+            var batch = Engine.Reshape(Tensor<T>.FromVector(point), new[] { 1, point.Length });
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, batch, PdeDerivativeOrder, out var derivatives);
+            return _pdeSpecification.ComputeResidual(point, outputs.ToVector(), PointDerivatives(derivatives));
+        }
 
-            return _pdeSpecification.ComputeResidual(new Vector<T>(point), new Vector<T>(output), derivatives);
+        /// <summary>
+        /// The derivatives of one point from a batch of one: drops the leading batch axis.
+        /// </summary>
+        /// <param name="batched">Batched derivatives with a batch of one.</param>
+        /// <returns>The point-wise derivatives ([out, in], [out, in, in], ...).</returns>
+        protected PDEDerivatives<T> PointDerivatives(PDEDerivatives<T> batched)
+        {
+            return new PDEDerivatives<T>
+            {
+                FirstDerivatives = DropBatchAxis(batched.FirstDerivatives),
+                SecondDerivatives = DropBatchAxis(batched.SecondDerivatives),
+                ThirdDerivatives = DropBatchAxis(batched.ThirdDerivatives),
+                HigherDerivatives = batched.HigherDerivatives
+            };
+        }
+
+        private Tensor<T>? DropBatchAxis(Tensor<T>? tensor)
+        {
+            if (tensor is null)
+            {
+                return null;
+            }
+
+            if (tensor.Rank < 2 || tensor.Shape[0] != 1)
+            {
+                throw new ArgumentException("Expected derivatives for a batch of one point.");
+            }
+
+            return Engine.Reshape(tensor, tensor.Shape.ToArray().Skip(1).ToArray());
         }
 
         /// <summary>
@@ -474,100 +586,29 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <returns>Combined derivatives where each element is the sum of corresponding elements.</returns>
         protected PDEDerivatives<T> SumDerivatives(PDEDerivatives<T> a, PDEDerivatives<T> b)
         {
-            var result = new PDEDerivatives<T>();
-
-            // Sum first derivatives
-            if (a.FirstDerivatives is not null && b.FirstDerivatives is not null)
+            return new PDEDerivatives<T>
             {
-                int dim0 = a.FirstDerivatives.GetLength(0);
-                int dim1 = a.FirstDerivatives.GetLength(1);
+                FirstDerivatives = SumOrEither(a.FirstDerivatives, b.FirstDerivatives, "First"),
+                SecondDerivatives = SumOrEither(a.SecondDerivatives, b.SecondDerivatives, "Second"),
+                ThirdDerivatives = SumOrEither(a.ThirdDerivatives, b.ThirdDerivatives, "Third")
+            };
+        }
 
-                if (b.FirstDerivatives.GetLength(0) != dim0 || b.FirstDerivatives.GetLength(1) != dim1)
-                {
-                    throw new ArgumentException(
-                        $"First derivatives dimension mismatch: a has [{dim0}, {dim1}], b has [{b.FirstDerivatives.GetLength(0)}, {b.FirstDerivatives.GetLength(1)}].");
-                }
-
-                result.FirstDerivatives = new T[dim0, dim1];
-                for (int i = 0; i < dim0; i++)
-                {
-                    for (int j = 0; j < dim1; j++)
-                    {
-                        result.FirstDerivatives[i, j] = NumOps.Add(a.FirstDerivatives[i, j], b.FirstDerivatives[i, j]);
-                    }
-                }
-            }
-            else
+        private Tensor<T>? SumOrEither(Tensor<T>? a, Tensor<T>? b, string order)
+        {
+            if (a is null || b is null)
             {
-                result.FirstDerivatives = a.FirstDerivatives ?? b.FirstDerivatives;
+                return a ?? b;
             }
 
-            // Sum second derivatives
-            if (a.SecondDerivatives is not null && b.SecondDerivatives is not null)
+            if (!a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
             {
-                int dim0 = a.SecondDerivatives.GetLength(0);
-                int dim1 = a.SecondDerivatives.GetLength(1);
-                int dim2 = a.SecondDerivatives.GetLength(2);
-
-                if (b.SecondDerivatives.GetLength(0) != dim0 || b.SecondDerivatives.GetLength(1) != dim1 || b.SecondDerivatives.GetLength(2) != dim2)
-                {
-                    throw new ArgumentException(
-                        $"Second derivatives dimension mismatch: a has [{dim0}, {dim1}, {dim2}], b has [{b.SecondDerivatives.GetLength(0)}, {b.SecondDerivatives.GetLength(1)}, {b.SecondDerivatives.GetLength(2)}].");
-                }
-
-                result.SecondDerivatives = new T[dim0, dim1, dim2];
-                for (int i = 0; i < dim0; i++)
-                {
-                    for (int j = 0; j < dim1; j++)
-                    {
-                        for (int k = 0; k < dim2; k++)
-                        {
-                            result.SecondDerivatives[i, j, k] = NumOps.Add(a.SecondDerivatives[i, j, k], b.SecondDerivatives[i, j, k]);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                result.SecondDerivatives = a.SecondDerivatives ?? b.SecondDerivatives;
+                throw new ArgumentException(
+                    $"{order} derivatives dimension mismatch: a has [{string.Join(", ", a.Shape.ToArray())}], " +
+                    $"b has [{string.Join(", ", b.Shape.ToArray())}].");
             }
 
-            // Sum third derivatives if present
-            if (a.ThirdDerivatives is not null && b.ThirdDerivatives is not null)
-            {
-                int dim0 = a.ThirdDerivatives.GetLength(0);
-                int dim1 = a.ThirdDerivatives.GetLength(1);
-                int dim2 = a.ThirdDerivatives.GetLength(2);
-                int dim3 = a.ThirdDerivatives.GetLength(3);
-
-                if (b.ThirdDerivatives.GetLength(0) != dim0 || b.ThirdDerivatives.GetLength(1) != dim1 ||
-                    b.ThirdDerivatives.GetLength(2) != dim2 || b.ThirdDerivatives.GetLength(3) != dim3)
-                {
-                    throw new ArgumentException(
-                        $"Third derivatives dimension mismatch: a has [{dim0}, {dim1}, {dim2}, {dim3}], b has [{b.ThirdDerivatives.GetLength(0)}, {b.ThirdDerivatives.GetLength(1)}, {b.ThirdDerivatives.GetLength(2)}, {b.ThirdDerivatives.GetLength(3)}].");
-                }
-
-                result.ThirdDerivatives = new T[dim0, dim1, dim2, dim3];
-                for (int i = 0; i < dim0; i++)
-                {
-                    for (int j = 0; j < dim1; j++)
-                    {
-                        for (int k = 0; k < dim2; k++)
-                        {
-                            for (int l = 0; l < dim3; l++)
-                            {
-                                result.ThirdDerivatives[i, j, k, l] = NumOps.Add(a.ThirdDerivatives[i, j, k, l], b.ThirdDerivatives[i, j, k, l]);
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                result.ThirdDerivatives = a.ThirdDerivatives ?? b.ThirdDerivatives;
-            }
-
-            return result;
+            return Engine.TensorAdd(a, b);
         }
 
         /// <summary>

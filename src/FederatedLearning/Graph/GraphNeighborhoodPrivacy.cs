@@ -73,20 +73,13 @@ public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
                 nameof(embeddings));
         }
 
-        var privatized = new Tensor<T>(new[] { totalElements });
-
         // Gaussian mechanism: sigma = sensitivity * sqrt(2 * ln(1.25/delta)) / epsilon
         double sigma = _sensitivity * Math.Sqrt(2 * Math.Log(1.25 / _delta)) / _epsilon;
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
-        for (int i = 0; i < totalElements; i++)
-        {
-            double value = NumOps.ToDouble(embeddings[i]);
-            double noise = SampleGaussian(rng, 0, sigma);
-            privatized[i] = NumOps.FromDouble(value + noise);
-        }
-
-        return privatized;
+        // Noise comes from the cryptographically secure generator, then is added in one engine op.
+        var flat = Engine.TensorSlice(embeddings.Reshape(new[] { embeddings.Length }), new[] { 0 }, new[] { totalElements });
+        return Engine.TensorAdd(flat, SampleGaussianTensor(rng, totalElements, sigma));
     }
 
     /// <summary>
@@ -141,31 +134,37 @@ public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
         if (aggregatedFeatures is null) throw new ArgumentNullException(nameof(aggregatedFeatures));
 
         int dim = aggregatedFeatures.Shape[0];
-        var result = new Tensor<T>(new[] { dim });
-
-        // Compute L2 norm
-        double normSquared = 0;
-        for (int i = 0; i < dim; i++)
+        if (dim == 0)
         {
-            double v = NumOps.ToDouble(aggregatedFeatures[i]);
-            normSquared += v * v;
+            return new Tensor<T>(new[] { 0 });
         }
 
-        double norm = Math.Sqrt(normSquared);
+        var features = Engine.TensorSlice(aggregatedFeatures.Reshape(new[] { aggregatedFeatures.Length }), new[] { 0 }, new[] { dim });
+
+        // L2 norm as max|v| * ‖v / max|v|‖, the scaled sum of squares accumulated in double for narrow T: it
+        // reaches the entry count, which passes Half's 65504 and would make the norm infinite and the clip 0.
+        double norm = Infrastructure.FederatedTensorMath<T>.ScaledNorm(features.ToVector());
+
         double clipFactor = norm > clipNorm ? clipNorm / norm : 1.0;
 
         // Clip and add Gaussian noise
         double sigma = clipNorm * Math.Sqrt(2 * Math.Log(1.25 / _delta)) / _epsilon;
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
-        for (int i = 0; i < dim; i++)
+        // (scaled in double for Half: a clip factor near 1e-8 rounds to zero as a Half scalar)
+        var clipped = Infrastructure.FederatedTensorMath<T>.Scale(features, clipFactor);
+        return Engine.TensorAdd(clipped, SampleGaussianTensor(rng, dim, sigma));
+    }
+
+    private static Tensor<T> SampleGaussianTensor(Random rng, int count, double stdDev)
+    {
+        var noise = new double[count];
+        for (int i = 0; i < count; i++)
         {
-            double clipped = NumOps.ToDouble(aggregatedFeatures[i]) * clipFactor;
-            double noise = SampleGaussian(rng, 0, sigma);
-            result[i] = NumOps.FromDouble(clipped + noise);
+            noise[i] = SampleGaussian(rng, 0, stdDev);
         }
 
-        return result;
+        return new Tensor<double>(noise, new[] { count }).Cast<T>();
     }
 
     private static double SampleGaussian(Random rng, double mean, double stdDev)

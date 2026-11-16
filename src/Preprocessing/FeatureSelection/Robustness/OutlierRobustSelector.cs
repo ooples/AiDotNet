@@ -25,14 +25,14 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly double _outlierThreshold;
 
-    private double[]? _robustnessScores;
+    private Vector<T>? _robustnessScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double OutlierThreshold => _outlierThreshold;
-    public double[]? RobustnessScores => _robustnessScores;
+    public Vector<T>? RobustnessScores => _robustnessScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,103 +68,29 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        _robustnessScores = new double[p];
+        // Outliers: |x - median| / (1.4826 * MAD) above the threshold (only when that MAD is above 1e-10)
+        var deviation = engine.TensorAbs(engine.TensorSubtract(x, SelectorTensorOps.ColumnMedian(x, keepDims: true)));
+        var mad = engine.TensorMultiplyScalar(SelectorTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1.4826));
+        var spread = engine.TensorBroadcastTo(engine.TensorGreaterThan(mad, NumOps.FromDouble(1e-10)), new[] { n, p });
+        var isOutlier = engine.TensorMultiply(spread,
+            engine.TensorGreaterThan(engine.TensorDivide(deviation, mad), NumOps.FromDouble(_outlierThreshold)));
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+        // Correlation with all data and without each column's outliers (needs more than 2 rows)
+        var all = PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One);
+        var corrAll = SelectorTensorOps.MaskedPearson(x, y, all, 2);
+        var corrFiltered = SelectorTensorOps.MaskedPearson(x, y, PreprocessingTensorOps.Not(isOutlier), 3);
 
-            // Compute robust statistics using median and MAD
-            double median = GetMedian(col);
-            double mad = GetMAD(col, median);
+        // Robustness score: high correlation that is stable with and without outliers
+        var stability = PreprocessingTensorOps.OneMinus(engine.TensorAbs(engine.TensorSubtract(corrAll, corrFiltered)));
+        var scores = engine.TensorMultiply(engine.TensorAbs(corrAll), stability);
 
-            // Identify outliers
-            var isOutlier = new bool[n];
-            for (int i = 0; i < n; i++)
-                isOutlier[i] = mad > 1e-10 && Math.Abs(col[i] - median) / mad > _outlierThreshold;
-
-            // Compute correlation with all data
-            double corrAll = ComputeCorrelation(col, y);
-
-            // Compute correlation without outliers
-            var colFiltered = new List<double>();
-            var yFiltered = new List<double>();
-            for (int i = 0; i < n; i++)
-            {
-                if (!isOutlier[i])
-                {
-                    colFiltered.Add(col[i]);
-                    yFiltered.Add(y[i]);
-                }
-            }
-
-            double corrFiltered = colFiltered.Count > 2
-                ? ComputeCorrelation(colFiltered.ToArray(), yFiltered.ToArray())
-                : 0;
-
-            // Robustness score: features where correlation is stable with/without outliers
-            // We want high correlation AND stability
-            double stability = 1 - Math.Abs(corrAll - corrFiltered);
-            _robustnessScores[j] = Math.Abs(corrAll) * stability;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _robustnessScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _robustnessScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double GetMedian(double[] values)
-    {
-        var sorted = values.OrderBy(v => v).ToArray();
-        int n = sorted.Length;
-        if (n == 0) return 0;
-        return n % 2 == 0
-            ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
-            : sorted[n / 2];
-    }
-
-    private double GetMAD(double[] values, double median)
-    {
-        var deviations = values.Select(v => Math.Abs(v - median)).ToArray();
-        return GetMedian(deviations) * 1.4826; // Scale factor for normal distribution
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        if (n < 2) return 0;
-
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = x[i] - xMean;
-            double yDiff = y[i] - yMean;
-            numerator += xDiff * yDiff;
-            xSumSq += xDiff * xDiff;
-            ySumSq += yDiff * yDiff;
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
     /// <inheritdoc />
@@ -180,15 +106,7 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("OutlierRobustSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

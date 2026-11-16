@@ -55,7 +55,10 @@ public class SpectralOptions<T> : ClusteringOptions<T>
     /// <summary>
     /// Gets or sets the gamma parameter for RBF kernel.
     /// </summary>
-    /// <value>Gamma value, or null for automatic (1/n_features).</value>
+    /// <value>
+    /// Gamma value, or null for automatic: 1 / (sum of the per-feature variances), the "scale" heuristic, or
+    /// 1/n_features when every feature is constant. (scikit-learn's SpectralClustering defaults to gamma = 1.0.)
+    /// </value>
     public double? Gamma { get; set; }
 
     /// <summary>

@@ -270,7 +270,7 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
     {
         if (layer == null) return;
         var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++) parameters.Add(p[i]);
+        parameters.AddRange(p);
     }
 
     private static void SetLayerParams(ILayer<T>? layer, Vector<T> parameters, ref int index)
@@ -278,8 +278,9 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         if (layer == null) return;
         var p = layer.GetParameters();
         var np = new Vector<T>(p.Length);
-        for (int i = 0; i < p.Length && index < parameters.Length; i++)
-            np[i] = parameters[index++];
+        int copyCount = Math.Max(0, Math.Min(p.Length, parameters.Length - index));
+        parameters.AsSpan().Slice(index, copyCount).CopyTo(np.AsWritableSpan());
+        index += copyCount;
         layer.SetParameters(np);
     }
 
@@ -290,12 +291,12 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         foreach (var layer in _encoderLayers)
         {
             var g = layer.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+            gradients.AddRange(g);
         }
         foreach (var layer in _decoderLayers)
         {
             var g = layer.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+            gradients.AddRange(g);
         }
         return new Vector<T>(gradients.ToArray());
     }

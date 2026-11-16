@@ -50,28 +50,18 @@ public class SelfAttentionGuidance<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var result = new Tensor<T>(unconditional._shape);
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-        var resultSpan = result.AsWritableSpan();
+        var engine = AiDotNetEngine.Current;
 
         // SAG: guided = uncond + scale * (cond - uncond) + sag_scale * attention_correction
         // Simplified: the attention correction amplifies differences in high-attention regions
         var cfgScale = NumOps.FromDouble(scale);
         var sagBlend = NumOps.FromDouble(_sagScale * _blurSigma / 2.0);
 
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            var cfgResult = NumOps.Add(uncondSpan[i], NumOps.Multiply(cfgScale, diff));
+        var diff = engine.TensorSubtract(conditional, unconditional);
+        var cfgResult = engine.TensorAdd(unconditional, engine.TensorMultiplyScalar(diff, cfgScale));
 
-            // SAG correction: amplify where difference is large (high-attention areas)
-            var absDiff = NumOps.Abs(diff);
-            var sagCorrection = NumOps.Multiply(sagBlend, NumOps.Multiply(absDiff, diff));
-
-            resultSpan[i] = NumOps.Add(cfgResult, sagCorrection);
-        }
-
-        return result;
+        // SAG correction: amplify where difference is large (high-attention areas), sag_blend * |d| * d
+        var sagCorrection = engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorAbs(diff), diff), sagBlend);
+        return engine.TensorAdd(cfgResult, sagCorrection);
     }
 }

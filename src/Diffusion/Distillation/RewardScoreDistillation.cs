@@ -76,24 +76,11 @@ public class RewardScoreDistillation<T>
         Vector<T> predictedNoise, Vector<T> addedNoise,
         Vector<T> rewardGradient, double timestepWeight)
     {
-        var gradient = new Vector<T>(predictedNoise.Length);
-        var sdsWeight = NumOps.FromDouble(timestepWeight);
-        var rwdWeight = NumOps.FromDouble(_rewardWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            // SDS component
-            var sdsDiff = NumOps.Subtract(predictedNoise[i],
-                i < addedNoise.Length ? addedNoise[i] : NumOps.Zero);
-            var sdsGrad = NumOps.Multiply(sdsWeight, sdsDiff);
-
-            // Reward component
-            var rwdGrad = NumOps.Multiply(rwdWeight,
-                i < rewardGradient.Length ? rewardGradient[i] : NumOps.Zero);
-
-            gradient[i] = NumOps.Add(sdsGrad, rwdGrad);
-        }
-
-        return gradient;
+        // w(t) (eps_pred - eps) + reward_weight * grad_reward, both padded to the prediction length
+        var engine = AiDotNetEngine.Current;
+        int length = predictedNoise.Length;
+        var sdsGrad = DiffusionVectorOps.ScaledDifference(predictedNoise, addedNoise, length, NumOps.FromDouble(timestepWeight));
+        var rwdGrad = engine.Multiply(DiffusionVectorOps.Fit(rewardGradient, length), NumOps.FromDouble(_rewardWeight));
+        return engine.Add(sdsGrad, rwdGrad);
     }
 }

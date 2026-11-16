@@ -28,16 +28,6 @@ namespace AiDotNet.WindowFunctions;
 public class LanczosWindow<T> : IWindowFunction<T>
 {
     /// <summary>
-    /// The numeric operations provider for performing calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// This field stores an object that provides operations like addition, multiplication, and
-    /// trigonometric functions for the generic numeric type T. It's essential for implementing
-    /// the window function's mathematical formula across different numeric types.
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="LanczosWindow{T}"/> class.
     /// </summary>
     /// <remarks>
@@ -47,7 +37,6 @@ public class LanczosWindow<T> : IWindowFunction<T>
     /// </remarks>
     public LanczosWindow()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -77,16 +66,13 @@ public class LanczosWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T nT = _numOps.FromDouble(n);
-            T x = _numOps.Multiply(_numOps.FromDouble(2 * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)));
-            x = _numOps.Subtract(x, _numOps.One);
-            window[n] = MathHelper.Sinc(x);
+            return degenerate;
         }
 
-        return window;
+        // w(n) = sinc(2n/(N-1) - 1) (scipy.signal.windows.lanczos, normalized sinc)
+        return AiDotNetEngine.Current.TensorSinc(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize)).ToVector();
     }
 
     /// <summary>

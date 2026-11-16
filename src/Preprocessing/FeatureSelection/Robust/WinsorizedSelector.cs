@@ -27,7 +27,7 @@ public class WinsorizedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _lowerPercentile;
     private readonly double _upperPercentile;
 
-    private double[]? _winsorizedScores;
+    private Vector<T>? _winsorizedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class WinsorizedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LowerPercentile => _lowerPercentile;
     public double UpperPercentile => _upperPercentile;
-    public double[]? WinsorizedScores => _winsorizedScores;
+    public Vector<T>? WinsorizedScores => _winsorizedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -75,72 +75,17 @@ public class WinsorizedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
-        // Winsorize target
-        var yWinsorized = Winsorize(y);
-        double yMean = yWinsorized.Average();
+        // Winsorize target and features, then correlate
+        var yWinsorized = SelectorTensorOps.WinsorizeColumns(
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _lowerPercentile, _upperPercentile);
+        var xWinsorized = SelectorTensorOps.WinsorizeColumns(Tensor<T>.FromMatrix(data), _lowerPercentile, _upperPercentile);
+        var scores = engine.TensorAbs(SelectorTensorOps.PearsonWithColumn(xWinsorized, yWinsorized));
 
-        _winsorizedScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var x = new double[n];
-            for (int i = 0; i < n; i++) x[i] = X[i, j];
-
-            // Winsorize feature
-            var xWinsorized = Winsorize(x);
-            double xMean = xWinsorized.Average();
-
-            // Compute correlation on Winsorized data
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = xWinsorized[i] - xMean;
-                double yd = yWinsorized[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-
-            _winsorizedScores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _winsorizedScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _winsorizedScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double[] Winsorize(double[] values)
-    {
-        var sorted = values.OrderBy(v => v).ToArray();
-        int n = sorted.Length;
-
-        int lowerIdx = (int)(n * _lowerPercentile);
-        int upperIdx = (int)(n * _upperPercentile);
-        if (upperIdx >= n) upperIdx = n - 1;
-
-        double lowerBound = sorted[lowerIdx];
-        double upperBound = sorted[upperIdx];
-
-        return values.Select(v =>
-        {
-            if (v < lowerBound) return lowerBound;
-            if (v > upperBound) return upperBound;
-            return v;
-        }).ToArray();
     }
 
     /// <inheritdoc />
@@ -156,15 +101,7 @@ public class WinsorizedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("WinsorizedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -155,14 +155,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             if (code.Length != _dimension)
                 throw new ArgumentException("Code length does not match the trained dimensionality.", nameof(code));
 
-            var values = new T[_dimension];
+            var min = _min ?? throw new InvalidOperationException("_min is null where it is required.");
+            var scale = _scale ?? throw new InvalidOperationException("_scale is null where it is required.");
+            var values = new double[_dimension];
             for (int i = 0; i < _dimension; i++)
             {
-                double reconstructed = (_min ?? throw new InvalidOperationException("_min is null where it is required."))[i] + code[i] * (_scale ?? throw new InvalidOperationException("_scale is null where it is required."))[i];
-                values[i] = _numOps.FromDouble(reconstructed);
+                values[i] = min[i] + code[i] * scale[i];
             }
 
-            return new Vector<T>(values);
+            // The quantization parameters are stored in double; convert the reconstruction in one pass.
+            return new Vector<T>(RagScoreConversion<T>.FromDouble(values));
         }
     }
 }

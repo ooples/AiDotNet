@@ -117,17 +117,11 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
         }
 
         // Convert labels to +1/-1 for binary classification
-        T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        var yBinary = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0
-                ? NumOps.One
-                : NumOps.Negate(NumOps.One);
-        }
+        var yBinary = SignedBinaryTargets(y).ToArray();
 
         T eta = NumOps.FromDouble(Options.LearningRate);
         T alpha = NumOps.FromDouble(Options.Alpha);
+        bool hasAlpha = NumOps.Compare(alpha, NumOps.Zero) > 0;
 
         // Training loop
         for (int epoch = 0; epoch < Options.MaxIterations; epoch++)
@@ -137,46 +131,19 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
 
             foreach (int i in indices)
             {
-                // Extract sample
-                var sample = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
+                // Misclassification (margin <= 0) updates w = w + eta * y * x
+                if (PerceptronStep(GetSample(x, i), yBinary[i], eta))
                 {
-                    sample[j] = x[i, j];
-                }
-
-                // Compute prediction
-                T prediction = DecisionFunction(sample);
-                T target = yBinary[i];
-
-                // Check if prediction is correct
-                T margin = NumOps.Multiply(target, prediction);
-                if (NumOps.Compare(margin, NumOps.Zero) <= 0)
-                {
-                    // Misclassification - update weights
                     numErrors++;
-
-                    // Update: w = w + eta * y * x
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        T update = NumOps.Multiply(eta, NumOps.Multiply(target, sample[j]));
-                        Weights[j] = NumOps.Add(Weights[j], update);
-                    }
-
-                    // Update intercept
-                    if (Options.FitIntercept)
-                    {
-                        T interceptUpdate = NumOps.Multiply(eta, target);
-                        Intercept = NumOps.Add(Intercept, interceptUpdate);
-                    }
                 }
             }
 
             // Apply regularization
-            if (Options.Penalty == LinearPenalty.L2 && NumOps.Compare(alpha, NumOps.Zero) > 0)
+            if (Options.Penalty == LinearPenalty.L2 && hasAlpha)
             {
                 ApplyL2Gradient(eta, alpha);
             }
-            else if (Options.Penalty == LinearPenalty.L1 && NumOps.Compare(alpha, NumOps.Zero) > 0)
+            else if (Options.Penalty == LinearPenalty.L1 && hasAlpha)
             {
                 ApplyL1Gradient(eta, alpha);
             }
@@ -187,5 +154,26 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// One perceptron update on a single sample; returns true when the sample was misclassified.
+    /// </summary>
+    private bool PerceptronStep(Vector<T> sample, T target, T eta)
+    {
+        T margin = NumOps.Multiply(target, DecisionFunction(sample));
+        if (NumOps.Compare(margin, NumOps.Zero) > 0)
+        {
+            return false;
+        }
+
+        T scale = NumOps.Multiply(eta, target);
+        AddScaledSample(sample, scale);
+        if (Options.FitIntercept)
+        {
+            Intercept = NumOps.Add(Intercept, scale);
+        }
+
+        return true;
     }
 }

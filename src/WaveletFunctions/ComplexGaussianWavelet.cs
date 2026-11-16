@@ -201,26 +201,17 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
             throw new ArgumentException("Error tolerance must be positive", nameof(errorTolerance));
 
         int length = DetermineAdaptiveLength(sigma, errorTolerance);
-        var coeffs = new Complex<T>[length];
-
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
         T centerIndex = NumOps.FromDouble((length - 1) / 2.0);
 
-        for (int i = 0; i < length; i++)
-        {
-            T x = NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(i), centerIndex), sigma);
-            T gaussianValue = CalculateGaussianValue(x);
-            coeffs[i] = new Complex<T>(gaussianValue, NumOps.Zero);
-            sum = NumOps.Add(sum, gaussianValue);
-        }
-
-        // Normalize coefficients
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = new Complex<T>(NumOps.Divide(coeffs[i].Real, sum), NumOps.Zero);
-        }
-
-        return new Vector<Complex<T>>(coeffs);
+        // x = (i - center) / sigma; exp(-x^2 / 2) normalized to unit sum, with a zero imaginary part
+        var x = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(engine.TensorArange<T>(0, length, 1), centerIndex), sigma);
+        var gaussianValue = engine.TensorExp(engine.TensorNegate(
+            engine.TensorDivideScalar(engine.TensorMultiply(x, x), NumOps.FromDouble(2))));
+        T sum = engine.TensorSum(gaussianValue);
+        var real = engine.TensorDivideScalar(gaussianValue, sum);
+        return engine.TensorComplex(real, engine.TensorZerosLike(real)).ToVector();
     }
 
     /// <summary>
@@ -253,18 +244,21 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </remarks>
     private int DetermineAdaptiveLength(T sigma, T errorTolerance)
     {
-        int length = 1;
-        T x = NumOps.Zero;
-        T gaussianValue;
+        // The search grows length = 3, 5, 7, ... until exp(-(m / sigma)^2 / 2) <= tolerance with m = length / 2.
+        // The Gaussian decreases in m, so the answer is 2 * (1 + #{m >= 1 : g(m) > tolerance}) + 1; m never needs
+        // to pass sigma * sqrt(2 ln(1 / tolerance)), so the candidates m = 1 .. bound + 2 cover the search.
+        var engine = AiDotNetEngine.Current;
+        int bound = NumOps.GreaterThanOrEquals(errorTolerance, NumOps.One)
+            ? 1
+            : NumOps.ToInt32(NumOps.Ceiling(NumOps.Multiply(sigma, NumOps.Sqrt(NumOps.Multiply(
+                NumOps.FromDouble(2), NumOps.Log(NumOps.Divide(NumOps.One, errorTolerance))))))) + 2;
 
-        do
-        {
-            length += 2; // Ensure odd length for symmetry
-            x = NumOps.Divide(NumOps.FromDouble(length / 2), sigma);
-            gaussianValue = CalculateGaussianValue(x);
-        } while (NumOps.GreaterThan(gaussianValue, errorTolerance));
-
-        return length;
+        var m = engine.TensorArange<T>(1, bound + 1, 1);
+        var x = engine.TensorDivideScalar(m, sigma);
+        var gaussianValue = engine.TensorExp(engine.TensorNegate(
+            engine.TensorDivideScalar(engine.TensorMultiply(x, x), NumOps.FromDouble(2))));
+        int above = engine.TensorCountNonzero(engine.TensorGreaterThan(gaussianValue, errorTolerance));
+        return 2 * (above + 1) + 1;
     }
 
     /// <summary>
@@ -328,23 +322,16 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     public override Vector<Complex<T>> GetWaveletCoefficients()
     {
         int length = 10 * _order;
-        var coeffs = new Complex<T>[length];
+        var engine = AiDotNetEngine.Current;
         T sigma = NumOps.FromDouble(Math.Sqrt(_order));
 
-        for (int i = 0; i < length; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), sigma);
-            T gaussianValue = NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.Multiply(x, x), NumOps.FromDouble(2))));
-            T sinValue = MathHelper.Sin(x);
-            T cosValue = MathHelper.Cos(x);
-
-            coeffs[i] = new Complex<T>(
-                NumOps.Multiply(gaussianValue, cosValue),
-                NumOps.Multiply(gaussianValue, sinValue)
-            );
-        }
-
-        return new Vector<Complex<T>>(coeffs);
+        // x = (i - length / 2) / sigma; exp(-x^2 / 2) * (cos x + i sin x)
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), sigma);
+        var gaussianValue = engine.TensorExp(engine.TensorNegate(
+            engine.TensorDivideScalar(engine.TensorMultiply(x, x), NumOps.FromDouble(2))));
+        return engine.TensorComplex(
+            engine.TensorMultiply(gaussianValue, engine.TensorCos(x)),
+            engine.TensorMultiply(gaussianValue, engine.TensorSin(x))).ToVector();
     }
 
     /// <summary>
@@ -382,17 +369,24 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
         if (n == 0) return NumOps.One;
         if (n == 1) return NumOps.Multiply(NumOps.FromDouble(2), x);
 
-        T h0 = NumOps.One;
-        T h1 = NumOps.Multiply(NumOps.FromDouble(2), x);
+        // Physicists' Hermite polynomial in closed form: H_n(x) = sum_m c_m (2x)^(n - 2m) for m = 0 .. n / 2, with
+        // c_0 = 1 and c_(m+1) = -c_m (n - 2m)(n - 2m - 1) / (m + 1).
+        var engine = AiDotNetEngine.Current;
+        int terms = n / 2 + 1;
+        var m = engine.TensorArange<T>(0, terms, 1);
+        var exponents = engine.ScalarMinusTensor(NumOps.FromDouble(n), engine.TensorMultiplyScalar(m, NumOps.FromDouble(2)));
 
-        for (int i = 2; i <= n; i++)
-        {
-            T hi = NumOps.Subtract(NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), x), h1), NumOps.Multiply(NumOps.FromDouble(2 * (i - 1)), h0));
-            h0 = h1;
-            h1 = hi;
-        }
+        var k = engine.TensorSlice(exponents, new[] { 0 }, new[] { terms - 1 });
+        var mHead = engine.TensorSlice(m, new[] { 0 }, new[] { terms - 1 });
+        var ratios = engine.TensorDivide(
+            engine.TensorNegate(engine.TensorMultiply(k, engine.TensorSubtractScalar(k, NumOps.One))),
+            engine.TensorAddScalar(mHead, NumOps.One));
+        var coefficients = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromVector(new Vector<T>(new[] { NumOps.One })), engine.TensorCumProd(ratios, 0) }, 0);
 
-        return h1;
+        T twoX = NumOps.Multiply(NumOps.FromDouble(2), x);
+        var powers = engine.TensorPower(engine.TensorFullLike(exponents, twoX), exponents);
+        return engine.TensorSum(engine.TensorMultiply(coefficients, powers));
     }
 
     /// <summary>
@@ -428,16 +422,8 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
         var approxRecon = ConvolveReversed(approxUpsampled, lowPass);
         var detailRecon = ConvolveReversed(detailUpsampled, highPass);
 
-        // Add contributions
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        int outputLength = Math.Min(approxRecon.Length, detailRecon.Length);
-        var reconstructed = new Vector<Complex<T>>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = complexOps.Add(approxRecon[i], detailRecon[i]);
-        }
-
-        return reconstructed;
+        // Combine the results
+        return ComplexWaveletEngineOps<T>.AddTruncated(approxRecon, detailRecon);
     }
 
     /// <summary>
@@ -445,21 +431,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </summary>
     private Vector<Complex<T>> Upsample(Vector<Complex<T>> input, int factor)
     {
-        int newLength = input.Length * factor;
-        var result = new Complex<T>[newLength];
-        var zero = new Complex<T>(NumOps.Zero, NumOps.Zero);
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = zero;
-        }
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-
-        return new Vector<Complex<T>>(result);
+        return ComplexWaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -467,25 +439,7 @@ public class ComplexGaussianWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </summary>
     private Vector<Complex<T>> ConvolveReversed(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
     {
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        int resultLength = input.Length;
-        var result = new Complex<T>[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                int inputIndex = i - j + kernel.Length / 2;
-                if (inputIndex >= 0 && inputIndex < input.Length)
-                {
-                    int revJ = kernel.Length - 1 - j;
-                    sum = complexOps.Add(sum, complexOps.Multiply(input[inputIndex], kernel[revJ]));
-                }
-            }
-            result[i] = sum;
-        }
-
-        return new Vector<Complex<T>>(result);
+        // result[i] = sum_j input[i - j + K / 2] * kernel[K - 1 - j]: a centred convolution with the reversed kernel
+        return ComplexWaveletEngineOps<T>.CenteredConvolve(input, ComplexWaveletEngineOps<T>.Reverse(kernel));
     }
 }

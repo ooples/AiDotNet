@@ -28,14 +28,14 @@ public class PCABasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     private readonly int _nFeaturesToSelect;
     private readonly int _nComponents;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NComponents => _nComponents;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,137 +63,38 @@ public class PCABasedSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        // Center the data
-        var means = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        var centered = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                centered[i, j] = NumOps.ToDouble(data[i, j]) - means[j];
+        // Center the data
+        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
 
         // Compute covariance matrix
-        var cov = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += centered[i, j1] * centered[i, j2];
-                cov[j1, j2] = sum / (n - 1);
-                cov[j2, j1] = cov[j1, j2];
-            }
-        }
+        var cov = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), NumOps.FromDouble(n - 1));
 
         // Power iteration for top eigenvalues/eigenvectors
         int nComp = Math.Min(_nComponents, p);
-        var loadings = new double[nComp, p];
-        var eigenvalues = new double[nComp];
-        var deflatedCov = (double[,])cov.Clone();
-
-        for (int k = 0; k < nComp; k++)
-        {
-            var eigenvector = PowerIteration(deflatedCov, p, 100);
-            eigenvalues[k] = ComputeEigenvalue(deflatedCov, eigenvector, p);
-
-            for (int j = 0; j < p; j++)
-                loadings[k, j] = eigenvector[j];
-
-            // Deflate
-            for (int j1 = 0; j1 < p; j1++)
-                for (int j2 = 0; j2 < p; j2++)
-                    deflatedCov[j1, j2] -= eigenvalues[k] * eigenvector[j1] * eigenvector[j2];
-        }
+        var loadings = FeatureScoringTensorOps.PowerIterationComponents(cov, nComp, 100, false, out var eigenvalues);
 
         // Compute feature importance as weighted sum of squared loadings
-        _featureImportances = new double[p];
-        double totalVariance = eigenvalues.Sum();
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int k = 0; k < nComp; k++)
-            {
-                double weight = eigenvalues[k] / (totalVariance + 1e-10);
-                _featureImportances[j] += weight * loadings[k, j] * loadings[k, j];
-            }
-        }
+        var weights = engine.TensorDivideScalar(eigenvalues,
+            NumOps.Add(engine.TensorSum(eigenvalues), PreprocessingTensorOps.Tolerance<T>(1e-10)));
+        var importances = FeatureScoringTensorOps.WeightedSquaredLoadings(loadings, weights);
+        _featureImportances = importances.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
-
-    private double[] PowerIteration(double[,] matrix, int size, int maxIter)
-    {
-        var v = new double[size];
-        for (int i = 0; i < size; i++)
-            v[i] = 1.0 / size;
-
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            var newV = new double[size];
-            for (int i = 0; i < size; i++)
-            {
-                for (int j = 0; j < size; j++)
-                    newV[i] += matrix[i, j] * v[j];
-            }
-
-            double norm = Math.Sqrt(newV.Sum(x => x * x));
-            if (norm > 1e-10)
-            {
-                for (int i = 0; i < size; i++)
-                    newV[i] /= norm;
-            }
-
-            v = newV;
-        }
-
-        return v;
-    }
-
-    private double ComputeEigenvalue(double[,] matrix, double[] eigenvector, int size)
-    {
-        var mv = new double[size];
-        for (int i = 0; i < size; i++)
-            for (int j = 0; j < size; j++)
-                mv[i] += matrix[i, j] * eigenvector[j];
-
-        double numerator = 0, denominator = 0;
-        for (int i = 0; i < size; i++)
-        {
-            numerator += eigenvector[i] * mv[i];
-            denominator += eigenvector[i] * eigenvector[i];
-        }
-
-        return denominator > 1e-10 ? numerator / denominator : 0;
-    }
-
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("PCABasedSelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

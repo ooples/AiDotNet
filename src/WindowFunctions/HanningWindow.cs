@@ -78,19 +78,22 @@ public class HanningWindow<T> : IWindowFunction<T>
     {
         Vector<T> window = new Vector<T>(windowSize);
 
+        if (windowSize == 0) return window;
+
         if (windowSize == 1)
         {
             window[0] = _numOps.One;
             return window;
         }
 
-        for (int n = 0; n < windowSize; n++)
-        {
-            window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Subtract(_numOps.One,
-                MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1))))));
-        }
-
-        return window;
+        // Compute geometry in double: Half cannot represent large indices or the scalar cosine helper's
+        // IConvertible conversion. Cast only the completed coefficients to the requested storage type.
+        using var noGradSource = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        var engine = AiDotNetEngine.Current;
+        var angles = engine.TensorLinspace(0.0, 2.0 * Math.PI, windowSize);
+        return engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1.0, engine.TensorCos(angles)), 0.5)
+            .Cast<T>().ToVector();
     }
 
     /// <summary>

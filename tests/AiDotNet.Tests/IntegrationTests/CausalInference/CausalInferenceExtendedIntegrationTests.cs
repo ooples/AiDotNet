@@ -85,7 +85,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var slearner = new SLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var slearner = new SLearner<double>(lambda: 0.001);
         slearner.Fit(X, treatmentVec, outcome);
 
         var (ate, se) = slearner.EstimateATE(X, treatment, outcome);
@@ -101,7 +101,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var slearner = new SLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var slearner = new SLearner<double>(lambda: 0.001);
         slearner.Fit(X, treatmentVec, outcome);
 
         var (ate, _) = slearner.EstimateATE(X, treatment, outcome);
@@ -117,7 +117,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var slearner = new SLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var slearner = new SLearner<double>(lambda: 0.001);
         slearner.Fit(X, treatmentVec, outcome);
 
         var (ate, _) = slearner.EstimateATE(X, treatment, outcome);
@@ -132,7 +132,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var slearner = new SLearner<double>(maxIterations: 100, learningRate: 0.05);
+        var slearner = new SLearner<double>();
         slearner.Fit(X, treatmentVec, outcome);
 
         var cates = slearner.EstimateCATEPerIndividual(X, treatment, outcome);
@@ -151,7 +151,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var tlearner = new TLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var tlearner = new TLearner<double>(lambda: 0.001);
         tlearner.Fit(X, treatmentVec, outcome);
 
         var (ate, se) = tlearner.EstimateATE(X, treatment, outcome);
@@ -167,7 +167,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var tlearner = new TLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var tlearner = new TLearner<double>(lambda: 0.001);
         tlearner.Fit(X, treatmentVec, outcome);
 
         var (ate, _) = tlearner.EstimateATE(X, treatment, outcome);
@@ -182,7 +182,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var tlearner = new TLearner<double>(maxIterations: 100, learningRate: 0.05);
+        var tlearner = new TLearner<double>();
         tlearner.Fit(X, treatmentVec, outcome);
 
         var effects = tlearner.EstimateTreatmentEffect(X);
@@ -209,7 +209,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var xlearner = new XLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var xlearner = new XLearner<double>(lambda: 0.001);
         xlearner.Fit(X, treatmentVec, outcome);
 
         var (ate, se) = xlearner.EstimateATE(X, treatment, outcome);
@@ -225,7 +225,7 @@ public class CausalInferenceExtendedIntegrationTests
         var treatmentVec = new Vector<double>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
-        var xlearner = new XLearner<double>(maxIterations: 100, learningRate: 0.05);
+        var xlearner = new XLearner<double>();
         xlearner.Fit(X, treatmentVec, outcome);
 
         var cates = xlearner.EstimateCATEPerIndividual(X, treatment, outcome);
@@ -419,12 +419,12 @@ public class CausalInferenceExtendedIntegrationTests
         for (int i = 0; i < treatment.Length; i++) treatmentVec[i] = treatment[i];
 
         // S-Learner
-        var slearner = new SLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var slearner = new SLearner<double>(lambda: 0.001);
         slearner.Fit(X, treatmentVec, outcome);
         var (ateS, _) = slearner.EstimateATE(X, treatment, outcome);
 
         // T-Learner
-        var tlearner = new TLearner<double>(maxIterations: 200, learningRate: 0.05, lambda: 0.001);
+        var tlearner = new TLearner<double>(lambda: 0.001);
         tlearner.Fit(X, treatmentVec, outcome);
         var (ateT, _) = tlearner.EstimateATE(X, treatment, outcome);
 

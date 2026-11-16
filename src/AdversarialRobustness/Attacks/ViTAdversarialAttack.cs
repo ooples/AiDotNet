@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -108,109 +110,126 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
             $"ViT adversarial attack requires Vector<{typeof(T).Name}> input for perturbation calculation.");
     }
 
+    /// <summary>
+    /// Patch-restricted PGD: an L-infinity PGD attack whose perturbation lives only on the most salient patches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Patches are ranked by the L1 norm of the loss gradient inside them (gradient saliency, as in the
+    /// patch attacks studied for ViTs: Bhojanapalli et al. 2021; Fu et al. 2022, Patch-Fool), and the
+    /// top <c>numAttackPatches</c> are attacked. Each step is x + stepSize * sign(g) on those patches,
+    /// projected to the epsilon ball and clipped to [0, 1] (Madry et al. 2018), with stepSize = epsilon / steps.
+    /// The loss is the same MSE against the label vector that FGSM and PGD use. An untargeted attack stops as
+    /// soon as the predicted class (argmax) differs from the label's class; a targeted attack, which descends
+    /// the loss toward the label, stops once the prediction reaches the label's class.
+    /// </para>
+    /// </remarks>
     private Vector<T> GeneratePatchAdversarial(
         Vector<T> input, TOutput trueLabel, IFullModel<T, TInput, TOutput> targetModel)
     {
         var engine = AiDotNetEngine.Current;
         int length = input.Length;
+        var vectorLabel = ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel);
+        int trueClass = ArgMaxIndex(vectorLabel);
 
-        // Compute number of patches
         int patchElements = _patchSize * _patchSize;
-        int numPatches = (length + patchElements - 1) / patchElements; // Ceiling division to include trailing elements
-        if (numPatches < 1) numPatches = 1;
-
-        // Estimate patch importance using gradient-free saliency
-        // Compute per-patch variance as a proxy for attention importance
-        double[] patchImportance = new double[numPatches];
-        for (int p = 0; p < numPatches; p++)
-        {
-            int patchStart = p * patchElements;
-            int patchEnd = Math.Min(patchStart + patchElements, length);
-
-            double sum = 0, sumSq = 0;
-            int count = 0;
-            for (int i = patchStart; i < patchEnd; i++)
-            {
-                double val = NumOps.ToDouble(input[i]);
-                sum += val;
-                sumSq += val * val;
-                count++;
-            }
-
-            if (count > 0)
-            {
-                double mean = sum / count;
-                double variance = (sumSq / count) - (mean * mean);
-                // High-variance patches carry more signal — ViT attention focuses on them
-                patchImportance[p] = variance;
-            }
-        }
-
-        // Select top-k most important patches
-        var patchIndices = new int[numPatches];
-        for (int i = 0; i < numPatches; i++) patchIndices[i] = i;
-        Array.Sort(patchImportance, patchIndices);
-        Array.Reverse(patchIndices);
-
+        int numPatches = Math.Max((length + patchElements - 1) / patchElements, 1);
         int attackPatchCount = Math.Min(_numAttackPatches, numPatches);
-        var targetPatchSet = new HashSet<int>();
-        for (int i = 0; i < attackPatchCount; i++)
-        {
-            targetPatchSet.Add(patchIndices[i]);
-        }
 
-        // Create perturbation mask (only target patches)
-        double eps = Options.Epsilon;
-        double stepSize = eps / Math.Max(1, _numSteps);
+        // Patch saliency from the gradient at the clean input; the mask covers the top-k patches.
+        var mask = SalientPatchMask(LossGradient(input, vectorLabel, targetModel), patchElements, numPatches, attackPatchCount);
 
-        var result = new T[length];
-        for (int i = 0; i < length; i++)
-            result[i] = input[i];
+        var epsilon = NumOps.FromDouble(Options.Epsilon);
+        var stepSize = NumOps.FromDouble(Options.Epsilon / Math.Max(1, _numSteps));
+        var adversarial = input.Clone();
 
-        // Use model prediction to guide perturbation direction
-        var currentPred = targetModel.Predict((TInput)(object)new Vector<T>(result));
-        bool predMatchesTrue = currentPred?.Equals(trueLabel) ?? false;
-
-        // Iterative patch-targeted perturbation
         for (int step = 0; step < _numSteps; step++)
         {
-            for (int p = 0; p < numPatches; p++)
+            var gradient = LossGradient(adversarial, vectorLabel, targetModel);
+            var update = engine.Multiply<T>(engine.Multiply<T>(SignVector(gradient), mask), stepSize);
+            adversarial = engine.Add<T>(adversarial, Options.IsTargeted ? engine.Negate<T>(update) : update);
+            adversarial = engine.Add<T>(input, ProjectLInfinity(engine.Subtract<T>(adversarial, input), epsilon));
+            adversarial = engine.Clamp<T>(adversarial, NumOps.Zero, NumOps.One);
+
+            // Untargeted: done once the prediction leaves the true class. Targeted (the step descends the loss
+            // toward the label, so the label is the target): done once the prediction reaches it.
+            int predicted = PredictedClass(adversarial, targetModel);
+            if (Options.IsTargeted ? predicted == trueClass : predicted != trueClass)
             {
-                if (!targetPatchSet.Contains(p)) continue;
-
-                int patchStart = p * patchElements;
-                int patchEnd = Math.Min(patchStart + patchElements, length);
-
-                for (int i = patchStart; i < patchEnd; i++)
-                {
-                    // Random sign perturbation (gradient-free FGSM-like step)
-                    double sign = Random.NextDouble() > 0.5 ? 1.0 : -1.0;
-                    double current = NumOps.ToDouble(result[i]);
-                    double original = NumOps.ToDouble(input[i]);
-                    double perturbed = current + sign * stepSize;
-
-                    // Project to epsilon ball
-                    double diff = perturbed - original;
-                    if (diff > eps) diff = eps;
-                    if (diff < -eps) diff = -eps;
-                    perturbed = original + diff;
-
-                    // Clamp to valid range [0, 1]
-                    if (perturbed < 0) perturbed = 0;
-                    if (perturbed > 1) perturbed = 1;
-
-                    result[i] = NumOps.FromDouble(perturbed);
-                }
-            }
-
-            // Early termination: stop if the attack changes the model's prediction
-            if (predMatchesTrue)
-            {
-                var stepPred = targetModel.Predict((TInput)(object)new Vector<T>(result));
-                if (stepPred != null && !stepPred.Equals(trueLabel)) break;
+                break;
             }
         }
 
-        return new Vector<T>(result);
+        return adversarial;
+    }
+
+    private int PredictedClass(Vector<T> input, IFullModel<T, TInput, TOutput> targetModel)
+    {
+        var output = targetModel.Predict((TInput)(object)input);
+        return ArgMaxIndex(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+    }
+
+    /// <summary>
+    /// d MSE(model(x), label) / dx: the recorded backward pass for neural networks, central differences otherwise.
+    /// </summary>
+    private Vector<T> LossGradient(Vector<T> input, Vector<T> vectorLabel, IFullModel<T, TInput, TOutput> targetModel)
+    {
+        if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
+        {
+            var engine = AiDotNetEngine.Current;
+            var inputTensor = Tensor<T>.FromVector(input);
+            var targetTensor = Tensor<T>.FromVector(vectorLabel);
+            using var tape = new GradientTape<T>();
+            var outputTensor = nnModel.ForwardForTraining(inputTensor);
+            var diff = engine.TensorSubtract(outputTensor, engine.Reshape(targetTensor, outputTensor.Shape.ToArray()));
+            var squared = engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var loss = engine.ReduceMean(squared, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(loss, [inputTensor]);
+            if (!grads.TryGetValue(inputTensor, out var g))
+            {
+                throw new InvalidOperationException("ViT attack: gradient computation failed - no gradient for input tensor.");
+            }
+
+            return g.ToVector();
+        }
+
+        return EstimateInputGradient(
+            input,
+            (TInput)(object)input,
+            targetModel,
+            output => ComputeMeanSquaredError(output, vectorLabel),
+            NumOps.FromDouble(1e-4));
+    }
+
+    /// <summary>
+    /// A 0/1 mask over the input that is 1 on the <paramref name="count"/> patches with the largest
+    /// sum of |gradient| (lowest patch index first on ties).
+    /// </summary>
+    private Vector<T> SalientPatchMask(Vector<T> gradient, int patchElements, int numPatches, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        int length = gradient.Length;
+        int padded = numPatches * patchElements;
+
+        var absGradient = engine.Abs<T>(gradient).AsTensor();
+        if (padded > length)
+        {
+            absGradient = engine.TensorConcatenate(new[] { absGradient, new Tensor<T>(new[] { padded - length }) }, 0);
+        }
+
+        var saliency = engine.ReduceSum(engine.Reshape(absGradient, new[] { numPatches, patchElements }), new[] { 1 }, keepDims: false);
+        var lowest = engine.TensorAddScalar(new Tensor<T>(new[] { numPatches }), NumOps.MinValue);
+        var patchMask = new Tensor<T>(new[] { numPatches });
+        for (int k = 0; k < count; k++)
+        {
+            int best = engine.TensorArgMax(saliency, 0).Data.Span[0];
+            var chosen = Vector<T>.CreateStandardBasis(numPatches, best).AsTensor();
+            patchMask = engine.TensorAdd(patchMask, chosen);
+            saliency = engine.TensorWhere(chosen, lowest, saliency);
+        }
+
+        var elementMask = engine.TensorRepeatInterleave(patchMask, patchElements, 0);
+        return engine.TensorSlice(elementMask, new[] { 0 }, new[] { length }).ToVector();
     }
 }

@@ -31,7 +31,7 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double L1Ratio => _l1Ratio;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -85,110 +85,30 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
+        // Standardize features (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
+
+        // Coordinate descent for Elastic Net: beta_j = S(rho, l1) / (||x_j||^2 + l2), 0 when that denominator is
+        // below 1e-10
+        T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio * n);
+        T l2Penalty = NumOps.FromDouble(_alpha * (1 - _l1Ratio) * n);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var none = new Tensor<T>(new[] { 1 });
+        var denominators = engine.TensorAddScalar(engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false), l2Penalty);
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance, (rho, j) =>
         {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            means[j] = mean;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            double std = Math.Sqrt(variance / n);
-            stds[j] = std > 1e-10 ? std : 1.0;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - mean) / stds[j];
-        }
-
-        // Standardize target
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Coordinate descent for Elastic Net
-        _coefficients = new double[p];
-        var residuals = (double[])y.Clone();
-
-        double l1Penalty = _alpha * _l1Ratio * n;
-        double l2Penalty = _alpha * (1 - _l1Ratio) * n;
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                double oldCoef = _coefficients[j];
-
-                // Add back contribution of current feature to residuals
-                for (int i = 0; i < n; i++)
-                    residuals[i] += X[i, j] * oldCoef;
-
-                // Compute raw update
-                double rho = 0;
-                double sumXjSq = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    rho += X[i, j] * residuals[i];
-                    sumXjSq += X[i, j] * X[i, j];
-                }
-
-                // Elastic Net update with soft thresholding
-                double denom = sumXjSq + l2Penalty;
-                double newCoef;
-                if (denom < 1e-10)
-                {
-                    newCoef = 0;
-                }
-                else
-                {
-                    if (rho > l1Penalty)
-                        newCoef = (rho - l1Penalty) / denom;
-                    else if (rho < -l1Penalty)
-                        newCoef = (rho + l1Penalty) / denom;
-                    else
-                        newCoef = 0;
-                }
-
-                _coefficients[j] = newCoef;
-
-                // Update residuals
-                for (int i = 0; i < n; i++)
-                    residuals[i] -= X[i, j] * newCoef;
-
-                maxChange = Math.Max(maxChange, Math.Abs(newCoef - oldCoef));
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
+            var denom = engine.TensorSlice(denominators, new[] { j }, new[] { 1 });
+            return engine.TensorWhere(engine.TensorLessThan(denom, floor), none,
+                engine.TensorDivide(FeatureScoringTensorOps.SoftThreshold(rho, l1Penalty), denom));
+        }, out _);
+        _coefficients = coefficients.ToVector();
 
         // Select features by absolute coefficient magnitude
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
         IsFitted = true;
     }
 
@@ -205,15 +125,7 @@ public class ElasticNetFeatureSelection<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("ElasticNetFeatureSelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

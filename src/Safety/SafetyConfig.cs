@@ -152,6 +152,11 @@ public class TextSafetyConfig
     public bool? PIIDetection { get; set; }
 
     /// <summary>
+    /// Gets or sets the kinds of PII the PII detector looks for. Default: null, every <see cref="PiiType"/>.
+    /// </summary>
+    public PiiType[]? PIITypes { get; set; }
+
+    /// <summary>
     /// Gets or sets whether jailbreak/prompt injection detection is enabled. Default: true.
     /// </summary>
     public bool? JailbreakDetection { get; set; }
@@ -162,6 +167,15 @@ public class TextSafetyConfig
     public double? JailbreakSensitivity { get; set; }
 
     /// <summary>
+    /// Gets or sets whether a detected jailbreak or prompt injection blocks the input. Default: true.
+    /// </summary>
+    /// <remarks>
+    /// With false the injection findings stay in the <see cref="SafetyReport"/> (so they can be logged or reviewed)
+    /// but <see cref="SafetyPipeline{T}.EnforcePolicy"/> ignores them; other unsafe findings are still enforced.
+    /// </remarks>
+    public bool? BlockJailbreaks { get; set; }
+
+    /// <summary>
     /// Gets or sets whether hallucination detection is enabled. Default: false.
     /// </summary>
     /// <remarks>
@@ -169,6 +183,12 @@ public class TextSafetyConfig
     /// It is disabled by default because it needs additional inputs.
     /// </remarks>
     public bool? HallucinationDetection { get; set; }
+
+    /// <summary>
+    /// Gets or sets the contradiction score (0-1) at or above which a pair of sentences is reported as a
+    /// self-contradiction (a hallucination signal). Default: 0.3.
+    /// </summary>
+    public double? HallucinationThreshold { get; set; }
 
     /// <summary>
     /// Gets or sets whether copyright/memorization detection is enabled. Default: false.
@@ -194,6 +214,9 @@ public class TextSafetyConfig
     internal bool EffectiveJailbreakDetection => JailbreakDetection ?? true;
     internal double EffectiveJailbreakSensitivity => JailbreakSensitivity ?? 0.7;
     internal bool EffectiveHallucinationDetection => HallucinationDetection ?? false;
+    internal double EffectiveHallucinationThreshold => HallucinationThreshold ?? 0.3;
+    internal bool EffectiveBlockJailbreaks => BlockJailbreaks ?? true;
+    internal PiiType[] EffectivePIITypes => PIITypes ?? (PiiType[])Enum.GetValues(typeof(PiiType));
     internal bool EffectiveCopyrightDetection => CopyrightDetection ?? false;
     internal string[] EffectiveLanguages => Languages ?? DefaultLanguages;
     internal int EffectiveMaxInputLength => MaxInputLength ?? 10000;

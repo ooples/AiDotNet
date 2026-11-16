@@ -184,12 +184,12 @@ const base = import.meta.env.BASE_URL;
           planBadge.textContent = 'Pro';
           planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-brand-blue/10 text-brand-blue';
           if (planDesc) planDesc.textContent = 'Cloud-hosted inference API, priority support, and direct team access.';
-          if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
+          if (upgradeBtn) { upgradeBtn.textContent = 'Manage Plan'; upgradeBtn.setAttribute('href', '/account/billing/'); }
         } else if (tier === 'enterprise' && planBadge) {
           planBadge.textContent = 'Enterprise';
           planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
           if (planDesc) planDesc.textContent = 'Dedicated support, SLA, and architecture consulting.';
-          if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
+          if (upgradeBtn) { upgradeBtn.textContent = 'Manage Plan'; upgradeBtn.setAttribute('href', '/account/billing/'); }
         }
       }
 

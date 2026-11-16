@@ -45,13 +45,13 @@ on:
         required: false
         default: ''
       sonar_only:
-        description: 'Run only the SonarCloud analysis (for changes to that job). Skips the build, test shards, CodeQL and size check; the CI Gate fails closed, so this run never certifies a PR.'
+        description: 'Run only the SonarCloud analysis (for changes to that job). Skips the build, test shards and size check; the CI Gate fails closed, so this run never certifies a PR.'
         type: boolean
         default: false
   schedule:
     # NIGHTLY FULL MATRIX on master, the net under test-level selection: pull requests and merges
     # run only the tests their change can statically reach, so anything reached only by reflection
-    # over a name surfaces here within a day. Also the full traced CodeQL analysis. 03:00 UTC keeps
+    # over a name surfaces here within a day. 03:00 UTC keeps
     # the ~100-minute run clear of the working day and of the 04:30-06:00 nightly workflows.
     - cron: '0 3 * * *'
 
@@ -134,7 +134,7 @@ jobs:
       # conservatively treated as true; schema-v2 non-runtime certificates explicitly emit false.
       reused_requires_validation: ${{ steps.resolve.outputs.reused_requires_validation || steps.defaults.outputs.reused_requires_validation }}
       # Independent JSON booleans. A validation-only certificate suppresses the large build/test
-      # graph while still rerunning CodeQL and Sonar; only a complete certificate suppresses both.
+      # graph while still rerunning Sonar; only a complete certificate suppresses that too.
       # A sonar_only dispatch turns the whole build/test graph off; quality (Sonar) stays on.
       execute_validation: ${{ inputs.sonar_only && 'false' || steps.resolve.outputs.execute_validation || steps.defaults.outputs.execute_validation }}
       execute_quality: ${{ steps.resolve.outputs.execute_quality || steps.defaults.outputs.execute_quality }}
@@ -256,187 +256,12 @@ jobs:
           echo '::warning::exact-tree resolver failed unexpectedly; fail-closed defaults authorize full validation'
           echo 'Resolver failure: full validation remains enabled.' >> "$GITHUB_STEP_SUMMARY"
 
-  # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
-  # Runs on PRs, merge groups, pushes to master/main, and the weekly security schedule.
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    needs: [validation-source, select-shards]
-    # Build-less on EVERY event, so a pull request's alerts are compared with a baseline produced the
-    # same way. Pull requests used to extract build-less while master's baseline came from the traced
-    # build (#2268), and the two extractors do not report the same alerts on the same code: 380
-    # error-level alerts (cs/loss-of-precision, cs/unused-collection, ...) existed only in build-less
-    # results, so a large pull request had them attributed to it and failed the ruleset for lines it
-    # never touched (#2136). Pull requests still extract only the C# files they change; master pushes,
-    # the nightly schedule and manual runs extract the whole library, which becomes that baseline.
-    # The traced analysis continues in codeql-traced below, under its own category.
-    #
-    # Build-less extraction of the whole library holds a runner about 41 minutes; 85 leaves the same
-    # margin for hosted-runner variance the traced job needed.
-    timeout-minutes: 85
-    # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
-    # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Scope build-less analysis to this change
-        id: codeql-scope
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # refs/pull/N/merge: the first parent is the base this PR is validated against.
-          mapfile -t changed < <(git -c core.quotepath=false diff --no-renames --diff-filter=AMR --name-only HEAD^1 HEAD -- '*.cs' \
-            | grep -Ev '^(tests|AiDotNetTests|AiDotNetTestConsole|AiDotNetBenchmarkTests|examples|docs)/' || true)
-          # codeql-action only loads a config file from inside the workspace.
-          config="$GITHUB_WORKSPACE/.codeql-pr-config.yml"
-          cp .github/codeql/codeql-config.yml "$config"
-          printf '\npaths:\n' >> "$config"
-          if [ "${#changed[@]}" -eq 0 ]; then
-            echo "no analyzed C# changed - extracting src/GlobalUsings.cs so the ruleset still receives a result"
-            changed=('src/GlobalUsings.cs')
-          fi
-          q="'"
-          for path in "${changed[@]}"; do
-            printf "  - '%s'\n" "${path//$q/$q$q}" >> "$config"
-          done
-          echo "extracting ${#changed[@]} changed C# file(s)"
-          echo "config=$config" >> "$GITHUB_OUTPUT"
-
-      - name: Initialize CodeQL (build-less, pull requests)
-        if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: none
-          config-file: ${{ steps.codeql-scope.outputs.config }}
-          queries: security-and-quality
-
-      - name: Initialize CodeQL (build-less, whole library)
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: none
-          config-file: ./.github/codeql/codeql-config.yml
-          queries: security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          category: "/language:csharp"
-          upload: always
-
-
-  # Trace source-generated code as well as running the quick build-less analysis.
-  # Both categories exist on master, so PRs must upload both; skipping the traced category
-  # leaves GitHub's CodeQL check blocked by a missing analysis configuration.
-  codeql-traced:
-    name: CodeQL Analysis (traced)
-    runs-on: ubuntu-latest
-    needs: [validation-source, select-shards]
-    # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
-    # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
-    # with enough time for analysis and upload on the expanded native model source.
-    timeout-minutes: 120
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Free runner disk space
-        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
-        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
-        # host frameworks intact and remove only preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          sudo rm -rf /opt/hostedtoolcache/PyPy || true
-          sudo rm -rf /opt/hostedtoolcache/Ruby || true
-          sudo rm -rf /opt/hostedtoolcache/go || true
-          sudo rm -rf /usr/share/swift || true
-          sudo rm -rf /usr/share/miniconda || true
-          sudo rm -rf /usr/local/share/boost || true
-          sudo apt-get clean || true
-          df -h /
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
-        run: |
-          dotnet restore src/AiDotNet.csproj
-          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
-          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
-          dotnet restore src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj
-
-      # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
-      # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
-      # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
-      # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
-      - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: manual
-          config-file: ./.github/codeql/codeql-config.yml
-          queries: security-and-quality
-
-      # CodeQL needs to trace the build - can't reuse artifacts.
-      # CodeQL only analyzes what the traced build compiles, so every shipped entry point that
-      # takes untrusted input has to be built here: the core library, the Serving API and the
-      # playground's Azure Functions. This step used to build the library alone to avoid a file
-      # lock on AiDotNet.Serving's static web assets; naming each project in its own sequential
-      # command (the pattern the build job uses) builds Serving exactly once, never concurrently.
-      # The core library's command is unchanged and runs first, so its extraction is identical;
-      # the next two builds find it up to date and compile only their own sources.
-      - name: Build for CodeQL (net10.0)
-        run: |
-          dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
-          dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
-          dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
-          dotnet build src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj -c Release --no-restore
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          category: "/language:csharp-traced"
-          upload: always
-
+  # CodeQL does not run in this workflow. Both analyses (build-less and traced) run from
+  # .github/workflows/codeql.yml on pushes to master and nightly, never on a pull request.
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   # A DRAFT runs this compile check and nothing else: every other job gates on
-  # `github.event.pull_request.draft != true`, so drafts no longer queue CodeQL, the shards or the
+  # `github.event.pull_request.draft != true`, so drafts no longer queue the shards or the
   # paper-fidelity slices behind the PRs that are ready to merge. Marking the PR ready
   # (ready_for_review) starts the full run. Superseded draft builds cancel each other.
   draft-build:
@@ -634,9 +459,26 @@ jobs:
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
         run: ./tools/TestImpact/Build-GeneratorBase.ps1
 
+      # Layer 2 (repository variable TEST_IMPACT_REPACK; tools/TestImpact/ShardPacking.ps1): the timing table the
+      # step below predicts each slice's test time from. shard-timing-table.yml rebuilds it daily and saves it to
+      # the default branch's cache, which a pull request can read. Skipped unless the variable is report or on;
+      # without a table every slice is predicted to fill a job, so nothing is packed.
+      - name: Restore the shard timing table
+        if: ${{ (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: shard-timing-table.json
+          key: shard-timing-table-v1-${{ github.run_id }}
+          restore-keys: |
+            shard-timing-table-v1-
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
+      #
+      # With TEST_IMPACT_REPACK=on it then packs the slices it kept into time-balanced jobs (the matrix output
+      # holds packed jobs); with report it only records what packing would do; unset or off, it is as it was.
       - name: Select affected tests
         id: impact
         shell: pwsh
@@ -648,10 +490,27 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A stacked pull request selected for what it adds to master; narrowing against its base would drop that.
+          MAP_LINEAGE_REF: ${{ needs.select-shards.outputs.map_lineage_ref }}
           # The routing select-shards planned, so a narrowed matrix sends the same share to the self-hosted runners.
           SELF_HOSTED_SHARDS: ${{ needs.select-shards.outputs.self_hosted_shards || '0' }}
           SELF_HOSTED_LABEL: ${{ needs.select-shards.outputs.self_hosted_label }}
+          # off (or unset) | report | on. Anything else reads as off.
+          TEST_IMPACT_REPACK: ${{ vars.TEST_IMPACT_REPACK }}
         run: ./tools/TestImpact/Select-AffectedTests.ps1
+
+      # What repacking did, or would do, to this run's matrix: every job, its slices and their predicted minutes.
+      # The aggregate analysis compares it with what the jobs took. Written only with TEST_IMPACT_REPACK report or on.
+      - name: Upload the shard pack plan
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('shard-pack-plan.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shard-pack-plan
+          path: shard-pack-plan.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
 
       - name: Upload test-level selection plan
         if: always() && hashFiles('type-impact-plan.json') != ''
@@ -739,14 +598,35 @@ jobs:
       # already runs every analyzer on net10.0 over the same source. With them, two compiles under -m:2
       # passed the 16-GB ceiling and the OOM kill surfaced only as "The runner has received a shutdown
       # signal". Code compiled only for net471/net8 (#if branches) is not analyzed here.
-      # A pull request compiles the test project for net471 only and skips the pack: nothing consumes
-      # the package it produced, and master pushes still pack every framework.
+      # Validation artifacts with a prerelease dependency must themselves be prerelease.
+      # Keep the evaluated project version and every pack validation; only this CI artifact gets a suffix.
+      - name: Set validation package version for prerelease dependencies
+        id: validation-package-version
+        shell: pwsh
+        run: |
+          [xml]$packages = Get-Content Directory.Packages.props -Raw
+          $tensors = @($packages.Project.ItemGroup.PackageVersion | Where-Object Include -eq 'AiDotNet.Tensors')
+          if ($tensors.Count -ne 1) { throw 'Expected one central AiDotNet.Tensors version.' }
+          if ($tensors[0].Version -match '-') {
+            $version = (& dotnet msbuild src/AiDotNet.csproj -getProperty:PackageVersion -p:CompatBuildOnly=true -verbosity:quiet | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Could not evaluate the project package version.' }
+            if ($version -notmatch '^\d+\.\d+\.\d+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+              throw "Invalid evaluated package version: $version"
+            }
+            $version = $version.Split('+')[0]
+            $separator = if ($version.Contains('-')) { '.' } else { '-' }
+            $version = "$version${separator}ci.g$env:GITHUB_SHA"
+            "argument=-p:PackageVersion=$version" >> $env:GITHUB_OUTPUT
+          }
+
+      # PRs compile tests for net471 and skip the separate pack/upload steps; the build still validates
+      # its automatically generated packages. Master pushes explicitly pack every framework.
       - name: Build (Release, compat frameworks)
-        run: dotnet build -c Release --no-restore -m:2 -p:RunAnalyzers=false -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
+        run: dotnet build -c Release --no-restore -m:2 -p:RunAnalyzers=false -p:CompatBuildOnly=true ${{ steps.validation-package-version.outputs.argument }} ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
 
       - name: Build NuGet package
         if: github.event_name != 'pull_request'
-        run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true
+        run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true ${{ steps.validation-package-version.outputs.argument }}
 
       - name: Upload NuGet package
         if: github.event_name != 'pull_request'
@@ -866,6 +746,9 @@ jobs:
       requires_sweeps: ${{ steps.select.outputs.requires_sweeps }}
       requires_shapes: ${{ steps.select.outputs.requires_shapes }}
       escalated: ${{ steps.select.outputs.escalated }}
+      # Set only when a stacked pull request fell back to master's map; the Build job's test-level
+      # selection then keeps this selection whole (Select-AffectedTests.ps1).
+      map_lineage_ref: ${{ steps.map.outputs.lineage_ref }}
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
       requires_validation: ${{ steps.select.outputs.requires_validation }}
@@ -885,6 +768,9 @@ jobs:
       # Their full correctness suites still execute, but repeating the instrumentation that already
       # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
       coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
+      # Rolling map refresh (TEST_IMPACT_ROLLING_MAP): the heavy shards tonight's scheduled run instruments.
+      # '[]' on every other event and whenever the flag is off.
+      coverage_rolling: ${{ steps.select.outputs.coverage_rolling }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -911,6 +797,7 @@ jobs:
           rm -rf map map-resolution.json
           run_id=''
           kind=''
+          lineage_ref=''
           if [ "$FORCE_COVERAGE" = 'true' ]; then
             case "${INPUT_MAP_RUN_ID:-}" in
               '')
@@ -932,8 +819,11 @@ jobs:
             esac
           else
             # The executable resolver makes the newest completed map workflow a revocation barrier.
-            # Its adversarial fixtures record every download attempt and prove that a newer failed
-            # or certificate-withholding run can never fall back to an older certificate.
+            # Its adversarial fixtures record every download attempt and prove that a newer run
+            # that audited a miss, or that withholds its certificate, can never fall back to an
+            # older certificate. A run that failed WITHOUT a typed audit decision is neutral: the
+            # last certified map stays in use while it is no older than the resolver's
+            # FailedRunFallbackMaxAgeDays setting (default 14), and the selection report says so.
             if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
                  -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
                  -ResultFile map-resolution.json -MapBranch "$MAP_BRANCH"; then
@@ -946,6 +836,35 @@ jobs:
               echo '::warning::certified map resolver failed; selection will fail closed'
               rm -rf map
             fi
+
+            # A stacked pull request's base is another feature branch, and maps are only ever built on
+            # master, so the lookup above finds no run at all and every stacked pull request ran the
+            # full matrix (6 of the 9 no-map runs measured in November 2026). Fall back to master's
+            # certified map, and tell the selector the map is master's (lineage_ref): it then selects
+            # for everything the stack adds to master, not only this pull request's diff against its
+            # base branch, which that map has never measured.
+            #
+            # Only NoCertifiedRun falls back. A revoked, unclassified or certificate-less run on the
+            # base branch is negative evidence about that branch and stays fail-closed, and master's
+            # own revocation barrier applies unchanged to the map resolved here.
+            if [ -z "$run_id" ] && [ "$MAP_BRANCH" != 'master' ] && [ -f map-resolution.json ] &&
+               [ "$(jq -r '.status // empty' map-resolution.json)" = 'NoCertifiedRun' ]; then
+              echo "no certified map was ever built on '$MAP_BRANCH' - resolving master's map for a stacked pull request"
+              rm -rf map map-resolution.json
+              if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
+                   -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
+                   -ResultFile map-resolution.json -MapBranch master; then
+                candidate=$(jq -r 'if .found then (.runId | tostring) else empty end' map-resolution.json)
+                if [ -n "$candidate" ]; then
+                  run_id="$candidate"
+                  kind='certified'
+                  lineage_ref='origin/master'
+                fi
+              else
+                echo '::warning::certified map resolver failed for master; selection will fail closed'
+                rm -rf map
+              fi
+            fi
           fi
 
           if [ -z "$run_id" ]; then
@@ -953,6 +872,30 @@ jobs:
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"
+
+      # ROLLING MAP (tools/TestImpact/RollingShardMap.ps1), behind repository variable
+      # TEST_IMPACT_ROLLING_MAP: unset or 'off' skips this step and every other rolling step, and leaves the
+      # selection, the matrix and what is instrumented exactly as they were. 'shadow' computes the rolling
+      # selection beside the weekly map's and reports both; 'on' lets a certified rolling map decide.
+      #
+      # The rolling map is only ever taken from the run the resolver above returned: the run that certified
+      # the weekly map (the anchor) is the run that built and certified the rolling map on top of it. So the
+      # resolver's revocation barrier covers both: a revoked, unclassified or superseded anchor leaves no
+      # rolling map to find. A missing artifact is the ordinary case (no nightly digest yet) and not an error.
+      - name: Download the rolling shard map
+        id: rolling
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && steps.map.outputs.kind == 'certified' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+        run: |
+          rm -rf rolling-map
+          if ! gh run download "$MAP_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rolling-shard-map --dir rolling-map; then
+            echo "map run $MAP_RUN_ID published no rolling map - the certified weekly map decides alone"
+            rm -rf rolling-map
+          fi
 
       # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
@@ -1042,6 +985,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Isolated worker coverage proof failed' }
           ./tools/TestImpact/Test-ValidationReuseModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
+          # Layer 2 (TEST_IMPACT_REPACK): the packing rules, set equality over generated matrices and the real
+          # manifest, and the workflow's per-slice steps. A few seconds; the end-to-end half of this self-test
+          # runs in the aggregate analysis job, and only while the variable is report or on.
+          ./tools/TestImpact/Test-ShardPacking.ps1 -RulesOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Shard packing rules proof failed' }
 
       - name: Select
         id: select
@@ -1049,6 +997,17 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+          # Set only when a stacked pull request fell back to master's map (Download the shard map).
+          MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}
+          # Kill switch for the selector's precise fallbacks (Select-Shards.ps1, .NOTES). Unset leaves them
+          # on; set the repository variable to 'off' to select every shard executing a file for a changed
+          # range no shard executes, as before, without reverting anything.
+          TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}
+          # Rolling per-shard coverage map: off (default, also unset or unrecognised), shadow, or on. See
+          # "Download the rolling shard map". The budget is predicted EXTRA runner-minutes a scheduled nightly
+          # may spend instrumenting heavy shards; unset is RollingBudgetMinutes in RollingShardMap.ps1 (450).
+          TEST_IMPACT_ROLLING_MAP: ${{ vars.TEST_IMPACT_ROLLING_MAP }}
+          TEST_IMPACT_ROLLING_BUDGET_MINUTES: ${{ vars.TEST_IMPACT_ROLLING_BUDGET_MINUTES }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.
@@ -1111,6 +1070,13 @@ jobs:
             exit 1
           }
           Write-Host "shard list: $($all.Count) shard(s)"
+
+          # Nothing below reads the rolling map unless this is 'shadow' or 'on'.
+          $rollingMode = 'off'
+          if (-not [string]::IsNullOrWhiteSpace($env:TEST_IMPACT_ROLLING_MAP)) {
+            . ./tools/TestImpact/RollingShardMap.ps1
+            $rollingMode = Get-RollingMapMode $env:TEST_IMPACT_ROLLING_MAP
+          }
 
           $escalate = $true
           # Why the workflow overrode or bypassed the selector, for the selection report. Empty means the selector's own
@@ -1210,6 +1176,11 @@ jobs:
             # remains true and continues into the certified-map path below.
             $pathRequiresValidation = $true
             try {
+              # A stacked pull request's change is everything its stack adds to the lineage branch, not
+              # only its own base-to-head paths, so the classifier cannot clear it on that narrower set.
+              if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+                throw "the map lineage '$($env:MAP_LINEAGE_REF)' widens the change beyond the pull request's own paths"
+              }
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
                   -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
@@ -1233,13 +1204,37 @@ jobs:
               # numbers the map's ranges are expressed in; the pull request head only decides WHICH
               # paths are this pull request's change.
               try {
+                # A stacked pull request selecting with master's map: the selector widens the change
+                # to everything the stack adds to master (Resolve-MapLineageBase).
+                $lineage = @{}
+                if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+                  $lineage['MapLineageRef'] = [string] $env:MAP_LINEAGE_REF
+                }
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
                     -PullRequestHeadSha $changeHeadSha `
+                    @lineage `
                     -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
                 if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
+                if ($rollingMode -ne 'off') {
+                  # The weekly map has selected. Now the same change against the rolling map, each layer in
+                  # its own commit's line numbers (Select-Shards.ps1, Invoke-RollingMapSelection). shadow:
+                  # selection.json is not touched. on: it is replaced only by a certified rolling map's
+                  # selection; anything else, including a failure here, leaves the weekly map's in place.
+                  try {
+                    & ./tools/TestImpact/Invoke-RollingSelection.ps1 -Mode $rollingMode `
+                        -AnchorMapFile map/shard-map.json -AnchorRunId ([long] $env:MAP_RUN_ID) `
+                        -RollingDirectory rolling-map -AnchorSelectionFile selection.json `
+                        -PullRequestHeadSha $changeHeadSha @lineage `
+                        -ShardManifestFile shard-manifest.json -ExpectedShards @($all.name)
+                    if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+                  }
+                  catch {
+                    Write-Host "::warning::rolling map selection unavailable ($($_.Exception.Message)) - the certified weekly map decides"
+                  }
+                }
                 $result = Get-Content selection.json -Raw | ConvertFrom-Json
                 $selectionEscalated = Read-RequiredJsonBoolean `
                     -Object $result -PropertyName 'escalate'
@@ -1418,7 +1413,8 @@ jobs:
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
-                  -ReportFile selection-report.json
+                  -RollingComparisonFile rolling-comparison.json `
+                  -MapResolutionFile map-resolution.json -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
             catch {
@@ -1542,6 +1538,34 @@ jobs:
               runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)
             } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
           }
+          # ROLLING MAP REFRESH. On the scheduled nightly, and only with the flag on, name a budgeted handful
+          # of heavy shards for the test job to instrument tonight (Invoke-Shard.ps1 reads COVERAGE_ROLLING).
+          # Which ones, in what order and under what cap is Select-RollingCoverageShards.ps1; timing shards and
+          # shards the weekly run could not digest are never named. Any failure names none, which is the
+          # nightly as it always was. Every other event, and the flag off, emits '[]'.
+          $rollingCoverage = @()
+          if ($rollingMode -ne 'off' -and $env:GITHUB_EVENT_NAME -eq 'schedule' -and
+              $env:COLLECT_COVERAGE_EVERYWHERE -ne 'true') {
+            try {
+              if (-not $selectorTrusted) { throw 'the impact tooling failed its own self-test' }
+              if (-not $mapCertified) { throw 'there is no certified weekly map to refresh' }
+              & ./tools/TestImpact/Select-RollingCoverageShards.ps1 -ShardManifestFile shard-manifest.json `
+                  -AnchorMapFile map/shard-map.json -RollingMapFile rolling-map/rolling-shard-map.json `
+                  -BudgetMinutes ([string] $env:TEST_IMPACT_ROLLING_BUDGET_MINUTES) -OutFile rolling-source.json
+              if ($LASTEXITCODE -ne 0) { throw "Select-RollingCoverageShards exited $LASTEXITCODE" }
+              $rollingPlan = Get-Content rolling-source.json -Raw | ConvertFrom-Json
+              $rollingCoverage = @($rollingPlan.instrument | ForEach-Object { [string] $_ })
+              "### Rolling map refresh`n`ninstrumenting $($rollingCoverage.Count) heavy shard(s) tonight, predicted $($rollingPlan.predictedExtraMinutes) of $($rollingPlan.budgetMinutes) extra runner-minute(s)." |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+            catch {
+              Write-Host "::warning::rolling map refresh unavailable ($($_.Exception.Message)) - instrumenting nothing extra tonight"
+              $rollingCoverage = @()
+              Remove-Item rolling-source.json -ErrorAction SilentlyContinue
+            }
+          }
+          "coverage_rolling=$(ConvertTo-Json -InputObject @($rollingCoverage) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_carried=$(ConvertTo-Json -InputObject @($carried) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
@@ -1556,9 +1580,26 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: shard-selection-report
+          # The rolling files exist only with TEST_IMPACT_ROLLING_MAP shadow or on.
           path: |
             selection.json
             selection-report.json
+            selection-rolling.json
+            selection-anchor.json
+            rolling-comparison.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
+
+      # What makes a scheduled run a source for the rolling map: the plan it instrumented under. The map
+      # workflow ignores scheduled runs without it, so nightlies from before the flag are never drawn on.
+      - name: Upload rolling-source marker
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && github.event_name == 'schedule' && hashFiles('rolling-source.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: test-impact-rolling-source
+          path: rolling-source.json
           if-no-files-found: ignore
           retention-days: 14
           overwrite: true
@@ -1596,7 +1637,12 @@ jobs:
     # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation gets a
     # 60-minute fallback so a bounded artifact retry cannot consume the test's execution budget;
     # the isolated nightly run gets enough room to finish cleanly.
-    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || matrix.shard.timeout || 60 }}
+    #
+    # A heavy shard instrumented for the rolling map (coverage_rolling; '[]' unless TEST_IMPACT_ROLLING_MAP is
+    # on for a scheduled run) gets the same 90 minutes: instrumentation added a median 25 and at most 32
+    # minutes to a heavy shard in run 42322440147, and the longest then took 57. With an empty list the
+    # middle term is false and this is the expression it was.
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}
     permissions:
       actions: read
       contents: read
@@ -1615,8 +1661,56 @@ jobs:
         shard: ${{ fromJSON(needs.build.outputs.matrix || needs.select-shards.outputs.matrix) }}
 
     steps:
+      # Invoke-Shard.ps1 counts a packed job's slice deadline from here, so the setup steps below are inside it.
+      - name: Record job start
+        shell: pwsh
+        run: '"SHARD_JOB_STARTED=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_ENV'
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Ensure GitHub CLI is available on self-hosted runners
+        if: runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue) {
+            & gh --version
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+          }
+          # Official portable archives; no administrator access or machine-wide installation.
+          $version = '2.104.0'
+          $platform = "$($env:RUNNER_OS)/$($env:RUNNER_ARCH)"
+          $assets = @{
+            'Linux/X64' = @('linux_amd64.tar.gz', '98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e')
+            'Linux/ARM64' = @('linux_arm64.tar.gz', 'cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3')
+            'Windows/X64' = @('windows_amd64.zip', '08c06d10482f12c478018cd259f64acbd5f625712cadf331aad19ba973c879e5')
+            'Windows/ARM64' = @('windows_arm64.zip', 'd56fbf5b9ad32e5985e3e7e1d8f4d28ae2994618986cd2cba9b50ac710dffe01')
+          }
+          if (-not $assets.ContainsKey($platform)) { throw "Unsupported GitHub CLI platform: $platform" }
+          $asset = $assets[$platform]
+          $name = "gh_${version}_$($asset[0])"
+          $install = Join-Path $env:RUNNER_TEMP ("github-cli-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $install | Out-Null
+          $archive = Join-Path $install $name
+          Invoke-WebRequest "https://github.com/cli/cli/releases/download/v$version/$name" -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $asset[1]) {
+            throw "GitHub CLI archive checksum mismatch: $name"
+          }
+          if ($env:RUNNER_OS -eq 'Windows') {
+            Expand-Archive -LiteralPath $archive -DestinationPath $install
+            $bin = Join-Path $install 'bin'
+            $executable = Join-Path $bin 'gh.exe'
+          } else {
+            & tar -xzf $archive -C $install
+            if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI archive extraction failed' }
+            $bin = Join-Path $install "gh_${version}_linux_$($env:RUNNER_ARCH.ToLower().Replace('x64', 'amd64'))/bin"
+            $executable = Join-Path $bin 'gh'
+          }
+          & $executable --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI version check failed' }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
 
       - name: Free runner disk space
         # GitHub-hosted only: everything below is a hosted-image preinstall that a self-hosted runner does not have,
@@ -1718,6 +1812,9 @@ jobs:
           # names, and names contain characters PowerShell would parse inside a quoted literal.
           COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
           COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+          # Rolling map refresh: heavy shards to instrument on tonight's scheduled run. Empty or '[]' (always,
+          # unless TEST_IMPACT_ROLLING_MAP is shadow or on) leaves Invoke-Shard.ps1's decision as it was.
+          COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
           # Dedicated enterprise CI license key (save-capable â€” lifts the persistence op cap under capability
           # gating â€” with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
@@ -1745,6 +1842,11 @@ jobs:
           SHARD_NAME: ${{ matrix.shard.name }}
           SHARD_FILTER: ${{ matrix.shard.filter }}
           SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+          # Layer 2 (TEST_IMPACT_REPACK=on): a packed job's slices. Invoke-Shard.ps1 then runs each as its own
+          # invocation, with its own filter, environment and TestResults/slot-N. `null` for every other job,
+          # which runs exactly as before. The timeout lets it stop starting slices before the job is cancelled.
+          SHARD_SEGMENTS: ${{ toJSON(matrix.shard.segments) }}
+          SHARD_PACK_TIMEOUT: ${{ matrix.shard.segments && matrix.shard.timeout || '' }}
         # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
         # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
@@ -1796,7 +1898,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Download legacy retry baseline shard TRX
-        if: always() && steps.retry-baseline.outputs.baseline_mode == 'trx'
+        if: always() && !matrix.shard.segments && steps.retry-baseline.outputs.baseline_mode == 'trx'
         id: retry-trx-download
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
@@ -1808,7 +1910,7 @@ jobs:
 
       - name: Select PR-new failures for targeted retry
         if: >-
-          always() && steps.retry-baseline.outcome == 'success' &&
+          always() && !matrix.shard.segments && steps.retry-baseline.outcome == 'success' &&
           ((steps.retry-baseline.outputs.baseline_mode == 'ledger' && steps.retry-ledger-download.outcome == 'success') ||
           (steps.retry-baseline.outputs.baseline_mode == 'trx' && steps.retry-trx-download.outcome == 'success'))
         id: retry-candidates
@@ -1861,8 +1963,22 @@ jobs:
           & dotnet @retryArgs
           exit $LASTEXITCODE
 
+      # A packed job (Layer 2) retries per slice: each failed slice's PR-new failures, rerun with that slice's own
+      # environment into its own TestResults/slot-N (Invoke-PackedShardRetry.ps1). It needs the compact ledger
+      # baseline, which is one download for the whole job; against a legacy per-shard TRX baseline the first
+      # results stand, as they do for an unpacked job with no baseline.
+      - name: Rerun PR-new failures once in each packed slice
+        if: always() && matrix.shard.segments && steps.retry-baseline.outputs.baseline_mode == 'ledger' && steps.retry-ledger-download.outcome == 'success'
+        id: retry-packed-slices
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SHARD_SEGMENTS: ${{ toJSON(matrix.shard.segments) }}
+        run: ./.github/scripts/Invoke-PackedShardRetry.ps1
+
       - name: Record shard outcome
-        if: always()
+        # A packed job records one outcome per slice instead (Invoke-Shard.ps1 writes TestResults/slot-N/shard-metadata.json).
+        if: always() && !matrix.shard.segments
         shell: pwsh
         run: |
           # A TRX cannot identify a shard whose host died before flushing results. Keep a tiny
@@ -1880,6 +1996,53 @@ jobs:
             rerunCandidateCount = "${{ steps.retry-candidates.outputs.rerun_count }}"
             rerunStepOutcome = "${{ steps.retry-new-failures.outcome }}"
           } | ConvertTo-Json | Set-Content TestResults/shard-metadata.json -Encoding utf8
+
+      # PACKED JOB, one step per slice (Layer 2: repository variable TEST_IMPACT_REPACK=on, ShardPacking.ps1).
+      # A packed job runs up to eight shard slices in the test step above. Each slice gets a step named for its
+      # shard whose conclusion is that slice's own, so the job page shows which slice failed, and the tools that
+      # read a run's jobs by shard name (Resolve-CiValidationReuse.ps1, the aggregate analysis) read a packed
+      # run slice by slice. matrix.shard.slotN exists only for the Nth slice of a packed job, so on every other
+      # job these steps, and the per-slice uploads below, are skipped.
+      # Test-ShardPacking.ps1 fails when the number of slots here and ShardPackMaxSegments differ.
+      - name: "Packed slice 1: ${{ matrix.shard.slot0.name }}"
+        if: always() && matrix.shard.slot0
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 0
+
+      - name: "Packed slice 2: ${{ matrix.shard.slot1.name }}"
+        if: always() && matrix.shard.slot1
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 1
+
+      - name: "Packed slice 3: ${{ matrix.shard.slot2.name }}"
+        if: always() && matrix.shard.slot2
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 2
+
+      - name: "Packed slice 4: ${{ matrix.shard.slot3.name }}"
+        if: always() && matrix.shard.slot3
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 3
+
+      - name: "Packed slice 5: ${{ matrix.shard.slot4.name }}"
+        if: always() && matrix.shard.slot4
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 4
+
+      - name: "Packed slice 6: ${{ matrix.shard.slot5.name }}"
+        if: always() && matrix.shard.slot5
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 5
+
+      - name: "Packed slice 7: ${{ matrix.shard.slot6.name }}"
+        if: always() && matrix.shard.slot6
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 6
+
+      - name: "Packed slice 8: ${{ matrix.shard.slot7.name }}"
+        if: always() && matrix.shard.slot7
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 7
 
       - name: Set artifact name
         if: always()
@@ -1905,9 +2068,13 @@ jobs:
         # That is a silent miss, and it is likelier here than anywhere: forcing coverage onto
         # heavy shards is exactly what pushes them into an OOM. A shard that fails simply
         # produces no digest and stays always-run, which is the safe direction.
-        if: steps.shard-tests.outcome == 'success'
+        if: steps.shard-tests.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true
         shell: pwsh
+        env:
+          # The matrix entry this job ran, for the digest's record of its own shard definition. Via env: the
+          # filters contain quotes and pipes.
+          SHARD_DEFINITION: ${{ toJSON(matrix.shard) }}
         run: |
           $coverage = @(Get-ChildItem -Path TestResults -Filter 'coverage.opencover.xml' -Recurse -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -1923,7 +2090,10 @@ jobs:
           & ./tools/TestImpact/New-CoverageDigest.ps1 `
               -CoverageXml $coverage[0].FullName `
               -Shard "${{ matrix.shard.name }}" `
-              -OutFile "impact-digest/$slug.digest.json"
+              -OutFile "impact-digest/$slug.digest.json" `
+              -MeasuredSha ([string] $env:GITHUB_SHA) -RunId ([string] $env:GITHUB_RUN_ID) `
+              -RunAttempt ([string] $env:GITHUB_RUN_ATTEMPT) -ShardDefinitionJson ([string] $env:SHARD_DEFINITION) `
+              -ManifestBlob ([string] (& git rev-parse 'HEAD:.github/test-shards.yml' 2>$null))
 
       - name: Upload test-impact digest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
@@ -1939,11 +2109,14 @@ jobs:
           # (2026-11-07) expired the same day, and every map run since has found "no
           # coverage-everywhere marker" and published nothing. 30 days outlasts three lost weekly
           # runs; a digest is ~200 KB at most, so a retained run costs tens of MB.
-          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || 7 }}
+          #
+          # A scheduled run's digests feed the rolling map when TEST_IMPACT_ROLLING_MAP is on, which uses a
+          # digest for up to 10 days (RollingMaxDigestAgeDays); 14 keeps them that long. Otherwise 7, as before.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && 14) || 7 }}
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success'
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
           name: ${{ env.ARTIFACT_NAME }}
@@ -1955,6 +2128,120 @@ jobs:
           if-no-files-found: error
           # A forced all-shard run is several GiB. The compact digests above are the durable input;
           # raw coverage only needs to survive long enough for immediate diagnosis.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+      # PACKED JOB: each slice uploads under its own shard's artifact name, from its own TestResults/slot-N, in
+      # the layout the step above gives an unpacked job (shard-metadata.json beside the <slug>/ results) - so
+      # the regression ledger, the delta import, the retry baseline and Sonar read it as they always have.
+      - name: Upload coverage + test results (packed slice 1)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
+          path: |
+            TestResults/slot-0/**/coverage.opencover.xml
+            TestResults/slot-0/**/*.trx
+            TestResults/slot-0/shard-metadata.json
+            TestResults/slot-0/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 2)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
+          path: |
+            TestResults/slot-1/**/coverage.opencover.xml
+            TestResults/slot-1/**/*.trx
+            TestResults/slot-1/shard-metadata.json
+            TestResults/slot-1/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 3)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
+          path: |
+            TestResults/slot-2/**/coverage.opencover.xml
+            TestResults/slot-2/**/*.trx
+            TestResults/slot-2/shard-metadata.json
+            TestResults/slot-2/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 4)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
+          path: |
+            TestResults/slot-3/**/coverage.opencover.xml
+            TestResults/slot-3/**/*.trx
+            TestResults/slot-3/shard-metadata.json
+            TestResults/slot-3/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 5)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
+          path: |
+            TestResults/slot-4/**/coverage.opencover.xml
+            TestResults/slot-4/**/*.trx
+            TestResults/slot-4/shard-metadata.json
+            TestResults/slot-4/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 6)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
+          path: |
+            TestResults/slot-5/**/coverage.opencover.xml
+            TestResults/slot-5/**/*.trx
+            TestResults/slot-5/shard-metadata.json
+            TestResults/slot-5/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
+          path: |
+            TestResults/slot-6/**/coverage.opencover.xml
+            TestResults/slot-6/**/*.trx
+            TestResults/slot-6/shard-metadata.json
+            TestResults/slot-6/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
+          path: |
+            TestResults/slot-7/**/coverage.opencover.xml
+            TestResults/slot-7/**/*.trx
+            TestResults/slot-7/shard-metadata.json
+            TestResults/slot-7/rerun-candidates.json
+          if-no-files-found: error
           retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
 
       # Keep crash evidence separate from coverage artifacts. Process dumps are deliberately not
@@ -1978,13 +2265,109 @@ jobs:
       # retains hang-sequence evidence that the coverage artifact intentionally omits.
       - name: Upload compact test diagnostics
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success'
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true
         with:
           name: ${{ env.TEST_RESULTS_ARTIFACT_NAME }}
           path: |
             TestResults/**/*.trx
             TestResults/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+      # PACKED JOB: the same compact diagnostics, one artifact per slice under its own shard's name.
+      - name: Upload compact test diagnostics (packed slice 1)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
+          path: |
+            TestResults/slot-0/**/*.trx
+            TestResults/slot-0/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 2)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
+          path: |
+            TestResults/slot-1/**/*.trx
+            TestResults/slot-1/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 3)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
+          path: |
+            TestResults/slot-2/**/*.trx
+            TestResults/slot-2/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 4)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
+          path: |
+            TestResults/slot-3/**/*.trx
+            TestResults/slot-3/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 5)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
+          path: |
+            TestResults/slot-4/**/*.trx
+            TestResults/slot-4/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 6)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
+          path: |
+            TestResults/slot-5/**/*.trx
+            TestResults/slot-5/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
+          path: |
+            TestResults/slot-6/**/*.trx
+            TestResults/slot-6/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
+          path: |
+            TestResults/slot-7/**/*.trx
+            TestResults/slot-7/**/Sequence*.xml
           if-no-files-found: ignore
           retention-days: 30
 
@@ -2898,6 +3281,17 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/test-analyze-test-results.ps1
 
+      # Layer 2 (TEST_IMPACT_REPACK): the whole repacking self-test on a real runner - the selection with the flag
+      # unset, off, report and on, and Invoke-Shard.ps1 over a packed job with a stub in place of dotnet. Skipped
+      # unless the variable is report or on, and it cannot fail the job: until packing has run here for a while
+      # this is evidence, not a gate.
+      - name: Verify shard repacking
+        if: ${{ vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./tools/TestImpact/Test-ShardPacking.ps1
+
       - name: Initialize diagnostics directory
         shell: pwsh
         run: New-Item -ItemType Directory -Path TestDiagnostics -Force | Out-Null
@@ -3007,6 +3401,43 @@ jobs:
           "BASELINE_SOURCE=$baselineSource" >> $env:GITHUB_ENV
           "Baseline: $baselineSource" >> $env:GITHUB_STEP_SUMMARY
 
+      # Layer 2 (repository variable TEST_IMPACT_REPACK; ShardPacking.ps1): what the Build job's packing predicted
+      # for each job against what the jobs took. With `report` the matrix was one job per shard, so this is the
+      # evidence for or against turning packing on. Report-only, and skipped unless the variable is report or on.
+      - name: Report shard repacking
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('current-jobs.json') != '' }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name shard-pack-plan --dir shard-pack-plan
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host 'this run published no shard pack plan'
+            exit 0
+          }
+          ./tools/TestImpact/Write-ShardPackReport.ps1 -JobsFile current-jobs.json -PlanFile shard-pack-plan/shard-pack-plan.json
+
+      - name: Upload the shard repacking report
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('shard-pack-report.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shard-pack-report
+          path: shard-pack-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+          overwrite: true
+
+      # A packed job is several shards. The analysis below and the rolling-map comparison read this run's jobs by
+      # shard name, so each packed job is replaced by one entry per slice, with the slice's own conclusion (its
+      # 'Packed slice N' step). A job list with no packed job is left untouched. Skipped unless the variable is on.
+      - name: Read packed jobs by shard
+        if: ${{ always() && vars.TEST_IMPACT_REPACK == 'on' && hashFiles('current-jobs.json') != '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: ./tools/TestImpact/Write-ShardPackReport.ps1 -JobsFile current-jobs.json -ExpandJobs
+
       - name: Build aggregate failure analysis
         shell: pwsh
         env:
@@ -3032,7 +3463,35 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Certify the expensive validation stage independently from CodeQL and Sonar. A hosted runner
+      # Rolling map, after the matrix: which of the shards the rolling map would NOT have run failed here.
+      # In shadow mode they all ran, so this is the evidence for or against turning it on. Report-only,
+      # and skipped unless TEST_IMPACT_ROLLING_MAP is shadow or on.
+      - name: Compare the rolling selection with what ran
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name shard-selection-report --dir rolling-report
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path rolling-report/rolling-comparison.json) -or -not (Test-Path current-jobs.json)) {
+            Write-Host 'no rolling comparison was recorded for this run'
+            exit 0
+          }
+          ./tools/TestImpact/Invoke-RollingSelection.ps1 -OutcomeComparisonFile rolling-report/rolling-comparison.json `
+              -JobsFile current-jobs.json -OutcomeFile rolling-shadow-outcome.json
+
+      - name: Upload rolling shadow outcome
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && hashFiles('rolling-shadow-outcome.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: rolling-shadow-outcome
+          path: rolling-shadow-outcome.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # Certify the expensive validation stage independently from Sonar. A hosted runner
   # disappearing during either quality job must not force the landed tree to repeat 100+ shards.
   validation-gate:
     name: Validation Gate
@@ -3180,8 +3639,8 @@ jobs:
 
   # ---------------------------------------------------------------------------------------------
   # Single aggregation gate for the dynamic build/test matrix. Keep this stable check in the
-  # `Main` ruleset alongside the separately required SonarCloud and CodeQL policies; do not list
-  # the individual shards themselves.
+  # `Main` ruleset; do not list the individual shards themselves. CodeQL is not part of this
+  # gate: it runs after merge from .github/workflows/codeql.yml.
   #
   # Required-check names must be STATIC, which is why a 158-job matrix cannot be listed directly:
   # every time a shard is re-split (G-I -> G + H-I, and so on) the job names change and any
@@ -3199,7 +3658,6 @@ jobs:
     needs:
       - validation-source
       - validation-gate
-      - codeql
       - build
       - build-compat
       - select-shards
@@ -3226,7 +3684,6 @@ jobs:
             -RequiresValidation '${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}' `
             -ValidationGateResult '${{ needs.validation-gate.result }}' `
             -PromotionResult '${{ needs.promote-ci-test-analysis.result }}' `
-            -CodeQLResult '${{ needs.codeql.result }}' `
             -SonarResult '${{ needs.sonarcloud.result }}' `
             -SummaryFile $env:GITHUB_STEP_SUMMARY
   # The aggregate analysis artifact proves that tests emitted data; it does not prove validation

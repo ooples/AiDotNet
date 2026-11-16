@@ -101,8 +101,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             // Compute support embedding
             ParamModel.SetParameters(adaptedParams);
@@ -118,9 +117,8 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 var queryEmb = CompressVector(queryGrad, _algoOptions.TransformDim);
 
                 // Combine embeddings
-                var combined = new Vector<T>(_algoOptions.TransformDim);
-                for (int e = 0; e < _algoOptions.TransformDim && e < supportEmb.Length; e++)
-                    combined[e] = NumOps.FromDouble(NumOps.ToDouble(supportEmb[e]) + _algoOptions.QueryInfluenceWeight * NumOps.ToDouble(queryEmb[e]));
+                var combined = Engine.Add(FitToTransform(supportEmb),
+                    Engine.Multiply(FitToTransform(queryEmb), NumOps.FromDouble(_algoOptions.QueryInfluenceWeight)));
 
                 // Compute transform
                 var transform = ComputeTransform(combined);
@@ -128,12 +126,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 // Adapt with transformed gradients
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int cd = d % _compressedDim;
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(transform[cd]) * NumOps.ToDouble(grad[d])));
-                }
+                adaptedParams = TransformedStep(adaptedParams, grad, transform);
             }
 
             // Remaining adaptation steps (non-transductive)
@@ -149,12 +142,10 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Transform regularization
-            double transformReg = 0;
-            for (int i = 0; i < _transformParams.Length; i++)
-                transformReg += NumOps.ToDouble(_transformParams[i]) * NumOps.ToDouble(_transformParams[i]);
+            T transformReg = Engine.DotProduct(_transformParams, _transformParams);
 
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.TransformRegWeight * transformReg / _transformParams.Length));
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(
+                NumOps.FromDouble(_algoOptions.TransformRegWeight / _transformParams.Length), transformReg));
 
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -171,56 +162,59 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         ParamModel.SetParameters(adaptedParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
         var supportEmb = CompressVector(supportGrad, _algoOptions.TransformDim);
 
-        var combined = new Vector<T>(_algoOptions.TransformDim);
-        for (int e = 0; e < _algoOptions.TransformDim && e < supportEmb.Length; e++)
-            combined[e] = supportEmb[e];
+        var combined = FitToTransform(supportEmb);
         var transform = ComputeTransform(combined);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int cd = d % _compressedDim;
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(transform[cd]) * NumOps.ToDouble(grad[d])));
-            }
+            adaptedParams = TransformedStep(adaptedParams, grad, transform);
         }
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
+    /// <summary>0.5 + sigmoid(W c), shifted to [0.5, 1.5] so it doesn't kill gradients.</summary>
     private Vector<T> ComputeTransform(Vector<T> combined)
     {
-        var transform = new Vector<T>(_compressedDim);
-        for (int d = 0; d < _compressedDim; d++)
-        {
-            double sum = 0;
-            for (int e = 0; e < _algoOptions.TransformDim; e++)
-                sum += NumOps.ToDouble(combined[e]) * NumOps.ToDouble(_transformParams[d * _algoOptions.TransformDim + e]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-sum));
-            transform[d] = NumOps.FromDouble(0.5 + sigmoid); // shift to [0.5, 1.5] so it doesn't kill gradients
-        }
-        return transform;
+        int transformDim = _algoOptions.TransformDim;
+        var weights = Tensor<T>.FromVector(_transformParams, new[] { _compressedDim, transformDim });
+        var logits = Engine.TensorMatMul(weights, Tensor<T>.FromVector(FitToTransform(combined), new[] { transformDim, 1 })).ToVector();
+        return Engine.Add(Engine.Sigmoid(logits), Engine.Fill(_compressedDim, NumOps.FromDouble(0.5)));
+    }
+
+    /// <summary>The first TransformDim entries of an embedding, zero-padded when it is shorter.</summary>
+    private Vector<T> FitToTransform(Vector<T> embedding)
+    {
+        int transformDim = _algoOptions.TransformDim;
+        if (embedding.Length == transformDim) return embedding;
+        return embedding.Length > transformDim
+            ? embedding.GetSubVector(0, transformDim)
+            : Vector<T>.Concatenate(embedding, new Vector<T>(transformDim - embedding.Length));
+    }
+
+    /// <summary>theta_d - lr * transform[d mod compressedDim] * g_d.</summary>
+    private Vector<T> TransformedStep(Vector<T> parameters, Vector<T> gradient, Vector<T> transform)
+    {
+        var scaled = Engine.Multiply(ParameterModulation.Cycle(Engine, transform, _paramDim), gradient.GetSubVector(0, _paramDim));
+        return Engine.Subtract(parameters, Engine.Multiply(scaled, NumOps.FromDouble(_algoOptions.InnerLearningRate)));
     }
 
     private double ComputeETPNLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
+            var ap = initParams.Clone();
             ParamModel.SetParameters(ap);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var se = CompressVector(sg, _algoOptions.TransformDim);
@@ -229,14 +223,14 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             {
                 ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                for (int d = 0; d < _paramDim; d++)
-                    ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(t[d % _compressedDim]) * NumOps.ToDouble(g[d])));
+                ap = TransformedStep(ap, g, t);
             }
             ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

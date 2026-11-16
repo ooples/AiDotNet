@@ -203,14 +203,8 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         // Initialize accumulated weight matrix to zero
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        _accumulatedWeight = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _accumulatedWeight[i, j] = NumOps.Zero;
-            }
-        }
+        _accumulatedWeight = new Matrix<T>(outputSize, inputSize); // zero-filled
+
     }
 
     /// <summary>
@@ -254,18 +248,15 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get the current LoRA weight contribution
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
-        // Accumulate the LoRA weights
-        for (int i = 0; i < _accumulatedWeight.Rows; i++)
-        {
-            for (int j = 0; j < _accumulatedWeight.Columns; j++)
-            {
-                _accumulatedWeight[i, j] = NumOps.Add(_accumulatedWeight[i, j], loraWeights[i, j]);
-            }
-        }
+        // Accumulate the LoRA weights. MergeWeights() is [inputSize, outputSize] while the
+        // accumulated weight is [outputSize, inputSize] (applied as input * W^T), so add the transpose.
+        _accumulatedWeight = Engine.MatrixAdd(_accumulatedWeight, Engine.MatrixTranspose(loraWeights));
+
 
         // Reinitialize LoRA matrices
         Matrix<T> matrixA = _loraLayer.GetMatrixA();
-        Matrix<T> matrixB = _loraLayer.GetMatrixB();
+        Matrix<T> currentB = _loraLayer.GetMatrixB();
+
 
         // Reinitialize A with random values (same as initial LoRA initialization)
         T stddev = NumOps.Sqrt(NumOps.Divide(NumOps.One, NumOps.FromDouble(_loraLayer.Rank)));
@@ -277,36 +268,11 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Reset B to zero
-        for (int i = 0; i < matrixB.Rows; i++)
-        {
-            for (int j = 0; j < matrixB.Columns; j++)
-            {
-                matrixB[i, j] = NumOps.Zero;
-            }
-        }
+        // Reset B to zero (a fresh matrix is zero-filled)
+        Matrix<T> matrixB = new Matrix<T>(currentB.Rows, currentB.Columns);
 
-        // Update the LoRA layer's parameters
-        int paramIdx = 0;
-        Vector<T> loraParams = new Vector<T>((int)_loraLayer.ParameterCount);
-
-        // Pack matrix A
-        for (int i = 0; i < matrixA.Rows; i++)
-        {
-            for (int j = 0; j < matrixA.Columns; j++)
-            {
-                loraParams[paramIdx++] = matrixA[i, j];
-            }
-        }
-
-        // Pack matrix B
-        for (int i = 0; i < matrixB.Rows; i++)
-        {
-            for (int j = 0; j < matrixB.Columns; j++)
-            {
-                loraParams[paramIdx++] = matrixB[i, j];
-            }
-        }
+        // Update the LoRA layer's parameters (A then B, row-major)
+        Vector<T> loraParams = Vector<T>.Concatenate(matrixA.ToRowVector(), matrixB.ToRowVector());
 
         _loraLayer.SetParameters(loraParams);
 
@@ -352,33 +318,17 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix for accumulated weight multiplication
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
         // Compute accumulated contribution: input * AccumulatedWeight^T
-        Matrix<T> accumulatedOutput = inputMatrix.Multiply(_accumulatedWeight.Transpose());
+        Tensor<T> accumulatedOutput = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]),
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(_accumulatedWeight)));
 
-        // Sum all contributions
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                int idx = i * outputSize + j;
-                T baseVal = baseOutput[idx];
-                T loraVal = loraOutput[idx];
-                T accVal = accumulatedOutput[i, j];
-
-                result[idx] = NumOps.Add(NumOps.Add(baseVal, loraVal), accVal);
-            }
-        }
+        // Sum all contributions: (base + lora) + accumulated
+        Tensor<T> result = Engine.Reshape(
+            Engine.TensorAdd(
+                Engine.Reshape(Engine.TensorAdd(baseOutput, loraOutput), [batchSize, outputSize]),
+                accumulatedOutput),
+            baseOutput.Shape.ToArray());
 
         return result;
     }
@@ -474,26 +424,14 @@ public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with all merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge: base_weights + accumulated_weights + current_lora_weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            T baseWeight = baseParams[i];
-            T accWeight = _accumulatedWeight[row, col];
-            T loraWeight = currentLoRAWeights[row, col];
-
-            mergedParams[i] = NumOps.Add(NumOps.Add(baseWeight, accWeight), loraWeight);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge: base_weights + accumulated_weights + current_lora_weights. The accumulated weight
+        // is [outputSize, inputSize] and the current LoRA delta [inputSize, outputSize]; DenseLayer
+        // stores its weights input-major and FullyConnectedLayer output-major. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Matrix<T> accumulatedLayout = isOutputMajor ? _accumulatedWeight : Engine.MatrixTranspose(_accumulatedWeight);
+        Matrix<T> loraLayout = isOutputMajor ? Engine.MatrixTranspose(currentLoRAWeights) : currentLoRAWeights;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(baseParams, accumulatedLayout, weightCount);
+        mergedParams = AddFlatWeightsToParameters(mergedParams, loraLayout, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

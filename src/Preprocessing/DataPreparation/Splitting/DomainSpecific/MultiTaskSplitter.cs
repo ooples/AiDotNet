@@ -102,9 +102,10 @@ public class MultiTaskSplitter<T> : DataSplitterBase<T>
 
         // Group samples by task
         var taskSamples = new Dictionary<int, List<int>>();
+        var taskIds = PreprocessingTensorOps.IntColumn(X, _taskColumn);
         for (int i = 0; i < nSamples; i++)
         {
-            int taskId = (int)Convert.ToDouble(X[i, _taskColumn]);
+            int taskId = taskIds[i];
             if (!taskSamples.TryGetValue(taskId, out var list))
             {
                 list = new List<int>();

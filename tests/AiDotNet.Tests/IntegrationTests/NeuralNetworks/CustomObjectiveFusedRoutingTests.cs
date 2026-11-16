@@ -93,7 +93,9 @@ public class CustomObjectiveFusedRoutingTests
                 x, x, new Func<Tensor<float>, Tensor<float>>(ForwardForTraining),
                 new Func<Tensor<float>, Tensor<float>, Tensor<float>>((prediction, _) =>
                     new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, capturedTarget)),
-                null, null, true, true, null, null,
+                // sessionPerOptimizer, no closure objective, verifyReplayAgreement, no warm-up key or eager
+                // fallback, and the model's gradient clip.
+                null, null, true, null, true, null, null, true,
             })!;
 
         private static readonly MethodInfo s_trainCustomTapeStep = typeof(NeuralNetworkBase<float>).GetMethod(
@@ -102,8 +104,8 @@ public class CustomObjectiveFusedRoutingTests
                 typeof(Tensor<float>), typeof(Tensor<float>), typeof(Func<Tensor<float>, Tensor<float>>),
                 typeof(Func<Tensor<float>, Tensor<float>, Tensor<float>>),
                 typeof(IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>),
-                typeof(Func<System.Collections.Generic.IReadOnlyList<Tensor<float>>>), typeof(bool), typeof(bool),
-                typeof(MethodInfo), typeof(Func<float>),
+                typeof(Func<System.Collections.Generic.IReadOnlyList<Tensor<float>>>), typeof(bool),
+                typeof(Func<Tensor<float>>), typeof(bool), typeof(MethodInfo), typeof(Func<float>), typeof(bool),
             }, null) ?? throw new InvalidOperationException("TrainCustomTapeStep's private overload was not found.");
     }
 

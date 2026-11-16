@@ -228,32 +228,34 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         const int maxAudioLength = 500;
         const int maxVisualLength = 256;
 
-        _audioPositionalEmbedding = new Tensor<T>([maxAudioLength, _embeddingDimension]);
-        _visualPositionalEmbedding = new Tensor<T>([maxVisualLength, _embeddingDimension]);
-
-        InitializeSinusoidalEmbedding(_audioPositionalEmbedding, maxAudioLength);
-        InitializeSinusoidalEmbedding(_visualPositionalEmbedding, maxVisualLength);
+        _audioPositionalEmbedding = SinusoidalEmbedding(maxAudioLength);
+        _visualPositionalEmbedding = SinusoidalEmbedding(maxVisualLength);
     }
 
-    private void InitializeSinusoidalEmbedding(Tensor<T> embedding, int maxLength)
+    /// <summary>
+    /// <c>[maxLength, embeddingDimension]</c> sinusoidal table: sin(pos * exp(-i ln(10000) / d)) in even columns i,
+    /// cos of the same angle in odd ones.
+    /// </summary>
+    private Tensor<T> SinusoidalEmbedding(int maxLength)
     {
-        for (int pos = 0; pos < maxLength; pos++)
-        {
-            for (int i = 0; i < _embeddingDimension; i++)
-            {
-                var divTerm = Math.Exp(i * -Math.Log(10000.0) / _embeddingDimension);
-                var angle = pos * divTerm;
+        int width = _embeddingDimension;
+        if (maxLength == 0 || width == 0) return new Tensor<T>([maxLength, width]);
 
-                if (i % 2 == 0)
-                {
-                    embedding[pos, i] = NumOps.FromDouble(Math.Sin(angle));
-                }
-                else
-                {
-                    embedding[pos, i] = NumOps.FromDouble(Math.Cos(angle));
-                }
-            }
-        }
+        // The table is a constant: built in double (angles reach maxLength radians, beyond what float or
+        // Half can carry to the sin/cos) and rounded to T once, as the per-element double math was.
+        var positions = Engine.TensorArange<double>(0, maxLength);
+        var divTerms = Engine.TensorExp(Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<double>(0, width), -Math.Log(10000.0)), width));
+        var angles = Engine.TensorOuter(positions, divTerms); // [maxLength, width]
+
+        // 1 in even columns, 0 in odd ones; sin * even + cos * (1 - even) picks one exactly.
+        var evenColumns = new Tensor<int>(Enumerable.Range(0, width).Select(i => 1 - i % 2).ToArray(), new[] { 1, width }).Cast<double>();
+        var ones = new Tensor<double>(new[] { 1, width });
+        ones.Fill(1.0);
+        var oddColumns = Engine.TensorSubtract(ones, evenColumns);
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(Engine.TensorSin(angles), evenColumns),
+            Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)).Cast<T>();
     }
 
     #endregion
@@ -347,19 +349,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         int topK = 10)
     {
         var audioEmb = GetAudioEmbedding(audioWaveform, _audioSampleRate);
-        var scores = new List<(int Index, T Score)>();
-        int index = 0;
-
-        foreach (var visualEmb in visualDatabase)
-        {
-            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(audioEmb, visualEmb));
-            scores.Add((index, score));
-            index++;
-        }
-
-        return scores
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
-            .Take(topK);
+        return RankByScore(BatchCosineSimilarity.Scores(audioEmb, visualDatabase), topK);
     }
 
     /// <inheritdoc/>
@@ -369,18 +359,18 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         int topK = 10)
     {
         var visualEmb = GetVisualEmbedding(frames);
-        var scores = new List<(int Index, T Score)>();
-        int index = 0;
+        return RankByScore(BatchCosineSimilarity.Scores(visualEmb, audioDatabase), topK);
+    }
 
-        foreach (var audioEmb in audioDatabase)
-        {
-            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(visualEmb, audioEmb));
-            scores.Add((index, score));
-            index++;
-        }
-
-        return scores
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
+    /// <summary>
+    /// The topK (index, score) pairs by descending score. OrderByDescending is a stable sort, so equal scores keep
+    /// database order, and the default comparer ranks NaN lowest, as the double-keyed sort did.
+    /// </summary>
+    private static IEnumerable<(int Index, T Score)> RankByScore(Tensor<T> scores, int topK)
+    {
+        return scores.ToVector().ToArray()
+            .Select((score, index) => (Index: index, Score: score))
+            .OrderByDescending(x => x.Score)
             .Take(topK);
     }
 
@@ -560,8 +550,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            T epochLoss = NumOps.Zero;
-            int sampleCount = 0;
+            var pairLosses = new List<T>();
             for (int pair = 0; pair < audioList.Count; pair++)
             {
                 var frames = visualList[pair];
@@ -574,13 +563,14 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
                     var similarity = Engine.ReduceSum(Engine.TensorMultiply(audioEmbedding, visualEmbedding),
                         new[] { 0 }, keepDims: true);
                     var target = new Tensor<T>(new[] { 1 });
-                    target[0] = NumOps.One;
+                    target.Fill(NumOps.One);
                     return tapeLoss.ComputeTapeLoss(similarity, target);
                 }, _optimizer);
-                epochLoss = NumOps.Add(epochLoss, loss);
-                sampleCount++;
+                pairLosses.Add(loss);
             }
-            if (sampleCount > 0) LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(sampleCount));
+            // Mean of this epoch's pair losses (sum / count).
+            if (pairLosses.Count > 0)
+                LastLoss = Engine.TensorMean(new Tensor<T>(pairLosses.ToArray(), new[] { pairLosses.Count }));
         }
     }
 
@@ -675,18 +665,23 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         {
             if (mask is null || mask.Shape.Length != 1 || mask.Shape[0] != SPECTROGRAM_BINS)
                 throw new ArgumentException($"Each target mask must have shape [{SPECTROGRAM_BINS}], one value per mel bin.", nameof(targetMasks));
-            for (int bin = 0; bin < SPECTROGRAM_BINS; bin++)
-            {
-                double value = NumOps.ToDouble(mask[bin]);
-                if (double.IsNaN(value) || value < 0.0 || value > 1.0)
-                    throw new ArgumentException("Target mask values must lie in [0, 1].", nameof(targetMasks));
-            }
+            // Any NaN, negative or above-one entry is rejected.
+            var maskOnes = new Tensor<T>(mask._shape);
+            maskOnes.Fill(NumOps.One);
+            var nanFlags = Engine.TensorWhere(Engine.TensorIsNan(mask), maskOnes, new Tensor<T>(mask._shape));
+            T outOfRange = NumOps.Add(
+                Engine.TensorSum(nanFlags),
+                NumOps.Add(
+                    Engine.TensorSum(Engine.TensorLessThan(mask, NumOps.Zero)),
+                    Engine.TensorSum(Engine.TensorGreaterThan(mask, NumOps.One))));
+            if (NumOps.GreaterThan(outOfRange, NumOps.Zero))
+                throw new ArgumentException("Target mask values must lie in [0, 1].", nameof(targetMasks));
         }
 
         var separationLoss = new BinaryCrossEntropyLoss<T>();
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            T epochLoss = NumOps.Zero;
+            var sampleLosses = new List<T>();
             for (int sample = 0; sample < audioList.Count; sample++)
             {
                 var mask = maskList[sample];
@@ -699,9 +694,10 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
                     var probabilities = Engine.Sigmoid(GetSeparationHead().Forward(ApplyPairTrunk(pairFeatures)));
                     return separationLoss.ComputeTapeLoss(probabilities, mask);
                 }, _optimizer);
-                epochLoss = NumOps.Add(epochLoss, loss);
+                sampleLosses.Add(loss);
             }
-            LastLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(audioList.Count));
+            // Mean of this epoch's sample losses (sum / count; every sample trains).
+            LastLoss = Engine.TensorMean(new Tensor<T>(sampleLosses.ToArray(), new[] { sampleLosses.Count }));
         }
     }
 
@@ -923,44 +919,20 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         var numPositions = spatialFeatures.Shape[0];
         var attentionScores = new Tensor<T>([numPositions]);
 
-        // Compute attention between audio and each spatial position
-        for (int pos = 0; pos < numPositions; pos++)
+        if (numPositions > 0)
         {
-            var spatialVec = new Vector<T>(_embeddingDimension);
-            for (int j = 0; j < _embeddingDimension; j++)
-            {
-                var idx = pos * _embeddingDimension + j;
-                if (idx < spatialFeatures.Length)
-                {
-                    spatialVec[j] = spatialFeatures.Data.Span[idx];
-                }
-            }
+            // Position pos reads flat entries [pos * width, (pos + 1) * width); entries past the end read as 0.
+            int width = _embeddingDimension;
+            int needed = numPositions * width;
+            int available = Math.Min(needed, spatialFeatures.Length);
+            var flat = Engine.Reshape(spatialFeatures, new[] { spatialFeatures.Length });
+            var positions = available > 0 ? Engine.TensorSlice(flat, new[] { 0 }, new[] { available }) : new Tensor<T>(new[] { 0 });
+            if (available < needed)
+                positions = Engine.TensorConcatenate(new[] { positions, new Tensor<T>(new[] { needed - available }) }, 0);
 
-            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(audioEmbedding, spatialVec));
-            attentionScores.Data.Span[pos] = score;
-        }
-
-        // Softmax normalization
-        var maxScore = NumOps.Zero;
-        for (int i = 0; i < numPositions; i++)
-        {
-            if (NumOps.GreaterThan(attentionScores.Data.Span[i], maxScore))
-            {
-                maxScore = attentionScores.Data.Span[i];
-            }
-        }
-
-        var sumExp = NumOps.Zero;
-        for (int i = 0; i < numPositions; i++)
-        {
-            var shifted = NumOps.Subtract(attentionScores.Data.Span[i], maxScore);
-            attentionScores.Data.Span[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            sumExp = NumOps.Add(sumExp, attentionScores.Data.Span[i]);
-        }
-
-        for (int i = 0; i < numPositions; i++)
-        {
-            attentionScores.Data.Span[i] = NumOps.Divide(attentionScores.Data.Span[i], sumExp);
+            // Cosine scores, then a softmax over positions (shift-invariant, so the engine's own max shift matches).
+            var scores = BatchCosineSimilarity.RowScores(audioEmbedding, Engine.Reshape(positions, new[] { numPositions, width }));
+            attentionScores = Engine.Softmax(scores, 0);
         }
 
         // Reshape to spatial dimensions
@@ -969,13 +941,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
         if (checked(patchH * patchW) != numPositions)
             throw new InvalidOperationException("Spatial features do not match the input frame's patch grid.");
 
-        var attentionMap = new Tensor<T>([patchH, patchW]);
-        for (int i = 0; i < Math.Min(numPositions, patchH * patchW); i++)
-        {
-            attentionMap.Data.Span[i] = attentionScores.Data.Span[i];
-        }
-
-        return attentionMap;
+        return Engine.Reshape(attentionScores, new[] { patchH, patchW });
     }
 
     private Vector<T> GlobalAveragePool(Tensor<T> features)
@@ -999,19 +965,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length + b.Length);
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = a[i];
-        }
-
-        for (int i = 0; i < b.Length; i++)
-        {
-            result[a.Length + i] = b[i];
-        }
-
-        return result;
+        return Engine.TensorConcatenate(new[] { Tensor<T>.FromVector(a), Tensor<T>.FromVector(b) }, 0).ToVector();
     }
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
@@ -1046,29 +1000,31 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     {
         var numFrames = maskedSpectrogram.Shape[0];
         var outputLength = numFrames * SPECTROGRAM_HOP;
-        var output = TensorAllocator.Rent<T>([outputLength]);
+        if (outputLength == 0) return new Tensor<T>([0]);
 
-        // Griffin-Lim style reconstruction approximation
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            var startSample = frame * SPECTROGRAM_HOP;
-            for (int i = 0; i < SPECTROGRAM_HOP && startSample + i < outputLength; i++)
-            {
-                var binIdx = (i * SPECTROGRAM_BINS) / SPECTROGRAM_HOP;
-                binIdx = Math.Min(binIdx, SPECTROGRAM_BINS - 1);
-                var specIdx = frame * SPECTROGRAM_BINS + binIdx;
+        // Griffin-Lim style reconstruction approximation: sample i of a frame takes bin min(i * bins / hop, bins - 1)
+        // of that frame, as (exp(logMag) - 1e-8) * sin(2 pi i / hop). Entries whose bin lies past the end stay 0.
+        var hopBins = new Tensor<int>(
+            Enumerable.Range(0, SPECTROGRAM_HOP).Select(i => Math.Min((i * SPECTROGRAM_BINS) / SPECTROGRAM_HOP, SPECTROGRAM_BINS - 1)).ToArray(),
+            new[] { 1, SPECTROGRAM_HOP });
+        var frameStarts = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Engine.TensorArange<int>(0, numFrames), new[] { numFrames, 1 }), SPECTROGRAM_BINS);
+        var specIndices = Engine.Reshape(Engine.TensorAdd(frameStarts, hopBins), new[] { outputLength });
 
-                if (specIdx < maskedSpectrogram.Length)
-                {
-                    var logMag = NumOps.ToDouble(maskedSpectrogram.Data.Span[specIdx]);
-                    var mag = Math.Exp(logMag) - 1e-8;
-                    var phase = Math.Sin(2.0 * Math.PI * i / SPECTROGRAM_HOP);
-                    output.Data.Span[startSample + i] = NumOps.FromDouble(mag * phase);
-                }
-            }
-        }
+        int specLength = maskedSpectrogram.Length;
+        var valid = Engine.TensorLessThan(specIndices, specLength);
+        var safeIndices = Engine.TensorClamp(specIndices, 0, Math.Max(0, specLength - 1));
+        var logMagnitudes = specLength > 0
+            ? Engine.TensorTake(Engine.Reshape(maskedSpectrogram, new[] { specLength }), safeIndices)
+            : new Tensor<T>(new[] { outputLength });
+        var magnitudes = Engine.TensorSubtractScalar(Engine.TensorExp(logMagnitudes), NumOps.FromDouble(1e-8));
 
-        return output;
+        var phases = Engine.TensorSin(Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0, SPECTROGRAM_HOP), NumOps.FromDouble(2.0 * Math.PI / SPECTROGRAM_HOP)));
+        var samples = Engine.Reshape(
+            Engine.TensorMultiply(Engine.Reshape(magnitudes, new[] { numFrames, SPECTROGRAM_HOP }), Engine.Reshape(phases, new[] { 1, SPECTROGRAM_HOP })),
+            new[] { outputLength });
+        return Engine.TensorWhere(valid.Cast<T>(), samples, new Tensor<T>(new[] { outputLength }));
     }
 
     #endregion

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -27,7 +28,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly double _gammaX;
     private readonly double _gammaY;
 
-    private double[]? _hsicScores;
+    private Vector<T>? _hsicScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +36,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double GammaX => _gammaX;
     public double GammaY => _gammaY;
-    public double[]? HSICScores => _hsicScores;
+    public Vector<T>? HSICScores => _hsicScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,94 +74,31 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute kernel matrix for target
-        var Ky = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double diff = y[i] - y[j];
-                double kval = Math.Exp(-_gammaY * diff * diff);
-                Ky[i, j] = kval;
-                Ky[j, i] = kval;
-            }
-        }
+        // Centred RBF kernel of the target: H Ky H with H = I - 11'/n
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var ky = FeatureSelectionTensorOps.RbfColumnKernel(y, NumOps.FromDouble(-_gammaY));
+        var centering = engine.TensorSubtract(
+            engine.TensorEye<T>(n), PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.FromDouble(1.0 / n)));
+        var centeredKy = engine.TensorMatMul(engine.TensorMatMul(centering, ky), centering);
 
-        // Center Ky
-        var H = CreateCenteringMatrix(n);
-        var HKy = Multiply(H, Ky, n);
-        var HKyH = Multiply(HKy, H, n);
-
-        _hsicScores = new double[p];
-
-        for (int feat = 0; feat < p; feat++)
-        {
-            // Compute kernel matrix for this feature
-            var Kx = new double[n, n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i; j < n; j++)
-                {
-                    double diff = X[i, feat] - X[j, feat];
-                    double kval = Math.Exp(-_gammaX * diff * diff);
-                    Kx[i, j] = kval;
-                    Kx[j, i] = kval;
-                }
-            }
-
-            // Center Kx
-            var HKx = Multiply(H, Kx, n);
-            var HKxH = Multiply(HKx, H, n);
-
-            // HSIC = trace(HKxH * HKyH) / (n-1)^2
-            double hsic = 0;
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < n; j++)
-                    hsic += HKxH[i, j] * HKyH[j, i];
-            hsic /= ((double)(n - 1) * (n - 1));
-
-            _hsicScores[feat] = Math.Max(0, hsic);
-        }
+        // Biased HSIC = trace(Kx H Ky H) / (n-1)^2 = sum(Kx .* (H Ky H)') / (n-1)^2, clamped at 0
+        T negativeGammaX = NumOps.FromDouble(-_gammaX);
+        var sums = FeatureSelectionTensorOps.KernelWeightedSums(
+            x,
+            column => FeatureSelectionTensorOps.RbfColumnKernel(column, negativeGammaX),
+            new[] { engine.TensorTranspose(centeredKy) },
+            Array.Empty<Tensor<T>>());
+        var hsic = engine.TensorMax(
+            engine.TensorDivideScalar(engine.Reshape(sums, new[] { p }), NumOps.FromDouble((double)(n - 1) * (n - 1))), NumOps.Zero);
+        _hsicScores = hsic.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hsicScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hsic, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double[,] CreateCenteringMatrix(int n)
-    {
-        var H = new double[n, n];
-        double val = 1.0 / n;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                H[i, j] = (i == j ? 1 : 0) - val;
-        }
-        return H;
-    }
-
-    private double[,] Multiply(double[,] A, double[,] B, int n)
-    {
-        var C = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                for (int k = 0; k < n; k++)
-                    C[i, j] += A[i, k] * B[k, j];
-        return C;
     }
 
     /// <inheritdoc />
@@ -176,15 +114,7 @@ public class HSICSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("HSICSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

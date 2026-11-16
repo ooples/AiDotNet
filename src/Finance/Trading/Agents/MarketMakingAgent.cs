@@ -213,10 +213,8 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private static Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var combined = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++) combined[i] = state[i];
-        for (int i = 0; i < action.Length; i++) combined[state.Length + i] = action[i];
-        return combined;
+        return AiDotNetEngine.Current.TensorConcatenate(
+            new[] { Tensor<T>.FromVector(state), Tensor<T>.FromVector(action) }, 0).ToVector();
     }
 
     /// <summary>
@@ -304,15 +302,14 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
 
         // Desired continuous action of the agent's own ActionSize, derived from the supervised target.
         int actionSize = TradingOptions.ActionSize;
-        var desiredAction = new Vector<T>(actionSize);
-        for (int i = 0; i < actionSize; i++)
-            desiredAction[i] = target[i % target.Length];
+        var engine = AiDotNetEngine.Current;
+        var targetValues = Tensor<T>.FromVector(target);
+        int targetLength = target.Length;
+        var cycle = Enumerable.Range(0, actionSize).Select(i => i % targetLength).ToArray();
+        var desiredAction = engine.TensorTake(targetValues, new Tensor<int>(cycle, new[] { actionSize })).ToVector();
 
         // Bounded scalar reward signal from the supervised target (mean is dimension-agnostic).
-        T reward = NumOps.Zero;
-        for (int i = 0; i < target.Length; i++)
-            reward = NumOps.Add(reward, target[i]);
-        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+        T reward = engine.TensorMean(targetValues);
 
         StoreExperience(state, desiredAction, reward, state, done: true);
 
@@ -350,86 +347,45 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
 
-        int stateDim = batch[0].State.Length;
         int actionDim = batch[0].Action.Length;
-        int stateActionDim = stateDim + actionDim;
         double gamma = Convert.ToDouble(TradingOptions.DiscountFactor);
 
         // ---- 1. Critic target: y = r + gamma * (1 - done) * Q'(s', mu'(s')) ----
         // This is where the REWARD enters the update. The previous implementation regressed the policy
         // onto the actions it had itself taken, so the reward was never read by anything: whatever the
         // agent happened to quote became its own training target and the quotes could not improve.
-        var statesData = new T[n * stateDim];
-        var nextStatesData = new T[n * stateDim];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < stateDim; j++)
-            {
-                statesData[(i * stateDim) + j] = batch[i].State[j];
-                nextStatesData[(i * stateDim) + j] = batch[i].NextState[j];
-            }
-        }
-
-        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        var engine = AiDotNetEngine.Current;
+        using var states = engine.TensorStack(batch.Select(e => Tensor<T>.FromVector(e.State)).ToArray(), 0);
+        using var nextStates = engine.TensorStack(batch.Select(e => Tensor<T>.FromVector(e.NextState)).ToArray(), 0);
+        var actions = engine.TensorStack(batch.Select(e => Tensor<T>.FromVector(e.Action)).ToArray(), 0);
 
         using var nextActionsTensor = _targetPolicyNetwork.Predict(nextStates);
-        var nextActions = nextActionsTensor.ToVector();
-        var nextStateActionsData = new T[n * stateActionDim];
-        var stateActionsData = new T[n * stateActionDim];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < stateDim; j++)
-            {
-                nextStateActionsData[(i * stateActionDim) + j] = batch[i].NextState[j];
-                stateActionsData[(i * stateActionDim) + j] = batch[i].State[j];
-            }
-
-            for (int j = 0; j < actionDim; j++)
-            {
-                nextStateActionsData[(i * stateActionDim) + stateDim + j] = nextActions[(i * actionDim) + j];
-                stateActionsData[(i * stateActionDim) + stateDim + j] = batch[i].Action[j];
-            }
-        }
-
-        using var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
+        var nextActions = engine.Reshape(nextActionsTensor, new[] { n, actionDim });
+        using var nextStateActions = engine.TensorConcatenate(new[] { nextStates, nextActions }, 1);
         using var nextQTensor = _targetCritic.Predict(nextStateActions);
-        var nextQ = nextQTensor.ToVector();
+        var nextQ = engine.Reshape(nextQTensor, new[] { n });
 
-        var targetData = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            double bootstrap = batch[i].Done ? 0.0 : gamma * NumOps.ToDouble(nextQ[i]);
-            targetData[i] = NumOps.Add(batch[i].Reward, NumOps.FromDouble(bootstrap));
-        }
+        // y = r on terminal transitions, r + gamma * Q'(s', mu'(s')) otherwise.
+        var rewards = new Tensor<T>(batch.Select(e => e.Reward).ToArray(), new[] { n });
+        var bootstrapped = engine.TensorAdd(rewards, engine.TensorMultiplyScalar(nextQ, NumOps.FromDouble(gamma)));
+        var targetValues = engine.TensorWhere(batch.Select(e => e.Done).ToArray(), rewards, bootstrapped);
 
-        using var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
-        using var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        using var stateActions = engine.TensorConcatenate(new[] { states, actions }, 1);
+        using var targets = engine.Reshape(targetValues, new[] { n, 1 });
 
         _critic.Train(stateActions, targets);
         T criticLoss = _critic.GetLastLoss();
 
         // ---- 2. Policy update: ascend Q(s, mu(s)) (deterministic policy gradient) ----
         using var meansTensor = _policyNetwork.Predict(states);
-        var means = meansTensor.ToVector();
-        var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
+        var means = engine.Reshape(meansTensor, new[] { n, actionDim });
+        var actionGradients = EstimateActionGradients(states, means, n, actionDim);
 
         T maxPosition = TradingOptions.MaxPositionSize;
         T minPosition = NumOps.Negate(maxPosition);
-        var policyTargetData = new T[n * actionDim];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < actionDim; j++)
-            {
-                int flat = (i * actionDim) + j;
-                T ascended = NumOps.Add(
-                    means[flat],
-                    NumOps.FromDouble(ActorPolicyGradientStep * actionGradients[flat]));
-                policyTargetData[flat] = MathHelper.Clamp<T>(ascended, minPosition, maxPosition);
-            }
-        }
-
-        using var policyTargets = new Tensor<T>([n, actionDim], new Vector<T>(policyTargetData));
+        var ascended = engine.TensorAdd(
+            means, engine.TensorMultiplyScalar(actionGradients, NumOps.FromDouble(ActorPolicyGradientStep)));
+        using var policyTargets = engine.TensorClamp(ascended, minPosition, maxPosition);
         _policyNetwork.Train(states, policyTargets);
         T policyLoss = _policyNetwork.GetLastLoss();
 
@@ -452,49 +408,32 @@ public partial class MarketMakingAgent<T> : TradingAgentBase<T>, IGradientComput
     /// Central-difference estimate of <c>dQ/da</c> at the policy's current quote for each sampled state,
     /// returned as a flat <c>[n * actionDim]</c> buffer. One batched critic pass per direction per sign.
     /// </summary>
-    private double[] EstimateActionGradients(
-        List<Experience<T>> batch, Vector<T> means, int n, int stateDim, int actionDim, int stateActionDim)
+    private Tensor<T> EstimateActionGradients(Tensor<T> states, Tensor<T> means, int n, int actionDim)
     {
-        var gradients = new double[n * actionDim];
-        double epsilon = ActionFiniteDifferenceEpsilon;
-
+        // Central differences dQ/da_d = (Q(s, mu + eps e_d) - Q(s, mu - eps e_d)) / (2 eps), one critic pass
+        // per direction over the whole batch.
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(ActionFiniteDifferenceEpsilon);
+        T inverseSpan = NumOps.FromDouble(1.0 / (2.0 * ActionFiniteDifferenceEpsilon));
+        var identity = engine.TensorEye<T>(actionDim);
+        var columns = new Tensor<T>[actionDim];
         for (int dimension = 0; dimension < actionDim; dimension++)
         {
-            var plusData = new T[n * stateActionDim];
-            var minusData = new T[n * stateActionDim];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < stateDim; j++)
-                {
-                    plusData[(i * stateActionDim) + j] = batch[i].State[j];
-                    minusData[(i * stateActionDim) + j] = batch[i].State[j];
-                }
+            var step = engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorSlice(identity, new[] { dimension, 0 }, new[] { 1, actionDim }), epsilon),
+                new[] { n, actionDim });
 
-                for (int j = 0; j < actionDim; j++)
-                {
-                    T mean = means[(i * actionDim) + j];
-                    int slot = (i * stateActionDim) + stateDim + j;
-                    plusData[slot] = j == dimension ? NumOps.Add(mean, NumOps.FromDouble(epsilon)) : mean;
-                    minusData[slot] = j == dimension ? NumOps.Subtract(mean, NumOps.FromDouble(epsilon)) : mean;
-                }
-            }
-
-            // Released per direction rather than at method exit: the loop runs actionDim times and each
-            // iteration allocates two [n, stateActionDim] buffers that nothing reads after its pass.
-            using var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
-            using var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
-            using var plusQTensor = _critic.Predict(plus);
-            var plusQ = plusQTensor.ToVector();
-            using var minusQTensor = _critic.Predict(minus);
-            var minusQ = minusQTensor.ToVector();
-            for (int i = 0; i < n; i++)
-            {
-                gradients[(i * actionDim) + dimension] =
-                    (NumOps.ToDouble(plusQ[i]) - NumOps.ToDouble(minusQ[i])) / (2.0 * epsilon);
-            }
+            // Released per direction rather than at method exit: each pass allocates two [n, stateActionDim]
+            // buffers that nothing reads after it.
+            using var plus = engine.TensorConcatenate(new[] { states, engine.TensorAdd(means, step) }, 1);
+            using var minus = engine.TensorConcatenate(new[] { states, engine.TensorSubtract(means, step) }, 1);
+            using var plusQ = _critic.Predict(plus);
+            using var minusQ = _critic.Predict(minus);
+            columns[dimension] = engine.TensorMultiplyScalar(
+                engine.Reshape(engine.TensorSubtract(plusQ, minusQ), new[] { n, 1 }), inverseSpan);
         }
 
-        return gradients;
+        return engine.TensorConcatenate(columns, 1);
     }
 
     #endregion

@@ -142,12 +142,9 @@ public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBas
             {
                 var (nextS, r) = _model[s][a];
 
-                // Update Q-value
-                T q = _qTable[s][a];
-                T maxQ = GetMaxQValue(nextS);
-                T t = NumOps.Add(r, NumOps.Multiply(DiscountFactor, maxQ));
-                T d = NumOps.Subtract(t, q);
-                _qTable[s][a] = NumOps.Add(q, NumOps.Multiply(LearningRate, d));
+                // Update Q-value (one entry per sweep step; later steps read what it wrote)
+                T t = RLTensorOps.BootstrapTarget(NumOps, r, DiscountFactor, GetMaxQValue(nextS));
+                _qTable[s][a] = RLTensorOps.TdStep(NumOps, _qTable[s][a], t, LearningRate);
 
                 // Update predecessors
                 if (_predecessors.ContainsKey(s))
@@ -157,11 +154,7 @@ public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBas
                         if (_model.ContainsKey(predState) && _model[predState].ContainsKey(predAction))
                         {
                             var (predNextState, predReward) = _model[predState][predAction];
-                            T predQ = _qTable[predState][predAction];
-                            T predMaxQ = GetMaxQValue(predNextState);
-                            T predTarget = NumOps.Add(predReward, NumOps.Multiply(DiscountFactor, predMaxQ));
-                            T predDelta = NumOps.Subtract(predTarget, predQ);
-                            double predPriority = Math.Abs(NumOps.ToDouble(predDelta));
+                            double predPriority = PredecessorPriority(predState, predAction, predNextState, predReward);
 
                             if (predPriority > _options.PriorityThreshold)
                             {
@@ -198,6 +191,14 @@ public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBas
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
+    /// <summary>Priority |r + gamma * max Q(s') - Q(s,a)| of one predecessor entry.</summary>
+    private double PredecessorPriority(string predState, int predAction, string predNextState, T predReward)
+    {
+        T predTarget = RLTensorOps.BootstrapTarget(NumOps, predReward, DiscountFactor, GetMaxQValue(predNextState));
+        T predDelta = NumOps.Subtract(predTarget, _qTable[predState][predAction]);
+        return Math.Abs(NumOps.ToDouble(predDelta));
+    }
+
     private int GetGreedyAction(string stateKey)
     {
         // Sutton & Barto §2.3: when all action-values are tied (the case for
@@ -206,29 +207,15 @@ public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBas
         // action for every unseen state. Track whether any inequality was
         // observed; if not, fall through to HashStateToAction so the policy
         // is at least state-distinguishable without injecting non-determinism.
-        int best = 0;
-        T bestVal = _qTable[stateKey][0];
-        bool allEqual = true;
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            T v = _qTable[stateKey][a];
-            if (NumOps.GreaterThan(v, bestVal))
-            {
-                bestVal = v;
-                best = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(v, bestVal))
-            {
-                allEqual = false;
-            }
-        }
+        var qRow = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int best = RLTensorOps.ArgMax(qRow);
+        bool allEqual = RLTensorOps.AllEqual(qRow, NumOps);
         if (allEqual)
             best = HashStateToAction(stateKey, _options.ActionSize);
         return best;
     }
-    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return max; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["queue_size"] = NumOps.FromDouble(_priorityQueue.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };

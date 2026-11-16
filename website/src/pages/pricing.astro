@@ -56,6 +56,12 @@ const base = import.meta.env.BASE_URL;
         <p class="text-xs mt-2 opacity-80">Manage your licenses in your <a href={`${base}account/licenses/`} class="underline font-semibold">account dashboard</a>.</p>
       </div>
 
+      <!-- Signed-in customers: what they have now and where to manage it -->
+      <div id="current-plan-banner" class="hidden mb-8 p-4 rounded-xl bg-brand-blue/5 dark:bg-brand-purple/10 border border-brand-blue/20 dark:border-brand-purple/30 text-center text-slate-700 dark:text-slate-200">
+        <span id="current-plan-text"></span>
+        <a href={`${base}account/billing/`} class="ml-2 underline font-semibold">Manage billing</a>
+      </div>
+
       <!-- Error banner -->
       <div id="error-banner" class="hidden mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-center font-medium">
         <span id="error-message"></span>
@@ -245,6 +251,7 @@ const base = import.meta.env.BASE_URL;
 
   <script>
     import { supabase } from '../lib/supabase';
+    import { loadBillingState, openPortal, formatDate, TIER_LABEL, type BillingState, type PaidTier } from '../lib/billing';
 
     document.addEventListener('DOMContentLoaded', () => {
       // Check for success/cancel URL params
@@ -304,6 +311,7 @@ const base = import.meta.env.BASE_URL;
             const yearly = el.getAttribute('data-yearly-interval') || '';
             el.textContent = isYearly ? yearly : monthly;
           });
+          refreshPlanButtons();
         });
       }
 
@@ -319,10 +327,110 @@ const base = import.meta.env.BASE_URL;
         },
       };
 
+      // Signed-in plan awareness. A customer with a Stripe subscription changes plan through the
+      // Stripe portal (a second Payment Link checkout would bill them twice); the card for what
+      // they already have says so instead of offering to sell it again.
+      let billing: BillingState | null = null;
+      const CARD_LABEL: Record<string, string> = { community: 'Community', pro: 'Professional', enterprise: 'Enterprise' };
+      const RANK: Record<string, number> = { community: 0, free: 0, pro: 1, enterprise: 2 };
+
+      function refreshPlanButtons() {
+        if (!billing?.signedIn) return;
+        const current = billing.subscription?.tier ?? billing.tier;
+        const currentInterval = billing.subscription?.interval ?? null;
+        const live = billing.hasBillingAccount && !!billing.subscription;
+        const wantedInterval = isYearly ? 'year' : 'month';
+        document.querySelectorAll<HTMLButtonElement>('.checkout-btn').forEach((btn) => {
+          const tier = btn.dataset.tier!;
+          const status = document.querySelector<HTMLElement>(`[data-plan-status="${tier}"]`);
+          btn.dataset.originalText ??= btn.textContent?.trim() ?? '';
+          let mode = 'checkout';
+          let label = btn.dataset.originalText;
+          let note = '';
+          if (current !== 'free') {
+            if (tier === current && (!live || !currentInterval || currentInterval === wantedInterval)) {
+              mode = 'current';
+              label = 'Current plan';
+              note = billing!.subscription?.cancel_at_period_end ? 'Ends at the close of this billing period' : '';
+            } else if (tier === current) {
+              mode = 'change';
+              label = wantedInterval === 'year' ? 'Switch to yearly billing' : 'Switch to monthly billing';
+            } else if (tier === 'community') {
+              if (live) {
+                mode = 'cancel';
+                label = 'Downgrade to Community';
+                note = `Cancels ${CARD_LABEL[current]} at the end of the billing period`;
+              }
+            } else if (live) {
+              mode = 'change';
+              label = RANK[tier] > RANK[current] ? `Upgrade to ${CARD_LABEL[tier]}` : `Downgrade to ${CARD_LABEL[tier]}`;
+              note = 'Prorated; you confirm the change on the next screen';
+            } else if (RANK[tier] > RANK[current]) {
+              label = `Upgrade to ${CARD_LABEL[tier]}`;
+            }
+          }
+          btn.dataset.mode = mode;
+          btn.textContent = label;
+          btn.disabled = mode === 'current';
+          btn.classList.toggle('cursor-default', mode === 'current');
+          btn.classList.toggle('opacity-60', mode === 'current');
+          if (status) { status.textContent = note; status.classList.toggle('hidden', !note); }
+        });
+      }
+
+      // Clicks wait for this: a subscriber who clicks before it settles must not reach checkout.
+      let billingFailed = false;
+      const billingReady = loadBillingState().then((state) => {
+        billing = state;
+        if (state.error) { billingFailed = true; showError(state.error); }
+        if (state.signedIn && !state.error) {
+          const current = state.subscription?.tier ?? state.tier;
+          if (current !== 'free') {
+            const sub = state.subscription;
+            let text = `You are on the ${TIER_LABEL[current]} plan`;
+            if (sub?.interval) text += `, billed ${sub.interval === 'year' ? 'yearly' : 'monthly'}`;
+            if (sub?.cancel_at_period_end) text += `. It ends on ${formatDate(sub.current_period_end)}.`;
+            else if (sub) text += `. Renews on ${formatDate(sub.current_period_end)}.`;
+            else text += '.';
+            document.getElementById('current-plan-text')!.textContent = text;
+            document.getElementById('current-plan-banner')!.classList.remove('hidden');
+          }
+          refreshPlanButtons();
+        }
+        document.body.dataset.planLoaded = 'true';
+      }).catch((e) => {
+        console.error(e);
+        billingFailed = true;
+        showError('Could not load your plan. Please refresh the page before buying or changing a plan.');
+        document.body.dataset.planLoaded = 'true';
+      });
+
+      async function portalFromPricing(btn: HTMLButtonElement, mode: string, tier: string) {
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Opening Stripe…';
+        const err = mode === 'cancel'
+          ? await openPortal({ action: 'cancel' }, '/pricing/')
+          : await openPortal({ action: 'change_plan', tier: tier as PaidTier, interval: isYearly ? 'year' : 'month' }, '/pricing/');
+        if (err) { btn.disabled = false; btn.textContent = label; showError(err); }
+      }
+
       document.querySelectorAll('.checkout-btn').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const tier = (btn as HTMLElement).dataset.tier;
           if (!tier) return;
+          await billingReady;
+          // Unknown plan state: buying could create a second subscription, so nothing paid goes ahead.
+          if (billingFailed && tier !== 'community') {
+            showError('Could not load your current plan, so checkout is blocked to avoid billing you twice. Please refresh the page.');
+            return;
+          }
+          const mode = (btn as HTMLElement).dataset.mode;
+          if (mode === 'current') return;
+          if (mode === 'change' || mode === 'cancel') {
+            await portalFromPricing(btn as HTMLButtonElement, mode, tier);
+            return;
+          }
 
           // Community tier — self-service registration
           if (tier === 'community') {

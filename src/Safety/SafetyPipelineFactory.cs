@@ -91,7 +91,7 @@ internal static class SafetyPipelineFactory<T>
         if (config.Text.EffectivePIIDetection)
         {
             // Register composite PII detector (combines regex, NER, and context-aware)
-            pipeline.AddModule(new CompositePIIDetector<T>());
+            pipeline.AddModule(new CompositePIIDetector<T>(config.Text.EffectivePIITypes));
         }
 
         if (config.Text.EffectiveJailbreakDetection)
@@ -103,7 +103,8 @@ internal static class SafetyPipelineFactory<T>
 
         if (config.Text.EffectiveHallucinationDetection)
         {
-            pipeline.AddModule(new SelfConsistencyHallucinationDetector<T>());
+            pipeline.AddModule(new SelfConsistencyHallucinationDetector<T>(
+                contradictionThreshold: config.Text.EffectiveHallucinationThreshold));
         }
 
         if (config.Text.EffectiveCopyrightDetection)

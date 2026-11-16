@@ -27,16 +27,16 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly int _minFeatures;
     private readonly int _maxFeatures;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scorer;
     private readonly int _nFolds;
 
-    private double _bestScore;
+    private T _bestScore = MathHelper.GetNumericOperations<T>().FromDouble(double.NegativeInfinity);
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int MinFeatures => _minFeatures;
     public int MaxFeatures => _maxFeatures;
-    public double BestScore => _bestScore;
+    public T BestScore => _bestScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -45,7 +45,7 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     public ExhaustiveFeatureSelector(
         int minFeatures = 1,
         int maxFeatures = 10,
-        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scorer = null,
         int nFolds = 5,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -79,7 +79,7 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int maxFeaturesActual = Math.Min(_maxFeatures, p);
 
         var scorer = _scorer ?? DefaultScorer;
-        _bestScore = double.NegativeInfinity;
+        _bestScore = NumOps.FromDouble(double.NegativeInfinity);
         _selectedIndices = null;
 
         // Generate and evaluate all combinations
@@ -87,8 +87,8 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         {
             foreach (var combination in GetCombinations(p, k))
             {
-                double score = scorer(data, target, combination);
-                if (score > _bestScore)
+                T score = scorer(data, target, combination);
+                if (WrapperScoringOps.IsAbove(score, _bestScore))
                 {
                     _bestScore = score;
                     _selectedIndices = combination.OrderBy(x => x).ToArray();
@@ -133,110 +133,39 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         }
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
         if (featureIndices.Length == 0)
-            return double.NegativeInfinity;
+            return negativeInfinity;
 
+        // k-fold cross-validated R^2 of a least-squares linear regression on the subset, as mlxtend's
+        // ExhaustiveFeatureSelector with scikit-learn's LinearRegression and KFold(n_splits=nFolds): contiguous
+        // test folds, the first n % nFolds of them one row larger
         int n = data.Rows;
-        int foldSize = n / _nFolds;
-        double totalScore = 0;
+        var x = WrapperScoringOps.Columns(data, featureIndices);
+        var y = Tensor<T>.FromVector(target);
+        T totalScore = NumOps.Zero;
+        int testStart = 0;
 
         for (int fold = 0; fold < _nFolds; fold++)
         {
-            int testStart = fold * foldSize;
-            int testEnd = fold == _nFolds - 1 ? n : (fold + 1) * foldSize;
+            int testSize = n / _nFolds + (fold < n % _nFolds ? 1 : 0);
+            if (testSize == 0 || testSize == n)
+                return negativeInfinity;
 
-            var trainX = new List<double[]>();
-            var trainY = new List<double>();
-            var testX = new List<double[]>();
-            var testY = new List<double>();
-
-            for (int i = 0; i < n; i++)
-            {
-                var row = new double[featureIndices.Length];
-                for (int j = 0; j < featureIndices.Length; j++)
-                    row[j] = NumOps.ToDouble(data[i, featureIndices[j]]);
-
-                double y = NumOps.ToDouble(target[i]);
-
-                if (i >= testStart && i < testEnd)
-                {
-                    testX.Add(row);
-                    testY.Add(y);
-                }
-                else
-                {
-                    trainX.Add(row);
-                    trainY.Add(y);
-                }
-            }
-
-            double score = ComputeR2Score(trainX, trainY, testX, testY);
-            totalScore += score;
+            int testEnd = testStart + testSize;
+            var slopes = WrapperScoringOps.LeastSquaresSlopes(
+                WrapperScoringOps.ExcludeRows(x, testStart, testEnd), WrapperScoringOps.ExcludeRows(y, testStart, testEnd),
+                out var xMean, out T yMean);
+            var predictions = WrapperScoringOps.Predict(
+                WrapperScoringOps.RowBlock(x, testStart, testSize), slopes, xMean, yMean);
+            totalScore = WrapperScoringOps.Add(totalScore,
+                WrapperScoringOps.RSquared(WrapperScoringOps.RowBlock(y, testStart, testSize), predictions));
+            testStart = testEnd;
         }
 
-        return totalScore / _nFolds;
-    }
-
-    private static double ComputeR2Score(List<double[]> trainX, List<double> trainY,
-        List<double[]> testX, List<double> testY)
-    {
-        if (trainX.Count == 0 || testX.Count == 0)
-            return double.NegativeInfinity;
-
-        int nFeatures = trainX[0].Length;
-        int nTrain = trainX.Count;
-
-        double yMean = trainY.Average();
-        var xMeans = new double[nFeatures];
-        for (int j = 0; j < nFeatures; j++)
-        {
-            for (int i = 0; i < nTrain; i++)
-                xMeans[j] += trainX[i][j];
-            xMeans[j] /= nTrain;
-        }
-
-        var correlations = new double[nFeatures];
-        var xStds = new double[nFeatures];
-        double yVar = trainY.Select(y => (y - yMean) * (y - yMean)).Sum() / nTrain;
-        double yStd = Math.Sqrt(yVar);
-
-        for (int j = 0; j < nFeatures; j++)
-        {
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                double xDiff = trainX[i][j] - xMeans[j];
-                double yDiff = trainY[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-            xStds[j] = Math.Sqrt(sxx / nTrain);
-            correlations[j] = (sxx > 1e-10 && yVar > 1e-10) ? sxy / Math.Sqrt(sxx * yVar * nTrain) : 0;
-        }
-
-        double ssTot = 0, ssRes = 0;
-        double testYMean = testY.Average();
-
-        for (int i = 0; i < testX.Count; i++)
-        {
-            double pred = yMean;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                if (xStds[j] > 1e-10)
-                {
-                    double zScore = (testX[i][j] - xMeans[j]) / xStds[j];
-                    pred += correlations[j] * zScore * yStd;
-                }
-            }
-
-            double residual = testY[i] - pred;
-            ssRes += residual * residual;
-            ssTot += (testY[i] - testYMean) * (testY[i] - testYMean);
-        }
-
-        return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
+        return NumOps.Divide(totalScore, NumOps.FromDouble(_nFolds));
     }
 
     /// <inheritdoc />
@@ -252,15 +181,7 @@ public class ExhaustiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("ExhaustiveFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

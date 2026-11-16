@@ -507,30 +507,47 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     {
         int numNodes = original.Shape[0];
         var loss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < numNodes; i++)
+        if (numNodes > 0)
         {
-            for (int j = 0; j < numNodes; j++)
-            {
-                T p = reconstructed[i, j];
-                T y = original[i, j];
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var (p, y, ones) = ClampedEdgeProbabilities(reconstructed, original, numNodes);
 
-                // Clamp p to [epsilon, 1-epsilon] for numerical stability
-                var upperBound = NumOps.Subtract(NumOps.One, epsilon);
-                p = NumOps.LessThan(p, upperBound) ? p : upperBound;
-                p = NumOps.GreaterThan(p, epsilon) ? p : epsilon;
-
-                // BCE: -y * log(p) - (1-y) * log(1-p)
-                T term1 = NumOps.Multiply(y, NumOps.Log(p));
-                T term2 = NumOps.Multiply(NumOps.Subtract(NumOps.One, y),
-                    NumOps.Log(NumOps.Subtract(NumOps.One, p)));
-                loss = NumOps.Subtract(loss, NumOps.Add(term1, term2));
-            }
+            // BCE: -y * log(p) - (1-y) * log(1-p)
+            var term1 = Engine.TensorMultiply(y, Engine.TensorLog(p));
+            var term2 = Engine.TensorMultiply(Engine.TensorSubtract(ones, y),
+                Engine.TensorLog(Engine.TensorSubtract(ones, p)));
+            loss = NumOps.Subtract(loss, Engine.TensorSum(Engine.TensorAdd(term1, term2)));
         }
 
         // Average over all edges
         return NumOps.Divide(loss, NumOps.FromDouble(numNodes * numNodes));
+    }
+
+    /// <summary>
+    /// The leading [numNodes, numNodes] edge probabilities clamped to [1e-10, 1 - 1e-10] (NaN goes to the
+    /// upper bound, as the scalar clamp did), the matching targets, and a ones tensor of that shape.
+    /// </summary>
+    private (Tensor<T> P, Tensor<T> Y, Tensor<T> Ones) ClampedEdgeProbabilities(
+        Tensor<T> reconstructed, Tensor<T> original, int numNodes)
+    {
+        int[] shape = { numNodes, numNodes };
+        T epsilon = NumOps.FromDouble(1e-10);
+        T upperBound = NumOps.Subtract(NumOps.One, epsilon);
+        var p = new Tensor<T>(Engine.TensorSlice(reconstructed, new[] { 0, 0 }, shape).ToArray(), shape);
+        var y = new Tensor<T>(Engine.TensorSlice(original, new[] { 0, 0 }, shape).ToArray(), shape);
+
+        var upper = new Tensor<T>(shape);
+        upper.Fill(upperBound);
+        var lower = new Tensor<T>(shape);
+        lower.Fill(epsilon);
+        var ones = new Tensor<T>(shape);
+        ones.Fill(NumOps.One);
+
+        // p = p < upper ? p : upper;  p = p > epsilon ? p : epsilon
+        p = Engine.TensorWhere(Engine.TensorLessThan(p, upperBound), p, upper);
+        p = Engine.TensorWhere(Engine.TensorGreaterThan(p, epsilon), p, lower);
+        return (p, y, ones);
     }
 
     /// <summary>
@@ -633,26 +650,16 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     {
         int numNodes = original.Shape[0];
         var gradient = new Tensor<T>([numNodes, numNodes]);
-        T epsilon = NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < numNodes; i++)
+        if (numNodes > 0)
         {
-            for (int j = 0; j < numNodes; j++)
-            {
-                T p = reconstructed[i, j];
-                T y = original[i, j];
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var (p, y, ones) = ClampedEdgeProbabilities(reconstructed, original, numNodes);
 
-                // Clamp p for numerical stability
-                var upperBound = NumOps.Subtract(NumOps.One, epsilon);
-                p = NumOps.LessThan(p, upperBound) ? p : upperBound;
-                p = NumOps.GreaterThan(p, epsilon) ? p : epsilon;
-
-                // d(BCE)/d(p) = -y/p + (1-y)/(1-p)
-                T term1 = NumOps.Divide(y, p);
-                T term2 = NumOps.Divide(NumOps.Subtract(NumOps.One, y),
-                    NumOps.Subtract(NumOps.One, p));
-                gradient[i, j] = NumOps.Subtract(term2, term1);
-            }
+            // d(BCE)/d(p) = -y/p + (1-y)/(1-p)
+            var term1 = Engine.TensorDivide(y, p);
+            var term2 = Engine.TensorDivide(Engine.TensorSubtract(ones, y), Engine.TensorSubtract(ones, p));
+            gradient = Engine.TensorSubtract(term2, term1);
         }
 
         // Scale by number of elements
@@ -714,37 +721,20 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 
         // Threshold to get binary adjacency matrix
         var adjacency = new Tensor<T>([numNodes, numNodes]);
+        if (numNodes == 0) return adjacency;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         T thresholdT = NumOps.FromDouble(threshold);
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (NumOps.GreaterThan(edgeProbs[i, j], thresholdT))
-                {
-                    adjacency[i, j] = NumOps.One;
-                }
-                else
-                {
-                    adjacency[i, j] = NumOps.Zero;
-                }
-            }
-        }
+        var edges = Engine.TensorGreaterThan(
+            Engine.TensorSlice(edgeProbs, new[] { 0, 0 }, new[] { numNodes, numNodes }), thresholdT);
 
-        // Make symmetric (undirected graph)
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = i + 1; j < numNodes; j++)
-            {
-                if (NumOps.GreaterThan(adjacency[i, j], NumOps.Zero) ||
-                    NumOps.GreaterThan(adjacency[j, i], NumOps.Zero))
-                {
-                    adjacency[i, j] = NumOps.One;
-                    adjacency[j, i] = NumOps.One;
-                }
-            }
-            // No self-loops
-            adjacency[i, i] = NumOps.Zero;
-        }
+        // Make symmetric (undirected graph): an edge either way is an edge both ways
+        var either = Engine.TensorGreaterThan(
+            Engine.TensorAdd(edges, Engine.TensorTranspose(edges)), NumOps.Zero);
+
+        // No self-loops
+        var diagonal = new bool[numNodes * numNodes];
+        for (int i = 0; i < numNodes; i++) diagonal[i * numNodes + i] = true;
+        Engine.TensorWhere(diagonal, adjacency, either).CopyTo(adjacency.AsWritableSpan());
 
         return adjacency;
     }
@@ -779,15 +769,12 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
             double alpha = (double)step / numSteps;
 
             // Linear interpolation in latent space
-            var interpolated = new Tensor<T>(latent1._shape);
-            for (int i = 0; i < latent1.Length; i++)
+            Tensor<T> interpolated;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T val1 = latent1.GetFlat(i);
-                T val2 = latent2.GetFlat(i);
-                T interp = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(1 - alpha), val1),
-                    NumOps.Multiply(NumOps.FromDouble(alpha), val2));
-                interpolated.SetFlat(i, interp);
+                interpolated = Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(latent1, NumOps.FromDouble(1 - alpha)),
+                    Engine.TensorMultiplyScalar(Engine.Reshape(latent2, latent1._shape), NumOps.FromDouble(alpha)));
             }
 
             // Decode
@@ -795,12 +782,9 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 
             // Threshold
             T threshold = NumOps.FromDouble(0.5);
-            var adjacency = new Tensor<T>(reconstructed._shape);
-            for (int i = 0; i < reconstructed.Length; i++)
-            {
-                adjacency.SetFlat(i, NumOps.GreaterThan(reconstructed.GetFlat(i), threshold)
-                    ? NumOps.One : NumOps.Zero);
-            }
+            Tensor<T> adjacency;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                adjacency = Engine.TensorGreaterThan(reconstructed, threshold);
 
             interpolatedGraphs.Add(adjacency);
         }
@@ -885,9 +869,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         // activations by numNodes^2 and saturate sigmoid(Z*Z^T) to a constant.
         // Call Forward(nodeFeatures, adjacencyMatrix) when graph structure is
         // available; that explicit matrix continues to drive the encoder.
-        var adj = new Tensor<T>([numNodes, numNodes]);
-        for (int i = 0; i < numNodes; i++)
-            adj[i, i] = NumOps.One;
+        var adj = Engine.TensorEye<T>(numNodes);
 
         _autoAdjacencyMatrix = adj;
         return adj;

@@ -241,6 +241,27 @@ public partial class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region IParameterizable Implementation
 
+    /// <summary>
+    /// Not supported: image-to-3D is not part of this model's published pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Magic3D (Lin et al., 2023) is a text-to-3D method: coarse NeRF then mesh score distillation from a text
+    /// prompt. The paper has no image-conditioned path.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always; the message names the supported entry point.</exception>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 4,
+        int numInferenceSteps = 50,
+        double guidanceScale = 3.0,
+        int? seed = null)
+        => throw new NotSupportedException(ImageTo3DUnsupportedMessage);
+
+    /// <summary>The reason <see cref="ImageTo3D"/> is unsupported, naming the supported entry point.</summary>
+    internal const string ImageTo3DUnsupportedMessage =
+        "Magic3D is text-to-3D only (Lin et al., 2023); use GenerateMesh or GeneratePointCloud with a text prompt.";
+
+
 
 
     #endregion

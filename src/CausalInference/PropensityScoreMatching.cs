@@ -235,17 +235,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
         // Convert treatment vector to int with validation
-        var treatmentInt = new Vector<int>(treatment.Length);
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            double raw = NumOps.ToDouble(treatment[i]);
-            double rounded = Math.Round(raw);
-            if (Math.Abs(raw - rounded) > 1e-6 || (rounded != 0 && rounded != 1))
-            {
-                throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
-            }
-            treatmentInt[i] = (int)rounded;
-        }
+        var treatmentInt = RoundBinaryTreatment(treatment);
 
         // Validate outcome alignment before caching
         if (features.Rows != outcome.Length)
@@ -288,14 +278,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         // PSM doesn't naturally produce heterogeneous effects
         // We return the estimated ATE for all individuals
         var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-
-        var effects = new Vector<T>(features.Rows);
-        for (int i = 0; i < features.Rows; i++)
-        {
-            effects[i] = ate;
-        }
-
-        return effects;
+        return Constant(features.Rows, ate);
     }
 
     /// <summary>
@@ -318,43 +301,8 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
             throw new InvalidOperationException("Model must be fitted with outcome data for treated predictions.");
         }
 
-        var propensityScores = EstimatePropensityScores(features);
-        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
-        var predictions = new Vector<T>(features.Rows);
-
-        for (int i = 0; i < features.Rows; i++)
-        {
-            double queryScore = NumOps.ToDouble(propensityScores[i]);
-
-            // Find treated individuals with similar propensity scores
-            double sumOutcome = 0;
-            double sumWeight = 0;
-
-            for (int j = 0; j < _cachedTreatment.Length; j++)
-            {
-                if (_cachedTreatment[j] == 1)
-                {
-                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
-                    double distance = Math.Abs(queryScore - refScore);
-
-                    if (distance <= _caliper)
-                    {
-                        double weight = 1.0 / (distance + 1e-8);
-                        sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
-                        sumWeight += weight;
-                    }
-                }
-            }
-
-            if (sumWeight == 0)
-            {
-                throw new InvalidOperationException(
-                    $"No treated matches found within caliper {_caliper} for query at index {i}.");
-            }
-            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
-        }
-
-        return predictions;
+        // Inverse-distance weighted outcomes of the treated individuals within the caliper
+        return CaliperWeightedOutcome(features, _cachedFeatures, _cachedTreatment, _cachedOutcome, 1, "treated");
     }
 
     /// <summary>
@@ -377,43 +325,60 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
             throw new InvalidOperationException("Model must be fitted with outcome data for control predictions.");
         }
 
-        var propensityScores = EstimatePropensityScores(features);
-        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
-        var predictions = new Vector<T>(features.Rows);
+        // Inverse-distance weighted outcomes of the control individuals within the caliper
+        return CaliperWeightedOutcome(features, _cachedFeatures, _cachedTreatment, _cachedOutcome, 0, "control");
+    }
 
-        for (int i = 0; i < features.Rows; i++)
+    /// <summary>
+    /// For each query row, the outcomes of the cached rows in <paramref name="group"/> whose propensity score is
+    /// within the caliper, weighted by 1 / (distance + ε) with ε the larger of 1e-8 and T's resolution.
+    /// </summary>
+    private Vector<T> CaliperWeightedOutcome(
+        Matrix<T> features, Matrix<T> cachedFeatures, Vector<int> cachedTreatment, Vector<T> cachedOutcome,
+        int group, string groupName)
+    {
+        var queryScores = EstimatePropensityScores(features).AsTensor();
+        var referenceScores = EstimatePropensityScores(cachedFeatures).AsTensor();
+        int m = queryScores.Length;
+        int n = referenceScores.Length;
+        if (m == 0)
+            return new Vector<T>(0);
+
+        var inGroup = Engine.Reshape(Engine.TensorEquals(cachedTreatment.AsTensor(), group).Cast<T>(), new[] { 1, n });
+        T outcomeScale = PeakMagnitude(cachedOutcome.AsTensor());
+        var scaledOutcome = Engine.Reshape(Engine.TensorDivideScalar(cachedOutcome.AsTensor(), outcomeScale), new[] { n, 1 });
+        var reference = Engine.Reshape(referenceScores, new[] { 1, n });
+        T caliper = NumOps.FromDouble(_caliper);
+        T epsilon = NumOps.FromDouble(Math.Max(1e-8, Math.Pow(2.0, -NumOps.PrecisionBits)));
+
+        // Queries are processed in blocks so the [block, n] weights stay a bounded size.
+        int blockRows = Math.Max(1, (1 << 22) / Math.Max(1, n));
+        var weightBlocks = new List<Tensor<T>>();
+        var outcomeBlocks = new List<Tensor<T>>();
+        for (int start = 0; start < m; start += blockRows)
         {
-            double queryScore = NumOps.ToDouble(propensityScores[i]);
+            int rows = Math.Min(blockRows, m - start);
+            var query = Engine.Reshape(Engine.TensorNarrow(queryScores, 0, start, rows), new[] { rows, 1 });
+            var distance = Engine.TensorAbs(Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(query, new[] { rows, n }), Engine.TensorBroadcastTo(reference, new[] { rows, n })));
+            var withinCaliper = Engine.TensorSubtract(Engine.TensorOnesLike(distance), Engine.TensorGreaterThan(distance, caliper));
+            var eligible = Engine.TensorMultiply(withinCaliper, Engine.TensorBroadcastTo(inGroup, new[] { rows, n }));
+            var weight = Engine.TensorMultiply(eligible, Engine.TensorReciprocal(Engine.TensorAddScalar(distance, epsilon)));
 
-            // Find control individuals with similar propensity scores
-            double sumOutcome = 0;
-            double sumWeight = 0;
-
-            for (int j = 0; j < _cachedTreatment.Length; j++)
-            {
-                if (_cachedTreatment[j] == 0)
-                {
-                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
-                    double distance = Math.Abs(queryScore - refScore);
-
-                    if (distance <= _caliper)
-                    {
-                        double weight = 1.0 / (distance + 1e-8);
-                        sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
-                        sumWeight += weight;
-                    }
-                }
-            }
-
-            if (sumWeight == 0)
-            {
-                throw new InvalidOperationException(
-                    $"No control matches found within caliper {_caliper} for query at index {i}.");
-            }
-            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
+            weightBlocks.Add(Engine.ReduceSum(weight, new[] { 1 }, false));
+            outcomeBlocks.Add(Engine.Reshape(Engine.TensorMatMul(weight, scaledOutcome), new[] { rows }));
         }
 
-        return predictions;
+        var sumWeight = Engine.TensorConcatenate(weightBlocks.ToArray(), 0);
+        var empty = Engine.TensorNonzero(Engine.TensorEquals(sumWeight, NumOps.Zero));
+        if (empty.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"No {groupName} matches found within caliper {_caliper} for query at index {empty[0, 0]}.");
+        }
+
+        var sumOutcome = Engine.TensorConcatenate(outcomeBlocks.ToArray(), 0);
+        return Engine.TensorMultiplyScalar(Engine.TensorDivide(sumOutcome, sumWeight), outcomeScale).ToVector();
     }
 
     private void ValidateFitData(Matrix<T> x, Vector<int> treatment)
@@ -424,14 +389,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
                 $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
         }
 
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            if (treatment[i] != 0 && treatment[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
-            }
-        }
+        CountTreatedRequiringBinary(treatment);
     }
 
     /// <summary>
@@ -454,8 +412,12 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <para>
     /// <b>For Beginners:</b> ATE is estimated by:
     /// 1. Computing propensity scores
-    /// 2. Matching treated to controls with similar scores
-    /// 3. Computing the average outcome difference in matched pairs
+    /// 2. Matching treated to controls (the ATT) and controls to treated (the ATC) with similar scores
+    /// 3. Averaging the two, weighted by how many individuals of each group found a match
+    /// </para>
+    /// <para>
+    /// This is DoWhy's propensity-score matching estimator. Matching only from the treated side estimates the
+    /// effect on the treated, which is what <see cref="EstimateATT"/> returns.
     /// </para>
     /// </remarks>
     public override (T estimate, T standardError) EstimateATE(
@@ -468,32 +430,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
 
         ValidateCausalData(x, treatment, outcome);
 
-        var propensityScores = EstimatePropensityScores(x);
-        var matches = PerformMatching(propensityScores, treatment);
-
-        // Calculate ATE from matched pairs
-        double sumDiff = 0;
-        int numMatches = 0;
-
-        foreach (var (treatedIdx, controlIdxs) in matches)
-        {
-            double treatedOutcome = NumOps.ToDouble(outcome[treatedIdx]);
-            foreach (int controlIdx in controlIdxs)
-            {
-                double controlOutcome = NumOps.ToDouble(outcome[controlIdx]);
-                sumDiff += treatedOutcome - controlOutcome;
-                numMatches++;
-            }
-        }
-
-        if (numMatches == 0)
-        {
-            throw new InvalidOperationException(
-                $"No matches found within caliper {_caliper}. ATE is undefined. " +
-                "Consider relaxing the caliper or adjusting the match ratio.");
-        }
-
-        T ate = NumOps.FromDouble(sumDiff / numMatches);
+        T ate = EstimateATEInternal(x, treatment, outcome);
         T se = CalculateBootstrapStandardError(
             (xB, tB, oB) => EstimateATEInternal(xB, tB, oB),
             x, treatment, outcome);
@@ -503,31 +440,70 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
 
     private T EstimateATEInternal(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        var propensityScores = EstimatePropensityScores(x);
-        var matches = PerformMatching(propensityScores, treatment);
+        var propensityScores = EstimatePropensityScores(x).AsTensor();
 
-        double sumDiff = 0;
-        int numMatches = 0;
-
-        foreach (var (treatedIdx, controlIdxs) in matches)
-        {
-            double treatedOutcome = NumOps.ToDouble(outcome[treatedIdx]);
-            foreach (int controlIdx in controlIdxs)
-            {
-                double controlOutcome = NumOps.ToDouble(outcome[controlIdx]);
-                sumDiff += treatedOutcome - controlOutcome;
-                numMatches++;
-            }
-        }
-
-        if (numMatches == 0)
+        // Treated matched to controls give the ATT, controls matched to treated the ATC; the ATE is their average
+        // weighted by the matched units of each group (DoWhy's propensity-score matching estimator).
+        var att = MatchedEffect(propensityScores, treatment, outcome, 1);
+        var atc = MatchedEffect(propensityScores, treatment, outcome, 0);
+        int matchedUnits = att.MatchedUnits + atc.MatchedUnits;
+        if (matchedUnits == 0)
         {
             throw new InvalidOperationException(
                 $"No matches found within caliper {_caliper}. ATE is undefined. " +
                 "Consider relaxing the caliper or adjusting the match ratio.");
         }
 
-        return NumOps.FromDouble(sumDiff / numMatches);
+        T weighted = NumOps.Add(
+            NumOps.Multiply(att.Effect, NumOps.FromDouble(att.MatchedUnits)),
+            NumOps.Multiply(atc.Effect, NumOps.FromDouble(atc.MatchedUnits)));
+        return NumOps.Divide(weighted, NumOps.FromDouble(matchedUnits));
+    }
+
+    /// <summary>The ATT from matching each treated individual to controls.</summary>
+    private T EstimateATTInternal(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
+    {
+        var att = MatchedEffect(EstimatePropensityScores(x).AsTensor(), treatment, outcome, 1);
+        if (att.MatchedUnits == 0)
+        {
+            throw new InvalidOperationException(
+                $"No matches found within caliper {_caliper}. ATT is undefined. " +
+                "Consider relaxing the caliper or adjusting the match ratio.");
+        }
+
+        return att.Effect;
+    }
+
+    /// <summary>
+    /// Matches each individual of <paramref name="group"/> to the other group and averages, over the matched
+    /// individuals, treated outcome minus control outcome (the matches' outcomes averaged first).
+    /// </summary>
+    private (T Effect, int MatchedUnits, Tensor<T> UnitEffect, Tensor<T> Matched) MatchedEffect(
+        Tensor<T> propensityScores, Vector<int> treatment, Vector<T> outcome, int group)
+    {
+        int n = treatment.Length;
+        var (sources, targets) = PerformMatching(propensityScores, treatment, group);
+
+        var y = outcome.AsTensor();
+        T scale = PeakMagnitude(y);
+        var scaled = Engine.TensorDivideScalar(y, scale);
+        var zeros = new Tensor<T>(new[] { n });
+        var matchSum = Engine.TensorScatterAdd(zeros, sources, Engine.TensorIndexSelect(scaled, targets, 0), 0);
+        var matchCount = Engine.TensorScatterAdd(new Tensor<T>(new[] { n }), sources, Engine.TensorOnesLike(Engine.TensorIndexSelect(scaled, targets, 0)), 0);
+        var matched = Engine.TensorGreaterThan(matchCount, NumOps.Zero);
+        int matchedUnits = Engine.TensorCountNonzero(matched);
+
+        // Own outcome minus the mean matched outcome, signed treated − control
+        var safeCount = Engine.TensorWhere(matched, matchCount, Engine.TensorOnesLike(matchCount));
+        var difference = Engine.TensorSubtract(scaled, Engine.TensorDivide(matchSum, safeCount));
+        if (group == 0)
+            difference = Engine.TensorNegate(difference);
+        var unitEffect = Engine.TensorMultiplyScalar(Engine.TensorMultiply(matched, difference), scale);
+
+        T effect = matchedUnits == 0
+            ? NumOps.Zero
+            : NumOps.Divide(Engine.TensorSum(unitEffect), NumOps.FromDouble(matchedUnits));
+        return (effect, matchedUnits, unitEffect, matched);
     }
 
     /// <summary>
@@ -535,15 +511,28 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> For PSM, ATT is the same as ATE since we're matching
-    /// treated to controls (every match is centered on a treated individual).
+    /// <b>For Beginners:</b> Each treated person is matched to controls with similar
+    /// propensity scores; the ATT is the average, over the matched treated, of their
+    /// outcome minus the mean outcome of their matches.
     /// </para>
     /// </remarks>
     public override (T estimate, T standardError) EstimateATT(
         Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        // For PSM, ATT = ATE since matching is done from treated to controls
-        return EstimateATE(x, treatment, outcome);
+        if (!IsFitted)
+        {
+            Fit(x, treatment);
+        }
+
+        ValidateCausalData(x, treatment, outcome);
+
+        // Matching from treated to controls estimates the effect on the treated
+        T att = EstimateATTInternal(x, treatment, outcome);
+        T se = CalculateBootstrapStandardError(
+            (xB, tB, oB) => EstimateATTInternal(xB, tB, oB),
+            x, treatment, outcome);
+
+        return (att, se);
     }
 
     /// <summary>
@@ -551,8 +540,9 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> For each treated person, we estimate their individual
-    /// effect as the difference between their outcome and their matched control(s).
+    /// <b>For Beginners:</b> For each matched person, we estimate their individual
+    /// effect as the difference between the treated and control outcomes of them and
+    /// their match(es); unmatched people get the average effect.
     /// </para>
     /// </remarks>
     public override Vector<T> EstimateCATEPerIndividual(
@@ -565,32 +555,18 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
 
         ValidateCausalData(x, treatment, outcome);
 
-        var propensityScores = EstimatePropensityScores(x);
-        var matches = PerformMatching(propensityScores, treatment);
-        var cate = new Vector<T>(x.Rows);
+        var propensityScores = EstimatePropensityScores(x).AsTensor();
+        var treatedSide = MatchedEffect(propensityScores, treatment, outcome, 1);
+        var controlSide = MatchedEffect(propensityScores, treatment, outcome, 0);
 
-        // Initialize with average effect for unmatched
+        // Average effect for the unmatched
         T avgEffect = EstimateATE(x, treatment, outcome).estimate;
-        for (int i = 0; i < x.Rows; i++)
-        {
-            cate[i] = avgEffect;
-        }
 
-        // Set individual effects for matched treated
-        foreach (var (treatedIdx, controlIdxs) in matches)
-        {
-            double treatedOutcome = NumOps.ToDouble(outcome[treatedIdx]);
-            double avgControlOutcome = 0;
-            foreach (int controlIdx in controlIdxs)
-            {
-                avgControlOutcome += NumOps.ToDouble(outcome[controlIdx]);
-            }
-            avgControlOutcome /= controlIdxs.Count;
-
-            cate[treatedIdx] = NumOps.FromDouble(treatedOutcome - avgControlOutcome);
-        }
-
-        return cate;
+        // Individual effects for the matched: each treated against its matched controls, each control against its
+        // matched treated (a unit is a source in only one direction, so the two never overlap)
+        var matched = Engine.TensorAdd(treatedSide.Matched, controlSide.Matched);
+        var individual = Engine.TensorAdd(treatedSide.UnitEffect, controlSide.UnitEffect);
+        return Engine.TensorWhere(matched, individual, Tensor<T>.CreateDefault(new[] { x.Rows }, avgEffect)).ToVector();
     }
 
     /// <summary>
@@ -617,14 +593,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         // PSM doesn't model heterogeneous effects well
         // Return a constant effect (the ATE from training data)
         var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-
-        var effects = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            effects[i] = ate;
-        }
-
-        return effects;
+        return Constant(x.Rows, ate);
     }
 
     /// <summary>
@@ -633,71 +602,61 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is where the "matching" happens:
-    /// - For each treated person, find controls with similar propensity scores
+    /// - For each person in the group, find people of the other group with similar propensity scores
     /// - Only keep matches within the caliper
     /// - If without replacement, each control can only be matched once
     /// </para>
     /// </remarks>
-    private Dictionary<int, List<int>> PerformMatching(Vector<T> propensityScores, Vector<int> treatment)
+    private (Tensor<int> Sources, Tensor<int> Targets) PerformMatching(
+        Tensor<T> propensityScores, Vector<int> treatment, int group)
     {
-        var matches = new Dictionary<int, List<int>>();
-        var usedControls = new HashSet<int>();
+        // Get indices of the matched group and of the other group
+        var assignment = treatment.AsTensor();
+        var sourceCoordinates = Engine.TensorNonzero(Engine.TensorEquals(assignment, group));
+        var targetCoordinates = Engine.TensorNonzero(Engine.TensorNotEquals(assignment, group));
+        var sourceIndices = Engine.Reshape(sourceCoordinates, new[] { sourceCoordinates.Length });
+        var targetIndices = Engine.Reshape(targetCoordinates, new[] { targetCoordinates.Length });
+        int targetCount = targetIndices.Length;
 
-        // Get indices of treated and control
-        var treatedIndices = new List<int>();
-        var controlIndices = new List<int>();
+        // Shuffle the sources for random matching order (one draw per source, as before)
+        var shuffled = sourceIndices.ToArray().OrderBy(_ => _random.Next()).ToArray();
+        var sourceScores = Engine.TensorIndexSelect(propensityScores, new Tensor<int>(shuffled, new[] { shuffled.Length }), 0);
+        var targetScores = Engine.TensorIndexSelect(propensityScores, targetIndices, 0);
 
-        for (int i = 0; i < treatment.Length; i++)
+        T caliper = NumOps.FromDouble(_caliper);
+        var available = Engine.TensorOnesLike(targetScores);
+        var unavailable = Tensor<T>.CreateDefault(new[] { targetCount }, NumOps.MaxValue);
+        var sources = new List<Tensor<int>>();
+        var targets = new List<Tensor<int>>();
+
+        for (int k = 0; k < shuffled.Length && targetCount > 0; k++)
         {
-            if (treatment[i] == 1)
-                treatedIndices.Add(i);
-            else
-                controlIndices.Add(i);
-        }
+            // Distances to the still-available candidates within the caliper
+            var score = Engine.TensorBroadcastTo(Engine.TensorNarrow(sourceScores, 0, k, 1), new[] { targetCount });
+            var distance = Engine.TensorAbs(Engine.TensorSubtract(score, targetScores));
+            var eligible = Engine.TensorMultiply(available,
+                Engine.TensorSubtract(Engine.TensorOnesLike(distance), Engine.TensorGreaterThan(distance, caliper)));
+            int candidates = Engine.TensorCountNonzero(eligible);
+            if (candidates == 0)
+                continue;
 
-        // Shuffle treated for random matching order
-        var shuffledTreated = treatedIndices.OrderBy(x => _random.Next()).ToList();
+            // Sort by distance and take the closest matches
+            int take = Math.Min(_matchRatio, candidates);
+            var order = Engine.TensorArgsort(Engine.TensorWhere(eligible, distance, unavailable), 0, false);
+            var chosen = Engine.TensorNarrow(order, 0, 0, take);
+            targets.Add(Engine.TensorIndexSelect(targetIndices, chosen, 0));
+            sources.Add(Tensor<int>.CreateDefault(new[] { take }, shuffled[k]));
 
-        foreach (int treatedIdx in shuffledTreated)
-        {
-            double treatedScore = NumOps.ToDouble(propensityScores[treatedIdx]);
-
-            // Find best matches among controls
-            var candidateMatches = new List<(int idx, double distance)>();
-
-            foreach (int controlIdx in controlIndices)
+            if (!_withReplacement)
             {
-                if (!_withReplacement && usedControls.Contains(controlIdx))
-                    continue;
-
-                double controlScore = NumOps.ToDouble(propensityScores[controlIdx]);
-                double distance = Math.Abs(treatedScore - controlScore);
-
-                if (distance <= _caliper)
-                {
-                    candidateMatches.Add((controlIdx, distance));
-                }
-            }
-
-            // Sort by distance and take top matches
-            candidateMatches.Sort((a, b) => a.distance.CompareTo(b.distance));
-            var selectedMatches = candidateMatches.Take(_matchRatio).ToList();
-
-            if (selectedMatches.Count > 0)
-            {
-                matches[treatedIdx] = selectedMatches.Select(m => m.idx).ToList();
-
-                if (!_withReplacement)
-                {
-                    foreach (var match in selectedMatches)
-                    {
-                        usedControls.Add(match.idx);
-                    }
-                }
+                available = Engine.TensorScatter(available, chosen, new Tensor<T>(new[] { take }), 0);
             }
         }
 
-        return matches;
+        if (sources.Count == 0)
+            return (new Tensor<int>(new[] { 0 }), new Tensor<int>(new[] { 0 }));
+
+        return (Engine.TensorConcatenate(sources.ToArray(), 0), Engine.TensorConcatenate(targets.ToArray(), 0));
     }
 
     /// <summary>
@@ -711,12 +670,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         // propensity-coefficient indexing stays in range — mirrors TLearner/SLearner.
         if (input.Columns == NumFeatures + 1)
         {
-            int n = input.Rows;
-            var features = new Matrix<T>(n, NumFeatures);
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < NumFeatures; j++)
-                    features[i, j] = input[i, j + 1];
-            return EstimatePropensityScores(features);
+            return EstimatePropensityScores(DropLeadingColumn(input));
         }
 
         return EstimatePropensityScores(input);
@@ -749,12 +703,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
 
         if (_propensityCoefficients is not null)
         {
-            var coeffs = new double[_propensityCoefficients.Length];
-            for (int i = 0; i < _propensityCoefficients.Length; i++)
-            {
-                coeffs[i] = NumOps.ToDouble(_propensityCoefficients[i]);
-            }
-            data["PropensityCoefficients"] = coeffs;
+            data["PropensityCoefficients"] = _propensityCoefficients.ToArray();
         }
 
         return data;
@@ -793,14 +742,10 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)
         {
-            var coeffs = coeffsToken.ToObject<double[]>();
+            var coeffs = coeffsToken.ToObject<T[]>();
             if (coeffs is not null && coeffs.Length > 0)
             {
-                _propensityCoefficients = new Vector<T>(coeffs.Length);
-                for (int i = 0; i < coeffs.Length; i++)
-                {
-                    _propensityCoefficients[i] = NumOps.FromDouble(coeffs[i]);
-                }
+                _propensityCoefficients = new Vector<T>(coeffs);
                 NumFeatures = coeffs.Length - 1; // -1 for intercept
             }
         }
@@ -821,10 +766,8 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
             Fit(x, treatment);
         }
 
-        var propensityScores = EstimatePropensityScores(x);
-        var matches = PerformMatching(propensityScores, treatment);
-
-        return matches.Values.Sum(m => m.Count);
+        var propensityScores = EstimatePropensityScores(x).AsTensor();
+        return PerformMatching(propensityScores, treatment, 1).Sources.Length;
     }
 
     /// <summary>
@@ -847,123 +790,68 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
             Fit(x, treatment);
         }
 
-        var propensityScores = EstimatePropensityScores(x);
-        var matches = PerformMatching(propensityScores, treatment);
+        var propensityScores = EstimatePropensityScores(x).AsTensor();
+        var (sources, targets) = PerformMatching(propensityScores, treatment, 1);
+        int n = x.Rows;
 
-        var beforeSMD = new Vector<T>(x.Columns);
-        var afterSMD = new Vector<T>(x.Columns);
+        // SMD is scale-free, so the covariates are scaled into [-1, 1] per column first (nothing squared overflows)
+        var features = Tensor<T>.FromMatrix(x);
+        var peak = Engine.ReduceMax(Engine.TensorAbs(features), new[] { 0 }, true);
+        var columnScale = Engine.TensorWhere(Engine.TensorEquals(peak, NumOps.Zero), Engine.TensorOnesLike(peak), peak);
+        var scaled = Engine.TensorDivide(features, Engine.TensorBroadcastTo(columnScale, new[] { n, x.Columns }));
 
-        // Calculate SMD before matching
-        for (int j = 0; j < x.Columns; j++)
-        {
-            double meanTreated = 0, meanControl = 0;
-            double varTreated = 0, varControl = 0;
-            int nTreated = 0, nControl = 0;
+        // Calculate SMD before matching: every treated against every other individual
+        var treated = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+        var control = Engine.TensorSubtract(Engine.TensorOnesLike(treated), treated);
+        var beforeSMD = StandardizedMeanDifference(scaled, treated, control);
 
-            // First pass: means
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double val = NumOps.ToDouble(x[i, j]);
-                if (treatment[i] == 1)
-                {
-                    meanTreated += val;
-                    nTreated++;
-                }
-                else
-                {
-                    meanControl += val;
-                    nControl++;
-                }
-            }
-
-            // Guard against divide-by-zero when a group has zero samples
-            if (nTreated == 0 || nControl == 0)
-            {
-                beforeSMD[j] = NumOps.Zero;
-                continue;
-            }
-
-            meanTreated /= nTreated;
-            meanControl /= nControl;
-
-            // Second pass: variances
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double val = NumOps.ToDouble(x[i, j]);
-                if (treatment[i] == 1)
-                {
-                    varTreated += (val - meanTreated) * (val - meanTreated);
-                }
-                else
-                {
-                    varControl += (val - meanControl) * (val - meanControl);
-                }
-            }
-            // Guard against divide-by-zero when group has < 2 samples
-            varTreated = nTreated > 1 ? varTreated / (nTreated - 1) : 0;
-            varControl = nControl > 1 ? varControl / (nControl - 1) : 0;
-
-            double pooledStd = Math.Sqrt((varTreated + varControl) / 2);
-            beforeSMD[j] = NumOps.FromDouble(pooledStd > 0 ? (meanTreated - meanControl) / pooledStd : 0);
-        }
-
-        // Calculate SMD after matching
-        for (int j = 0; j < x.Columns; j++)
-        {
-            double meanTreated = 0, meanControl = 0;
-            double varTreated = 0, varControl = 0;
-            int nTreated = 0, nControl = 0;
-
-            var matchedControlIndices = new HashSet<int>();
-            foreach (var (_, controlIdxs) in matches)
-            {
-                foreach (int idx in controlIdxs)
-                {
-                    matchedControlIndices.Add(idx);
-                }
-            }
-
-            // First pass: means
-            foreach (var (treatedIdx, _) in matches)
-            {
-                meanTreated += NumOps.ToDouble(x[treatedIdx, j]);
-                nTreated++;
-            }
-            foreach (int controlIdx in matchedControlIndices)
-            {
-                meanControl += NumOps.ToDouble(x[controlIdx, j]);
-                nControl++;
-            }
-
-            // Guard: if either group has zero matched samples, SMD is undefined
-            if (nTreated == 0 || nControl == 0)
-            {
-                afterSMD[j] = NumOps.Zero;
-                continue;
-            }
-
-            meanTreated /= nTreated;
-            meanControl /= nControl;
-
-            // Second pass: variances
-            foreach (var (treatedIdx, _) in matches)
-            {
-                double val = NumOps.ToDouble(x[treatedIdx, j]);
-                varTreated += (val - meanTreated) * (val - meanTreated);
-            }
-            foreach (int controlIdx in matchedControlIndices)
-            {
-                double val = NumOps.ToDouble(x[controlIdx, j]);
-                varControl += (val - meanControl) * (val - meanControl);
-            }
-
-            if (nTreated > 1) varTreated /= (nTreated - 1);
-            if (nControl > 1) varControl /= (nControl - 1);
-
-            double pooledStd = Math.Sqrt((varTreated + varControl) / 2);
-            afterSMD[j] = NumOps.FromDouble(pooledStd > 0 ? (meanTreated - meanControl) / pooledStd : 0);
-        }
+        // Calculate SMD after matching: the treated with a match against the distinct matched controls
+        var ones = Tensor<T>.CreateDefault(new[] { sources.Length }, NumOps.One);
+        var matchedTreated = Engine.TensorGreaterThan(Engine.TensorScatterAdd(new Tensor<T>(new[] { n }), sources, ones, 0), NumOps.Zero);
+        var matchedControls = Engine.TensorGreaterThan(Engine.TensorScatterAdd(new Tensor<T>(new[] { n }), targets, ones, 0), NumOps.Zero);
+        var afterSMD = StandardizedMeanDifference(scaled, matchedTreated, matchedControls);
 
         return (beforeSMD, afterSMD);
+    }
+
+    /// <summary>
+    /// Per-column (mean₁ − mean₀) / √((s₁² + s₀²) / 2) between the rows in two 0/1 masks, with n − 1 sample
+    /// variances (0 for a group of one); all zeros when either group is empty, and 0 for a column with no spread.
+    /// </summary>
+    private Vector<T> StandardizedMeanDifference(Tensor<T> features, Tensor<T> first, Tensor<T> second)
+    {
+        int n = features.Shape[0];
+        int p = features.Shape[1];
+        int firstCount = Engine.TensorCountNonzero(first);
+        int secondCount = Engine.TensorCountNonzero(second);
+
+        // Guard against divide-by-zero when a group has zero samples
+        if (firstCount == 0 || secondCount == 0)
+            return new Vector<T>(p);
+
+        var (meanFirst, varianceFirst) = GroupMoments(features, first, firstCount, n, p);
+        var (meanSecond, varianceSecond) = GroupMoments(features, second, secondCount, n, p);
+
+        var pooledStd = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorAdd(varianceFirst, varianceSecond), NumOps.FromDouble(0.5)));
+        var spread = Engine.TensorGreaterThan(pooledStd, NumOps.Zero);
+        var safeStd = Engine.TensorWhere(spread, pooledStd, Engine.TensorOnesLike(pooledStd));
+        var difference = Engine.TensorDivide(Engine.TensorSubtract(meanFirst, meanSecond), safeStd);
+        return Engine.TensorMultiply(spread, difference).ToVector();
+    }
+
+    /// <summary>Column means and n − 1 sample variances (0 for one row) of the masked rows.</summary>
+    private (Tensor<T> Mean, Tensor<T> Variance) GroupMoments(Tensor<T> features, Tensor<T> mask, int count, int n, int p)
+    {
+        var rowMask = Engine.TensorBroadcastTo(Engine.Reshape(mask, new[] { n, 1 }), new[] { n, p });
+        var mean = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(features, rowMask), new[] { 0 }, false), NumOps.FromDouble(count));
+        if (count < 2)
+            return (mean, new Tensor<T>(new[] { p }));
+
+        var deviation = Engine.TensorMultiply(
+            Engine.TensorSubtract(features, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, p }), new[] { n, p })), rowMask);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(deviation), new[] { 0 }, false), NumOps.FromDouble(count - 1));
+        return (mean, variance);
     }
 }

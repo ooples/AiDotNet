@@ -361,13 +361,8 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
             current = Layers[i].Forward(current);
         var parameters = current.ToVector();
         int latent = parameters.Length / 2;
-        var mean = new Vector<T>(latent);
-        var logVariance = new Vector<T>(latent);
-        for (int i = 0; i < latent; i++)
-        {
-            mean[i] = parameters[i];
-            logVariance[i] = parameters[latent + i];
-        }
+        var mean = parameters.GetSubVector(0, latent);
+        var logVariance = parameters.GetSubVector(latent, latent);
         return (mean, logVariance);
     }
 
@@ -639,12 +634,8 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         if (_lastLogVariance != null)
         {
             // Calculate mean of standard deviations
-            T stdSum = NumOps.Zero;
-            for (int i = 0; i < _lastLogVariance.Length; i++)
-            {
-                var halfLogVar = NumOps.Multiply(NumOps.FromDouble(0.5), _lastLogVariance[i]);
-                stdSum = NumOps.Add(stdSum, NumOps.Exp(halfLogVar));
-            }
+            var halfLogVar = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(_lastLogVariance), NumOps.FromDouble(0.5));
+            T stdSum = Engine.TensorSum(Engine.TensorExp(halfLogVar));
             var stdMean = NumOps.Divide(stdSum, NumOps.FromDouble(_lastLogVariance.Length));
             diagnostics["LatentStdMean"] = stdMean?.ToString() ?? "0";
         }

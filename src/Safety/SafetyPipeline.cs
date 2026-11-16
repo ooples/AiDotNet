@@ -380,6 +380,19 @@ public class SafetyPipeline<T>
     /// </exception>
     public void EnforcePolicy(SafetyReport report, bool isInput)
     {
+        if (report is null) throw new ArgumentNullException(nameof(report));
+        if (!_config.Text.EffectiveBlockJailbreaks)
+        {
+            // Jailbreak and prompt-injection findings are reported but not enforced.
+            var enforced = report.Findings
+                .Where(f => f.Category != SafetyCategory.JailbreakAttempt && f.Category != SafetyCategory.PromptInjection)
+                .ToList();
+            if (enforced.Count != report.Findings.Count)
+            {
+                report = SafetyReport.FromFindings(enforced, report.ModulesExecuted, report.EvaluationTimeMs);
+            }
+        }
+
         if (report.IsSafe)
         {
             return;

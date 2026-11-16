@@ -53,23 +53,16 @@ internal static class MbPAConversions<T>
             case Matrix<T> matrix when matrix.Rows > 0:
             {
                 int row = index % matrix.Rows;
-                var single = new Matrix<T>(1, matrix.Columns);
-                for (int j = 0; j < matrix.Columns; j++) single[0, j] = matrix[row, j];
+                var single = AiDotNetEngine.Current.TensorSlice(
+                    Tensor<T>.FromMatrix(matrix), new[] { row, 0 }, new[] { 1, matrix.Columns }).ToMatrix();
                 return (TInput)(object)single;
             }
 
             case Tensor<T> tensor when tensor.Rank >= 2 && tensor.Shape[0] > 0:
             {
-                int batch = tensor.Shape[0];
-                int stride = tensor.Length / batch;
-                int offset = (index % batch) * stride;
-
                 // Keep the trailing dimensions and set the batch dimension to 1, so the embedding
                 // network sees the shape it was built for rather than a flattened vector.
-                var shape = tensor.Shape.ToArray();
-                shape[0] = 1;
-                var single = new Tensor<T>(shape);
-                for (int i = 0; i < stride && offset + i < tensor.Length; i++) single[i] = tensor[offset + i];
+                var single = SliceBatchRow(tensor, index % tensor.Shape[0]);
                 return (TInput)(object)single;
             }
 
@@ -92,42 +85,29 @@ internal static class MbPAConversions<T>
                 // — the batched case the meta-learning tasks in this library actually produce.
                 if (vector.Length > 1 && index < vector.Length)
                 {
-                    var scalar = new Vector<T>(1);
-                    scalar[0] = vector[index];
-                    return scalar;
+                    return vector.GetSubVector(index, 1);
                 }
                 return vector;
             }
 
             case Matrix<T> matrix when matrix.Rows > 0:
             {
-                int row = index % matrix.Rows;
-                var result = new Vector<T>(matrix.Columns);
-                for (int j = 0; j < matrix.Columns; j++) result[j] = matrix[row, j];
-                return result;
+                return matrix.GetRow(index % matrix.Rows);
             }
 
             case Tensor<T> tensor when tensor.Rank == 1:
             {
+                var all = tensor.ToVector();
                 if (tensor.Length > 1 && index < tensor.Length)
                 {
-                    var scalar = new Vector<T>(1);
-                    scalar[0] = tensor[index];
-                    return scalar;
+                    return all.GetSubVector(index, 1);
                 }
-                var all = new Vector<T>(tensor.Length);
-                for (int j = 0; j < tensor.Length; j++) all[j] = tensor[j];
-                return all;
+                return all.Clone();
             }
 
             case Tensor<T> tensor when tensor.Rank >= 2 && tensor.Shape[0] > 0:
             {
-                int batch = tensor.Shape[0];
-                int stride = tensor.Length / batch;
-                int offset = (index % batch) * stride;
-                var result = new Vector<T>(stride);
-                for (int j = 0; j < stride && offset + j < tensor.Length; j++) result[j] = tensor[offset + j];
-                return result;
+                return SliceBatchRow(tensor, index % tensor.Shape[0]).ToVector();
             }
 
             default:
@@ -141,12 +121,20 @@ internal static class MbPAConversions<T>
     /// </summary>
     internal static Vector<T> ResizeTo(Vector<T>? source, int length)
     {
-        var result = new Vector<T>(length);
-        for (int i = 0; i < length; i++) result[i] = Ops.Zero;
-        if (source is null) return result;
-        int copy = Math.Min(length, source.Length);
-        for (int i = 0; i < copy; i++) result[i] = source[i];
-        return result;
+        if (source is null || source.Length == 0 || length == 0) return new Vector<T>(length);
+        return source.Length >= length
+            ? source.GetSubVector(0, length)
+            : Vector<T>.Concatenate(source.Clone(), new Vector<T>(length - source.Length));
+    }
+
+    /// <summary>Row <paramref name="row"/> of a batched tensor, keeping its rank with a batch size of 1.</summary>
+    private static Tensor<T> SliceBatchRow(Tensor<T> tensor, int row)
+    {
+        var start = new int[tensor.Rank];
+        var length = tensor.Shape.ToArray();
+        start[0] = row;
+        length[0] = 1;
+        return AiDotNetEngine.Current.TensorSlice(tensor, start, length).Clone();
     }
 
     /// <summary>Converts a categorical class index or a full distribution to a head target.</summary>

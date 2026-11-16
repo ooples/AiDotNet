@@ -5,6 +5,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Moq;
 using Xunit;
 
@@ -59,16 +60,18 @@ public class MultiScalePINNPrecisionTests
 
         public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives) => 1.0;
 
-        public double ComputeScaleResidual(int scaleIndex, double[] inputs, double[] outputs, PDEDerivatives<double> derivatives) => 1.0;
+        public Tensor<double> ComputeScaleResidual(
+            int scaleIndex, Tensor<double> inputs, Tensor<double> outputs, PDEDerivatives<double> derivatives)
+            => Tensor<double>.CreateDefault(new[] { inputs.Shape[0] }, 1.0);
 
-        public double ComputeScaleCoupling(
+        public Tensor<double> ComputeScaleCoupling(
             int coarseIndex,
             int fineIndex,
-            double[] inputs,
-            double[] coarseOutputs,
-            double[] fineOutputs,
+            Tensor<double> inputs,
+            Tensor<double> coarseOutputs,
+            Tensor<double> fineOutputs,
             PDEDerivatives<double> coarseDerivatives,
-            PDEDerivatives<double> fineDerivatives) => 0.0;
+            PDEDerivatives<double> fineDerivatives) => new Tensor<double>(new[] { inputs.Shape[0] });
 
         public double GetScaleLossWeight(int scaleIndex) => 1.0;
 

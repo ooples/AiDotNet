@@ -222,11 +222,11 @@ internal sealed class VitsStochasticDurationPredictor<T>
     // x += cond_lang(lang_emb.detach())), then the DDS convolutions.
     private Tensor<T> Condition(Tensor<T> text, Tensor<T>? speaker, Tensor<T>? language)
     {
-        var x = _pre.Forward(new Tensor<T>(text._shape, text.ToVector()));
+        var x = _pre.Forward(_engine.StopGradient(text));
         if (speaker is not null && _condition is not null)
-            x = _engine.TensorAdd(x, _engine.TensorTile(_condition.Forward(new Tensor<T>(speaker._shape, speaker.ToVector())), new[] { 1, 1, x.Shape[2] }));
+            x = _engine.TensorAdd(x, _engine.TensorTile(_condition.Forward(_engine.StopGradient(speaker)), new[] { 1, 1, x.Shape[2] }));
         if (language is not null && _languageCondition is not null)
-            x = _engine.TensorAdd(x, _engine.TensorTile(_languageCondition.Forward(new Tensor<T>(language._shape, language.ToVector())), new[] { 1, 1, x.Shape[2] }));
+            x = _engine.TensorAdd(x, _engine.TensorTile(_languageCondition.Forward(_engine.StopGradient(language)), new[] { 1, 1, x.Shape[2] }));
         return _proj.Forward(_convs.Forward(x, null));
     }
 
@@ -448,11 +448,11 @@ internal sealed class Vits2DurationPredictor<T>
     /// <c>[1, 1, tokens]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> text, Tensor<T>? speaker, Tensor<T>? language, Tensor<T> noise)
     {
-        var x = new Tensor<T>(text._shape, text.ToVector());
+        var x = _engine.StopGradient(text);
         if (speaker is not null && _condition is not null)
-            x = _engine.TensorAdd(x, _engine.TensorTile(_condition.Forward(new Tensor<T>(speaker._shape, speaker.ToVector())), new[] { 1, 1, x.Shape[2] }));
+            x = _engine.TensorAdd(x, _engine.TensorTile(_condition.Forward(_engine.StopGradient(speaker)), new[] { 1, 1, x.Shape[2] }));
         if (language is not null && _languageCondition is not null)
-            x = _engine.TensorAdd(x, _engine.TensorTile(_languageCondition.Forward(new Tensor<T>(language._shape, language.ToVector())), new[] { 1, 1, x.Shape[2] }));
+            x = _engine.TensorAdd(x, _engine.TensorTile(_languageCondition.Forward(_engine.StopGradient(language)), new[] { 1, 1, x.Shape[2] }));
         x = _engine.TensorConcatenate(new[] { x, noise }, 1);
         x = VitsOps.ChannelNorm(_engine, _norm1, _engine.ReLU(_conv1.Forward(x)));
         if (_dropout is not null) x = _dropout.Forward(x);
@@ -506,7 +506,7 @@ internal sealed class Vits2DurationDiscriminator<T>
     /// <summary>The text features shared by the real and the generated duration (stop-gradient input).</summary>
     public Tensor<T> Encode(Tensor<T> text)
     {
-        var x = new Tensor<T>(text._shape, text.ToVector());
+        var x = _engine.StopGradient(text);
         x = VitsOps.ChannelNorm(_engine, _norm1, _engine.ReLU(_conv1.Forward(x)));
         return VitsOps.ChannelNorm(_engine, _norm2, _engine.ReLU(_conv2.Forward(x)));
     }

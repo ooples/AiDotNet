@@ -193,8 +193,8 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
 
         if (_features is Tensor<T> tensor)
         {
-            // Clone shape but change first dimension
-            var newShape = (int[])tensor._shape;
+            // Clone shape but change first dimension (_shape is the tensor's own array: never write to it)
+            var newShape = (int[])tensor._shape.Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 
@@ -215,18 +215,14 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
     {
         if (_labels is Vector<T> vector)
         {
-            var result = new Vector<T>(indices.Length);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                result[i] = vector[indices[i]];
-            }
+            var result = BatchGather.Elements(vector, indices);
             return CastToDataType<Vector<T>, TOutput>(result);
         }
 
         if (_labels is Tensor<T> tensor)
         {
-            // Clone shape but change first dimension
-            var newShape = (int[])tensor._shape;
+            // Clone shape but change first dimension (_shape is the tensor's own array: never write to it)
+            var newShape = (int[])tensor._shape.Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 
@@ -240,14 +236,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         if (_labels is Matrix<T> matrix)
         {
             // Multi-output (n×H) target: gather the requested ROWS, preserving all output columns (horizons).
-            var result = new Matrix<T>(indices.Length, matrix.Columns);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                for (int c = 0; c < matrix.Columns; c++)
-                {
-                    result[i, c] = matrix[indices[i], c];
-                }
-            }
+            var result = BatchGather.Rows(matrix, indices);
 
             return CastToDataType<Matrix<T>, TOutput>(result);
         }

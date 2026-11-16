@@ -88,6 +88,7 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T innerLearningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -114,12 +115,7 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 for (int i = 0; i < _algoOptions.NumParticles; i++)
                 {
                     var svgdUpdate = ComputeSVGDUpdate(particles, taskGrads, i, bandwidth);
-                    newParticles[i] = new Vector<T>(_paramDim);
-                    for (int d = 0; d < _paramDim; d++)
-                    {
-                        newParticles[i][d] = NumOps.Add(particles[i][d],
-                            NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(svgdUpdate[d])));
-                    }
+                    newParticles[i] = Engine.Add(particles[i], Engine.Multiply(svgdUpdate, innerLearningRate));
                 }
 
                 particles = newParticles;
@@ -151,6 +147,7 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var initParams = ParamModel.GetParameters();
         var particles = InitializeParticles(initParams);
+        T innerLearningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
 
         // SVGD inner loop
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -169,12 +166,7 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int i = 0; i < _algoOptions.NumParticles; i++)
             {
                 var svgdUpdate = ComputeSVGDUpdate(particles, taskGrads, i, bandwidth);
-                newParticles[i] = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    newParticles[i][d] = NumOps.Add(particles[i][d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(svgdUpdate[d])));
-                }
+                newParticles[i] = Engine.Add(particles[i], Engine.Multiply(svgdUpdate, innerLearningRate));
             }
 
             particles = newParticles;
@@ -217,60 +209,60 @@ public partial class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         int m = particles.Length;
         if (m <= 1) return 1.0;
 
-        var pairwiseDists = new List<double>();
+        // Retain only the strict upper triangle; parameter differences use bounded blocks.
+        var pairwise = new double[checked((int)((long)m * (m - 1) / 2))];
+        int pair = 0;
         for (int i = 0; i < m; i++)
             for (int j = i + 1; j < m; j++)
-            {
-                double dist2 = 0;
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double diff = NumOps.ToDouble(particles[i][d]) - NumOps.ToDouble(particles[j][d]);
-                    dist2 += diff * diff;
-                }
-                pairwiseDists.Add(dist2);
-            }
-
-        if (pairwiseDists.Count == 0) return 1.0;
-        pairwiseDists.Sort();
-        double median = pairwiseDists[pairwiseDists.Count / 2];
-        double h2 = median / Math.Max(Math.Log(m), 1.0);
+                pairwise[pair++] = SquaredParticleDistance(particles[i], particles[j]);
+        Array.Sort(pairwise);
+        double h2 = pairwise[pairwise.Length / 2] / Math.Max(Math.Log(m), 1.0);
         return Math.Max(h2, 1e-10);
     }
 
-    /// <summary>
-    /// Computes the SVGD update direction for particle i:
-    /// φ(θ_i) = (1/M) Σ_j [k(θ_j, θ_i) * ∇ log p(D|θ_j) + α * ∇_{θ_j} k(θ_j, θ_i)]
-    /// </summary>
+    private const int ParameterBlockSize = 16384;
+
+    private Tensor<double> ParticleBlock(Vector<T> particle, int start, int count)
+        => Tensor<T>.FromVector(particle.GetSubVector(start, count)).Cast<double>();
+
+    private double SquaredParticleDistance(Vector<T> left, Vector<T> right)
+    {
+        double distance = 0;
+        for (int start = 0; start < _paramDim;)
+        {
+            int count = Math.Min(ParameterBlockSize, _paramDim - start);
+            var difference = Engine.TensorSubtract(ParticleBlock(left, start, count), ParticleBlock(right, start, count));
+            distance += Engine.TensorSum(Engine.TensorSquare(difference));
+            start += count;
+        }
+        return distance;
+    }
+
+    /// <summary>Computes attractive and repulsive SVGD terms without stacking particle parameters.</summary>
     private Vector<T> ComputeSVGDUpdate(Vector<T>[] particles, Vector<T>[] taskGrads, int i, double bandwidth)
     {
         int m = particles.Length;
-        var update = new Vector<T>(_paramDim);
-
+        var kernels = new double[m];
         for (int j = 0; j < m; j++)
+            kernels[j] = Math.Exp(-SquaredParticleDistance(particles[j], particles[i]) / (2.0 * bandwidth));
+
+        var update = new Vector<T>(_paramDim);
+        for (int start = 0; start < _paramDim;)
         {
-            // Compute RBF kernel k(θ_j, θ_i) = exp(-||θ_j - θ_i||² / (2h²))
-            double dist2 = 0;
-            for (int d = 0; d < _paramDim; d++)
+            int count = Math.Min(ParameterBlockSize, _paramDim - start);
+            var target = ParticleBlock(particles[i], start, count);
+            var sum = new Tensor<double>([count]);
+            for (int j = 0; j < m; j++)
             {
-                double diff = NumOps.ToDouble(particles[j][d]) - NumOps.ToDouble(particles[i][d]);
-                dist2 += diff * diff;
+                var difference = Engine.TensorSubtract(ParticleBlock(particles[j], start, count), target);
+                var terms = Engine.TensorAdd(ParticleBlock(taskGrads[j], start, count),
+                    Engine.TensorMultiplyScalar(difference, _algoOptions.SVGDRepulsiveWeight / bandwidth));
+                sum = Engine.TensorAdd(sum, Engine.TensorMultiplyScalar(terms, kernels[j]));
             }
-            double kernel = Math.Exp(-dist2 / (2.0 * bandwidth));
-
-            for (int d = 0; d < _paramDim; d++)
-            {
-                // Attractive term: k(θ_j, θ_i) * (-∇L(θ_j)) [negative gradient = ∇ log p]
-                double attractive = kernel * (-NumOps.ToDouble(taskGrads[j][d]));
-
-                // Repulsive term: ∇_{θ_j} k(θ_j, θ_i) = k * (θ_i - θ_j) / h²
-                double diffJI = NumOps.ToDouble(particles[i][d]) - NumOps.ToDouble(particles[j][d]);
-                double repulsive = kernel * diffJI / bandwidth;
-
-                update[d] = NumOps.Add(update[d],
-                    NumOps.FromDouble((attractive + _algoOptions.SVGDRepulsiveWeight * repulsive) / m));
-            }
+            Engine.TensorMultiplyScalar(sum, -1.0 / m).Cast<T>()
+                .CopyTo(update.AsWritableSpan().Slice(start, count));
+            start += count;
         }
-
         return update;
     }
 }

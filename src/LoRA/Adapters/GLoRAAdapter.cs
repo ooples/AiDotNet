@@ -181,12 +181,9 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> activationAdaptationOutput = _activationAdaptation.Forward(input);
 
         // Sum all outputs: base + weight_adaptation + activation_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            T sum = NumOps.Add(baseOutput[i], weightAdaptationOutput[i]);
-            result[i] = NumOps.Add(sum, activationAdaptationOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(
+            Engine.TensorAdd(baseOutput, weightAdaptationOutput), activationAdaptationOutput);
+
 
         return result;
     }
@@ -264,23 +261,15 @@ public partial class GLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge all weights: base + weight_lora + activation_lora
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            T sum = NumOps.Add(baseParams[i], weightLoraWeights[row, col]);
-            mergedParams[i] = NumOps.Add(sum, activationLoraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge all weights: base + weight_lora + activation_lora. The deltas are
+        // [inputSize, outputSize]; DenseLayer stores its weights input-major and
+        // FullyConnectedLayer output-major, so the latter uses the transposes.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? weightLoraWeights.Transpose() : weightLoraWeights, weightCount);
+        mergedParams = AddFlatWeightsToParameters(
+            mergedParams, isOutputMajor ? activationLoraWeights.Transpose() : activationLoraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

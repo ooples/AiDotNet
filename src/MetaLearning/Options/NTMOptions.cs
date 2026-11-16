@@ -207,7 +207,8 @@ public class NTMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <summary>
     /// Gets or sets the number of write heads.
     /// </summary>
-    /// <value>Default is 1.</value>
+    /// <value>Default is 1, the only supported value: the controllers emit one erase vector, add vector and
+    /// write addressing per step.</value>
     public int NumWriteHeads { get; set; } = 1;
 
     /// <summary>
@@ -246,6 +247,21 @@ public class NTMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <value>Default is 0.0 (no regularization).</value>
     public double MemorySharpnessRegularization { get; set; } = 0.0;
 
+    /// <summary>
+    /// Gets or sets the shift range R of location-based addressing: every head emits a shift weighting over the
+    /// 2R + 1 integer offsets -R..R and convolves its weighting with it (Graves et al. 2014, section 3.3.2).
+    /// </summary>
+    /// <value>Default is 1, the paper's setting (shifts of -1, 0 and +1). Zero disables shifting.</value>
+    public int ShiftRange { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether each input is presented together with the previous step's label, one-hot encoded
+    /// (Santoro et al. 2016, section 3.1): the controller sees (x_t, y_{t-1}), so it must bind a sample to its
+    /// label through memory rather than read the label off its own input. Query labels are never shown.
+    /// </summary>
+    /// <value>Default is true, as in the paper.</value>
+    public bool PresentPreviousLabel { get; set; } = true;
+
     #endregion
 
     #region Constructors
@@ -275,7 +291,11 @@ public class NTMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
                MemorySize > 0 &&
                MemoryWidth > 0 &&
                NumReadHeads > 0 &&
-               NumWriteHeads > 0 &&
+               // One write head: the controllers emit one erase vector, one add vector and one write
+               // addressing per step, so a second write head would have nothing to write with.
+               NumWriteHeads == 1 &&
+               NumClasses > 0 &&
+               ShiftRange >= 0 &&
                ControllerHiddenSize > 0 &&
                MetaBatchSize > 0 &&
                NumMetaIterations > 0;
@@ -314,7 +334,9 @@ public class NTMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
             InitializeMemory = InitializeMemory,
             MemoryInitialization = MemoryInitialization,
             MemoryUsageRegularization = MemoryUsageRegularization,
-            MemorySharpnessRegularization = MemorySharpnessRegularization
+            MemorySharpnessRegularization = MemorySharpnessRegularization,
+            ShiftRange = ShiftRange,
+            PresentPreviousLabel = PresentPreviousLabel
         };
     }
 

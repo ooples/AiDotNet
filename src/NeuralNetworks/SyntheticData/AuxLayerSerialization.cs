@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -177,23 +179,11 @@ internal static class AuxLayerSerialization
 
     private static void WriteLayerState<T>(BinaryWriter writer, ILayer<T> layer)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        var parameters = layer.GetParameters();
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            writer.Write(numOps.ToDouble(parameters[i]));
-        }
+        WriteElements(writer, layer.GetParameters());
 
         if (layer is ILayerSerializationExtras<T> extras)
         {
-            var extraParameters = extras.GetExtraParameters();
-            writer.Write(extraParameters.Length);
-            for (int i = 0; i < extraParameters.Length; i++)
-            {
-                writer.Write(numOps.ToDouble(extraParameters[i]));
-            }
+            WriteElements(writer, extras.GetExtraParameters());
         }
         else
         {
@@ -203,29 +193,154 @@ internal static class AuxLayerSerialization
 
     private static void ReadLayerState<T>(BinaryReader reader, ILayer<T>? layer)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        int parameterCount = reader.ReadInt32();
-        var parameters = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-        {
-            parameters[i] = numOps.FromDouble(reader.ReadDouble());
-        }
-        if (parameterCount > 0 && layer is not null)
+        var parameters = ReadElements<T>(reader);
+        if (parameters.Length > 0 && layer is not null)
         {
             layer.SetParameters(parameters);
         }
 
-        int extraCount = reader.ReadInt32();
-        var extraParameters = new Vector<T>(extraCount);
-        for (int i = 0; i < extraCount; i++)
-        {
-            extraParameters[i] = numOps.FromDouble(reader.ReadDouble());
-        }
-        if (extraCount > 0 && layer is ILayerSerializationExtras<T> extras)
+        var extraParameters = ReadElements<T>(reader);
+        if (extraParameters.Length > 0 && layer is ILayerSerializationExtras<T> extras)
         {
             extras.SetExtraParameters(extraParameters);
         }
+    }
+
+    /// <summary>
+    /// Leading marker of the raw-element format written by <see cref="WriteElements{T}"/>
+    /// (format version 1 in the low byte). It is negative, so it can never be mistaken for the
+    /// non-negative element count that begins the legacy format (count followed by that many
+    /// doubles) written before the raw-element format existed.
+    /// </summary>
+    internal const int RawElementsFormatMarker = unchecked((int)0xA1D7E501);
+
+    /// <summary>
+    /// Writes <paramref name="values"/> as the <see cref="RawElementsFormatMarker"/>, its element
+    /// count, the element size in bytes, and the raw element bytes of <typeparamref name="T"/>.
+    /// The bytes are taken straight from the vector's span (<c>MemoryMarshal</c> byte view), so
+    /// values round-trip bit-for-bit in <typeparamref name="T"/> without a per-element conversion.
+    /// </summary>
+    internal static void WriteElements<T>(BinaryWriter writer, Vector<T> values)
+    {
+        int elementSize = GetElementSize<T>();
+        writer.Write(RawElementsFormatMarker);
+        writer.Write(values.Length);
+        if (values.Length == 0)
+        {
+            return;
+        }
+
+        writer.Write(elementSize);
+        ReadOnlySpan<T> span = values.AsSpan();
+        int byteCount = checked(span.Length * elementSize);
+        ref byte first = ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(span));
+#if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+        writer.Write(MemoryMarshal.CreateReadOnlySpan(ref first, byteCount));
+#else
+        var buffer = new byte[byteCount];
+        Unsafe.CopyBlockUnaligned(ref buffer[0], ref first, (uint)byteCount);
+        writer.Write(buffer);
+#endif
+    }
+
+    /// <summary>
+    /// Reads a vector written by <see cref="WriteElements{T}"/>, copying the raw bytes straight
+    /// into the new vector's storage. A vector in the legacy format (no
+    /// <see cref="RawElementsFormatMarker"/>: a non-negative count followed by that many doubles)
+    /// is read and converted to <typeparamref name="T"/>, so checkpoints saved before the
+    /// raw-element format still load.
+    /// </summary>
+    /// <exception cref="InvalidDataException">
+    /// The stream was written for an element type of a different size, has an unknown format
+    /// marker, or is truncated.
+    /// </exception>
+    internal static Vector<T> ReadElements<T>(BinaryReader reader)
+    {
+        int elementSize = GetElementSize<T>();
+        int header = reader.ReadInt32();
+        if (header >= 0)
+        {
+            return ReadLegacyDoubleElements<T>(reader, header);
+        }
+
+        if (header != RawElementsFormatMarker)
+        {
+            throw new InvalidDataException(
+                $"Unknown element format marker 0x{header:X8} in auxiliary layer state.");
+        }
+
+        int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new InvalidDataException($"Negative element count {count} in auxiliary layer state.");
+        }
+
+        var values = new Vector<T>(count);
+        if (count == 0)
+        {
+            return values;
+        }
+
+        int storedElementSize = reader.ReadInt32();
+        if (storedElementSize != elementSize)
+        {
+            throw new InvalidDataException(
+                $"Auxiliary layer state was written with {storedElementSize}-byte elements, but "
+                + $"{typeof(T).Name} uses {elementSize}-byte elements.");
+        }
+
+        int byteCount = checked(count * elementSize);
+        byte[] bytes = reader.ReadBytes(byteCount);
+        if (bytes.Length != byteCount)
+        {
+            throw new InvalidDataException(
+                $"Auxiliary layer state is truncated: expected {byteCount} bytes, read {bytes.Length}.");
+        }
+
+        Span<T> target = values.AsWritableSpan();
+        Unsafe.CopyBlockUnaligned(
+            ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(target)),
+            ref bytes[0],
+            (uint)byteCount);
+        return values;
+    }
+
+    /// <summary>
+    /// Reads the legacy element layout (<paramref name="count"/> little-endian doubles, the count
+    /// already consumed) and converts it to <typeparamref name="T"/> in one tensor cast.
+    /// </summary>
+    private static Vector<T> ReadLegacyDoubleElements<T>(BinaryReader reader, int count)
+    {
+        var values = new Vector<T>(count);
+        if (count == 0)
+        {
+            return values;
+        }
+
+        int byteCount = checked(count * sizeof(double));
+        byte[] bytes = reader.ReadBytes(byteCount);
+        if (bytes.Length != byteCount)
+        {
+            throw new InvalidDataException(
+                $"Auxiliary layer state is truncated: expected {byteCount} bytes, read {bytes.Length}.");
+        }
+
+        var doubles = new double[count];
+        Buffer.BlockCopy(bytes, 0, doubles, 0, byteCount);
+        var converted = new Tensor<double>(doubles, new[] { count }).Cast<T>();
+        converted.AsSpan().CopyTo(values.AsWritableSpan());
+        return values;
+    }
+
+    private static int GetElementSize<T>()
+    {
+        if (!typeof(T).IsValueType)
+        {
+            throw new NotSupportedException(
+                $"Auxiliary layer serialization needs a value-type element, but got {typeof(T).Name}.");
+        }
+
+        return Unsafe.SizeOf<T>();
     }
 
     private static void WriteIntArray(BinaryWriter writer, int[]? values)

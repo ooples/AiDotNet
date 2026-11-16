@@ -223,6 +223,71 @@ public sealed class ModelStateRegistryTests
         return destination;
     }
 
+    [Fact]
+    public void HalfState_RoundTripsThroughTheDoublePayload()
+    {
+        // Half is not IConvertible, so Convert.ToDouble threw for every Half vector, matrix, tensor and scalar.
+        var vector = new Vector<Half>(new[] { (Half)1.5, (Half)(-2.25), (Half)0.125 });
+        var tensor = new Tensor<Half>(new[] { 2, 2 }, new Vector<Half>(new[] { (Half)1, (Half)2, (Half)(-3), (Half)0.5 }));
+        Half scalar = (Half)0.75;
+        var writing = new ModelStateRegistry<Half>();
+        writing.Declare("v", () => (Vector<Half>?)vector, (Vector<Half>? _) => { });
+        writing.Declare("t", () => (Tensor<Half>?)tensor, (Tensor<Half>? _) => { });
+        writing.DeclareScalar("s", () => scalar, _ => { });
+
+        var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writing.WriteAll(writer);
+            writer.Flush();
+        }
+
+        stream.Position = 0;
+        Vector<Half>? restoredVector = null;
+        Tensor<Half>? restoredTensor = null;
+        Half restoredScalar = default;
+        var reading = new ModelStateRegistry<Half>();
+        reading.Declare("v", () => restoredVector, (Vector<Half>? value) => restoredVector = value);
+        reading.Declare("t", () => restoredTensor, (Tensor<Half>? value) => restoredTensor = value);
+        reading.DeclareScalar("s", () => restoredScalar, value => restoredScalar = value);
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            reading.ReadAll(reader);
+        }
+
+        Assert.NotNull(restoredVector);
+        Assert.NotNull(restoredTensor);
+        Assert.Equal(vector.ToArray(), restoredVector?.ToArray());
+        Assert.Equal(tensor.ToArray(), restoredTensor?.ToArray());
+        Assert.Equal(new[] { 2, 2 }, restoredTensor?.Shape.ToArray());
+        Assert.Equal(scalar, restoredScalar);
+    }
+
+    [Fact]
+    public void TensorView_IsWrittenInLogicalOrder()
+    {
+        // A transposed view shares the [[1, 2, 3], [4, 5, 6]] storage; its logical order is 1, 4, 2, 5, 3, 6.
+        // The payload converted the backing storage, so the restored tensor came back as 1, 2, 3, 4, 5, 6.
+        var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
+        var view = source.Transpose(new[] { 1, 0 });
+        var writing = new ModelStateRegistry<double>();
+        writing.Declare("t", () => (Tensor<double>?)view, (Tensor<double>? _) => { });
+        var stream = Write(writing);
+
+        stream.Position = 0;
+        Tensor<double>? restored = null;
+        var reading = new ModelStateRegistry<double>();
+        reading.Declare("t", () => restored, (Tensor<double>? value) => restored = value);
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            reading.ReadAll(reader);
+        }
+
+        Assert.NotNull(restored);
+        Assert.Equal(new[] { 3, 2 }, restored?.Shape.ToArray());
+        Assert.Equal(new[] { 1.0, 4.0, 2.0, 5.0, 3.0, 6.0 }, restored?.ToArray());
+    }
+
     private static MemoryStream Write(ModelStateRegistry<double> registry)
     {
         var stream = new MemoryStream();

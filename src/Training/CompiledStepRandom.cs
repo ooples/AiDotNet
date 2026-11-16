@@ -108,6 +108,50 @@ public static class CompiledStepRandom<T>
     }
 
     /// <summary>
+    /// An inverted-dropout mask of <paramref name="shape"/>, redrawn on every compiled replay: each entry is 0 with
+    /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>, one <see cref="Random.NextDouble"/> per
+    /// entry in row-major order, as an eager host loop draws it.
+    /// </summary>
+    internal static Tensor<T> InvertedDropoutMask(int[] shape, Random random, double rate)
+    {
+        Guard.NotNull(random);
+        T keep = NumOps.FromDouble(1.0 / (1.0 - rate));
+        return Draw(shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
+    }
+
+    /// <summary>
+    /// A per-step 0/1 gate (shape <c>[1]</c>) that is 0 with probability <paramref name="dropProbability"/>, redrawn on
+    /// every compiled replay: LayerDrop as <c>gate * layer(x) + (1 - gate) * x</c>, which is exactly <c>layer(x)</c> or
+    /// <c>x</c>, keeps every layer in the traced graph instead of baking the traced step's choice of layers into it.
+    /// </summary>
+    internal static Tensor<T> KeepGate(Random random, double dropProbability)
+    {
+        Guard.NotNull(random);
+        return Draw(new[] { 1 }, g => g.AsWritableSpan()[0] = random.NextDouble() < dropProbability ? NumOps.Zero : NumOps.One);
+    }
+
+    /// <summary>
+    /// <paramref name="kept"/> where the <see cref="KeepGate"/> gate is 1 and <paramref name="skipped"/> where it is 0,
+    /// as a selection that has the same shape as <paramref name="kept"/>.
+    /// </summary>
+    /// <remarks>
+    /// A selection, not <c>gate * kept + (1 - gate) * skipped</c>. A dropped layer still runs so that it stays in the
+    /// traced graph. If its output overflowed (inf or NaN, which Half reaches at 65504), <c>0 * inf</c> made the
+    /// skipped step NaN, where LayerDrop's reference skips the layer and returns the input untouched.
+    /// </remarks>
+    internal static Tensor<T> Gated(IEngine engine, Tensor<T> gate, Tensor<T> kept, Tensor<T> skipped)
+    {
+        var shape = kept._shape;
+        var ones = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Repeat(1, shape.Length));
+        var gateEverywhere = engine.TensorBroadcastTo(engine.Reshape(gate, ones), shape);
+        return engine.TensorWhere(engine.TensorGreaterThan(gateEverywhere, NumOps.Zero), kept, skipped);
+    }
+
+    /// <summary>
     /// A per-step seed counter value for a layer that derives its randomness from one (dropout): normally
     /// <paramref name="advance"/>'s result. Inside <see cref="ReplayDraws"/> it is the value the probe of the same step
     /// took, in order, so a retrace does not advance the counter a second time.

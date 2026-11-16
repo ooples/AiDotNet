@@ -28,15 +28,15 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
     private readonly int _kernel;
 
     // Two linear maps from the length-L window to a scalar next-step forecast (ForecastHorizon=1 in the
-    // supervised harness): seasonal and trend weights + biases. Stored as double for the closed-form update.
+    // supervised harness): seasonal and trend weights + biases.
     [TrainableParameter]
-    private readonly double[] _wSeasonal;
+    private readonly Vector<T> _wSeasonal;
     [TrainableParameter]
-    private readonly double[] _wTrend;
+    private readonly Vector<T> _wTrend;
     [TrainableParameter]
-    private double _bSeasonal;
+    private T _bSeasonal;
     [TrainableParameter]
-    private double _bTrend;
+    private T _bTrend;
 
     public DLinearModel(DLinearOptions<T>? options = null)
         : base(options ??= new DLinearOptions<T>())
@@ -50,161 +50,176 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         _kernel = k % 2 == 0 ? k + 1 : k; // odd kernel for a centered moving average
 
         // Initialize both maps to a uniform 1/L (a moving-average-like start), the common DLinear init.
-        _wSeasonal = new double[_l];
-        _wTrend = new double[_l];
-        for (int j = 0; j < _l; j++)
-        {
-            _wSeasonal[j] = 1.0 / _l;
-            _wTrend[j] = 1.0 / _l;
-        }
+        T uniform = NumOps.FromDouble(1.0 / _l);
+        _wSeasonal = Engine.Fill(_l, uniform);
+        _wTrend = Engine.Fill(_l, uniform);
+        _bSeasonal = NumOps.Zero;
+        _bTrend = NumOps.Zero;
     }
 
-    /// <summary>Centered moving-average trend (edge-padded by replication) and the seasonal remainder.</summary>
-    private (double[] Trend, double[] Seasonal) Decompose(double[] x)
+    /// <summary>
+    /// Centered moving-average trend (edge-padded by replication) and the seasonal remainder of every row of
+    /// <paramref name="windows"/> ([batch, L]).
+    /// </summary>
+    /// <remarks>
+    /// The model is fitted and evaluated in double, as master did, and the maps are stored in T. In Half the
+    /// batch gradient window · error of series in the hundreds overflows past 65504.
+    /// </remarks>
+    private (Tensor<double> Trend, Tensor<double> Seasonal) Decompose(Tensor<double> windows)
     {
-        int n = x.Length;
-        var trend = new double[n];
         int half = _kernel / 2;
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int o = -half; o <= half; o++)
-            {
-                int idx = Math.Max(0, Math.Min(n - 1, i + o)); // replicate edges (net471: no Math.Clamp)
-                sum += x[idx];
-            }
+        var padded = Engine.PadNd<double>(windows, new[] { half, half }, AiDotNet.Tensors.Engines.PadMode.Replicate);
 
-            trend[i] = sum / _kernel;
-        }
-
-        var seasonal = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            seasonal[i] = x[i] - trend[i];
-        }
-
-        return (trend, seasonal);
+        // [batch, L, kernel] sliding windows summed over the kernel axis, in master's offset order.
+        var sums = Engine.ReduceSum(Engine.TensorUnfold(padded, 1, _kernel, 1), new[] { 2 }, keepDims: false);
+        var trend = Engine.TensorDivideScalar(sums, (double)_kernel);
+        return (trend, Engine.TensorSubtract(windows, trend));
     }
 
-    private double Forecast(double[] trend, double[] seasonal)
+    private Tensor<double> Forecast(Tensor<double> trend, Tensor<double> seasonal, DoubleMaps maps)
     {
-        double pred = _bSeasonal + _bTrend;
-        for (int j = 0; j < _l; j++)
-        {
-            pred += _wSeasonal[j] * seasonal[j] + _wTrend[j] * trend[j];
-        }
-
-        return pred;
+        var seasonalPart = Engine.TensorMatMul(seasonal, Tensor<double>.FromVector(maps.Seasonal, new[] { _l, 1 }));
+        var trendPart = Engine.TensorMatMul(trend, Tensor<double>.FromVector(maps.Trend, new[] { _l, 1 }));
+        return Engine.TensorAddScalar(Engine.TensorAdd(seasonalPart, trendPart), maps.SeasonalBias + maps.TrendBias);
     }
 
-    private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
-
-    private static double[] LastWindow(Vector<T> input, int l)
+    /// <summary>
+    /// The last <paramref name="l"/> columns of every row of <paramref name="rows"/> ([batch, cols]),
+    /// zero-padded on the right when there are fewer columns, with non-finite values replaced by zero.
+    /// </summary>
+    private Tensor<double> LastWindow(Tensor<double> rows, int l)
     {
-        var x = new double[l];
-        int start = Math.Max(0, input.Length - l);
-        for (int j = 0; j < l; j++)
+        int batch = rows.Shape[0];
+        int cols = rows.Shape[1];
+        int start = Math.Max(0, cols - l);
+        int take = Math.Min(l, cols);
+        var window = take > 0
+            ? Engine.TensorSlice(rows, new[] { 0, start }, new[] { batch, take })
+            : new Tensor<double>(new[] { batch, 0 });
+        if (take < l)
         {
-            int srcIdx = start + j;
-            double v = srcIdx < input.Length ? Convert.ToDouble(input[srcIdx]) : 0.0;
-            x[j] = IsFiniteValue(v) ? v : 0.0;
+            window = Engine.TensorConcatenate(new[] { window, new Tensor<double>(new[] { batch, l - take }) }, 1);
         }
 
-        return x;
+        return Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+    }
+
+    /// <summary>The seasonal and trend maps in double, for fitting and forecasting.</summary>
+    private sealed class DoubleMaps
+    {
+        public DoubleMaps(Vector<double> seasonal, Vector<double> trend, double seasonalBias, double trendBias)
+        {
+            Seasonal = seasonal;
+            Trend = trend;
+            SeasonalBias = seasonalBias;
+            TrendBias = trendBias;
+        }
+
+        public Vector<double> Seasonal { get; }
+        public Vector<double> Trend { get; }
+        public double SeasonalBias { get; set; }
+        public double TrendBias { get; set; }
+    }
+
+    private DoubleMaps MapsAsDouble() => new DoubleMaps(
+        _wSeasonal.AsTensor().Cast<double>().ToVector(),
+        _wTrend.AsTensor().Cast<double>().ToVector(),
+        NumOps.ToDouble(_bSeasonal),
+        NumOps.ToDouble(_bTrend));
+
+    private void StoreMaps(DoubleMaps maps)
+    {
+        maps.Seasonal.AsTensor().Cast<T>().AsVector().CopyTo(_wSeasonal.AsWritableSpan());
+        maps.Trend.AsTensor().Cast<T>().AsVector().CopyTo(_wTrend.AsWritableSpan());
+        _bSeasonal = NumOps.FromDouble(maps.SeasonalBias);
+        _bTrend = NumOps.FromDouble(maps.TrendBias);
     }
 
     /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        double lr = _options.LearningRate;
+        var rows = Tensor<T>.FromMatrix(x).Cast<double>();
+        var targets = Tensor<T>.FromVector(y, new[] { n, 1 }).Cast<double>();
+        var maps = MapsAsDouble();
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToList();
+            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToArray();
 
-            // Squared error accumulated over the epoch, to report a mean loss below.
-            double epochSquaredError = 0.0;
-            int epochSamples = 0;
+            // Per-sample errors of the epoch, to report a mean squared error below.
+            var epochErrors = new List<Tensor<double>>();
 
             for (int batchStart = 0; batchStart < n; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, n);
-                int bs = batchEnd - batchStart;
-
-                var gS = new double[_l];
-                var gT = new double[_l];
-                double gbS = 0, gbT = 0;
-
-                for (int bi = batchStart; bi < batchEnd; bi++)
-                {
-                    int i = order[bi];
-                    var window = new double[_l];
-                    int cols = x.Columns;
-                    int start = Math.Max(0, cols - _l);
-                    for (int j = 0; j < _l; j++)
-                    {
-                        int c = start + j;
-                        double v = c < cols ? Convert.ToDouble(x[i, c]) : 0.0;
-                        window[j] = IsFiniteValue(v) ? v : 0.0;
-                    }
-
-                    var (trend, seasonal) = Decompose(window);
-                    double pred = Forecast(trend, seasonal);
-                    double err = pred - Convert.ToDouble(y[i]); // dMSE/dpred ∝ error (linear gradients)
-
-                    if (IsFiniteValue(err))
-                    {
-                        epochSquaredError += err * err;
-                        epochSamples++;
-                    }
-
-                    for (int j = 0; j < _l; j++)
-                    {
-                        gS[j] += err * seasonal[j];
-                        gT[j] += err * trend[j];
-                    }
-
-                    gbS += err;
-                    gbT += err;
-                }
-
-                double inv = bs > 0 ? 1.0 / bs : 0.0;
-                for (int j = 0; j < _l; j++)
-                {
-                    _wSeasonal[j] -= lr * gS[j] * inv;
-                    _wTrend[j] -= lr * gT[j] * inv;
-                }
-
-                _bSeasonal -= lr * gbS * inv;
-                _bTrend -= lr * gbT * inv;
+                var batch = new Tensor<int>(new[] { batchEnd - batchStart }, new Vector<int>(
+                    new ArraySegment<int>(order, batchStart, batchEnd - batchStart)));
+                epochErrors.Add(TrainBatch(rows, targets, batch, maps));
             }
+
+            StoreMaps(maps);
 
             // Report every epoch, including a fully diverged one (no finite sample): a non-finite loss counts
             // as non-improving, so the training callback and patience-based early stopping still fire for the
             // worst-case divergence this feature is meant to guard against.
-            double epochLoss = epochSamples > 0 ? epochSquaredError / epochSamples : double.PositiveInfinity;
-            if (!ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLoss)))
+            if (!ReportEpoch(epoch, _options.Epochs, EpochLoss(epochErrors)))
             {
                 break;
             }
         }
+    }
 
+    /// <summary>One mini-batch gradient step on the rows at <paramref name="batch"/>; returns the batch errors.</summary>
+    private Tensor<double> TrainBatch(Tensor<double> rows, Tensor<double> targets, Tensor<int> batch, DoubleMaps maps)
+    {
+        int bs = batch.Length;
+        var window = LastWindow(Engine.TensorIndexSelect(rows, batch, 0), _l);
+        var (trend, seasonal) = Decompose(window);
+        var err = Engine.TensorSubtract(Forecast(trend, seasonal, maps), Engine.TensorIndexSelect(targets, batch, 0));
+
+        // dMSE/dpred is proportional to the error (linear gradients), averaged over the batch.
+        double step = bs > 0 ? _options.LearningRate / bs : 0.0;
+        var gS = Engine.TensorMatMul(Engine.TensorTranspose(seasonal), err).ToVector();
+        var gT = Engine.TensorMatMul(Engine.TensorTranspose(trend), err).ToVector();
+        maps.Seasonal.SubtractInPlace(Engine.Multiply(gS, step));
+        maps.Trend.SubtractInPlace(Engine.Multiply(gT, step));
+
+        double biasStep = Engine.TensorSum(err) * step;
+        maps.SeasonalBias -= biasStep;
+        maps.TrendBias -= biasStep;
+        return err;
+    }
+
+    /// <summary>Mean squared error over the finite errors of an epoch; +infinity when none is finite.</summary>
+    private T EpochLoss(List<Tensor<double>> epochErrors)
+    {
+        double loss = double.PositiveInfinity;
+        if (epochErrors.Count > 0)
+        {
+            var errors = Engine.TensorConcatenate(epochErrors.ToArray(), 0);
+            var finite = Engine.TensorIsFinite(errors);
+            var zeros = Engine.TensorZerosLike(errors);
+            int samples = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(errors), zeros));
+            if (samples > 0)
+            {
+                var kept = Engine.TensorWhere(finite, errors, zeros);
+                loss = Engine.TensorSum(Engine.TensorMultiply(kept, kept)) / samples;
+            }
+        }
+
+        return NumOps.FromDouble(loss);
     }
 
     /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
-        var window = LastWindow(input, _l);
+        var window = LastWindow(Tensor<T>.FromVector(input, new[] { 1, input.Length }).Cast<double>(), _l);
         var (trend, seasonal) = Decompose(window);
-        double pred = Forecast(trend, seasonal);
-        return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
+        T pred = NumOps.FromDouble(Forecast(trend, seasonal, MapsAsDouble())[0, 0]);
+        return NumOps.IsNaN(pred) || NumOps.IsInfinity(pred) ? NumOps.Zero : pred;
     }
-
-
-
-
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

@@ -25,27 +25,27 @@ namespace AiDotNet.Preprocessing.FeatureSelection.CostSensitive;
 public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _budget;
-    private readonly double[]? _featureCosts;
+    private readonly Vector<T>? _featureCosts;
 
-    private double[]? _relevanceScores;
-    private double[]? _valuePerCost;
+    private Vector<T>? _relevanceScores;
+    private Vector<T>? _valuePerCost;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _usedBudget;
+    private T _usedBudget;
 
     public double Budget => _budget;
-    public double[]? FeatureCosts => _featureCosts;
-    public double[]? RelevanceScores => _relevanceScores;
-    public double[]? ValuePerCost => _valuePerCost;
+    public Vector<T>? FeatureCosts => _featureCosts;
+    public Vector<T>? RelevanceScores => _relevanceScores;
+    public Vector<T>? ValuePerCost => _valuePerCost;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
-    public double UsedBudget => _usedBudget;
+    public T UsedBudget => _usedBudget;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public BudgetConstrainedFS(
         double budget = 100.0,
-        double[]? featureCosts = null,
+        Vector<T>? featureCosts = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -54,6 +54,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
         _budget = budget;
         _featureCosts = featureCosts;
+        _usedBudget = NumOps.Zero;
     }
 
     /// <inheritdoc />
@@ -70,130 +71,76 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Compute relevance scores
-        _relevanceScores = ComputeRelevanceScores(data, target, n, p);
 
         // Get or create feature costs
         var costs = _featureCosts ?? CreateUnitCosts(p);
         if (costs.Length != p)
             throw new ArgumentException("Feature costs length must match number of features.");
 
-        // Compute value per cost
-        _valuePerCost = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _valuePerCost[j] = costs[j] > 1e-10 ? _relevanceScores[j] / costs[j] : _relevanceScores[j] * 1000;
-        }
-
-        // Greedy selection within budget
-        var selected = new List<int>();
-        _usedBudget = 0;
-
-        // Sort by value per cost
-        var sortedFeatures = Enumerable.Range(0, p)
-            .OrderByDescending(j => _valuePerCost[j])
-            .ToList();
-
-        foreach (int j in sortedFeatures)
-        {
-            if (_usedBudget + costs[j] <= _budget)
-            {
-                selected.Add(j);
-                _usedBudget += costs[j];
-            }
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
-
-        IsFitted = true;
+        FitWithCosts(data, target, costs);
     }
 
-    public void Fit(Matrix<T> data, Vector<T> target, double[] featureCosts)
+    public void Fit(Matrix<T> data, Vector<T> target, Vector<T> featureCosts)
     {
         if (featureCosts.Length != data.Columns)
             throw new ArgumentException("Feature costs must match number of columns.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
+        FitWithCosts(data, target, featureCosts);
+    }
+
+    private void FitWithCosts(Matrix<T> data, Vector<T> target, Vector<T> costs)
+    {
+        var engine = Engine;
         int p = data.Columns;
 
-        // Compute relevance scores
-        _relevanceScores = ComputeRelevanceScores(data, target, n, p);
+        // Compute relevance scores (|correlation| with target)
+        var relevance = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+        _relevanceScores = relevance.ToVector();
 
-        // Compute value per cost
-        _valuePerCost = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _valuePerCost[j] = featureCosts[j] > 1e-10
-                ? _relevanceScores[j] / featureCosts[j]
-                : _relevanceScores[j] * 1000;
-        }
+        // Compute value per cost (a (near-)free feature gets 1000x its relevance)
+        var costTensor = Tensor<T>.FromVector(costs);
+        var valuePerCost = engine.TensorWhere(engine.TensorGreaterThan(costTensor, PreprocessingTensorOps.Tolerance<T>(1e-10)),
+            engine.TensorDivide(relevance, costTensor), engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(1000)));
+        _valuePerCost = valuePerCost.ToVector();
 
-        // Greedy selection within budget
+        // Greedy selection within budget, by value per cost: every prefix of the remaining features whose
+        // running total stays within budget is taken at once, the first feature that does not fit is skipped
+        var order = PreprocessingTensorOps.StableOrder(valuePerCost, descending: true);
+        var sortedCosts = p == 0
+            ? new Tensor<T>(new[] { 0 })
+            : engine.TensorIndexSelect(costTensor, new Tensor<int>(order, new[] { p }), 0);
         var selected = new List<int>();
-        _usedBudget = 0;
-
-        var sortedFeatures = Enumerable.Range(0, p)
-            .OrderByDescending(j => _valuePerCost[j])
-            .ToList();
-
-        foreach (int j in sortedFeatures)
+        T budget = NumOps.FromDouble(_budget);
+        var used = new Tensor<T>(new[] { 1 });
+        int start = 0;
+        while (start < p)
         {
-            if (_usedBudget + featureCosts[j] <= _budget)
-            {
-                selected.Add(j);
-                _usedBudget += featureCosts[j];
-            }
+            int remaining = p - start;
+            var rest = engine.TensorSlice(sortedCosts, new[] { start }, new[] { remaining });
+            var running = engine.TensorSlice(
+                engine.TensorCumSum(engine.TensorConcatenate(new[] { used, rest }, 0), 0), new[] { 1 }, new[] { remaining });
+            var over = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(
+                engine.TensorLessEqual(running, PreprocessingTensorOps.Filled(new[] { remaining }, budget))));
+            int fit = over.Length == 0 ? remaining : over[0];
+            selected.AddRange(order.Skip(start).Take(fit));
+            if (fit > 0)
+                used = engine.TensorSlice(running, new[] { fit - 1 }, new[] { 1 });
+            start += fit + 1;
         }
 
+        _usedBudget = engine.TensorSum(used);
         _selectedIndices = selected.OrderBy(x => x).ToArray();
 
         IsFitted = true;
     }
 
-    private double[] ComputeRelevanceScores(Matrix<T> data, Vector<T> target, int n, int p)
+    private Vector<T> CreateUnitCosts(int p)
     {
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
+        return PreprocessingTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
     }
-
-    private double[] CreateUnitCosts(int p)
-    {
-        var costs = new double[p];
-        for (int j = 0; j < p; j++)
-            costs[j] = 1.0;
-        return costs;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -207,15 +154,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("BudgetConstrainedFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
@@ -237,9 +176,9 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         return mask;
     }
 
-    public double GetRemainingBudget()
+    public T GetRemainingBudget()
     {
-        return _budget - _usedBudget;
+        return NumOps.Subtract(NumOps.FromDouble(_budget), _usedBudget);
     }
 
     /// <inheritdoc />

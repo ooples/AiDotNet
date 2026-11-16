@@ -252,9 +252,9 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
         int participatingStreams = Math.Min(_inputStreams, targetCodebook + 1);
         for (int stream = 0; stream < participatingStreams; stream++)
         {
-            var tokens = new Tensor<T>([1, frames]);
-            for (int frame = 0; frame < frames; frame++)
-                tokens[0, frame] = NumOps.FromDouble(codebooks[stream, frame]);
+            var row = new int[frames];
+            Buffer.BlockCopy(codebooks, stream * frames * sizeof(int), row, 0, frames * sizeof(int));
+            var tokens = new Tensor<int>(row, [1, frames]).Cast<T>();
             hidden = Engine.TensorAdd(hidden, _tokenEmbeddings[stream].Forward(tokens));
         }
 
@@ -276,10 +276,11 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
         }
 
         int last = rankThree ? logits.Shape[1] - 1 : logits.Shape[0] - 1;
-        var values = new T[_options.OutputVocabularySize];
-        for (int token = 0; token < values.Length; token++)
-            values[token] = rankThree ? logits[0, last, token] : logits[last, token];
-        return new Vector<T>(values);
+        int vocabulary = _options.OutputVocabularySize;
+        var row = rankThree
+            ? Engine.TensorSlice(logits, [0, last, 0], [1, 1, vocabulary])
+            : Engine.TensorSlice(logits, [last, 0], [1, vocabulary]);
+        return new Vector<T>(row.ToArray());
     }
 
     internal void ResetCache()
@@ -340,12 +341,10 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
 
     private Tensor<T> AddPositions(Tensor<T> hidden, int sequence, int positionOffset)
     {
-        var positions = new Tensor<T>([hidden.Shape[0], sequence]);
-        for (int batch = 0; batch < hidden.Shape[0]; batch++)
-        {
-            for (int position = 0; position < sequence; position++)
-                positions[batch, position] = NumOps.FromDouble(positionOffset + position);
-        }
+        int batches = hidden.Shape[0];
+        var ids = new int[batches * sequence];
+        for (int index = 0; index < ids.Length; index++) ids[index] = positionOffset + index % sequence;
+        var positions = new Tensor<int>(ids, [batches, sequence]).Cast<T>();
         return Engine.TensorAdd(hidden, _positionEmbeddings.Forward(positions));
     }
 

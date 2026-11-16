@@ -123,61 +123,53 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
             throw new ArgumentException(
                 $"The image height ({height}) and width ({width}) must each be divisible by the patch size {_patchSize}.", nameof(images));
 
-        var longer = new bool[batch];
+        // longer flags as a [batch] 0/1 tensor (mask > 0.5; NaN counts as not longer).
+        var longer = new Tensor<T>(new[] { batch });
         if (longerMask is not null)
         {
             if (longerMask.Length != batch)
                 throw new ArgumentException($"The longer mask has {longerMask.Length} entries for a batch of {batch}.", nameof(longerMask));
-            for (int b = 0; b < batch; b++) longer[b] = NumOps.ToDouble(longerMask.GetFlat(b)) > 0.5;
+            longer = Engine.TensorGreaterThan(longerMask.Reshape(new[] { batch }), NumOps.FromDouble(0.5));
         }
-        if (IsTrainingMode && Array.TrueForAll(longer, l => !l))
+        if (IsTrainingMode && Engine.TensorCountNonzero(longer) == 0)
         {
             // htsat.forward: "if self.training: x['longer'][torch.randint(0, B, (1,))] = True".
             long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
             var rng = RandomSeed.HasValue
                 ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
                 : RandomHelper.CreateSecureRandom();
-            longer[rng.Next(batch)] = true;
+            var one = new Tensor<T>(new[] { 1 });
+            one.Fill(NumOps.One);
+            longer = Engine.TensorSetSlice(longer, one, new[] { rng.Next(batch) });
         }
 
         var global = _projection.Forward(Engine.TensorSlice(images, new[] { 0, 0, 0, 0 }, new[] { batch, 1, height, width }));
-        int gridH = global.Shape[2], gridW = global.Shape[3];
+        int gridW = global.Shape[3];
 
-        var longerIndices = new List<int>();
-        for (int b = 0; b < batch; b++) if (longer[b]) longerIndices.Add(b);
-        if (longerIndices.Count > 0)
+        // Row indices of the longer clips in ascending order (torch.nonzero is row-major).
+        var nonzero = Engine.TensorNonzero(longer);
+        int longerCount = nonzero.Shape[0];
+        if (longerCount > 0)
         {
+            var longerIndices = nonzero.Reshape(new[] { longerCount });
             var globalLonger = Gather(global, longerIndices);
             var local = LocalMaps(Gather(images, longerIndices), gridW);
             var fused = _fusion.Forward(globalLonger, local);
-            if (longerIndices.Count == batch)
-            {
-                global = fused;
-            }
-            else
-            {
-                var rows = new Tensor<T>[batch];
-                int next = 0;
-                for (int b = 0; b < batch; b++)
-                {
-                    rows[b] = longer[b]
-                        ? Engine.TensorSlice(fused, new[] { next++, 0, 0, 0 }, new[] { 1, _embedDim, gridH, gridW })
-                        : Engine.TensorSlice(global, new[] { b, 0, 0, 0 }, new[] { 1, _embedDim, gridH, gridW });
-                }
-                global = Engine.TensorConcatenate(rows, 0);
-            }
+            // Fused rows replace their global rows; the rest keep the global map.
+            global = longerCount == batch
+                ? fused
+                : Engine.TensorIndexCopy(global, 0, longerIndices, fused);
         }
+        int gridH = global.Shape[2];
 
         var tokens = Engine.Reshape(Engine.TensorPermute(global, new[] { 0, 2, 3, 1 }), new[] { batch, gridH * gridW, _embedDim });
         return _norm.Forward(tokens);
     }
 
-    private Tensor<T> Gather(Tensor<T> source, List<int> indices)
+    private Tensor<T> Gather(Tensor<T> source, Tensor<int> indices)
     {
-        if (indices.Count == source.Shape[0]) return source;
-        var index = new Tensor<int>(new[] { indices.Count });
-        for (int i = 0; i < indices.Count; i++) index[i] = indices[i];
-        return Engine.TensorGather(source, index, axis: 0);
+        if (indices.Length == source.Shape[0]) return source;
+        return Engine.TensorGather(source, indices, axis: 0);
     }
 
     // The three local crops -> [n, E, gridH, gridW], laid out as the reference's view/permute/flatten/pad.

@@ -110,19 +110,20 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets the learning rate for the inner loop (task adaptation).
     /// </summary>
-    /// <value>Default: 0.01.</value>
+    /// <value>Default: 0.0525, the centre of the U[0.005, 0.1] range Li et al. (2017) draw alpha from.</value>
     /// <remarks>
     /// <para>
     /// In Meta-SGD, this serves as the initial value for per-parameter learning rates
-    /// when using uniform initialization. During meta-training, each parameter will
-    /// learn its own optimal learning rate, which may diverge from this initial value.
+    /// when using uniform initialization, and as the centre of the range for random initialization. During
+    /// meta-training, each parameter will learn its own optimal learning rate, which may diverge from this
+    /// initial value.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is the starting point for all learning rates.
     /// Meta-SGD will adjust each one individually as it learns.
     /// </para>
     /// </remarks>
-    public double InnerLearningRate { get; set; } = 0.01;
+    public double InnerLearningRate { get; set; } = 0.0525;
 
     /// <summary>
     /// Gets or sets the learning rate for the outer loop (meta-optimization).
@@ -331,7 +332,10 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets the initialization strategy for per-parameter learning rates.
     /// </summary>
-    /// <value>Default: MetaSGDLearningRateInitialization.Uniform.</value>
+    /// <value>
+    /// Default: MetaSGDLearningRateInitialization.Random. Li et al. (2017), Sec. 4: alpha is initialised randomly
+    /// in [0.005, 0.1], which the defaults InnerLearningRate = 0.0525 and LearningRateInitRange = 0.095 give.
+    /// </value>
     /// <remarks>
     /// <para>
     /// <b>Initialization strategies:</b>
@@ -342,19 +346,19 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// - <b>Xavier:</b> Xavier-style initialization
     /// </para>
     /// </remarks>
-    public MetaSGDLearningRateInitialization LearningRateInitialization { get; set; } = MetaSGDLearningRateInitialization.Uniform;
+    public MetaSGDLearningRateInitialization LearningRateInitialization { get; set; } = MetaSGDLearningRateInitialization.Random;
 
     /// <summary>
     /// Gets or sets the initialization range for learning rates when using random initialization.
     /// </summary>
-    /// <value>Default: 0.1.</value>
+    /// <value>Default: 0.095, so the default random initialization covers the paper's [0.005, 0.1].</value>
     /// <remarks>
     /// <para>
     /// When using Random initialization, learning rates are initialized uniformly
     /// in [InnerLearningRate - range/2, InnerLearningRate + range/2].
     /// </para>
     /// </remarks>
-    public double LearningRateInitRange { get; set; } = 0.1;
+    public double LearningRateInitRange { get; set; } = 0.095;
 
     /// <summary>
     /// Gets or sets the minimum allowed per-parameter learning rate.

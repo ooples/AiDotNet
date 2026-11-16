@@ -212,7 +212,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             foreach (var piece in MeloTextPipeline.SplitSentence(text, o.Language))
             {
                 string sentence = o.Language is MeloLanguage.English or MeloLanguage.ChineseMixEnglish
-                    ? Regex.Replace(piece, "([a-z])([A-Z])", "$1 $2")
+                    ? Regex.Replace(piece, "([a-z])([A-Z])", "$1 $2", RegexOptions.None, TimeSpan.FromSeconds(1))
                     : piece;
                 var utterance = Prepare(sentence);
                 var (waveform, _) = _synthesizer!.Infer(utterance.Text.Symbols, utterance.Text.Tones, utterance.Text.Languages,
@@ -228,6 +228,20 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new Tensor<T>(new[] { samples.Count }, new Vector<T>(samples.ToArray()));
     }
 
+    /// <summary>
+    /// Symbol ids carried in T as ints in [0, <paramref name="count"/>): each rounded half to even, then clamped to the
+    /// table, so +∞ reads as the last symbol and −∞ as the first, as the saturating int conversion and the clamp give
+    /// them; NaN reads as 0.
+    /// </summary>
+    internal static int[] SymbolIds(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> input, int count)
+    {
+        Validation.Guard.NotNull(engine);
+        Validation.Guard.NotNull(input);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rounded = engine.TensorNanToNum(engine.TensorRound(input), 0.0, count - 1.0, 0.0);
+        return engine.TensorClamp(rounded, ops.Zero, ops.FromDouble(count - 1)).Cast<int>().ToArray();
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// The tensor path reads <paramref name="input"/> <c>[tokens]</c> as MeloTTS symbol ids (rounded, blanks
@@ -239,7 +253,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         var o = _options;
         int count = MeloSymbols.Symbols.Count;
-        var raw = input.ToVector().Select(v => Math.Max(0, Math.Min(count - 1, (int)Math.Round(NumOps.ToDouble(v))))).ToArray();
+        var raw = SymbolIds(Engine, input, count);
         var symbols = MeloSymbols.Intersperse(raw);
         string code = MeloTextPipeline.Code(o.Language);
         var tones = MeloSymbols.Intersperse(Enumerable.Repeat(MeloSymbols.ToneStart(code), raw.Length).ToArray());
@@ -413,13 +427,14 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         List<(Tensor<T> Score, List<Tensor<T>> Features)> realScores;
         using (new NoGradScope<T>()) realScores = _discriminators.Forward(Segment(u, o));
         loss = Engine.TensorAdd(loss, GeneratorAdversarialLoss(fake.Select(f => f.Score).ToList()));
+        var featureWeight = NumOps.FromDouble(2);
         for (int k = 0; k < fake.Count; k++)
             for (int l = 0; l < fake[k].Features.Count; l++)
             {
                 // feature_loss: 2 Σ mean |r − g|.
                 var r = Detached(realScores[k].Features[l]);
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))),
-                    NumOps.FromDouble(2)));
+                    featureWeight));
             }
         if (_options.UseDurationDiscriminator)
         {

@@ -596,10 +596,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
         var rand = Vector<T>.CreateRandom(tensor.Length, -0.5, 0.5);
         var randTensor = new Tensor<T>(tensor._shape, rand);
         var scaled = Engine.TensorMultiplyScalar(randTensor, scale);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled[i];
-        }
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <summary>

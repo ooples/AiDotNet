@@ -138,44 +138,50 @@ public class TukeyWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        // Special case: alpha = 0 is a rectangular window (all ones)
-        if (_numOps.Equals(_alpha, _numOps.Zero))
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            for (int n = 0; n < windowSize; n++)
-            {
-                window[n] = _numOps.One;
-            }
-            return window;
+            return degenerate;
         }
 
-        T N = _numOps.FromDouble(windowSize - 1);
-        T halfAlphaN = _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)));
-
-        for (int n = 0; n < windowSize; n++)
+        // scipy.signal.windows.tukey: alpha <= 0 is the rectangular window, alpha >= 1 is the Hann window.
+        if (_numOps.LessThanOrEquals(_alpha, _numOps.Zero))
         {
-            T nT = _numOps.FromDouble(n);
-            if (_numOps.LessThanOrEquals(nT, halfAlphaN))
-            {
-                // Left taper region: 0.5 * (1 + cos(π * (2n/(αN) - 1)))
-                T x = _numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
-            }
-            else if (_numOps.LessThan(nT, _numOps.Subtract(N, halfAlphaN)))
-            {
-                // Flat region
-                window[n] = _numOps.One;
-            }
-            else
-            {
-                // Right taper region: 0.5 * (1 + cos(π * (2n/(αN) - 2/α + 1)))
-                T x = _numOps.Add(_numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.Divide(_numOps.FromDouble(2), _alpha)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
-            }
+            return Vector<T>.CreateDefault(windowSize, _numOps.One);
         }
 
-        return window;
+        if (_numOps.GreaterThanOrEquals(_alpha, _numOps.One))
+        {
+            return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.5, 0.5);
+        }
+
+        // The index n, 2n/(alpha N) and the region tests are formed in double: Half holds integers exactly only
+        // up to 2048, so an index formed in Half merges neighbouring samples of a longer window.
+        var engine = AiDotNetEngine.Current;
+        double alpha = _numOps.ToDouble(_alpha);
+        double N = windowSize - 1;
+        double halfAlphaN = alpha * N / 2.0;
+        Tensor<double> n = WindowFunctionHelper.SampleIndices<double>(windowSize);
+
+        // 2n/(alpha N), shared by both tapers
+        Tensor<T> scaled = TensorCopyHelper.CastLogical<double, T>(
+            engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, 2.0), alpha * N));
+        T pi = _numOps.FromDouble(Math.PI);
+        T half = _numOps.FromDouble(0.5);
+
+        // Left taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 1)))
+        Tensor<T> left = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scaled, _numOps.One), pi)), _numOps.One), half);
+
+        // Right taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 2/alpha + 1)))
+        T rightShift = _numOps.Subtract(_numOps.One, _numOps.Divide(_numOps.FromDouble(2), _alpha));
+        Tensor<T> right = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(scaled, rightShift), pi)), _numOps.One), half);
+
+        // Flat region: n < N - alpha N / 2 (and past the left taper)
+        Tensor<T> flat = Tensor<T>.CreateDefault(new[] { windowSize }, _numOps.One);
+        Tensor<T> beforeRight = TensorCopyHelper.CastLogical<double, T>(engine.TensorLessThan(n, N - halfAlphaN));
+        Tensor<T> afterLeft = TensorCopyHelper.CastLogical<double, T>(engine.TensorGreaterThan(n, halfAlphaN));
+        return engine.TensorWhere(afterLeft, engine.TensorWhere(beforeRight, flat, right), left).ToVector();
     }
 
     /// <summary>

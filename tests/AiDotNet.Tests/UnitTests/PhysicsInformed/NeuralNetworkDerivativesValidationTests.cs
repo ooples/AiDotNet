@@ -37,9 +37,8 @@ public class NeuralNetworkDerivativesValidationTests
         var d = NeuralNetworkDerivatives<double>.ComputeDerivatives(SingleOutputNetwork(), new[] { 0.3, -0.7 }, 1);
         var first = d.FirstDerivatives ?? throw new InvalidOperationException("FirstDerivatives is null.");
         var second = d.SecondDerivatives ?? throw new InvalidOperationException("SecondDerivatives is null.");
-        Assert.Equal(1, first.GetLength(0));
-        Assert.Equal(2, first.GetLength(1));
-        Assert.Equal(new[] { 1, 2, 2 }, new[] { second.GetLength(0), second.GetLength(1), second.GetLength(2) });
+        Assert.Equal(new[] { 1, 2 }, first.Shape.ToArray());
+        Assert.Equal(new[] { 1, 2, 2 }, second.Shape.ToArray());
         // A Hessian of a smooth scalar function is symmetric.
         Assert.Equal(second[0, 0, 1], second[0, 1, 0], 10);
     }
