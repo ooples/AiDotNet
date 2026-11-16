@@ -13,11 +13,19 @@ permissions:
 
 jobs:
   e2e:
-    name: Playwright against production
+    name: Playwright against production (${{ matrix.part }})
     runs-on: ubuntu-latest
-    # The license-lifecycle spec writes to production; never run two suites at once.
+    # One job runs the suite; the full-site crawl runs as one job per kind of visitor, in parallel.
+    # Run back to back on one worker, with failures retried, they took hours.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [suite, anon, free, pro-stripe, pro-granted, admin]
+    timeout-minutes: 60
+    # The license-lifecycle spec writes to production; never run two suites at once. Each crawl
+    # makes its own throwaway users, so only the same part of two runs is serialized.
     concurrency:
-      group: website-e2e-production
+      group: website-e2e-production-${{ matrix.part }}
       cancel-in-progress: false
     defaults:
       run:
@@ -80,8 +88,15 @@ jobs:
           echo "SUPABASE_SERVICE_ROLE_KEY=$key" >> "$GITHUB_ENV"
 
       - name: Run Playwright E2E smoke tests
-        run: npx playwright test
+        # A crawl is not retried: re-crawling 12,000 pages reaches the same broken link again.
+        run: |
+          if [ "$PART" = suite ]; then
+            npx playwright test --grep-invert "every link and control works for"
+          else
+            npx playwright test --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
+          fi
         env:
+          PART: ${{ matrix.part }}
           PLAYWRIGHT_BASE_URL: https://www.aidotnet.dev
           PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
@@ -100,6 +115,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.part }}
           path: website/playwright-report/
           retention-days: 14
