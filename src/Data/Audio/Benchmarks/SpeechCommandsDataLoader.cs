@@ -604,34 +604,23 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
 
         if (targetLen <= 0) return;
 
-        // Linear interpolation: gather the floor/ceil neighbours with the engine and blend them
-        // with per-output weights (1 - frac, frac). The source position is
-        // nativeOffset + t * nativeRate / targetRate, so its floor is nativeOffset plus the integer
-        // quotient and frac is the integer remainder / targetRate: the index bookkeeping is integer-only
-        // and the weights and the blend are formed in double (cast to T once), like the scalar code: half
-        // precision cannot hold remainders above 2048 or a target rate above 65504.
-        var floorIdx = new int[targetLen];
-        var ceilIdx = new int[targetLen];
-        var remainders = new int[targetLen];
-        for (int t = 0; t < targetLen; t++)
-        {
-            long scaled = (long)t * nativeRate;
-            int f = nativeOffset + (int)(scaled / targetRate);
-            int c = f + 1;
-            floorIdx[t] = f > lastIdx ? lastIdx : f;
-            ceilIdx[t] = c > lastIdx ? lastIdx : c;
-            remainders[t] = (int)(scaled % targetRate);
-        }
-
+        // Form the source position in double with the scalar operation order, then derive its
+        // neighbours and fractional part. Remainder/rate is mathematically equivalent but can round
+        // differently from position - floor(position), changing a Half blend at its rounding midpoint.
         var engine = AiDotNetEngine.Current;
-        var source = new Tensor<T>(nativeBuf, new[] { nativeBuf.Length });
         var shape = new[] { targetLen };
-        var v0 = engine.TensorIndexSelect(source, new Tensor<int>(floorIdx, shape), 0);
-        var v1 = engine.TensorIndexSelect(source, new Tensor<int>(ceilIdx, shape), 0);
-        var remainder = new Tensor<int>(remainders, shape).Cast<double>();
-        double rate = targetRate;
-        var w1 = engine.TensorDivideScalar(remainder, rate);
-        var w0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remainder, rate), remainder), rate);
+        var position = engine.TensorAddScalar(engine.TensorDivide(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, targetLen), (double)nativeRate),
+            Tensor<double>.CreateDefault(shape, (double)targetRate)), (double)nativeOffset);
+        var floor = engine.TensorFloor(position);
+        var floorIndex = floor.Cast<int>();
+        var floorIdx = engine.TensorClamp(floorIndex, 0, lastIdx);
+        var ceilIdx = engine.TensorClamp(engine.TensorAddScalar(floorIndex, 1), 0, lastIdx);
+        var source = new Tensor<T>(nativeBuf, new[] { nativeBuf.Length });
+        var v0 = engine.TensorIndexSelect(source, floorIdx, 0);
+        var v1 = engine.TensorIndexSelect(source, ceilIdx, 0);
+        var w1 = engine.TensorSubtract(position, floor);
+        var w0 = engine.TensorSubtract(engine.TensorFullLike(w1, 1.0), w1);
         var blended = engine.TensorAdd(
             engine.TensorMultiply(v0.Cast<double>(), w0), engine.TensorMultiply(v1.Cast<double>(), w1));
         blended.Cast<T>().AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));

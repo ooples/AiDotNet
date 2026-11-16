@@ -95,8 +95,9 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         var labelsData = new int[totalSamples * 10];
 
         bool nchw = _options.Layout == ImageTensorLayout.NCHW;
-        // Divide by 255 (one rounding, matching the scalar b / 255.0) rather than multiply by fl(1/255)
-        T divisor = NumOps.FromDouble(_options.Normalize ? 255.0 : 1.0);
+        // Keep the scalar byte / 255.0 calculation in double, then round to T once.
+        // TensorDivideScalar multiplies by a rounded reciprocal and can change the final pixel.
+        var divisor = Tensor<double>.CreateDefault(new[] { 3, 32, 32 }, _options.Normalize ? 255.0 : 1.0);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -109,7 +110,7 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             var pixelValues = new int[pixelsPerImage];
             Array.Copy(sample, 1, pixelValues, 0, pixelsPerImage);
             var sampleTensor = AiDotNetEngine.Current
-                .TensorDivideScalar(new Tensor<int>(pixelValues, new[] { 3, 32, 32 }).Cast<T>(), divisor);
+                .TensorDivide(new Tensor<int>(pixelValues, new[] { 3, 32, 32 }).Cast<double>(), divisor).Cast<T>();
 
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);

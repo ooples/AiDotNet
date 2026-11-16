@@ -886,6 +886,10 @@ namespace AiDotNet.AutoML
         public override IVAEModel<T> VAE => _vae;
 
         /// <inheritdoc />
+        /// <remarks>Denoising optimizes only the predictor; the first-stage VAE remains frozen.</remarks>
+        protected override object TrainingParameterRoot => _noisePredictor;
+
+        /// <inheritdoc />
         public override IConditioningModule<T>? Conditioner => _conditioner;
 
         /// <inheritdoc />
