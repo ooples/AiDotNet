@@ -222,7 +222,10 @@
         "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
         "src/WaveletFunctions/FejérKorovkinWavelet.cs",
         "src/WaveletFunctions/WaveletEngineOps.cs",
-        "src/WindowFunctions/TukeyWindow.cs"
+        "src/WindowFunctions/TukeyWindow.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/PopulationSearchOps.cs",
+        "src/Preprocessing/FeatureSelection/Filter/Correlation/PartialCorrelation.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionInformationOps.cs"
       ],
       "status": "claimed; Wave 1 in progress across isolated fixer-1..4 + adversarial verifier-1..2 worktrees"
     },
@@ -466,7 +469,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T21:48:14.118569Z",
+  "updated_utc": "2026-11-16T21:49:38.5323120Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
