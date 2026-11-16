@@ -673,7 +673,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
         if (scope is null)
         {
-            ValidateIndicesOrThrow(input, vocabularySize);
+            ValidateIndicesOrThrow(Engine, input, vocabularySize);
             return input;
         }
 
@@ -685,7 +685,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             input._shape,
             (replayEngine, result) =>
             {
-                ValidateIndicesOrThrow(capturedInput, vocabularySize);
+                ValidateIndicesOrThrow(replayEngine, capturedInput, vocabularySize);
                 AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, capturedInput, result);
             },
             // Token IDs are discrete: the embedding table receives gradients, the validation output does not.
@@ -700,33 +700,32 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Validation runs on every call because token values can change while the shape remains constant.
     /// This replaces a silent mode switch or backend-specific gather failure with one actionable error.
     /// </remarks>
-    private void ValidateIndicesOrThrow(Tensor<T> input, int vocabularySize)
+    private static void ValidateIndicesOrThrow(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> input, int vocabularySize)
     {
         if (input.Length == 0)
             return;
 
-        // An element is rejected when it is not finite, is more than 1e-6 from its truncation, or truncates
-        // outside [0, vocabularySize). Values past the int range truncate outside it, as the (int) cast
-        // wrapped them negative.
+        var ops = MathHelper.GetNumericOperations<T>();
+        // Reject non-finite values, fractional IDs, and IDs outside the vocabulary on every replay.
         int badIndex;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var flat = Engine.Reshape(input, new[] { input.Length });
+            var flat = engine.Reshape(input, new[] { input.Length });
             var ones = new Tensor<T>(flat._shape);
-            ones.Fill(NumOps.One);
-            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat.Contiguous().Cast<double>()), new Tensor<T>(flat._shape), ones);
-            var truncated = Engine.TensorTrunc(flat);
-            var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(flat, truncated)), NumOps.FromDouble(1e-6));
-            var negative = Engine.TensorLessThan(truncated, NumOps.Zero);
-            var tooLarge = Engine.TensorGreaterThan(truncated.Cast<double>(), (double)(vocabularySize - 1)).Cast<T>();
-            var bad = Engine.TensorMax(Engine.TensorMax(nonFinite, fractional), Engine.TensorMax(negative, tooLarge));
-            badIndex = NumOps.GreaterThan(Engine.TensorMaxValue(bad), NumOps.Zero) ? Engine.TensorArgMax(bad, 0)[0] : -1;
+            ones.Fill(ops.One);
+            var nonFinite = engine.TensorWhere(engine.TensorIsFinite(flat.Contiguous().Cast<double>()), new Tensor<T>(flat._shape), ones);
+            var truncated = engine.TensorTrunc(flat);
+            var fractional = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(flat, truncated)), ops.FromDouble(1e-6));
+            var negative = engine.TensorLessThan(truncated, ops.Zero);
+            var tooLarge = engine.TensorGreaterThan(truncated.Cast<double>(), (double)(vocabularySize - 1)).Cast<T>();
+            var bad = engine.TensorMax(engine.TensorMax(nonFinite, fractional), engine.TensorMax(negative, tooLarge));
+            badIndex = ops.GreaterThan(engine.TensorMaxValue(bad), ops.Zero) ? engine.TensorArgMax(bad, 0)[0] : -1;
         }
 
         if (badIndex >= 0)
         {
             int i = badIndex;
-            double val = NumOps.ToDouble(input.GetFlat(i));
+            double val = ops.ToDouble(input.GetFlat(i));
             throw new ArgumentException(
                 $"EmbeddingLayer requires token indices, but element {i} is {val}, which is not in "
                 + $"[0, {vocabularySize}). Use DenseLayer for continuous feature projection, or a "

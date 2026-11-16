@@ -132,7 +132,7 @@ public partial class YourTTS<T> : StochasticDurationVitsBase<T>
         using (new NoGradScope<T>())
         {
             var r = SpeakerEncoder.Embed(ToEncoderRate(realSegment));
-            real = new Tensor<T>(r._shape, r.ToVector());
+            real = Engine.StopGradient(r);
         }
         var generated = SpeakerEncoder.Embed(ToEncoderRate(generatedSegment));
         // Both embeddings have unit norm, so the cosine similarity is their dot product.

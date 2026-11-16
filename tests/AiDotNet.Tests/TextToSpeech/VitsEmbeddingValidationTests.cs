@@ -30,6 +30,7 @@ public sealed class VitsEmbeddingValidationTests
             var table = Initialize(layer);
             var expected = table.ToArray();
             var ids = new Tensor<double>(new[] { 0.0, 1.0 }, new[] { 2 });
+            using var recording = ClosureObjectiveGuard<double>.BeginRecording();
             CompiledTrainingPlan<double> plan;
             using (var scope = GraphMode.EnableTraining(new[] { table }))
             {
@@ -38,12 +39,17 @@ public sealed class VitsEmbeddingValidationTests
             }
             using (plan)
             {
+                var guard = ClosureObjectiveGuard<double>.TakeRecorded(out var reason);
+                Assert.True(guard != null, reason);
+                guard!.AttachTo(plan);
                 const float rate = 0.125f;
                 plan.ConfigureOptimizer(OptimizerType.SGD, learningRate: rate);
                 foreach (var selected in new[] { new[] { 0, 1 }, new[] { 3, 3 }, new[] { 4, 2 }, new[] { 1, 0 } })
                 {
                     for (int i = 0; i < selected.Length; i++) ids[i] = selected[i];
                     ids.IncrementVersion();
+                    Assert.Equal(ClosureGuardResult.Matched,
+                        guard.TryRebind(() => engine.ReduceSum(layer.Forward(ids), null), new[] { table }, out _));
                     double expectedLoss = 0;
                     foreach (int row in selected)
                         for (int col = 0; col < 3; col++) expectedLoss += expected[row * 3 + col];

@@ -164,7 +164,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
     /// <summary>The duration term of the generator loss given the text encoding <c>[1, hidden, tokens]</c>, the speaker
     /// and language embeddings <c>[1, channels, 1]</c> (null when absent) and the alignment's durations; null when the
     /// duration model is not trained jointly.</summary>
-    protected abstract Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, int[] durations, Random random);
+    protected abstract Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Tensor<T> durations, Random random);
 
     /// <summary>Durations in frames for synthesis, before <see cref="VitsModelOptions.LengthScale"/>: the model's
     /// predicted log-durations, exponentiated.</summary>
@@ -352,6 +352,14 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         var expanded = LengthRegulator.Expand(rows, durations);
         return Engine.Reshape(Engine.TensorTranspose(expanded), new[] { 1, c, expanded.Shape[0] });
     }
+    // A fixed-size hard path selects exactly one token per frame; its matrix product's backward sums repeated reads.
+    internal static Tensor<T> ExpandAligned(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> value, Tensor<T> path)
+    {
+        int channels = value.Shape[1], tokens = value.Shape[2];
+        return engine.Reshape(engine.TensorMatMul(engine.Reshape(value, new[] { channels, tokens }), path),
+            new[] { 1, channels, path.Shape[1] });
+    }
+
 
     // ---------------------------------------------------------------- synthesis
 
@@ -604,7 +612,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
     /// <summary>The alignment of one utterance: the text encoding, the prior, the posterior sample and its image under
     /// the flow, and the monotonic alignment's durations.</summary>
     protected sealed record VitsAlignment(Tensor<T> Hidden, Tensor<T> Mean, Tensor<T> LogScale, Tensor<T> Z, Tensor<T> LogScaleQ,
-        Tensor<T> Zp, Tensor<T>? Speaker, Tensor<T>? Language, int[] Durations);
+        Tensor<T> Zp, Tensor<T>? Speaker, Tensor<T>? Language, Tensor<T> Durations, Tensor<T> Path);
 
     /// <summary>
     /// Encodes the text and the recording and runs monotonic alignment search on
@@ -620,46 +628,83 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         var (z, _, logScaleQ) = _posterior!.Forward(data.PosteriorInput, condition, draw.PosteriorNoise);
         var zp = _flow!.Forward(z, condition, reverse: false);
 
-        int tokens = mean.Shape[2], frames = data.Frames, channels = _vits.InterChannels;
-        Tensor<double> scores;
-        using (new NoGradScope<T>())
-        {
-            // log N(z_j; m_i, σ_i) summed over channels, expanded as the reference does (neg_cent1 … neg_cent4):
-            // Σ_c (−½ log 2π − ls) + (−½ σ⁻²)ᵀ z² + (m σ⁻²)ᵀ z + Σ_c (−½ m² σ⁻²), [tokens, frames]. The scores and the
-            // noise statistics stay in double (the search only compares them): in half precision the cross term
-            // alone overflows (192 channels at m = z = 20 give 76,800) and so do n − 1 and the sum of squares.
-            var m = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(mean, new[] { channels, tokens }));
-            var ls = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(logScale, new[] { channels, tokens }));
-            var zf = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(zp, new[] { channels, frames }));
-            var inverseVariance = Engine.TensorExp(Engine.TensorMultiplyScalar(ls, -2.0));
-            var constant = Engine.ReduceSum(Engine.TensorAddScalar(Engine.TensorNegate(ls), -0.5 * Math.Log(2 * Math.PI)), new[] { 0 }, false);
-            var quadratic = Engine.ReduceSum(Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(m, m), inverseVariance), -0.5), new[] { 0 }, false);
-            var perToken = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorAdd(constant, quadratic), new[] { tokens, 1 }), new[] { tokens, frames });
-            var squares = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiplyScalar(inverseVariance, -0.5)),
-                Engine.TensorMultiply(zf, zf));
-            var cross = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiply(m, inverseVariance)), zf);
-            scores = Engine.TensorAdd(Engine.TensorAdd(squares, cross), perToken);
+        var path = AlignmentPath(Engine, mean, logScale, zp, draw.AlignmentSeed,
+            training ? AlignmentNoiseScale(_trainingSteps) : 0.0);
+        var durations = Engine.ReduceSum(path, new[] { 1 }, keepDims: false);
+        return new VitsAlignment(hidden, mean, logScale, z, logScaleQ, zp, speaker, language, durations, path);
+    }
 
-            double noiseScale = training ? AlignmentNoiseScale(_trainingSteps) : 0.0;
-            int n = tokens * frames;
-            if (noiseScale > 0 && n > 1)
-            {
-                // ε = std(P) · N(0, 1) · scale (torch.std, unbiased), drawn in the alignment seed's order.
-                var centred = Engine.TensorSubtractScalar(scores, Engine.TensorMean(scores));
-                double std = Math.Sqrt(TensorReductionHelper.SumOfSquares(Engine, centred) / (n - 1));
-                var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.AlignmentSeed);
-                var draws = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    // Gaussian's draws, in its order, kept in double.
-                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    draws[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                }
-                var noise = new Tensor<double>(draws, new[] { tokens, frames });
-                scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(noise, std * noiseScale));
-            }
+    /// <summary>The no-gradient MAS decision, refreshed from this step's latents and exact typed draw metadata.</summary>
+    internal static Tensor<T> AlignmentPath(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> mean, Tensor<T> logScale, Tensor<T> zp,
+        int alignmentSeed, double noiseScale)
+    {
+        int tokens = mean.Shape[2], frames = zp.Shape[2];
+        var seed = new Tensor<int>(new[] { alignmentSeed }, new[] { 1 });
+        var scale = new Tensor<double>(new[] { noiseScale }, new[] { 1 });
+        var inputs = new[] { mean, logScale, zp };
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var path = new Tensor<T>(new[] { tokens, frames });
+            ComputeAlignmentPath(engine, inputs, seed.GetFlat(0), scale.GetFlat(0), path);
+            return path;
         }
-        return new VitsAlignment(hidden, mean, logScale, z, logScaleQ, zp, speaker, language, MonotonicAlignment.MaximumPath(scores));
+        // These are external metadata leaves, not foreign producer nodes. Declare them in saved state as well as
+        // the callback so the closure guard rebinds their exact int/double storage and the plan leases it.
+        return scope.RecordVariadic(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom, "VitsMonotonicAlignmentPath",
+            inputs, new[] { tokens, frames },
+            (replayEngine, output) =>
+            {
+                var value = new Tensor<T>(output._shape);
+                ComputeAlignmentPath(replayEngine, inputs, seed.GetFlat(0), scale.GetFlat(0), value);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, output);
+            },
+            static (_, _, _, _, _, _) => { }, new object[] { seed, scale });
+    }
+
+    private static void ComputeAlignmentPath(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T>[] inputs, int alignmentSeed,
+        double noiseScale, Tensor<T> path)
+    {
+        using var noGrad = new NoGradScope<T>();
+        using var noDoubleGrad = new NoGradScope<double>();
+        int channels = inputs[0].Shape[1], tokens = inputs[0].Shape[2], frames = inputs[2].Shape[2];
+        // The complete decision stays in double, as in the eager reference. Nothing differentiates through MAS.
+        var m = TensorCopyHelper.CastLogical<T, double>(engine.Reshape(inputs[0], new[] { channels, tokens }));
+        var ls = TensorCopyHelper.CastLogical<T, double>(engine.Reshape(inputs[1], new[] { channels, tokens }));
+        var zf = TensorCopyHelper.CastLogical<T, double>(engine.Reshape(inputs[2], new[] { channels, frames }));
+        var inverseVariance = engine.TensorExp(engine.TensorMultiplyScalar(ls, -2.0));
+        var constant = engine.ReduceSum(engine.TensorAddScalar(engine.TensorNegate(ls), -0.5 * Math.Log(2 * Math.PI)), new[] { 0 }, false);
+        var quadratic = engine.ReduceSum(engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorMultiply(m, m), inverseVariance), -0.5), new[] { 0 }, false);
+        var perToken = engine.TensorBroadcastTo(engine.Reshape(engine.TensorAdd(constant, quadratic), new[] { tokens, 1 }), new[] { tokens, frames });
+        var squares = engine.TensorMatMul(engine.TensorTranspose(engine.TensorMultiplyScalar(inverseVariance, -0.5)), engine.TensorMultiply(zf, zf));
+        var cross = engine.TensorMatMul(engine.TensorTranspose(engine.TensorMultiply(m, inverseVariance)), zf);
+        var scores = engine.TensorAdd(engine.TensorAdd(squares, cross), perToken);
+        int n = checked(tokens * frames);
+        if (noiseScale > 0 && n > 1)
+        {
+            // Preserve the unbiased torch.std and the original one-cosine-per-pair Gaussian draw order.
+            var centred = engine.TensorSubtractScalar(scores, engine.TensorMean(scores));
+            double std = Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, centred) / (n - 1));
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(alignmentSeed);
+            var draws = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+                draws[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            }
+            scores = engine.TensorAdd(scores, engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { tokens, frames }), std * noiseScale));
+        }
+        var durations = MonotonicAlignment.MaximumPath(scores);
+        var values = path.AsWritableSpan();
+        values.Clear();
+        T one = MathHelper.GetNumericOperations<T>().One;
+        int frame = 0;
+        for (int token = 0; token < durations.Length; token++)
+        {
+            values.Slice(token * frames + frame, durations[token]).Fill(one);
+            frame += durations[token];
+        }
     }
 
     private sealed record ForwardResult(Tensor<T> Audio, Tensor<T> Kl, Tensor<T>? Duration, Tensor<T>? Speaker);
@@ -672,8 +717,8 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.DurationSeed));
 
         // KL(q(z|x) || p(z|c)) through the flow (reference kl_loss), averaged over frames.
-        var mp = Expand(a.Mean, a.Durations);
-        var sp = Expand(a.LogScale, a.Durations);
+        var mp = ExpandAligned(Engine, a.Mean, a.Path);
+        var sp = ExpandAligned(Engine, a.LogScale, a.Path);
         var diff = Engine.TensorSubtract(a.Zp, mp);
         var klTerms = Engine.TensorAdd(
             Engine.TensorAddScalar(Engine.TensorSubtract(sp, a.LogScaleQ), NumOps.FromDouble(-0.5)),
@@ -719,7 +764,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             loss = Engine.TensorAdd(loss, Mean(Engine.TensorMultiply(d, d)));
             for (int l = 0; l < fake[k].Features.Count; l++)
             {
-                var r = new Tensor<T>(real[k].Features[l]._shape, real[k].Features[l].ToVector());
+                var r = Engine.StopGradient(real[k].Features[l]);
                 // feature_loss returns 2 Σ mean |r − g|.
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))), two));
             }
@@ -763,15 +808,6 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         return parameters.Where(selected.Contains).ToList();
     }
-
-    /// <inheritdoc />
-    /// <remarks>The generator objective runs monotonic alignment search on the host every step, and the durations it
-    /// returns set the graph's shape, so no compiled plan can capture it: that objective always trains on the eager
-    /// tape. With the default optimizer per group that is all it costs, since each optimizer has its own fused session
-    /// and the discriminator's still compiles. One optimizer supplied at construction is shared by both groups, and so
-    /// is its fused session: once the discriminator's plan holds that optimizer's moments, the generator's eager step
-    /// cannot continue from them. A shared optimizer therefore keeps the whole model on the eager tape.</remarks>
-    protected override bool SupportsFusedCompiledTraining => _suppliedOptimizer is null;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> OptimizerFor(string group)
     {
