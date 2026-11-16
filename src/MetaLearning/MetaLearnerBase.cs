@@ -50,7 +50,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <remarks>The inner model the meta-learner adapts. Both hand-written surfaces already delegated straight to it, so registering it is the same enumeration with the forwarding removed.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(MetaModel);
+        RegisterParameterComponent("meta-model", MetaModel);
     }
     /// <summary>A cached parameter view of <see cref="MetaModel"/>: the same storage, never a second copy.</summary>
     [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
@@ -63,6 +63,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// meta-model's weights once per populated view, so it changed length as caches filled and a copy of a learner
     /// serialized a different vector from the original. One cache, declared an alias, now serves them all.
     /// </remarks>
+    [AiDotNet.Attributes.ParameterAlias("meta-model")]
     protected IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     #region Fields

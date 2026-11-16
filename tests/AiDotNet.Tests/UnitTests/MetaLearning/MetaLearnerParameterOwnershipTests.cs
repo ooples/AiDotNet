@@ -19,6 +19,7 @@ public sealed class MetaLearnerParameterOwnershipTests
         var learner = Learner(model);
 
         Assert.Equal(3, learner.ParameterCount);
+        Assert.Equal("meta-model", Assert.Single(learner.ParameterLayout.Slots).StableId);
         Assert.Equal(model.GetParameters().ToArray(), learner.GetParameters().ToArray());
         Assert.Equal(3, learner.ParameterCount);
 
@@ -46,6 +47,7 @@ public sealed class MetaLearnerParameterOwnershipTests
 
         Assert.Same(replacement, learner.BaseModel);
         Assert.Equal(2, learner.ParameterCount);
+        Assert.Equal("meta-model", Assert.Single(learner.ParameterLayout.Slots).StableId);
         Assert.Equal(replacement.GetParameters().ToArray(), learner.GetParameters().ToArray());
         var updated = new Vector<double>(new[] { -12.0, 13.0 });
         learner.SetParameters(updated);

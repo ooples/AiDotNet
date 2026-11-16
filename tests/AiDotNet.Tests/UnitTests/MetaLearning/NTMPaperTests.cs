@@ -533,6 +533,9 @@ public class NTMPaperTests
         var parameters = algorithm.GetParameters();
         Assert.Equal(controllerParameters.Length, parameters.Length);
         Assert.Equal(controllerParameters.Length, algorithm.ParameterCount);
+        var owner = Assert.Single(algorithm.ParameterLayout.Slots);
+        Assert.NotEqual("meta-model", owner.StableId);
+        Assert.DoesNotContain("MetaLearnerBase", owner.StableId);
         for (int i = 0; i < parameters.Length; i++)
             Assert.Equal(controllerParameters[i], parameters[i]);
 
