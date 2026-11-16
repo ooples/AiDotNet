@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
+  "branch": "codex/2524-ci-coordination",
+  "pr_branch": "perf/elementwise-sweep-combined-v1",
+  "current_pr_head": "35f28db67906c7b0d1ad93afeb6cc1c3fa647753",
+  "rules": [
+    "No PR yet; no merge or force push.",
+    "Do not push to PR2524 until its entire current CI cycle completes.",
+    "Claim a bounded file/task scope before editing; use separate worktrees and contributor branches.",
+    "Do not weaken assertions, replay guards, lint rules or shard checks; no scalar-kernel exemptions or legacy adapters.",
+    "No public validation NuGet releases; future candidates must be GitHub artifacts."
+  ],
+  "owners": [
+    {
+      "files": [
+        "src/Training/CompiledTapeTrainingStep.cs",
+        "src/Training/FusedTrainingSession.cs",
+        "src/Training/TapeTrainingStepper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Training/SharedTrainingStepTests.cs",
+        "AiDotNet.Tensors: CpuEngine.LstmSequenceState.cs"
+      ],
+      "owner": "this session and its agents",
+      "scope": "Shared training guarded hybrid/rebind and upstream double-LSTM replay state"
+    },
+    {
+      "files": [
+        "src/TextToSpeech/Vocoders/WaveRNN.cs",
+        "src/TextToSpeech/Vocoders/SegmentVocoderBase.cs",
+        "tests/AiDotNet.Tests/TextToSpeech/WaveRNNEquationReferenceTests.cs"
+      ],
+      "owner": "this session and its agents",
+      "scope": "WaveRNN and shared class-vocoder log-softmax; implemented and locally verified"
+    },
+    {
+      "constraint": "Propose a bounded subset here or relay through user before overlapping shared helpers.",
+      "owner": "available for other contributor to claim",
+      "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
+      "starting_points": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs: detached target magnitudes and host-computed double norms",
+        "AlignTTS/flow/codec model host reads listed in TTS run43902661676"
+      ]
+    }
+  ],
+  "verification": {
+    "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
+    "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
+    "full_ci": "Run43902662001 still running at PR head35f; all167shards selected, production+compat+pack passed. Four self-hosted runners lost communication during artifact downloads.",
+    "rebind": "Initial47focused:45pass2trajectoryfail; diagnosed CPU parameters accidentally promoted to GPU. Engine guard corrected in e114afbf9f; final normal rerun pending. Process-only diagnostics pass both trajectories.",
+    "upstream_lstm": "0c40e80c120bf2bff409d83a5afb600ca043f24f:37focusedtests passed0skips; not packaged/published; needs artifact-only integration",
+    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips"
+  },
+  "decisions": [
+    {
+      "decision": "Explicit declared graph breaks only; shared optimizer/config/clipping preflight, distinct hybrid counts; unexpected replay failures remain visible.",
+      "status": "approved",
+      "id": "hybrid"
+    },
+    {
+      "decision": "Same-layer ordered same-shape slot replacement transfers optimizer checkpoint, moments, step and live schedules; hybrid/raw parameter drift remains strict.",
+      "status": "approved",
+      "id": "rebind"
+    },
+    {
+      "decision": "Fix model/preprocessing and upstream replay contracts for94TTSfailures; no blanket fallback or weakened checks.",
+      "status": "approved",
+      "id": "tts-contracts"
+    },
+    {
+      "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
+      "status": "approved",
+      "id": "merge"
+    }
+  ],
+  "questions": [],
+  "question_protocol": [
+    "Separate contributor sessions do not automatically share this chat or interactive question responses.",
+    "Contributor records a question on their own branch with ID, finding, files, proposed fix, alternatives and verification cost; user relays branch/path or question here.",
+    "This session reads it and presents material user decisions through the interactive questions feature.",
+    "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
+    "Pending or preselected answers are not approval; continue independent approved tasks."
+  ],
+  "updated_utc": "2026-11-16T16:58:59.7162167Z"
+}
