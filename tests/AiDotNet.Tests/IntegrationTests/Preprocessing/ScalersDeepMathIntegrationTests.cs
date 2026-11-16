@@ -101,9 +101,9 @@ public class ScalersDeepMathIntegrationTests
         scaler.Fit(data);
         var transformed = scaler.Transform(data);
 
-        // mean=4, std=sqrt(((2-4)^2+(4-4)^2+(6-4)^2)/2) = sqrt(4) = 2
-        // Without centering: values/std = {1, 2, 3}
-        double std = 2.0;
+        // mean=4, population variance=((2-4)^2+(4-4)^2+(6-4)^2)/3=8/3
+        // Without centering: values/std = [2, 4, 6] / sqrt(8/3)
+        double std = Math.Sqrt(8.0 / 3.0);
         Assert.Equal(2.0 / std, transformed[0, 0], MediumTolerance);
         Assert.Equal(4.0 / std, transformed[1, 0], MediumTolerance);
         Assert.Equal(6.0 / std, transformed[2, 0], MediumTolerance);
@@ -145,12 +145,12 @@ public class ScalersDeepMathIntegrationTests
         var train = CreateMatrix(new double[,] { { 0 }, { 10 } });
         scaler.Fit(train);
 
-        // mean=5, std=sqrt((25+25)/1)=sqrt(50)=5*sqrt(2)
+        // mean=5, population variance=(25+25)/2=25, std=5
         var test = CreateMatrix(new double[,] { { 5 }, { 15 }, { -5 } });
         var transformed = scaler.Transform(test);
 
         double mean = 5.0;
-        double std = Math.Sqrt(50.0);
+        double std = 5.0;
         Assert.Equal((5.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((15.0 - mean) / std, transformed[1, 0], MediumTolerance);
         Assert.Equal((-5.0 - mean) / std, transformed[2, 0], MediumTolerance);
@@ -166,7 +166,7 @@ public class ScalersDeepMathIntegrationTests
 
         // Column 0 should be standardized
         double mean0 = 2.0;
-        double std0 = 1.0; // sqrt(((1-2)^2+(2-2)^2+(3-2)^2)/2) = sqrt(1) = 1
+        double std0 = Math.Sqrt(2.0 / 3.0); // population variance=((1-2)^2+(2-2)^2+(3-2)^2)/3=2/3
         Assert.Equal((1.0 - mean0) / std0, transformed[0, 0], MediumTolerance);
 
         // Column 1 should be untouched
@@ -757,13 +757,13 @@ public class ScalersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_TwoSamples_VarianceCalculation()
     {
-        // With only 2 samples: mean = 1.5, variance = (0.25+0.25)/1 = 0.5, std = sqrt(0.5)
+        // With 2 samples: mean=1.5, population variance=(0.25+0.25)/2=0.25, std=0.5
         var scaler = new StandardScaler<double>();
         var data = CreateMatrix(new double[,] { { 1 }, { 2 } });
         var transformed = scaler.FitTransform(data);
 
         double mean = 1.5;
-        double std = Math.Sqrt(0.5);
+        double std = 0.5;
         Assert.Equal((1.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((2.0 - mean) / std, transformed[1, 0], MediumTolerance);
     }
