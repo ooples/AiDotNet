@@ -36,8 +36,8 @@ internal sealed class SamTraining<T>
     }
 
     /// <summary>
-    /// The objective for an image <c>[1, C, H, W]</c> (pixel values, H and W at most the encoder size) and its ground
-    /// truth (<c>H·W</c> values; above 0.5 is the mask). The prompts are drawn when the objective is evaluated.
+    /// The initial prompt and sampling draws are fixed once per training step. Re-evaluating the
+    /// objective uses those same draws against the current predictions, without consuming random state.
     /// </summary>
     public Func<Tensor<T>> Objective(Tensor<T> image, Tensor<T> groundTruth, Random random)
     {
@@ -48,81 +48,74 @@ internal sealed class SamTraining<T>
         var gt = new double[h * w];
         for (int i = 0; i < gt.Length; i++) gt[i] = NumOps.ToDouble(values[i]) > 0.5 ? 1.0 : 0.0;
         var truth = new Tensor<T>(new[] { 1, 1, h, w }, new Vector<T>(gt.Select(NumOps.FromDouble).ToArray()));
-        return () => Loss(image, gt, truth, h, w, random);
+        int noPromptRound = 1 + random.Next(9);
+        Tensor<T>? points = null, labels = null, box = null;
+        if (random.NextDouble() < 0.5)
+            box = Box();
+        else if (Sample(gt, w, random, v => v > 0.5) is { } first)
+        {
+            points = new Tensor<T>(new[] { NumOps.FromDouble(first.X), NumOps.FromDouble(first.Y) }, new[] { 1, 1, 2 });
+            labels = Tensor<T>.CreateDefault(new[] { 1, 1 }, NumOps.One);
+        }
+        else box = Box();
+        Tensor<T> Box() => new(new[] { 1, 4 }, new Vector<T>(NoisyBox(gt, h, w, random).Select(NumOps.FromDouble).ToArray()));
+
+        // Double inputs preserve the sampling resolution even when the model uses Half.
+        var draws = new Tensor<double>[11];
+        for (int round = 0; round < draws.Length; round++)
+            draws[round] = new Tensor<double>(new[] { round > 0 && round != noPromptRound && round != 10 ? random.NextDouble() : 0.0 }, new[] { 1 });
+        return () => Loss(image, truth, points, labels, box, noPromptRound, draws, h, w);
     }
 
-    private Tensor<T> Loss(Tensor<T> image, double[] gt, Tensor<T> truth, int h, int w, Random random)
+    private Tensor<T> Loss(Tensor<T> image, Tensor<T> truth, Tensor<T>? points, Tensor<T>? labels,
+        Tensor<T>? box, int noPromptRound, Tensor<double>[] draws, int h, int w)
     {
         var net = _network;
         var embedding = net.EncodeImage(net.Preprocess(image));
         var positional = net.DensePositional();
-        int noPromptRound = 1 + random.Next(9);
-        var points = new List<(double X, double Y, double Label)>();
-        double[]? box = null;
         Tensor<T>? previous = null;
         Tensor<T>? total = null;
         for (int round = 0; round < 11; round++)
         {
-            if (round == 0)
+            if (round > 0 && round != noPromptRound && round != 10)
             {
-                if (random.NextDouble() < 0.5) box = NoisyBox(gt, h, w, random);
-                else if (Sample(gt, w, random, v => v > 0.5) is { } first) points.Add((first.X, first.Y, 1.0));
-                else box = NoisyBox(gt, h, w, random);
+                var predicted = _engine.TensorGreaterThan(net.Postprocess(previous!, h, w, h, w), NumOps.Zero);
+                var error = _engine.Reshape(_engine.TensorSubtract(truth, predicted), new[] { h * w }).Cast<double>();
+                var sampled = SampleErrorPoint(_engine, error, draws[round], w).Cast<T>();
+                var point = _engine.TensorSlice(sampled, new[] { 0, 0, 0 }, new[] { 1, 1, 2 });
+                var label = _engine.Reshape(_engine.TensorSlice(sampled, new[] { 0, 0, 2 }, new[] { 1, 1, 1 }), new[] { 1, 1 });
+                points = points is null ? point : _engine.TensorConcatenate(new[] { points, point }, 1);
+                labels = labels is null ? label : _engine.TensorConcatenate(new[] { labels, label }, 1);
             }
-            else if (round != noPromptRound && round != 10 && previous is not null)
-            {
-                var predicted = net.Postprocess(previous, h, w, h, w).ToArray();
-                var error = new double[h * w];
-                for (int i = 0; i < error.Length; i++)
-                {
-                    bool on = NumOps.ToDouble(predicted[i]) > 0;
-                    error[i] = gt[i] > 0.5 && !on ? 1.0 : gt[i] <= 0.5 && on ? -1.0 : 0.0;
-                }
-                if (Sample(error, w, random, v => v != 0) is { } p)
-                    points.Add((p.X, p.Y, error[(int)p.Y * w + (int)p.X] > 0 ? 1.0 : 0.0));
-            }
-            Tensor<T>? pointTensor = null, labelTensor = null, boxTensor = null;
-            if (points.Count > 0)
-            {
-                pointTensor = new Tensor<T>(new[] { 1, points.Count, 2 });
-                labelTensor = new Tensor<T>(new[] { 1, points.Count });
-                for (int i = 0; i < points.Count; i++)
-                {
-                    pointTensor[0, i, 0] = NumOps.FromDouble(points[i].X);
-                    pointTensor[0, i, 1] = NumOps.FromDouble(points[i].Y);
-                    labelTensor[0, i] = NumOps.FromDouble(points[i].Label);
-                }
-            }
-            if (box is not null) boxTensor = new Tensor<T>(new[] { 1, 4 }, new Vector<T>(box.Select(NumOps.FromDouble).ToArray()));
-            var (sparse, dense) = net.EncodePrompts(pointTensor, labelTensor, boxTensor, previous);
+            var (sparse, dense) = net.EncodePrompts(points, labels, box, previous);
             bool ambiguous = round == 0 && box is null;
-            var (low, iou) = net.DecodeMasks(embedding, positional, sparse, dense, multimask: ambiguous);
+            var (low, iou) = net.DecodeMasks(embedding, positional, sparse, dense, multimask: ambiguous,
+                sparseValidity: net.SparsePromptValidity(labels, box is not null));
             var full = net.Postprocess(low, h, w, h, w);
-            Tensor<T>? best = null;
-            double bestValue = double.PositiveInfinity;
-            int bestIndex = 0;
+            Tensor<T>? best = null, chosen = null;
             for (int m = 0; m < low.Shape[1]; m++)
             {
                 var logits = _engine.TensorSlice(full, new[] { 0, m, 0, 0 }, new[] { 1, 1, h, w });
                 var predictedIou = _engine.Reshape(_engine.TensorSlice(iou, new[] { 0, m }, new[] { 1, 1 }), new[] { 1 });
-                var target = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(ActualIou(logits.ToArray(), gt)) }));
-                var difference = _engine.TensorSubtract(predictedIou, target);
+                var difference = _engine.TensorSubtract(predictedIou, _engine.StopGradient(ActualIou(_engine, logits, truth)));
                 var loss = _engine.TensorAdd(MaskLoss(logits, truth), _engine.TensorMultiply(difference, difference));
-                double value = NumOps.ToDouble(loss[0]);
-                if (value < bestValue)
+                var candidate = _engine.TensorSlice(low, new[] { 0, m, 0, 0 }, new[] { 1, 1, low.Shape[2], low.Shape[3] });
+                if (best is null) { best = loss; chosen = candidate; }
+                else
                 {
-                    bestValue = value;
-                    best = loss;
-                    bestIndex = m;
+                    // Strict comparison keeps the first minimum, including exact ties, just as argmin.
+                    var better = _engine.TensorLessThan(loss, best);
+                    best = _engine.TensorWhere(better, loss, best);
+                    chosen = _engine.TensorWhere(_engine.TensorBroadcastTo(
+                        _engine.Reshape(better, new[] { 1, 1, 1, 1 }), candidate.Shape.ToArray()), candidate, chosen!);
                 }
             }
             total = total is null ? best! : _engine.TensorAdd(total, best!);
-            // The next round's mask prompt: this round's (chosen) unthresholded logits, as data.
-            var chosen = _engine.TensorSlice(low, new[] { 0, bestIndex, 0, 0 }, new[] { 1, 1, low.Shape[2], low.Shape[3] });
-            previous = new Tensor<T>(chosen.Shape.ToArray(), new Vector<T>(chosen.ToArray()));
+            previous = _engine.StopGradient(chosen!);
         }
         return _engine.TensorMultiplyScalar(total!, NumOps.FromDouble(1.0 / 11));
     }
+
 
     /// <summary>focalWeight·focal + diceWeight·dice on mask logits <c>[1, 1, H, W]</c>, the focal loss averaged over
     /// pixels and the dice loss smoothed by 1.</summary>
@@ -149,16 +142,50 @@ internal sealed class SamTraining<T>
             _engine.TensorMultiplyScalar(dice, NumOps.FromDouble(_diceWeight)));
     }
 
-    private static double ActualIou(T[] logits, double[] gt)
+    internal static Tensor<T> ActualIou(IEngine engine, Tensor<T> logits, Tensor<T> truth)
     {
-        double inter = 0, union = 0;
-        for (int i = 0; i < gt.Length; i++)
+        // Count in double: image-sized masks can exceed Half's finite range.
+        var predicted = engine.TensorGreaterThan(logits, NumOps.Zero).Cast<double>();
+        var target = truth.Cast<double>();
+        var intersection = engine.ReduceSum(engine.TensorMultiply(predicted, target), null);
+        var union = engine.ReduceSum(engine.TensorMax(predicted, target), null);
+        return engine.TensorWhere(engine.TensorGreaterThan(union, 0.0),
+            engine.TensorDivide(intersection, engine.TensorClampMin(union, 1.0)),
+            Tensor<double>.CreateDefault(union.Shape.ToArray(), 1.0)).Cast<T>();
+    }
+
+    /// <summary>A discrete, input-bound sampling node. Its output is data, so its derivative is zero.</summary>
+    internal static Tensor<double> SampleErrorPoint(IEngine engine, Tensor<double> error, Tensor<double> draw, int width)
+    {
+        if (error.Rank != 1 || width <= 0 || error.Length % width != 0 || draw.Length != 1)
+            throw new ArgumentException("Expected flattened pixel errors, an image width and one uniform draw.");
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is { } scope)
         {
-            bool on = NumOps.ToDouble(logits[i]) > 0, truth = gt[i] > 0.5;
-            if (on && truth) inter++;
-            if (on || truth) union++;
+            scope.BindEngineIfUnset(engine);
+            return scope.RecordBinary(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom, "SamErrorPoint",
+                error, draw, new[] { 1, 1, 3 },
+                (replayEngine, output) => SelectErrorPoint(replayEngine, error, draw, width, output),
+                static (_, _, _, _, _, _) => { });
         }
-        return union == 0 ? 1.0 : inter / union;
+        var result = new Tensor<double>(new[] { 1, 1, 3 });
+        SelectErrorPoint(engine, error, draw, width, result);
+        return result;
+    }
+
+    private static void SelectErrorPoint(IEngine engine, Tensor<double> error, Tensor<double> draw, int width, Tensor<double> output)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        double uniform = draw[0];
+        if (double.IsNaN(uniform) || double.IsInfinity(uniform) || uniform < 0.0 || uniform >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(draw), "A sampling draw must be in [0, 1).");
+        int count = engine.TensorCountNonzero(error);
+        output.AsWritableSpan().Clear();
+        if (count == 0) { output[2] = -2.0; return; }
+        var candidates = engine.TensorNonzero(error);
+        int picked = candidates[Math.Min(count - 1, (int)(uniform * count)), 0];
+        output[0] = picked % width;
+        output[1] = picked / width;
+        output[2] = error[picked] > 0.0 ? 1.0 : 0.0;
     }
 
     /// <summary>A pixel (x, y) drawn uniformly from those satisfying <paramref name="where"/>, or null if none does.</summary>
