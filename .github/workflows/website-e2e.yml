@@ -89,6 +89,7 @@ jobs:
           PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
           SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           CI: '1'
 
       - name: Upload Playwright report

@@ -80,6 +80,24 @@ jobs:
           n=$(psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 -Atc "with d as (delete from auth.users where email like 'delivered+e2e-user-%@resend.dev' and created_at < now() - interval '1 hour' returning 1) select count(*) from d")
           echo "Deleted $n leftover e2e test user(s)."
 
+      - name: Delete leftover e2e Stripe customers
+        # The signed-in personas get real Stripe customers (trial subscriptions, never charged)
+        # tagged metadata.e2e=true. Tests delete their own; this removes any an aborted run left.
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          : "${STRIPE_SECRET_KEY:?Missing STRIPE_SECRET_KEY secret}"
+          cutoff=$(( $(date +%s) - 3600 ))
+          ids=$(curl -sfS -G https://api.stripe.com/v1/customers/search -u "$STRIPE_SECRET_KEY:" \
+            --data-urlencode "query=metadata['e2e']:'true' AND created<$cutoff" -d limit=100 | jq -r '.data[].id')
+          n=0
+          for id in $ids; do
+            curl -sfS -X DELETE -u "$STRIPE_SECRET_KEY:" "https://api.stripe.com/v1/customers/$id" > /dev/null
+            n=$((n + 1))
+          done
+          echo "Deleted $n leftover e2e Stripe customer(s)."
+
       - name: Auth email is configured
         # Without custom SMTP, Supabase only emails project team members: customers can't confirm
         # sign-up or reset a password. deploy-website.yml sets it; this catches a revert.

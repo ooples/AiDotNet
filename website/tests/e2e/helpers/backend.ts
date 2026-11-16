@@ -5,11 +5,12 @@ import type { APIRequestContext } from '@playwright/test';
 //   SUPABASE_URL               the project URL (PUBLIC_SUPABASE_URL secret)
 //   SUPABASE_SERVICE_ROLE_KEY  fetched at run time with the Supabase CLI and masked
 //   STRIPE_WEBHOOK_SECRET      the signing secret the stripe-webhook function verifies against
+//   STRIPE_SECRET_KEY          creates the personas' real (trial, never charged) Stripe subscriptions
 //
 // In CI a missing variable is a failure, never a skip: a journey that silently skips is a
 // gate that fails open. Locally, without the variables, the journeys skip with the reason.
 
-export const JOURNEY_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_WEBHOOK_SECRET'] as const;
+export const JOURNEY_ENV = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_SECRET_KEY'] as const;
 
 export function missingJourneyEnv(): string[] {
   return JOURNEY_ENV.filter((k) => !process.env[k]);
@@ -100,6 +101,15 @@ export async function restInsert<T>(request: APIRequestContext, table: string, r
   });
   if (!res.ok()) throw new Error(`insert ${table}: HTTP ${res.status()} ${await res.text()}`);
   return ((await res.json()) as T[])[0];
+}
+
+export async function restPatch(request: APIRequestContext, pathAndQuery: string, patch: Record<string, unknown>): Promise<number> {
+  const res = await request.patch(`${env('SUPABASE_URL')}/rest/v1/${pathAndQuery}`, {
+    headers: { ...adminHeaders(), prefer: 'return=representation' },
+    data: patch,
+  });
+  if (!res.ok()) throw new Error(`patch ${pathAndQuery}: HTTP ${res.status()} ${await res.text()}`);
+  return ((await res.json()) as unknown[]).length;
 }
 
 /** Posts a Stripe event to the stripe-webhook function, signed exactly as Stripe signs it. */

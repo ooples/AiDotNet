@@ -92,6 +92,7 @@ const isPaid = stripeTier && stripeTier !== 'community';
     >
       {cta}
     </button>
+    <p class="plan-status hidden mt-2 text-xs text-center text-slate-500 dark:text-slate-400" data-plan-status={stripeTier}></p>
   ) : (
     <a
       href={ctaHref || '#'}

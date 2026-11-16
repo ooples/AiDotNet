@@ -110,6 +110,23 @@ const base = import.meta.env.BASE_URL;
     </div>
   </div>
 
+  <div id="delete-account-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+    <div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 my-auto">
+      <h2 id="delete-account-title" class="text-lg font-semibold text-slate-900 dark:text-white">Delete your account?</h2>
+      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+        This permanently deletes your profile, API keys and usage history, and revokes every license key on the account,
+        including on machines already activated. It cannot be undone.
+      </p>
+      <label for="delete-confirm-input" class="block mt-4 text-sm font-medium text-slate-700 dark:text-slate-300">Type <strong>DELETE</strong> to confirm</label>
+      <input id="delete-confirm-input" type="text" autocomplete="off" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white" />
+      <p id="delete-account-error" role="alert" class="hidden mt-3 text-sm text-red-600 dark:text-red-400"></p>
+      <div class="mt-6 flex gap-3">
+        <button id="delete-cancel-btn" type="button" class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700">Cancel</button>
+        <button id="delete-confirm-btn" type="button" disabled class="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">Delete account</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     import { supabase } from '../../../lib/supabase';
 
@@ -213,14 +230,38 @@ const base = import.meta.env.BASE_URL;
     }
 
     // Delete account
-    const deleteBtn = document.getElementById('delete-account-btn');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', () => {
-        if (confirm('Are you sure you want to delete your account? This action cannot be undone. All your API keys, usage data, and profile will be permanently deleted.')) {
-          alert('Please contact support@aidotnet.dev to delete your account.');
-        }
-      });
-    }
+    const deleteModal = document.getElementById('delete-account-modal')!;
+    const deleteInput = document.getElementById('delete-confirm-input') as HTMLInputElement;
+    const deleteConfirm = document.getElementById('delete-confirm-btn') as HTMLButtonElement;
+    const deleteError = document.getElementById('delete-account-error')!;
+    const closeDelete = () => { deleteModal.classList.add('hidden'); deleteInput.value = ''; deleteConfirm.disabled = true; deleteError.classList.add('hidden'); };
+    document.getElementById('delete-account-btn')?.addEventListener('click', () => {
+      deleteModal.classList.remove('hidden');
+      deleteInput.focus();
+    });
+    document.getElementById('delete-cancel-btn')?.addEventListener('click', closeDelete);
+    deleteModal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDelete(); });
+    deleteInput.addEventListener('input', () => { deleteConfirm.disabled = deleteInput.value.trim() !== 'DELETE'; });
+    deleteConfirm.addEventListener('click', async () => {
+      deleteConfirm.disabled = true;
+      deleteConfirm.textContent = 'Deleting…';
+      deleteError.classList.add('hidden');
+      const { error } = await supabase.functions.invoke('delete-account', { method: 'POST', body: { confirm: 'DELETE' } });
+      if (error) {
+        let message = 'Your account could not be deleted. Please try again or email support@aidotnet.dev.';
+        try {
+          const payload = await (error as { context?: Response }).context?.json();
+          if (payload?.message) message = payload.message;
+        } catch { /* keep the generic message */ }
+        deleteError.textContent = message;
+        deleteError.classList.remove('hidden');
+        deleteConfirm.textContent = 'Delete account';
+        deleteConfirm.disabled = false;
+        return;
+      }
+      await supabase.auth.signOut({ scope: 'local' });
+      window.location.assign('/?account_deleted=1');
+    });
 
     loadSettings();
   </script>
