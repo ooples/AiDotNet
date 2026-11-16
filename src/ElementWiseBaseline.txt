@@ -5496,7 +5496,6 @@
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>.Gaussian(int[], System.Random, double)
 2	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>.RvqCrossEntropy(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int[*,*])
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>.Wave(System.Collections.Generic.IReadOnlyList<double>)
-2	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>.AdversarialLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>.BuildDiscriminators()
 2	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>.CodecForward(AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>.CodecUtterance, System.Random, bool)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>.Wave(System.Collections.Generic.IReadOnlyList<double>)
