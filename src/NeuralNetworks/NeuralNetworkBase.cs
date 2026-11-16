@@ -17220,6 +17220,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
+        // A model that opts out of fused compiled training is not offered to the closure session either. The session
+        // applies a graph break only to a request without a closure objective, so it traced the objective of such a
+        // model anyway; when the plan then could not be built, the eager step that followed ran the objective a second
+        // time, after the trace had already advanced the forward's per-step state (stochastic depth and SpecAugment
+        // draws, batch-norm running statistics), and the model trained on a different trajectory than its eager step.
+        if (!SupportsFusedCompiledTraining) return false;
         // The groups are asked only of a model that names any. Collecting the trainable tensors is not free of effect
         // on a model whose lazily shaped layers have not seen an input yet: it allocates their weights early, and their
         // seeded initialization then differs from the one the first forward alone gives. CLAP's patch-merging
