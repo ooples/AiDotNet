@@ -264,7 +264,10 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
                 Engine.TensorOneHot<T>(wordIdTensor, _wordVocabSize),
                 Engine.TensorBroadcastTo(realWord, [seq, _wordVocabSize]));
             charOneHot = Engine.TensorMultiply(
-                Engine.TensorOneHot<T>(charIdTensor, _charVocabSize),
+                // OneHot flattens the index positions into rows. Restore the word/character
+                // axes before masking and treating words as the character BiLSTM's batch.
+                Engine.Reshape(Engine.TensorOneHot<T>(charIdTensor, _charVocabSize),
+                    [seq, _maxWordLength, _charVocabSize]),
                 Engine.TensorBroadcastTo(realChar, [seq, _maxWordLength, _charVocabSize]));
             tokenMask = Engine.TensorBroadcastTo(realWord, [seq, OutputEmbeddingDim]); // 1 on real tokens, 0 on PAD rows
 
