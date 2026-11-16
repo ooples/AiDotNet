@@ -242,7 +242,9 @@ internal sealed class TapeTrainingStepper<T>
         if (!_closureObjectiveWarmed)
         {
             // Objectives such as WGAN-GP need their own inner derivatives even during warmup.
-            // A throwaway tape isolates warmup without suppressing those nested tapes.
+            // Isolate the throwaway tape from the caller's arena: its captured batches must
+            // remain alive for the real step, after warmup disposes its own intermediates.
+            using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
             using (new GradientTape<T>())
             using (CompiledStepRandom<T>.SuppressDraws())
                 objective();
