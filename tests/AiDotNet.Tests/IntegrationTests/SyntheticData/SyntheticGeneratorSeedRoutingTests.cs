@@ -46,7 +46,7 @@ public class SyntheticGeneratorSeedRoutingTests
         type.GetField("_adjacency", flags)!.SetValue(model, adjacency);
         type.GetField("_dataWidth", flags)!.SetValue(model, 3);
         var method = type.GetMethod("ComputeNOTEARSConstraintAndGradient", flags)!;
-        (double, double[,]) Evaluate() => ((double, double[,]))method.Invoke(model, null)!;
+        (double, Tensor<double>) Evaluate() => ((double, Tensor<double>))method.Invoke(model, null)!;
         var (_, gradient) = Evaluate();
         const double epsilon = 1e-5;
         for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)
