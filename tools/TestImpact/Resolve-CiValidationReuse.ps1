@@ -53,6 +53,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot/RunnerFailover.ps1"
 
 enum CiValidationReuseScope {
     None
@@ -128,63 +129,36 @@ function ConvertTo-CertificateEvidence {
     $requiresValidation = $true
 
     $scope = [CiValidationReuseScope]::None
-    $testedTree = ''
-    switch ($schema) {
-        1 {
-            # Legacy v1 did not contain requiresValidation, but if one remains in artifact
-            # retention it is conservatively runtime-scoped and complete only.
-            $requiresValidation = $true
-            if (-not $Certificate.PSObject.Properties['ciGateConclusion'] -or
-                [string] $Certificate.ciGateConclusion -cne 'success') {
-                throw 'legacy certificate did not pass CI Gate'
-            }
-            $scope = [CiValidationReuseScope]::Complete
-        }
-        2 {
-            $requiresValidation = ConvertTo-RequiredBooleanProperty $Certificate 'requiresValidation'
-            if (-not $Certificate.PSObject.Properties['ciGateConclusion'] -or
-                [string] $Certificate.ciGateConclusion -cne 'success') {
-                throw 'legacy certificate did not pass CI Gate'
-            }
-            $scope = [CiValidationReuseScope]::Complete
-        }
-        3 {
-            $requiresValidation = ConvertTo-RequiredBooleanProperty $Certificate 'requiresValidation'
-            if (-not (Test-JsonInteger $Certificate.schemaVersion) -or
-                -not (Test-JsonInteger $Certificate.runId)) {
-                throw 'schema-v3 certificate schemaVersion and runId must be JSON integers'
-            }
-            foreach ($name in 'scope', 'testedTree', 'gateConclusion') {
-                if (-not $Certificate.PSObject.Properties[$name]) {
-                    throw "schema-v3 certificate is missing $name"
-                }
-            }
-            if ([string] $Certificate.gateConclusion -cne 'success') {
-                throw 'schema-v3 certificate did not pass its gate'
-            }
-            if ($Certificate.scope -isnot [string]) {
-                throw 'schema-v3 certificate scope must be a named JSON string'
-            }
-            $scopeText = [string] $Certificate.scope
-            if (-not [Enum]::TryParse[CiValidationReuseScope]($scopeText, $false, [ref] $scope) -or
-                -not [Enum]::IsDefined([CiValidationReuseScope], $scope) -or
-                $scope -eq [CiValidationReuseScope]::None -or $scope.ToString() -cne $scopeText) {
-                throw "schema-v3 certificate has unsupported scope '$scopeText'"
-            }
-            $testedTree = [string] $Certificate.testedTree
-            if ($testedTree -cnotmatch '^[0-9a-f]{40}$') {
-                throw 'schema-v3 certificate testedTree must be a lowercase 40-character Git SHA'
-            }
-        }
-        default { throw "unsupported certificate schemaVersion $schema" }
+    if ($schema -ne 4) { throw "unsupported certificate schemaVersion $schema; runner evidence requires schema 4" }
+    $requiresValidation = ConvertTo-RequiredBooleanProperty $Certificate 'requiresValidation'
+    $requiresTests = ConvertTo-RequiredBooleanProperty $Certificate 'requiresTests'
+    if ($requiresTests -and -not $requiresValidation) { throw 'schema-v4 test requirements cannot omit validation' }
+    if (-not (Test-JsonInteger $Certificate.schemaVersion) -or -not (Test-JsonInteger $Certificate.runId)) {
+        throw 'schema-v4 certificate schemaVersion and runId must be JSON integers'
     }
+    foreach ($name in 'scope', 'testedTree', 'gateConclusion', 'runnerFailoverProof') {
+        if (-not $Certificate.PSObject.Properties[$name]) { throw "schema-v4 certificate is missing $name" }
+    }
+    if ([string] $Certificate.gateConclusion -cne 'success') { throw 'schema-v4 certificate did not pass its gate' }
+    if ($Certificate.scope -isnot [string]) { throw 'schema-v4 certificate scope must be a named JSON string' }
+    $scopeText = [string] $Certificate.scope
+    if (-not [Enum]::TryParse[CiValidationReuseScope]($scopeText, $false, [ref] $scope) -or
+        -not [Enum]::IsDefined([CiValidationReuseScope], $scope) -or
+        $scope -eq [CiValidationReuseScope]::None -or $scope.ToString() -cne $scopeText) {
+        throw "schema-v4 certificate has unsupported scope '$scopeText'"
+    }
+    $testedTree = [string] $Certificate.testedTree
+    if ($testedTree -cnotmatch '^[0-9a-f]{40}$') { throw 'schema-v4 certificate testedTree must be a lowercase 40-character Git SHA' }
+    $proofBinding = $Certificate.runnerFailoverProof
+    foreach ($name in 'artifactId', 'digest', 'runAttempt') {
+        if ($null -eq $proofBinding -or -not $proofBinding.PSObject.Properties[$name] -or $proofBinding.$name -isnot [string]) {
+            throw "schema-v4 runner proof binding '$name' must be a JSON string"
+        }
+    }
+    if ($proofBinding.artifactId -cnotmatch '^[1-9][0-9]*$' -or
+        $proofBinding.digest -cnotmatch '^sha256:[a-f0-9]{64}$' -or
+        $proofBinding.runAttempt -cnotmatch '^[1-9][0-9]*$') { throw 'schema-v4 runner proof artifact binding is malformed' }
 
-    if (-not $testedTree -and $Certificate.PSObject.Properties['testedTree']) {
-        $testedTree = [string] $Certificate.testedTree
-        if ($testedTree -and $testedTree -cnotmatch '^[0-9a-f]{40}$') {
-            throw 'legacy certificate testedTree is malformed'
-        }
-    }
 
     return [pscustomobject]@{
         Scope = $scope
@@ -192,7 +166,31 @@ function ConvertTo-CertificateEvidence {
         TestedSha = $testedSha
         TestedTree = $testedTree
         RequiresValidation = $requiresValidation
+        RequiresTests = $requiresTests
     }
+}
+
+function Get-CertificateFailoverArtifact {
+    param([Parameter(Mandatory)] $Certificate, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Artifacts)
+    $binding = $Certificate.runnerFailoverProof
+    $matches = @($Artifacts | Where-Object { [string]$_.id -ceq [string]$binding.artifactId })
+    if ($matches.Count -ne 1) { throw 'Bound runner proof artifact is missing or duplicated' }
+    $artifact = $matches[0]
+    if ($artifact.expired -ne $false -or [string]$artifact.digest -cne [string]$binding.digest -or
+        [string]$artifact.workflow_run.id -cne [string]$Certificate.runId -or
+        [string]$artifact.name -cne "runner-failover-proof-$($Certificate.testedSha)-$($binding.runAttempt)") {
+        throw 'Bound runner proof artifact was replaced, expired or mismatched'
+    }
+    return $artifact
+}
+
+function Assert-CertificateFailoverEvidence {
+    param([Parameter(Mandatory)] $Certificate, [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Artifacts,
+        [Parameter(Mandatory)] [string] $ProofDirectory)
+    $proofFiles = @(Get-ChildItem -LiteralPath $ProofDirectory -Recurse -File -Filter proof.json)
+    if ($proofFiles.Count -ne 1) { throw 'Runner proof artifact has missing or duplicate proof documents' }
+    $proof = Get-Content -LiteralPath $proofFiles[0].FullName -Raw | ConvertFrom-Json
+    Assert-FailoverPublishedProof $proof $Certificate $Artifacts
 }
 
 function Select-BestCiEvidence {
@@ -466,9 +464,10 @@ if ($SelfTest) {
     $sha = '0123456789abcdef0123456789abcdef01234567'
     $tree = '89abcdef0123456789abcdef0123456789abcdef'
     $partialJson = [pscustomobject]@{
-        schemaVersion = 3; scope = 'Validation'; runId = 10; testedSha = $sha
-        testedTree = $tree; event = 'pull_request'; requiresValidation = $true
+        schemaVersion = 4; scope = 'Validation'; runId = 10; testedSha = $sha
+        testedTree = $tree; event = 'pull_request'; requiresValidation = $true; requiresTests = $true
         gateConclusion = 'success'
+        runnerFailoverProof = [pscustomobject]@{ artifactId = '100'; digest = 'sha256:' + ('a' * 64); runAttempt = '1' }
     }
     $partial = ConvertTo-CertificateEvidence $partialJson 10
     Assert-True ($partial.Scope -eq [CiValidationReuseScope]::Validation) `
@@ -480,26 +479,93 @@ if ($SelfTest) {
     Assert-True ($complete.Scope -eq [CiValidationReuseScope]::Complete) `
         'complete evidence did not retain its typed scope'
 
-    $legacyJson = [pscustomobject]@{
-        schemaVersion = 2; runId = '11'; testedSha = $sha; testedTree = $tree
-        event = 'merge_group'; requiresValidation = $false; ciGateConclusion = 'success'
+    foreach ($legacySchema in @(1, 2, 3)) {
+        $legacyJson = $partialJson.PSObject.Copy(); $legacyJson.schemaVersion = $legacySchema
+        Assert-Rejected { ConvertTo-CertificateEvidence $legacyJson 10 } `
+            "legacy schema-$legacySchema certificate without current runner evidence was reusable"
     }
-    $legacy = ConvertTo-CertificateEvidence $legacyJson 11
-    Assert-True ($legacy.Scope -eq [CiValidationReuseScope]::Complete) `
-        'legacy full-gate evidence was not treated as complete'
-
-    $legacyV1Json = [pscustomobject]@{
-        schemaVersion = 1; runId = '12'; testedSha = $sha
-        event = 'pull_request'; ciGateConclusion = 'success'
+    $noWorkJson = $partialJson.PSObject.Copy(); $noWorkJson.requiresValidation = $false; $noWorkJson.requiresTests = $false
+    $noWork = ConvertTo-CertificateEvidence $noWorkJson 10
+    Assert-True (-not $noWork.RequiresValidation) 'explicit no-work certificate lost its policy'
+    $missingProof = $partialJson.PSObject.Copy(); $missingProof.PSObject.Properties.Remove('runnerFailoverProof')
+    Assert-Rejected { ConvertTo-CertificateEvidence $missingProof 10 } 'missing runner proof binding was accepted'
+    foreach ($bindingField in @('artifactId', 'digest', 'runAttempt')) {
+        $malformedProof = $partialJson | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        $malformedProof.runnerFailoverProof.$bindingField = 'wrong'
+        Assert-Rejected { ConvertTo-CertificateEvidence $malformedProof 10 } "malformed runner proof $bindingField was accepted"
     }
-    $legacyV1 = ConvertTo-CertificateEvidence $legacyV1Json 12
-    Assert-True ($legacyV1.Scope -eq [CiValidationReuseScope]::Complete -and
-        $legacyV1.RequiresValidation) `
-        'legacy schema-v1 evidence did not retain conservative runtime semantics'
+    $proofArtifact = [pscustomobject]@{
+        id = 100; digest = $partialJson.runnerFailoverProof.digest; expired = $false
+        name = "runner-failover-proof-$sha-1"; workflow_run = [pscustomobject]@{ id = 10 }
+    }
+    Assert-True ($null -ne (Get-CertificateFailoverArtifact $partialJson @($proofArtifact))) 'exact proof artifact was rejected'
+    Assert-Rejected { Get-CertificateFailoverArtifact $partialJson @() } 'missing proof artifact was accepted'
+    Assert-Rejected { Get-CertificateFailoverArtifact $partialJson @($proofArtifact, $proofArtifact) } 'duplicate proof artifact was accepted'
+    foreach ($field in @('id', 'digest', 'expired', 'name', 'workflow_run')) {
+        $changedArtifact = $proofArtifact | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        switch ($field) {
+            id { $changedArtifact.id = 101 }
+            digest { $changedArtifact.digest = 'sha256:' + ('c' * 64) }
+            expired { $changedArtifact.expired = $true }
+            name { $changedArtifact.name = 'runner-failover-proof-wrongsha-2' }
+            workflow_run { $changedArtifact.workflow_run.id = 11 }
+        }
+        Assert-Rejected { Get-CertificateFailoverArtifact $partialJson @($changedArtifact) } "proof artifact $field mismatch was accepted"
+    }
+    $noWorkProof = [pscustomobject]@{
+        schemaVersion = 1; complete = $true; errors = @(); testedSha = $sha; runId = '10'; runAttempt = '1'
+        requiresValidation = $false; requiresTests = $false
+        sourceArtifactId = ''; sourceArtifactDigest = ''; coveragePolicyHash = 'b' * 64
+        requiredShards = @(); shards = @()
+    }
+    Assert-FailoverPublishedProof $noWorkProof $noWorkJson @($proofArtifact)
+    $auxiliaryJson = $partialJson.PSObject.Copy(); $auxiliaryJson.requiresTests = $false
+    $auxiliary = ConvertTo-CertificateEvidence $auxiliaryJson 10
+    Assert-True ($auxiliary.RequiresValidation -and -not $auxiliary.RequiresTests) 'auxiliary-only certificate lost its policy'
+    $auxiliaryProof = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $auxiliaryProof.requiresValidation = $true
+    Assert-FailoverPublishedProof $auxiliaryProof $auxiliaryJson @($proofArtifact)
+    Assert-Rejected { Assert-FailoverPublishedProof $noWorkProof $auxiliaryJson @($proofArtifact) } 'auxiliary certificate accepted omitted validation policy'
+    $inconsistentPolicy = $noWorkJson.PSObject.Copy(); $inconsistentPolicy.requiresTests = $true
+    Assert-Rejected { ConvertTo-CertificateEvidence $inconsistentPolicy 10 } 'test policy omitted required validation'
+    Assert-Rejected { Assert-FailoverPublishedProof $noWorkProof $partialJson @($proofArtifact) } 'runtime policy accepted an empty shard proof'
+    $mislabelledNoWork = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $mislabelledNoWork.requiredShards = @([pscustomobject]@{ name = 'Core' })
+    Assert-Rejected { Assert-FailoverPublishedProof $mislabelledNoWork $noWorkJson @($proofArtifact) } 'no-work policy hid a required shard'
+    foreach ($flag in @('requiresValidation', 'requiresTests')) {
+        $runtimeNoWork = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        $runtimeNoWork.$flag = $true
+        Assert-Rejected { Assert-FailoverPublishedProof $runtimeNoWork $noWorkJson @($proofArtifact) } "no-work certificate accepted runtime proof $flag"
+        $missingPolicy = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        $missingPolicy.PSObject.Properties.Remove($flag)
+        Assert-Rejected { Assert-FailoverPublishedProof $missingPolicy $noWorkJson @($proofArtifact) } "proof accepted missing policy $flag"
+        $malformedPolicy = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        $malformedPolicy.$flag = 'false'
+        Assert-Rejected { Assert-FailoverPublishedProof $malformedPolicy $noWorkJson @($proofArtifact) } "proof accepted malformed policy $flag"
+    }
+    $sourcedNoWork = $noWorkProof | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $sourcedNoWork.sourceArtifactId = '200'; $sourcedNoWork.sourceArtifactDigest = 'sha256:' + ('d' * 64)
+    Assert-Rejected { Assert-FailoverPublishedProof $sourcedNoWork $noWorkJson @($proofArtifact) } 'no-work proof accepted nonempty runtime source binding'
+    $proofDirectory = Join-Path ([IO.Path]::GetTempPath()) ('ci-reuse-proof-' + [guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($proofDirectory) | Out-Null
+    $proofFile = Join-Path $proofDirectory 'proof.json'
+    try {
+        Assert-Rejected { Assert-CertificateFailoverEvidence $noWorkJson @($proofArtifact) $proofDirectory } 'missing proof document was accepted'
+        $noWorkProof | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $proofFile
+        Assert-CertificateFailoverEvidence $noWorkJson @($proofArtifact) $proofDirectory
+        $noWorkProof.complete = $false
+        $noWorkProof | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $proofFile
+        Assert-Rejected { Assert-CertificateFailoverEvidence $noWorkJson @($proofArtifact) $proofDirectory } 'incomplete proof was reusable'
+    } finally {
+        if (Test-Path -LiteralPath $proofFile) { Remove-Item -LiteralPath $proofFile }
+        Remove-Item -LiteralPath $proofDirectory
+    }
 
     $badBoolean = $partialJson.PSObject.Copy(); $badBoolean.requiresValidation = 'true'
     Assert-Rejected { ConvertTo-CertificateEvidence $badBoolean 10 } `
         'a string requiresValidation value was accepted'
+    $badTestsBoolean = $partialJson.PSObject.Copy(); $badTestsBoolean.requiresTests = 'true'
+    Assert-Rejected { ConvertTo-CertificateEvidence $badTestsBoolean 10 } 'a string requiresTests value was accepted'
     $badScope = $partialJson.PSObject.Copy(); $badScope.scope = 'AlmostComplete'
     Assert-Rejected { ConvertTo-CertificateEvidence $badScope 10 } `
         'an unknown certificate scope was accepted'
@@ -512,7 +578,7 @@ if ($SelfTest) {
         'a certificate bound to another run was accepted'
     $stringRunId = $partialJson.PSObject.Copy(); $stringRunId.runId = '10'
     Assert-Rejected { ConvertTo-CertificateEvidence $stringRunId 10 } `
-        'a schema-v3 certificate with a string runId was accepted'
+        'a schema-v4 certificate with a string runId was accepted'
 
     $partialCandidate = [pscustomobject]@{
         Scope = [CiValidationReuseScope]::Validation; RunId = 10; CreatedAt = '2026-01-01T00:00:00Z'
@@ -775,6 +841,12 @@ do {
             try {
                 $certificate = Get-Content -LiteralPath $certificateFile[0].FullName -Raw | ConvertFrom-Json
                 $parsed = ConvertTo-CertificateEvidence $certificate $runId
+                $proofArtifact = Get-CertificateFailoverArtifact $certificate $artifacts
+                $proofDirectory = Join-Path $env:RUNNER_TEMP "runner-proof-$runId-$([guid]::NewGuid().ToString('N'))"
+                & "$PSScriptRoot/Receive-RequiredArtifact.ps1" -Repository $Repository -ArtifactId $proofArtifact.id `
+                    -ExpectedDigest $certificate.runnerFailoverProof.digest -Destination $proofDirectory -RunId $runId -JobIndex 0
+                if ($LASTEXITCODE -ne 0) { throw 'Runner proof failed immutable archive verification' }
+                Assert-CertificateFailoverEvidence $certificate $artifacts $proofDirectory
             }
             catch {
                 Write-Host "::warning::rejecting malformed validation certificate from run ${runId}: $($_.Exception.Message)"

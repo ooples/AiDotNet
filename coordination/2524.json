@@ -37,18 +37,103 @@
       "owner": "available for other contributor to claim",
       "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
       "starting_points": [
-        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs: detached target magnitudes and host-computed double norms",
-        "AlignTTS/flow/codec model host reads listed in TTS run43902661676"
+        "Remaining AlignTTS/flow/codec model host reads in TTS run43902661676; exclude all explicitly owned files."
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared STFT target-detach and wide target-norm replay repairs; reviewed and integrated447aa7ac78",
+      "files": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Approved bidirectional infrastructure-only runner failover and mandatory evidence reconciliation",
+      "files": [
+        ".github/workflows/sonarcloud.yml",
+        "tools/TestImpact/RunnerFailover.ps1",
+        "tools/TestImpact/New-RunnerFailoverPlan.ps1",
+        "tools/TestImpact/Resolve-RunnerFailoverResults.ps1",
+        "tools/TestImpact/Test-RunnerFailover.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit05 bounded reduction/fixture repair and observed stale MiniRocket ratchet; implementation next, root review required",
+      "files": [
+        "src/Helpers/TensorReductionHelper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/TensorSumOfSquaresDoubleTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/SumOfSquaresDoubleCallSiteTests.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit07 NTM canonical meta-model registration and direct regular-learner ownership regressions; root review before verification",
+      "files": [
+        "src/MetaLearning/MetaLearnerBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/MetaLearning/NTMPaperTests.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared TTS feature/KL detach fixes and named retained-output producer-to-critic lifecycle",
+      "files": [
+        "src/TextToSpeech/Vocoders/GanVocoderBase.cs",
+        "src/TextToSpeech/CodecBased/UniAudioCodecTrainingModules.cs",
+        "src/TextToSpeech/CodecBased/CosyVoiceDifferentiableReward.cs",
+        "src/TextToSpeech/CodecBased/TortoiseTTS.cs",
+        "src/Training/CompiledTapeTrainingStep.cs",
+        "src/Training/TapeTrainingStepper.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit11 ARIMAX canonical parameter restoration, proven closure-warmup arena isolation, approved FP32 Adam master/state repair",
+      "files": [
+        "src/TimeSeries/ARIMAXModel.cs",
+        "src/TimeSeries/TimeSeriesModelBase.cs",
+        "src/Optimizers/AdamOptimizer.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit13 GEM Half conversions, Unit09 fresh-GP kernel update, Unit10 valid TRPO test contract, upstream typed predicates and sparse reduction",
+      "files": [
+        "src/ContinualLearning/Strategies/GradientEpisodicMemory.cs",
+        "src/GaussianProcesses/StandardGaussianProcess.cs",
+        "tests/AiDotNet.Tests/UnitTests/ReinforcementLearning/TrpoTopologyOptionsTests.cs",
+        "AiDotNet.Tensors: CpuEngine.Parity210.cs",
+        "AiDotNet.Tensors: CpuEngine.cs TensorSumOfSquares"
+      ]
+    },
+    {
+      "owner": "this session root",
+      "scope": "Artifact-only temporary Tensors feed and consumer workflow wiring; no public release",
+      "files": [
+        ".github/actions/setup-tensors-validation/",
+        ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+        ".github/tensors-validation.json",
+        ".github/workflows/tensors-validation-preflight.yml",
+        ".github/workflows/sonarcloud.yml",
+        ".github/workflows/tts-paper-contracts.yml",
+        ".github/workflows/recurrent-foundations.yml"
       ]
     }
   ],
   "verification": {
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
-    "full_ci": "Run43902662001 still running at PR head35f; all167shards selected, production+compat+pack passed. Four self-hosted runners lost communication during artifact downloads.",
-    "rebind": "Initial47focused:45pass2trajectoryfail; CPU->GPU promotion diagnosed and fixed by matching initial engine guard. Both exact-case no-build diagnostics pass; final normal build/test currently running with integratedWaveRNN.",
-    "upstream_lstm": "Pushed0c40e80c120bf2bff409d83a5afb600ca043f24f to AiDotNet.Tensors codex/2524-ci-coordination;37focusedtests passed0skips. Artifact-only workflow under review; no NuGet publication or PR.",
-    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips"
+    "full_ci": "PR head remains35f; full cycle still running. Latest snapshot27main failed,39passed,15active112queued. All completed failures retained; new failures are triaged as they finish. Do not push PR branch until entire cycle completes.",
+    "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
+    "upstream_lstm": "Producer4d9d0b323 passed normal all-five-TFM build/pack. Tests36passed1failed0skips: explicit OpenCL regression could not find runtime. Producer26791c1a5 now provisions verified PoCL runtime and allows CPU OpenCL; unchanged37tests/filter/assertions, GitHub run43925212863 queued. No public package or PR.",
+    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
+    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
+    "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
+    "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified.",
+    "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening."
   },
   "decisions": [
     {
@@ -70,9 +155,25 @@
       "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
       "status": "approved",
       "id": "merge"
+    },
+    {
+      "id": "runner-failover",
+      "status": "approved",
+      "decision": "One alternate-pool attempt for proven terminal infrastructure failure; visible intermediate attempts backed by mandatory fail-closed logical shard evidence gate. All required shards, exact SHA/artifact/definition/TRX checks preserved; real/unknown/test/compiler/analyzer/OOM/manual-cancel failures cannot be hidden. Queued-pool watchdog outside first batch."
+    },
+    {
+      "id": "fp32-adam-state",
+      "status": "approved",
+      "decision": "User explicitly approved FP32 Adam state repair, including reset/checkpoint/reverse/copy continuity. Root review additionally requires persistent FP32 master weights and sub-Half-ULP accumulation regression."
     }
   ],
-  "questions": [],
+  "questions": [
+    {
+      "id": "student-t-statistical-contract",
+      "status": "pending",
+      "question": "Industry standard: explicit GP prior/normalization policy. Root recommends shared GP test contracts with independent fixed-prior posterior oracles; alternative explicit GaussianProcessBase normalization. Awaiting user choice; no StudentT production edits."
+    }
+  ],
   "question_protocol": [
     "Separate contributor sessions do not automatically share this chat or interactive question responses.",
     "Contributor records a question on their own branch with ID, finding, files, proposed fix, alternatives and verification cost; user relays branch/path or question here.",
@@ -80,6 +181,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T17:02:27.1160444Z",
-  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination"
+  "updated_utc": "2026-11-16T19:03:14.1724626Z",
+  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
 }
