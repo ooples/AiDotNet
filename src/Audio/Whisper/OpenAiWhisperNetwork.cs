@@ -327,17 +327,50 @@ internal sealed class OpenAiWhisperNetwork<T>
     public void InitializeLikeReference(Random random)
     {
         var d = Dimensions;
-        double Uniform(double bound) => bound * (2 * random.NextDouble() - 1);
-        LoadTorchWeights((name, shape) =>
+        int half = d.AudioState / 2;
+        double increment = Math.Log(10000) / (half - 1);
+        // Generated run by run straight into the layers, in the order the reference draws them. Returning a fresh
+        // double[] per tensor (8 bytes a parameter, twice that for the token table through a Vector) made every
+        // construction allocate a second copy of the model as LOH garbage: whisper-medium at 764M parameters peaked at
+        // 11.1 GB private bytes for 3.6 GB of live float weights, and WhisperSpeech<double> did not fit in 12 GB.
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.Generated((name, shape, offset, values) =>
         {
-            int count = shape.Aggregate(1, (a, s) => a * s);
-            var values = new double[count];
-            if (name == "encoder.positional_embedding") return Sinusoids(d.AudioContext, d.AudioState);
+            if (name == "encoder.positional_embedding")
+            {
+                // Sinusoids(AudioContext, AudioState), element by element: sines then cosines of t·exp(−increment·i).
+                for (int k = 0; k < values.Length; k++)
+                {
+                    long index = offset + k;
+                    int t = (int)(index / d.AudioState), c = (int)(index % d.AudioState);
+                    // An odd width's last channel is neither, and stays zero as in Sinusoids.
+                    values[k] = c < half ? Math.Sin(t * Math.Exp(-increment * c))
+                        : c < 2 * half ? Math.Cos(t * Math.Exp(-increment * (c - half))) : 0.0;
+                }
+                return;
+            }
             if (name.EndsWith("ln.weight", StringComparison.Ordinal) || name.EndsWith("ln_post.weight", StringComparison.Ordinal))
-                return Enumerable.Repeat(1.0, count).ToArray();
+            {
+                values.Fill(1.0);
+                return;
+            }
             if (name.EndsWith("ln.bias", StringComparison.Ordinal) || name.EndsWith("ln_post.bias", StringComparison.Ordinal) || name == "decoder.positional_embedding")
-                return values;
-            if (name == "decoder.token_embedding.weight") return TorchParametersGaussian(random, count);
+            {
+                values.Clear();
+                return;
+            }
+            if (name == "decoder.token_embedding.weight")
+            {
+                // N(0, 1) by Box-Muller pairs, as TorchParameters.Gaussian draws them; runs start at even offsets, so a
+                // pair never straddles two runs, and a tensor's odd last element still consumes both draws.
+                for (int i = 0; i < values.Length; i += 2)
+                {
+                    double radius = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble()));
+                    double angle = 2.0 * Math.PI * random.NextDouble();
+                    values[i] = radius * Math.Cos(angle);
+                    if (i + 1 < values.Length) values[i + 1] = radius * Math.Sin(angle);
+                }
+                return;
+            }
             int fanIn = shape.Length >= 2 ? shape.Skip(1).Aggregate(1, (a, s) => a * s) : 0;
             if (shape.Length == 1)
             {
@@ -348,17 +381,10 @@ internal sealed class OpenAiWhisperNetwork<T>
                     : name.StartsWith("encoder", StringComparison.Ordinal) ? d.AudioState : d.TextState;
             }
             double bound = 1.0 / Math.Sqrt(fanIn);
-            for (int i = 0; i < count; i++) values[i] = Uniform(bound);
-            return values;
-        });
+            for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+        }));
         AlignmentHeads = Enumerable.Range(d.TextLayers / 2, d.TextLayers - d.TextLayers / 2)
             .SelectMany(layer => Enumerable.Range(0, d.TextHeads).Select(head => (layer, head))).ToList();
-    }
-
-    private static double[] TorchParametersGaussian(Random random, int count)
-    {
-        var v = AiDotNet.TextToSpeech.CodecBased.TorchParameters.Gaussian<double>(random, count, 1.0);
-        return v.ToArray();
     }
 
     /// <summary><c>sinusoids(length, channels)</c>: sines then cosines of position × exp(−log(10000) / (channels/2 − 1) · i).</summary>
