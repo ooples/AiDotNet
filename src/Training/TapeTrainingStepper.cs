@@ -316,6 +316,8 @@ internal sealed class TapeTrainingStepper<T>
                 RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
                 ModelGradientClip = request.ModelGradientClip,
                 Optimizer = request.Optimizer,
+                ReportsRetainedOutputOutcome = ReportsRetainedOutputOutcome(request.Optimizer),
+
             });
     }
 
@@ -449,6 +451,8 @@ internal sealed class TapeTrainingStepper<T>
                 RegularizeGradients = applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null,
                 ModelGradientClip = modelGradientClip,
                 Optimizer = optimizer,
+                ReportsRetainedOutputOutcome = ReportsRetainedOutputOutcome(optimizer),
+
                 BeforeUpdate = beforeUpdate,
             });
     }
@@ -487,12 +491,13 @@ internal sealed class TapeTrainingStepper<T>
                 using var noGrad = new NoGradScope<T>();
                 foreach (var parameter in context.Parameters)
                     engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(context.Gradients[parameter], learningRate));
+                RetainedOutputCapture<T>.MarkUpdateAccepted();
             },
             placeholder,
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients });
+            new EagerStepHooks { OnGradients = onGradients, ReportsRetainedOutputOutcome = true });
     }
 
     /// <summary>
@@ -674,6 +679,10 @@ internal sealed class TapeTrainingStepper<T>
         modelClip?.Invoke(gradients);
     }
 
+    internal static bool ReportsRetainedOutputOutcome(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+        => optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>
+            { HasRetainedOutputOutcomeReporting: true };
+
     private static Action<TapeStepContext<T>> OptimizerUpdate(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
         => context =>
         {
@@ -691,6 +700,9 @@ internal sealed class TapeTrainingStepper<T>
     {
         /// <summary>Optional model owner whose distributed coordinator or mixed-precision context governs the step.</summary>
         public object? Owner { get; init; }
+        /// <summary>The callback owner guarantees explicit acceptance/rejection reporting; unknown callbacks are unsupported for handoffs.</summary>
+        public bool ReportsRetainedOutputOutcome { get; init; }
+
 
         /// <summary>
         /// Widens the tensors the backward differentiates beyond the parameters (a diagnostic probe asking whether an
@@ -753,8 +765,14 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(objective);
         Guard.NotNull(parameterProvider);
         Guard.NotNull(update);
+        RetainedOutputCapture<T>.RequireReportingUpdater(hooks?.ReportsRetainedOutputOutcome == true);
+
+        if (objectiveTerms is not null)
+            RetainedOutputCapture<T>.RejectUnsupportedRoute("summed-objective");
         if (hooks?.Owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } distCoord } distNet)
         {
+            RetainedOutputCapture<T>.RejectUnsupportedRoute("distributed");
+
             return ExecuteDistributedEagerTapeStep(
                 distNet, distCoord, objective, parameterProvider, update,
                 input, target, recomputeForward, recomputeLoss, hooks, objectiveTerms);
@@ -796,8 +814,13 @@ internal sealed class TapeTrainingStepper<T>
         hooks?.RegularizeAndClip(reached, gradients);
         hooks?.BeforeUpdate?.Invoke();
 
+        using var updateOutcome = RetainedOutputCapture<T>.BeginEagerUpdate();
+
         update(new TapeStepContext<T>(
             reached, gradients, lossValue, input, target, recomputeForward, recomputeLoss, parameterBuffer: null));
+        if (updateOutcome?.Accepted == true)
+            RetainedOutputCapture<T>.PublishEager(tape);
+
         return lossValue;
     }
 
@@ -1413,9 +1436,14 @@ internal sealed class TapeTrainingStepper<T>
             hooks.RegularizeAndClip(reached, gradients);
             hooks.BeforeUpdate?.Invoke();
 
+            using var updateOutcome = RetainedOutputCapture<T>.BeginEagerUpdate();
+
             update(new TapeStepContext<T>(
                 reached, gradients, lossValue, input, target, recomputeForward, recomputeLoss, parameterBuffer: null));
             mpNet.InvalidateLayerWeightCaches();
+            if (updateOutcome?.Accepted == true)
+                RetainedOutputCapture<T>.PublishEager(tape);
+
             return lossValue;
         }
         finally

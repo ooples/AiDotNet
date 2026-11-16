@@ -900,6 +900,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc />
+    protected override bool ReportsRetainedOutputUpdateOutcome => true;
+
+    /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
@@ -959,6 +962,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (guardActive && !IsFiniteDouble(globalNormSq)
             && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
+            ReportRetainedOutputUpdateRejected();
+
             return;
         }
 
@@ -1467,6 +1472,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             for (int __i = 0; __i < __params.Count; __i++) ProcessParam(__params[__i]);
         }
+        ReportRetainedOutputUpdateAccepted();
+
     }
 
     /// <summary>

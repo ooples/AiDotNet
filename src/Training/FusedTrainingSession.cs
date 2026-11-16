@@ -355,6 +355,9 @@ internal sealed class FusedTrainingSession<T>
             return Decline("mixed precision active (requires eager tape loss scaling)");
 
         bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
+        if (isDistributed)
+            AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.RejectUnsupportedRoute("distributed");
+
 
         if (IsDisabled)
         {

@@ -17059,6 +17059,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             Owner = this,
             Optimizer = opt,
+            ReportsRetainedOutputOutcome = Training.TapeTrainingStepper<T>.ReportsRetainedOutputOutcome(opt),
+
             RegularizeGradients = isDistributed ? OptimizerRegularizer(opt) : null,
             ModelGradientClip = isDistributed && clipCustomObjective ? MaxGradNormValue : 0.0,
             // An armed probe only ever ADDS questions: its tensors are differentiated, never updated.

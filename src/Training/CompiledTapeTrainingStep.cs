@@ -778,7 +778,8 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
             Dictionary<Tensor<T>, Tensor<T>> gradients;
-            using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(TrainingTapeOptions.Step))
+            var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(TrainingTapeOptions.Step);
+            using (tape)
             {
                 loss = request.ClosureObjective!();
                 gradients = tape.ComputeGradients(loss, parameters);
@@ -798,6 +799,11 @@ public static class CompiledTapeTrainingStep<T>
                 t_lastClosurePlanCount = closure.PlanCount;
                 t_lastClosureIsDynamic = closure.IsDynamic;
             }
+            if (AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.IsActive
+                && _configuredPlan is AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> appliedPlan
+                && !appliedPlan.LastStepSkippedNonFiniteGradients)
+                AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.PublishEager(tape);
+
             return true;
         }
         finally

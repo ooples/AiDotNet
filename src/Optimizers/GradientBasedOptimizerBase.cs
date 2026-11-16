@@ -3226,6 +3226,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
     }
 
+    /// <summary>Whether this optimizer explicitly reports every accepted or rejected native update for output handoffs.</summary>
+    protected virtual bool ReportsRetainedOutputUpdateOutcome => false;
+    internal bool HasRetainedOutputOutcomeReporting => ReportsRetainedOutputUpdateOutcome;
+
+    /// <summary>Reports successful completion of a native update to an active retained-output handoff.</summary>
+    protected void ReportRetainedOutputUpdateAccepted()
+        => AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.MarkUpdateAccepted();
+
+    /// <summary>Reports that a native guard rejected the current update without changing parameters.</summary>
+    protected void ReportRetainedOutputUpdateRejected()
+        => AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.MarkUpdateRejected();
+
     /// <summary>
     /// Snapshots the parameters whose layer declares its own learning rate (a scale or a cap), before the step.
     /// </summary>
