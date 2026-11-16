@@ -578,7 +578,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // The layer is an index lookup by construction. Continuous feature projection belongs in
         // DenseLayer, so invalid values cannot silently change this layer's output rank or parameters.
-        ValidateIndicesOrThrow(input, vocabularySize);
+        input = ValidateIndicesForLookup(input, vocabularySize);
 
         Tensor<T> flatOutput;
         // Standard embedding lookup for integer token indices.
@@ -666,6 +666,32 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         return ApplyOutputScale(reshaped);
     }
+    // Validation is a runtime data boundary, not a trace-time decision: every replay checks its current token IDs.
+    // The lookup consumes the checked identity output, so its gather cannot execute before the guard succeeds.
+    private Tensor<T> ValidateIndicesForLookup(Tensor<T> input, int vocabularySize)
+    {
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            ValidateIndicesOrThrow(input, vocabularySize);
+            return input;
+        }
+
+        var capturedInput = input;
+        return scope.RecordUnary(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "ValidateEmbeddingIndices",
+            input,
+            input._shape,
+            (replayEngine, result) =>
+            {
+                ValidateIndicesOrThrow(capturedInput, vocabularySize);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, capturedInput, result);
+            },
+            // Token IDs are discrete: the embedding table receives gradients, the validation output does not.
+            static (_, _, _, _, _, _) => { });
+    }
+
 
     /// <summary>
     /// Confirms the input really holds token indices, and explains the fix when it does not.

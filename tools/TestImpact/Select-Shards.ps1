@@ -2273,6 +2273,31 @@ function Select-ImpactedShards {
         }
     }
 
+    # Classification above visits every applicable path, including control/deny rules. Once any rule
+    # requires the full matrix, line intersections and Roslyn fallbacks cannot reduce that requirement.
+    # Do not spend the selector's whole job budget proving a reduction that will be discarded.
+    if ($escalate) {
+        foreach ($shard in @($Map.knownShards) + $mandatory) { [void] $selected.Add([string] $shard) }
+        foreach ($path in $mappedPaths) {
+            if ($currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
+                Add-FileDecision $path 'MapCandidate' 'escalated' @() 'full matrix already required; precise coverage routing was not performed'
+            }
+        }
+        foreach ($shard in ($selected | Sort-Object)) {
+            [void] $routes.Add("$shard <= full matrix required by classification; no precise coverage claim")
+        }
+        return [pscustomobject]@{
+            Escalate           = $true
+            RequiresValidation = $true
+            Reasons            = $reasons
+            Shards             = @($selected | Sort-Object)
+            Routes             = @($routes)
+            Files              = @($files)
+            Untested           = @()
+            NewSourcePaths     = @()
+        }
+    }
+
     # Audits must exercise the mandatory shard set even when the only changes since
     # the candidate map are non-runtime. Ordinary docs-only PRs still select nothing.
     if ($Changed.Count -eq 0 -or ($AuditUnchangedMap -and $mappedPaths.Count -eq 0 -and -not $escalate)) {
@@ -3802,6 +3827,37 @@ if ($SelfTest) {
         }
     } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
     $expected = @('Alpha', 'Beta', 'HeavyNoCoverage')
+    # A broad sweep can require full execution before expensive mapped-line routing begins. Keep the
+    # full-validation control last in sort order so all preceding source paths must still be classified.
+    $broadFiles = [ordered]@{}
+    $broadChanged = @{}
+    $broadDetails = @{}
+    for ($i = 0; $i -lt 3000; $i++) {
+        $path = 'src/Area/Broad{0:D4}.cs' -f $i
+        $broadFiles[$path] = @(@{ s = 0; r = @(10, 20) })
+        $broadChanged[$path] = @(21, 21)
+        $broadDetails[$path] = [pscustomobject]@{
+            Swept = $false; Base = 'base'; MapRevision = 'map'; MapHunks = @()
+            Hunks = @([pscustomobject]@{ Map = @(21, 21) })
+        }
+    }
+    $broadMap = @{
+        knownShards = @('Alpha', 'Beta', 'PolicyRequired'); alwaysRun = @('HeavyNoCoverage')
+        redefinedShards = @('Beta'); files = $broadFiles
+    } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
+    $broadChanged['zz/Directory.Build.props'] = @(1, 1)
+    $sourceReads = [pscustomobject]@{ Count = 0 }
+    $broad = Select-ImpactedShards -Map $broadMap -Changed $broadChanged -RequiredShards @('PolicyRequired') `
+        -ChangeDetail $broadDetails -PreciseFallbacks $true -ReadSource {
+            param($revision, $path) $sourceReads.Count++; return $null
+        }
+    Assert-True ($broad.Escalate -and $broad.RequiresValidation) 'a broad full-validation change tried to reduce execution'
+    Assert-True (($broad.Shards -join ',') -ceq 'Alpha,Beta,HeavyNoCoverage,PolicyRequired') 'early full validation lost indexed, mandatory or policy-required shards'
+    Assert-True ($sourceReads.Count -eq 0) 'full validation still invoked expensive source/Roslyn routing'
+    Assert-True (@($broad.Files).Count -eq 3001) 'full validation did not classify/report every changed path'
+    Assert-True (@($broad.Files | Where-Object { $_.path -ceq 'zz/Directory.Build.props' -and $_.category -ceq 'FullValidation' }).Count -eq 1) 'the last full-validation control path was not reported'
+    Assert-True (@($broad.Files | Where-Object { $_.outcome -ceq 'routed' }).Count -eq 0) 'early full validation fabricated precise coverage evidence'
+
     try { Assert-ShardMap -Map $map -Expected $expected } catch { [void] $failures.Add("valid map rejected: $_") }
 
     # CLASSIFICATION PINNED TO REAL PULL REQUESTS, because the failures this feature keeps shipping
