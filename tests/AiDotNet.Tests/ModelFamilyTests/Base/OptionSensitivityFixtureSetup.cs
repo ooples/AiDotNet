@@ -216,6 +216,17 @@ internal static class OptionSensitivityFixtureSetup
             return KokoroOptionFixture.Observe(kokoro, option);
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (network is AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T> hamiltonian
+            && option is "SymplecticSolverTolerance" or "SymplecticSolverMaxIterations")
+        {
+            // These options control the implicit simulation step, not Predict/Train. At this
+            // finite nonseparable state, a single correction has a measurable momentum residual.
+            var initial = new Vector<T>(Enumerable.Repeat(ops.FromDouble(1), input.Shape[^1]).ToArray());
+            var trajectory = hamiltonian.Simulate(initial, ops.FromDouble(4), 3);
+            task = OptionSensitivityHarness.Combine(task,
+                OptionSensitivityHarness.Fingerprint(trajectory.ToArray().Select(ops.ToDouble)));
+        }
+
         // Vector.Select materializes another full vector (and a double copy for float models).
         // Stream conversions so a paper-scale model needs only the existing parameter snapshot.
         var parameters = network.GetParameters();

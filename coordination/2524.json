@@ -58,6 +58,24 @@
         "tools/TestImpact/Test-RunnerFailover.ps1",
         "tools/TestImpact/Assert-CiGate.ps1"
       ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit05 bounded reduction/fixture repair and observed stale MiniRocket ratchet; implementation next, root review required",
+      "files": [
+        "src/Helpers/TensorReductionHelper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/TensorSumOfSquaresDoubleTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/SumOfSquaresDoubleCallSiteTests.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit07 NTM canonical meta-model registration and direct regular-learner ownership regressions; root review before verification",
+      "files": [
+        "src/MetaLearning/MetaLearnerBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/MetaLearning/NTMPaperTests.cs"
+      ]
     }
   ],
   "verification": {
@@ -67,7 +85,9 @@
     "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
     "upstream_lstm": "Producer4d9d0b323 passed normal all-five-TFM build/pack. Tests36passed1failed0skips: explicit OpenCL regression could not find runtime. Producer26791c1a5 now provisions verified PoCL runtime and allows CPU OpenCL; unchanged37tests/filter/assertions, GitHub run43925212863 queued. No public package or PR.",
     "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
-    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open."
+    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
+    "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
+    "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified."
   },
   "decisions": [
     {
@@ -104,7 +124,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T18:06:08.2798807Z",
+  "updated_utc": "2026-11-16T18:13:29.1209763Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
