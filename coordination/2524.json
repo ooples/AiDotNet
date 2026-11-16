@@ -315,12 +315,14 @@
     "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified.",
     "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening.",
     "artifact_feed": "Linux preflight43958514136 PASSED at7e1f1a8fc78415d141a88810ee4cc8bcd49ecaac:17 fixtures; authenticated immutable archive/run/artifact/manifest/package identity; original99 plus retained-output26 distinct mandatory CPU cases,125total; all5TFMs and tested-packaged net10 binary SHA; exact candidate NuGet restore. This is feed/package validation, not consumer-source verification.",
-    "next_native_candidate": "Validated producer run43955817990 at7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382 completed all5TFM normal pack and125mandatoryCPU tests (original99 unchanged plus26 retained-output/arena cases), zero skips; exact manifest reviewed. Artifact14272518202 pinned in consumer descriptor; no public NuGet release. Consumer normal125 production/API and main test compilation passed; focused290=270pass/5fail/15existing capability skips. Four batch corrections pending; ClvpTextLength finding remains Claude-owned.",
+    "next_native_candidate": "Validated producer run43955817990 at7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382 completed all5TFM normal pack and125mandatoryCPU tests (original99 unchanged plus26 retained-output/arena cases), zero skips; exact manifest reviewed. Artifact14272518202 pinned in consumer descriptor; no public NuGet release. Consumer normal125 production/API and main test compilation passed; latest correction-cohort evidence is recorded separately and does not establish global readiness. Follow-up native165 cohort has3failures/1skip under investigation; no newer artifact is ready.",
     "combined_99": "Prior combined99-package focused run:400total,393passed,7failed,0skipped. Seven grouped corrections were prepared/reviewed but remain unverified until consolidated125-package build/tests complete.",
-    "next_pr_batch": "Root125 normal production build and main test compilation PASS. Focused290:270passed,5failed,15existing Tortoise-capability skips. Four batch failures are being corrected; fifth new Tortoise ClvpTextLength option failure belongs to Claude owner. Corrective verification and final PR-batch review remain pending; do not mark all sources verified or resolve unproven comments.",
+    "next_pr_batch": "Consumer baselinece7928ef40 normal125 production/API and main test compilation passed. Correction cohort102passed plus1test-declaration failure; affected async clipping-refusal rerun1/1passed. Complete root tree remains an incomplete integration baseline with explicit unresolved b11 owner actions. Native165=161pass/3fail/1skip under investigation, separateFP16=4pass; no new artifact or PR push is ready.",
     "final_tts_main_shard": "Final main job133444409230 TTS Paper Tests:cancelled at2026-11-16T21:34:34Z; GitHub annotation says1h0m0s maximum execution time exceeded. Test step never completed; no TRX/result artifact among fresh512-artifact index. Partial33.7MB log retains409Passed lines,33uniqueFAIL lines,0Skipped lines, but no terminal test counters. Not a passed or completed test suite; not proven runner infrastructure. The33 failures map existing ownership:WaveRNN20Floor, MegaTTS1TensorSlice, LlamaOmni2CTCLoss, CosyVoice/SpeechGPT/SpeedySpeech5Reshape, SoundStorm4TensorMax+1frozenByT5encoder movement.",
     "title_infrastructure_retry": "Run43902661476 attempt2 SUCCESS on aidotnet-super-server-2, job133637244095, exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753; fresh API confirmed. Historical initial9-workflow completion snapshot5success/4failure remains retained; latest title check is clean.",
-    "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning."
+    "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning.",
+    "consumer_correction_cohort": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
+    "native_current_cohort": "Original125 mandatory CPU cases remain all passing. Current native165 cohort:161passed,3failed,1skipped, with heterogeneous replay failures under investigation. Separate FP16 focused check4/4passed. No new native artifact is ready; retain the validated125 consumer package pin. Passing FP16 checks do not approve broader native optimizer work."
   },
   "decisions": [
     {
@@ -402,7 +404,8 @@
       "files": "src/TextToSpeech/.../VarianceAdaptorLayer.cs (shared)",
       "finding": "FastSpeech2: Bucketize always reshapes the pitch/energy target before TensorSearchSorted reads it, so the read lands on a traced Reshape.",
       "proposed_fix": "values.Rank == 1 ? values : Engine.Reshape(values, ...) before TensorSearchSorted. Verified locally: FastSpeech2 passes; ProDiff 3->1 and AdaSpeech2 2->1 failures; no regressions. Patch in our scratchpad, not committed.",
-      "alternatives": "Traced bucketize: rejected, the embedding input check then host-reads traced indices and ProDiff/AdaSpeech2 regress."
+      "alternatives": "Traced bucketize: rejected, the embedding input check then host-reads traced indices and ProDiff/AdaSpeech2 regress.",
+      "coordinator_review_note": "Coordinator review: avoiding a redundant rank1 reshape is within existing replay scope subject to exact value/gradient/current-data replay tests; this note does not approve an unreviewed implementation or relax embedding/index guards."
     },
     {
       "id": "tts-codec-gan-detach",
@@ -411,7 +414,8 @@
       "files": "src/Audio/Codecs/CodecWaveformGan.cs, src/TextToSpeech/Latest/IndexTtsPerceiver.cs (shared)",
       "finding": "SeedTTS TokenizerPretraining and Spark BiCodecAdversarialTraining/ValidAlternativeBands: CodecWaveformGan.Detached copies values on the host; IndexTtsPerceiver.Forward uses scalar TensorMax(norm, 1e-12) eagerly.",
       "proposed_fix": "Detached(x) => Engine.StopGradient(x); TensorMax(norm, eps) -> relu(norm - eps) + eps.",
-      "alternatives": "None better; both are exact rewrites."
+      "alternatives": "None better; both are exact rewrites.",
+      "coordinator_review_note": "Coordinator review: tensor-native StopGradient detach and mathematically faithful tensor clamp are within the existing approved replay scope, subject to independent value/gradient and replay tests. Preserve ownership/lifetime and numerical semantics; no host fallback or approval of unreviewed code."
     },
     {
       "id": "tts-hift-harmonics",
@@ -420,7 +424,8 @@
       "files": "src/TextToSpeech/Vocoders/HiftModules.cs (shared)",
       "finding": "CosyVoice and CosyVoice2 VocoderStage: Harmonics/HarmonicsByFrames read f0 per sample on the host.",
       "proposed_fix": "Express with engine ops (cumsum of f0*h/sr, then sin) so the plan replays it.",
-      "alternatives": "A CompiledStepHostValue node, if exact phase accumulation must stay in double."
+      "alternatives": "A CompiledStepHostValue node, if exact phase accumulation must stay in double.",
+      "coordinator_review_note": "Coordinator review: tensor cumsum/phase/sin construction is within the existing approved scope, subject to original sample/frame-boundary/phase and replay oracles. Preserve mathematical and state semantics; no unreviewed implementation approval."
     },
     {
       "id": "tts-groupnorm-trace",
@@ -429,7 +434,8 @@
       "files": "AiDotNet.Tensors Engine.GroupNorm, or src/TextToSpeech/FlowDiffusion/MatchaDecoder.cs",
       "finding": "CosyVoiceOptimizerOptions CoupledDecay (v1, clone): MatchaDecoder blocks use GroupNormalizationLayer and Engine.GroupNorm computes eagerly under a training trace. Also blocks FireRedTTS FlowDecoder (MatchaDecoder).",
       "proposed_fix": "Upstream: record GroupNorm lazily in training traces.",
-      "alternatives": "Interim: compose the norm from reductions in MatchaDecoder (as CosyVoiceModules.SingleGroupNorm does)."
+      "alternatives": "Interim: compose the norm from reductions in MatchaDecoder (as CosyVoiceModules.SingleGroupNorm does).",
+      "coordinator_review_note": "Coordinator review: necessary native replay investigation fits existing upstream scope; require exact separate claims and root review, with gradient/value/replay evidence. Do not silently bundle GroupNorm changes into heterogeneous replay."
     },
     {
       "id": "tts-batchnorm-probe",
@@ -438,7 +444,8 @@
       "files": "AiDotNet.Tensors CpuEngine.BatchNorm GraphMode branch",
       "finding": "TransformerTTS (and likely Tacotron2, NonAttentiveTacotron): BatchNorm on non-float or non-rank-4 input computes immediately, reading the probe placeholder, so the probe aborts with \"reads 'Reshape'\". Trigger: ConvBatchNormStackLayer, rank-2 double. Also blocks SpeedySpeech (DilatedResidualConvBlock), Tacotron2 and ForwardTacotron (ConvBatchNormStackLayer, SeriesPredictor/CBHG), FireRedTTS SpeechTokenizer (IndexTtsEcapa) and MelCodec (MegaTtsMelDiscriminator). With BatchNorm bypassed locally those objectives replay and train.",
       "proposed_fix": "When scope.IsProbe, record the BatchNorm node with correctly shaped outputs instead of computing.",
-      "alternatives": "None in AiDotNet without weakening the guard."
+      "alternatives": "None in AiDotNet without weakening the guard.",
+      "coordinator_review_note": "Coordinator review: necessary native replay investigation fits the existing upstream scope, but exact separate CpuEngine/state/test claims and design review are required. Do not silently bundle BatchNorm changes into heterogeneous replay or weaken probe/closure guards."
     },
     {
       "id": "tts-uniaudio-tortoise-residual",
@@ -506,7 +513,8 @@
       "files": "AiDotNet.Tensors LayerNorm node (package 0.151.1-coordination.43955817990)",
       "finding": "New with the latest pinned package: 10 GPT-SoVITS/Melo/MegaTTS2/StyleTTS tests that pass on package run 43940828211 fail with \"Closure objective replay contract is missing: op 'LayerNorm' field 'Execute.stateRef' holds a AiDotNet.Tensors.Engines.Autodiff.LayerNormStateRef`1\".",
       "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
-      "alternatives": "None in AiDotNet without weakening the guard."
+      "alternatives": "None in AiDotNet without weakening the guard.",
+      "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted."
     },
     {
       "id": "tensors-1764-in-coordination-package",
@@ -525,7 +533,8 @@
       "files": "src/NeuralNetworks/Layers/NormedConv1DLayer.cs, NormedConv2DLayer.cs (shared; overlaps GanVocoderBase owner)",
       "finding": "SpiritLM and SpeechGPT vocoders: Kernel() with spectral normalization reads the weights on the host (v.ToVector()), runs the power iteration on the host and writes _u/_v back; used by HiFiGanDiscriminators' first scale discriminator, so every HiFi-GAN-style discriminator is affected.",
       "proposed_fix": "Power iteration with engine ops on StopGradient(v): v'=normalize(vd^T u), u'=normalize(vd v'), sigma=u'^T v v'; persist u'/v' through a CompiledStepHostValue node (x0 into sigma) keyed per layer, as GLM4Voice's codebook statistics do.",
-      "alternatives": "Owner of GanVocoderBase takes it."
+      "alternatives": "Owner of GanVocoderBase takes it.",
+      "coordinator_review_note": "Coordinator review: shared spectral-normalization replay repair requires precise ownership and root review of training/eval/probe/accepted-outcome state semantics. Preserve the normalization math and gradient contract; do not copy the disputed GLM lifecycle pattern. No implementation approval is implied."
     },
     {
       "id": "owner-tortoise-clvp-text-length-option",
@@ -534,6 +543,14 @@
       "files": "TortoiseTTS option routing and direct owner tests; no new overlap by our agents",
       "finding": "Root focused125 run reports a new ClvpTextLength option sensitivity failure, the fifth failure after four batch corrections. This is an owner finding, not authorization to change baseline/assertions or expand our overlapping TTS work.",
       "proposed_fix": "Claude owner investigates the exact option contract and posts precise change/test evidence or a shared-scope proposal; coordinate with existing Tortoise overlap reconciliation."
+    },
+    {
+      "id": "native-optimizer-expansion",
+      "status": "QUESTION PENDING; no approval",
+      "question": "Whether to authorize additional native optimizer work beyond already approved scopes. Root must obtain the material scope decision through interactive questions before dependent implementation.",
+      "constraint": "Existing typed-T backward and explicitly approved consumer Adam work do not imply approval for further native optimizer expansion. No new owner claim or implementation authorization is created by the FP16 checks.",
+      "finding": "Ordinary typed NoGrad plans lose RecordedUnderNoGrad metadata on Save/Load. Heterogeneous serialization explicitly refuses before writes, and that refusal test passes; these are distinct paths.",
+      "scope_under_discussion": "Proper enrollment continuation needs new plan/optimizer format metadata and per-parameter ages. A CPU/GPU grouped/capture audit may exceed3-6hours. No implementation approval yet; do not treat existing heterogeneous forward-data or NoGrad authorization as approval for this expansion."
     }
   ],
   "question_protocol": [
@@ -543,7 +560,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T22:34:55.107441+00:00",
+  "updated_utc": "2026-11-16T23:02:03.790812+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -736,5 +753,19 @@
     "Contributors post branch/commit, exact verification results and limitations; propose shared-boundary changes before implementation.",
     "Material choices use root interactive questions. Routine selection among unclaimed tasks does not require user assignment.",
     "Combine independently verified contributor fixes on shared coordination handoff; root controls final batch verification and PR push. No independent PR push mid-batch."
-  ]
+  ],
+  "source_handoff": {
+    "status": "INCOMPLETE INTEGRATION BASELINE; draft for root review, not PR-ready or globally verified",
+    "consumer_baseline": "ce7928ef40c44c3e30f37da3ae545ded84fb70e9",
+    "plan": "Root will share the complete reviewed consumer WIP on the coordination branch, preserving contributor changes and unresolved owner actions. No selective dropping of integrated contributor hunks, no PR-branch push, no unproven review resolution. Root reviews exact source diff and this complete coordination log before handoff publication.",
+    "consumer_verification": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
+    "unresolved_owner_actions": [
+      "owner-lossbalancer-signed-factory-state: signed factory identity, EMA/Steps host-state lifecycle and compiled rebind/probe/skip/throw tests",
+      "owner-glm-accepted-statistics-lifecycle: accepted-step publication, valid masks, cleanup and no stale/probe statistics; compiled arrays are heap copies",
+      "owner-dittotts-duplicate-codec-forward: replace duplicate codec reconstruction with accepted-step named output, preserve quantizer semantics",
+      "owner-tortoise-clvp-text-length-option: Claude-owned option finding; coordinate with existing completed-overlap reconciliation",
+      "Pending native BatchNorm/GroupNorm/LayerNorm proposals require exact separate claims and review, not silent heterogeneous-package inclusion"
+    ],
+    "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness."
+  }
 }
