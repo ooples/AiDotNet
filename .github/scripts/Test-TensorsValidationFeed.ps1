@@ -95,6 +95,9 @@ Copy-Item -LiteralPath "$env:TENSORS_FIXTURE_ROOT/evidence" -Destination $Destin
 exit 0
 '@ | Set-Content "$root/tools/TestImpact/Receive-RequiredArtifact.ps1"
     '<configuration><packageSources><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources></configuration>' | Set-Content "$root/NuGet.Config"
+    # The mocked downloader deliberately sets a failing native exit code. Keep that
+    # expected failure from leaking into the enclosing GitHub PowerShell step.
+    $savedExitCode = if (Test-Path variable:global:LASTEXITCODE) { $global:LASTEXITCODE } else { 0 }
     $savedEnvironment = @{}
     $fixtureEnvironment = @{
         GITHUB_REPOSITORY='ooples/AiDotNet'; GITHUB_EVENT_NAME='push'; RUNNER_TEMP="$root/runner"
@@ -119,6 +122,7 @@ exit 0
         Write-Host 'PASS: nonzero downloader exit fails before manifest read and restores both tokens'
     } finally {
         foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name]) }
+        $global:LASTEXITCODE = $savedExitCode
     }
     Set-Content "$root/Directory.Packages.props" ($props.Replace($version, '0.151.1'))
     Move-Item -LiteralPath "$root/.github/tensors-validation.json" -Destination "$root/descriptor.saved.json"
