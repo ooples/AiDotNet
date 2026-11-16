@@ -272,8 +272,9 @@ public class CustomObjectiveFusedRoutingTests
     }
 
     [Fact(Timeout = 120000)]
-    public void ADeclaredBreak_WithNewModelValueClipping_IsRefusedBeforeItsObjective()
+    public async System.Threading.Tasks.Task ADeclaredBreak_WithNewModelValueClipping_IsRefusedBeforeItsObjective()
     {
+        await System.Threading.Tasks.Task.Yield();
         var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
         bool previous = options.EnableCompilation;
         try
