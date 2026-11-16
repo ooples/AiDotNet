@@ -386,6 +386,31 @@
           "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save→Load→Save→Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
         }
       ]
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "repository": "ooples/AiDotNet.Tensors",
+      "scope": "User-approved CUDA capture enrollment/age backend and necessary exact-artifact GPU validation. Core optimizer remains cuda_capture; no overlapping source writers.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/DirectGpu/IGraphStepIo.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaBackend.StepIo.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaBackend.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/Kernels/CudaOptimizerKernels.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs",
+        ".github/workflows/gpu-cuda-selfhosted.yml",
+        "tests/AiDotNet.Tensors.Tests/Engines/DirectGpu/GpuLaneBackendTests.cs"
+      ],
+      "new_files": [
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs"
+      ],
+      "constraints": [
+        "One global finite-gradient guard and global learning-rate counter; integer parameter-age arithmetic before bias conversion.",
+        "No independent age-group guards, no weakening graph replay assertions or CUDA availability requirements.",
+        "All-zero age offsets retain ordinary no-extra-allocation behavior.",
+        "Validate exact producer archive, package and loaded DLL identity on real CUDA; local AMD OpenCL results are not CUDA proof.",
+        "No public validation release or PR-branch push; consolidated root review before build."
+      ],
+      "status": "CLAIMED; explicit user CUDA approval, exact disjoint files reviewed by root. API agreement with core required before edits."
     }
   ],
   "verification": {
@@ -412,6 +437,17 @@
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified."
   },
   "decisions": [
+    {
+      "id": "cuda-capture-enrollment-backend",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1–2 hours plus remote testing was approved; validation must use the exact packaged DLL."
+    },
+    {
+      "id": "coupled-optimizer-fixed-domain",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "For LBFGS, TrustRegion, ConjugateGradient, HypergradientSGD, DAdaptationSGD and ScheduleFreeSGD, support initial frozen subsets and preserve same-active-domain history. Reject active-domain changes before mutation. Core projects norms/history/search/updates onto fixed active coordinates; serializer persists canonical fixed-domain membership. Per-parameter optimizers retain approved changing-membership/age continuity. No changing-domain coupled-algorithm redesign."
+    },
+
     {
       "decision": "Explicit declared graph breaks only; shared optimizer/config/clipping preflight, distinct hybrid counts; unexpected replay failures remain visible.",
       "status": "approved",
