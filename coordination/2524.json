@@ -33,11 +33,23 @@
       "scope": "WaveRNN and shared class-vocoder log-softmax; implemented and locally verified"
     },
     {
-      "constraint": "Propose a bounded subset here or relay through user before overlapping shared helpers.",
-      "owner": "available for other contributor to claim",
-      "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
-      "starting_points": [
-        "Remaining AlignTTS/flow/codec model host reads in TTS run43902661676; exclude all explicitly owned files."
+      "owner": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "scope": "Remaining TTS model/loss replay-contract failures from TTS run 43902661676, excluding every file owned above",
+      "branch": "claude/2524-tts-replay",
+      "files": [
+        "src/TextToSpeech/CodecBased/** (NaturalSpeech 1/2/3, CosyVoice/CosyVoice2/CosyVoice3 DiffRO, UniAudio, SparkTTS, VoiceCraft, Pheme, SeedTTS, TortoiseTTS, Voicebox)",
+        "src/TextToSpeech/Classic/AlignTTS.cs",
+        "src/TextToSpeech/FlowDiffusion/** (E2TTS/F5TTS linear sizing, DiTToTTS)",
+        "src/TextToSpeech/VoiceCloning/OpenVoice*",
+        "src/TextToSpeech/MultiModal/GLM4Voice*, GlmSpeechTokenizer.cs",
+        "src/Audio/Codecs/LossBalancer.cs, src/Audio/Codecs/EnCodec.cs",
+        "SoundStormConformer (traced variance clamp for Pheme)",
+        "src/ElementWiseBaseline.txt (counts lowered only, no new exemptions)"
+      ],
+      "status": "Implemented on claude/2524-tts-replay (pushed, not on the PR branch): AlignTTS, E2/F5 TTS, DiTTo, OpenVoice, GLM4Voice, NaturalSpeech 1/2/3, VoiceCraft, CosyVoice DiffRO, UniAudio, Voicebox, Pheme, SeedTTS, SparkTTS, TortoiseTTS, EnCodec. Each verified by focused tests in its own worktree; merged-tree verification running now. Open items are under questions (shared helpers and upstream Tensors).",
+      "not_claimed": [
+        "WaveRNN, SegmentVocoderBase.cs, VocoderSignalModules.cs, src/Training/** (owned above; FreGrad fixed by 447aa7ac78, no change from us)",
+        "NonAttentiveTacotron LstmSequenceTrain (owned above: upstream LSTM replay state)"
       ]
     },
     {
@@ -172,6 +184,69 @@
       "id": "student-t-statistical-contract",
       "status": "pending",
       "question": "Industry standard: explicit GP prior/normalization policy. Root recommends shared GP test contracts with independent fixed-prior posterior oracles; alternative explicit GaussianProcessBase normalization. Awaiting user choice; no StudentT production edits."
+    },
+    {
+      "id": "tts-variance-bucketize",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/.../VarianceAdaptorLayer.cs (shared)",
+      "finding": "FastSpeech2: Bucketize always reshapes the pitch/energy target before TensorSearchSorted reads it, so the read lands on a traced Reshape.",
+      "proposed_fix": "values.Rank == 1 ? values : Engine.Reshape(values, ...) before TensorSearchSorted. Verified locally: FastSpeech2 passes; ProDiff 3->1 and AdaSpeech2 2->1 failures; no regressions. Patch in our scratchpad, not committed.",
+      "alternatives": "Traced bucketize: rejected, the embedding input check then host-reads traced indices and ProDiff/AdaSpeech2 regress."
+    },
+    {
+      "id": "tts-codec-gan-detach",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/Audio/Codecs/CodecWaveformGan.cs, src/TextToSpeech/Latest/IndexTtsPerceiver.cs (shared)",
+      "finding": "SeedTTS TokenizerPretraining and Spark BiCodecAdversarialTraining/ValidAlternativeBands: CodecWaveformGan.Detached copies values on the host; IndexTtsPerceiver.Forward uses scalar TensorMax(norm, 1e-12) eagerly.",
+      "proposed_fix": "Detached(x) => Engine.StopGradient(x); TensorMax(norm, eps) -> relu(norm - eps) + eps.",
+      "alternatives": "None better; both are exact rewrites."
+    },
+    {
+      "id": "tts-hift-harmonics",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/Vocoders/HiftModules.cs (shared)",
+      "finding": "CosyVoice and CosyVoice2 VocoderStage: Harmonics/HarmonicsByFrames read f0 per sample on the host.",
+      "proposed_fix": "Express with engine ops (cumsum of f0*h/sr, then sin) so the plan replays it.",
+      "alternatives": "A CompiledStepHostValue node, if exact phase accumulation must stay in double."
+    },
+    {
+      "id": "tts-groupnorm-trace",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors Engine.GroupNorm, or src/TextToSpeech/FlowDiffusion/MatchaDecoder.cs",
+      "finding": "CosyVoiceOptimizerOptions CoupledDecay (v1, clone): MatchaDecoder blocks use GroupNormalizationLayer and Engine.GroupNorm computes eagerly under a training trace.",
+      "proposed_fix": "Upstream: record GroupNorm lazily in training traces.",
+      "alternatives": "Interim: compose the norm from reductions in MatchaDecoder (as CosyVoiceModules.SingleGroupNorm does)."
+    },
+    {
+      "id": "tts-batchnorm-probe",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors CpuEngine.BatchNorm GraphMode branch",
+      "finding": "TransformerTTS (and likely Tacotron2, NonAttentiveTacotron): BatchNorm on non-float or non-rank-4 input computes immediately, reading the probe placeholder, so the probe aborts with \"reads 'Reshape'\". Trigger: ConvBatchNormStackLayer, rank-2 double.",
+      "proposed_fix": "When scope.IsProbe, record the BatchNorm node with correctly shaped outputs instead of computing.",
+      "alternatives": "None in AiDotNet without weakening the guard."
+    },
+    {
+      "id": "tts-uniaudio-tortoise-residual",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "UniAudio/TortoiseTTS UnivNet stage",
+      "finding": "On the merged tree UniAudio* abort with \"reads 'TensorSubtract'\" and TortoiseTTS UnivNetStage_* fails; both appeared after the merge with 447aa7ac78 and fail with or without our EnCodec change.",
+      "proposed_fix": "Investigating in our scope (UniAudio/Tortoise are claimed); will report the root before editing any shared vocoder file.",
+      "alternatives": ""
+    },
+    {
+      "id": "prodiff-adaspeech2-unowned",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "ProDiff, AdaSpeech2",
+      "finding": "Not in run 43902661676's list; locally 5 of 7 tests in these classes fail at the starting commit (ProDiff Distillation reads 'TensorAdd'; AdaSpeech2 MelEncoderAligning reads 'TensorIndexSelect').",
+      "proposed_fix": "Claim them next if nobody owns them.",
+      "alternatives": ""
     }
   ],
   "question_protocol": [
@@ -181,7 +256,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T19:03:14.1724626Z",
+  "updated_utc": "2026-11-16T19:29:31.525498Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
