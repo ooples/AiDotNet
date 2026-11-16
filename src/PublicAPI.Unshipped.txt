@@ -1052,7 +1052,7 @@ AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Hidden.init -> 
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Equals(object? obj) -> bool
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Equals(AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment? other) -> bool
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.<Clone>$() -> AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment!
-AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Deconstruct(out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Hidden, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mean, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScale, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Z, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScaleQ, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Zp, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Speaker, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Language, out int[]! Durations) -> void
+AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Deconstruct(out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Hidden, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mean, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScale, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Z, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScaleQ, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Zp, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Speaker, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Language, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Durations, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Path) -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.LogScale.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Z.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.LogScale.init -> void
@@ -1065,8 +1065,10 @@ AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Zp.init -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Speaker.init -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Language.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Language.init -> void
-AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Durations.get -> int[]!
+AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Durations.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Durations.init -> void
+AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Path.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.Path.init -> void
 AiDotNet.NeuralNetworks.Layers.AcousticConditionEncoderLayer<T>
 AiDotNet.TextToSpeech.MultiModal.MoshiDepthLayout.AllStreams = 0 -> AiDotNet.TextToSpeech.MultiModal.MoshiDepthLayout
 AiDotNet.TextToSpeech.MultiModal.MoshiDepthLayout
@@ -3364,7 +3366,7 @@ override AiDotNet.TextToSpeech.ProprietaryAPI.Murf<T>.DecodeAudio(byte[]! body, 
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.CreateDurationModel(int hidden, int speakerChannels, int languageChannels) -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.JointDurationLayers.get -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
-abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, int[]! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.ExternalSpeakerChannels.get -> int
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.ExternalSpeaker(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.ExtraGeneratorLoss(AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance! data, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realSegment, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedSegment) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
@@ -3657,7 +3659,7 @@ AiDotNet.TextToSpeech.DescriptionBased.ParlerTTS<T>.CreateVoice(string! descript
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.ThrowIfCannotTrain() -> void
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.TrainingUnavailableReason.get -> string?
-AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.VitsAlignment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mean, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScale, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Z, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScaleQ, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Zp, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Language, int[]! Durations) -> void
+AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsAlignment.VitsAlignment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mean, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScale, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Z, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogScaleQ, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Zp, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? Language, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Durations, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Path) -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.VitsTrainingDraw(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! PosteriorNoise, int SegmentStart, int DurationSeed, int AlignmentSeed) -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance.Tokens.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance.Audio.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -3813,7 +3815,7 @@ override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.SpeakerConditionedEncoderBlock.
 override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.FlowTransformer.get -> (int Layers, int Heads, int KernelSize, double Dropout)
 override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.CreateDurationModel(int hidden, int speakerChannels, int languageChannels) -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.JointDurationLayers.get -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
-override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, int[]! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 override AiDotNet.TextToSpeech.Classic.Tacotron<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.TrainUtterance(AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance! data, AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw! draw) -> void
 override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.Objective(AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance! data, AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw! draw) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -3829,7 +3831,7 @@ AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.StochasticDurationV
 AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.StochasticDurationVitsBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.EndToEnd.VITSOptions! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer) -> void
 override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.CreateDurationModel(int hidden, int speakerChannels, int languageChannels) -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.JointDurationLayers.get -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
-override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, int[]! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.JointDurationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! durations, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void

@@ -99,7 +99,7 @@ public partial class VITS2<T> : VitsTtsModelBase<T>
     protected override IEnumerable<LayerBase<T>> JointDurationLayers => Array.Empty<LayerBase<T>>();
 
     /// <inheritdoc />
-    protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, int[] durations, Random random) => null;
+    protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Tensor<T> durations, Random random) => null;
 
     /// <inheritdoc />
     protected override Tensor<T> PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
@@ -147,10 +147,12 @@ public partial class VITS2<T> : VitsTtsModelBase<T>
         VitsAlignment alignment;
         using (new NoGradScope<T>()) alignment = Align(data, draw, training: true);
         int tokens = alignment.Durations.Length;
-        var logDurations = Engine.Reshape(LogDurationTarget(alignment.Durations, 1e-6), new[] { 1, 1, tokens });
-        var hidden = new Tensor<T>(alignment.Hidden._shape, alignment.Hidden.ToVector());
-        var speaker = alignment.Speaker is null ? null : new Tensor<T>(alignment.Speaker._shape, alignment.Speaker.ToVector());
-        var language = alignment.Language is null ? null : new Tensor<T>(alignment.Language._shape, alignment.Language.ToVector());
+        // MAS covers every token, so counts are positive. Preserve count-to-T, epsilon-to-T, then log in T.
+        var logDurations = Engine.Reshape(Engine.TensorLog(Engine.TensorAddScalar(alignment.Durations, NumOps.FromDouble(1e-6))),
+            new[] { 1, 1, tokens });
+        var hidden = Engine.StopGradient(alignment.Hidden);
+        var speaker = alignment.Speaker is null ? null : Engine.StopGradient(alignment.Speaker);
+        var language = alignment.Language is null ? null : Engine.StopGradient(alignment.Language);
         var noise = Gaussian(new[] { 1, 1, tokens }, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.DurationSeed));
         return new DurationTraining(hidden, speaker, language, logDurations, noise);
     }

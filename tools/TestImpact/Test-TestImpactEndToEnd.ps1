@@ -812,6 +812,19 @@ try {
                  "($(@($packageSelection.reasons) -join '; '))")
             Assert-True ($null -ne $packageSelection.packageRouting -and [string] $packageSelection.packageRouting.impact -ceq $case.Impact) `
                 "package routing ($($case.Name)): the selection did not record the $($case.Impact) verdict"
+            if ($case.Escalate) {
+                # The workflow ignores the diagnostic shard list on escalation and executes its CURRENT full
+                # manifest. With a valid map the selector now reports that complete inventory explicitly.
+                Assert-True ($packageSelection.requiresValidation -is [bool] -and $packageSelection.requiresValidation -and
+                    $packageSelection.requiresShards -is [bool] -and $packageSelection.requiresShards) `
+                    "package routing ($($case.Name)): full validation did not require both build and shard execution"
+                Assert-True (@($packageSelection.shards).Count -eq $shardNames.Count -and
+                    (@($packageSelection.shards | Sort-Object) -join ',') -ceq (@($shardNames | Sort-Object) -join ',')) `
+                    "package routing ($($case.Name)): full validation omitted indexed or mandatory shards"
+                Assert-True (@($packageSelection.files | Where-Object {
+                    $_.path -ceq 'Directory.Packages.props' -and $_.category -ceq 'FullValidation' -and $_.outcome -ceq 'escalated'
+                }).Count -eq 1) "package routing ($($case.Name)): the fail-closed package decision was not reported"
+            }
             if ($case.Name -ceq 'benchmark-only') {
                 Assert-True (-not [bool] $packageSelection.requiresShards -and [bool] $packageSelection.requiresValidation) `
                     'a benchmark-only package bump did not stay a compile-only change'
