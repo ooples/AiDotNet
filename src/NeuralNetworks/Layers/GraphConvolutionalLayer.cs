@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
 [TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract, ICompiledBindingSource
 {
     /// <inheritdoc />
     /// <remarks>
@@ -939,9 +939,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // would be frozen into the plan as a constant: a graph task packs each step's adjacency into the step's data
         // (GraphModelLayoutBase.GraphTrainingObjective), and every replay would train on the traced step's graph. For
         // one graph the [1, N, N] view costs nothing; for a batch the plan re-tiles the live matrix each replay, which
-        // the measured training step does not notice. An inference plan's only input is the node features, so the
-        // graph is a constant of that plan either way, and it keeps the cached resident copy (re-tiling it on every
-        // replay cost up to 3x at batch 8-16 on CPU).
+        // the measured training step does not notice. An inference plan's only input is the node features, so it keeps
+        // the cached resident copy as a constant: the owning network drops its compiled plans when
+        // CompiledBindingVersion moves (a new graph, or a write into this one), so that constant never replays stale.
         if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace)
         {
@@ -950,7 +950,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         if (_tiledAdjacency is not null && ReferenceEquals(adjacency, _tiledAdjacencySource)
-            && adjacency.Version == _tiledAdjacencyVersion && _tiledAdjacency.Shape[0] == batchSize)
+            && adjacency.StorageMutationVersion == _tiledAdjacencyVersion && _tiledAdjacency.Shape[0] == batchSize)
             return _tiledAdjacency;
         // A plain host copy, not an engine op: an op here would be recorded into whichever compiled plan is tracing
         // this forward, and the cached tensor would then only hold data while that plan runs.
@@ -961,9 +961,17 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _tiledAdjacency = new Tensor<T>(tiled, [batchSize, numNodes, numNodes]);
         KeepResident(ref _residentTiledAdjacency, _tiledAdjacency);
         _tiledAdjacencySource = adjacency;
-        _tiledAdjacencyVersion = adjacency.Version;
+        _tiledAdjacencyVersion = adjacency.StorageMutationVersion;
         return _tiledAdjacency;
     }
+
+    // What a compiled inference plan reads besides the weights: the adjacency, or the edge list in sparse mode.
+    [Scratch]
+    private CompiledBindingTracker _bindingTracker;
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _bindingTracker.Observe(_adjacencyMatrix, _edgeSourceIndices, _edgeTargetIndices, _useSparseAggregation);
 
     /// <summary>
     /// Performs batched matrix multiplication between a 3D tensor and a 2D weight matrix.
