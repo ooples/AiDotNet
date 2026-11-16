@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
@@ -58,6 +60,10 @@ public class DenseFeatureImportanceTests
         Assert.All(importance.Values, value => Assert.Equal(1.0 / 3.0, value, 12));
     }
 
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
     private sealed class ImportanceProbe : NeuralNetworkBase<double>
     {
         public ImportanceProbe(DenseLayer<double> dense) : base(new MeanSquaredErrorLoss<double>())

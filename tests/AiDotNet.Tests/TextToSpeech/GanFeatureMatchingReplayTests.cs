@@ -72,7 +72,7 @@ public sealed class GanFeatureMatchingReplayTests
                 Assert.True(guard is not null, reason);
                 Assert.True(guard!.LeafCount > 0);
                 guard.AttachTo(plan);
-                plan.ConfigureOptimizer(OptimizerType.SGD, learningRate: 0.125);
+                plan.ConfigureOptimizer(AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD, learningRate: 0.125);
                 var expectedFake = fakeWeights.ToArray();
                 var cases = new[]
                 {
