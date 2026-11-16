@@ -9057,6 +9057,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (wasTraining) SetTrainingMode(false);
         try
         {
+            RefreshCompiledBindings();
             return _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
         }
         finally
@@ -9135,6 +9136,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // internally and invalidates stale plans when _layerStructureVersion changes.
             // Executing once up-front warms the plan so the first production inference
             // pays no trace + compile cost.
+            RefreshCompiledBindings();
             var warmupOutput = _compileHost.Predict(
                 sampleInput,
                 _layerStructureVersion,
@@ -9353,6 +9355,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!InferenceAccelerationEngaged || AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerForward();
 
+        RefreshCompiledBindings();
         return _inferenceGate.Run(
             input,
             _layerStructureVersion,
@@ -9360,6 +9363,58 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
+    // The layers whose forward reads non-parameter tensors a compiled plan bakes in (a graph's adjacency), collected
+    // once per layer structure, and the sum of their binding versions the compiled plans were last checked against.
+    [AiDotNet.Attributes.Scratch]
+    private NeuralNetworks.Layers.ICompiledBindingSource[]? _compiledBindingSources;
+    [AiDotNet.Attributes.Scratch]
+    private int _compiledBindingSourcesStructure = -1;
+    [AiDotNet.Attributes.Scratch]
+    private long _compiledBindingSum = long.MinValue;
+
+    /// <summary>
+    /// The sum of the binding versions of this network's layers (see <see cref="NeuralNetworks.Layers.ICompiledBindingSource"/>):
+    /// it moves when a layer's graph is replaced or written in place, so anything that caches a compiled forward of
+    /// this network re-traces. Each version only increases, so the sum never returns to a value it had.
+    /// </summary>
+    internal long CompiledBindingVersion
+    {
+        get
+        {
+            if (_compiledBindingSources is null || _compiledBindingSourcesStructure != _layerStructureVersion)
+            {
+                var sources = new List<NeuralNetworks.Layers.ICompiledBindingSource>();
+                foreach (var layer in Layers)
+                {
+                    if (layer is NeuralNetworks.Layers.ICompiledBindingSource source) sources.Add(source);
+                }
+                _compiledBindingSources = sources.ToArray();
+                _compiledBindingSourcesStructure = _layerStructureVersion;
+            }
+
+            long sum = 0;
+            foreach (var source in _compiledBindingSources) sum += source.CompiledBindingVersion;
+            return sum;
+        }
+    }
+
+    /// <summary>
+    /// Drops the compiled inference plans (and the accelerated path's verdicts and memoized outputs) when a layer's
+    /// graph changed since they were built: a plan holds the graph it traced, as a constant or as the tensor object it
+    /// read, so replaying it after SetAdjacencyMatrix or an in-place edit of the matrix would answer for the old graph.
+    /// </summary>
+    private void RefreshCompiledBindings()
+    {
+        long sum = CompiledBindingVersion;
+        if (sum == _compiledBindingSum) return;
+        if (_compiledBindingSum != long.MinValue)
+        {
+            _compileHost.Invalidate();
+            _inferenceGate.Clear();
+        }
+        _compiledBindingSum = sum;
     }
 
     /// <summary>

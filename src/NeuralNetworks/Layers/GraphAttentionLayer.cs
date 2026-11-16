@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
 [TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract, ICompiledBindingSource
 {
     /// <inheritdoc />
     /// <remarks>
@@ -477,7 +477,14 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // instead of O(nodes^2 * heads) work and memory (the dense path materializes several [N, N] tensors per head
         // and rebuilds the mask and the dropout mask on the host every forward). It needs every row to have an edge
         // (a fully masked dense row softmaxes to a uniform 1/N over all nodes), which a GAT's self-loops guarantee.
-        var csrGraph = adjacency2D && UseSparseAttention ? GetCsrGraph(adjacency) : null;
+        // A training step's own adjacency (GraphStepAdjacency), while a compiled plan traces the step, is a plan input
+        // that every replay refreshes: a CSR pattern or mask built from it on the host here would be frozen into the
+        // plan with the traced step's graph. Such a forward takes the dense path with the mask recorded from the live
+        // adjacency instead. A graph that stays fixed across steps (the layer's own) keeps the sparse kernel.
+        bool graphIsReplayedData = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && GraphStepAdjacency<T>.IsStepData(adjacency);
+        var csrGraph = adjacency2D && UseSparseAttention && !graphIsReplayedData ? GetCsrGraph(adjacency) : null;
         if (csrGraph is not null && csrGraph.NodeCount == numNodes)
         {
             // Wh for every head at once: [B*N, in] @ [in, H*F], laid out [B, N, H, F] as the CSR op reads it.
@@ -503,7 +510,9 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // tape parameter), so the same instance can be reused across heads.
         var perBatchMasks = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
-            perBatchMasks[b] = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+            perBatchMasks[b] = graphIsReplayedData
+                ? RecordedAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf)
+                : BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
 
         // Retain every head output until the paper's head-combination operation. Hidden
         // GAT layers concatenate heads; the final prediction layer averages them.
@@ -617,13 +626,36 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private CsrGraph? GetCsrGraph(Tensor<T> adjacency)
     {
-        if (ReferenceEquals(adjacency, _csrGraphSource) && adjacency.Version == _csrGraphSourceVersion)
+        // The storage epoch, not Version: Version does not advance for a write made in inference mode or through
+        // another view of the same storage.
+        if (ReferenceEquals(adjacency, _csrGraphSource) && adjacency.StorageMutationVersion == _csrGraphSourceVersion)
             return _csrGraph;
         var graph = CsrGraph.FromDenseAdjacency(adjacency);
         _csrGraph = graph is not null && graph.EveryRowHasEdge ? graph : null;
         _csrGraphSource = adjacency;
-        _csrGraphSourceVersion = adjacency.Version;
+        _csrGraphSourceVersion = adjacency.StorageMutationVersion;
         return _csrGraph;
+    }
+
+    // What a compiled inference plan reads besides the weights: the adjacency (its CSR pattern or mask), or the edges.
+    [Scratch]
+    private CompiledBindingTracker _bindingTracker;
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _bindingTracker.Observe(_adjacencyMatrix, _edgeSourceIndices, _edgeTargetIndices, _useSparseAggregation);
+
+    /// <summary>
+    /// The additive attention mask for one graph, as recorded engine ops over the live adjacency: 0 on an edge, -1e9
+    /// elsewhere, the same values as <see cref="BuildAttentionMask"/>. A compiled training plan replays these ops on
+    /// each step's own adjacency.
+    /// </summary>
+    private Tensor<T> RecordedAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
+    {
+        var graph = adjacency2D
+            ? adjacency
+            : Engine.Reshape(Engine.TensorSlice(adjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+        return Engine.TensorMultiplyScalar(Engine.TensorEquals(graph, NumOps.Zero), negInf);
     }
 
     private Tensor<T> ExtractHeadWeight(int h)

@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Tasks.Graph;
 using AiDotNet.Tensors.Engines.Optimization;
@@ -24,7 +28,7 @@ public class GraphTaskFusedTrainingTests
     private const int Nodes = 5;
     private const int Features = 3;
 
-    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification", "GraphGeneration" };
+    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification", "GraphGeneration", "NodeClassificationGat" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -46,6 +50,18 @@ public class GraphTaskFusedTrainingTests
                 new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
                     taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
                     inputSize: Features, outputSize: 2),
+                options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
+            // Graph attention layers: their sparse kernel derives a CSR pattern from the graph on the host, which a plan
+            // traced on one step's graph must not keep for the next.
+            "NodeClassificationGat" => new NodeClassificationModel<double>(
+                new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
+                    inputSize: Features, outputSize: 2,
+                    layers: new List<ILayer<double>>
+                    {
+                        new GraphAttentionLayer<double>(Features, 4, numHeads: 2, activationFunction: new ReLUActivation<double>()),
+                        new GraphAttentionLayer<double>(4, 2, numHeads: 1, activationFunction: new IdentityActivation<double>()),
+                    }),
                 options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
             // A variational graph autoencoder: it reconstructs the adjacency, with reparameterization noise per step.
             "GraphGeneration" => new GraphGenerationModel<double>(options: new AiDotNet.NeuralNetworks.Options.GraphGenerationModelOptions

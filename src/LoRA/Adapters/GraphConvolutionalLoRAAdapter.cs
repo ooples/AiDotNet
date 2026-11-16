@@ -53,7 +53,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// </para>
 /// </remarks>
 [AutoParameters]
-public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvolutionLayer<T>, ICompiledBindingSource
 {
     /// <summary>
     /// The graph-aware base layer being adapted.
@@ -143,6 +143,10 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
         _adjacencyMatrix = adjacencyMatrix;
         _graphBaseLayer.SetAdjacencyMatrix(adjacencyMatrix);
     }
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _graphBaseLayer is ICompiledBindingSource source ? source.CompiledBindingVersion : 0;
 
     /// <summary>
     /// Gets the current adjacency matrix.
