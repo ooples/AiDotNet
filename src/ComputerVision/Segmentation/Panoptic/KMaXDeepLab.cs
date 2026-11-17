@@ -343,6 +343,16 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             ? Layers.Skip(SemanticDecoderStart).Take(Common.PanopticDeepLabSemanticDecoder.LayerCount(_semanticShape)).ToList()
             : new List<ILayer<T>>();
 
+    /// <summary>Channel widths of the four backbone pyramid stages (<c>res2..stage5</c>).</summary>
+    internal IReadOnlyList<int> BackboneStageChannels => _channelDims;
+
+    /// <summary>
+    /// Runs this model's configured auxiliary semantic decoder and head over multi-scale backbone
+    /// <paramref name="stages"/> (<c>[B, C, h, w]</c>, finest first; ASPP reads <c>stages[stages.Count - 1]</c>).
+    /// </summary>
+    internal Tensor<T> RunSemanticDecoder(IReadOnlyList<Tensor<T>> stages)
+        => Common.PanopticDeepLabSemanticDecoder.Run(Layers, SemanticDecoderStart, _semanticShape, stages);
+
     private static (Common.KMaXDecoderShape Shape, Common.SemanticDecoderShape Semantic, Common.KMaXLossSettings Loss, Random Random)
         DecoderSettings(KMaXDeepLabOptions options, int pixelDim)
     {
@@ -490,7 +500,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             Layers, DecoderStart, _decoderShape, decoderScales, _kMeansIterations,
             finest.Features, finest.Height, finest.Width, _numClusters);
         var semanticLogits = includeSemantic
-            ? Common.PanopticDeepLabSemanticDecoder.Run(Layers, SemanticDecoderStart, _semanticShape, stages) // [B, K, h4, w4]
+            ? RunSemanticDecoder(stages) // [B, K, h4, w4]
             : null;
         return new DecodedImage(predictions, semanticLogits, height, width);
     }

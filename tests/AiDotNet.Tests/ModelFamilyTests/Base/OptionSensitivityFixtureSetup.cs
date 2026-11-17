@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> && DevaOptionFixture.Handles(option) ? "deva-video-" + option
+            : network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> && KMaXSemanticAtrousOptionFixture.Handles(option) ? "kmax-" + option
             : AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
             // TryTrainOption trains this option on a two-second recording, not the fixture input, so its control must too.
@@ -514,6 +515,9 @@ internal static class OptionSensitivityFixtureSetup
             var masks = medicalSam.SegmentImageSet(images, 0, new float[,] { { 32f, 32f } }, new[] { 1 });
             return OptionSensitivityHarness.Fingerprint(masks.SelectMany(mask => mask.Select(ops.ToDouble)));
         }
+        if (network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> kmax
+            && KMaXSemanticAtrousOptionFixture.Handles(option))
+            return KMaXSemanticAtrousOptionFixture.Observe(kmax);
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishText && option is "NormalizeChineseText" or "ChunkLength")
         {
             // Both act on the text Synthesize speaks (clean_text's number normalizer, split_text); Predict takes ids.
@@ -1324,6 +1328,7 @@ internal static class OptionSensitivityFixtureSetup
         : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
         : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? 0
         : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? 0
+        : network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> && KMaXSemanticAtrousOptionFixture.Handles(option) ? 0
         // Graph, inference and dropout probes already observe their native path directly; reserve the
         // full 100M-parameter backward pass for the optimizer settings that require it.
         : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> && option is not ("LearningRate" or "WeightDecay")
@@ -2080,6 +2085,9 @@ internal static class OptionSensitivityFixtureSetup
                 medicalSize.HieraGlobalAttentionBlockIndexes = null;
             }
         }
+        if (options is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions kmaxOptions
+            && KMaXSemanticAtrousOptionFixture.Handles(option))
+            KMaXSemanticAtrousOptionFixture.PrepareOptions(kmaxOptions, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fishOptions)
         {
             if (option == "ContextLength")

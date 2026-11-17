@@ -289,7 +289,6 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> Each rate is how far apart a branch's convolution samples, so larger rates see wider
     /// context. One branch is built per entry.</para>
     /// </remarks>
-    [AiDotNet.Attributes.OptionBehaviourExempt("At the 32x32 option-sensitivity fixture scale, stride-32 stage5 features are 1x1 where every positive 3x3 same-padded dilation rate is mathematically identical (a - rate < 0 and a + rate >= 1), so all 22 same-length rate perturbations cannot act before the 300s timeout; multi-pixel atrous rates and branch counts are verified by PanopticVideoFewShotSegmentationReferenceTests.")]
     public int[] SemanticAtrousRates { get; set; } = [6, 12, 18];
 
     /// <summary>
