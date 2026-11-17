@@ -648,6 +648,18 @@
         "tests/AiDotNet.Tests/ModelFamilyTests/NeuralNetworks/TextQueriedSegmentationScaffolds.cs"
       ],
       "status": "claimed; dispatched to fixer-3"
+    },
+    {
+      "owner": "Antigravity swarm (Wave 5)",
+      "scope": "Wave 5 final unclaimed consumer stragglers from 96-job audit: (1) BuilderJitValueStabilityTests zero-op TensorProgram fallthrough in already-claimed CompiledNeuralPredictor.cs (2 failures in Integration N-O 133444390079); (2) stale pre-04c9c3ccae linear-layer singular-mass-matrix test fixtures in ScientificMLTests.cs LagrangianNeuralNetwork_* (2 failures in Unit 13 133444368972, strictly excluding HamiltonianNeuralNetwork_* tests and production LagrangianNeuralNetwork.cs)",
+      "files": [
+        "src/Inference/CompiledNeuralPredictor.cs",
+        "tests/AiDotNet.Tests/UnitTests/PhysicsInformed/ScientificML/ScientificMLTests.cs"
+      ],
+      "file_scope_limits": {
+        "tests/AiDotNet.Tests/UnitTests/PhysicsInformed/ScientificML/ScientificMLTests.cs": "ONLY LagrangianNeuralNetwork_ComputeAcceleration_ConstantLagrangianReturnsZero and LagrangianNeuralNetwork_TrainUpdatesParameters (lines 97-134), updating stale pre-04c9c3ccae single-LinearLayer (singular zero Hessian mass matrix) fixtures to match LagrangianNeuralNetwork.cs:233 Euler-Lagrange contract (free-particle quadratic kinetic energy 0.5*qDot^2 + c for zero-acceleration check + smooth nonlinear layer for TrainUpdatesParameters, plus explicit non-finite assertion on singular constant Lagrangian); do NOT touch HamiltonianNeuralNetwork_* tests."
+      },
+      "status": "claimed; queued for first freed fixer after Wave 4B integrates"
     }
   ],
   "pinn_candidate_owner_action": {
@@ -1108,7 +1120,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T06:30:27.015130Z",
+  "updated_utc": "2026-11-17T07:07:24.889100Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
