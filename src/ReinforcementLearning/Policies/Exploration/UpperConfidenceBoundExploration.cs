@@ -68,11 +68,13 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             var qValues = RLTensorOps.Head(policyAction, actionSpaceSize);
             var counts = RLTensorOps.CountsAs<T>(new Vector<int>(
                 Enumerable.Range(0, actionSpaceSize).Select(a => _actionCounts.TryGetValue(a, out int count) ? count : 0)));
+            var countTensor = counts.AsTensor();
+            var unvisited = engine.TensorEquals(countTensor, NumOps.Zero);
+            var safeCounts = engine.TensorWhere(unvisited, engine.TensorOnesLike(countTensor), countTensor).ToVector();
             var bonus = engine.Multiply(
-                engine.Sqrt(engine.Divide(Vector<T>.CreateDefault(actionSpaceSize, NumOps.FromDouble(Math.Log(_totalSteps))), counts)),
+                engine.Sqrt(engine.Divide(Vector<T>.CreateDefault(actionSpaceSize, NumOps.FromDouble(Math.Log(_totalSteps))), safeCounts)),
                 NumOps.FromDouble(_explorationConstant));
-            var unvisited = engine.TensorEquals(counts.AsTensor(), NumOps.Zero);
-            var infinite = engine.TensorFullLike(counts.AsTensor(), NumOps.FromDouble(double.PositiveInfinity));
+            var infinite = engine.TensorFullLike(countTensor, NumOps.FromDouble(double.PositiveInfinity));
             var ucbBonus = engine.TensorWhere(unvisited, infinite, bonus.AsTensor()).ToVector();
             int bestAction = RLTensorOps.ArgMaxAbove(engine.Add(qValues, ucbBonus), NumOps.FromDouble(double.NegativeInfinity), out _);
 

@@ -589,7 +589,7 @@ public class CertificationReferenceTests
 
         Assert.True(result.IsCertified);
         Assert.Equal(1.0, (double)result.Confidence, 1e-12);
-        Assert.Equal((double)(Half)0.9305946838334416, (double)result.CertifiedRadius, 1e-12);
+        Assert.Equal((double)CertificationMath<Half>.RoundDown(0.9305946838334416), (double)result.CertifiedRadius, 1e-12);
     }
 
     [Fact(Timeout = 60000)]

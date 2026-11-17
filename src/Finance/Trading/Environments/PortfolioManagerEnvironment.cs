@@ -184,10 +184,11 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
         var tradable = engine.TensorWhere(
             engine.TensorIsFinite(priceTensor), engine.TensorGreaterThan(priceTensor, NumOps.Zero), zeros);
         var tradePrices = engine.TensorWhere(tradable, priceTensor, zeros).ToVector();
+        var safePrices = engine.TensorWhere(tradable, priceTensor, engine.TensorOnesLike(priceTensor)).ToVector();
 
         // Reconcile each position toward its exact target weight: delta = w * V / p - position. An untradable asset,
         // or one whose target is not finite, is not traded.
-        var desiredUnits = engine.Divide(engine.Multiply(weights, portfolioValue), tradePrices);
+        var desiredUnits = engine.Divide(engine.Multiply(weights, portfolioValue), safePrices);
         var finiteDelta = engine.TensorWhere(
             engine.TensorIsFinite(desiredUnits.AsTensor()),
             engine.Subtract(desiredUnits, positions).AsTensor(),

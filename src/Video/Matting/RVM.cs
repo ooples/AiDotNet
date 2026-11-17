@@ -297,13 +297,28 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 
     /// <summary>
     /// Runs the recurrent network on a frame <c>[C, H, W]</c> or <c>[B, C, H, W]</c>, or on a clip
-    /// <c>[B, T, C, H, W]</c> frame by frame, carrying the ConvGRU states from the previous call; returns
-    /// alpha then foreground RGB in the input's layout.
+    /// <c>[B, T, C, H, W]</c> frame by frame, carrying the ConvGRU states from the previous call for single frames;
+    /// returns alpha then foreground RGB in the input's layout.
     /// </summary>
     private Tensor<T> Forward(Tensor<T> input)
     {
+        // A 5-D clip [B, T, C, H, W] or a multi-sample 4-D batch [B, C, H, W] (B > 1) is evaluated statelessly from a
+        // fresh zero ConvGRU state; single-frame streaming calls ([C, H, W] or [1, C, H, W]) carry _recurrentState.
+        if (input.Rank == 5 || (input.Rank == 4 && input.Shape[0] > 1))
+        {
+            return Run(input, null).Output;
+        }
+
+        // NeuralNetworkBase.PredictAndValidateChain runs a discarded unfolded diagnostic pass under
+        // LayerForwardObserver before re-running the folded forward; do not advance _recurrentState on that
+        // discarded pass so frame 1 starts from its true prior state.
+        var observer = AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current;
         var (output, state) = Run(input, _recurrentState);
-        _recurrentState = state;
+        if (observer is null || observer.SuppressedFolding == false)
+        {
+            _recurrentState = state;
+        }
+
         return output;
     }
 
@@ -382,8 +397,18 @@ public partial class RVM<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultRVMLayers(ch, _imageHeight, _imageWidth, _numFeatures));
         }
 
-        // Bind once here so a custom layer list that does not follow CreateDefaultRVMLayers fails at construction.
+        // Bind once here so a custom layer list that does not follow CreateDefaultRVMLayers fails at construction,
+        // and materialize all lazy Conv2D / BatchNorm shapes in eval mode so Clone and Deserialize restore every weight.
         _ = new RvmRecurrentNetwork<T>(Engine, Layers);
+        int probeChannels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            foreach (var layer in Layers) layer.SetTrainingMode(false);
+            _ = Run(new Tensor<T>([1, probeChannels, _imageHeight, _imageWidth]), null);
+        }
+
+        ResetState();
     }
 
     /// <inheritdoc />

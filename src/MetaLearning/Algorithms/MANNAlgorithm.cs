@@ -461,16 +461,29 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </summary>
     private EpisodeGradients EpisodeGradient(IMetaLearningTask<T, TInput, TOutput> task, bool commit)
     {
-        var episode = EpisodeOf(task);
-        var start = _memory.Snapshot();
-        var embeddings = Embed(episode);
-        EnsureOutputLayer(embeddings.Shape[1]);
+        // embeddings, start state and leaf tensors must be heap-owned so ComputeGradients resetting an enclosing
+        // step arena cannot reissue embeddings under another shape before TapeGradients slices it.
+        Episode episode;
+        ExternalMemory<T>.State start;
+        Tensor<T> embeddings;
+        MannWeights frozen;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            episode = EpisodeOf(task);
+            start = _memory.Snapshot();
+            embeddings = Embed(episode);
+            EnsureOutputLayer(embeddings.Shape[1]);
+            frozen = Weights();
+        }
 
-        var frozen = Weights();
         var composed = new EmbeddingObjectiveLoss<T>(rows => Objective(start, rows, episode, frozen, out _));
         var body = ComputeGradients(MetaModel, episode.Stacked, episode.StackedTarget, composed);
 
-        var weights = Weights();
+        MannWeights weights;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            weights = Weights();
+        }
         var output = new Vector<T>(weights.Output.Length);
         var bias = new Vector<T>(weights.Bias.Length);
         var gate = new Vector<T>(weights.GateLogit.Length);

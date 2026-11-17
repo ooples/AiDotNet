@@ -610,7 +610,12 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
     // before them received no gradient. GELU is torch's nn.GELU, as ProPainter uses.
     internal Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
 
-    internal Tensor<T> ApplyGELU(Tensor<T> input) => Engine.GELU(input);
+    internal Tensor<T> ApplyGELU(Tensor<T> input)
+    {
+        var scaled = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / Math.Sqrt(2.0)));
+        var cdf = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Engine.TensorErf(scaled), NumOps.One), NumOps.FromDouble(0.5));
+        return Engine.TensorMultiply(input, cdf);
+    }
 
     /// <summary>
     /// Element-wise addition of two tensors (residual connection).

@@ -38,7 +38,8 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// </remarks>
 public static class FiganLoss<T>
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    /// <summary>Exact power-of-two factor lifting IEEE-754 subnormals into normal range without rounding.</summary>
+    private static readonly double SubnormalScale = Math.Pow(2.0, 600);
 
     /// <summary>The paper's VGG weight in the content loss (Eq. 13).</summary>
     public const double VggWeight = 0.001;
@@ -107,9 +108,12 @@ public static class FiganLoss<T>
             }
             else
             {
-                // Divided, not multiplied by 1 / peak: a subnormal peak's reciprocal overflows to infinity
-                var unit = engine.TensorDivideScalar(difference, peak);
-                squared = engine.TensorMean(engine.TensorMultiply(unit, unit)) * peak * peak;
+                // Engine.TensorDivideScalar multiplies by 1 / divisor internally, which overflows to infinity when
+                // peak is subnormal (< 2.225e-308); lifting subnormal values by 2^600 keeps the exponent shift exact.
+                var unit = peak < 1e-200
+                    ? engine.TensorDivideScalar(engine.TensorMultiplyScalar(difference, SubnormalScale), peak * SubnormalScale)
+                    : engine.TensorDivideScalar(difference, peak);
+                squared = (engine.TensorMean(engine.TensorMultiply(unit, unit)) * peak) * peak;
             }
         }
 

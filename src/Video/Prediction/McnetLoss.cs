@@ -92,6 +92,8 @@ public static class McnetLoss<T>
         return MeanPower(engine, d, p);
     }
 
+    private static readonly double SubnormalScale = Math.Pow(2.0, 600);
+
     /// <summary>
     /// Mean of <c>|v|^exponent</c> over the non-negative values <paramref name="magnitudes"/>, with the values
     /// divided by their peak before the power so a large exponent cannot overflow.
@@ -110,8 +112,11 @@ public static class McnetLoss<T>
             return exponent == 0 ? 1.0 : 0.0;
         }
 
-        // Divided, not multiplied by 1 / peak: a subnormal peak's reciprocal overflows to infinity
-        var unit = engine.TensorDivideScalar(magnitudes, peak);
+        // Engine.TensorDivideScalar multiplies by 1 / divisor internally, which overflows to infinity when peak is
+        // subnormal (< 2.225e-308); lifting subnormal values by 2^600 keeps the exponent shift exact in IEEE-754.
+        var unit = peak < 1e-200
+            ? engine.TensorDivideScalar(engine.TensorMultiplyScalar(magnitudes, SubnormalScale), peak * SubnormalScale)
+            : engine.TensorDivideScalar(magnitudes, peak);
         var powered = engine.TensorPow(unit, exponent);
         return engine.TensorMean(powered) * Math.Pow(peak, exponent);
     }
