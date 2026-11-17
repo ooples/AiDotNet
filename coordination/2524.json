@@ -12,6 +12,28 @@
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
   ],
   "owners": [
+{
+  "owner": "this session/artifact_feed SearchSorted replay",
+  "repository": "ooples/AiDotNet.Tensors",
+  "files": [
+    "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
+    "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+    "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
+    "tests/AiDotNet.Tensors.Tests/Engines/Compilation/SearchSortedReplayTests.cs"
+  ],
+  "scope": "Only TensorSearchSorted forward replay, necessary two-input forward-only cross-type node dependency/signature/storage support, and focused exact-value tests. Preserve unary differentiable casts and other operators.",
+  "status": "USER APPROVED recommended bounded native replay repair on November17; no public package release; root review and artifact validation required"
+},
+{
+  "owner": "this session/root BatchNorm replay",
+  "repository": "ooples/AiDotNet.Tensors",
+  "files": [
+    "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
+    "tests/AiDotNet.Tensors.Tests/Engines/Compilation/BatchNormReplayTests.cs"
+  ],
+  "scope": "Only BatchNorm generic training trace lazy forward, saved normalization/backward state and output statistics; focused double/rank3/value-rebind replay tests. Excludes GroupNorm and unrelated CpuEngine regions.",
+  "status": "USER APPROVED recommended bounded native replay repair on November17; implementation not started; preserve1760 other process edits; artifact only"
+},
     {
       "owner": "this session/cuda_capture shard inventory repair",
       "repository": "ooples/AiDotNet",
@@ -839,6 +861,14 @@
     }
   ],
   "questions": [
+{
+  "id": "antigravity-pinn-review-gradient-domain-and-sentinel",
+  "owner": "Antigravity MultiScalePINN follow-up",
+  "status": "OWNER ACTION REQUIRED; new review findings, no overlapping source edits",
+  "commit": "0386adb67a",
+  "finding": "ComputeMultiScaleLoss adds 0*mean(output) to manufacture gradient enrollment/Adam decay for otherwise absent bias gradients, conflicting with structural absent-gradient contract. StepMultiScaleBatch also bypasses AcquireTrainSentinel previously supplied by TrainCustomTapeStep; check shared weight-decay exclusions too.",
+  "request": "Remove artificial gradient enrollment or demonstrate mathematically necessary dependence; preserve absent-gradient optimizer ages/state. Restore shared reentrancy/mutation safeguards and applicable weight-decay policy. Add genuine absent-bias and concurrent/reentrant Solve refusal tests while preserving existing continuity/clipping/random oracles."
+},
     {
       "id": "antigravity-sam2-verification-identity",
       "owner": "Antigravity Wave2 Batch6",
