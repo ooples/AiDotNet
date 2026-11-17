@@ -226,11 +226,39 @@ public class FeatureSelectionSweepReferenceTests
     public async Task FairFeatureSelector_DisparateImpactSplitsAtTheSortedMedian()
     {
         await Task.Yield();
-        // Protected attribute = feature = [10, 1, 2, 3, 4, 5]; the n/2-th smallest value is 4, so the groups
-        // are {1, 2, 3, 4} (mean 2.5) and {10, 5} (mean 7.5): disparate impact 2.5 / 7.5 = 1/3.
+        // Protected attribute = feature = [10, 1, 2, 3, 4, 5]; the sorted midpoint median is 0.5 * (3 + 4) = 3.5, so
+        // the groups are {1, 2, 3} (mean 2.0) and {10, 4, 5} (mean 19/3): disparate impact 2.0 / (19/3) = 6/19
+        // (unsorted indices 2 and 3 would give midpoint 2.5 and 3/11).
         var selector = new FairFeatureSelector<double>(nFeaturesToSelect: 1, protectedAttributeIndex: 0);
 
-        Assert.Equal(1.0 / 3.0, selector.GetDisparateImpact(Column(10, 1, 2, 3, 4, 5), 0), Tolerance);
+        Assert.Equal(6.0 / 19.0, selector.GetDisparateImpact(Column(10, 1, 2, 3, 4, 5), 0), Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FairFeatureSelector_ContinuousEvenProtectedAttributeUsesMidpointMedian()
+    {
+        await Task.Yield();
+        // Protected [0, 1, 2, 3], feature [1, 1, 9, 9]: conventional even-count midpoint median is 1.5, splitting
+        // into {0, 1} (feature mean 1) and {2, 3} (feature mean 9) for disparate impact 1/9 (upper-middle 2 gave 11/27).
+        var selector = new FairFeatureSelector<double>(nFeaturesToSelect: 1, protectedAttributeIndex: 0);
+        var data = Columns(new double[] { 0, 1, 2, 3 }, new double[] { 1, 1, 9, 9 });
+
+        Assert.Equal(1.0 / 9.0, selector.GetDisparateImpact(data, 1), Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FairFeatureSelector_SkewedBinaryTieAtMaximumSplitsNonEmptyGroups()
+    {
+        await Task.Yield();
+        // Protected [0, 1, 1, 1], feature [2, 6, 6, 6]: midpoint median is 1.0 (equal to the column maximum), so
+        // strict "> 1.0" is empty while "< 1.0" vs ">= 1.0" splits {0} (mean 2) from {1, 1, 1} (mean 6) -> 1/3,
+        // whereas a constant protected attribute [1, 1, 1, 1] has only one group and returns 0.
+        var selector = new FairFeatureSelector<double>(nFeaturesToSelect: 1, protectedAttributeIndex: 0);
+        var skewed = Columns(new double[] { 0, 1, 1, 1 }, new double[] { 2, 6, 6, 6 });
+        var constant = Columns(new double[] { 1, 1, 1, 1 }, new double[] { 2, 6, 6, 6 });
+
+        Assert.Equal(1.0 / 3.0, selector.GetDisparateImpact(skewed, 1), Tolerance);
+        Assert.Equal(0.0, selector.GetDisparateImpact(constant, 1), Tolerance);
     }
 
     [Fact(Timeout = 120000)]
