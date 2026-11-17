@@ -242,6 +242,20 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 audit_coverage("gpu_backing", claim, run)
 
+    def test_pool_route_requires_all_of_its_distinct_counter_providers(self):
+        run = self.run_fixture()
+        providers = ["aidotnet_gpu_requests", "aidotnet_compiled_workspace_loans", "aidotnet_step_scratch_reuse"]
+        claim = {"scope": SCOPES["gpu_framework_requested"], "window": "fixed_work_construction_training_epochs_inference_steady",
+            "bound": "upper", "providers": providers, "unmeasured_routes": [], "reviewer": "synthetic-unit-fixture",
+            "exclusions": ["vendor_internal_allocations_bypassing_framework_allocators"], "routes": {
+                "backend_buffer_api": {"status": "measured", "provider": providers[0], **self.audit()},
+                "framework_pool_borrows": {"status": "measured", "providers": providers[1:], **self.audit()},
+                "framework_owned_vendor_workspaces": {"status": "inactive", **self.audit()}}}
+        self.assertEqual(providers, audit_coverage("gpu_framework_requested", claim, run))
+        claim["routes"]["framework_pool_borrows"]["providers"].pop()
+        with self.assertRaises(ValueError):
+            audit_coverage("gpu_framework_requested", claim, run)
+
     def test_allocation_count_fails_independently_of_byte_win(self):
         runs = [self.run_fixture(side, pair, mode) for pair in range(5)
                 for side in ("aidotnet", "pytorch") for mode in ("score", "diagnostic")]
