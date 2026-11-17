@@ -98,6 +98,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     // Module constructors can supply an explicit stream before any default weight, bias or spectral-vector draw.
     // The public constructor and its serialized shape signature keep their existing behavior and compatibility.
+    [ScalarKernel("Cold initialization preserves the existing sequential uniform/Gaussian random draws and scalar gain-reduction order so an explicit seed determines every parameter and buffer without changing its distribution.")]
     internal NormedConv1DLayer(int inChannels, int outChannels, int kernelSize,
         int stride, int dilation, int groups, int padding, bool transposed, ConvolutionNormalization normalization,
         Random? initialization, bool useBias = true, int outputPadding = 0)
