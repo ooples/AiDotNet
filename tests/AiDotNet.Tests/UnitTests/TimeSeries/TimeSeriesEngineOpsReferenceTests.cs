@@ -533,7 +533,7 @@ public class TimeSeriesHalfPrecisionTests
             Assert.Equal((Half)0, candidate.PredictSingle(pulseWindowHalf));
         }
 
-        // 3. Full Serialize/Deserialize, Clone, and DeepCopy roundtrip at the same std = 2.58e-8 (< old 1e-8 cutoff).
+        // 3. Float persistence also preserves the same std = 2.58e-8.
         var reloadedFloat = new NLinearModel<float>(new NLinearOptions<float>
         {
             LookbackWindow = 4,
