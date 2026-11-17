@@ -322,7 +322,7 @@
         "src/Preprocessing/FeatureSelection/Online/AlphaInvesting.cs",
         "src/Preprocessing/DimensionalityReduction/HessianLLE.cs",
         "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
-        "src/WaveletFunctions/Fej\u00e9rKorovkinWavelet.cs",
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs",
         "src/WaveletFunctions/WaveletEngineOps.cs",
         "src/WindowFunctions/TukeyWindow.cs",
         "src/Preprocessing/FeatureSelection/Helpers/PopulationSearchOps.cs",
@@ -501,7 +501,7 @@
           ],
           "scope": "Append only StopGradient and TensorAddInPlace enum entries at the end of existing OpType byte values and add their parser names in the SAME OpType.cs file, preserving every existing ordinal. Add exactly two OpReplay handlers with arity preflight. StopGradient uses the existing recorded forward-copy/null-backward helper; TensorAddInPlace invokes the existing engine mutation and returns the same target object, preserving in-place prior-writer identity. No Unknown-name workaround or broad operator feature work.",
           "existing_owned_followups": "TrainingPlanReader/Writer must preserve independent RecordedUnderNoGrad and HasBackward bits, including legitimate flags3, rather than enforce mutual exclusion. Persist declared derivative indices; reconstruct canonical excluded operand paths with recorded StopGradient barriers, not enrollment masking alone.",
-          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save\u2192Load\u2192Save\u2192Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
+          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save→Load→Save→Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
         }
       ]
     },
@@ -796,7 +796,7 @@
         ".github/scripts/Invoke-Shard.ps1",
         "tests/AiDotNet.Tests/IntegrationTests/NeuralNetworks/FusedCompiledTrainingOptOutInventoryTests.cs"
       ],
-      "status": "COMPLETE \u2014 Bucket 2.1 Item 1 integrated at 395606fa05 (#309) and Bucket 2.3 Item 3 integrated at 8626103a18 (#323)"
+      "status": "COMPLETE — Bucket 2.1 Item 1 integrated at 395606fa05 (#309) and Bucket 2.3 Item 3 integrated at 8626103a18 (#323)"
     },
     {
       "owner": "Antigravity swarm (Round 2 Group 1B & Bucket 2.5: tts-lead, r2-verifier-2)",
@@ -976,7 +976,7 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "All approved review/CI and retained-epoch edits pushed35ba2468c. Latest pre-push review snapshot23threads0unresolved.49local retention/streaming cases pass0skip;33precision cases pass0skip. Priorb817 fullCIgreen33success/15conditional skips. Third572cycle superseded by user-authorized immediate Tensors push; cancelled/incomplete, not a pass. Full latest CI44158617211 monitoring underway. No further source changes planned unless concrete failures/findings. No merge/public release.",
+      "status": "CI35ba green33success15skips and23inline threads resolved. Final review-body inspection found one still-valid outside-diff capture-disposal finding; bounded correction claimed. Tensors push allowed after local verification; no merge/release or review dismissal.",
       "commit": "35ba2468ce1f8ea00ff056db406ee19120e2c189",
       "verification": {
         "focused_net10": {
@@ -1061,7 +1061,19 @@
         },
         "effort": "bounded30-45min; no GradientTape multi-exit redesign or public API change"
       },
-      "push_policy": "USER CLARIFIED: Tensors reviewed fixes may be pushed immediately after local verification without waiting for active CI. Wait-for-entire-cycle rule applies only to AiDotNet PR2524. Monitor full CI on latest Tensors head."
+      "push_policy": "USER CLARIFIED: Tensors reviewed fixes may be pushed immediately after local verification without waiting for active CI. Wait-for-entire-cycle rule applies only to AiDotNet PR2524. Monitor full CI on latest Tensors head.",
+      "outside_diff_followup": {
+        "review": "PRR_kwDOQ-aYaM8AAAABYkfuRQ",
+        "files": [
+          "src/AiDotNet.Tensors/Engines/Autodiff/RetainedOutputCapture.cs",
+          "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NamedRetainedOutputTests.cs"
+        ],
+        "finding": "Reject capture Dispose while an owned update scope remains active",
+        "owner": "artifact_feed implementation; root review/verification",
+        "scope": "RetainedOutputCapture.Dispose owner-state guard before any mutation, with recovery and valid nested-child disposal tests",
+        "older_outside_findings": "Parity active-only buffers and TrainingPlanReader restore cleanup already addressed in753ad7ee49; root confirming source",
+        "status": "CLAIMED before edits under approved review-fix objective; no new API or redesign"
+      }
     }
   ],
   "codex_assignments": {
@@ -1080,7 +1092,7 @@
       "owner": "this session and its agents",
       "repository": "ooples/AiDotNet",
       "tasks": [
-        "Active 7ddcb4d7c1 TTS helpers: CodecWaveformGan.cs + SparkTTSPaperTests.cs (pinn_review) and HiftModules.cs + HiftReplayTests.cs (artifact_feed) \u2014 note paused KMaX/FinancialA2C/TensorModelTrainer drafts in 7ddcb4d7c1 are now handled by Antigravity r2-fixer-2 & r2-fixer-3",
+        "Active 7ddcb4d7c1 TTS helpers: CodecWaveformGan.cs + SparkTTSPaperTests.cs (pinn_review) and HiftModules.cs + HiftReplayTests.cs (artifact_feed) — note paused KMaX/FinancialA2C/TensorModelTrainer drafts in 7ddcb4d7c1 are now handled by Antigravity r2-fixer-2 & r2-fixer-3",
         "TimeSeriesModelBase.cs:1318,1327 Half.Serialize() Convert.ToDouble -> NumOps.ToDouble repair",
         "Unit05 TensorReductionHelper / MiniRocket + RuntimeFidelityBaseline.cs stale ratchets (including TRX-proven 11 PINN options + KMaXDeepLab::MaxGradNorm)",
         "NTMPaperTests.cs remaining 2 unit05_ntm_pending cases",
@@ -1185,7 +1197,7 @@
     {
       "id": "cuda-capture-enrollment-backend",
       "status": "user-approved by explicit interactive answer",
-      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1\u20132 hours plus remote testing was approved; validation must use the exact packaged DLL."
+      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1–2 hours plus remote testing was approved; validation must use the exact packaged DLL."
     },
     {
       "id": "coupled-optimizer-fixed-domain",
@@ -1450,7 +1462,7 @@
       "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
       "alternatives": "None in AiDotNet without weakening the guard.",
       "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted.",
-      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate\u2192AddObjectFields\u2192AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
+      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate→AddObjectFields→AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
     },
     {
       "id": "tensors-1764-in-coordination-package",
@@ -1496,7 +1508,7 @@
       "files": [
         "src/TimeSeries/GARCHModel.cs"
       ],
-      "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega\u22480.01 has ULP\u22487.63e-6, while epsilon\u22481e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
+      "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega≈0.01 has ULP≈7.63e-6, while epsilon≈1e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
       "request": "Repair representable/high-precision finite-difference probes and objective consistently; add a Half nondegenerate estimation oracle. Do not replace the zero denominator with an arbitrary epsilon floor.",
       "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: moved EstimateParameters MLE objective, scale-aware central-difference probes (step = 1e-6 * max(1, |param|), exact span = plus - minus, zero arbitrary epsilon floor), momentum ascent, and parameter constraints into double precision; switched ClampMinimum/PositivePart to TensorLessThan so NaN is never clamped to VarianceFloor/0; added GARCH_Half_EstimatesNondegenerateParametersMatchingDouble (180-step MLE agreement with double + NaN preservation check). Verified 191/191 (TRX SHA-256 29e1bf57f91d75e286e32f569c1585ff1ef84d2e5d2c8cf0ca16c472ff8655cf)."
     },
@@ -1508,7 +1520,7 @@
       "files": [
         "src/TimeSeries/NLinearModel.cs"
       ],
-      "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std\u22482.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
+      "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std≈2.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
       "request": "Preserve the same fitted transform through training, inference, serialization and cloning; add a subnormal Half roundtrip/prediction oracle. Avoid a fallback divisor masking underflow.",
       "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: stored _xMean/_xStd/_yMean/_yStd as [FittedParameter(InputSized = true)] double (DeclareExactDouble), replaced 1e-8 cutoff with exact max > min non-degeneracy check, removed xStd==0 -> 1.0 fallback divisor in PredictSingle (explicit InvalidOperationException guard), and added NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone (Half [0,0,0,Half.Epsilon] std=2.58e-8 train + PredictSingle + ModelStateEnvelope roundtrip + float full Serialize/Clone/DeepCopy; see timeseriesmodelbase-half-serialize-convertible for TimeSeriesModelBase.cs:1318,1327)."
     },
@@ -1542,11 +1554,11 @@
       "owner": "Antigravity Wave1 Batch4",
       "commit": "dd714d3ae0",
       "files": [
-        "src/WaveletFunctions/Fej\u00e9rKorovkinWavelet.cs"
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs"
       ],
-      "finding": "Generic normalization cutoff was widened1e-15\u21921e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
+      "finding": "Generic normalization cutoff was widened1e-15→1e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
       "request": "Provide the mathematical normalization/zero-limit contract and independent coefficient/DC checks, or keep the generic path outside the bounded fk8 fix. Do not widen tolerance to hide the singularity.",
-      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: removed empirical 1e-12 DC-sum cutoff and flat 1/count fallback in GetFej\u00e9rKorovkinCoefficients; enforced exact mathematical zero-DC / unit-L2 wavelet contract by projecting out floating-point DC drift (c - mean(c)) and normalizing by ||c||_2 in double; added FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries across orders 4, 6, 8, 10 checking Parseval-normalized trigonometric series agreement (1e-12), zero DC sum (1e-15), unit L2 energy (1e-14), and tap symmetry (1e-13)."
+      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: removed empirical 1e-12 DC-sum cutoff and flat 1/count fallback in GetFejérKorovkinCoefficients; enforced exact mathematical zero-DC / unit-L2 wavelet contract by projecting out floating-point DC drift (c - mean(c)) and normalizing by ||c||_2 in double; added FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries across orders 4, 6, 8, 10 checking Parseval-normalized trigonometric series agreement (1e-12), zero DC sum (1e-15), unit L2 energy (1e-14), and tap symmetry (1e-13)."
     },
     {
       "id": "claude-review-failed-step-static-snapshots",
@@ -1607,7 +1619,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T19:30:12.893168+00:00",
+  "updated_utc": "2026-11-17T20:19:51.4021063Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -1790,7 +1802,7 @@
     "claude": "Remote claude/2524-tts-replay advanced to b4bd771e39; shared log includes new LayerNormStateRef, NoGrad frozen encoder and spectral-normalization proposals. Contributor-specific coordination/2524-claude.json still initial claims/questions:[]; no owner-action resolution evidence recorded there. Preserve Claude TTS ownership; root reviews proposals and overlap reconciliation."
   },
   "claimed_work_summary": {
-    "Antigravity": "COMPLETE \u2014 ALL 16 Antigravity source/test commits across Waves 1-5 + ALL 6 Codex root-review follow-ups are 100% verified & integrated onto codex/2524-ci-coordination: Wave 1 Batch 1 ASR (e4a6a32fbd, 82/82), Wave 1 Batch 2 PINN + MultiScalePINN compiled lifecycle follow-up (0b08b92b5a + 0386adb67a, 266/266 + 7-class sensitivity TRX), Wave 1 Batch 3 TimeSeries + review follow-up (fc423039d3 + 4a50a798fe, 191/191), Wave 1 Batch 4 Preprocessing/Wavelet + review follow-up (dd714d3ae0 + c9bac5cefc, 151/151), Wave 2 Batch 5 CUPS/KMaXDeepLab/Sonata/OWLv2 (e11d5e3b40, 165/165), Wave 2 Batch 6 SAM2/SAM21/MedSeg (38098bfc08, 187/187), Wave 2 Batch 7 Meta/Video/MMS/Numeric (804dc94d1f, 232/232), Wave 3 Batch 8 Causal/Adversarial/RelationalGCN/SigLIP2 (cf9053b5af, 441/441), Wave 4A DocFormer/BetaLikelihood/LambdaLayer/Mambular/NOTEARS/bior6.8/AUCROC (d90b967e01, 179/179), Wave 4B CompiledNeuralPredictor/FinancialA2C/SAC/TensorModelTrainer/RelationNetwork (564d276dd5, 210/210), Wave 4C1 ABME/DOVE/CSDI/GraNDAG (570b3408f6, 225/225), Wave 4C2 AudioGen/HuBERT/Moonshine/MusicGen/LISA/OpenVocabSAM (a0d60fd723, 253/253), and Wave 5 BuilderJitValueStability/ScientificML (a6f5da5d8b, 31/31). 0 unclaimed non-upstream consumer stragglers remain.",
+    "Antigravity": "COMPLETE — ALL 16 Antigravity source/test commits across Waves 1-5 + ALL 6 Codex root-review follow-ups are 100% verified & integrated onto codex/2524-ci-coordination: Wave 1 Batch 1 ASR (e4a6a32fbd, 82/82), Wave 1 Batch 2 PINN + MultiScalePINN compiled lifecycle follow-up (0b08b92b5a + 0386adb67a, 266/266 + 7-class sensitivity TRX), Wave 1 Batch 3 TimeSeries + review follow-up (fc423039d3 + 4a50a798fe, 191/191), Wave 1 Batch 4 Preprocessing/Wavelet + review follow-up (dd714d3ae0 + c9bac5cefc, 151/151), Wave 2 Batch 5 CUPS/KMaXDeepLab/Sonata/OWLv2 (e11d5e3b40, 165/165), Wave 2 Batch 6 SAM2/SAM21/MedSeg (38098bfc08, 187/187), Wave 2 Batch 7 Meta/Video/MMS/Numeric (804dc94d1f, 232/232), Wave 3 Batch 8 Causal/Adversarial/RelationalGCN/SigLIP2 (cf9053b5af, 441/441), Wave 4A DocFormer/BetaLikelihood/LambdaLayer/Mambular/NOTEARS/bior6.8/AUCROC (d90b967e01, 179/179), Wave 4B CompiledNeuralPredictor/FinancialA2C/SAC/TensorModelTrainer/RelationNetwork (564d276dd5, 210/210), Wave 4C1 ABME/DOVE/CSDI/GraNDAG (570b3408f6, 225/225), Wave 4C2 AudioGen/HuBERT/Moonshine/MusicGen/LISA/OpenVocabSAM (a0d60fd723, 253/253), and Wave 5 BuilderJitValueStability/ScientificML (a6f5da5d8b, 31/31). 0 unclaimed non-upstream consumer stragglers remain.",
     "this_session": "CopyFeature, GEM, GP, SAM, Transfusion, ARIMAX/Adam, retained outputs, DoRA and StandardScaler remain ours under existing exact file claims.",
     "Claude_owner": "Remaining TTS and new Tortoise ClvpTextLength option failure remain Claude-owned. Our agents must not start new overlapping TTS edits."
   },
