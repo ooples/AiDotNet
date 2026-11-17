@@ -784,75 +784,22 @@
       "status": "CLAIMED under approved single-coordinator master plan; Stage A active"
     },
     {
-      "owner": "Antigravity swarm (Round 2 Bucket 2.1: ci-shepherd, r2-verifier)",
+      "owner": "Antigravity swarm (Round 2 Bucket 2.1 & 2.3: r2-fixer-3, ci-shepherd, r2-verifier)",
       "repository": "ooples/AiDotNet",
-      "scope": "Single-coordinator governance: Bucket 2.1 CI infrastructure, shard coverage policy PullRequest strict-mode repair, shard routing, CompatibilitySuppressions verification, and <=72-char commitlint enforcement",
+      "scope": "Antigravity Lead governance: Bucket 2.1 Item 1 (.github/scripts/Get-ShardCoveragePolicy.ps1 + .github/scripts/Invoke-Shard.ps1 $pullRequest StrictMode crash repair) + Bucket 2.3 Item 3 (FusedCompiledTrainingOptOutInventoryTests.cs audit of 9 newly merged master models)",
       "files": [
         ".github/scripts/Get-ShardCoveragePolicy.ps1",
         ".github/scripts/Invoke-Shard.ps1",
-        "tools/TestImpact/RollingShardMap.ps1",
-        "tools/TestImpact/Select-RollingCoverageShards.ps1",
-        "tools/TestImpact/ShardPacking.ps1",
-        "tools/TestImpact/Test-RollingShardMap.ps1",
-        "tools/TestImpact/Test-ShardPacking.ps1",
-        "tools/TestImpact/Select-Shards.ps1",
-        ".github/test-shards.yml",
-        "src/CompatibilitySuppressions.xml"
-      ],
-      "status": "CLAIMED under approved single-coordinator master plan; Stage A active"
-    },
-    {
-      "owner": "Antigravity swarm (Round 2 Buckets 2.3 & 2.4: r2-fixer-1..3, r2-verifier, r2-verifier-2)",
-      "repository": "ooples/AiDotNet",
-      "scope": "Single-coordinator governance Buckets 2.3 & 2.4: (r2-fixer-1) TestScaffoldGenerator Lagrangian12, GeneratedFloatScaffoldSmokeTests PixelLM, NeuralNetworkBase FirstLayerFeatureImportance + DenseFeatureImportanceTests, FeatureSelectorHelper CopyFeature + FeatureSelectorCopyReferenceTests, Elementwise01/Scalers/DoRA deep-math reference tests; (r2-fixer-2) CompiledTapeTrainingStep/FusedTrainingSession/TapeTrainingStepper + SharedTrainingStepTests, TimeSeriesModelBase Half.Serialize + ARIMAXModel + AdamOptimizer, MetaLearnerBase + NTMPaperTests + MetaLearningCoverageIntegrationTests, TensorReductionHelper + SumOfSquares tests; (r2-fixer-3) StandardGaussianProcess + StudentTGaussianProcess + GaussianProcessModelTestBase, GradientEpisodicMemory, TrpoTopologyOptionsTests, SamNetwork/SamTraining + WordCharEmbeddingLayer + Transfusion + DevaOptionFixture + VisionMamba, RuntimeFidelityBaseline.cs + FusedCompiledTrainingOptOutInventoryTests.cs reconciliation",
-      "files": [
-        "src/AiDotNet.Generators/TestScaffoldGenerator.cs",
-        "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs",
-        "src/NeuralNetworks/NeuralNetworkBase.cs",
-        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/DenseFeatureImportanceTests.cs",
-        "src/Helpers/FeatureSelectorHelper.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/Helpers/FeatureSelectorCopyReferenceTests.cs",
-        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/Elementwise01NumericalRegressionTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/PreprocessingDeepMathIntegrationTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/ScalersDeepMathIntegrationTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/LoRA/LoRADeepMathIntegrationTests.cs",
-        "src/Training/CompiledTapeTrainingStep.cs",
-        "src/Training/FusedTrainingSession.cs",
-        "src/Training/TapeTrainingStepper.cs",
-        "tests/AiDotNet.Tests/UnitTests/Training/SharedTrainingStepTests.cs",
-        "src/TimeSeries/TimeSeriesModelBase.cs",
-        "src/TimeSeries/ARIMAXModel.cs",
-        "src/Optimizers/AdamOptimizer.cs",
-        "src/MetaLearning/MetaLearnerBase.cs",
-        "tests/AiDotNet.Tests/UnitTests/MetaLearning/NTMPaperTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/MetaLearning/MetaLearningCoverageIntegrationTests.cs",
-        "src/Helpers/TensorReductionHelper.cs",
-        "tests/AiDotNet.Tests/UnitTests/Helpers/TensorSumOfSquaresDoubleTests.cs",
-        "tests/AiDotNet.Tests/UnitTests/Helpers/SumOfSquaresDoubleCallSiteTests.cs",
-        "src/GaussianProcesses/StandardGaussianProcess.cs",
-        "src/GaussianProcesses/StudentTGaussianProcess.cs",
-        "tests/AiDotNet.Tests/ModelFamilyTests/Base/GaussianProcessModelTestBase.cs",
-        "src/ContinualLearning/Strategies/GradientEpisodicMemory.cs",
-        "tests/AiDotNet.Tests/UnitTests/ReinforcementLearning/TrpoTopologyOptionsTests.cs",
-        "src/ComputerVision/Segmentation/Foundation/SamNetwork.cs",
-        "src/ComputerVision/Segmentation/Foundation/SamTraining.cs",
-        "src/NeuralNetworks/Layers/WordCharEmbeddingLayer.cs",
-        "src/VisionLanguage/Unified/Transfusion.cs",
-        "src/VisionLanguage/Unified/Transfusion.Training.cs",
-        "tests/AiDotNet.Tests/ModelFamilyTests/Base/DevaOptionFixture.cs",
-        "src/ComputerVision/Segmentation/Mamba/VisionMamba.cs",
-        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs",
         "tests/AiDotNet.Tests/IntegrationTests/NeuralNetworks/FusedCompiledTrainingOptOutInventoryTests.cs"
       ],
-      "status": "CLAIMED under approved single-coordinator master plan; Stage A/B active"
+      "status": "CLAIMED by Antigravity swarm; Stage A active (0 overlap with active Codex drafts)"
     },
     {
       "owner": "Antigravity swarm (Round 2 Group 1B & Bucket 2.5: tts-lead, r2-verifier-2)",
       "repository": "ooples/AiDotNet",
-      "scope": "Single-coordinator governance: Hostile line-by-line adversarial audit + 5 mandatory review fixes on claude/2524-tts-replay (LossBalancer, GLM4Voice/GlmSpeechTokenizer, DiTToTTS.CodecTraining, TortoiseTTS ClvpTextLength + detach reconciliation, FireRedTTS/SpiritLM static leak elimination) + Bucket 2.5 shared TTS/vocoder/ASR fixes (VarianceAdaptorLayer, CodecWaveformGan, IndexTtsModules/IndexTtsPerceiver, HiftModules, NormedConv1DLayer/NormedConv2DLayer, WaveRNN/SegmentVocoderBase/GanVocoderBase, AzureSpeechSTT/NeMoMultitask/ConvTransformer/OpenVoiceV2/SenseVoice option sensitivity)",
+      "scope": "Antigravity Lead governance: Audit & integrate Claude Round-2 (d5bfb7e9ba..fb3c0b639d) + audit Claude Round-1 (390318c6bf..68e400562e) + fix all 5 open TTS review blockers (LossBalancer, GLM4Voice/GlmSpeechTokenizer, DiTToTTS.CodecTraining, TortoiseTTS ClvpTextLength, FireRedTTS/SpiritLM static leak elimination) + unclaimed Bucket 2.5 shared TTS/ASR fixes (VarianceAdaptorLayer, IndexTtsModules/IndexTtsPerceiver, SoundStorm frozen ByT5 encoder, CTCLoss host reads, NormedConv1DLayer/NormedConv2DLayer, Paper fidelity ASR/TTS option sensitivity for AzureSpeechSTT/NeMoMultitask/ConvTransformer/OpenVoiceV2/SenseVoice). Excludes CodecWaveformGan.cs & HiftModules.cs actively claimed by Codex in 7ddcb4d7c1 unless released.",
       "files": [
         "src/Audio/Codecs/LossBalancer.cs",
-        "src/Audio/Codecs/CodecWaveformGan.cs",
         "src/Audio/Generation/EnCodec.cs",
         "src/NeuralNetworks/Layers/VarianceAdaptorLayer.cs",
         "src/NeuralNetworks/Layers/NormedConv1DLayer.cs",
@@ -884,6 +831,7 @@
         "src/TextToSpeech/CodecBased/NaturalSpeechModules.cs",
         "src/TextToSpeech/CodecBased/SeedTTS.cs",
         "src/TextToSpeech/CodecBased/SeedTTSModules.cs",
+        "src/TextToSpeech/CodecBased/SoundStorm.cs",
         "src/TextToSpeech/CodecBased/SoundStormConformer.cs",
         "src/TextToSpeech/CodecBased/SparkTTS.cs",
         "src/TextToSpeech/CodecBased/SparkTTSModules.cs",
@@ -916,11 +864,6 @@
         "src/TextToSpeech/StyleEmotion/StyleTtsModules.cs",
         "src/TextToSpeech/StyleEmotion/StyleTtsSpeechModules.cs",
         "src/TextToSpeech/StyleEmotion/StyleTtsUtilities.cs",
-        "src/TextToSpeech/Vocoders/HiftModules.cs",
-        "src/TextToSpeech/Vocoders/WaveRNN.cs",
-        "src/TextToSpeech/Vocoders/SegmentVocoderBase.cs",
-        "src/TextToSpeech/Vocoders/GanVocoderBase.cs",
-        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs",
         "src/TextToSpeech/VoiceCloning/OpenVoiceTrainingGraph.cs",
         "src/TextToSpeech/VoiceCloning/OpenVoiceV2.cs",
         "src/TextToSpeech/VoiceCloning/OpenVoiceV2.Training.cs",
@@ -937,34 +880,54 @@
         "src/SpeechRecognition/AlibabaASR/SenseVoiceLargeOptions.cs",
         "tests/AiDotNet.Tests/Audio/Codecs/EnCodecPaperTests.cs",
         "tests/AiDotNet.Tests/Audio/Codecs/LossBalancerTests.cs",
-        "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs",
-        "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs",
         "tests/AiDotNet.Tests/TextToSpeech/StyleTTSPaperTests.cs",
-        "tests/AiDotNet.Tests/TextToSpeech/WaveRNNEquationReferenceTests.cs",
         "tests/AiDotNet.Tests/Audio/SenseVoicePaperTests.cs",
         "tests/AiDotNet.Tests/Audio/SenseVoiceLargePaperTests.cs"
       ],
-      "status": "CLAIMED under approved single-coordinator master plan; Stage A active"
+      "status": "CLAIMED by Antigravity swarm; Stage A active"
     },
     {
       "owner": "Antigravity swarm (Round 2 Group 1C & Bucket 2.2: tensors-lead, r2-verifier-2)",
       "repository": "ooples/AiDotNet.Tensors",
-      "scope": "Single-coordinator governance: Sync origin/main (v0.151.1 = 772ca81b50) + adversarial audit of da76b5e84b..c9770e98d9 + TensorSearchSorted forward replay + BatchNorm generic trace/probe + GroupNorm lazy trace + LstmSequenceState replay + GenericLinalg.SvdTall Jacobi convergence & Half IConvertible audit + single validated coordination-package.yml artifact",
+      "scope": "Antigravity Lead governance (strictly disjoint from Codex SearchSorted & BatchNorm files): Merge origin/main (v0.151.1 = 772ca81b50) + bump coordination artifact version to 0.151.2-coordination.* + adversarial audit of da76b5e8..c9770e98 + GroupNorm lazy training trace in new partial CpuEngine.GroupNormReplay.cs + Half PNormCross/TensorCDist IConvertible fix + GenericLinalg.SvdTall Jacobi rank-deficient convergence",
       "files": [
-        "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
-        "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
-        "src/AiDotNet.Tensors/Engines/CpuEngine.LstmSequenceState.cs",
-        "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.MissingKernels.cs",
-        "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
-        "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.GroupNormReplay.cs",
         "src/AiDotNet.Tensors/LinearAlgebra/GenericLinalg.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/SearchSortedReplayTests.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/BatchNormReplayTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/GroupNormReplayTests.cs",
+        "Directory.Build.props"
+      ],
+      "new_files": [
+        "src/AiDotNet.Tensors/Engines/CpuEngine.GroupNormReplay.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/GroupNormReplayTests.cs"
       ],
-      "status": "CLAIMED under approved single-coordinator master plan; Stage A active"
+      "status": "CLAIMED by Antigravity swarm; Stage A active (0 overlap with Codex CpuEngine.cs / CpuEngine.Parity210.cs)"
     }
   ],
+  "codex_assignments": {
+    "governance_note": "Antigravity swarm is Lead Coordinator for PR #2524 closure; Codex remains active on the explicitly assigned scopes below. Please commit with <=72-char conventional commit headers (blank line before body/footer) and push to codex/2524-ci-coordination for Antigravity 5-Gate verification, or mark status as RELEASED TO ANTIGRAVITY if delegating back.",
+    "Codex-1_AiDotNet_Tensors": {
+      "owner": "this session/artifact_feed & this session/root",
+      "repository": "ooples/AiDotNet.Tensors",
+      "tasks": [
+        "Finish & push TensorSearchSorted forward replay (CpuEngine.Parity210.cs, DirectGpuTensorEngine.MissingKernels.cs, LazyTensorScope.cs, CrossTypeLazyNode.cs, SearchSortedReplayTests.cs)",
+        "Finish & push BatchNorm generic training trace & probe (CpuEngine.cs, BatchNormReplayTests.cs)",
+        "Coordinate validation workflow extension (.github/workflows/coordination-package.yml, gpu-cuda-selfhosted.yml) with tensors-lead 0.151.2-coordination.* merge of v0.151.1 (772ca81b50)"
+      ],
+      "status": "ASSIGNED TO CODEX"
+    },
+    "Codex-2_AiDotNet_Consumer": {
+      "owner": "this session and its agents",
+      "repository": "ooples/AiDotNet",
+      "tasks": [
+        "Active 7ddcb4d7c1 TTS helpers: CodecWaveformGan.cs + SparkTTSPaperTests.cs (pinn_review) and HiftModules.cs + HiftReplayTests.cs (artifact_feed) — note paused KMaX/FinancialA2C/TensorModelTrainer drafts in 7ddcb4d7c1 are now handled by Antigravity r2-fixer-2 & r2-fixer-3",
+        "TimeSeriesModelBase.cs:1318,1327 Half.Serialize() Convert.ToDouble -> NumOps.ToDouble repair",
+        "Unit05 TensorReductionHelper / MiniRocket + RuntimeFidelityBaseline.cs stale ratchets (including TRX-proven 11 PINN options + KMaXDeepLab::MaxGradNorm)",
+        "NTMPaperTests.cs remaining 2 unit05_ntm_pending cases",
+        "Tortoise 2 TensorSlice / UniAudio 1 TensorSubtract host-read items in Codex-claimed overlap files (or mark RELEASED TO ANTIGRAVITY)"
+      ],
+      "status": "ASSIGNED TO CODEX (or mark RELEASED TO ANTIGRAVITY per item)"
+    }
+  },
   "pinn_candidate_owner_action": {
     "candidate": "7ce3cb5cf948c273b273ff171df9f826c1c0e373",
     "status": "RESOLVED on codex/2524-ci-coordination at 0386adb67a2b3d0fe3db947d5dc0912ec97ff4fa (MultiScalePINN compiled lifecycle repaired with zero IsFusedTrainingDisabled references; unchanged 7-class PINN sensitivity TRX w3-pinn-sensitivity-v2.trx SHA-256 4067ef60ad69ac9b871e000617849e2df572bc8782f6a05371ce9bfb2dd92a5b proves exact 11 newly-sensitive entries); ready for root review",
@@ -1473,7 +1436,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T14:09:00Z",
+  "updated_utc": "2026-11-17T14:12:00Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
