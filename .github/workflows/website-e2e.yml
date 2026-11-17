@@ -1,4 +1,4 @@
-name: Website E2E (production)
+name: Website E2E
 
 # The Playwright suite against https://www.aidotnet.dev, shared by the post-deploy smoke run
 # (deploy-website.yml) and the nightly health check (website-health.yml). The auth-backed
@@ -12,7 +12,7 @@ on:
       part:
         description: 'Preview checks to run'
         type: choice
-        options: [suite, all, anon, free, pro-stripe, pro-granted, admin, auth-config]
+        options: [suite, all, journeys, anon, free, pro-stripe, pro-granted, admin, auth-config]
         default: suite
       repair_email:
         description: 'Verify the existing repository mail key and synchronize the function mail secret'
@@ -146,6 +146,8 @@ jobs:
           if [ "$PREVIEW_RUN" = true ]; then config=playwright.deployed.config.ts; fi
           if [ "$PART" = suite ]; then
             npx playwright test --config "$config" --grep-invert "every link and control works for" --retries=0
+          elif [ "$PART" = journeys ]; then
+            npx playwright test --config "$config" --project=journeys --grep-invert "every link and control works for" --retries=0
           else
             npx playwright test --config "$config" --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
           fi
