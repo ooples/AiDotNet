@@ -91,6 +91,16 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int stride, [LayerState] int dilation, [LayerState] int groups, [LayerState] int padding,
         [LayerState] bool transposed, [LayerState] ConvolutionNormalization normalization, [LayerState] bool useBias = true,
         [LayerState] int outputPadding = 0)
+        : this(inChannels, outChannels, kernelSize, stride, dilation, groups, padding, transposed, normalization,
+            initialization: null, useBias, outputPadding)
+    {
+    }
+
+    // Module constructors can supply an explicit stream before any default weight, bias or spectral-vector draw.
+    // The public constructor and its serialized shape signature keep their existing behavior and compatibility.
+    internal NormedConv1DLayer(int inChannels, int outChannels, int kernelSize,
+        int stride, int dilation, int groups, int padding, bool transposed, ConvolutionNormalization normalization,
+        Random? initialization, bool useBias = true, int outputPadding = 0)
         : base(new[] { inChannels }, new[] { outChannels })
     {
         _useBias = useBias;
@@ -113,9 +123,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         _transposed = transposed;
         _normalization = normalization;
 
-        var random = RandomSeed.HasValue
+        var random = initialization ?? (RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
-            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
         int fanIn = (transposed ? outChannels / groups : inChannels / groups) * kernelSize;
         double bound = 1.0 / Math.Sqrt(fanIn);
         _direction = transposed
