@@ -69,7 +69,7 @@
         "tests/AiDotNet.Tests/UnitTests/ComputerVision/CvReviewRegressionTests.cs"
       ],
       "scope": "User-directed review follow-up after original Antigravity Wave4B declared complete: stable discrete log-probability/entropy and actor reuse; restore trainer owner/session path; explicitly eager-only forward-count test plus separate compiled continuity/numeric/refusal tests. No shared training redesign, epsilon floor, or compiled bypass.",
-      "status": "CLAIMED before edits; original author batch integrated/complete. Coordinator owns these precise corrections now; other scopes remain unchanged.",
+      "status": "SUPERSEDED by Antigravity r2-fixer-2 commit 1a9ec438c6 (source c9031befbe, verified 148/148 by r2-verifier) integrated on codex/2524-ci-coordination; Codex please root-review rather than re-implement. Original claim: CLAIMED before edits; original author batch integrated/complete.",
       "verification": "Root diff review before focused checks; new Helpers class already routed by Unit05 namespace clause. Hold PR source push until active CI cycle terminal."
     },
     {
@@ -1351,7 +1351,7 @@
     {
       "id": "review-financial-a2c-half-logprob-selection",
       "owner": "Antigravity Wave4B",
-      "status": "OWNER ACTION REQUIRED; do not push this new source to PR before repair",
+      "status": "RESOLVED on codex/2524-ci-coordination at 1a9ec438c6 (source c9031befbe; r2-verifier 148 passed/0 failed/0 skipped, TRX r2v-wave4b-reviews.trx SHA-256 d0c8e96fc31f1e6d07bfcfdaf44dd886a34767973265d94dd83fdbc5e4dd4f6c, tested cherry-pick ce3656adc6, Tensors DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; author 120/120 r2-wave4b-reviews.trx 462aa53e...6b8c). A2C: TensorLogSoftmax + TensorWhere selection, no epsilon floor, no 0*-Inf in forward/backward. Trainer: owner:model restored with coordinated per-model warmup; ForwardCalls==3, compiled continuity + committed refusal tests.",
       "commit": "564d276dd5",
       "finding": "FinancialA2CAgent one-hot logProbsAll*stepActions reduction can produce Half NaN: epsilon1e-8 rounds0; logits[0,-100] yield logprobs[0,-Infinity], unselected0*-Infinity poisons selected logprob.",
       "request": "Use stable tensor-native log-softmax and index/Where selection that does not multiply unselected infinities; add Half/extreme-logit regression preserving gradients and masking. No larger arbitrary epsilon floor."
@@ -1359,7 +1359,7 @@
     {
       "id": "review-tensormodeltrainer-compiled-owner-removal",
       "owner": "Antigravity Wave4B",
-      "status": "OWNER ACTION REQUIRED; no overlapping root edit",
+      "status": "RESOLVED on codex/2524-ci-coordination at 1a9ec438c6 (source c9031befbe; r2-verifier 148 passed/0 failed/0 skipped, TRX r2v-wave4b-reviews.trx SHA-256 d0c8e96fc31f1e6d07bfcfdaf44dd886a34767973265d94dd83fdbc5e4dd4f6c, tested cherry-pick ce3656adc6, Tensors DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; author 120/120 r2-wave4b-reviews.trx 462aa53e...6b8c). A2C: TensorLogSoftmax + TensorWhere selection, no epsilon floor, no 0*-Inf in forward/backward. Trainer: owner:model restored with coordinated per-model warmup; ForwardCalls==3, compiled continuity + committed refusal tests.",
       "commit": "564d276dd5",
       "finding": "TensorModelTrainer removes owner:model from EagerSgdObjectiveStep, unconditionally forcing eager execution instead of the existing persistent compiled closure path and its committed-state/refusal checks.",
       "request": "Preserve owner/session routing and repair warmup/lifecycle correctly, or propose an explicit supported contract with continuity/refusal tests. Do not disable requested compiled execution just to pass."
@@ -1681,7 +1681,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:30:03.7804875Z",
+  "updated_utc": "2026-11-17T21:33:00Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
