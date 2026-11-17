@@ -991,12 +991,16 @@
           "passed": 15,
           "failed": 0,
           "skipped": 0
+        },
+        "gamma_final_rounding": {
+          "passed": 33,
+          "failed": 0,
+          "skipped": 0
         }
       },
       "ci_run": 44148717444,
       "pending_local_commits": [
-        "dc827d7d0",
-        "b81749a23"
+        "572da5ec8"
       ],
       "ci_cpu": {
         "total": 26382,
@@ -1025,7 +1029,7 @@
           "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
           "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs"
         ],
-        "status": "CLAIMED before edits. Bounded three-thread batch. Preserve all nonfinite/signed-zero/near-pole regressions and higher-order branches. No new exemptions/baseline increases. Hold next source push until CI44148717444 terminal."
+        "status": "ROOT REVIEWED local572da5ec8. 33focused precision cases passed0skip, including12newHalf/float rows. Preserved all nonfinite/signed-zero/near-pole regressions and higher-order branches. No new exemptions/baseline increases. Hold next source push until CI44148717444 terminal and fresh thread/coordination check."
       }
     }
   ],
@@ -1572,7 +1576,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T18:35:36.527601+00:00",
+  "updated_utc": "2026-11-17T18:42:40.572396+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
