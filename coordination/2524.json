@@ -543,9 +543,10 @@
         "tools/TestImpact/RollingShardMap.ps1",
         "tools/TestImpact/Select-RollingCoverageShards.ps1",
         "tools/TestImpact/ShardPacking.ps1",
-        "tools/TestImpact/Test-RollingShardMap.ps1"
+        "tools/TestImpact/Test-RollingShardMap.ps1",
+        "tools/TestImpact/Test-ShardPacking.ps1"
       ],
-      "file_scope_limits": "Only replace stale inline Invoke-Shard coverage-list/decision assumptions with the actual Get-ShardCoveragePolicy source and corresponding proof integration. No fallback lists, dummy variables, skipped assertions, workflow changes or coverage-policy behavior changes.",
+      "file_scope_limits": "Only replace stale inline Invoke-Shard coverage-list/decision assumptions with the actual Get-ShardCoveragePolicy source and corresponding proof integration. Test-ShardPacking.ps1 is limited to the direct selection fixture helper-copy integration and retaining its missing-file negative control. No fallback lists, dummy variables, skipped assertions, workflow changes or coverage-policy behavior changes.",
       "verification": "Inspect the complete Verify impact tooling prerequisite; batch-run relevant lightweight proofs including rolling map, packing rules and Test-TestImpactEndToEnd. Keep source fixes local for root review; no source push, rerun or dispatch."
     }
   ],
