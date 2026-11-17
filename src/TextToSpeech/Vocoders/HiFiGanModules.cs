@@ -31,6 +31,7 @@ internal sealed class HiFiGanGenerator<T>
     private readonly List<List<(List<NormedConv1DLayer<T>> First, List<NormedConv1DLayer<T>> Second)>> _blocks = new();
     private readonly NormedConv1DLayer<T> _post;
     private readonly bool _resblockType1;
+    private readonly T _residualAverageScale;
     private readonly bool _tanhOutput;
     private readonly int _outputReflectPad;
 
@@ -62,6 +63,10 @@ internal sealed class HiFiGanGenerator<T>
     {
         _engine = engine;
         _resblockType1 = resblockType1;
+        // Every upsampling stage has the same parallel residual branches. This is one architecture scalar,
+        // converted before the stage loops; an empty stage still fails at its existing missing-branch guard.
+        var scalarOps = MathHelper.GetNumericOperations<T>();
+        _residualAverageScale = resblockKernels.Length == 0 ? scalarOps.Zero : scalarOps.FromDouble(1.0 / resblockKernels.Length);
         _tanhOutput = tanhOutput;
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
@@ -171,7 +176,6 @@ internal sealed class HiFiGanGenerator<T>
         using var forward = TensorScope.Begin();
         long snapshot = gpu.ActivationCacheTimestampSnapshot();
         var released = new HashSet<object>(AiDotNet.Tensors.Engines.Autodiff.ReferenceEqualityComparer<object>.Instance);
-        var ops = MathHelper.GetNumericOperations<T>();
 
         // Carries are our own results, but an identity/view may share a still-live boundary or caller storage.
         static bool Aliases(Tensor<T> left, Tensor<T>? right)
@@ -255,7 +259,7 @@ internal sealed class HiFiGanGenerator<T>
             }
             var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
             using (var average = TensorScope.Begin())
-                x = average.Keep(_engine.TensorMultiplyScalar(completedSum, ops.FromDouble(1.0 / _blocks[i].Count)));
+                x = average.Keep(_engine.TensorMultiplyScalar(completedSum, _residualAverageScale));
             ReleaseConsumed(completedSum, x);
             ReleaseConsumed(stageInput, x);
         }
