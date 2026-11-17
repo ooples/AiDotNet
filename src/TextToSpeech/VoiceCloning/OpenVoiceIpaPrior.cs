@@ -40,11 +40,13 @@ internal sealed class OpenVoiceIpaPrior<T>
     {
         if (tokens.Rank != 1 || tokens.Length == 0) throw new ArgumentException("Expected one nonempty IPA-token sequence.", nameof(tokens));
         var numeric = MathHelper.GetNumericOperations<T>();
-        foreach (var value in tokens.ToArray())
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            double id = numeric.ToDouble(value);
-            if (double.IsNaN(id) || double.IsInfinity(id) || id != Math.Truncate(id) || id < 0 || id >= _vocabulary)
-                throw new ArgumentException("IPA-token IDs must be integers in the configured vocabulary.", nameof(tokens));
+            foreach (double id in TensorCopyHelper.CastLogical<T, double>(tokens).ToArray())
+            {
+                if (double.IsNaN(id) || double.IsInfinity(id) || id != Math.Truncate(id) || id < 0 || id >= _vocabulary)
+                    throw new ArgumentException("IPA-token IDs must be integers in the configured vocabulary.", nameof(tokens));
+            }
         }
         var hidden = _engine.TensorMultiplyScalar(_embedding.Forward(tokens), numeric.FromDouble(Math.Sqrt(_hidden)));
         for (int i = 0; i < _blocks.Length; i++)

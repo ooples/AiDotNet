@@ -135,4 +135,63 @@ public class LlamaOmniModulesReferenceTests
         Assert.True(Math.Abs((double)f["loss"]! - loss) <= 1e-8 * Math.Abs((double)f["loss"]!), $"CTC loss: {(double)f["loss"]!:R} vs {loss:R}");
         Assert.Equal(f["prediction"]!.Select(v => (int)v).ToArray(), decoder.Alignment(reps));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task DecoderLoss_TracesCleanlyUnderProbeAndZeroesInfeasibleAlignment()
+    {
+        await Task.Yield();
+        var f = Fixture("llamaomni_reference.json");
+        var (_, decoder, layers) = Tiny(f);
+        var utterances = Utterances(f);
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+            layers.Cast<AiDotNet.Interfaces.ILayer<double>>().ToList()).ToArray();
+
+        using (var probe = AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe())
+        {
+            var tracedLoss = decoder.Loss(utterances);
+            Assert.NotNull(tracedLoss);
+            Assert.True(probe.Nodes.Count > 0);
+        }
+
+        var optimizer = new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 1e-3,
+                EnableGradientClipping = false,
+            });
+        var stepper = AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(optimizer);
+        try
+        {
+            var dummy = utterances[0].Item1;
+            for (int step = 0; step < 2; step++)
+            {
+                stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<double>
+                {
+                    Layers = layers.OfType<AiDotNet.Interfaces.ITrainableLayer<double>>().ToArray(),
+                    Input = dummy,
+                    Target = dummy,
+                    Forward = static x => x,
+                    ComputeLoss = (_, _) => decoder.Loss(utterances),
+                    ClosureObjective = () => decoder.Loss(utterances),
+                    Optimizer = optimizer,
+                    ExtraParameters = parameters,
+                });
+            }
+            Assert.Equal(1, AiDotNet.Training.CompiledTapeTrainingStep<double>.LastClosurePlanCount);
+            Assert.Equal(0, AiDotNet.Training.CompiledTapeTrainingStep<double>.LastClosureOutsidePlanSteps);
+        }
+        finally
+        {
+            stepper.Session.Reset(stickyDisable: false);
+        }
+
+        // Infeasible CTC alignment (2 upsampled frames for 5 duplicate units requiring >= 9 frames) must zero out without host reads.
+        var tinyStates = new Tensor<double>(new[] { 1, decoder.Configuration.LanguageModelWidth });
+        var infeasible = new List<(Tensor<double> States, int[] Units)>
+        {
+            (tinyStates, new[] { 1, 1, 1, 1, 1 }),
+        };
+        double zeroed = decoder.Loss(infeasible)[0];
+        Assert.Equal(0.0, zeroed, 12);
+    }
 }

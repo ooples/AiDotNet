@@ -13,7 +13,7 @@ internal sealed class OpenVoiceTrainingGraph<T>
 {
     internal sealed record Utterance(Tensor<T> Tokens, Tensor<T> Audio, Tensor<T> Spectrum, Tensor<T> ReferenceSpectrum,
         int Frames, int SegmentFrames);
-    internal sealed record Draw(Tensor<T> Noise, int SegmentStart);
+    internal sealed record Draw(Tensor<T> Noise, int SegmentStart, Tensor<T> SegmentSelector);
     private readonly IEngine _engine;
     private readonly OpenVoiceNative<T> _native;
     private readonly OpenVoiceTrainingOptions _options;
@@ -75,6 +75,11 @@ internal sealed class OpenVoiceTrainingGraph<T>
     {
         if (sample.Audio is null || sample.Audio.Rank != 1 || sample.Tokens.Rank != 1 || sample.Tokens.Length == 0)
             throw new ArgumentException("OpenVoice training requires IPA-token IDs and a mono target recording.", nameof(sample));
+        foreach (double id in TensorCopyHelper.CastLogical<T, double>(sample.Tokens).ToArray())
+        {
+            if (double.IsNaN(id) || double.IsInfinity(id) || id != Math.Truncate(id) || id < 0 || id >= _options.IpaVocabularySize)
+                throw new ArgumentException("IPA-token IDs must be integers in the configured vocabulary.", nameof(sample));
+        }
         using var noGrad = new NoGradScope<T>();
         var spectrum = _native.TrainingSpectrogram(sample.Audio);
         var reference = _native.TrainingSpectrogram(sample.SpeakerReference ?? sample.Audio);
@@ -97,14 +102,19 @@ internal sealed class OpenVoiceTrainingGraph<T>
         if (noise.Rank != 3 || noise.Shape[0] != 1 || noise.Shape[1] != _native.LatentChannels ||
             noise.Shape[2] != data.Frames || start < 0 || start + data.SegmentFrames > data.Frames)
             throw new ArgumentException("The posterior draw or decoder crop differs from the utterance.");
-        return new Draw(noise, start);
+        var selector = new Tensor<T>(new[] { data.Frames, data.SegmentFrames });
+        var selectorSpan = selector.AsWritableSpan();
+        T one = Numeric.One;
+        for (int i = 0; i < data.SegmentFrames; i++)
+            selectorSpan[(start + i) * data.SegmentFrames + i] = one;
+        return new Draw(noise, start, selector);
     }
 
     internal Tensor<T> RealSegment(Utterance data, Draw draw) => _engine.TensorSlice(data.Audio,
         new[] { draw.SegmentStart * _native.HopSize }, new[] { data.SegmentFrames * _native.HopSize });
 
     internal Tensor<T> Generate(Utterance data, Draw draw) => Flat(_native.TrainingForward(data.Spectrum,
-        data.ReferenceSpectrum, draw.Noise, draw.SegmentStart, data.SegmentFrames).Waveform);
+        data.ReferenceSpectrum, draw.Noise, draw.SegmentStart, data.SegmentFrames, draw.SegmentSelector).Waveform);
 
     private Tensor<T> Flat(Tensor<T> value) => _engine.Reshape(value, new[] { value.Length });
     private Tensor<T> Mean(Tensor<T> value) => _engine.Reshape(_engine.ReduceMean(value,
@@ -125,16 +135,16 @@ internal sealed class OpenVoiceTrainingGraph<T>
             Mean(Square(_engine.TensorAddScalar(realScores[index].Score, Numeric.FromDouble(-1)))), Mean(Square(fakeScores[index].Score)))));
     }
 
-    internal Tensor<T> GeneratorLoss(Utterance data, Draw draw, bool adversarial, bool training)
+    internal Tensor<T> GeneratorLoss(Utterance data, Draw draw, bool adversarial, bool training, Tensor<T>? precomputedRealSegment = null)
     {
-        var posterior = _native.TrainingForward(data.Spectrum, data.ReferenceSpectrum, draw.Noise, draw.SegmentStart, data.SegmentFrames);
+        var posterior = _native.TrainingForward(data.Spectrum, data.ReferenceSpectrum, draw.Noise, draw.SegmentStart, data.SegmentFrames, draw.SegmentSelector);
         var prior = _prior.Forward(data.Tokens, training, DropoutMasksForAudit);
         var path = AlignmentPath(posterior.Prior, prior.Mean, prior.LogScale);
         var alignedMean = Expand(prior.Mean, path); var alignedLogs = Expand(prior.LogScale, path);
         var mask = new Tensor<T>(new[] { 1, 1, data.Frames });
-        for (int i = 0; i < data.Frames; i++) mask[i] = Numeric.One;
+        mask.AsWritableSpan().Fill(Numeric.One);
         var kl = OpenVoiceTrainingLoss<T>.AlignedKl(_engine, posterior.Prior, posterior.LogScale, alignedMean, alignedLogs, mask);
-        var generated = Flat(posterior.Waveform); var real = RealSegment(data, draw);
+        var generated = Flat(posterior.Waveform); var real = precomputedRealSegment ?? RealSegment(data, draw);
         Tensor<T> targetMel;
         // OpenVoice's published mel_processing uses 1e-6 inside the magnitude
         // square root; the shared HiFi-GAN helper defaults to 1e-9.
@@ -146,7 +156,8 @@ internal sealed class OpenVoiceTrainingGraph<T>
         var fake = _discriminators.Forward(generated);
         List<(Tensor<T> Score, List<Tensor<T>> Features)> realFeatures;
         using (new NoGradScope<T>()) realFeatures = _discriminators.Forward(real);
-        var gan = Sum(fake.Select(value => Mean(Square(_engine.TensorAddScalar(value.Score, Numeric.FromDouble(-1))))));
+        T minusOne = Numeric.FromDouble(-1);
+        var gan = Sum(fake.Select(value => Mean(Square(_engine.TensorAddScalar(value.Score, minusOne)))));
         var featureLosses = new List<Tensor<T>>();
         for (int index = 0; index < fake.Count; index++)
             for (int layer = 0; layer < fake[index].Features.Count; layer++)

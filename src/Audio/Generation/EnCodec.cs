@@ -154,10 +154,12 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     protected override double DiscriminatorUpdateProbability => PaperOptions.DiscriminatorUpdateProbability;
 
     /// <inheritdoc />
-    protected override Tensor<T> EncodeLatent(Tensor<T> audio) => _encoder!.Forward(audio);
+    protected override Tensor<T> EncodeLatent(Tensor<T> audio)
+        => (_encoder ?? throw new InvalidOperationException("EnCodec encoder is not initialized.")).Forward(audio);
 
     /// <inheritdoc />
-    protected override Tensor<T> DecodeLatent(Tensor<T> latent) => _decoder!.Forward(latent);
+    protected override Tensor<T> DecodeLatent(Tensor<T> latent)
+        => (_decoder ?? throw new InvalidOperationException("EnCodec decoder is not initialized.")).Forward(latent);
 
     // The chunk's scale: 1e-8 + the RMS of its channel mean (reference EncodecModel._encode_frame), a constant.
     private double VolumeScale(Tensor<T> audio)
@@ -212,25 +214,27 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private Tensor<T> FrequencyLoss(IReadOnlyList<IReadOnlyList<Tensor<T>>> realMels, Tensor<T> generated)
     {
         var o = PaperOptions;
+        var melScales = _melScales ?? throw new InvalidOperationException("EnCodec mel scales are not initialized.");
         var channels = Channels(generated).ToList();
         var terms = new List<Tensor<T>>();
         for (int c = 0; c < channels.Count; c++)
-            for (int i = 0; i < _melScales!.Count; i++)
+            for (int i = 0; i < melScales.Count; i++)
             {
-                var d = Engine.TensorSubtract(realMels[c][i], _melScales[i].Forward(channels[c]));
+                var d = Engine.TensorSubtract(realMels[c][i], melScales[i].Forward(channels[c]));
                 double count = d.Length;
                 var l1 = Total(Engine.TensorAbs(d));
                 var l2 = Engine.TensorPow(Engine.TensorAddScalar(Total(Engine.TensorMultiply(d, d)), NumOps.FromDouble(1e-24)), NumOps.FromDouble(0.5));
                 terms.Add(Engine.TensorMultiplyScalar(Engine.TensorAdd(l1, Engine.TensorMultiplyScalar(l2, NumOps.FromDouble(o.MelL2Coefficient))),
-                    NumOps.FromDouble(1.0 / (count * _melScales.Count))));
+                    NumOps.FromDouble(1.0 / (count * melScales.Count))));
             }
         return Sum(terms);
     }
 
     private List<IReadOnlyList<Tensor<T>>> RealMels(Tensor<T> real)
     {
+        var melScales = _melScales ?? throw new InvalidOperationException("EnCodec mel scales are not initialized.");
         using var _ = new NoGradScope<T>();
-        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)_melScales!.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
+        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)melScales.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
     }
 
     /// <summary>ℓ_g = (1/K) Σ_k max(0, 1 − D_k(x̂)), per channel, averaged over channels.</summary>
@@ -296,15 +300,21 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
                 ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
             };
         }
-        var commitment = Engine.TensorMultiplyScalar(Quantizer!.CommitmentLoss ?? new Tensor<T>(new[] { 1 }), NumOps.FromDouble(o.CommitmentLossWeight));
+        var quantizer = Quantizer ?? throw new InvalidOperationException("EnCodec quantizer is not initialized.");
+        var commitment = Engine.TensorMultiplyScalar(quantizer.CommitmentLoss ?? new Tensor<T>(new[] { 1 }), NumOps.FromDouble(o.CommitmentLossWeight));
         _reported = null;
         if (o.UseBalancer)
         {
+            var balancer = _balancer ?? throw new InvalidOperationException("EnCodec loss balancer is not initialized.");
             // The balancer (Eq. 5) takes each loss's gradient at the output on a nested tape and averages its norm on the
             // host; under a trace that is one node the plan reruns on every replay with the step's output and recording.
             // The objective's value is the weighted loss (the reported one); its gradient is the surrogate's.
-            var (surrogate, weighted) = _balancer!.TracedSurrogate(generated, new[] { real },
-                context => LossesAgainst(context[0]));
+            int discriminatorIndex = DiscriminatorIndex(bandwidth);
+            var (surrogate, weighted) = balancer.TracedSurrogate(
+                generated,
+                new[] { real },
+                context => LossesAgainst(context[0]),
+                stateKey: (discriminatorIndex, o.TimeLossWeight, o.FrequencyLossWeight, o.AdversarialLossWeight, o.FeatureLossWeight));
             var valued = Engine.TensorAdd(surrogate, Engine.StopGradient(Engine.TensorSubtract(weighted, surrogate)));
             return Engine.TensorAdd(valued, commitment);
         }
@@ -374,7 +384,8 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
 
     private (int Length, int Stride) ChunkGeometry()
     {
-        int length = (int)Math.Round(PaperOptions.ChunkSeconds!.Value * PaperOptions.SampleRate);
+        double chunkSeconds = PaperOptions.ChunkSeconds ?? throw new InvalidOperationException("ChunkSeconds is not configured.");
+        int length = (int)Math.Round(chunkSeconds * PaperOptions.SampleRate);
         return (length, Math.Max(1, (int)((1 - PaperOptions.ChunkOverlap) * length)));
     }
 
@@ -385,6 +396,7 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         ThrowIfDisposed();
         SetTrainingMode(false);
         using var _ = new NoGradScope<T>();
+        var quantizer = Quantizer ?? throw new InvalidOperationException("EnCodec quantizer is not initialized.");
         var x = AsBatch(audio);
         int total = x.Shape[2], quantizers = QuantizersForBandwidth(PaperOptions.TargetBandwidthKbps);
         var (length, stride) = Chunked ? ChunkGeometry() : (total, total);
@@ -395,7 +407,7 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
             var chunk = Engine.TensorSlice(x, new[] { 0, 0, offset }, new[] { 1, x.Shape[1], n });
             double scale = PaperOptions.NormalizeVolume ? VolumeScale(chunk) : 1.0;
             if (scale != 1.0) chunk = Engine.TensorMultiplyScalar(chunk, NumOps.FromDouble(1.0 / scale));
-            frames.Add(new EncodedFrame(Quantizer!.Encode(EncodeLatent(chunk), quantizers), scale));
+            frames.Add(new EncodedFrame(quantizer.Encode(EncodeLatent(chunk), quantizers), scale));
         }
         return frames;
     }
@@ -407,9 +419,10 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         ThrowIfDisposed();
         SetTrainingMode(false);
         using var _ = new NoGradScope<T>();
+        var quantizer = Quantizer ?? throw new InvalidOperationException("EnCodec quantizer is not initialized.");
         var decoded = frames.Select(f =>
         {
-            var y = DecodeLatent(Quantizer!.Decode(f.Codes));
+            var y = DecodeLatent(quantizer.Decode(f.Codes));
             return f.Scale == 1.0 ? y : Engine.TensorMultiplyScalar(y, NumOps.FromDouble(f.Scale));
         }).ToList();
         if (decoded.Count == 1) return decoded[0];

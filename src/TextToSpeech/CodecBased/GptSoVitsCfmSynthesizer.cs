@@ -232,12 +232,20 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
     /// upsampling and wns1 over the mel's frames, a prompt of ⌊U·⅔·frames⌋ frames, and the CFM loss. The draws come from
     /// <paramref name="random"/> unless <paramref name="draws"/> fixes them.
     /// </summary>
+    /// <param name="frozenQuantized">With <paramref name="freezeQuantizer"/>, the frozen quantizer's output for
+    /// <paramref name="ssl"/> (<see cref="FrozenQuantized"/>) when the caller has it: a compiled training plan then reads
+    /// it as the step's data, as the codebook search runs on the host.</param>
     internal Tensor<T> Loss(Tensor<T> ssl, Tensor<T> spectrogram, Tensor<T> mel, IReadOnlyList<int> text, bool freezeQuantizer, Random random,
-        bool training = true, LossDraws? draws = null)
+        bool training = true, LossDraws? draws = null, Tensor<T>? frozenQuantized = null)
     {
         var ge = Style(spectrogram, training, random);
-        var projected = SslProjection.Forward(ssl);
-        var (quantized, _, _) = Quantizer.Forward(freezeQuantizer ? MeloOps.Detach(projected) : projected, training: training && !freezeQuantizer, random);
+        Tensor<T> quantized;
+        if (freezeQuantizer && frozenQuantized is not null) quantized = frozenQuantized;
+        else
+        {
+            var projected = SslProjection.Forward(ssl);
+            (quantized, _, _) = Quantizer.Forward(freezeQuantizer ? MeloOps.Detach(projected) : projected, training: training && !freezeQuantizer, random);
+        }
         quantized = NearestUpsample(_engine, quantized, 2.0);
         // The collate pads the SSL features to an even length; the frames past the spectrogram's are masked off.
         if (quantized.Shape[2] < spectrogram.Shape[2])
@@ -262,6 +270,16 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
         return draws is null
             ? Cfm.Loss(target, mu, promptLength, random, training)
             : Cfm.Loss(target, mu, promptLength, draws.Time, draws.Noise, draws.ShortcutExponent, training, random);
+    }
+
+    /// <summary>The frozen SSL projection and quantizer on <paramref name="ssl"/> (no gradient, the codebook unmoved): the
+    /// codebook vectors <see cref="Loss"/> reads with a frozen quantizer.</summary>
+    internal Tensor<T> FrozenQuantized(Tensor<T> ssl)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // Evaluation never draws: the generator is not read.
+        var (quantized, _, _) = Quantizer.Forward(SslProjection.Forward(ssl), training: false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
+        return quantized;
     }
 
     /// <summary>Loads the s2 v3/v4/V5 checkpoint's <c>weight</c>.</summary>

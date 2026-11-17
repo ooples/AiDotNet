@@ -300,6 +300,31 @@ public class TortoiseTTSPaperTests
     }
 
     [Fact]
+    public void ClvpTextLength_TruncatesCandidateScoringAndValidatesPositiveBound()
+    {
+        var shortTextOptions = SmallOptions(TortoiseTrainingComponent.Clvp);
+        shortTextOptions.ClvpTextLength = 3;
+        var longTextOptions = SmallOptions(TortoiseTrainingComponent.Clvp);
+        longTextOptions.ClvpTextLength = 12;
+
+        using var shortModel = Create(shortTextOptions);
+        using var longModel = Create(longTextOptions);
+        longModel.SetParameters(shortModel.GetParameters());
+
+        var text = Ids(2, 3, 4, 5, 6, 7, 8, 9);
+        var speech = Ids(1, 2, 3, 4);
+        double truncated = shortModel.ScoreCandidate(text, speech);
+        double full = longModel.ScoreCandidate(text, speech);
+        Assert.True(TtsPaperNumerics.IsFinite(truncated));
+        Assert.True(TtsPaperNumerics.IsFinite(full));
+        Assert.NotEqual(truncated, full);
+
+        var invalid = SmallOptions(TortoiseTrainingComponent.Clvp);
+        invalid.ClvpTextLength = 0;
+        Assert.Throws<ArgumentException>(() => Create(invalid));
+    }
+
+    [Fact]
     public void ConvertedCheckpoint_IsStrictAndRestoresEveryComponent()
     {
         var source = Create();

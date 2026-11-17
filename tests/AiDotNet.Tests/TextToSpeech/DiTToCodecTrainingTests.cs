@@ -68,18 +68,24 @@ public sealed class DiTToCodecTrainingTests
         var reference = document.RootElement;
         var trainer = new DiTToCodecTrainer<double>(AiDotNetEngine.Current, Options());
         trainer.InitializeSemanticDecoder(8, new Random(1));
-        trainer.SemanticDecoder!.LoadHuggingFaceWeights((key, shape) =>
+        var semanticDecoder = trainer.SemanticDecoder;
+        var projectionLayer = trainer.Projection;
+        Assert.NotNull(semanticDecoder);
+        Assert.NotNull(projectionLayer);
+        semanticDecoder.LoadHuggingFaceWeights((key, shape) =>
         {
             Assert.Equal(shape, reference.GetProperty("weight_shapes").GetProperty(key).EnumerateArray().Select(item => item.GetInt32()).ToArray());
             return Values(reference.GetProperty("weights").GetProperty(key));
         });
-        AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(AiDotNetEngine.Current, trainer.Projection!, 8, 8,
+        AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(AiDotNetEngine.Current, projectionLayer, 8, 8,
             Values(reference.GetProperty("projection_weight")), Values(reference.GetProperty("projection_bias")));
         trainer.DecoderWeightsLoaded = true;
         var latents = new Tensor<double>(new[] { 4, 8 }, new Vector<double>(Values(reference.GetProperty("latents"))));
         var frozen = Parameters(trainer.DecoderLayers);
         using var tape = new GradientTape<double>();
-        var loss = trainer.SemanticLoss(latents, reference.GetProperty("text").GetString()!);
+        string? text = reference.GetProperty("text").GetString();
+        Assert.NotNull(text);
+        var loss = trainer.SemanticLoss(latents, text);
         // HF forces RMS variance and attention probabilities to float32, including on a double model.
         Assert.True(Math.Abs(reference.GetProperty("loss").GetDouble() - loss[0]) < 2e-6);
         Assert.Equal(reference.GetProperty("fp64_loss").GetDouble(), loss[0], 9);
@@ -116,23 +122,73 @@ public sealed class DiTToCodecTrainingTests
             Text = semantic ? "hi" : null, Mel = mel };
         _ = model.GetParameters();
         Assert.True(TtsPaperNumerics.IsFinite(model.EvaluateTrainingObjective(sample)));
-        var encoder = model.MelVae!.EncoderInput.GetParameters().ToArray();
-        var decoder = model.MelVae.DecoderOutput.GetParameters().ToArray();
-        var quantizer = model.MelVae.Quantizer.Codebooks[0].GetParameters().ToArray();
-        var critics = Parameters(model.CodecTrainer!.Critics.Layers);
-        var diffusion = model.DiffusionTransformer!.Output.GetParameters().ToArray();
-        var textEncoder = model.TextEncoder!.Embedding.GetParameters().ToArray();
-        var frozenDecoder = Parameters(model.CodecTrainer.DecoderLayers);
-        var projection = Parameters(model.CodecTrainer.ProjectionLayers);
+        var melVae = model.MelVae;
+        var codecTrainer = model.CodecTrainer;
+        var diffusionTransformer = model.DiffusionTransformer;
+        var textEncoderModel = model.TextEncoder;
+        Assert.NotNull(melVae);
+        Assert.NotNull(codecTrainer);
+        Assert.NotNull(diffusionTransformer);
+        Assert.NotNull(textEncoderModel);
+        var encoder = melVae.EncoderInput.GetParameters().ToArray();
+        var decoder = melVae.DecoderOutput.GetParameters().ToArray();
+        var quantizer = melVae.Quantizer.Codebooks[0].GetParameters().ToArray();
+        var critics = Parameters(codecTrainer.Critics.Layers);
+        var diffusion = diffusionTransformer.Output.GetParameters().ToArray();
+        var textEncoder = textEncoderModel.Embedding.GetParameters().ToArray();
+        var frozenDecoder = Parameters(codecTrainer.DecoderLayers);
+        var projection = Parameters(codecTrainer.ProjectionLayers);
         Assert.True(TtsPaperNumerics.IsFinite(model.Train(sample)));
-        Changed(encoder, model.MelVae.EncoderInput.GetParameters().ToArray());
-        Changed(decoder, model.MelVae.DecoderOutput.GetParameters().ToArray());
-        Changed(quantizer, model.MelVae.Quantizer.Codebooks[0].GetParameters().ToArray());
-        Changed(critics, Parameters(model.CodecTrainer.Critics.Layers));
-        Assert.Equal(diffusion, model.DiffusionTransformer.Output.GetParameters().ToArray());
-        Assert.Equal(textEncoder, model.TextEncoder.Embedding.GetParameters().ToArray());
-        Assert.Equal(frozenDecoder, Parameters(model.CodecTrainer.DecoderLayers));
-        if (semantic) Changed(projection, Parameters(model.CodecTrainer.ProjectionLayers));
+        Changed(encoder, melVae.EncoderInput.GetParameters().ToArray());
+        Changed(decoder, melVae.DecoderOutput.GetParameters().ToArray());
+        Changed(quantizer, melVae.Quantizer.Codebooks[0].GetParameters().ToArray());
+        Changed(critics, Parameters(codecTrainer.Critics.Layers));
+        Assert.Equal(diffusion, diffusionTransformer.Output.GetParameters().ToArray());
+        Assert.Equal(textEncoder, textEncoderModel.Embedding.GetParameters().ToArray());
+        Assert.Equal(frozenDecoder, Parameters(codecTrainer.DecoderLayers));
+        if (semantic) Changed(projection, Parameters(codecTrainer.ProjectionLayers));
+    }
+
+    [Fact]
+    public void CodecTraining_RetainsGeneratorReconstructionWithoutDuplicateForward()
+    {
+        var previousOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        try
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
+            var options = DiTToTTSPaperTests.TinyOptions();
+            options.CodecTraining = Options();
+            options.TrainingStage = DiTToTrainingStage.MelVaePretraining;
+            using var eagerModel = new DiTToTTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+            var mel = new Tensor<double>(new[] { 8, 4 });
+            for (int i = 0; i < mel.Length; i++) mel[i] = -1.5 + Math.Cos(i * 0.25);
+            var sample = new TtsTrainingSample<double> { Tokens = new Tensor<double>(new[] { 1 }), Mel = mel };
+            _ = eagerModel.GetParameters();
+            for (int step = 0; step < 3; step++)
+            {
+                Assert.True(TtsPaperNumerics.IsFinite(eagerModel.Train(sample)));
+            }
+            // Exactly 1 generator forward per step on eager tape (no duplicate NoGrad CodecReconstruction pass).
+            Assert.Equal(3, eagerModel.CodecGeneratorForwardCount);
+
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = true });
+            using var compiledModel = new DiTToTTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+            _ = compiledModel.GetParameters();
+            for (int step = 0; step < 3; step++)
+            {
+                Assert.True(TtsPaperNumerics.IsFinite(compiledModel.Train(sample)));
+            }
+            Assert.True(compiledModel.CustomFusedStepCount >= 6, $"Expected >= 6 fused G+D steps, got {compiledModel.CustomFusedStepCount}");
+            Assert.Equal(0, compiledModel.CustomEagerStepCount);
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(previousOptions);
+        }
     }
 
     [Fact]

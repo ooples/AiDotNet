@@ -214,7 +214,14 @@ public partial class GLM4Voice<T>
     {
         var random = TrainingRandom;
         _trainedLayers = _lmLayers;
-        return TrainWithCustomObjective(anchor, anchor, (_, _) => LanguageModelLoss(ids, targets, true, random), LanguageModelOptimizer());
+        try
+        {
+            return TrainWithCustomObjective(anchor, anchor, (_, _) => LanguageModelLoss(ids, targets, true, random), LanguageModelOptimizer());
+        }
+        finally
+        {
+            _trainedLayers = null;
+        }
     }
 
     /// <inheritdoc />
@@ -276,30 +283,75 @@ public partial class GLM4Voice<T>
         var samples = Samples(recording);
         if (samples.Length > 30 * SpeechSampleRate) throw new ArgumentException("The tokenizer trains on chunks of at most 30 seconds.", nameof(recording));
         var (features, valid) = tokenizer.Features(samples);
+        var pooledValid = tokenizer.PooledValidMask(features.Shape[1], valid);
         var decoderInput = new[] { _options.AsrDecoderStartId }.Concat(labels.Take(labels.Count - 1)).ToArray();
         var random = TrainingRandom;
-        GlmSpeechTokenizer<T>.EncoderOutput? last = null;
+        Tensor<T>? retainedPre = null;
+        Tensor<T>? retainedOneHot = null;
+        T loss;
         _trainedLayers = _speechTokenizerLayers;
-        var loss = TrainWithCustomObjective(recording, recording, (_, _) =>
+        try
         {
-            var output = tokenizer.Encode(features, valid, training: true, random);
-            last = output;
-            var objective = Engine.TensorAdd(tokenizer.AsrLoss(decoderInput, labels, output.Hidden, output.Valid, true, random), tokenizer.CommitmentLoss(output));
-            // Zero, and no gradient: it records this step's codes for the EMA update below.
-            return Engine.TensorAdd(objective, Engine.TensorMultiplyScalar(tokenizer.TrainingStatistics(output), NumOps.Zero));
-        }, TokenizerOptimizer());
-        // The release updates the EMA codebook in the training forward; the codebook takes no gradient.
-        if (last is not null)
+            using var outputs = RetainedOutputCapture<T>.Begin();
+            loss = TrainWithCustomObjective(recording, recording, (_, _) =>
+            {
+                var output = tokenizer.Encode(features, valid, training: true, random);
+                if (GradientRecording.IsRecording<T>())
+                {
+                    var codesOneHot = output.CodesOneHot
+                        ?? throw new InvalidOperationException("The encoder pass did not reach the quantizer.");
+                    GradientRecording.RetainOutput("glm-vq-pre", Engine.StopGradient(output.PreQuantized));
+                    GradientRecording.RetainOutput("glm-vq-onehot", Engine.StopGradient(codesOneHot));
+                }
+                return Engine.TensorAdd(
+                    tokenizer.AsrLoss(decoderInput, labels, output.Hidden, output.Valid, true, random),
+                    tokenizer.CommitmentLoss(output));
+            }, TokenizerOptimizer());
+
+            if (TryCompleteRetainedOutputs(outputs))
+            {
+                retainedPre = outputs.Get("glm-vq-pre");
+                retainedOneHot = outputs.Get("glm-vq-onehot");
+            }
+        }
+        finally
         {
+            _trainedLayers = null;
+        }
+
+        // Only advance the EMA codebook after an accepted optimizer update (never on probe, skipped non-finite step, or throw).
+        if (retainedPre is not null && retainedOneHot is not null)
+        {
+            var accepted = new GlmSpeechTokenizer<T>.EncoderOutput(
+                retainedPre,
+                Array.Empty<int>(),
+                pooledValid,
+                retainedPre,
+                retainedPre,
+                retainedOneHot);
             using var _ = new NoGradScope<T>();
-            tokenizer.UpdateCodebook(last, (rows, count) =>
+            tokenizer.UpdateCodebook(accepted, (rows, count) =>
             {
                 if (count > rows)
                     throw new InvalidOperationException($"{count} dead codes restart at distinct frames, but the batch has {rows} (random.sample in the release).");
                 return Enumerable.Range(0, rows).OrderBy(_ => random.Next()).Take(count).ToArray();
             });
         }
+
         return loss;
+    }
+
+    private static bool TryCompleteRetainedOutputs(RetainedOutputCapture<T> outputs)
+    {
+        try
+        {
+            outputs.Complete();
+            return true;
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "No successful training step published retained outputs.")
+        {
+            return false;
+        }
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> TokenizerOptimizer() => _tokenizerOptimizer ??=
@@ -341,7 +393,14 @@ public partial class GLM4Voice<T>
         if (_options.StreamingTruncation) (tokens, mel) = decoder.Truncate(tokens, mel, random);
         var zeros = new Tensor<T>(new[] { decoder.Flow.Configuration.SpeakerDim });
         _trainedLayers = _flowLayers;
-        return TrainWithCustomObjective(audio, audio, (_, _) => decoder.Flow.TrainingLoss(tokens, mel, zeros, true, random), DecoderOptimizer());
+        try
+        {
+            return TrainWithCustomObjective(audio, audio, (_, _) => decoder.Flow.TrainingLoss(tokens, mel, zeros, true, random), DecoderOptimizer());
+        }
+        finally
+        {
+            _trainedLayers = null;
+        }
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> DecoderOptimizer() => _decoderOptimizer ??=

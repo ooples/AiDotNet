@@ -52,14 +52,14 @@ internal sealed class OpenVoiceNative<T>
     }
 
     internal (Tensor<T> Waveform, Tensor<T> Posterior, Tensor<T> Prior, Tensor<T> Mean, Tensor<T> LogScale) TrainingForward(
-        Tensor<T> spectrumRows, Tensor<T> referenceRows, Tensor<T> noise, int start, int frames)
+        Tensor<T> spectrumRows, Tensor<T> referenceRows, Tensor<T> noise, int start, int frames, Tensor<T>? segmentSelector = null)
     {
         int time = spectrumRows.Shape[0];
         var speaker = _reference.Forward(_engine.Reshape(referenceRows, new[] { 1, referenceRows.Shape[0], _fft / 2 + 1 }));
         var spectrum = _engine.Reshape(_engine.TensorTranspose(spectrumRows), new[] { 1, _fft / 2 + 1, time });
         var mask = new Tensor<T>(new[] { 1, 1, time }); var numeric = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < time; i++) mask[i] = numeric.One;
-        return _converter.TrainingForward(spectrum, mask, _engine.Reshape(speaker, new[] { 1, _speakerChannels, 1 }), noise, start, frames);
+        mask.AsWritableSpan().Fill(numeric.One);
+        return _converter.TrainingForward(spectrum, mask, _engine.Reshape(speaker, new[] { 1, _speakerChannels, 1 }), noise, start, frames, segmentSelector);
     }
 
     public Tensor<T> Convert(Tensor<T> audio, Tensor<T> source, Tensor<T> target, double tau = .3, Tensor<T>? noise = null)

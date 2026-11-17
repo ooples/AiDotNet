@@ -52,10 +52,20 @@ public partial class FireRedTTS<T>
         Validation.Guard.NotNull(sample);
         var random = _trainingRandom ??= AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.TrainingSeed);
         if (_options.Stage == FireRedTtsStage.MelCodec) return TrainMelCodec(sample, random);
+        if (_options.Stage == FireRedTtsStage.SpeechTokenizer)
+        {
+            var tokenizerObjective = TokenizerObjective(sample, training: true, random, retainPrefix: "firered-tok-vq");
+            using var outputs = RetainedOutputCapture<T>.Begin();
+            var tokenizerLoss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => tokenizerObjective(), Optimizer());
+            if (TryCompleteRetainedOutputs(outputs))
+            {
+                SpeechTokenizer.Quantizer.ApplyRetainedUpdate(outputs, "firered-tok-vq", random);
+                _tokenizerSteps++;
+            }
+            return tokenizerLoss;
+        }
         var objective = Objective(sample, training: true, random);
-        var result = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), Optimizer());
-        if (_options.Stage == FireRedTtsStage.SpeechTokenizer) _tokenizerSteps++;
-        return result;
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), Optimizer());
     }
 
     /// <inheritdoc />
@@ -82,8 +92,8 @@ public partial class FireRedTTS<T>
     {
         FireRedTtsStage.TextToSpeech => GptObjective(sample, training, random),
         FireRedTtsStage.FlowDecoder => FlowObjective(sample, training, random),
-        FireRedTtsStage.SpeechTokenizer => TokenizerObjective(sample, training, random),
-        FireRedTtsStage.MelCodec => CodecObjective(PrepareCodec(sample), training, random, null),
+        FireRedTtsStage.SpeechTokenizer => TokenizerObjective(sample, training, random, retainPrefix: null),
+        FireRedTtsStage.MelCodec => CodecObjective(PrepareCodec(sample), training, random, null, retainReconstruction: false, retainQuantizerPrefix: null),
         _ => AcousticObjective(sample, training, random),
     };
 
@@ -100,25 +110,38 @@ public partial class FireRedTTS<T>
     }
 
     // The codec's generator loss: L1 mel reconstruction, the commitment loss and, with window starts, the LSGAN loss of
-    // the discriminator's score of the reconstruction; the reconstruction is handed out for the discriminator's turn.
-    private Func<Tensor<T>> CodecObjective((Tensor<T> Mel, Tensor<T> Speaker) target, bool training, Random random, int[]? starts,
-        Action<Tensor<T>>? reconstructed = null)
+    // the discriminator's score of the reconstruction; retained outputs carry the detached reconstruction and VQ stats.
+    private Func<Tensor<T>> CodecObjective(
+        (Tensor<T> Mel, Tensor<T> Speaker) target,
+        bool training,
+        Random random,
+        int[]? starts,
+        bool retainReconstruction,
+        string? retainQuantizerPrefix)
     {
         var o = _options;
         return () =>
         {
             var codec = MelCodec;
-            var (_, quantized, _, commitment) = codec.Quantizer.Forward(codec.Encode(target.Mel), update: training, random);
+            var (_, quantized, _, commitment) = codec.Quantizer.Forward(
+                codec.Encode(target.Mel),
+                update: training,
+                random,
+                retainPrefix: retainQuantizerPrefix);
             var mel = codec.Decode(quantized, target.Speaker);
-            reconstructed?.Invoke(mel);
             int frames = target.Mel.Shape[0], channels = target.Mel.Shape[1];
             var l1 = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(mel, target.Mel)), null),
                 Ops.FromDouble(1.0 / ((double)frames * channels)));
             var loss = Engine.TensorAdd(Engine.TensorMultiplyScalar(l1, Ops.FromDouble(o.CodecReconstructionWeight)), commitment);
             if (starts is not null)
             {
-                var score = MelDiscriminator.Forward(Engine.Reshape(mel, new[] { 1, frames, channels }), starts)!;
+                var score = MelDiscriminator.Forward(Engine.Reshape(mel, new[] { 1, frames, channels }), starts)
+                    ?? throw new InvalidOperationException("Mel discriminator returned no score for the supplied windows.");
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(MeanSquareTo(score, 1), Ops.FromDouble(o.CodecAdversarialWeight)));
+            }
+            if (retainReconstruction && GradientRecording.IsRecording<T>())
+            {
+                GradientRecording.RetainOutput("firered-mel-reconstruction", Engine.StopGradient(mel));
             }
             return loss;
         };
@@ -141,13 +164,31 @@ public partial class FireRedTTS<T>
         var target = PrepareCodec(sample);
         int frames = target.Mel.Shape[0];
         bool adversarial = _options.CodecAdversarialWeight > 0 && _options.DiscriminatorWindows.All(w => w <= frames);
-        Tensor<T>? generated = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-            (_, _) => CodecObjective(target, training: true, random, adversarial ? WindowStarts(frames, random) : null, m => generated = m)(),
-            Optimizer());
-        if (adversarial && generated is not null)
+        // The windows are drawn before the objective, so a compiled plan's probe and trace of the step read the same.
+        var starts = adversarial ? WindowStarts(frames, random) : null;
+        var objective = CodecObjective(
+            target,
+            training: true,
+            random,
+            starts,
+            retainReconstruction: adversarial,
+            retainQuantizerPrefix: "firered-mel-vq");
+        Tensor<T>? fake = null;
+        T loss;
+        using (var outputs = RetainedOutputCapture<T>.Begin())
         {
-            var fake = new Tensor<T>(generated._shape, new Vector<T>(generated.ToArray()));
+            loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), Optimizer());
+            if (TryCompleteRetainedOutputs(outputs))
+            {
+                MelCodec.Quantizer.ApplyRetainedUpdate(outputs, "firered-mel-vq", random);
+                if (adversarial)
+                {
+                    fake = outputs.Get("firered-mel-reconstruction");
+                }
+            }
+        }
+        if (adversarial && fake is { } retainedFake)
+        {
             var realStarts = WindowStarts(frames, random);
             var fakeStarts = WindowStarts(frames, random);
             int channels = target.Mel.Shape[1];
@@ -156,8 +197,10 @@ public partial class FireRedTTS<T>
             {
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    var real = MelDiscriminator.Forward(Engine.Reshape(target.Mel, new[] { 1, frames, channels }), realStarts)!;
-                    var forged = MelDiscriminator.Forward(Engine.Reshape(fake, new[] { 1, frames, channels }), fakeStarts)!;
+                    var real = MelDiscriminator.Forward(Engine.Reshape(target.Mel, new[] { 1, frames, channels }), realStarts)
+                        ?? throw new InvalidOperationException("Mel discriminator returned no score on real mel.");
+                    var forged = MelDiscriminator.Forward(Engine.Reshape(retainedFake, new[] { 1, frames, channels }), fakeStarts)
+                        ?? throw new InvalidOperationException("Mel discriminator returned no score on fake mel.");
                     return Engine.TensorAdd(MeanSquareTo(real, 1), MeanSquareTo(forged, 0));
                 }, DiscriminatorOptimizer());
             }
@@ -168,6 +211,19 @@ public partial class FireRedTTS<T>
             }
         }
         return loss;
+    }
+
+    private static bool TryCompleteRetainedOutputs(RetainedOutputCapture<T> outputs)
+    {
+        try
+        {
+            outputs.Complete();
+            return true;
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "No successful training step published retained outputs.")
+        {
+            return false;
+        }
     }
 
     private bool _discriminatorTurn;
@@ -307,7 +363,7 @@ public partial class FireRedTTS<T>
         return 1.0 + f * (o.DualDecodingFinalWeight - 1.0);
     }
 
-    private Func<Tensor<T>> TokenizerObjective(TtsTrainingSample<T> sample, bool training, Random random)
+    private Func<Tensor<T>> TokenizerObjective(TtsTrainingSample<T> sample, bool training, Random random, string? retainPrefix)
     {
         var o = _options;
         var audio = sample.Audio ?? throw new ArgumentException("The tokenizer trains on the recording; set Audio.", nameof(sample));
@@ -320,13 +376,15 @@ public partial class FireRedTTS<T>
             mel = SpeakerMel(wave);
         }
         double gamma = DualDecodingWeight(_tokenizerSteps);
+        // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise; drawn before
+        // the objective, so a compiled plan's probe and trace of the step read the same slices.
+        var speakerInput = training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel;
         return () =>
         {
             foreach (var layer in _speakerLayers) layer.SetTrainingMode(training);
             var encoded = tokenizer.Encode(ssl);
-            var (_, quantized, preQuantized, commitment) = tokenizer.Quantizer.Forward(encoded, update: training, random);
-            // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise.
-            var speaker = SpeakerEncoder.Forward(training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel);
+            var (_, quantized, preQuantized, commitment) = tokenizer.Quantizer.Forward(encoded, update: training, random, retainPrefix: retainPrefix);
+            var speaker = SpeakerEncoder.Forward(speakerInput);
             var (sslQ, melQ) = tokenizer.Reconstruct(quantized, speaker);
             var (sslP, melP) = tokenizer.Reconstruct(preQuantized, speaker);
             var ssLoss = Engine.TensorAdd(MeanSquare(sslQ, ssl), Engine.TensorMultiplyScalar(MeanSquare(sslP, ssl), Ops.FromDouble(gamma)));

@@ -45,20 +45,24 @@ internal sealed class OpenVoiceTrainingController<T>
         var data = Graph.Prepare(sample); var draw = Graph.Sample(data);
         _owner.SetTrainingMode(true);
         Tensor<T> generated;
+        Tensor<T> realSegment;
         using (new NoGradScope<T>())
         {
             var value = Graph.Generate(data, draw);
             generated = new Tensor<T>(value.Shape.ToArray(), value.ToVector());
+            var seg = Graph.RealSegment(data, draw);
+            realSegment = new Tensor<T>(seg.Shape.ToArray(), seg.ToVector());
         }
+        var graph = Graph;
         T Run(IReadOnlyList<LayerBase<T>> layers, string group, Func<Tensor<T>> objective)
         {
             _selected = layers;
             try { return step(data.Tokens, data.Audio, (_, _) => objective(), Optimizer(group)); }
             finally { _selected = null; }
         }
-        Run(Graph.DiscriminatorLayers, "discriminator", () => Graph.DiscriminatorLoss(Graph.RealSegment(data, draw), generated));
+        Run(graph.DiscriminatorLayers, "discriminator", () => graph.DiscriminatorLoss(realSegment, generated));
         AfterStepForAudit?.Invoke("discriminator");
-        var loss = Run(Graph.GeneratorLayers, "generator", () => Graph.GeneratorLoss(data, draw, adversarial: true, training: true));
+        var loss = Run(graph.GeneratorLayers, "generator", () => graph.GeneratorLoss(data, draw, adversarial: true, training: true, precomputedRealSegment: realSegment));
         AfterStepForAudit?.Invoke("generator");
         _options.TrainingSteps++;
         return loss;

@@ -255,7 +255,8 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     // The frozen BiCodec's tokens are the language model's step data: its quantizer picks codes with a host argmax, so
     // they are taken before the objective a compiled plan replays.
     private (Tensor<T> Semantic, Tensor<T> Global) FrozenTokens(TtsTrainingSample<T> sample)
-        => _biCodec!.Tokenize(sample.Audio ?? throw new ArgumentException("Spark-TTS training requires Audio.", nameof(sample)));
+        => (_biCodec ?? throw new InvalidOperationException("BiCodec is not initialized."))
+            .Tokenize(sample.Audio ?? throw new ArgumentException("Spark-TTS training requires Audio.", nameof(sample)));
 
     private sealed record ControlAnnotation(bool Female, SparkTTSControlLevel Pitch, SparkTTSControlLevel Speed,
         int PitchMel, int SyllablesPerSecond);
@@ -268,18 +269,22 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_options.TrainingComponent == SparkTTSTrainingComponent.BiCodec)
         {
             EnsureCodecTraining();
+            var audio = sample.Audio ?? throw new ArgumentException("Spark-TTS BiCodec training requires Audio.", nameof(sample));
+            var biCodec = _biCodec ?? throw new InvalidOperationException("BiCodec is not initialized.");
+            var codecTraining = _codecTraining ?? throw new InvalidOperationException("Spark-TTS codec training is not initialized.");
+            var discriminatorOptimizer = _discriminatorOptimizer ?? throw new InvalidOperationException("Spark-TTS discriminator optimizer is not initialized.");
             _discriminatorTurn = true;
             try
             {
                 // The generator's waveform is the discriminator step's data: computed before its objective, so the codec
                 // GAN's detach copies a value of this step rather than reading the traced generator on the host.
                 Tensor<T> generated;
-                using (new NoGradScope<T>()) generated = Snapshot(_biCodec!.TrainingForward(sample.Audio!, _codecTrainingSteps < _options.GlobalTokenizerWarmupSteps).Waveform);
+                using (new NoGradScope<T>()) generated = Snapshot(biCodec.TrainingForward(audio, _codecTrainingSteps < _options.GlobalTokenizerWarmupSteps).Waveform);
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    var real = Engine.TensorNarrow(Engine.Reshape(sample.Audio!, new[] { sample.Audio!.Length }), 0, 0, generated.Length);
-                    return _codecTraining!.DiscriminatorLoss(real, generated);
-                }, _discriminatorOptimizer!);
+                    var real = Engine.TensorNarrow(Engine.Reshape(audio, new[] { audio.Length }), 0, 0, generated.Length);
+                    return codecTraining.DiscriminatorLoss(real, generated);
+                }, discriminatorOptimizer);
             }
             finally { _discriminatorTurn = false; }
         }

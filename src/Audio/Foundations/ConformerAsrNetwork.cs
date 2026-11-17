@@ -763,14 +763,26 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
             for (int t = 0; t < frames; t++)
                 for (int b = start; b < Math.Min(bins, start + width); b++) masked[t, b] = 0.0;
         }
-        int maxLength = (int)(_o.TimeMaskRatio * frames);
+        int rawMax = (int)(_o.TimeMaskRatio * frames);
+        int maxLength = rawMax > 0 ? rawMax : (_o.TimeMasks > 0 && _o.TimeMaskRatio > 0 && frames > 1 ? 1 : 0);
+        int minLength = rawMax == 0 && maxLength == 1 ? 1 : 0;
         for (int m = 0; m < _o.TimeMasks && maxLength > 0; m++)
         {
-            int length = random.Next(maxLength + 1), start = random.Next(Math.Max(1, frames - length + 1));
+            int length = random.Next(minLength, maxLength + 1), start = random.Next(Math.Max(1, frames - length + 1));
             for (int t = start; t < Math.Min(frames, start + length); t++)
                 for (int b = 0; b < bins; b++) masked[t, b] = 0.0;
         }
         return masked;
+    }
+
+    /// <summary>Applies <see cref="SpecAugment(double[,], Random)"/> and converts the result to a <c>[frames, bins]</c> tensor.</summary>
+    public Tensor<T> SpecAugmentTensor(double[,] features, Random random)
+    {
+        var masked = SpecAugment(features, random);
+        int frames = masked.GetLength(0), bins = masked.GetLength(1);
+        var flat = new double[frames * bins];
+        Buffer.BlockCopy(masked, 0, flat, 0, flat.Length * sizeof(double));
+        return TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { frames, bins }, new Vector<double>(flat)));
     }
 
     /// <summary>The encoder output <c>[L, EncoderDim]</c> of features <c>[frames, bins]</c>.</summary>
@@ -884,6 +896,16 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
     /// Equations 11 and 12).
     /// </summary>
     public Tensor<T> CtcTrainingLoss(double[,] features, int[] labels, bool training)
+    {
+        int frames = features.GetLength(0), bins = features.GetLength(1);
+        var flat = new double[frames * bins];
+        Buffer.BlockCopy(features, 0, flat, 0, flat.Length * sizeof(double));
+        var tensor = TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { frames, bins }, new Vector<double>(flat)));
+        return CtcTrainingLoss(tensor, labels, training);
+    }
+
+    /// <summary>The CTC/attention training loss for a prepared <c>[frames, bins]</c> feature tensor.</summary>
+    public Tensor<T> CtcTrainingLoss(Tensor<T> features, int[] labels, bool training)
     {
         var (output, intermediates) = EncodeWithIntermediates(features, training);
         if (_o.Decoder == ConformerAsrDecoder.Attention) return AttentionLoss(output, labels);

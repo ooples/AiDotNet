@@ -109,11 +109,16 @@ public partial class UniAudio<T>
     {
         EnsureCodecGan();
         ApplyCodecLearningRate();
-        var audio = PrepareCodecAudio(sample.Audio!, randomCrop: true);
+        var rawAudio = sample.Audio ?? throw new ArgumentException("Universal-codec training requires Audio.", nameof(sample));
+        var codec = _codec ?? throw new InvalidOperationException("Universal codec is not initialized.");
+        var codecGan = _codecGan ?? throw new InvalidOperationException("Universal codec GAN is not initialized.");
+        var generatorOptimizer = _codecGeneratorOptimizer ?? throw new InvalidOperationException("Universal codec generator optimizer is not initialized.");
+        var discriminatorOptimizer = _codecDiscriminatorOptimizer ?? throw new InvalidOperationException("Universal codec discriminator optimizer is not initialized.");
+        var audio = PrepareCodecAudio(rawAudio, randomCrop: true);
         int quantizers = DrawCodecQuantizers();
         // The released loop updates G first, then reconstructs again before updating D.
         T generator = TrainWithCustomObjective(audio, audio, (input, _) => CodecGeneratorObjective(input, quantizers),
-            _codecGeneratorOptimizer!);
+            generatorOptimizer);
         _codecDiscriminatorTurn = true;
         try
         {
@@ -122,11 +127,11 @@ public partial class UniAudio<T>
             Tensor<T> generated;
             using (new NoGradScope<T>())
             {
-                var waveform = _codec!.TrainingForward(audio, quantizers).Waveform;
+                var waveform = codec.TrainingForward(audio, quantizers).Waveform;
                 generated = new Tensor<T>(waveform._shape, waveform.ToVector());
             }
             T discriminator = TrainWithCustomObjective(audio, audio, (input, _) =>
-                _codecGan!.DiscriminatorObjective(input, generated), _codecDiscriminatorOptimizer!);
+                codecGan.DiscriminatorObjective(input, generated), discriminatorOptimizer);
             LastCodecDiscriminatorLoss = NumOps.ToDouble(discriminator);
         }
         finally { _codecDiscriminatorTurn = false; }

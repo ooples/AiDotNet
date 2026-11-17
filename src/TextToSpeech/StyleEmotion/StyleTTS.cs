@@ -492,6 +492,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         if (_disposed)
             return;
         _disposed = true;
+        R1Owners.TryRemove(_r1Id, out _);
         base.Dispose(disposing);
     }
 }

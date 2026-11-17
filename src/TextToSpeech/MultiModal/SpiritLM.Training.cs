@@ -140,7 +140,8 @@ public partial class SpiritLM<T>
         if (ids.Length > _options.MaxTextLength) throw new ArgumentException($"The sequence's {ids.Length} tokens exceed {_options.MaxTextLength}.");
         int count = ids.Length - 1, vocabulary = _options.VocabSize;
         var (_, logits) = LanguageModel.Forward(Embed(ids.Take(count).ToArray()));
-        var logProbabilities = Engine.Reshape(Engine.TensorLogSoftmax(Engine.Reshape(logits!, new[] { count, vocabulary }), axis: 1), new[] { count * vocabulary, 1 });
+        var logitsTensor = logits ?? throw new InvalidOperationException("Language model returned no logits.");
+        var logProbabilities = Engine.Reshape(Engine.TensorLogSoftmax(Engine.Reshape(logitsTensor, new[] { count, vocabulary }), axis: 1), new[] { count * vocabulary, 1 });
         var picks = new Tensor<int>(new[] { count }, new Vector<int>(Enumerable.Range(0, count).Select(j => j * vocabulary + ids[j + 1]).ToArray()));
         return Engine.TensorMultiplyScalar(Engine.TensorNegate(Engine.ReduceSum(Engine.TensorIndexSelect(logProbabilities, picks, 0), null, false)),
             Ops.FromDouble(1.0 / count));
@@ -259,7 +260,7 @@ public partial class SpiritLM<T>
         if (IsExpressive && (pitch is null || styles is null)) throw new ArgumentException("SpiritLM Expressive's vocoder trains on pitch and style tokens.");
         var vocoder = Vocoder;
         var discriminators = _discriminators ?? throw new InvalidOperationException("Training the vocoder needs SpiritLMOptions.IncludeVocoderDiscriminators.");
-        var mel = _lossMel!;
+        var mel = _lossMel ?? throw new InvalidOperationException("Vocoder mel loss is not initialized.");
         int[]? framePitch = pitch is null ? null : CodeHiFiGan<T>.Upsample(pitch, codes.Length, vocoder.Configuration.PitchRatio);
         int[]? frameStyle = styles is null ? null : CodeHiFiGan<T>.Upsample(styles, codes.Length, vocoder.Configuration.StyleRatio);
         int? utteranceStyle = IsExpressive || _options.VocoderStyles == 0 ? null : style ?? _options.VocoderStyle;
@@ -267,45 +268,52 @@ public partial class SpiritLM<T>
         var (segment, segmentPitch, segmentStyle, real) = VocoderTrainingSegment(recording, codes, framePitch, frameStyle, random);
         (Tensor<T> Waveform, Tensor<T>? DurationLoss) Generate() => vocoder.TrainingForward(segment, speaker, random, utteranceStyle, segmentPitch, segmentStyle);
 
-        _trainedGroup = "discriminator";
-        TrainWithCustomObjective(real, real, (_, _) =>
+        try
         {
-            Tensor<T> generated;
-            using (new NoGradScope<T>()) generated = Generate().Waveform;
-            var onReal = discriminators.Forward(real);
-            var onFake = discriminators.Forward(generated);
-            Tensor<T>? total = null;
-            for (int k = 0; k < onReal.Count; k++)
+            _trainedGroup = "discriminator";
+            TrainWithCustomObjective(real, real, (_, _) =>
             {
-                var r = Engine.TensorAddScalar(Engine.TensorNegate(onReal[k].Score), Ops.One);
-                var term = Engine.TensorAdd(Mean(Engine.TensorMultiply(r, r)), Mean(Engine.TensorMultiply(onFake[k].Score, onFake[k].Score)));
-                total = total is null ? term : Engine.TensorAdd(total, term);
-            }
-            return total!;
-        }, SpeechOptimizer("discriminator"));
+                Tensor<T> generated;
+                using (new NoGradScope<T>()) generated = Generate().Waveform;
+                var onReal = discriminators.Forward(real);
+                var onFake = discriminators.Forward(generated);
+                Tensor<T>? total = null;
+                for (int k = 0; k < onReal.Count; k++)
+                {
+                    var r = Engine.TensorAddScalar(Engine.TensorNegate(onReal[k].Score), Ops.One);
+                    var term = Engine.TensorAdd(Mean(Engine.TensorMultiply(r, r)), Mean(Engine.TensorMultiply(onFake[k].Score, onFake[k].Score)));
+                    total = total is null ? term : Engine.TensorAdd(total, term);
+                }
+                return total ?? throw new InvalidOperationException("Vocoder discriminators produced no scores.");
+            }, SpeechOptimizer("discriminator"));
 
-        _trainedGroup = "vocoder";
-        return TrainWithCustomObjective(real, real, (_, _) =>
-        {
-            var (generated, durationLoss) = Generate();
-            var onFake = discriminators.Forward(generated);
-            List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal;
-            using (new NoGradScope<T>()) onReal = discriminators.Forward(real);
-            Tensor<T>? total = null;
-            void Add(Tensor<T> term) => total = total is null ? term : Engine.TensorAdd(total, term);
-            for (int k = 0; k < onFake.Count; k++)
+            _trainedGroup = "vocoder";
+            return TrainWithCustomObjective(real, real, (_, _) =>
             {
-                var d = Engine.TensorAddScalar(Engine.TensorNegate(onFake[k].Score), Ops.One);
-                Add(Mean(Engine.TensorMultiply(d, d)));
-                for (int l = 0; l < onFake[k].Features.Count; l++)
-                    Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(onReal[k].Features[l], onFake[k].Features[l]))), Ops.FromDouble(2.0)));
-            }
-            Tensor<T> realMel;
-            using (new NoGradScope<T>()) realMel = mel.Forward(real);
-            Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(mel.Forward(generated), realMel))), Ops.FromDouble(45.0)));
-            if (durationLoss is not null) Add(durationLoss);
-            return total!;
-        }, SpeechOptimizer("vocoder"));
+                var (generated, durationLoss) = Generate();
+                var onFake = discriminators.Forward(generated);
+                List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal;
+                using (new NoGradScope<T>()) onReal = discriminators.Forward(real);
+                Tensor<T>? total = null;
+                void Add(Tensor<T> term) => total = total is null ? term : Engine.TensorAdd(total, term);
+                for (int k = 0; k < onFake.Count; k++)
+                {
+                    var d = Engine.TensorAddScalar(Engine.TensorNegate(onFake[k].Score), Ops.One);
+                    Add(Mean(Engine.TensorMultiply(d, d)));
+                    for (int l = 0; l < onFake[k].Features.Count; l++)
+                        Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(onReal[k].Features[l], onFake[k].Features[l]))), Ops.FromDouble(2.0)));
+                }
+                Tensor<T> realMel;
+                using (new NoGradScope<T>()) realMel = mel.Forward(real);
+                Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(mel.Forward(generated), realMel))), Ops.FromDouble(45.0)));
+                if (durationLoss is not null) Add(durationLoss);
+                return total ?? throw new InvalidOperationException("Vocoder objective produced no loss terms.");
+            }, SpeechOptimizer("vocoder"));
+        }
+        finally
+        {
+            _trainedGroup = "language model";
+        }
     }
 
     // ---------------------------------------------------------------- the pitch VQ-VAE
@@ -341,7 +349,38 @@ public partial class SpiritLM<T>
         var x = quantizer.Input(normalized, voiced.Take(frames).ToArray());
         var random = TrainingRandom;
         _trainedGroup = "pitch";
-        return TrainWithCustomObjective(x, x, (_, _) => quantizer.TrainingLoss(x, random), SpeechOptimizer("pitch"));
+        try
+        {
+            quantizer.PrepareTrainingStep(x, random);
+            using var outputs = RetainedOutputCapture<T>.Begin();
+            var loss = TrainWithCustomObjective(x, x, (_, _) => quantizer.TrainingObjective(x, retainStatistics: true), SpeechOptimizer("pitch"));
+            // Jukebox moves the codebook only after an accepted training forward; it takes no gradient.
+            if (TryCompleteRetainedOutputs(outputs))
+            {
+                quantizer.ApplyRetainedTrainingStep(
+                    outputs.Get("spiritlm-pitch-z"),
+                    outputs.Get("spiritlm-pitch-onehot"),
+                    random);
+            }
+            return loss;
+        }
+        finally
+        {
+            _trainedGroup = "language model";
+        }
+    }
+
+    private static bool TryCompleteRetainedOutputs(RetainedOutputCapture<T> outputs)
+    {
+        try
+        {
+            outputs.Complete();
+            return true;
+        }
+        catch (InvalidOperationException ex) when (ex.Message == "No successful training step published retained outputs.")
+        {
+            return false;
+        }
     }
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);

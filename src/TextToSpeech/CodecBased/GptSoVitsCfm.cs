@@ -528,9 +528,10 @@ internal sealed class GptSoVitsCfm<T>
         int frames = mel.Shape[0], channels = mel.Shape[1];
         var vt = _engine.TensorSubtract(mel, x0);
         var xt = _engine.TensorAdd(x0, _engine.TensorMultiplyScalar(vt, NumOps.FromDouble(t)));
-        var prompt = new Tensor<T>(new[] { frames, channels });
-        for (int i = 0; i < promptLength; i++)
-            for (int j = 0; j < channels; j++) prompt[i, j] = mel[i, j];
+        // The prompt's frames of the target and zeros after them, as engine ops: a compiled plan reads each step's mel.
+        var prompt = promptLength <= 0 ? new Tensor<T>(new[] { frames, channels })
+            : promptLength >= frames ? mel
+            : _engine.TensorConcatenate(new[] { _engine.TensorNarrow(mel, 0, 0, promptLength), new Tensor<T>(new[] { frames - promptLength, channels }) }, 0);
         xt = ZeroPrompt(xt, promptLength);
         var text = Estimator.TextEmbedding(mu, drop: false);
         double? dt = IsV5 ? null : 0.0;

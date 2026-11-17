@@ -210,21 +210,28 @@ public partial class NeMoMultitask<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         if (network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
         var labels = new int[rows][];
-        for (int r = 0; r < rows; r++)
+        var augmented = new Tensor<T>[rows];
+        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            labels[r] = Labels(row);
+            for (int r = 0; r < rows; r++)
+            {
+                var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                    target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+                labels[r] = Labels(row);
+                augmented[r] = network.SpecAugmentTensor(network.Features(Samples(input, r * samples, samples)), _random);
+            }
         }
+        var engine = Engine;
+        var invRows = NumOps.FromDouble(1.0 / rows);
         TrainWithCustomLoss(input, _ =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var loss = network.CtcTrainingLoss(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
+                var loss = network.CtcTrainingLoss(augmented[r], labels[r], training: true);
+                total = total is null ? loss : engine.TensorAdd(total, loss);
             }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            return engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), invRows);
         }, _optimizer);
         return true;
     }

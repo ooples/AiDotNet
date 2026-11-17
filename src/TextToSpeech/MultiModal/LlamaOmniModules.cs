@@ -155,9 +155,19 @@ internal sealed class LlamaOmniSpeechDecoder<T>
             if (units.Any(u => u < 0 || u >= Configuration.Units)) throw new ArgumentOutOfRangeException(nameof(utterances), $"Units lie in [0, {Configuration.Units}).");
             var logProbabilities = LogProbabilities(states, units.Length);
             int frames = logProbabilities.Shape[0];
-            var nll = _engine.TensorCTCLoss(_engine.Reshape(logProbabilities, new[] { frames, 1, Configuration.Units + 1 }),
-                new Tensor<int>(new[] { units.Length }, new Vector<int>(units)), new[] { frames }, new[] { units.Length }, Blank);
-            if (double.IsInfinity(NumOps.ToDouble(nll[0]))) nll = _engine.TensorMultiplyScalar(logProbabilities, NumOps.Zero);
+            int repeats = 0;
+            for (int i = 1; i < units.Length; i++)
+                if (units[i] == units[i - 1]) repeats++;
+            Tensor<T> nll;
+            if (frames < units.Length + repeats)
+            {
+                nll = _engine.TensorMultiplyScalar(logProbabilities, NumOps.Zero);
+            }
+            else
+            {
+                nll = _engine.TensorCTCLoss(_engine.Reshape(logProbabilities, new[] { frames, 1, Configuration.Units + 1 }),
+                    new Tensor<int>(new[] { units.Length }, new Vector<int>(units)), new[] { frames }, new[] { units.Length }, Blank);
+            }
             var sum = _engine.ReduceSum(nll, null, false);
             total = total is null ? sum : _engine.TensorAdd(total, sum);
             targets += units.Length;

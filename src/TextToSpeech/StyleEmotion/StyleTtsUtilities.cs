@@ -111,8 +111,22 @@ internal sealed class StyleTtsTextAligner<T>
     }
 
     // nn.GroupNorm on [1, C, T], through the layer's channels-first [1, C, T, 1] form.
-    private Tensor<T> GroupNorm(GroupNormalizationLayer<T> norm, Tensor<T> x) =>
-        _engine.Reshape(norm.Forward(_engine.Reshape(x, new[] { 1, x.Shape[1], x.Shape[2], 1 })), x._shape);
+    // nn.GroupNorm of x [1, C, T] as engine ops (each group's contiguous channels less their mean, over √(biased variance
+    // + ε), then the layer's per-channel weights): the layer's own forward computes its statistics on the host, which a
+    // compiled training plan cannot replay.
+    private Tensor<T> GroupNorm(GroupNormalizationLayer<T> norm, Tensor<T> x)
+    {
+        int channels = x.Shape[1], frames = x.Shape[2], groups = norm.NumGroups;
+        var grouped = _engine.Reshape(x, new[] { 1, groups, channels / groups * frames });
+        var mean = _engine.ReduceMean(grouped, new[] { 2 }, keepDims: true);
+        var centred = _engine.TensorSubtract(grouped, mean);
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { 2 }, keepDims: true);
+        var y = _engine.Reshape(_engine.TensorDivide(centred, _engine.TensorSqrt(_engine.TensorAddScalar(variance, norm.GetEpsilon()))),
+            new[] { 1, channels, frames });
+        var gamma = _engine.Reshape(norm.GetGammaTensor(), new[] { 1, channels, 1 });
+        var beta = _engine.Reshape(norm.GetBetaTensor(), new[] { 1, channels, 1 });
+        return _engine.Reshape(_engine.TensorAdd(_engine.TensorMultiply(y, gamma), beta), x._shape);
+    }
 
     /// <summary>The CTC head's logits <c>[⌈T / 2⌉, tokens]</c> of a mel spectrogram <c>[mels, T]</c>.</summary>
     public Tensor<T> CtcLogits(Tensor<T> mel, bool training, Random random)
@@ -269,19 +283,54 @@ internal sealed class StyleTtsPitchExtractor<T>
         return _engine.Reshape(best!, new[] { 1, c, h, w });
     }
 
+    /// <summary>
+    /// <c>nn.BatchNorm2d</c> of <c>x [1, C, H, W]</c>: in training, the batch statistics over every value of a channel
+    /// (biased variance) as engine ops, and the running statistics' in-place EMA (momentum, unbiased variance) as the
+    /// layer takes it; in evaluation, the layer's own forward on its running statistics.
+    /// </summary>
+    /// <remarks>The layer's training forward computes its batch statistics on the host for a double input, which a
+    /// compiled training plan cannot replay; these ops recompute them from each replay's input.</remarks>
+    private Tensor<T> Normalize(BatchNormalizationLayer<T> norm, Tensor<T> x)
+    {
+        int channels = x.Shape[1], perChannel = x.Length / channels;
+        if (!norm.InTrainingMode || x.Rank != 4 || perChannel < 2) return norm.Forward(x);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var axes = new[] { 0, 2, 3 };
+        var mean = _engine.ReduceMean(x, axes, keepDims: true);                                            // [1, C, 1, 1]
+        var centred = _engine.TensorSubtract(x, mean);
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), axes, keepDims: true);
+        var normalized = _engine.TensorDivide(centred, _engine.TensorSqrt(_engine.TensorAddScalar(variance, norm.GetEpsilon())));
+        var output = _engine.TensorAdd(_engine.TensorMultiply(normalized, _engine.Reshape(norm.GetGamma(), new[] { 1, channels, 1, 1 })),
+            _engine.Reshape(norm.GetBeta(), new[] { 1, channels, 1, 1 }));
+        if (!AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                // running = momentum · running + (1 − momentum) · batch, the variance's batch term the unbiased m/(m−1)·σ²_B;
+                // recalibration replaces the statistics outright.
+                T momentum = norm.OverwriteRunningStatistics ? ops.Zero : norm.GetMomentum();
+                T oneMinusMomentum = ops.Subtract(ops.One, momentum);
+                T unbiased = norm.OverwriteRunningStatistics ? ops.One : ops.FromDouble(perChannel / (perChannel - 1.0));
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(_engine, norm.GetRunningMean(), _engine.Reshape(mean, new[] { channels }),
+                    momentum, oneMinusMomentum);
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(_engine, norm.GetRunningVariance(),
+                    _engine.Reshape(variance, new[] { channels }), momentum, ops.Multiply(oneMinusMomentum, unbiased));
+            }
+        return output;
+    }
+
     /// <summary>The F0 of each frame <c>[1, T]</c> of a mel spectrogram <c>[mels, T]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> mel, bool training, Random random)
     {
         int mels = mel.Shape[0], frames = mel.Shape[1];
         var x = _engine.Reshape(_engine.TensorTranspose(mel), new[] { 1, 1, frames, mels });            // [1, 1, T, F]
-        x = Conv2.Forward(StyleTtsOps.LeakyRelu(_engine, Norm1.Forward(Conv1.Forward(x)), Slope));
+        x = Conv2.Forward(StyleTtsOps.LeakyRelu(_engine, Normalize(Norm1, Conv1.Forward(x)), Slope));
         foreach (var (preNorm, conv1, norm, conv2, shortcut) in Blocks)
         {
-            x = PoolLast(StyleTtsOps.LeakyRelu(_engine, preNorm.Forward(x), Slope), 2);
-            var residual = conv2.Forward(StyleTtsOps.LeakyRelu(_engine, norm.Forward(conv1.Forward(x)), Slope));
+            x = PoolLast(StyleTtsOps.LeakyRelu(_engine, Normalize(preNorm, x), Slope), 2);
+            var residual = conv2.Forward(StyleTtsOps.LeakyRelu(_engine, Normalize(norm, conv1.Forward(x)), Slope));
             x = _engine.TensorAdd(residual, shortcut.Forward(x));
         }
-        x = PoolLast(StyleTtsOps.LeakyRelu(_engine, PoolNorm.Forward(x), Slope), 4);
+        x = PoolLast(StyleTtsOps.LeakyRelu(_engine, Normalize(PoolNorm, x), Slope), 4);
         x = StyleTtsOps.Dropout(_engine, x, 0.2, training, random);                                        // [1, C, T, F/32]
         var rows = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { frames, _pooledWidth });
         var f0 = _engine.TensorAbs(Classifier.Forward(Lstm.Apply(rows)));                                  // [T, 1]

@@ -218,7 +218,7 @@ internal sealed class CosyVoiceHiFTLosses<T>
                     var values = inputs[2].Cast<double>().ToArray();
                     double m = values[MedianIndex(values)];
                     var span = value.AsWritableSpan();
-                    for (int i = 0; i < r.Length; i++) span[i] = r[i] < g[i] + m ? One : default!;
+                    for (int i = 0; i < r.Length; i++) span[i] = r[i] < g[i] + m ? One : NumOps.Zero;
                 });
             var centered = _engine.TensorSubtract(diff, _engine.TensorTile(median, new[] { n }));
             var squares = _engine.TensorMultiply(_engine.TensorMultiply(centered, centered), mask);
@@ -227,7 +227,7 @@ internal sealed class CosyVoiceHiFTLosses<T>
             var tau = Scalar(TprTau);
             loss = Add(loss, _engine.TensorSubtract(tau, _engine.ReLU(_engine.TensorSubtract(tau, relative))));
         }
-        return loss!;
+        return loss ?? throw new InvalidOperationException("CosyVoice TPR received no discriminator score pairs.");
     }
 
     /// <summary>The generator's loss and its parts, for real and generated audio <c>[samples]</c>, their discriminator
@@ -245,17 +245,19 @@ internal sealed class CosyVoiceHiFTLosses<T>
         for (int d = 0; d < onReal.Count; d++)
             for (int l = 0; l < onReal[d].Features.Count; l++)
                 features = Add(features, Mean(_engine.TensorAbs(_engine.TensorSubtract(onReal[d].Features[l], onGenerated[d].Features[l]))));
-        features = _engine.TensorMultiplyScalar(features!, NumOps.FromDouble(2.0));
+        var adversarialLoss = adversarial ?? throw new InvalidOperationException("CosyVoice HiFT generator received no discriminator scores.");
+        var featureLoss = features ?? throw new InvalidOperationException("CosyVoice HiFT generator received no discriminator feature maps.");
+        featureLoss = _engine.TensorMultiplyScalar(featureLoss, NumOps.FromDouble(2.0));
         var mel = Mean(_engine.TensorAbs(_engine.TensorSubtract(_mel.Forward(generated), _mel.Forward(real))));
         var tpr = TprWeight != 0
             ? Tpr(onGenerated.Select(o => o.Score).ToList(), onReal.Select(o => o.Score).ToList())
             : Scalar(0);
         var f0Loss = Mean(_engine.TensorAbs(_engine.TensorSubtract(f0, pitch)));
-        var total = _engine.TensorAdd(adversarial!, _engine.TensorMultiplyScalar(features, NumOps.FromDouble(FeatureWeight)));
+        var total = _engine.TensorAdd(adversarialLoss, _engine.TensorMultiplyScalar(featureLoss, NumOps.FromDouble(FeatureWeight)));
         total = _engine.TensorAdd(total, _engine.Reshape(_engine.TensorMultiplyScalar(mel, NumOps.FromDouble(MelWeight)), new[] { 1 }));
         total = _engine.TensorAdd(total, _engine.TensorMultiplyScalar(tpr, NumOps.FromDouble(TprWeight)));
         total = _engine.TensorAdd(total, _engine.Reshape(f0Loss, new[] { 1 }));
-        return (total, adversarial!, features, mel, tpr, f0Loss);
+        return (total, adversarialLoss, featureLoss, mel, tpr, f0Loss);
     }
 
     /// <summary>The discriminator's loss: LSGAN on real (target 1) and generated (target 0) scores, plus TPR.</summary>
@@ -268,8 +270,9 @@ internal sealed class CosyVoiceHiFTLosses<T>
             var oneMinus = _engine.TensorSubtract(_engine.TensorAddScalar(new Tensor<T>(real._shape), NumOps.One), real);
             loss = Add(loss, _engine.TensorAdd(Mean(_engine.TensorMultiply(oneMinus, oneMinus)), Mean(_engine.TensorMultiply(onGenerated[d].Score, onGenerated[d].Score))));
         }
+        var totalLoss = loss ?? throw new InvalidOperationException("CosyVoice HiFT discriminator received no scores.");
         if (TprWeight != 0)
-            loss = _engine.TensorAdd(loss!, _engine.TensorMultiplyScalar(Tpr(onReal.Select(o => o.Score).ToList(), onGenerated.Select(o => o.Score).ToList()), NumOps.FromDouble(TprWeight)));
-        return loss!;
+            totalLoss = _engine.TensorAdd(totalLoss, _engine.TensorMultiplyScalar(Tpr(onReal.Select(o => o.Score).ToList(), onGenerated.Select(o => o.Score).ToList()), NumOps.FromDouble(TprWeight)));
+        return totalLoss;
     }
 }

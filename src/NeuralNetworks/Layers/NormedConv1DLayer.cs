@@ -325,45 +325,46 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
-        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
-        // stored u and v unchanged.
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
+        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖ on StopGradient(V), both kept; σ = uᵀ V v with u and v held constant.
+        // Evaluation (and non-step/no-grad probes) uses the stored u and v without mutating persistent buffers.
+        Tensor<T> uRow, vCol;
         if (IsTrainingMode)
         {
-            var vHost = v.ToVector();
-            void Normalize(double[] a)
+            bool updateBuffers = !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed
+                && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                double n = Math.Sqrt(a.Sum(x => x * x));
-                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+                var vDetached = Engine.StopGradient(v);
+                var uPrev = Engine.Reshape(_u, new[] { rows, 1 });
+                vCol = NormalizeSpectralVector(Engine.TensorMatMul(Engine.TensorTranspose(vDetached), uPrev), per);
+                var uCol = NormalizeSpectralVector(Engine.TensorMatMul(vDetached, vCol), rows);
+                if (updateBuffers)
+                {
+                    AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(
+                        Engine, _u, Engine.Reshape(uCol, _u._shape), NumOps.Zero, NumOps.One);
+                    AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(
+                        Engine, _v, Engine.Reshape(vCol, _v._shape), NumOps.Zero, NumOps.One);
+                }
+                uRow = Engine.Reshape(uCol, new[] { 1, rows });
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(vHost[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
-            Engine.InvalidatePersistentTensor(_u);
-            Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
-        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
-        var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
-        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+        else
+        {
+            uRow = Engine.StopGradient(Engine.Reshape(_u, new[] { 1, rows }));
+            vCol = Engine.StopGradient(Engine.Reshape(_v, new[] { per, 1 }));
+        }
+        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uRow, v), vCol);                                  // [1, 1]
+        var scaled = Engine.TensorDivide(v, Engine.TensorTile(sigma, new[] { rows, per }));
+        return InvalidateComputedKernelCaches(Engine.Reshape(scaled, _direction._shape));
+    }
+
+    private Tensor<T> NormalizeSpectralVector(Tensor<T> vector, int length)
+    {
+        T eps = NumOps.FromDouble(1e-12);
+        if (NumOps.Equals(eps, NumOps.Zero)) eps = NumOps.FromDouble(1e-4);
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(vector, vector), new[] { 0 }, keepDims: true));
+        norm = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(norm, NumOps.Negate(eps))), eps);
+        return Engine.TensorDivide(vector, Engine.TensorTile(norm, new[] { length, 1 }));
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)

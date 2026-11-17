@@ -133,7 +133,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(_options.ModelPath!, _options.OnnxOptions);
+        OnnxModel = new OnnxModel<T>(_options.ModelPath ?? modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
@@ -412,8 +412,14 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private sealed class PromptInfo
     {
-        public Tensor<T> Speaker = null!;       // [SpeakerDim]
-        public Tensor<T> Mel = null!;           // [frames, 100], the flow's prompt
+        public PromptInfo(Tensor<T> speaker, Tensor<T> mel)
+        {
+            Speaker = speaker;
+            Mel = mel;
+        }
+
+        public Tensor<T> Speaker;       // [SpeakerDim]
+        public Tensor<T> Mel;           // [frames, 100], the flow's prompt
     }
 
     private readonly ConditionalWeakTable<TtsVoice<T>, PromptInfo> _prompts = new();
@@ -435,7 +441,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private PromptInfo PromptOf(Tensor<T> audio, int rate)
     {
         using var _ = new NoGradScope<T>();
-        return new PromptInfo { Speaker = SpeakerEmbedding(To16k(audio, rate)), Mel = FlowMel(audio, rate) };
+        return new PromptInfo(SpeakerEmbedding(To16k(audio, rate)), FlowMel(audio, rate));
     }
 
     private PromptInfo Prompt(TtsVoice<T> voice)
@@ -604,6 +610,11 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing)
+        {
+            _speakerCache.Clear();
+            _optimizers.Clear();
+        }
         base.Dispose(disposing);
     }
 }

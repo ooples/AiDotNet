@@ -38,7 +38,7 @@ internal static class TortoiseNativeFixture
 internal static class TortoiseOptionFixture
 {
     internal static bool Handles(string option) => option is "UnivNetUpsampleRates" or "AutoregressiveMelNormalization"
-        or "ClvpSpeechLength" or "ClvpTokenDropout" or "DiffusionConditioningDropout" or "TokenizerCommitmentWeight";
+        or "ClvpTextLength" or "ClvpSpeechLength" or "ClvpTokenDropout" or "DiffusionConditioningDropout" or "TokenizerCommitmentWeight";
 
     internal static void Prepare(TortoiseTTSOptions options, string option)
     {
@@ -49,6 +49,7 @@ internal static class TortoiseOptionFixture
         }
         if (option == "AutoregressiveMelNormalization")
             options.AutoregressiveMelNormalization = Enumerable.Repeat(1.0, options.AutoregressiveMelChannels).ToArray();
+        if (option == "ClvpTextLength") options.ClvpTextLength = 4;
         if (option == "ClvpSpeechLength") options.ClvpSpeechLength = 4;
         if (option == "ClvpTokenDropout") options.TrainingComponent = TortoiseTrainingComponent.Clvp;
         if (option == "DiffusionConditioningDropout") options.TrainingComponent = TortoiseTrainingComponent.Diffusion;
@@ -59,11 +60,12 @@ internal static class TortoiseOptionFixture
     {
         var options = (TortoiseTTSOptions)model.GetOptions();
         var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        if (option is "ClvpSpeechLength" or "ClvpTokenDropout")
+        if (option is "ClvpTextLength" or "ClvpSpeechLength" or "ClvpTokenDropout")
         {
+            var clvp = model.ClvpModel ?? throw new InvalidOperationException("CLVP model is not initialized.");
             var text = Enumerable.Range(0, 16).Select(i => 1 + i % (options.VocabSize - 2)).ToArray();
             var speech = Enumerable.Range(0, 16).Select(i => i % options.CodebookSize).ToArray();
-            var score = model.ClvpModel!.ScoreTensor(text, speech, option == "ClvpTokenDropout", new Random(1337));
+            var score = clvp.ScoreTensor(text, speech, option == "ClvpTokenDropout", AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1337));
             return OptionSensitivityHarness.Fingerprint(score.Select(value => numeric.ToDouble(value)));
         }
         if (option is not ("AutoregressiveMelNormalization" or "DiffusionConditioningDropout" or "TokenizerCommitmentWeight"))
@@ -72,8 +74,11 @@ internal static class TortoiseOptionFixture
         for (int i = 0; i < audio.Length; i++) audio[i] = numeric.FromDouble(0.2 * Math.Sin(i * 0.19) + 0.1 * Math.Cos(i * 0.37));
         if (option == "AutoregressiveMelNormalization")
         {
-            var mel = (Tensor<T>)typeof(TortoiseTTS<T>).GetMethod("AutoregressiveMel",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(model, new object[] { audio })!;
+            var method = typeof(TortoiseTTS<T>).GetMethod("AutoregressiveMel",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("AutoregressiveMel method not found.");
+            var mel = method.Invoke(model, new object[] { audio }) as Tensor<T>
+                ?? throw new InvalidOperationException("AutoregressiveMel returned null.");
             return OptionSensitivityHarness.Fingerprint(mel.Select(value => numeric.ToDouble(value)));
         }
         var tokens = new Tensor<T>(new[] { 4 });

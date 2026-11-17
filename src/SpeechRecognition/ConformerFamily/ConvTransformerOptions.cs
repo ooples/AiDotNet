@@ -43,6 +43,7 @@ public class ConvTransformerOptions : ModelOptions
         Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        Seed = other.Seed;
     }
 
     /// <summary>Audio sample rate in Hz.</summary>

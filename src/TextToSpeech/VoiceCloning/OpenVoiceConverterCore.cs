@@ -119,15 +119,26 @@ internal sealed class OpenVoiceConverterCore<T>
     /// <summary>Paper section 2.3: reconstruct directly from the posterior; use the
     /// forward flow only for the separate IPA-aligned KL objective, never inverse-convert the training audio.</summary>
     internal (Tensor<T> Waveform, Tensor<T> Posterior, Tensor<T> Prior, Tensor<T> Mean, Tensor<T> LogScale) TrainingForward(
-        Tensor<T> spectrogram, Tensor<T> mask, Tensor<T> speaker, Tensor<T> noise, int segmentStart, int segmentFrames)
+        Tensor<T> spectrogram, Tensor<T> mask, Tensor<T> speaker, Tensor<T> noise, int segmentStart, int segmentFrames,
+        Tensor<T>? segmentSelector = null)
     {
         if (spectrogram.Rank != 3 || spectrogram.Shape[1] != _spectrogramChannels || segmentStart < 0 ||
             segmentFrames <= 0 || segmentStart + segmentFrames > spectrogram.Shape[2])
             throw new ArgumentException("Invalid posterior spectrogram or decoder training segment.");
         var posterior = EncodePosterior(spectrogram, mask, speaker, noise, 1);
         var prior = Flow(posterior.Sampled, mask, speaker, false);
-        var segment = _engine.TensorSlice(posterior.Sampled, new[] { 0, 0, segmentStart },
-            new[] { spectrogram.Shape[0], _latent, segmentFrames });
+        Tensor<T> segment;
+        if (segmentSelector is not null)
+        {
+            int batch = spectrogram.Shape[0], totalFrames = spectrogram.Shape[2];
+            var flatPosterior = _engine.Reshape(posterior.Sampled, new[] { batch * _latent, totalFrames });
+            segment = _engine.Reshape(_engine.TensorMatMul(flatPosterior, segmentSelector), new[] { batch, _latent, segmentFrames });
+        }
+        else
+        {
+            segment = _engine.TensorSlice(posterior.Sampled, new[] { 0, 0, segmentStart },
+                new[] { spectrogram.Shape[0], _latent, segmentFrames });
+        }
         var condition = _zeroCondition ? new Tensor<T>(speaker.Shape.ToArray()) : speaker;
         return (_decoder.Forward(segment, condition), posterior.Sampled, prior, posterior.Mean, posterior.LogScale);
     }

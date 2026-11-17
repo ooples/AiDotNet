@@ -24,7 +24,9 @@ public class GLM4VoiceTaskTests
     public void ReleasedDecoderRejectsUnpairedGeometry(string property, int value)
     {
         var options = GLM4VoiceFixture.Options();
-        typeof(GLM4VoiceOptions).GetProperty(property)!.SetValue(options, value);
+        var prop = typeof(GLM4VoiceOptions).GetProperty(property);
+        Assert.NotNull(prop);
+        prop.SetValue(options, value);
         Assert.Throws<ArgumentException>(() => GLM4VoiceFixture.Tts<double>(options));
     }
 
@@ -226,5 +228,67 @@ public class GLM4VoiceTaskTests
         var draws = Enumerable.Range(0, 200).Select(_ => NucleusSampling<Half>.Sample(logits, 1.0, 0, 0.5, null, random)).ToArray();
         Assert.All(draws, d => Assert.True(d >= 2490, $"draw {d} below the kept set"));
         Assert.True(draws.Distinct().Count() >= 50, $"{draws.Distinct().Count()} distinct draws");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeechTokenizer_ProbeAndFailedStepDoNotAdvanceCodebookEmaAndNoStaticDictionaryExists()
+    {
+        await Task.Yield();
+        var staticDictionaries = typeof(GlmSpeechTokenizer<double>)
+            .GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            .Where(f => f.FieldType.Name.Contains("Dictionary", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Empty(staticDictionaries);
+
+        var options = GLM4VoiceFixture.Options();
+        options.IncludeSpeechTokenizerTraining = true;
+        using var model = GLM4VoiceFixture.Tts<double>(options);
+        var tokenizer = model.SpeechTokenizer;
+        var recording = GLM4VoiceFixture.Tones<double>(0.6, 16000);
+        var labels = new[] { 5, 9, 3, 7, 2 };
+
+        // Probe trace must never advance EmaUpdates or mutate EmaCount / EmaWeight.
+        var (features, valid) = tokenizer.Features(recording.ToArray());
+        var initialCount = tokenizer.EmaCount.ToArray();
+        var initialWeight = tokenizer.EmaWeight.ToArray();
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe())
+        {
+            var probeOut = tokenizer.Encode(features, valid, training: true, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
+            _ = tokenizer.CommitmentLoss(probeOut);
+        }
+        Assert.Equal(0, tokenizer.EmaUpdates);
+        Assert.Equal(initialCount, tokenizer.EmaCount);
+        Assert.Equal(initialWeight, tokenizer.EmaWeight);
+
+        // One accepted step advances EmaUpdates to 1.
+        _ = model.TrainSpeechTokenizer(recording, labels);
+        Assert.Equal(1, tokenizer.EmaUpdates);
+        var countAfterAccepted = tokenizer.EmaCount.ToArray();
+        var weightAfterAccepted = tokenizer.EmaWeight.ToArray();
+
+        // A failed/non-finite step (after quantizer forward retained its outputs) must NOT advance EMA or leak state.
+        var decoderNorm = tokenizer.DecoderNorm;
+        Assert.NotNull(decoderNorm);
+        var normParams = decoderNorm.GetParameters();
+        var savedParam = normParams.ToArray();
+        var badParams = normParams.ToArray();
+        badParams[0] = double.NaN;
+        decoderNorm.SetParameters(new Vector<double>(badParams));
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => model.TrainSpeechTokenizer(recording, labels));
+        }
+        finally
+        {
+            decoderNorm.SetParameters(new Vector<double>(savedParam));
+        }
+
+        Assert.Equal(1, tokenizer.EmaUpdates);
+        Assert.Equal(countAfterAccepted, tokenizer.EmaCount);
+        Assert.Equal(weightAfterAccepted, tokenizer.EmaWeight);
+
+        // Subsequent valid step succeeds cleanly and advances EmaUpdates to 2.
+        _ = model.TrainSpeechTokenizer(recording, labels);
+        Assert.Equal(2, tokenizer.EmaUpdates);
     }
 }

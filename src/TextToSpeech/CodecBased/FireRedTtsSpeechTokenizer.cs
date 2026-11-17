@@ -174,53 +174,144 @@ internal sealed class FireRedTtsProductQuantizer<T>
     /// The quantizer's training pass on encodings <c>[n, ModelDim]</c>: the tokens <c>[n, Groups]</c>; the quantized
     /// sequence projected back (straight-through, so gradients reach the encoder; with ordered dropout in training, the
     /// dropped groups zeroed); the pre-quantized sequence projected back (dual decoding's <c>return_pre_quant</c>); and the
-    /// commitment loss <c>‖E − sg(Z)‖²</c> averaged over the codebooks. With <paramref name="update"/> the codebooks then
-    /// take one EMA step (dead codes replaced first).
+    /// commitment loss <c>‖E − sg(Z)‖²</c> averaged over the codebooks.
     /// </summary>
-    public (int[,] Tokens, Tensor<T> Quantized, Tensor<T> PreQuantized, Tensor<T> Commitment) Forward(Tensor<T> encoded, bool update, Random random)
+    public (int[,] Tokens, Tensor<T> Quantized, Tensor<T> PreQuantized, Tensor<T> Commitment) Forward(
+        Tensor<T> encoded,
+        bool update,
+        Random random,
+        string? retainPrefix = null)
     {
         var c = Configuration;
         var projected = Project(encoded);
         int n = projected.Shape[0];
-        var tokens = GroupTokens(projected);
-        var codewords = Lookup(tokens);
-        var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), StopGradient(projected)));
+        var detached = StopGradient(projected);
+        var oneHots = new Tensor<T>[c.Codebooks];
+        var parts = new Tensor<T>[c.Codebooks];
+        for (int b = 0; b < c.Codebooks; b++)
+        {
+            var chunk = Chunk(detached, b);
+            oneHots[b] = AiDotNet.Training.CompiledStepHostValue<T>.Compute("FireRedTtsNearestCodes", new[] { chunk, Codebooks[b] },
+                new[] { n, c.CodebookSize }, static (values, oneHot) => NearestOneHot(values[0], values[1], oneHot));
+            parts[b] = _engine.TensorMatMul(oneHots[b], Codebooks[b]);
+        }
+        var codewords = c.Codebooks == 1 ? parts[0] : _engine.TensorConcatenate(parts, 1);
+        var tokens = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[0, c.Groups] : GroupTokens(projected);
+        var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), detached));
         if (update && c.Ordered && c.Groups > 1)
         {
             double rate = random.NextDouble();
             int width = PerGroup * c.CodebookDim;
             var keep = new Tensor<T>(new[] { 1, c.Codebooks * c.CodebookDim });
+            var keepSpan = keep.AsWritableSpan();
+            T one = NumOps.One;
             for (int g = 0; g < c.Groups; g++)
                 if ((double)g / c.Groups <= rate)
-                    for (int i = 0; i < width; i++) keep[0, g * width + i] = NumOps.One;
+                    keepSpan.Slice(g * width, width).Fill(one);
             straight = _engine.TensorMultiply(straight, _engine.TensorTile(keep, new[] { n, 1 }));
         }
         // F.mse_loss(quantize.detach(), x) per codebook, averaged over them: the same as one mean over every chunk.
         var difference = _engine.TensorSubtract(projected, StopGradient(codewords));
         var commitment = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null),
             NumOps.FromDouble(c.CommitmentWeight / ((double)n * c.Codebooks * c.CodebookDim)));
-        if (update) Update(projected, tokens, random);
+        if (update)
+        {
+            if (retainPrefix is not null)
+            {
+                if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput($"{retainPrefix}-proj", detached);
+                    for (int b = 0; b < c.Codebooks; b++)
+                    {
+                        AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput($"{retainPrefix}-onehot-{b}", StopGradient(oneHots[b]));
+                    }
+                }
+            }
+            else if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+            {
+                // Standalone eager module evaluation outside a retained training step.
+                ApplyTensorsUpdate(detached, oneHots, random);
+            }
+        }
         return (tokens, ProjectOut.Forward(straight), ProjectOut.Forward(projected), commitment);
     }
 
-    private Tensor<T> StopGradient(Tensor<T> x)
+    private Tensor<T> StopGradient(Tensor<T> x) => _engine.StopGradient(x);
+
+    // -(|x|^2 - 2 x.e + |e|^2) maximized, the first on ties (as Nearest): 0/1 rows [n, K] of chunk rows [n, dim].
+    private static void NearestOneHot(Tensor<T> chunk, Tensor<T> book, Tensor<T> oneHot)
     {
+        int n = chunk.Shape[0], dim = chunk.Shape[1], k = book.Shape[0];
+        var x = chunk.ToArray().Select(NumOps.ToDouble).ToArray();
+        var e = book.ToArray().Select(NumOps.ToDouble).ToArray();
+        var e2 = new double[k];
+        for (int j = 0; j < k; j++)
+            for (int i = 0; i < dim; i++) e2[j] += e[j * dim + i] * e[j * dim + i];
+        var one = NumOps.One;
+        var values = oneHot.AsWritableSpan();
+        values.Clear();
+        for (int t = 0; t < n; t++)
+        {
+            double x2 = 0;
+            for (int i = 0; i < dim; i++) x2 += x[t * dim + i] * x[t * dim + i];
+            double best = double.NegativeInfinity;
+            int index = 0;
+            for (int j = 0; j < k; j++)
+            {
+                double dot = 0;
+                for (int i = 0; i < dim; i++) dot += x[t * dim + i] * e[j * dim + i];
+                double score = -(x2 - 2 * dot + e2[j]);
+                if (score > best)
+                {
+                    best = score;
+                    index = j;
+                }
+            }
+            values[t * k + index] = one;
+        }
+    }
+
+    internal void ApplyRetainedUpdate(AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T> outputs, string retainPrefix, Random random)
+    {
+        var c = Configuration;
+        var projected = outputs.Get($"{retainPrefix}-proj");
+        var oneHots = new Tensor<T>[c.Codebooks];
+        for (int b = 0; b < c.Codebooks; b++)
+        {
+            oneHots[b] = outputs.Get($"{retainPrefix}-onehot-{b}");
+        }
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return x.Clone();
+        ApplyTensorsUpdate(projected, oneHots, random);
+    }
+
+    private void ApplyTensorsUpdate(Tensor<T> projectedTensor, IReadOnlyList<Tensor<T>> oneHots, Random random)
+    {
+        var projected = projectedTensor.ToArray().Select(NumOps.ToDouble).ToArray();
+        var codes = new int[oneHots.Count][];
+        for (int b = 0; b < codes.Length; b++)
+        {
+            int n = oneHots[b].Shape[0], k = oneHots[b].Shape[1];
+            var oneHot = oneHots[b].ToArray().Select(NumOps.ToDouble).ToArray();
+            codes[b] = new int[n];
+            for (int t = 0; t < n; t++)
+                for (int j = 0; j < k; j++)
+                    if (oneHot[t * k + j] != 0) { codes[b][t] = j; break; }
+        }
+        Update(projected, codes, random);
     }
 
     // EuclideanCodebook.forward's update: expire_codes_ (codes below the threshold replaced by batch samples), then the EMA
     // of cluster sizes and sums, and the codebook as their Laplace-smoothed ratio.
-    private void Update(Tensor<T> projected, int[,] tokens, Random random)
+    private void Update(double[] projected, int[][] codes, Random random)
     {
         var c = Configuration;
-        int n = projected.Shape[0], k = c.CodebookSize, dim = c.CodebookDim;
+        int k = c.CodebookSize, dim = c.CodebookDim, width = c.Codebooks * dim, n = projected.Length / width;
         for (int b = 0; b < c.Codebooks; b++)
         {
             var x = new double[n, dim];
             for (int t = 0; t < n; t++)
-                for (int i = 0; i < dim; i++) x[t, i] = NumOps.ToDouble(projected[t, b * dim + i]);
-            var index = Enumerable.Range(0, n).Select(t => Index(tokens, t, b)).ToArray();
+                for (int i = 0; i < dim; i++) x[t, i] = projected[t * width + b * dim + i];
+            var index = codes[b];
             var size = _clusterSize[b];
             var average = _embedAverage[b];
             var book = Codebooks[b];
@@ -338,10 +429,17 @@ internal sealed class FireRedTtsSpeechTokenizer<T>
 
     internal sealed class Decoder
     {
-        public StreamableConv1d<T> In = null!;
-        public SeanetLstm<T> Lstm = null!;
+        public Decoder(StreamableConv1d<T> convIn, SeanetLstm<T> lstm, StreamableConv1d<T> convOut)
+        {
+            In = convIn;
+            Lstm = lstm;
+            Out = convOut;
+        }
+
+        public StreamableConv1d<T> In;
+        public SeanetLstm<T> Lstm;
         public List<(StreamableConvTranspose1d<T> Up, (StreamableConv1d<T> A, StreamableConv1d<T> B)[] Units)> Blocks = new();
-        public StreamableConv1d<T> Out = null!;
+        public StreamableConv1d<T> Out;
     }
 
     public FireRedTtsSpeechTokenizer(IEngine engine, List<LayerBase<T>> hubertLayers, List<LayerBase<T>> layers,
@@ -371,15 +469,18 @@ internal sealed class FireRedTtsSpeechTokenizer<T>
         if (c.DecoderStrides.Length != 2) throw new ArgumentException("SAST has an SSL decoder and a mel decoder.", nameof(configuration));
         Decoder Build(int outputs, int[] strides)
         {
-            var decoder = new Decoder { In = Conv(d, d, 3), Lstm = new SeanetLstm<T>(engine, d, 1, true, layers, halfWidth: true) };
+            var convIn = Conv(d, d, 3);
+            var lstm = new SeanetLstm<T>(engine, d, 1, true, layers, halfWidth: true);
+            var blocks = new List<(StreamableConvTranspose1d<T> Up, (StreamableConv1d<T> A, StreamableConv1d<T> B)[] Units)>();
             foreach (int stride in strides)
             {
                 var up = new StreamableConvTranspose1d<T>(engine, d, d, 2 * stride, stride, false, 1.0, ConvolutionNormalization.Weight, layers);
                 int fan = d * 2 * stride;
                 up.Conv.LoadTorchWeights(IndexTtsOps.Uniform(random, d * d * 2 * stride, fan), null, IndexTtsOps.Uniform(random, d, fan));
-                decoder.Blocks.Add((up, new[] { Unit(d), Unit(d) }));
+                blocks.Add((up, new[] { Unit(d), Unit(d) }));
             }
-            decoder.Out = Conv(d, outputs, 3);
+            var decoder = new Decoder(convIn, lstm, Conv(d, outputs, 3));
+            decoder.Blocks.AddRange(blocks);
             return decoder;
         }
         SslDecoder = Build(c.SslDim, c.DecoderStrides[0]);
@@ -536,7 +637,9 @@ internal sealed class FireRedTtsSpeechTokenizer<T>
         int last = 2 + 2 * EncoderBlocks.Count;
         Conv(EncoderOut, $"encoder.layers.{last}");
         string lstm = $"encoder.layers.{last + 1}.lstm.";
-        foreach (var (cell, suffix) in new[] { (EncoderLstm.ForwardCells[0], ""), (EncoderLstm.BackwardCells[0]!, "_reverse") })
+        var backwardCell = EncoderLstm.BackwardCells[0]
+            ?? throw new InvalidOperationException("Bidirectional encoder LSTM is missing its reverse cell.");
+        foreach (var (cell, suffix) in new[] { (EncoderLstm.ForwardCells[0], ""), (backwardCell, "_reverse") })
             cell.LoadTorchWeights(source, $"{lstm}weight_ih_l0{suffix}", $"{lstm}weight_hh_l0{suffix}", $"{lstm}bias_ih_l0{suffix}",
                 $"{lstm}bias_hh_l0{suffix}");
         Quantizer.Load(source, "quantizer.quantizers.0.");
