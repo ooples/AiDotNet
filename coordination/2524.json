@@ -225,9 +225,13 @@
         "src/WindowFunctions/TukeyWindow.cs",
         "src/Preprocessing/FeatureSelection/Helpers/PopulationSearchOps.cs",
         "src/Preprocessing/FeatureSelection/Filter/Correlation/PartialCorrelation.cs",
-        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionInformationOps.cs"
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionInformationOps.cs",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/ARModelMeanReferenceTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/FeatureSelectionSweepReferenceTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs"
       ],
-      "status": "Wave 1 Batch 3 (fc423039d3, verified 223/223 by verifier-2) and Batch 4 (dd714d3ae0, verified 199/199 by verifier-1) integrated onto codex/2524-ci-coordination; Batch 1 (c471ab3cf0, 78/78 local) in final Gate E verification on verifier-1; Batch 2 (PINN44/MultiFidelityPINN24) in progress on fixer-2"
+      "status": "Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) integrated; five root-review follow-ups (antigravity-review-garch-half-probes, antigravity-review-nlinear-scaler-state, antigravity-review-ar-mean-persistence, antigravity-review-fairness-even-median, antigravity-review-wavelet-normalizer) + oracle regression tests queued next on fixer-3/fixer-4; Batch 1 (c471ab3cf0) in Gate E verification on verifier-1; Batch 2 (PINN44/MultiFidelityPINN24) in progress on fixer-2"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -477,9 +481,13 @@
         "src/ComputerVision/Segmentation/PointCloud/PointTransformerV3EncoderOptions.cs",
         "tests/AiDotNet.Tests/IntegrationTests/ComputerVision/PointCloudMedicalSegmentationIntegrationTests.cs",
         "src/Video/Inpainting/ProPainter.cs",
-        "tests/AiDotNet.Tests/AdversarialRobustness/CertificationReferenceTests.cs"
+        "tests/AiDotNet.Tests/AdversarialRobustness/CertificationReferenceTests.cs",
+        "src/PublicAPI.Unshipped.txt"
       ],
-      "status": "claimed; Wave 2 in progress on fixer-1 (Batch 5), fixer-3 (Batch 6), fixer-4 (Batch 7); Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) verified and integrated"
+      "status": "claimed; Wave 2 in progress on fixer-1 (Batch 5), fixer-3 (Batch 6), fixer-4 (Batch 7); Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) verified and integrated",
+      "file_scope_limits": {
+        "src/PublicAPI.Unshipped.txt": "ONLY append single override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.SelectTrainableParametersForTraining line matching sibling OmnilangualASR<T>/XLSR<T>."
+      }
     },
     {
       "owner": "this session/cuda_capture worker",
@@ -516,7 +524,6 @@
       "foundations": "43994562553 SUCCESS, actual206/206passed0skip.",
       "policy": "Validation branch is fixed; no rewriting/replacement cycle or PR source push until all three workflows finish. Fixes may be prepared locally with bounded tests; coordination claims remain live."
     },
-
     "native_candidate_c977": {
       "source": "c9770e98d97aa5cfdb634d18e0f4693ce8341a15",
       "branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
@@ -550,8 +557,8 @@
     "native_current_cohort": "GitHub producer43990270445 passed all230 mandatoryCPU cases in fresh gates and packaged all5TFMs. CUDA43991812670 passed22/22 zero skips with runtime DLL hash matching package; original125 cases preserved. Local split-run history retained separately.",
     "native_optimizer_repair": "Reviewed c977 implementation passed fresh GitHub230 CPU gates/all5TFMs and exact-packaged-DLL CUDA22 with zero skips; no public release. Consumer artifact pin and strict guards updated for next same-SHA branch validation.",
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified.",
-    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (cherry-picked from 45c8bb9480): normal analyzer-gated build passed (0 errors, 0 new warnings); independent verifier-2 suite across 16 TimeSeries & generated scaffold classes: 223 passed, 0 failed, 0 skipped; 0 null-forgiving operators, 0 ElementWiseBaseline.txt edits.",
-    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (cherry-picked from c66248d6bd): normal analyzer-gated build passed (0 errors, 0 warnings in modified files); independent verifier-1 Batch 4 suite (feature selection, HessianLLE, PowerTransformer, fk8 wavelet, TukeyWindow): 199 passed, 0 failed, 0 skipped; 0 null-forgiving operators, 0 ElementWiseBaseline.txt edits."
+    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (verified commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~GARCHModelTests|FullyQualifiedName~TBATSModelTests|FullyQualifiedName~DeepAntReferenceTests|FullyQualifiedName~DeepANTTests|FullyQualifiedName~NLinearModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOpsReferenceTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests\": 223 passed, 0 failed, 0 skipped; verifier-2 stdout receipt #181). Three root-review follow-ups (GARCH Half FD probes, NLinear Half scaler state persistence, ARModel _seriesMean persistence) acknowledged and queued next with new oracle tests.",
+    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (verified commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~FeatureSelectionSweepReferenceTests|FullyQualifiedName~FeatureSelectionTensorOpsTests|FullyQualifiedName~FeatureSelectionFilterRoundFiveTests|FullyQualifiedName~FeatureSelectionHelperRoundThreeTests|FullyQualifiedName~FeatureSelectionInformationReferenceTests|FullyQualifiedName~FeatureSelectionScipyReferenceTests|FullyQualifiedName~DimensionalityReductionReferenceTests|FullyQualifiedName~PowerTransformsDeepMathIntegrationTests|FullyQualifiedName~WaveletReferenceValueTests|FullyQualifiedName~AdvancedWaveletFunctionsTests|FullyQualifiedName~WindowFunctionReferenceTests\": 199 passed, 0 failed, 0 skipped; verifier-1 stdout receipt #180; fk8 taps derived from Nielsen 2001 J. Approx. Theory 108 Theorem 1 spectral factorization). Two root-review follow-ups (FairFeatureSelector midpoint even-median contract, FejerKorovkinWavelet zero-DC/unit-L2 normalizer without cutoff widening) acknowledged and queued next with new oracle tests."
   },
   "decisions": [
     {
@@ -889,7 +896,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T01:29:07.592Z",
+  "updated_utc": "2026-11-17T01:44:40.199229Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
