@@ -969,15 +969,15 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs"
       ],
       "file_scope_limits": {
-        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code.",
+        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code. Round2: only single-final-rounding correction to those same two scalar backward paths and exact integer-pole rationale; no GroupNorm or other operators.",
         "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs": "ONLY loss-root validation and structural gradient enrollment traversal near lines 10054-10100; preserve GroupNorm and other replay work.",
         "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs": "ONLY decimal.Abs -> Math.Abs portable overload, identical tolerance/assertion.",
         "src/AiDotNet.Tensors/ElementWiseBaseline.txt": "ONLY remove the two obsolete LgammaBackward/DigammaBackward 2-count TENS0011 entries after engine multiplication removes those generic numeric loops. No increases/exemptions.",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "CI44141107008:31success,1CPUfailure,15conditional skips,1CUDAactive. SoleCPUfailure is old host-loss test expecting plan construction despite newly approved explicit-producer refusal; test-only update preserves both original guard checks and adds exact compile exception. Local15targeted tests pass0skip. Hold both local commits until CUDA terminal, then reconcile/push verified batch. Separate stale-map finding awaits user decision; NOT implemented. No merge/release.",
-      "commit": "580ec37781da678b62c15c806c5ae823e9fc8ab4",
+      "status": "Second cycle running at b81749a23 after first cycle finished. Sole CPU/CUDA failure was identical host-loss test contract, corrected with both original guard assertions intact;15targeted tests pass. CUDA8enrollmentcases actually executed/passed at580ec377. New bounded round2 review batch claimed; next source push held until CI44148717444 terminal. Separate stale-map scope question still pending; NOT implemented.",
+      "commit": "b81749a236976ff8dd0ea7bd53fa3874314ca92e",
       "verification": {
         "focused_net10": {
           "passed": 165,
@@ -993,7 +993,7 @@
           "skipped": 0
         }
       },
-      "ci_run": 44141107008,
+      "ci_run": 44148717444,
       "pending_local_commits": [
         "dc827d7d0",
         "b81749a23"
@@ -1011,6 +1011,21 @@
         "status": "interactive question pending; no implementation or repro build",
         "exposure": "Native reuse supported; observed ordinary consumer steps create fresh tapes",
         "proposal": "Bounded registration/publication epoch validation and regressions, 30-45 minutes"
+      },
+      "round2_review_batch": {
+        "captured_at_head": "b81749a236976ff8dd0ea7bd53fa3874314ca92e",
+        "comment_ids": [
+          4603662777,
+          4603707416,
+          4603707535
+        ],
+        "owner": "artifact_feed implementation; root review/verification",
+        "scope": "Lgamma/Digamma first-order scalar backward paths: multiply promoted double slopes by promoted upstream gradients before a single final conversion to T. Independent Half/float finite-gradient and zero-upstream regressions. Exact x==Floor(x) comparisons intentionally detect integer poles, not approximate equality; document/test without tolerance/suppression.",
+        "files": [
+          "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
+          "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs"
+        ],
+        "status": "CLAIMED before edits. Bounded three-thread batch. Preserve all nonfinite/signed-zero/near-pole regressions and higher-order branches. No new exemptions/baseline increases. Hold next source push until CI44148717444 terminal."
       }
     }
   ],
@@ -1557,7 +1572,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T18:18:50.805074+00:00",
+  "updated_utc": "2026-11-17T18:35:36.527601+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
