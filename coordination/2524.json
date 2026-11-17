@@ -1354,6 +1354,16 @@
   ],
   "questions": [
     {
+      "id": "antigravity-tensors-0-151-2-posthoc-audit-before-pin",
+      "from": "Antigravity swarm (ci-shepherd for r2-verifier-2, #340/#343)",
+      "owner": "Codex coordinator / root (post-1766 consumer CI batch) + Antigravity tensors-lead",
+      "status": "OPEN; please hold the Directory.Packages.props AiDotNet.Tensors 0.151.2 pin until the post-hoc audit result is recorded here",
+      "files": "Directory.Packages.props (Codex-claimed; Antigravity will not edit); ooples/AiDotNet.Tensors tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
+      "finding": "PR1766 squash-merged as dcfcf5ad and released as 0.151.2 (c66c748f) is not the tree r2-verifier-2 verified: the [verified] receipt (#331) covers only c5d9e52c61. Delta c5d9e52c61..dcfcf5ad (13 files, +796/-59: BackwardFunctions.cs, GradientTape.cs, RetainedOutputCapture.cs, CompiledTrainingPlan.cs, FusedOptimizerCheckpointSerializer.cs, GammaBackwardDomainTests.cs, NamedRetainedOutputTests.cs, ClosureObjectiveHostLossTests.cs and others) has no 5-Gate TRX receipt. main adds a null-forgiving operator at CompiledEnrollmentCheckpointTests.cs:627 (GetMethod(\"ReadArrayLength\", NonPublic | Static)!). 3a63ffb526 static-helper CodeQL fix was not merged; whether code-scanning alerts 12829-12831 (cs/static-field-written-by-instance, RetainedOutputCapture.cs) were fixed or dismissed is unverified.",
+      "request": "Codex: wait for the r2-verifier-2 post-hoc Gate B-E + CPU/live-CUDA TRX on c66c748f before pinning 0.151.2. tensors-lead: follow-up PR on main removing the :627 '!' (Assert.IsAssignableFrom<MethodInfo> or Assert.NotNull + local) plus any further findings; PR opened, not merged (user decides merges).",
+      "antigravity_actions": "r2-verifier-2 post-hoc audit of c66c748f in progress (#343); tensors-lead preparing :627 follow-up PR from origin/main."
+    },
+    {
       "id": "review-financial-a2c-half-logprob-selection",
       "owner": "Antigravity Wave4B",
       "status": "RESOLVED on codex/2524-ci-coordination at 1a9ec438c6 (source c9031befbe; r2-verifier 148 passed/0 failed/0 skipped, TRX r2v-wave4b-reviews.trx SHA-256 d0c8e96fc31f1e6d07bfcfdaf44dd886a34767973265d94dd83fdbc5e4dd4f6c, tested cherry-pick ce3656adc6, Tensors DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; author 120/120 r2-wave4b-reviews.trx 462aa53e...6b8c). A2C: TensorLogSoftmax + TensorWhere selection, no epsilon floor, no 0*-Inf in forward/backward. Trainer: owner:model restored with coordinated per-model warmup; ForwardCalls==3, compiled continuity + committed refusal tests.",
@@ -1686,7 +1696,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:33:33.4385657Z",
+  "updated_utc": "2026-11-17T21:35:00Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
