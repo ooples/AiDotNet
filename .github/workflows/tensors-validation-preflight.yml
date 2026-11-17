@@ -28,16 +28,21 @@ jobs:
       - uses: ./.github/actions/setup-tensors-validation
         with:
           artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && secrets.AUTOFIX_PAT || '' }}
-      - name: Restore the exact candidate package
+      - name: Restore the selected Tensors package
         shell: pwsh
         run: |
-          $pin = Get-Content .github/tensors-validation.json -Raw | ConvertFrom-Json
+          [xml] $packages = Get-Content Directory.Packages.props -Raw
+          $versions = @($packages.SelectNodes('//PackageVersion[@Include="AiDotNet.Tensors"]'))
+          if ($versions.Count -ne 1) { throw 'Expected one central Tensors package version.' }
+          $version = $versions[0].Version
           $project = Join-Path $env:RUNNER_TEMP 'tensors-restore-smoke.csproj'
           @"
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
-            <ItemGroup><PackageReference Include="AiDotNet.Tensors" Version="$($pin.packageVersion)" /></ItemGroup>
+            <ItemGroup><PackageReference Include="AiDotNet.Tensors" Version="$version" /></ItemGroup>
           </Project>
           "@ | Set-Content $project
-          dotnet restore $project --configfile $env:RestoreConfigFile
-          if ($LASTEXITCODE -ne 0) { throw "Candidate restore failed: $LASTEXITCODE" }
+          $restoreArguments = @('restore', $project)
+          if ($env:RestoreConfigFile) { $restoreArguments += @('--configfile', $env:RestoreConfigFile) }
+          dotnet @restoreArguments
+          if ($LASTEXITCODE -ne 0) { throw "Tensors package restore failed: $LASTEXITCODE" }
