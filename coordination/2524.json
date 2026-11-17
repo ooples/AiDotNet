@@ -20,7 +20,8 @@
         "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs"
       ],
       "scope": "User-prioritized two existing Seed/Spark TTS failures: replace private host-copy Detached with recorded instance engine StopGradient; actual tiny GAN strict replay/value/gradient-stop regressions. Existing helper only shared proposal; Claude branch unchanged, no exact active helper claim.",
-      "status": "CLAIMED before edits; all other consumer drafts paused. Full1786TTS gate required before calling shard fixed."
+      "status": "ACTIVE under same exclusive claim: compare existing reviewed detach patch with latest8d3; instance Engine.StopGradient plus replay/value/gradient-stop regressions. Root reviews complete diff before one consolidated build. Do not overlap Antigravity1B.",
+      "branch": "codex/2524-codec-detach-reviewed"
     },
     {
       "owner": "this session/artifact_feed TTS HiFT replay",
@@ -30,7 +31,7 @@
         "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs"
       ],
       "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests.",
-      "status": "CLAIMED before edits; KMaX draft paused. Existing HiftReference/CosyVoice tests and full1786TTS required."
+      "status": "ACTIVE under same exclusive HiftModules/HiftReplay claim. Preserve harmonic algorithm, per-step phase/noise draws, detached F0 and trainable Merge. Root review before consolidated build. Antigravity1B excluded these paths."
     },
     {
       "owner": "this session/root native replay validation",
@@ -1117,6 +1118,18 @@
         "performed_by_this_session": false,
         "merged": true
       }
+    },
+    {
+      "scope": "Consume published Tensors release containing merged1766; preserve stable-vs-artifact guard behavior; review existing completed395606fa05 wrapper repair and integrate verified coordination batches. Own codec and HiFT repairs remain with Codex; all Antigravity Round2Group1A/1B file claims preserved. No new native/package release work.",
+      "repository": "ooples/AiDotNet",
+      "status": "ACTIVE. PR7784 full cycle terminal:167 shards21 pretest wrapper failures146 cancellations; no new complete regression verdict. Upcoming stable0.151.2 release pipeline completed, NuGet availability under check. Agents prepare exclusive CodecWaveformGan/Spark and HiftModules/HiftReplay source for root review; cuda_capture monitors exact CI evidence. Do not push incomplete owner changes to PR.",
+      "files": [
+        "Directory.Packages.props",
+        ".github/workflows/tensors-validation-preflight.yml",
+        ".github/scripts/Test-TensorsValidationFeed.ps1"
+      ],
+      "branch": "codex/2524-post1766-ci",
+      "owner": "Codex coordinator / root (post-1766 consumer CI batch)"
     }
   ],
   "codex_assignments": {
@@ -1662,7 +1675,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:14:09.9983674Z",
+  "updated_utc": "2026-11-17T21:27:57.3114027Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
