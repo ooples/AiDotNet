@@ -7,6 +7,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.TextToSpeech;
 
+[Collection("FusedTrainingSerial")]
 public sealed class NormedConvSpectralTrajectoryTests
 {
     [Theory]
