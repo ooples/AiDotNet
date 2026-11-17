@@ -79,7 +79,11 @@ const RUNS: PersonaRun[] = [
     kind: 'admin',
     seeds: ROUTES.filter((p) => isAdmin(p) || isAccount(p)),
     inScope: (p) => isAdmin(p) || isAccount(p),
-    dedicated: SIGNED_IN_DEDICATED,
+    dedicated: [
+      ...SIGNED_IN_DEDICATED,
+      [/^\/admin\/licenses\/ #close-activations-btn$/, 'admin/license-lifecycle.spec: open activations, deactivate machines, close, and verify freed seats'],
+      [/^\/admin\/users\/ #(prev|next)-btn$/, 'admin/user-management.spec: move forward and back through user pages'],
+    ],
     stubWrites: true,
     minPages: 10,
   },
