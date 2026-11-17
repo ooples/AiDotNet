@@ -13,6 +13,36 @@
   ],
   "owners": [
 {
+  "owner": "this session/pinn_review TTS codec replay",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    "src/Audio/Codecs/CodecWaveformGan.cs",
+    "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs"
+  ],
+  "scope": "User-prioritized two existing Seed/Spark TTS failures: replace private host-copy Detached with recorded instance engine StopGradient; actual tiny GAN strict replay/value/gradient-stop regressions. Existing helper only shared proposal; Claude branch unchanged, no exact active helper claim.",
+  "status": "CLAIMED before edits; all other consumer drafts paused. Full1786TTS gate required before calling shard fixed."
+},
+{
+  "owner": "this session/artifact_feed TTS HiFT replay",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    "src/TextToSpeech/Vocoders/HiftModules.cs",
+    "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs"
+  ],
+  "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests.",
+  "status": "CLAIMED before edits; KMaX draft paused. Existing HiftReference/CosyVoice tests and full1786TTS required."
+},
+{
+  "owner": "this session/root native replay validation",
+  "repository": "ooples/AiDotNet.Tensors",
+  "files": [
+    ".github/workflows/coordination-package.yml",
+    ".github/workflows/gpu-cuda-selfhosted.yml"
+  ],
+  "scope": "Preserve all230 mandatoryCPU and22 exact-artifactCUDA cases; add20 independent CPU replay cases and newGPU replay+existingheterogeneousGPU control. Buildall5TFMs, hash actualpackagedDLL, exactcaseIDs/counts/checksummedTRX. GitHub artifactsONLY, no publicNuGet.",
+  "status": "CLAIMED validation extension for approved native BatchNorm/SearchSorted. Combinedlocal52CPU+2OpenCLcases passed; realCUDA/exactpackage pending."
+},
+{
   "owner": "this session/artifact_feed KMaX option follow-up",
   "repository": "ooples/AiDotNet",
   "files": [
