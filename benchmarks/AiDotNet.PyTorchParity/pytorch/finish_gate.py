@@ -23,6 +23,9 @@ import threading
 import time
 
 import psutil
+from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage
+
+
 
 
 def read_json(path: Path) -> dict:
@@ -282,6 +285,9 @@ def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str,
              "AIDOTNET_DIRECT_PTX_CACHE_PATH": "aidotnet-kernels/CUDA/DirectPtx"}
     if side == "pytorch":
         known.update(TORCHINDUCTOR_CACHE_DIR="torchinductor", TRITON_CACHE_DIR="triton")
+    else:
+        known.update(AIDOTNET_AUTOTUNE_CACHE_PATH="aidotnet-autotune",
+                     AIDOTNET_CODEGEN_AUTOTUNE_CACHE="aidotnet-codegen/autotune.tsv")
     seed_receipt = None
     if regime == "warm":
         seed = Path(policy["warm_seeds"][side]["path"]).resolve()
@@ -293,10 +299,13 @@ def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str,
         shutil.copytree(seed, root, dirs_exist_ok=True)
         seed_receipt = actual
     env = {key: str(root / directory) for key, directory in known.items()}
-    for directory in env.values():
-        Path(directory).mkdir(parents=True, exist_ok=True)
+    for key, directory in env.items():
+        target = Path(directory)
+        (target.parent if key == "AIDOTNET_CODEGEN_AUTOTUNE_CACHE" else target).mkdir(parents=True, exist_ok=True)
+    initial_files = {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in sorted(root.rglob("*")) if path.is_file()}
     return env, {"regime": regime, "redirected_environment": env, "warm_seed": seed_receipt,
-                 "coverage": "known_environment_redirects_only",
+                 "initial_files": initial_files, "coverage": "known_environment_redirects_only",
                  "unverified": "Framework/vendor caches not honoring these environment variables require source and runtime verification."}
 
 
@@ -323,6 +332,17 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         env.pop("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE", None)
     for key in ("PROFILE_RANGE", "PROFILE_INFERENCE_BATCH", "BENCH_MEMSTEP", "AIDOTNET_FUSED_DIAG"):
         env.pop(key, None)
+    # Allocation callbacks belong only to diagnostic processes, never to scored timing.
+    profiler_keys = ("CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "CORECLR_PROFILER_PATH_64",
+                     "DOTNET_ENABLE_PROFILING", "DOTNET_PROFILER", "DOTNET_PROFILER_PATH", "DOTNET_PROFILER_PATH_64",
+                     "AIDOTNET_ARRAY_PROFILER_OUTPUT")
+    for key in profiler_keys:
+        env.pop(key, None)
+    if mode == "diagnostic" and side == "aidotnet" and "clr_array_profiler" in config["artifacts"]:
+        env.update(CORECLR_ENABLE_PROFILING="1", CORECLR_PROFILER="{5B735E8D-5547-4DB5-B407-E9AF3E2A9D15}",
+                   CORECLR_PROFILER_PATH=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
+                   CORECLR_PROFILER_PATH_64=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
+                   AIDOTNET_ARRAY_PROFILER_OUTPUT=str(run_dir / "array-allocations.json"))
     metadata = provenance(config)
     receipt_path = config.get("correctness_receipts", {}).get(model, {}).get(device)
     if receipt_path:
@@ -330,8 +350,8 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         metadata["correctness_receipt"] = {"path": str(receipt_file),
             "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
     metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
-                    cache_state=cache_state,
-                    environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
+                    cache_state=cache_state, cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
+                    environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) | set(profiler_keys) & set(env) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
                          "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
     blockers = contending_processes()
@@ -343,6 +363,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         return {"path": str(run_dir), **metadata}
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
+        metadata.update(pid=process.pid, process_create_time=psutil.Process(process.pid).create_time())
         sampler = Sampler(process.pid, config.get("gpu_id") if device == "cuda" else None)
         sampler.start()
         try:
@@ -358,6 +379,9 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
             return_code = -1
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
+    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json"}
+    metadata["diagnostic_files"] = {key: {"name": name, "sha256": hashlib.sha256((run_dir / name).read_bytes()).hexdigest()}
+                                    for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
                     gpu_allocator_peaks=gpu_allocator_peaks(phases),
                     contention=sampler.contention,
@@ -537,13 +561,37 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         names = sorted(set().union(*(row[0].keys() for side in rows.values() for row in side)))
         outcomes = {name: paired_gate([row[0].get(name) for row in rows["aidotnet"]],
                                       [row[0].get(name) for row in rows["pytorch"]], maximum) for name in names}
-        # Disk-cache redirection alone cannot prove a complete cold/warm regime across vendor libraries.
-        outcomes["first_epoch_cache_coverage"] = {"status": "unverified", "reason":
-            "Known cache directories are isolated; complete framework/vendor cache coverage is not yet proven."}
-        # Requested and actual backing allocations are independent gates. Unsupported counter coverage stays red.
-        for kind in ("cpu_framework_requested", "cpu_backing", *( ("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
+        cache_checks = [cache_coverage(run) for run in scored]
+        identities = [(run.get("pid"), run.get("process_create_time")) for run in scored]
+        outcomes["first_epoch_cache_coverage"] = {
+            "status": "pass" if cache_checks and all(row["status"] == "pass" for row in cache_checks)
+                      and len(set(identities)) == len(identities) else "unverified",
+            "receipts": cache_checks,
+            "reason": "Every score needs a fresh process and source-bound persistent-cache inventory.",
+        }
+        diagnostics = [run for run in runs if (run["model"], run["device"], run["mode"]) == (model, device, "diagnostic")]
+        allocation_rows = {side: [] for side in sides}
+        for side in sides:
+            for pair, score in zip(pairs, sides[side]):
+                matched = [run for run in diagnostics if run["side"] == side and run["pair"] == pair]
+                diagnostic = matched[0] if len(matched) == 1 else None
+                keys = ("protocol", "repositories", "artifacts", "machine", "gpu", "cache_policy")
+                if score is None or diagnostic is None or any(score.get(key) != diagnostic.get(key) for key in keys):
+                    allocation_rows[side].append(({}, ["Diagnostic pair/source/protocol/cache/hardware differs from scoring."]))
+                elif cache_coverage(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic cache coverage is incomplete."]))
+                else:
+                    allocation_rows[side].append(allocation_metrics(diagnostic))
+        # Compare computed exact/upper Ai bounds against exact/lower Torch bounds.
+        # Native CUDA acquisitions include async driver-pool suballocations, not physical backing events.
+        for kind in ("cpu_framework_requested", "cpu_backing", *(("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
             for unit in ("bytes", "count"):
-                outcomes[f"{kind}_{unit}"] = {"status": "unverified", "reason": "Allocator coverage contract not yet verified on both frameworks."}
+                name = f"{kind}_{unit}"
+                outcome = paired_gate([row[0].get(name) for row in allocation_rows["aidotnet"]],
+                                      [row[0].get(name) for row in allocation_rows["pytorch"]], maximum)
+                outcome["coverage_errors"] = {side: [error for _, errors in allocation_rows[side] for error in errors] for side in sides}
+                outcome["window"] = "construction_training_epochs_inference_steady_excluding_adaptive_warmup"
+                outcomes[name] = outcome
         numerical = [correctness_gate(run) for run in scored]
         outcomes["numerical_equivalence"] = {
             "status": "pass" if numerical and all(row["status"] == "pass" for row in numerical) else
@@ -553,6 +601,11 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         failures = [error for side in rows.values() for _, errors in side for error in errors]
         if not scored:
             failures.append("required model/device has no scored runs")
+        if len(scored) != len(pairs) * 2:
+            failures.append("scored pairs contain missing or duplicate members")
+        all_identities = [(run.get("pid"), run.get("process_create_time")) for run in scored + diagnostics]
+        if len(set(all_identities)) != len(all_identities):
+            failures.append("score/diagnostic process identities were reused")
         signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu")}, sort_keys=True)
                       for run in scored}
         if len(signatures) != 1:
