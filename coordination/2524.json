@@ -496,7 +496,7 @@
         "src/PublicAPI.Unshipped.txt",
         "src/ComputerVision/Segmentation/Common/PanopticDeepLabSemanticDecoder.cs"
       ],
-      "status": "Wave 2 Batch 6 (38098bfc08, verified 187/187 by verifier-2) integrated onto codex/2524-ci-coordination; Batch 5 active on fixer-1; Batch 7 active on fixer-4",
+      "status": "Wave 2 Batch 6 (38098bfc08, verified 187/187) integrated; Batch 7 (d9fb698300, 94/94 + 145/145 local) undergoing Gate A-E verification on verifier-2; Batch 5 active on fixer-1",
       "file_scope_limits": {
         "src/PublicAPI.Unshipped.txt": "ONLY append single override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.SelectTrainableParametersForTraining line matching sibling OmnilangualASR<T>/XLSR<T>."
       }
@@ -574,6 +574,74 @@
         "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs": "Only replace stale generated-namespace PixelLM expectation with exact existing manual scaffold FP32/base contract and no duplicate generated scaffold; no generator edits"
       },
       "status": "CLAIMED; isolated source work; no source push until monitored cycle completes and root reviews"
+    },
+    {
+      "owner": "Antigravity swarm (Wave 4A)",
+      "scope": "Wave 4A unclaimed integration failures: DocFormer StreamContext OOM, BiorthogonalWavelet bior6.6->bior6.8 CDF pair contract, AUCROCMetric tied-score order stability, BetaLikelihood Half boundary finiteness, LambdaLayer cloning, Mambular/SpikingNN unread options ratchet (4->3), and CausalGANGenerator NOTEARS gradient NullReferenceException",
+      "files": [
+        "src/Document/LayoutAware/DocFormer.cs",
+        "src/NeuralNetworks/Layers/DocFormerLayers.cs",
+        "src/WaveletFunctions/BiorthogonalWavelet.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletFunctionsIntegrationTests.cs",
+        "src/Evaluation/Metrics/Classification/AUCROCMetric.cs",
+        "src/GaussianProcesses/BetaLikelihood.cs",
+        "src/NeuralNetworks/Layers/LambdaLayer.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Cloning/AllLayersCloneTests.cs",
+        "src/Models/Options/MambularOptions.cs",
+        "src/NeuralNetworks/Tabular/MambularBase.cs",
+        "src/NeuralNetworks/Tabular/MambularNetwork.cs",
+        "src/NeuralNetworks/Options/SpikingNeuralNetworkOptions.cs",
+        "src/NeuralNetworks/SpikingNeuralNetwork.cs",
+        "src/NeuralNetworks/SyntheticData/CausalGANGenerator.cs",
+        "src/NeuralNetworks/SyntheticData/SyntheticTensorOps.cs"
+      ],
+      "status": "claimed; queued for next free fixer"
+    },
+    {
+      "owner": "Antigravity swarm (Wave 4B)",
+      "scope": "Wave 4B unclaimed consumer failures: Transformer #1221 trained direct-Predict input differentiation, RelationNetworkModel coverage reflection contract (excluding NTM and MetaLearnerBase.cs), A2CAgent initial warmup vs subsequent rollout readiness, SACAgent finite custom loss in PortfolioAgentTraining, and TensorModelTrainer warmup reuse count",
+      "files": [
+        "src/NeuralNetworks/Transformer.cs",
+        "src/MetaLearning/Algorithms/RelationNetworkAlgorithm.cs",
+        "src/MetaLearning/Models/RelationNetworkModel.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/MetaLearning/MetaLearningCoverageIntegrationTests.cs",
+        "src/ReinforcementLearning/Agents/A2CAgent.cs",
+        "src/ReinforcementLearning/Agents/SACAgent.cs",
+        "src/Finance/Trading/Evaluation/PortfolioAgentTraining.cs",
+        "src/ComputerVision/TensorModelTrainer.cs"
+      ],
+      "file_scope_limits": {
+        "tests/AiDotNet.Tests/IntegrationTests/MetaLearning/MetaLearningCoverageIntegrationTests.cs": "ONLY RelationNetwork_ModelAndModuleCoverage around line 921; do NOT touch NTM_LstmController_And_MemoryCoverage (Codex NTM scope)."
+      },
+      "status": "claimed; queued for next free fixer"
+    },
+    {
+      "owner": "Antigravity swarm (Wave 4C1)",
+      "scope": "Wave 4C1 unclaimed ModelFamily non-guard failures: ABME frame interpolation training invariant, DOVE directional finite-difference gradient mismatch, CSDI GetParameterGradients population after training step, and GraNDAGAlgorithm 60s structure-discovery timeouts",
+      "files": [
+        "src/Video/FrameInterpolation/ABME.cs",
+        "src/Video/Enhancement/DOVE.cs",
+        "src/Finance/Forecasting/Foundation/CSDI.cs",
+        "src/CausalDiscovery/DeepLearning/GraNDAGAlgorithm.cs"
+      ],
+      "status": "claimed; queued for next free fixer"
+    },
+    {
+      "owner": "Antigravity swarm (Wave 4C2)",
+      "scope": "Wave 4C2 unclaimed ModelFamily non-guard failures: AudioGenModel zero-input silence RMS, HuBERT memorization step-2 oscillation, Moonshine post-training clone equivalence, MusicGenModel gradient flow + FreezeTextEncoder option, LISA training loss reduction, and OpenVocabSAM test-scale memory footprint (strictly excluding SamNetwork.cs, SamTraining.cs, and NeuralNetworkBase.cs)",
+      "files": [
+        "src/Audio/AudioGen/AudioGenModel.cs",
+        "src/Audio/AudioGen/AudioGenOptions.cs",
+        "src/Audio/Foundations/HuBERT.cs",
+        "src/SpeechRecognition/Streaming/Moonshine.cs",
+        "src/Audio/MusicGen/MusicGenModel.cs",
+        "src/Audio/MusicGen/MusicGenOptions.cs",
+        "src/ComputerVision/Segmentation/Referring/LISA.cs",
+        "src/ComputerVision/Segmentation/OpenVocabulary/OpenVocabSAM.cs",
+        "src/ComputerVision/Segmentation/OpenVocabulary/OpenVocabSAMOptions.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/NeuralNetworks/TextQueriedSegmentationScaffolds.cs"
+      ],
+      "status": "claimed; queued for next free fixer"
     }
   ],
   "pinn_candidate_owner_action": {
@@ -645,11 +713,11 @@
     "native_current_cohort": "GitHub producer43990270445 passed all230 mandatoryCPU cases in fresh gates and packaged all5TFMs. CUDA43991812670 passed22/22 zero skips with runtime DLL hash matching package; original125 cases preserved. Local split-run history retained separately.",
     "native_optimizer_repair": "Reviewed c977 implementation passed fresh GitHub230 CPU gates/all5TFMs and exact-packaged-DLL CUDA22 with zero skips; no public release. Consumer artifact pin and strict guards updated for next same-SHA branch validation.",
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified.",
-    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (verified commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~GARCHModelTests|FullyQualifiedName~TBATSModelTests|FullyQualifiedName~DeepAntReferenceTests|FullyQualifiedName~DeepANTTests|FullyQualifiedName~NLinearModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOpsReferenceTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests\": 223 passed, 0 failed, 0 skipped; verifier-2 stdout receipt #181). Three root-review follow-ups (GARCH Half FD probes, NLinear Half scaler state persistence, ARModel _seriesMean persistence) acknowledged and queued next with new oracle tests.",
-    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (verified commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~FeatureSelectionSweepReferenceTests|FullyQualifiedName~FeatureSelectionTensorOpsTests|FullyQualifiedName~FeatureSelectionFilterRoundFiveTests|FullyQualifiedName~FeatureSelectionHelperRoundThreeTests|FullyQualifiedName~FeatureSelectionInformationReferenceTests|FullyQualifiedName~FeatureSelectionScipyReferenceTests|FullyQualifiedName~DimensionalityReductionReferenceTests|FullyQualifiedName~PowerTransformsDeepMathIntegrationTests|FullyQualifiedName~WaveletReferenceValueTests|FullyQualifiedName~AdvancedWaveletFunctionsTests|FullyQualifiedName~WindowFunctionReferenceTests\": 199 passed, 0 failed, 0 skipped; verifier-1 stdout receipt #180; fk8 taps derived from Nielsen 2001 J. Approx. Theory 108 Theorem 1 spectral factorization). Two root-review follow-ups (FairFeatureSelector midpoint even-median contract, FejerKorovkinWavelet zero-DC/unit-L2 normalizer without cutoff widening) acknowledged and queued next with new oracle tests.",
-    "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (cherry-picked from 7ce3cb5cf948c273b273ff171df9f826c1c0e373, net10.0, package 0.151.1-coordination.43990270445.1.gc9770e98d97a, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch2.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName!~Options_EachShouldChangeObservableBehaviour&(FullyQualifiedName~Generated.PhysicsInformedNeuralNetworkTests|FullyQualifiedName~Generated.DeepRitzMethodTests|FullyQualifiedName~Generated.DomainDecompositionPINNTests|FullyQualifiedName~Generated.VariationalPINNTests|FullyQualifiedName~Generated.MultiFidelityPINNTests|FullyQualifiedName~Generated.MultiScalePINNTests|FullyQualifiedName~Generated.DeepOperatorNetworkTests|FullyQualifiedName~PhysicsInformedPaperReferenceTests|FullyQualifiedName~MultiFidelityAndDomainDecompositionTests)\": 244 passed, 0 failed, 14 pre-existing manual skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch2.trx; verifier-2 #201). 11 newly-sensitive options in Codex-owned RuntimeFidelityBaseline.cs left untouched for owner removal after root review.",
-    "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (cherry-picked from c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch1.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ModelInputMeetsFirstLayerTests.AModelsDeclaredInputRankIsOneItsFirstLayerAccepts|FullyQualifiedName~DiffusersSchedulerReferenceTests|FullyQualifiedName~Generated.ChirpTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.CanaryQwenTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.SPIRALTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.W2vBertTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingZipformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.RNNTransducerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.ConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.FastEmitTests.Gradients_MatchFiniteDifference|FullyQualifiedName~MelSpectrogramAxisTests|FullyQualifiedName~AudioProcessingTests\": 82 passed, 0 failed, 0 skipped, 0 warnings in modified files, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch1.trx; verifier-1 #202).",
-    "antigravity_w2_batch6_sam2_medseg": "Integrated 38098bfc08fe791f3648b0e50df69a44d5d95d89 (cherry-picked from dd2af244b1a0cb62176a727c655fc052d5ef10e5, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w2-batch6.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~Generated.SAM2Tests|FullyQualifiedName~Generated.SAM21Tests|FullyQualifiedName~PointCloudMedicalSegmentationIntegrationTests|FullyQualifiedName~Sam21AndMedSam2Tests|FullyQualifiedName~Video.SAM2ModelTests|FullyQualifiedName~FoundationSegmentationIntegrationTests.SAM21|FullyQualifiedName~SegmentationTrainingRobustnessTests.SAM21|FullyQualifiedName~MedicalSegmentationPostProcessingTests\": 187 passed, 0 failed, 18 pre-existing skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w2-batch6.trx; verifier-2 #206)."
+    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (tested commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 223 passed, 0 failed, 0 skipped; 3 root-review follow-ups + new TRX receipt active on fixer-3).",
+    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (tested commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 199 passed, 0 failed, 0 skipped; 2 root-review follow-ups + new TRX receipt active on fixer-4).",
+    "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (tested commit 7128d2a01d = cherry-pick of 7ce3cb5cf948c273b273ff171df9f826c1c0e373 atop 4604bb6852, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; 244 passed, 0 failed, 14 pre-existing manual skips; TRX w1-batch2.trx SHA-256 4b4bd77eb818c9b04ffc509f62ebc6be917c2615ce1de3b3d39cc319a9adbbd0; MultiScalePINN IsFusedTrainingDisabled removal + sensitivity run queued next on fixer-2).",
+    "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (tested commit c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29 cherry-picked atop 14b3ac885c, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 82 passed, 0 failed, 0 skipped across 32 ModelInputMeetsFirstLayerTests slices + 9 ASR Gradients_MatchFiniteDifference + MelSpectrogramAxisTests + AudioProcessingTests + DiffusersSchedulerReferenceTests; TRX w1-batch1.trx SHA-256 72764061b9f3e891f3116df77369d2d7a4c7d50bf45c90d10ff22365d6e8a115).",
+    "antigravity_w2_batch6_sam2_medseg": "Integrated 38098bfc08fe791f3648b0e50df69a44d5d95d89 (tested commit addd236eeb17ab79c8d95000042ce432ed6019c0 = cherry-pick of dd2af244b1a0cb62176a727c655fc052d5ef10e5 atop e2af460f2e, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; 187 passed, 0 failed, 18 pre-existing skips, 0 new warnings, 0 null-forgiving operators; TRX w2-batch6.trx SHA-256 01991dc5a1e0644c86df1d74b68c9ef98a0ada9285ca0ff6fc241ad802be5566)."
   },
   "decisions": [
     {
@@ -747,8 +815,9 @@
     {
       "id": "antigravity-sam2-verification-identity",
       "owner": "Antigravity Wave2 Batch6",
-      "status": "OWNER EVIDENCE REQUEST; source/test-contract diff reviewed; no confirmed numeric defect",
-      "request": "For 38098bfc08, post the exact prebuilt test DLL source commit/hash and Tensors package version used by the reported 187-pass/18-pre-existing-skip run. Existing receipt links an inaccessible TRX; do not treat it as independently reverified. The combined next GitHub snapshot will verify actual source/package identities."
+      "status": "EVIDENCE PROVIDED; ready for combined GitHub snapshot",
+      "request": "For 38098bfc08, post the exact prebuilt test DLL source commit/hash and Tensors package version used by the reported 187-pass/18-pre-existing-skip run. Existing receipt links an inaccessible TRX; do not treat it as independently reverified. The combined next GitHub snapshot will verify actual source/package identities.",
+      "owner_response": "Tested commit: addd236eeb17ab79c8d95000042ce432ed6019c0 (cherry-pick of dd2af244b1a0cb62176a727c655fc052d5ef10e5 atop origin/codex/2524-ci-coordination @ e2af460f2e, integrated as 38098bfc08fe791f3648b0e50df69a44d5d95d89; built cleanly in E:/aidn-2524-swarm/verifier-2 with 0 errors and 0 new warnings). Pinned AiDotNet.Tensors package: 0.151.1-coordination.43990270445.1.gc9770e98d97a (lib/net10.0/AiDotNet.Tensors.dll SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e, matching producer run 43990270445). TRX SHA-256: 01991dc5a1e0644c86df1d74b68c9ef98a0ada9285ca0ff6fc241ad802be5566 (28,775,124 bytes, 187 passed / 0 failed / 18 pre-existing skips)."
     },
     {
       "id": "antigravity-review-multiscale-compiled-lifecycle",
@@ -1014,7 +1083,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T03:22:49.243566Z",
+  "updated_utc": "2026-11-17T04:06:40.979064Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -1154,7 +1223,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 4B; no overlapping edits",
       "root": "Transformer trained embedding/forward differentiation",
       "observed_failure_entries": 1,
       "jobs": [
