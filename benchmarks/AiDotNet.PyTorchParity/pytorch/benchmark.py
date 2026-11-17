@@ -5,16 +5,15 @@ Twin of the C# harness (../Program.cs): same four reference models
 training + multi-batch inference measurement loop, and the same JSON schema,
 so the two reports compare directly via compare.py.
 
-IMPORTANT (fair comparison): PyTorch here runs EAGER (no torch.compile). The
-AiDotNet side runs its own compiled/fused path; pitting it against a separately
-torch.compile'd PyTorch would compare two different compilation stacks rather
-than the kernels. Pin both sides to the same CPU thread count:
-    python benchmark.py --threads 8 ...
+The performance target uses --compile (TorchInductor), including first-epoch
+and steady-state measurements. Without that flag this script measures an eager
+baseline. Pin both sides to the same device and CPU thread count:
+    python benchmark.py --threads 8 --compile ...
     dotnet run ... (set AIDOTNET_CPU_THREADS=8)
 
 Usage:
     pip install -r requirements.txt
-    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
         --threads 8 --output ../results/pytorch.json
 """
 

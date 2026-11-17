@@ -103,14 +103,15 @@ beat PyTorch on).
 ```bash
 cd benchmarks/AiDotNet.PyTorchParity/pytorch
 pip install -r requirements.txt
-python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
     --threads 8 --output ../results/pytorch.json
 ```
 
-PyTorch runs **eager** here (no `torch.compile`) on purpose: the AiDotNet side
-runs its own compiled/fused path, and pitting it against a separately compiled
-PyTorch compares two compilation stacks rather than the kernels. Pin both sides
-to the same thread count (`--threads` ↔ `AIDOTNET_CPU_THREADS`).
+The performance target is **`torch.compile`**, including its first epoch and
+steady-state training and inference. Pass `--compile` explicitly; omitting it
+measures an eager baseline and does not establish a win against compiled PyTorch.
+Pin both sides to the same thread count (`--threads` ↔ `AIDOTNET_CPU_THREADS`)
+and device. Record peak CPU RAM and GPU VRAM separately from allocation volume.
 
 ## 3. Compare
 
