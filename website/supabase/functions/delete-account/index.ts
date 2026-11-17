@@ -59,7 +59,8 @@ serve(async (req: Request) => {
       // Every page: a billing subscription can sit behind any number of ended ones.
       let billing = false;
       for await (const s of stripe.subscriptions.list({ customer, status: "all", limit: 100 })) {
-        if (BILLING_STATUSES.has(s.status) && !s.cancel_at_period_end) { billing = true; break; }
+        const endsBeforeRenewal = s.cancel_at_period_end || (s.cancel_at != null && s.cancel_at <= s.current_period_end);
+        if (BILLING_STATUSES.has(s.status) && !endsBeforeRenewal) { billing = true; break; }
       }
       if (billing) {
         return json({

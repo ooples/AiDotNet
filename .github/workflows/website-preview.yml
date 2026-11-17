@@ -1,0 +1,88 @@
+name: Build and verify existing website preview
+on:
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: website-preview-verification
+  cancel-in-progress: false
+jobs:
+  deploy-preview:
+    environment: Preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install website dependencies
+        run: npm ci
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        with:
+          dotnet-version: 10.0.x
+      - name: Generate the complete API reference
+        working-directory: ${{ github.workspace }}
+        run: >
+          dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+
+          dotnet run --project tools/WikiGenerator -c Debug --
+          src/bin/Debug/net8.0/AiDotNet.xml
+          website/src/content/docs/reference/wiki
+      - name: Check and build the preview
+        run: |
+          set -euo pipefail
+          for variable in PUBLIC_SUPABASE_URL PUBLIC_SUPABASE_ANON_KEY PUBLIC_STRIPE_PRO_MONTHLY_LINK PUBLIC_STRIPE_PRO_YEARLY_LINK PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK; do
+            if [ -z "${!variable}" ]; then echo "::error::$variable is missing"; exit 1; fi
+          done
+          npm run check
+          npm run test:backend
+          npm run build
+          node --input-type=module -e "import fs from 'node:fs'; const routes=JSON.parse(fs.readFileSync('dist/verification-routes.json','utf8')); if(routes.filter(r=>r.startsWith('/docs/reference/wiki/')).length<10000) throw Error('Full generated API reference is missing'); console.log(routes.length+' built routes');"
+        env:
+          VERCEL: "1"
+          PUBLIC_ENV_MODE: dev
+          NODE_OPTIONS: --max-old-space-size=6144
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          PUBLIC_STRIPE_PRO_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_MONTHLY_LINK }}
+          PUBLIC_STRIPE_PRO_YEARLY_LINK: ${{ secrets.PUBLIC_STRIPE_PRO_YEARLY_LINK }}
+          PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK: ${{ secrets.PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK }}
+          PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK: ${{ secrets.PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK }}
+      - name: Save the reviewable preview build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: website-preview-build
+          path: website/dist/
+          retention-days: 3
+      - name: Install Vercel CLI
+        run: npm install --global vercel@65.17.0
+      - name: Deploy the existing preview and update its alias
+        run: |
+          set -euo pipefail
+          : "${VERCEL_TOKEN:?Missing VERCEL_TOKEN}"
+          mkdir -p "$RUNNER_TEMP/preview-stage/website"
+          cp -a dist "$RUNNER_TEMP/preview-stage/website/dist"
+          printf '%s\n' '{"name":"aidotnet-preview-stage","version":"1.0.0","private":true}' > "$RUNNER_TEMP/preview-stage/package.json"
+          printf '%s\n' '{"name":"aidotnet-preview","version":"1.0.0","private":true}' > "$RUNNER_TEMP/preview-stage/website/package.json"
+          node --input-type=module -e "import fs from 'node:fs'; const config=JSON.parse(fs.readFileSync('vercel.json','utf8')); Object.assign(config,{framework:null,outputDirectory:'dist',buildCommand:'true'}); fs.writeFileSync(process.env.RUNNER_TEMP+'/preview-stage/website/vercel.json',JSON.stringify(config));"
+          vercel deploy "$RUNNER_TEMP/preview-stage" --project aidotnet_website --scope franklins-projects-02a0b5a0 --environment preview --archive=tgz --yes --json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/preview-deployment.json"
+          url=$(jq -er '.deployment.url' "$RUNNER_TEMP/preview-deployment.json")
+          vercel alias set "$url" test.aidotnet.dev --scope franklins-projects-02a0b5a0 --token="$VERCEL_TOKEN"
+          printf 'Verified preview deployment: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_5HDGYIA59nu3JwRl3ZYCMGYV
+          VERCEL_PROJECT_ID: prj_JyDpz7IdLTf5WcEWHyxUKq7TcCSH
+  verify-user-paths:
+    needs: deploy-preview
+    uses: ./.github/workflows/website-e2e.yml
+    with:
+      preview: true
+      part: all
+    secrets: inherit

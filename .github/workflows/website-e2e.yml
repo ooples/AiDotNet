@@ -7,8 +7,19 @@ name: Website E2E
 
 on:
   workflow_call:
+    inputs:
+      preview:
+        type: boolean
+        default: false
+      part:
+        type: string
+        default: all
   workflow_dispatch:
     inputs:
+      preview:
+        description: "Use the existing preview environment"
+        type: boolean
+        default: true
       part:
         description: 'Preview checks to run'
         type: choice
@@ -28,7 +39,7 @@ permissions:
 
 jobs:
   preview-auth:
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.configure_preview_auth || inputs.part == 'auth-config') }}
+    if: ${{ inputs.preview && (inputs.configure_preview_auth || inputs.part == 'auth-config') }}
     environment: Preview
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -43,16 +54,16 @@ jobs:
         run: node website/scripts/configure-preview-auth.mjs
 
   e2e:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.part != 'auth-config' }}
+    if: ${{ inputs.part != 'auth-config' }}
     name: Playwright (${{ matrix.part }})
-    environment: ${{ github.event_name == 'workflow_dispatch' && 'Preview' || 'Production' }}
+    environment: ${{ inputs.preview && 'Preview' || 'Production' }}
     runs-on: ubuntu-latest
     # One job runs the suite; the full-site crawl runs as one job per kind of visitor, in parallel.
     # Run back to back on one worker, with failures retried, they took hours.
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.part != 'all' && format('["{0}"]', inputs.part) || '["suite","anon","free","pro-stripe","pro-granted","admin"]') }}
+        part: ${{ fromJSON(inputs.part != 'all' && format('["{0}"]', inputs.part) || '["suite","anon","free","pro-stripe","pro-granted","admin"]') }}
     timeout-minutes: 60
     # The license-lifecycle spec writes to production; never run two suites at once. Each crawl
     # makes its own throwaway users, so only the same part of two runs is serialized.
@@ -122,7 +133,7 @@ jobs:
       - name: Verify and synchronize the existing mail key
         id: mail
         continue-on-error: true
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_email && matrix.part == 'suite' }}
+        if: ${{ inputs.preview && inputs.repair_email && matrix.part == 'suite' }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -153,8 +164,8 @@ jobs:
           fi
         env:
           PART: ${{ matrix.part }}
-          PREVIEW_RUN: ${{ github.event_name == 'workflow_dispatch' }}
-          PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && 'https://test.aidotnet.dev' || 'https://www.aidotnet.dev' }}
+          PREVIEW_RUN: ${{ inputs.preview }}
+          PLAYWRIGHT_BASE_URL: ${{ inputs.preview && 'https://test.aidotnet.dev' || 'https://www.aidotnet.dev' }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
