@@ -86,7 +86,12 @@ public sealed class HiFiGanResidentMelTests
             if (stagedFloatWindow)
             {
                 float angle = i * (float)(2 * Math.PI / Window);
-                float cosine = MathF.Cos(angle), weighted = -.5f * cosine;
+#if NET5_0_OR_GREATER
+                float cosine = MathF.Cos(angle);
+#else
+                float cosine = (float)Math.Cos(angle);
+#endif
+                float weighted = -.5f * cosine;
                 window[windowStart + i] = weighted + .5f;
             }
             else window[windowStart + i] = .5 - .5 * Math.Cos(2 * Math.PI * i / Window);
@@ -119,7 +124,7 @@ public sealed class HiFiGanResidentMelTests
     {
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
-            Assert.True(double.IsFinite(actual[i]) && Math.Abs(actual[i] - expected[i]) <= tolerance * (1 + Math.Abs(expected[i])),
+            Assert.True(!double.IsNaN(actual[i]) && !double.IsInfinity(actual[i]) && Math.Abs(actual[i] - expected[i]) <= tolerance * (1 + Math.Abs(expected[i])),
                 $"[{i}] actual={actual[i]:G17} expected={expected[i]:G17}");
     }
 }
