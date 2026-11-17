@@ -242,7 +242,7 @@
         "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs",
         "tests/AiDotNet.Tests/IntegrationTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
       ],
-      "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal + continuity test queued next on fixer-2 per antigravity-review-multiscale-compiled-lifecycle), Batch 3 (fc423039d3, verified 223/223; 3 root-review follow-ups in progress on fixer-3), and Batch 4 (dd714d3ae0, verified 199/199; 2 root-review follow-ups queued next on fixer-4)"
+      "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal queued next on fixer-2), Batch 3 (fc423039d3 + review follow-up 4a50a798fe, verified 191/191 by verifier-1), and Batch 4 (dd714d3ae0; 2 review follow-ups in Gate E verification on verifier-2)"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -713,7 +713,7 @@
     "native_current_cohort": "GitHub producer43990270445 passed all230 mandatoryCPU cases in fresh gates and packaged all5TFMs. CUDA43991812670 passed22/22 zero skips with runtime DLL hash matching package; original125 cases preserved. Local split-run history retained separately.",
     "native_optimizer_repair": "Reviewed c977 implementation passed fresh GitHub230 CPU gates/all5TFMs and exact-packaged-DLL CUDA22 with zero skips; no public release. Consumer artifact pin and strict guards updated for next same-SHA branch validation.",
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified.",
-    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (tested commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 223 passed, 0 failed, 0 skipped; 3 root-review follow-ups + new TRX receipt active on fixer-3).",
+    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 + review follow-up 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7 (tested commit acb5f3b4eae21a0c3be5b18f17fa080dbf449b46 = cherry-pick of edb2009d07dbd335c8d4cb2e21af030912ff6122 atop 9a82f98425, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w3-ts-review.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOps|FullyQualifiedName~TimeSeriesHalfPrecisionTests|FullyQualifiedName~STLDecompositionMovingAverageTests|FullyQualifiedName~SampleQuantilesNaNTests|FullyQualifiedName~Generated.ARModelTests|FullyQualifiedName~Generated.NLinearModelTests|FullyQualifiedName~Generated.GARCHModelTests|FullyQualifiedName~GARCHModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~TimeSeriesSeedTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests.GARCHModel\": 191 passed, 0 failed, 0 skipped, 0 new warnings, 0 null-forgiving operators; TRX w3-ts-review.trx SHA-256 29e1bf57f91d75e286e32f569c1585ff1ef84d2e5d2c8cf0ca16c472ff8655cf; verifier-1 #222).",
     "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (tested commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 199 passed, 0 failed, 0 skipped; 2 root-review follow-ups + new TRX receipt active on fixer-4).",
     "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (tested commit 7128d2a01d = cherry-pick of 7ce3cb5cf948c273b273ff171df9f826c1c0e373 atop 4604bb6852, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; 244 passed, 0 failed, 14 pre-existing manual skips; TRX w1-batch2.trx SHA-256 4b4bd77eb818c9b04ffc509f62ebc6be917c2615ce1de3b3d39cc319a9adbbd0; MultiScalePINN IsFusedTrainingDisabled removal + sensitivity run queued next on fixer-2).",
     "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (tested commit c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29 cherry-picked atop 14b3ac885c, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 82 passed, 0 failed, 0 skipped across 32 ModelInputMeetsFirstLayerTests slices + 9 ASR Gradients_MatchFiniteDifference + MelSpectrogramAxisTests + AudioProcessingTests + DiffusersSchedulerReferenceTests; TRX w1-batch1.trx SHA-256 72764061b9f3e891f3116df77369d2d7a4c7d50bf45c90d10ff22365d6e8a115).",
@@ -994,36 +994,39 @@
     },
     {
       "id": "antigravity-review-garch-half-probes",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED on codex/2524-ci-coordination at 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7; ready for root review",
       "owner": "Antigravity Wave1 Batch3",
       "commit": "fc423039d3",
       "files": [
         "src/TimeSeries/GARCHModel.cs"
       ],
       "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega≈0.01 has ULP≈7.63e-6, while epsilon≈1e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
-      "request": "Repair representable/high-precision finite-difference probes and objective consistently; add a Half nondegenerate estimation oracle. Do not replace the zero denominator with an arbitrary epsilon floor."
+      "request": "Repair representable/high-precision finite-difference probes and objective consistently; add a Half nondegenerate estimation oracle. Do not replace the zero denominator with an arbitrary epsilon floor.",
+      "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: moved EstimateParameters MLE objective, scale-aware central-difference probes (step = 1e-6 * max(1, |param|), exact span = plus - minus, zero arbitrary epsilon floor), momentum ascent, and parameter constraints into double precision; switched ClampMinimum/PositivePart to TensorLessThan so NaN is never clamped to VarianceFloor/0; added GARCH_Half_EstimatesNondegenerateParametersMatchingDouble (180-step MLE agreement with double + NaN preservation check). Verified 191/191 (TRX SHA-256 29e1bf57f91d75e286e32f569c1585ff1ef84d2e5d2c8cf0ca16c472ff8655cf)."
     },
     {
       "id": "antigravity-review-nlinear-scaler-state",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED in NLinearModel.cs at 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7 (subject to TimeSeriesModelBase.cs:1318,1327 owner fix for Half.Serialize); ready for root review",
       "owner": "Antigravity Wave1 Batch3",
       "commit": "fc423039d3",
       "files": [
         "src/TimeSeries/NLinearModel.cs"
       ],
       "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std≈2.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
-      "request": "Preserve the same fitted transform through training, inference, serialization and cloning; add a subnormal Half roundtrip/prediction oracle. Avoid a fallback divisor masking underflow."
+      "request": "Preserve the same fitted transform through training, inference, serialization and cloning; add a subnormal Half roundtrip/prediction oracle. Avoid a fallback divisor masking underflow.",
+      "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: stored _xMean/_xStd/_yMean/_yStd as [FittedParameter(InputSized = true)] double (DeclareExactDouble), replaced 1e-8 cutoff with exact max > min non-degeneracy check, removed xStd==0 -> 1.0 fallback divisor in PredictSingle (explicit InvalidOperationException guard), and added NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone (Half [0,0,0,Half.Epsilon] std=2.58e-8 train + PredictSingle + ModelStateEnvelope roundtrip + float full Serialize/Clone/DeepCopy; see timeseriesmodelbase-half-serialize-convertible for TimeSeriesModelBase.cs:1318,1327)."
     },
     {
       "id": "antigravity-review-ar-mean-persistence",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED on codex/2524-ci-coordination at 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7; ready for root review",
       "owner": "Antigravity Wave1 Batch3",
       "commit": "fc423039d3",
       "files": [
         "src/TimeSeries/ARModel.cs"
       ],
       "finding": "Removing the only Buffer annotation from _seriesMean leaves it unclassified. The generator serializes/deep-copies classified state; ARModel has no handwritten persistence override, so a trained nonzero intercept is lost.",
-      "request": "Keep corrected parameter layout while explicitly registering fitted mean for persistence/cloning. Test a trained nonzero constant series before/after save-load and clone."
+      "request": "Keep corrected parameter layout while explicitly registering fitted mean for persistence/cloning. Test a trained nonzero constant series before/after save-load and clone.",
+      "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: annotated _seriesMean with [FittedParameter(InputSized = true)] so untrained ParameterCount stays 0 while generated DeclareScalar persists/clones _seriesMean; added ConstantNonzeroSeries_PreservesMeanAndParameterLayoutAcrossSerializeAndClone and NonConstantSeries_PreservesMeanAcrossSerializeAndClone in ARModelMeanReferenceTests.cs."
     },
     {
       "id": "antigravity-review-fairness-even-median",
@@ -1094,7 +1097,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T05:08:51.787632Z",
+  "updated_utc": "2026-11-17T05:17:13.625139Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
