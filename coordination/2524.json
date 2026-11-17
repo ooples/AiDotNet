@@ -556,8 +556,8 @@
   ],
   "pinn_candidate_owner_action": {
     "candidate": "7ce3cb5cf948c273b273ff171df9f826c1c0e373",
-    "status": "PUBLISHED on origin/codex/2524-ci-coordination at 0b08b92b5a552bf085237f5f3c8971c0ac4100af (cherry-picked from 7ce3cb5cf948c273b273ff171df9f826c1c0e373) after independent 5-gate verification by verifier-2 (244 passed, 0 failed, 14 pre-existing skips, TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch2.trx). Ready for root review and removal of the 11 stale Insensitive entries in RuntimeFidelityBaseline.cs.",
-    "required": "Contributor must publish a reachable ref or patch plus verification evidence before review/integration or removal of the eleven baseline exceptions.",
+    "status": "Published as 0b08b92b5a and reviewed. Root blocks endorsement pending MultiScale compiled lifecycle repair; see antigravity-review-multiscale-compiled-lifecycle.",
+    "required": "Preserve all eleven baseline exceptions until unchanged sensitivity tests prove the exact outcomes. Published 244-test command excluded sensitivity tests; preserve reported fourteen pre-existing skips.",
     "integrated_commit": "0b08b92b5a552bf085237f5f3c8971c0ac4100af"
   },
   "claude_helper_owner_action": {
@@ -567,6 +567,13 @@
     "required": "Claude must confirm exact bounded helper ownership and fix these reads, or explicitly hand off. Root will not make overlapping helper edits. Native BatchNorm/SearchSorted scope remains pending user decision and is not claimed here."
   },
   "verification": {
+    "rolling_policy_repair_2c59cdd76e": {
+      "source": "2c59cdd76e",
+      "review": "Root and independent reviewer approved five-file bounded canonical policy integration; coverage behavior and gates unchanged.",
+      "passed": "C scratch: Select-Shards -SelfTest, full Test-RollingShardMap proof, full Test-ShardPacking 24889 checks. Original workflow commands2-13 passed. Five scripts parse clean; git diff --check passed.",
+      "limitations": "Complete local 24-command preflight not claimed. Z fixtures failed Git dubious ownership (share owner differs); valid C end-to-end still running. Full unchanged Linux tooling gate and runtime matrix delegated to GitHub.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-aa19/tooling-repair"
+    },
     "validation_cycle_864c": {
       "source": "864c81714c57d116a324e29f07fb3ed93e844ea7",
       "branch": "codex/2524-validation-c977",
