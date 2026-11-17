@@ -224,6 +224,22 @@ class Sampler:
         return self.samples
 
 
+def reference_recipe_gate(run: dict) -> dict:
+    """Require the actual hashed reference manifest to name the scored Torch recipe."""
+    hashes = run.get("artifacts", {})
+    try:
+        manifest_path = Path(run.get("artifact_paths", {}).get("hifigan_reference_manifest", ""))
+        payload = manifest_path.read_bytes()
+        if not hashes.get("hifigan_reference_manifest") or hashlib.sha256(payload).hexdigest() != hashes["hifigan_reference_manifest"]:
+            return {"status": "unverified", "reason": "Missing or changed reference manifest for recipe validation."}
+        manifest = json.loads(payload)
+        if not isinstance(manifest, dict) or not hashes.get("pytorch_benchmark") or manifest.get("benchmark_source_sha256") != hashes["pytorch_benchmark"]:
+            return {"status": "unverified", "reason": "Reference manifest benchmark recipe does not match the scored PyTorch benchmark hash."}
+    except (OSError, ValueError, TypeError):
+        return {"status": "unverified", "reason": "Missing or invalid reference manifest for recipe validation."}
+    return {"status": "pass"}
+
+
 def provenance(config: dict) -> dict:
     repos = {}
     for name, path in config["repositories"].items():
@@ -236,7 +252,13 @@ def provenance(config: dict) -> dict:
     receipt = read_json(Path(config["build_receipt"]))
     if receipt.get("repositories") != repos or receipt.get("artifacts") != hashes:
         raise ValueError("Build receipt does not bind these exact source commits and binary/script hashes.")
-    return {"repositories": repos, "artifacts": hashes, "machine": platform.uname()._asdict(),
+    artifact_paths = {name: str(Path(path).resolve()) for name, path in config["artifacts"].items()}
+    if "hifigan-v1" in config.get("models", []):
+        recipe = reference_recipe_gate({"artifacts": hashes, "artifact_paths": artifact_paths})
+        if recipe["status"] != "pass":
+            raise ValueError(recipe["reason"])
+    return {"repositories": repos, "artifacts": hashes, "artifact_paths": artifact_paths,
+            "machine": platform.uname()._asdict(),
             "logical_cpus": psutil.cpu_count(), "gpu": nvidia_query(config["gpu_id"], "uuid,name,driver_version,memory.total")
             if config.get("gpu_id") else None, "cache_policy": config["cache_policy"]}
 
@@ -386,6 +408,9 @@ def correctness_gate(run: dict) -> dict:
         return {"status": "unverified", "reason": "Numerical receipt does not bind the scored assembly hashes."}
     if not hashes.get("hifigan_reference_manifest") or receipt.get("reference_manifest_sha256") != hashes["hifigan_reference_manifest"]:
         return {"status": "unverified", "reason": "Numerical receipt reference-manifest hash mismatch."}
+    recipe = reference_recipe_gate(run)
+    if recipe["status"] != "pass":
+        return recipe
     checks = receipt.get("checks") or []
     valid_checks = bool(checks) and all(check.get("pass") is True and check.get("finite") is True
                                        and (number(check.get("elements")) or 0) > 0 for check in checks)
