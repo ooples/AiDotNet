@@ -513,16 +513,9 @@ public class TimeSeriesHalfPrecisionTests
         Assert.Equal(epsHalf, halfModel.PredictSingle(zeroWindowHalf));
         Assert.Equal((Half)0, halfModel.PredictSingle(pulseWindowHalf));
 
-        // 2. Half generated DeclareExactDouble state envelope + SetParameters roundtrip preserves exact double scalers
-        //    (exercises NLinearModel<Half>'s state envelope directly while TimeSeriesModelBase.Serialize Half Convert.ToDouble is coordinated).
-        var declaredStateProp = typeof(TimeSeriesModelBase<Half>).GetProperty("DeclaredState", BindingFlags.NonPublic | BindingFlags.Instance);
-        Assert.NotNull(declaredStateProp);
-        var sourceState = declaredStateProp?.GetValue(halfModel) as AiDotNet.Models.ModelStateRegistry<Half>;
-        Assert.NotNull(sourceState);
-        byte[] halfEnvelope = AiDotNet.Models.ModelStateEnvelope.Append(
-            sourceState ?? new AiDotNet.Models.ModelStateRegistry<Half>(),
-            Array.Empty<byte>());
-
+        // 2. Public Half persistence must preserve both parameters and exact double scaler state.
+        // Populate metrics so the shared serializer also exercises its numeric metric values.
+        Assert.NotEmpty(halfModel.EvaluateModel(xHalf, yHalf));
         var restoredHalf = new NLinearModel<Half>(new NLinearOptions<Half>
         {
             LookbackWindow = 4,
@@ -531,15 +524,14 @@ public class TimeSeriesHalfPrecisionTests
             LearningRate = 0.05,
             Seed = 42
         });
-        restoredHalf.SetParameters(halfModel.GetParameters());
-        var targetState = declaredStateProp?.GetValue(restoredHalf) as AiDotNet.Models.ModelStateRegistry<Half>;
-        Assert.NotNull(targetState);
-        var stateRegistry = targetState ?? new AiDotNet.Models.ModelStateRegistry<Half>();
-        byte[] remaining = AiDotNet.Models.ModelStateEnvelope.ExtractBeforeParameters(stateRegistry, halfEnvelope);
-        _ = AiDotNet.Models.ModelStateEnvelope.ExtractAfterParameters(stateRegistry, halfEnvelope);
-        Assert.Empty(remaining);
-        Assert.Equal(epsHalf, restoredHalf.PredictSingle(zeroWindowHalf));
-        Assert.Equal((Half)0, restoredHalf.PredictSingle(pulseWindowHalf));
+        restoredHalf.Deserialize(halfModel.Serialize());
+        var clonedHalf = (NLinearModel<Half>)halfModel.Clone();
+        var deepCopiedHalf = (NLinearModel<Half>)halfModel.DeepCopy();
+        foreach (var candidate in new[] { restoredHalf, clonedHalf, deepCopiedHalf })
+        {
+            Assert.Equal(epsHalf, candidate.PredictSingle(zeroWindowHalf));
+            Assert.Equal((Half)0, candidate.PredictSingle(pulseWindowHalf));
+        }
 
         // 3. Full Serialize/Deserialize, Clone, and DeepCopy roundtrip at the same std = 2.58e-8 (< old 1e-8 cutoff).
         var reloadedFloat = new NLinearModel<float>(new NLinearOptions<float>

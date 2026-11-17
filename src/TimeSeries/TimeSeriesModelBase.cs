@@ -1315,7 +1315,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             writer.Write(parameterSnapshot.Length);
             for (int i = 0; i < parameterSnapshot.Length; i++)
             {
-                writer.Write(Convert.ToDouble(parameterSnapshot[i]));
+                writer.Write(NumOps.ToDouble(parameterSnapshot[i]));
             }
             WriteParameterCheckpointLayout(writer, parameterLayout);
 
@@ -1324,7 +1324,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             foreach (var kvp in LastEvaluationMetrics)
             {
                 writer.Write(kvp.Key);
-                writer.Write(Convert.ToDouble(kvp.Value));
+                writer.Write(NumOps.ToDouble(kvp.Value));
             }
         }
 
