@@ -18,6 +18,10 @@ on:
         description: 'Verify the existing repository mail key and synchronize the function mail secret'
         type: boolean
         default: false
+      configure_preview_auth:
+        description: 'Add the existing preview host to the Supabase Auth redirect allow list'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -118,6 +122,14 @@ jobs:
           printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/function-mail.env"
           supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/function-mail.env"
 
+      - name: Configure the existing preview Auth redirects
+        id: preview_auth
+        continue-on-error: true
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.configure_preview_auth && matrix.part == 'suite' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/configure-preview-auth.mjs
+
       - name: Run Playwright E2E smoke tests
         # Nothing is retried. A crawl re-run reaches the same broken link again, and a suite test that
         # passes only on a retry is a flaky check that should show red, not spend the job's budget.
@@ -143,10 +155,10 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           CI: '1'
 
-      - name: Keep a failed email verification visible
-        if: ${{ always() && steps.mail.outcome == 'failure' }}
+      - name: Keep failed environment preparation visible
+        if: ${{ always() && (steps.mail.outcome == 'failure' || steps.preview_auth.outcome == 'failure') }}
         run: |
-          echo "::error::The preview journeys ran, but the existing mail credential could not be verified or synchronized."
+          echo "::error::The preview journeys ran, but a requested mail or Auth configuration step failed. See the preparation step for its exact permission or configuration error."
           exit 1
 
       - name: Upload Playwright report
