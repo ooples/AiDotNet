@@ -134,8 +134,8 @@ public sealed class NormedConvSpectralTrajectoryTests
 
         private double Forward(double[] input, double target, double[] gradient)
         {
-            V = Normalize(Enumerable.Range(0, 6).Select(c => Enumerable.Range(0, 3).Sum(r => U[r] * Weight[r * 6 + c])).ToArray());
             U = Normalize(Enumerable.Range(0, 3).Select(r => Enumerable.Range(0, 6).Sum(c => Weight[r * 6 + c] * V[c])).ToArray());
+            V = Normalize(Enumerable.Range(0, 6).Select(c => Enumerable.Range(0, 3).Sum(r => U[r] * Weight[r * 6 + c])).ToArray());
             double sigma = Enumerable.Range(0, 18).Sum(i => U[i / 6] * Weight[i] * V[i % 6]);
             var kernelGradient = new double[18];
             double loss = 0;

@@ -332,9 +332,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         int rows = _direction.Shape[0], per = _direction.Length / rows;
         var v = Engine.Reshape(_direction, new[] { rows, per });
 
-        // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
-        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
-        // stored u and v unchanged.
+        // Match torch.nn.utils.parametrizations.spectral_norm: update u from the stored v FIRST, then v from the
+        // new u. The older spectral_norm hook used the opposite order; those orders disagree after a weight update.
+        // Both vectors are kept; σ = uᵀ V v with u and v held constant. Evaluation uses the stored state unchanged.
         Tensor<T> uT, vT;
         // Power iteration treats u/v as state, not differentiable functions of the weights. Keep the matrix and
         // state updates on the engine: downloading V and walking its elements dominated GPU vocoder training.
@@ -349,8 +349,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                     var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), null));
                     return Engine.TensorMultiply(x, Engine.TensorReciprocal(Engine.TensorMax(norm, NumOps.FromDouble(1e-12))));
                 }
-                var nextV = Normalize(Engine.TensorMatMul(uT, v));
-                var nextU = Normalize(Engine.TensorMatMul(v, Engine.Reshape(nextV, new[] { per, 1 })));
+                var nextU = Normalize(Engine.TensorMatMul(v, vT));
+                var nextV = Normalize(Engine.TensorMatMul(Engine.Reshape(nextU, new[] { 1, rows }), v));
                 Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
                 Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
                 // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
