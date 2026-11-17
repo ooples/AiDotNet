@@ -27,6 +27,21 @@ permissions:
   contents: read
 
 jobs:
+  preview-auth:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.configure_preview_auth }}
+    environment: Preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+      - name: Configure the existing preview Auth redirects
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node website/scripts/configure-preview-auth.mjs
+
   e2e:
     name: Playwright (${{ matrix.part }})
     environment: ${{ github.event_name == 'workflow_dispatch' && 'Preview' || 'Production' }}
@@ -122,14 +137,6 @@ jobs:
           printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/function-mail.env"
           supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/function-mail.env"
 
-      - name: Configure the existing preview Auth redirects
-        id: preview_auth
-        continue-on-error: true
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.configure_preview_auth && matrix.part == 'suite' }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: node scripts/configure-preview-auth.mjs
-
       - name: Run Playwright E2E smoke tests
         # Nothing is retried. A crawl re-run reaches the same broken link again, and a suite test that
         # passes only on a retry is a flaky check that should show red, not spend the job's budget.
@@ -156,9 +163,9 @@ jobs:
           CI: '1'
 
       - name: Keep failed environment preparation visible
-        if: ${{ always() && (steps.mail.outcome == 'failure' || steps.preview_auth.outcome == 'failure') }}
+        if: ${{ always() && steps.mail.outcome == 'failure' }}
         run: |
-          echo "::error::The preview journeys ran, but a requested mail or Auth configuration step failed. See the preparation step for its exact permission or configuration error."
+          echo "::error::The preview journeys ran, but the requested mail preparation failed. See that step for its exact permission or configuration error."
           exit 1
 
       - name: Upload Playwright report

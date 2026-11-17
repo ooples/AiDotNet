@@ -94,6 +94,10 @@ test.describe('Logged-in user — settings', () => {
     const dialog = page.locator('#delete-account-modal');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('revokes every license key');
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press(i % 2 ? 'Tab' : 'Shift+Tab');
+      expect(await page.evaluate(() => !!document.activeElement?.closest('#delete-account-modal')), 'keyboard focus stays in the deletion dialog').toBe(true);
+    }
     const confirm = page.locator('#delete-confirm-btn');
     await expect(confirm).toBeDisabled();
     await page.locator('#delete-confirm-input').fill('delete');
