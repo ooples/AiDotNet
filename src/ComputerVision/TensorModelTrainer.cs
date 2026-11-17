@@ -82,8 +82,10 @@ internal static class TensorModelTrainer<T>
 
     /// <summary>
     /// Forward, loss, backward and the optimizer update as one compiled plan, on the shared session every base
-    /// class trains through, when it applies. Only a tensor target can be a plan input; a typed target is read by
-    /// the loss closure on the host, so <see cref="StepWithTargets{TPrediction, TTarget}"/> stays eager.
+    /// class trains through, when an explicit optimizer and a tensor target are supplied. Plain-SGD and typed-target
+    /// objectives route through <see cref="StepWithTargets{TPrediction, TTarget}"/>, which delegates to the shared
+    /// persistent closure session on <see cref="AiDotNet.Training.TapeTrainingStepper{T}"/> and preserves its
+    /// continuity and committed-plan refusal checks.
     /// </summary>
     private static bool TryFusedStep(
         ModelBase<T, Tensor<T>, Tensor<T>> model,
@@ -139,12 +141,96 @@ internal static class TensorModelTrainer<T>
         Func<TPrediction, TTarget, Tensor<T>> loss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        // Resolve lazy layer shapes BEFORE reading the registry. The convolutions behind the Conv2D
-        // adapter infer their input depth on first Forward and own no parameters until then, so the
-        // registry would report none and the step would silently do nothing. No tape is active here,
-        // so this records nothing.
-        EnsureWarm(model, forward, input);
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
+        Tensor<T> Objective() => loss(forward(input), target);
 
+        // When compilation is off, TapeTrainingStepper skips closure warmup and goes straight to the eager tape.
+        // Run the single InferenceMode warmup first so lazy layers own their weights before reading the registry.
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+        {
+            EnsureWarm(model, forward, input);
+            var eagerParameters = RequireTrainableTensors(model);
+            return ExecuteObjectiveStep(model, () => eagerParameters, Objective, learningRate, optimizer, checkShapes);
+        }
+
+        // When compilation is enabled, TapeTrainingStepper's closure path runs its own throwaway warmup invocation
+        // before querying the parameter provider. Coordinate with WarmupState so concurrent callers serialize cold
+        // initialization, failed warmups remain retryable, and a fresh model pays only one warmup forward total
+        // while keeping owner: model routing (compiled closure execution + committed-state refusal checks) intact.
+        // Only the model's first (cold) step runs under the lock; every later step takes the unlocked path below.
+        // The warmup forward runs exactly once whichever side reaches it first: the stepper's closure warmup
+        // (objective), or the parameter provider when that stepper was already warmed by an earlier caller.
+        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
+        if (!System.Threading.Volatile.Read(ref warmup.Complete))
+        {
+            lock (warmup)
+            {
+                if (!warmup.Complete)
+                {
+                    Tensor<T> WarmAwareObjective()
+                    {
+                        if (!System.Threading.Volatile.Read(ref warmup.Complete))
+                        {
+                            using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
+                            var warmupLoss = loss(forward(input), target);
+                            System.Threading.Volatile.Write(ref warmup.Complete, true);
+                            return warmupLoss;
+                        }
+
+                        return loss(forward(input), target);
+                    }
+
+                    Tensor<T>[] ResolveParametersAfterWarmup()
+                    {
+                        if (!System.Threading.Volatile.Read(ref warmup.Complete))
+                        {
+                            using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
+                            forward(input);
+                            System.Threading.Volatile.Write(ref warmup.Complete, true);
+                        }
+
+                        return RequireTrainableTensors(model);
+                    }
+
+                    return ExecuteObjectiveStep(
+                        model,
+                        ResolveParametersAfterWarmup,
+                        WarmAwareObjective,
+                        learningRate,
+                        optimizer,
+                        checkShapes);
+                }
+            }
+        }
+
+        var parameters = RequireTrainableTensors(model);
+        return ExecuteObjectiveStep(model, () => parameters, Objective, learningRate, optimizer, checkShapes);
+    }
+
+    private static T ExecuteObjectiveStep(
+        ModelBase<T, Tensor<T>, Tensor<T>> model,
+        Func<IReadOnlyList<Tensor<T>>> parameters,
+        Func<Tensor<T>> objective,
+        T learningRate,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes)
+    {
+        return optimizer is null
+            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                parameters,
+                objective,
+                learningRate,
+                checkShapes,
+                owner: model)
+            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                parameters,
+                objective,
+                optimizer,
+                checkShapes);
+    }
+
+    private static Tensor<T>[] RequireTrainableTensors(ModelBase<T, Tensor<T>, Tensor<T>> model)
+    {
         var parameters = LiveTrainableTensors(model);
         if (parameters.Length == 0)
         {
@@ -152,13 +238,7 @@ internal static class TensorModelTrainer<T>
                 $"No live trainable tensors were discovered for model '{model.GetType().FullName}'.");
         }
 
-        // The shared eager step: the update runs inside the tape's scope (the gradients live in the step's arena), with
-        // plain SGD at the given rate or the caller's optimizer, whose state is keyed by these live tensors.
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
-        Tensor<T> Objective() => loss(forward(input), target);
-        return optimizer is null
-            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes)
-            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, Objective, optimizer, checkShapes);
+        return parameters;
     }
 
     // A gradient whose shape differs from its tensor means the forward used a reshaped copy or an
