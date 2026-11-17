@@ -958,11 +958,13 @@
         "src/AiDotNet.Tensors/Engines/Autodiff/GradientTape.cs",
         "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
-        "src/AiDotNet.Tensors/Engines/Compilation/FusedOptimizerCheckpointSerializer.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/FusedOptimizerCheckpointSerializer.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NamedRetainedOutputTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs",
-        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs"
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs"
       ],
       "file_scope_limits": {
         "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code.",
@@ -1516,7 +1518,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T17:32:35.623109+00:00",
+  "updated_utc": "2026-11-17T17:35:11.761230+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
