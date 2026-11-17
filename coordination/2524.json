@@ -1270,7 +1270,8 @@
       "rule": "Wait fullcycle before nextPRsourcepush; no manualcancel",
       "status": "ACTIVE; monitor cuda_capture exacthead/allworkflows/allpages",
       "package": "Oldc977coordination artifact; newstable0.151.2batch not yet onPR"
-    }
+    },
+    "post1766_policy_trainer_review": "Root-independent agent reviewed exact6files from1a9ec438c6: stableTensorLogSoftmax/Where and eager/compiled trainer numeric/refusal tests correct; one Half model-epsilonoverride blocker above. Shared Adam repair design under existing Codex scope; no new publicrelease."
   },
   "decisions": [
     {
@@ -1803,6 +1804,15 @@
       "status": "OWNER ACTION REQUESTED before final PR push; no Codex history mutation",
       "evidence": "C:/Users/cheat/source/artifacts/codex2524/resume-20261117/candidate-short-subjects.json",
       "finding": "Exact CI commitlint v19 + unchanged config checked current master53c7c2c0 to coordination8d3a37fb:3911ordinary commits,19header-max-length violations, no type/scope failures. CurrentPR7784 has8ofthose19. All19proposedsubjects pass same unchanged rules; retain original body/author/code trees/merge topology. Coordinate any shared-history rewrite/resync before final push."
+    },
+    {
+      "owner": "Antigravity Group1A owner of FinancialA2CAgent",
+      "files": "src/Finance/Trading/Agents/FinancialA2CAgent.cs CreateNetworkOptimizerOrDefault",
+      "finding": "Half-specific AdamEpsilon1e-5 changes optimizer algorithm to mask default1e-8 rounding0 in shared tape-state path. User explicitly rejects epsilon floors/workarounds. Vector Adam FP32state is implemented, but tape path still has T moments/epsilon. Other policy log-softmax/Where and trainer ownership changes reviewed as sound.",
+      "commit": "1a9ec438c6",
+      "id": "post1766-half-adam-model-epsilon-workaround",
+      "request": "Owner remove Half-specific epsilonoverride once Codex provides shared Half tape FP32master/moment repair under existing optimizer claim. Preserve all stable logprob/numeric/refusal tests; add no tolerance/gate weakening. Codex does not overlap FinancialA2CAgent edits.",
+      "status": "ROOT REVIEW BLOCKER; preserve stable logprob and trainer repairs"
     }
   ],
   "question_protocol": [
@@ -1812,7 +1822,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:38:04.1662464Z",
+  "updated_utc": "2026-11-17T21:42:51.4232102Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
