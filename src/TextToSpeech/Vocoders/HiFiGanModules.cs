@@ -2,6 +2,12 @@ using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Tensors.Helpers;
+
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -164,6 +170,13 @@ internal sealed class HiFiGanGenerator<T>
 
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
     {
+        // The native forward bypasses the generic layer walk's scratch recycling. Keep each branch's residual
+        // boundary, not every convolution's normalization and activation temporaries. A private arena never
+        // resets caller-owned input/condition tensors. GPU boundaries stay resident on their existing path.
+        bool recycle = InferenceArenaSettings.RecycleLayerScratch && TensorArena.Current is not null
+            && !_pre.InTrainingMode && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
+            && !_engine.Is<DirectGpuTensorEngine>();
+        using var scratch = recycle ? TensorArena.CreateDetached() : null;
         var ops = MathHelper.GetNumericOperations<T>();
         var x = _pre.Forward(features);
         if (condition is not null && Condition is not null)
@@ -176,14 +189,29 @@ internal sealed class HiFiGanGenerator<T>
             Tensor<T>? sum = null;
             foreach (var (first, second) in _blocks[i])
             {
+                using var active = scratch?.Activate();
                 var h = x;
                 for (int n = 0; n < first.Count; n++)
                 {
                     var t = first[n].Forward(LeakyRelu(h, Slope));
                     if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
                     h = _engine.TensorAdd(t, h);
+                    if (scratch is not null) h = scratch.DetachBoundaryAndReset(h);
                 }
-                sum = sum is null ? h : _engine.TensorAdd(sum, h);
+                if (sum is null)
+                {
+                    if (scratch is null) sum = h;
+                    else
+                    {
+                        // Own the first branch's sum outside the recyclable carry pool. Consume later branches
+                        // into this owned sum before they are recycled, preserving the original addition order.
+                        using (TensorArena.Suspend())
+                        using (TensorScope.Suspend())
+                            sum = new Tensor<T>(h.ToArray(), h.Shape.ToArray());
+                    }
+                }
+                else if (scratch is null) sum = _engine.TensorAdd(sum, h);
+                else _engine.TensorAddInPlace(sum, h);
             }
             x = _engine.TensorMultiplyScalar(sum!, ops.FromDouble(1.0 / _blocks[i].Count));
         }
@@ -193,6 +221,7 @@ internal sealed class HiFiGanGenerator<T>
         var y = _post.Forward(x);
         return _tanhOutput ? _engine.Tanh(y) : y;
     }
+
 }
 
 /// <summary>
