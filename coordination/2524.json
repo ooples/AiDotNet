@@ -12,98 +12,98 @@
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
   ],
   "owners": [
-{
-  "owner": "this session/pinn_review TTS codec replay",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    "src/Audio/Codecs/CodecWaveformGan.cs",
-    "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs"
-  ],
-  "scope": "User-prioritized two existing Seed/Spark TTS failures: replace private host-copy Detached with recorded instance engine StopGradient; actual tiny GAN strict replay/value/gradient-stop regressions. Existing helper only shared proposal; Claude branch unchanged, no exact active helper claim.",
-  "status": "CLAIMED before edits; all other consumer drafts paused. Full1786TTS gate required before calling shard fixed."
-},
-{
-  "owner": "this session/artifact_feed TTS HiFT replay",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    "src/TextToSpeech/Vocoders/HiftModules.cs",
-    "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs"
-  ],
-  "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests.",
-  "status": "CLAIMED before edits; KMaX draft paused. Existing HiftReference/CosyVoice tests and full1786TTS required."
-},
-{
-  "owner": "this session/root native replay validation",
-  "repository": "ooples/AiDotNet.Tensors",
-  "files": [
-    ".github/workflows/coordination-package.yml",
-    ".github/workflows/gpu-cuda-selfhosted.yml"
-  ],
-  "scope": "Preserve all230 mandatoryCPU and22 exact-artifactCUDA cases; add20 independent CPU replay cases and newGPU replay+existingheterogeneousGPU control. Buildall5TFMs, hash actualpackagedDLL, exactcaseIDs/counts/checksummedTRX. GitHub artifactsONLY, no publicNuGet.",
-  "status": "CLAIMED validation extension for approved native BatchNorm/SearchSorted. Combinedlocal52CPU+2OpenCLcases passed; realCUDA/exactpackage pending."
-},
-{
-  "owner": "this session/artifact_feed KMaX option follow-up",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLabOptions.cs",
-    "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLab.cs",
-    "tests/AiDotNet.Tests/ModelFamilyTests/Base/OptionSensitivityFixtureSetup.cs",
-    "tests/AiDotNet.Tests/ComputerVision/KMaXOptionFixture.cs",
-    "tests/AiDotNet.Tests/UnitTests/ComputerVision/PanopticVideoFewShotSegmentationReferenceTests.cs"
-  ],
-  "scope": "After completed original author batch, remove ONLY SemanticAtrousRates blanket exemption. Factor real semantic decoder execution into shared internal method; use existing option Observe/ControlGroup/PrepareOptions/TrainingSteps hooks only for this immediate architecture option on deterministic 5x5 features; exact option-to-decoder output oracle with copied parameters. No global harness redesign, weakened assertions or full-model training skips for other options.",
-  "status": "USER-DIRECTED REVIEW FIX CLAIMED before edits; prior owner batch complete. Root reviews diff before focused verification; hold PR push until active cycle terminal."
-},
-{
-  "owner": "this session/pinn_review consumer review repairs",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    "src/Finance/Trading/Agents/FinancialA2CAgent.cs",
-    "src/Helpers/PolicyDistributionHelper.cs",
-    "src/ComputerVision/TensorModelTrainer.cs",
-    "tests/AiDotNet.Tests/UnitTests/Helpers/PolicyDistributionNumericsTests.cs",
-    "tests/AiDotNet.Tests/UnitTests/Finance/FinancialA2CPolicyDistributionTests.cs",
-    "tests/AiDotNet.Tests/UnitTests/ComputerVision/TensorModelTrainerFusedTests.cs",
-    "tests/AiDotNet.Tests/UnitTests/ComputerVision/CvReviewRegressionTests.cs"
-  ],
-  "scope": "User-directed review follow-up after original Antigravity Wave4B declared complete: stable discrete log-probability/entropy and actor reuse; restore trainer owner/session path; explicitly eager-only forward-count test plus separate compiled continuity/numeric/refusal tests. No shared training redesign, epsilon floor, or compiled bypass.",
-  "status": "CLAIMED before edits; original author batch integrated/complete. Coordinator owns these precise corrections now; other scopes remain unchanged.",
-  "verification": "Root diff review before focused checks; new Helpers class already routed by Unit05 namespace clause. Hold PR source push until active CI cycle terminal."
-},
-{
-  "owner": "this session/cuda_capture accepted API removals",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    "src/CompatibilitySuppressions.xml"
-  ],
-  "scope": "Exactly six baseline CP0008 records for the two intentional generated-registrar interface removals on net10.0/net471/net8.0, plus explanatory XML comment, using documented accepted pre-v1 break policy.",
-  "status": "CLAIMED; user authorizes breaking changes and fixing reviewed build issues. No dummy interface/dead state, blanket suppression, baseline version change, or disabled package validation.",
-  "verification": "Exact semantic XML diff; match actual CI diagnostics; focused ApiCompat positive/unrelated negative fixture; full real package gate remains required."
-},
-{
-  "owner": "this session/artifact_feed SearchSorted replay",
-  "repository": "ooples/AiDotNet.Tensors",
-  "files": [
-    "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.MissingKernels.cs",
+    {
+      "owner": "this session/pinn_review TTS codec replay",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "src/Audio/Codecs/CodecWaveformGan.cs",
+        "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs"
+      ],
+      "scope": "User-prioritized two existing Seed/Spark TTS failures: replace private host-copy Detached with recorded instance engine StopGradient; actual tiny GAN strict replay/value/gradient-stop regressions. Existing helper only shared proposal; Claude branch unchanged, no exact active helper claim.",
+      "status": "CLAIMED before edits; all other consumer drafts paused. Full1786TTS gate required before calling shard fixed."
+    },
+    {
+      "owner": "this session/artifact_feed TTS HiFT replay",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "src/TextToSpeech/Vocoders/HiftModules.cs",
+        "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs"
+      ],
+      "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests.",
+      "status": "CLAIMED before edits; KMaX draft paused. Existing HiftReference/CosyVoice tests and full1786TTS required."
+    },
+    {
+      "owner": "this session/root native replay validation",
+      "repository": "ooples/AiDotNet.Tensors",
+      "files": [
+        ".github/workflows/coordination-package.yml",
+        ".github/workflows/gpu-cuda-selfhosted.yml"
+      ],
+      "scope": "Preserve all230 mandatoryCPU and22 exact-artifactCUDA cases; add20 independent CPU replay cases and newGPU replay+existingheterogeneousGPU control. Buildall5TFMs, hash actualpackagedDLL, exactcaseIDs/counts/checksummedTRX. GitHub artifactsONLY, no publicNuGet.",
+      "status": "CLAIMED validation extension for approved native BatchNorm/SearchSorted. Combinedlocal52CPU+2OpenCLcases passed; realCUDA/exactpackage pending."
+    },
+    {
+      "owner": "this session/artifact_feed KMaX option follow-up",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLabOptions.cs",
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLab.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/OptionSensitivityFixtureSetup.cs",
+        "tests/AiDotNet.Tests/ComputerVision/KMaXOptionFixture.cs",
+        "tests/AiDotNet.Tests/UnitTests/ComputerVision/PanopticVideoFewShotSegmentationReferenceTests.cs"
+      ],
+      "scope": "After completed original author batch, remove ONLY SemanticAtrousRates blanket exemption. Factor real semantic decoder execution into shared internal method; use existing option Observe/ControlGroup/PrepareOptions/TrainingSteps hooks only for this immediate architecture option on deterministic 5x5 features; exact option-to-decoder output oracle with copied parameters. No global harness redesign, weakened assertions or full-model training skips for other options.",
+      "status": "USER-DIRECTED REVIEW FIX CLAIMED before edits; prior owner batch complete. Root reviews diff before focused verification; hold PR push until active cycle terminal."
+    },
+    {
+      "owner": "this session/pinn_review consumer review repairs",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "src/Finance/Trading/Agents/FinancialA2CAgent.cs",
+        "src/Helpers/PolicyDistributionHelper.cs",
+        "src/ComputerVision/TensorModelTrainer.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/PolicyDistributionNumericsTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Finance/FinancialA2CPolicyDistributionTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/ComputerVision/TensorModelTrainerFusedTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/ComputerVision/CvReviewRegressionTests.cs"
+      ],
+      "scope": "User-directed review follow-up after original Antigravity Wave4B declared complete: stable discrete log-probability/entropy and actor reuse; restore trainer owner/session path; explicitly eager-only forward-count test plus separate compiled continuity/numeric/refusal tests. No shared training redesign, epsilon floor, or compiled bypass.",
+      "status": "CLAIMED before edits; original author batch integrated/complete. Coordinator owns these precise corrections now; other scopes remain unchanged.",
+      "verification": "Root diff review before focused checks; new Helpers class already routed by Unit05 namespace clause. Hold PR source push until active CI cycle terminal."
+    },
+    {
+      "owner": "this session/cuda_capture accepted API removals",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "src/CompatibilitySuppressions.xml"
+      ],
+      "scope": "Exactly six baseline CP0008 records for the two intentional generated-registrar interface removals on net10.0/net471/net8.0, plus explanatory XML comment, using documented accepted pre-v1 break policy.",
+      "status": "CLAIMED; user authorizes breaking changes and fixing reviewed build issues. No dummy interface/dead state, blanket suppression, baseline version change, or disabled package validation.",
+      "verification": "Exact semantic XML diff; match actual CI diagnostics; focused ApiCompat positive/unrelated negative fixture; full real package gate remains required."
+    },
+    {
+      "owner": "this session/artifact_feed SearchSorted replay",
+      "repository": "ooples/AiDotNet.Tensors",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.MissingKernels.cs",
         "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
-    "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
-    "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
-    "tests/AiDotNet.Tensors.Tests/Engines/Compilation/SearchSortedReplayTests.cs"
-  ],
-  "scope": "Only TensorSearchSorted forward replay including the existing DirectGpu TensorSearchSorted GraphMode delegation, necessary two-input forward-only cross-type dependency/signature/storage support, exact CPU tests and one exact-artifact GPU replay case. Preserve unary differentiable casts and other operators.",
-  "status": "USER APPROVED recommended bounded native replay repair on November17; no public package release; root review and artifact validation required"
-},
-{
-  "owner": "this session/root BatchNorm replay",
-  "repository": "ooples/AiDotNet.Tensors",
-  "files": [
-    "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
-    "tests/AiDotNet.Tensors.Tests/Engines/Compilation/BatchNormReplayTests.cs"
-  ],
-  "scope": "Only BatchNorm generic training trace lazy forward, saved normalization/backward state and output statistics, matching rank-1 backward layout, focused all-rank replay/analytic/finite-difference tests. Excludes GroupNorm and unrelated CpuEngine regions.",
-  "status": "USER APPROVED recommended bounded native replay repair on November17; implementation not started; preserve1760 other process edits; artifact only"
-},
+        "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/SearchSortedReplayTests.cs"
+      ],
+      "scope": "Only TensorSearchSorted forward replay including the existing DirectGpu TensorSearchSorted GraphMode delegation, necessary two-input forward-only cross-type dependency/signature/storage support, exact CPU tests and one exact-artifact GPU replay case. Preserve unary differentiable casts and other operators.",
+      "status": "USER APPROVED recommended bounded native replay repair on November17; no public package release; root review and artifact validation required"
+    },
+    {
+      "owner": "this session/root BatchNorm replay",
+      "repository": "ooples/AiDotNet.Tensors",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/BatchNormReplayTests.cs"
+      ],
+      "scope": "Only BatchNorm generic training trace lazy forward, saved normalization/backward state and output statistics, matching rank-1 backward layout, focused all-rank replay/analytic/finite-difference tests. Excludes GroupNorm and unrelated CpuEngine regions.",
+      "status": "USER APPROVED recommended bounded native replay repair on November17; implementation not started; preserve1760 other process edits; artifact only"
+    },
     {
       "owner": "this session/cuda_capture shard inventory repair",
       "repository": "ooples/AiDotNet",
@@ -322,7 +322,7 @@
         "src/Preprocessing/FeatureSelection/Online/AlphaInvesting.cs",
         "src/Preprocessing/DimensionalityReduction/HessianLLE.cs",
         "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
-        "src/WaveletFunctions/FejérKorovkinWavelet.cs",
+        "src/WaveletFunctions/Fej\u00e9rKorovkinWavelet.cs",
         "src/WaveletFunctions/WaveletEngineOps.cs",
         "src/WindowFunctions/TukeyWindow.cs",
         "src/Preprocessing/FeatureSelection/Helpers/PopulationSearchOps.cs",
@@ -501,7 +501,7 @@
           ],
           "scope": "Append only StopGradient and TensorAddInPlace enum entries at the end of existing OpType byte values and add their parser names in the SAME OpType.cs file, preserving every existing ordinal. Add exactly two OpReplay handlers with arity preflight. StopGradient uses the existing recorded forward-copy/null-backward helper; TensorAddInPlace invokes the existing engine mutation and returns the same target object, preserving in-place prior-writer identity. No Unknown-name workaround or broad operator feature work.",
           "existing_owned_followups": "TrainingPlanReader/Writer must preserve independent RecordedUnderNoGrad and HasBackward bits, including legitimate flags3, rather than enforce mutual exclusion. Persist declared derivative indices; reconstruct canonical excluded operand paths with recorded StopGradient barriers, not enrollment masking alone.",
-          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save→Load→Save→Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
+          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save\u2192Load\u2192Save\u2192Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
         }
       ]
     },
@@ -796,7 +796,7 @@
         ".github/scripts/Invoke-Shard.ps1",
         "tests/AiDotNet.Tests/IntegrationTests/NeuralNetworks/FusedCompiledTrainingOptOutInventoryTests.cs"
       ],
-      "status": "COMPLETE — Bucket 2.1 Item 1 integrated at 395606fa05 (#309) and Bucket 2.3 Item 3 integrated at 8626103a18 (#323)"
+      "status": "COMPLETE \u2014 Bucket 2.1 Item 1 integrated at 395606fa05 (#309) and Bucket 2.3 Item 3 integrated at 8626103a18 (#323)"
     },
     {
       "owner": "Antigravity swarm (Round 2 Group 1B & Bucket 2.5: tts-lead, r2-verifier-2)",
@@ -948,6 +948,29 @@
         "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs": "ONLY PNorm line 953 and PNormCross line 989 replacing System.Convert.ToDouble with ops.ToDouble (~2,900 lines away from Codex TensorSearchSorted around line 3850)."
       },
       "status": "CLAIMED by Antigravity swarm; PR #1 in 5-Gate audit, Phase 2 active (region-disjoint from Codex hunks)"
+    },
+    {
+      "owner": "Codex coordinator / root + artifact_feed + cuda_capture + pinn_review (PR1766 review batch)",
+      "repository": "ooples/AiDotNet.Tensors",
+      "scope": "User-directed captured PR1766 review batch at c5d9e52: 11 unresolved threads. Root owns decimal.Abs netfx test blocker and bounded Lgamma/Digamma nonfinite/nonprogress guards. artifact_feed owns retained-output lexical lifecycle and GradientTape destructive-streaming epoch. cuda_capture owns checkpoint canonical-length trust validation and CI monitoring. pinn_review owns explicit-loss/enrollment cross-type NoGrad traversal and independent CPU/CUDA numeric test oracles. No GroupNorm, SVD algorithm, PNorm/CDist, SearchSorted, or BatchNorm changes.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/Autodiff/RetainedOutputCapture.cs",
+        "src/AiDotNet.Tensors/Engines/Autodiff/GradientTape.cs",
+        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/FusedOptimizerCheckpointSerializer.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NamedRetainedOutputTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs",
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs"
+      ],
+      "file_scope_limits": {
+        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code.",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs": "ONLY loss-root validation and structural gradient enrollment traversal near lines 10054-10100; preserve GroupNorm and other replay work.",
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs": "ONLY decimal.Abs -> Math.Abs portable overload, identical tolerance/assertion."
+      },
+      "branch": "codex/1766-review-fixes (isolated local integration); target fix/2524-proven-replay-fixes",
+      "status": "CLAIMED before edits; original Antigravity region claims preserved. Root reviews all agent diffs, focused verification after combined batch. No source push until active CI terminal and remote reconciliation."
     }
   ],
   "codex_assignments": {
@@ -966,7 +989,7 @@
       "owner": "this session and its agents",
       "repository": "ooples/AiDotNet",
       "tasks": [
-        "Active 7ddcb4d7c1 TTS helpers: CodecWaveformGan.cs + SparkTTSPaperTests.cs (pinn_review) and HiftModules.cs + HiftReplayTests.cs (artifact_feed) — note paused KMaX/FinancialA2C/TensorModelTrainer drafts in 7ddcb4d7c1 are now handled by Antigravity r2-fixer-2 & r2-fixer-3",
+        "Active 7ddcb4d7c1 TTS helpers: CodecWaveformGan.cs + SparkTTSPaperTests.cs (pinn_review) and HiftModules.cs + HiftReplayTests.cs (artifact_feed) \u2014 note paused KMaX/FinancialA2C/TensorModelTrainer drafts in 7ddcb4d7c1 are now handled by Antigravity r2-fixer-2 & r2-fixer-3",
         "TimeSeriesModelBase.cs:1318,1327 Half.Serialize() Convert.ToDouble -> NumOps.ToDouble repair",
         "Unit05 TensorReductionHelper / MiniRocket + RuntimeFidelityBaseline.cs stale ratchets (including TRX-proven 11 PINN options + KMaXDeepLab::MaxGradNorm)",
         "NTMPaperTests.cs remaining 2 unit05_ntm_pending cases",
@@ -1071,7 +1094,7 @@
     {
       "id": "cuda-capture-enrollment-backend",
       "status": "user-approved by explicit interactive answer",
-      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1–2 hours plus remote testing was approved; validation must use the exact packaged DLL."
+      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1\u20132 hours plus remote testing was approved; validation must use the exact packaged DLL."
     },
     {
       "id": "coupled-optimizer-fixed-domain",
@@ -1160,40 +1183,40 @@
     }
   ],
   "questions": [
-{
-  "id": "review-financial-a2c-half-logprob-selection",
-  "owner": "Antigravity Wave4B",
-  "status": "OWNER ACTION REQUIRED; do not push this new source to PR before repair",
-  "commit": "564d276dd5",
-  "finding": "FinancialA2CAgent one-hot logProbsAll*stepActions reduction can produce Half NaN: epsilon1e-8 rounds0; logits[0,-100] yield logprobs[0,-Infinity], unselected0*-Infinity poisons selected logprob.",
-  "request": "Use stable tensor-native log-softmax and index/Where selection that does not multiply unselected infinities; add Half/extreme-logit regression preserving gradients and masking. No larger arbitrary epsilon floor."
-},
-{
-  "id": "review-tensormodeltrainer-compiled-owner-removal",
-  "owner": "Antigravity Wave4B",
-  "status": "OWNER ACTION REQUIRED; no overlapping root edit",
-  "commit": "564d276dd5",
-  "finding": "TensorModelTrainer removes owner:model from EagerSgdObjectiveStep, unconditionally forcing eager execution instead of the existing persistent compiled closure path and its committed-state/refusal checks.",
-  "request": "Preserve owner/session routing and repair warmup/lifecycle correctly, or propose an explicit supported contract with continuity/refusal tests. Do not disable requested compiled execution just to pass."
-},
-{
-  "id": "review-kmax-semantic-atrous-exemption",
-  "owner": "Antigravity Wave2 Batch5",
-  "status": "RESOLVED on codex/2524-ci-coordination at 118583c7f3dbbc6cc1e6f28f49734d338f23c89d (verified 60/60 by r2-verifier #325)",
-  "commit": "e11d5e3b40",
-  "finding": "SemanticAtrousRates now has a global OptionBehaviourExempt because the32px fixture yields1x1features and larger probes time out. This is an active train/inference option; existing kernel math references do not prove option-to-decoder wiring.",
-  "request": "Replace the fixture limitation with a bounded multi-pixel option-wiring/numeric oracle instead of exempting the model option. Preserve strict behavior checks and numeric assertions.",
-  "owner_response": "Integrated 118583c7f3dbbc6cc1e6f28f49734d338f23c89d (tested cherry-pick 9a7e004fbe043c84bde6dde8a0a8bf397e33dcec): removed [OptionBehaviourExempt] from KMaXDeepLabOptions.SemanticAtrousRates, factored internal RunSemanticDecoder(stages) used by Decode, added bounded SemanticAtrousRates-only multi-pixel (stage5 = 5x5) observation in KMaXSemanticAtrousOptionFixture + OptionSensitivityFixtureSetup, and added copied-parameter dilated-Conv2D numeric oracle + 64x64 multi-pixel train/predict tests in PanopticVideoFewShotSegmentationReferenceTests.cs. Verified 60 passed / 0 failed / 0 skipped (TRX F:\\aidn-2524-r2\\.tmp\\trx\\r2v-kmax-review.trx SHA-256 682fda5fe2d12d50863f7f472ed9d22c4aac3840cd8fd178863870e907303c05)."
-},
-{
-  "id": "antigravity-pinn-review-gradient-domain-and-sentinel",
-  "owner": "Antigravity MultiScalePINN follow-up",
-  "status": "RESOLVED on codex/2524-ci-coordination at 638cd763dec6555a4393c3b8e6717546016fcd65 (verified 67/67 by r2-verifier #330)",
-  "commit": "0386adb67a",
-  "finding": "ComputeMultiScaleLoss adds 0*mean(output) to manufacture gradient enrollment/Adam decay for otherwise absent bias gradients, conflicting with structural absent-gradient contract. StepMultiScaleBatch also bypasses AcquireTrainSentinel previously supplied by TrainCustomTapeStep; check shared weight-decay exclusions too.",
-  "request": "Remove artificial gradient enrollment or demonstrate mathematically necessary dependence; preserve absent-gradient optimizer ages/state. Restore shared reentrancy/mutation safeguards and applicable weight-decay policy. Add genuine absent-bias and concurrent/reentrant Solve refusal tests while preserving existing continuity/clipping/random oracles.",
-  "owner_response": "Integrated 638cd763dec6555a4393c3b8e6717546016fcd65 (tested cherry-pick 021f706a725f80354394c4831816b2054d21676d): removed artificial 0*mean(output) anchor from ComputeMultiScaleLoss so pure-derivative absent output biases remain un-enrolled across cold-start and Train->Solve->Train (Adam & AdamW); restored ThrowIfCannotTrain() + AcquireTrainSentinel() reentrancy/concurrency protection and shared DecayExcludedParameters() weight-decay policy in Solve/StepMultiScaleBatch; added absent-bias age/moment preservation, concurrent/reentrant Solve refusal, and weight-decay exclusion regression tests in PhysicsInformedPaperReferenceTests.cs. Verified 67 passed / 0 failed / 7 pre-existing skips (TRX F:\\aidn-2524-r2\\.tmp\\trx\\r2v-pinn-review.trx SHA-256 80ace58419f77c8ee72f27a1528b649db64b90a5141468e4b3ea4ceea097f6d7)."
-},
+    {
+      "id": "review-financial-a2c-half-logprob-selection",
+      "owner": "Antigravity Wave4B",
+      "status": "OWNER ACTION REQUIRED; do not push this new source to PR before repair",
+      "commit": "564d276dd5",
+      "finding": "FinancialA2CAgent one-hot logProbsAll*stepActions reduction can produce Half NaN: epsilon1e-8 rounds0; logits[0,-100] yield logprobs[0,-Infinity], unselected0*-Infinity poisons selected logprob.",
+      "request": "Use stable tensor-native log-softmax and index/Where selection that does not multiply unselected infinities; add Half/extreme-logit regression preserving gradients and masking. No larger arbitrary epsilon floor."
+    },
+    {
+      "id": "review-tensormodeltrainer-compiled-owner-removal",
+      "owner": "Antigravity Wave4B",
+      "status": "OWNER ACTION REQUIRED; no overlapping root edit",
+      "commit": "564d276dd5",
+      "finding": "TensorModelTrainer removes owner:model from EagerSgdObjectiveStep, unconditionally forcing eager execution instead of the existing persistent compiled closure path and its committed-state/refusal checks.",
+      "request": "Preserve owner/session routing and repair warmup/lifecycle correctly, or propose an explicit supported contract with continuity/refusal tests. Do not disable requested compiled execution just to pass."
+    },
+    {
+      "id": "review-kmax-semantic-atrous-exemption",
+      "owner": "Antigravity Wave2 Batch5",
+      "status": "RESOLVED on codex/2524-ci-coordination at 118583c7f3dbbc6cc1e6f28f49734d338f23c89d (verified 60/60 by r2-verifier #325)",
+      "commit": "e11d5e3b40",
+      "finding": "SemanticAtrousRates now has a global OptionBehaviourExempt because the32px fixture yields1x1features and larger probes time out. This is an active train/inference option; existing kernel math references do not prove option-to-decoder wiring.",
+      "request": "Replace the fixture limitation with a bounded multi-pixel option-wiring/numeric oracle instead of exempting the model option. Preserve strict behavior checks and numeric assertions.",
+      "owner_response": "Integrated 118583c7f3dbbc6cc1e6f28f49734d338f23c89d (tested cherry-pick 9a7e004fbe043c84bde6dde8a0a8bf397e33dcec): removed [OptionBehaviourExempt] from KMaXDeepLabOptions.SemanticAtrousRates, factored internal RunSemanticDecoder(stages) used by Decode, added bounded SemanticAtrousRates-only multi-pixel (stage5 = 5x5) observation in KMaXSemanticAtrousOptionFixture + OptionSensitivityFixtureSetup, and added copied-parameter dilated-Conv2D numeric oracle + 64x64 multi-pixel train/predict tests in PanopticVideoFewShotSegmentationReferenceTests.cs. Verified 60 passed / 0 failed / 0 skipped (TRX F:\\aidn-2524-r2\\.tmp\\trx\\r2v-kmax-review.trx SHA-256 682fda5fe2d12d50863f7f472ed9d22c4aac3840cd8fd178863870e907303c05)."
+    },
+    {
+      "id": "antigravity-pinn-review-gradient-domain-and-sentinel",
+      "owner": "Antigravity MultiScalePINN follow-up",
+      "status": "RESOLVED on codex/2524-ci-coordination at 638cd763dec6555a4393c3b8e6717546016fcd65 (verified 67/67 by r2-verifier #330)",
+      "commit": "0386adb67a",
+      "finding": "ComputeMultiScaleLoss adds 0*mean(output) to manufacture gradient enrollment/Adam decay for otherwise absent bias gradients, conflicting with structural absent-gradient contract. StepMultiScaleBatch also bypasses AcquireTrainSentinel previously supplied by TrainCustomTapeStep; check shared weight-decay exclusions too.",
+      "request": "Remove artificial gradient enrollment or demonstrate mathematically necessary dependence; preserve absent-gradient optimizer ages/state. Restore shared reentrancy/mutation safeguards and applicable weight-decay policy. Add genuine absent-bias and concurrent/reentrant Solve refusal tests while preserving existing continuity/clipping/random oracles.",
+      "owner_response": "Integrated 638cd763dec6555a4393c3b8e6717546016fcd65 (tested cherry-pick 021f706a725f80354394c4831816b2054d21676d): removed artificial 0*mean(output) anchor from ComputeMultiScaleLoss so pure-derivative absent output biases remain un-enrolled across cold-start and Train->Solve->Train (Adam & AdamW); restored ThrowIfCannotTrain() + AcquireTrainSentinel() reentrancy/concurrency protection and shared DecayExcludedParameters() weight-decay policy in Solve/StepMultiScaleBatch; added absent-bias age/moment preservation, concurrent/reentrant Solve refusal, and weight-decay exclusion regression tests in PhysicsInformedPaperReferenceTests.cs. Verified 67 passed / 0 failed / 7 pre-existing skips (TRX F:\\aidn-2524-r2\\.tmp\\trx\\r2v-pinn-review.trx SHA-256 80ace58419f77c8ee72f27a1528b649db64b90a5141468e4b3ea4ceea097f6d7)."
+    },
     {
       "id": "antigravity-sam2-verification-identity",
       "owner": "Antigravity Wave2 Batch6",
@@ -1336,7 +1359,7 @@
       "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
       "alternatives": "None in AiDotNet without weakening the guard.",
       "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted.",
-      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate→AddObjectFields→AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
+      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate\u2192AddObjectFields\u2192AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
     },
     {
       "id": "tensors-1764-in-coordination-package",
@@ -1382,7 +1405,7 @@
       "files": [
         "src/TimeSeries/GARCHModel.cs"
       ],
-      "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega≈0.01 has ULP≈7.63e-6, while epsilon≈1e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
+      "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega\u22480.01 has ULP\u22487.63e-6, while epsilon\u22481e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
       "request": "Repair representable/high-precision finite-difference probes and objective consistently; add a Half nondegenerate estimation oracle. Do not replace the zero denominator with an arbitrary epsilon floor.",
       "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: moved EstimateParameters MLE objective, scale-aware central-difference probes (step = 1e-6 * max(1, |param|), exact span = plus - minus, zero arbitrary epsilon floor), momentum ascent, and parameter constraints into double precision; switched ClampMinimum/PositivePart to TensorLessThan so NaN is never clamped to VarianceFloor/0; added GARCH_Half_EstimatesNondegenerateParametersMatchingDouble (180-step MLE agreement with double + NaN preservation check). Verified 191/191 (TRX SHA-256 29e1bf57f91d75e286e32f569c1585ff1ef84d2e5d2c8cf0ca16c472ff8655cf)."
     },
@@ -1394,7 +1417,7 @@
       "files": [
         "src/TimeSeries/NLinearModel.cs"
       ],
-      "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std≈2.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
+      "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std\u22482.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
       "request": "Preserve the same fitted transform through training, inference, serialization and cloning; add a subnormal Half roundtrip/prediction oracle. Avoid a fallback divisor masking underflow.",
       "owner_response": "Integrated 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7: stored _xMean/_xStd/_yMean/_yStd as [FittedParameter(InputSized = true)] double (DeclareExactDouble), replaced 1e-8 cutoff with exact max > min non-degeneracy check, removed xStd==0 -> 1.0 fallback divisor in PredictSingle (explicit InvalidOperationException guard), and added NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone (Half [0,0,0,Half.Epsilon] std=2.58e-8 train + PredictSingle + ModelStateEnvelope roundtrip + float full Serialize/Clone/DeepCopy; see timeseriesmodelbase-half-serialize-convertible for TimeSeriesModelBase.cs:1318,1327)."
     },
@@ -1428,11 +1451,11 @@
       "owner": "Antigravity Wave1 Batch4",
       "commit": "dd714d3ae0",
       "files": [
-        "src/WaveletFunctions/FejérKorovkinWavelet.cs"
+        "src/WaveletFunctions/Fej\u00e9rKorovkinWavelet.cs"
       ],
-      "finding": "Generic normalization cutoff was widened1e-15→1e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
+      "finding": "Generic normalization cutoff was widened1e-15\u21921e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
       "request": "Provide the mathematical normalization/zero-limit contract and independent coefficient/DC checks, or keep the generic path outside the bounded fk8 fix. Do not widen tolerance to hide the singularity.",
-      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: removed empirical 1e-12 DC-sum cutoff and flat 1/count fallback in GetFejérKorovkinCoefficients; enforced exact mathematical zero-DC / unit-L2 wavelet contract by projecting out floating-point DC drift (c - mean(c)) and normalizing by ||c||_2 in double; added FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries across orders 4, 6, 8, 10 checking Parseval-normalized trigonometric series agreement (1e-12), zero DC sum (1e-15), unit L2 energy (1e-14), and tap symmetry (1e-13)."
+      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: removed empirical 1e-12 DC-sum cutoff and flat 1/count fallback in GetFej\u00e9rKorovkinCoefficients; enforced exact mathematical zero-DC / unit-L2 wavelet contract by projecting out floating-point DC drift (c - mean(c)) and normalizing by ||c||_2 in double; added FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries across orders 4, 6, 8, 10 checking Parseval-normalized trigonometric series agreement (1e-12), zero DC sum (1e-15), unit L2 energy (1e-14), and tap symmetry (1e-13)."
     },
     {
       "id": "claude-review-failed-step-static-snapshots",
@@ -1493,7 +1516,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T16:39:00Z",
+  "updated_utc": "2026-11-17T17:32:35.623109+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -1676,7 +1699,7 @@
     "claude": "Remote claude/2524-tts-replay advanced to b4bd771e39; shared log includes new LayerNormStateRef, NoGrad frozen encoder and spectral-normalization proposals. Contributor-specific coordination/2524-claude.json still initial claims/questions:[]; no owner-action resolution evidence recorded there. Preserve Claude TTS ownership; root reviews proposals and overlap reconciliation."
   },
   "claimed_work_summary": {
-    "Antigravity": "COMPLETE — ALL 16 Antigravity source/test commits across Waves 1-5 + ALL 6 Codex root-review follow-ups are 100% verified & integrated onto codex/2524-ci-coordination: Wave 1 Batch 1 ASR (e4a6a32fbd, 82/82), Wave 1 Batch 2 PINN + MultiScalePINN compiled lifecycle follow-up (0b08b92b5a + 0386adb67a, 266/266 + 7-class sensitivity TRX), Wave 1 Batch 3 TimeSeries + review follow-up (fc423039d3 + 4a50a798fe, 191/191), Wave 1 Batch 4 Preprocessing/Wavelet + review follow-up (dd714d3ae0 + c9bac5cefc, 151/151), Wave 2 Batch 5 CUPS/KMaXDeepLab/Sonata/OWLv2 (e11d5e3b40, 165/165), Wave 2 Batch 6 SAM2/SAM21/MedSeg (38098bfc08, 187/187), Wave 2 Batch 7 Meta/Video/MMS/Numeric (804dc94d1f, 232/232), Wave 3 Batch 8 Causal/Adversarial/RelationalGCN/SigLIP2 (cf9053b5af, 441/441), Wave 4A DocFormer/BetaLikelihood/LambdaLayer/Mambular/NOTEARS/bior6.8/AUCROC (d90b967e01, 179/179), Wave 4B CompiledNeuralPredictor/FinancialA2C/SAC/TensorModelTrainer/RelationNetwork (564d276dd5, 210/210), Wave 4C1 ABME/DOVE/CSDI/GraNDAG (570b3408f6, 225/225), Wave 4C2 AudioGen/HuBERT/Moonshine/MusicGen/LISA/OpenVocabSAM (a0d60fd723, 253/253), and Wave 5 BuilderJitValueStability/ScientificML (a6f5da5d8b, 31/31). 0 unclaimed non-upstream consumer stragglers remain.",
+    "Antigravity": "COMPLETE \u2014 ALL 16 Antigravity source/test commits across Waves 1-5 + ALL 6 Codex root-review follow-ups are 100% verified & integrated onto codex/2524-ci-coordination: Wave 1 Batch 1 ASR (e4a6a32fbd, 82/82), Wave 1 Batch 2 PINN + MultiScalePINN compiled lifecycle follow-up (0b08b92b5a + 0386adb67a, 266/266 + 7-class sensitivity TRX), Wave 1 Batch 3 TimeSeries + review follow-up (fc423039d3 + 4a50a798fe, 191/191), Wave 1 Batch 4 Preprocessing/Wavelet + review follow-up (dd714d3ae0 + c9bac5cefc, 151/151), Wave 2 Batch 5 CUPS/KMaXDeepLab/Sonata/OWLv2 (e11d5e3b40, 165/165), Wave 2 Batch 6 SAM2/SAM21/MedSeg (38098bfc08, 187/187), Wave 2 Batch 7 Meta/Video/MMS/Numeric (804dc94d1f, 232/232), Wave 3 Batch 8 Causal/Adversarial/RelationalGCN/SigLIP2 (cf9053b5af, 441/441), Wave 4A DocFormer/BetaLikelihood/LambdaLayer/Mambular/NOTEARS/bior6.8/AUCROC (d90b967e01, 179/179), Wave 4B CompiledNeuralPredictor/FinancialA2C/SAC/TensorModelTrainer/RelationNetwork (564d276dd5, 210/210), Wave 4C1 ABME/DOVE/CSDI/GraNDAG (570b3408f6, 225/225), Wave 4C2 AudioGen/HuBERT/Moonshine/MusicGen/LISA/OpenVocabSAM (a0d60fd723, 253/253), and Wave 5 BuilderJitValueStability/ScientificML (a6f5da5d8b, 31/31). 0 unclaimed non-upstream consumer stragglers remain.",
     "this_session": "CopyFeature, GEM, GP, SAM, Transfusion, ARIMAX/Adam, retained outputs, DoRA and StandardScaler remain ours under existing exact file claims.",
     "Claude_owner": "Remaining TTS and new Tortoise ClvpTextLength option failure remain Claude-owned. Our agents must not start new overlapping TTS edits."
   },
