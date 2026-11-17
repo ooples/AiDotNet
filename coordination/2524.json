@@ -913,18 +913,34 @@
     {
       "owner": "Antigravity swarm (Round 2 Group 1C & Bucket 2.2: tensors-lead, r2-verifier-2)",
       "repository": "ooples/AiDotNet.Tensors",
-      "scope": "Antigravity Lead governance (strictly disjoint from Codex SearchSorted & BatchNorm files): Merge origin/main (v0.151.1 = 772ca81b50) + bump coordination artifact version to 0.151.2-coordination.* + adversarial audit of da76b5e8..c9770e98 + GroupNorm lazy training trace in new partial CpuEngine.GroupNormReplay.cs + Half PNormCross/TensorCDist IConvertible fix + GenericLinalg.SvdTall Jacobi rank-deficient convergence",
+      "scope": "Antigravity Lead governance (region-disjoint from Codex SearchSorted & BatchNorm hunks): Merge origin/main (v0.151.1 = 772ca81b50) + PR #1 proven replay/enrollment/predicate/sparse fixes + Phase 2 GroupNorm lazy training trace (CpuEngine.GroupNormReplay.cs + bounded hooks) + Half PNormCross/TensorCDist IConvertible fix + GenericLinalg.SvdTall Jacobi rank-deficient convergence",
       "files": [
         "src/AiDotNet.Tensors/Engines/CpuEngine.GroupNormReplay.cs",
-        "src/AiDotNet.Tensors/LinearAlgebra/GenericLinalg.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.cs",
+        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
+        "src/AiDotNet.Tensors/LinearAlgebra/Decompositions/GenericLinalg.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/GroupNormReplayTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/TensorPDistCDistHalfTests.cs",
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs",
         "Directory.Build.props"
       ],
       "new_files": [
         "src/AiDotNet.Tensors/Engines/CpuEngine.GroupNormReplay.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/GroupNormReplayTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/GroupNormReplayTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/TensorPDistCDistHalfTests.cs",
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs"
       ],
-      "status": "CLAIMED by Antigravity swarm; Stage A active (0 overlap with Codex CpuEngine.cs / CpuEngine.Parity210.cs)"
+      "file_scope_limits": {
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs": "ONLY GroupNorm<T> GraphMode block around lines 30309-30344 delegating to RecordGroupNormTraining (~3,700 lines away from Codex BatchNorm around line 26610).",
+        "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.cs": "ONLY 1-line GraphMode.IsActive delegation to base.GroupNorm in public override Tensor<T> GroupNorm<T> at line 26222 (matching IEngine.GroupNorm<T> at line 18003).",
+        "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY GroupNormBackward lines 2274-2291 reading GroupNormStateRef<T> plus LgammaBackward/DigammaBackward/NanToNumBackward ops.ToDouble/ops.IsNaN non-IConvertible widening at lines 9929, 9964, 10714.",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs": "ONLY OpType.GroupNorm specialization around lines 12224-12271 supporting GroupNormStateRef<T>.",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs": "ONLY PNorm line 953 and PNormCross line 989 replacing System.Convert.ToDouble with ops.ToDouble (~2,900 lines away from Codex TensorSearchSorted around line 3850)."
+      },
+      "status": "CLAIMED by Antigravity swarm; PR #1 in 5-Gate audit, Phase 2 active (region-disjoint from Codex hunks)"
     }
   ],
   "codex_assignments": {
@@ -1460,7 +1476,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T14:52:45Z",
+  "updated_utc": "2026-11-17T14:56:30Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
