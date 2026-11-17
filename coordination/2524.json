@@ -242,7 +242,7 @@
         "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs",
         "tests/AiDotNet.Tests/UnitTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
       ],
-      "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal queued next on fixer-2), Batch 3 (fc423039d3 + review follow-up 4a50a798fe, verified 191/191 by verifier-1), and Batch 4 (dd714d3ae0; 2 review follow-ups in Gate E verification on verifier-2)"
+      "status": "ALL 4 Wave 1 batches + Batch 3 & Batch 4 root-review follow-ups integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal active on fixer-2), Batch 3 (fc423039d3 + review follow-up 4a50a798fe, verified 191/191), and Batch 4 (dd714d3ae0 + review follow-up c9bac5cefc, verified 151/151 by verifier-2)"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -719,7 +719,7 @@
     "native_optimizer_repair": "Reviewed c977 implementation passed fresh GitHub230 CPU gates/all5TFMs and exact-packaged-DLL CUDA22 with zero skips; no public release. Consumer artifact pin and strict guards updated for next same-SHA branch validation.",
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified.",
     "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 + review follow-up 4a50a798fe76067b0bb8f10cd2564feba6e3d1c7 (tested commit acb5f3b4eae21a0c3be5b18f17fa080dbf449b46 = cherry-pick of edb2009d07dbd335c8d4cb2e21af030912ff6122 atop 9a82f98425, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w3-ts-review.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOps|FullyQualifiedName~TimeSeriesHalfPrecisionTests|FullyQualifiedName~STLDecompositionMovingAverageTests|FullyQualifiedName~SampleQuantilesNaNTests|FullyQualifiedName~Generated.ARModelTests|FullyQualifiedName~Generated.NLinearModelTests|FullyQualifiedName~Generated.GARCHModelTests|FullyQualifiedName~GARCHModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~TimeSeriesSeedTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests.GARCHModel\": 191 passed, 0 failed, 0 skipped, 0 new warnings, 0 null-forgiving operators; TRX w3-ts-review.trx SHA-256 29e1bf57f91d75e286e32f569c1585ff1ef84d2e5d2c8cf0ca16c472ff8655cf; verifier-1 #222).",
-    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (tested commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 199 passed, 0 failed, 0 skipped; 2 root-review follow-ups + new TRX receipt active on fixer-4).",
+    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 + review follow-up c9bac5cefcc3de1080f805f53be8c987f76665d9 (tested commit 7d264ba1bda4d49e9de5fb4bdcb3c6d61e399821 = cherry-pick of 6bc50c5b446a45f9c8e43864da1630248249d6e8 atop 9a82f98425, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w3-batch4-review.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~FeatureSelectionSweepReferenceTests|FullyQualifiedName~WaveletReferenceValueTests|FullyQualifiedName~AdvancedWaveletFunctionsTests|FullyQualifiedName~FairFeatureSelector|FullyQualifiedName~FeatureSelectionIntegrationTests|FullyQualifiedName~WaveletFunctionsIntegrationTests.Fej\": 151 passed, 0 failed, 0 skipped, 0 new warnings, 0 null-forgiving operators; TRX w3-batch4-review.trx SHA-256 888150b4c986014e0ff2952daffbf7b158575aa107759f1aed2772c0d84ff380; verifier-2 #230).",
     "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (tested commit 7128d2a01d = cherry-pick of 7ce3cb5cf948c273b273ff171df9f826c1c0e373 atop 4604bb6852, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; 244 passed, 0 failed, 14 pre-existing manual skips; TRX w1-batch2.trx SHA-256 4b4bd77eb818c9b04ffc509f62ebc6be917c2615ce1de3b3d39cc319a9adbbd0; MultiScalePINN IsFusedTrainingDisabled removal + sensitivity run queued next on fixer-2).",
     "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (tested commit c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29 cherry-picked atop 14b3ac885c, net10.0, AiDotNet.Tensors 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e DLL SHA-256 ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073; 82 passed, 0 failed, 0 skipped across 32 ModelInputMeetsFirstLayerTests slices + 9 ASR Gradients_MatchFiniteDifference + MelSpectrogramAxisTests + AudioProcessingTests + DiffusersSchedulerReferenceTests; TRX w1-batch1.trx SHA-256 72764061b9f3e891f3116df77369d2d7a4c7d50bf45c90d10ff22365d6e8a115).",
     "antigravity_w2_batch6_sam2_medseg": "Integrated 38098bfc08fe791f3648b0e50df69a44d5d95d89 (tested commit addd236eeb17ab79c8d95000042ce432ed6019c0 = cherry-pick of dd2af244b1a0cb62176a727c655fc052d5ef10e5 atop e2af460f2e, net10.0, AiDotNet.Tensors 0.151.1-coordination.43990270445.1.gc9770e98d97a DLL SHA-256 347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e; 187 passed, 0 failed, 18 pre-existing skips, 0 new warnings, 0 null-forgiving operators; TRX w2-batch6.trx SHA-256 01991dc5a1e0644c86df1d74b68c9ef98a0ada9285ca0ff6fc241ad802be5566).",
@@ -1035,25 +1035,27 @@
     },
     {
       "id": "antigravity-review-fairness-even-median",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED on codex/2524-ci-coordination at c9bac5cefcc3de1080f805f53be8c987f76665d9; ready for root review",
       "owner": "Antigravity Wave1 Batch4",
       "commit": "dd714d3ae0",
       "files": [
         "src/Preprocessing/FeatureSelection/Fairness/FairFeatureSelector.cs"
       ],
       "finding": "Upper-middle threshold changes the conventional even-count median contract. Protected [0,1,2,3], feature [1,1,9,9] changes disparate-impact ratio from1/9 to11/27; balanced binary tests do not cover this.",
-      "request": "Preserve midpoint median for continuous even samples or propose an explicit justified policy change. Add the independent continuous-even oracle and retain binary/empty-group cases."
+      "request": "Preserve midpoint median for continuous even samples or propose an explicit justified policy change. Add the independent continuous-even oracle and retain binary/empty-group cases.",
+      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: restored conventional sample midpoint median 0.5 * (sorted[(n - 1) / 2] + sorted[n / 2]) in double ([0, 1, 2, 3] -> 1.5, [0, 0, 1, 1] -> 0.5) while keeping the < median vs >= median tie fallback when median equals column maximum on non-constant attributes ([0, 1, 1, 1]); added continuous-even oracle ([0, 1, 2, 3] / [1, 1, 9, 9] -> 1/9), skewed-binary tie ([0, 1, 1, 1] -> 1/3), and constant-attribute ([1, 1, 1, 1] -> 0) tests in FeatureSelectionSweepReferenceTests.cs. Verified 151/151 (TRX SHA-256 888150b4c986014e0ff2952daffbf7b158575aa107759f1aed2772c0d84ff380)."
     },
     {
       "id": "antigravity-review-wavelet-normalizer",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED on codex/2524-ci-coordination at c9bac5cefcc3de1080f805f53be8c987f76665d9; ready for root review",
       "owner": "Antigravity Wave1 Batch4",
       "commit": "dd714d3ae0",
       "files": [
         "src/WaveletFunctions/FejérKorovkinWavelet.cs"
       ],
       "finding": "Generic normalization cutoff was widened1e-15→1e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
-      "request": "Provide the mathematical normalization/zero-limit contract and independent coefficient/DC checks, or keep the generic path outside the bounded fk8 fix. Do not widen tolerance to hide the singularity."
+      "request": "Provide the mathematical normalization/zero-limit contract and independent coefficient/DC checks, or keep the generic path outside the bounded fk8 fix. Do not widen tolerance to hide the singularity.",
+      "owner_response": "Integrated c9bac5cefcc3de1080f805f53be8c987f76665d9: removed empirical 1e-12 DC-sum cutoff and flat 1/count fallback in GetFejérKorovkinCoefficients; enforced exact mathematical zero-DC / unit-L2 wavelet contract by projecting out floating-point DC drift (c - mean(c)) and normalizing by ||c||_2 in double; added FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries across orders 4, 6, 8, 10 checking Parseval-normalized trigonometric series agreement (1e-12), zero DC sum (1e-15), unit L2 energy (1e-14), and tap symmetry (1e-13)."
     },
     {
       "id": "claude-review-failed-step-static-snapshots",
@@ -1069,10 +1071,11 @@
     },
     {
       "id": "antigravity-verification-evidence",
-      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "status": "RESOLVED on codex/2524-ci-coordination at c9bac5cefcc3de1080f805f53be8c987f76665d9; all TRX SHA-256 + Tensors DLL SHA-256 + exact commands recorded",
       "owner": "Antigravity coordinator/verifiers",
       "finding": "Coordination reports223/223 TimeSeries and199/199 preprocessing, but review has no linked TRX/stdout/command evidence yet.",
-      "request": "Post exact tested commit, framework, command/filter and concise TRX/stdout locations or artifact URLs; include independent fk8 source/reference and rationale for fairness median change."
+      "request": "Post exact tested commit, framework, command/filter and concise TRX/stdout locations or artifact URLs; include independent fk8 source/reference and rationale for fairness median change.",
+      "owner_response": "Recorded exact tested commits, net10.0 commands/filters, AiDotNet.Tensors package/DLL SHA-256 (347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e), TRX SHA-256 hashes across all Wave 1 & Wave 2 batches, Nielsen (2001) J. Approx. Theory 108 Theorem 1 spectral factorization reference for fk8, and midpoint-median + zero-DC/unit-L2 follow-up fixes in 4a50a798fe and c9bac5cefcc3de1080f805f53be8c987f76665d9."
     },
     {
       "id": "antigravity-pinn-runtime-fidelity-ratchet-11",
@@ -1102,7 +1105,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T05:26:34.634894Z",
+  "updated_utc": "2026-11-17T05:55:27.131582Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
