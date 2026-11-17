@@ -379,6 +379,19 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
         _ => "synthesis",
     };
 
+    // Cold-start synthesis trains all three randomly initialized networks simultaneously before
+    // SBMENet and ABMRNet have pre-trained Stage-1/2 flows; ramping from the single-pair Goyal
+    // batch-scaled rate (lr / ReferenceBatchSize) to the full batch-N paper rate over the first
+    // 200 steps prevents unscaled first-step Adam sign jumps from flipping 20x-scaled border flows.
+    private const int ColdStartWarmupSteps = 200;
+
+    private static int ReferenceBatchSize(AbmeTrainingStage stage) => stage switch
+    {
+        AbmeTrainingStage.SymmetricMotion => 24,
+        AbmeTrainingStage.AsymmetricMotion => 16,
+        _ => 6,
+    };
+
     private int[] Milestones(AbmeTrainingStage stage) => stage switch
     {
         AbmeTrainingStage.SymmetricMotion => _options.SymmetricMilestones,
@@ -390,6 +403,26 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     {
         if (_customOptimizer is not null) return _customOptimizer;
         if (_optimizers.TryGetValue(stage, out var existing)) return existing;
+        var milestones = Milestones(stage).ToArray();
+        int firstMilestone = milestones.Length > 0 ? milestones.Min() : int.MaxValue;
+        int warmupSteps = firstMilestone > ColdStartWarmupSteps ? ColdStartWarmupSteps : 0;
+        ILearningRateScheduler scheduler = warmupSteps > 0
+            ? new SequentialLRScheduler(
+                new ILearningRateScheduler[]
+                {
+                    new LinearWarmupScheduler(
+                        _options.LearningRate,
+                        warmupSteps,
+                        totalSteps: 0,
+                        warmupInitLr: _options.LearningRate / ReferenceBatchSize(stage),
+                        decayMode: LinearWarmupScheduler.DecayMode.Constant),
+                    new MultiStepLRScheduler(
+                        _options.LearningRate,
+                        milestones.Select(m => m - warmupSteps).ToArray(),
+                        _options.DecayRate),
+                },
+                new[] { warmupSteps })
+            : new MultiStepLRScheduler(_options.LearningRate, milestones, _options.DecayRate);
         // The paper states no betas, so Adam keeps PyTorch's (0.9, 0.999) and epsilon 1e-8.
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
@@ -400,7 +433,7 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
             UseAdaptiveLearningRate = false,
             UseAdaptiveBetas = false,
             UseAMSGrad = false,
-            LearningRateScheduler = new MultiStepLRScheduler(_options.LearningRate, Milestones(stage).ToArray(), _options.DecayRate),
+            LearningRateScheduler = scheduler,
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         });
         var verified = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer, Component(stage));
