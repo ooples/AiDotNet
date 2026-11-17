@@ -269,14 +269,17 @@ def audit_coverage(category: str, claim: dict, run: dict) -> list[str]:
         # This is a review artifact, not an automated assertion that static inventory proves execution.
         source_audit(route, run)
         if route.get("status") == "measured":
-            if route.get("provider") not in providers:
+            assigned = route.get("providers", [route.get("provider")])
+            if ("providers" in route and "provider" in route) or not assigned or len(set(assigned)) != len(assigned):
+                raise ValueError("Allocation route provider composition is empty, ambiguous or duplicated.")
+            if any(provider not in providers for provider in assigned):
                 raise ValueError("Allocation route has no eligible measured provider: " + role)
             if run["side"] == "aidotnet":
-                if role == "managed_fresh" and route["provider"] != "clr_arrays":
+                if role == "managed_fresh" and assigned != ["clr_arrays"]:
                     raise ValueError("Instrumented partial CPU requests do not bound every fresh array.")
-                if role == "framework_pool_borrows" and route["provider"] == "clr_arrays":
+                if role == "framework_pool_borrows" and "clr_arrays" in assigned:
                     raise ValueError("Array callbacks do not observe reused pool/arena borrows.")
-            used.add(route["provider"])
+            used.update(assigned)
         elif route.get("status") != "inactive" and not (claim["bound"] == "lower" and route.get("status") == "excluded_lower_bound"):
             raise ValueError("Allocation route is unknown or partially covered: " + role)
     if used != set(providers):
