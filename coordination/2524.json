@@ -964,12 +964,14 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs",
         "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs",
+        "src/AiDotNet.Tensors/ElementWiseBaseline.txt"
       ],
       "file_scope_limits": {
         "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code.",
         "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs": "ONLY loss-root validation and structural gradient enrollment traversal near lines 10054-10100; preserve GroupNorm and other replay work.",
-        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs": "ONLY decimal.Abs -> Math.Abs portable overload, identical tolerance/assertion."
+        "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs": "ONLY decimal.Abs -> Math.Abs portable overload, identical tolerance/assertion.",
+        "src/AiDotNet.Tensors/ElementWiseBaseline.txt": "ONLY remove the two obsolete LgammaBackward/DigammaBackward 2-count TENS0011 entries after engine multiplication removes those generic numeric loops. No increases/exemptions."
       },
       "branch": "codex/1766-review-fixes (isolated local integration); target fix/2524-proven-replay-fixes",
       "status": "CLAIMED before edits; original Antigravity region claims preserved. Root reviews all agent diffs, focused verification after combined batch. No source push until active CI terminal and remote reconciliation."
@@ -1518,7 +1520,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T17:35:11.761230+00:00",
+  "updated_utc": "2026-11-17T17:44:02.049275+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
