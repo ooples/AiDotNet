@@ -274,7 +274,8 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/OperationReorderingPassTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs",
-        "src/AiDotNet.Tensors/Engines/CpuEngine.cs"
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.ShortcutPair.cs"
       ],
       "new_files": [
         "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
