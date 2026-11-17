@@ -563,11 +563,34 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return Layers[index];
     }
 
+    private Tensor<T> VocabularyProjectionWeights(int width)
+    {
+        var layer = VocabularyProjection();
+        if (layer is NeuralNetworks.Layers.LayerBase<T> lb)
+        {
+            if (!lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape([width]);
+            }
+
+            lb.MaterializeParameters();
+        }
+
+        var projection = layer.GetWeights();
+        if (projection is null || projection.Rank != 2 || projection.Shape[0] != width)
+        {
+            throw new InvalidOperationException(
+                "The captioning vocabulary projection must hold [CaptioningDecoderDim, VocabSize] weights.");
+        }
+
+        return projection;
+    }
+
     // The tied input embeddings [n, width] of several tokens: columns of the vocabulary projection.
     private Tensor<T> CaptionTokenEmbeddings(int[] tokens, int width)
     {
-        var projection = VocabularyProjection().GetWeights();
-        if (projection is null || projection.Rank != 2 || projection.Shape[0] != width || tokens.Any(t => t < 0 || t >= projection.Shape[1]))
+        var projection = VocabularyProjectionWeights(width);
+        if (tokens.Any(t => t < 0 || t >= projection.Shape[1]))
             throw new InvalidOperationException(
                 "The captioning vocabulary projection must hold [CaptioningDecoderDim, VocabSize] weights covering every token.");
         return Engine.TensorTranspose(Engine.TensorIndexSelect(projection, new Tensor<int>([tokens.Length], Vector<int>.FromArray(tokens)), 1));
@@ -579,12 +602,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// </summary>
     private Tensor<T> CaptionTokenEmbedding(int token, int width)
     {
-        int projectionIndex = _captioningDecoderEnd - 1;
-        if (projectionIndex < _textEncoderEnd || projectionIndex >= Layers.Count)
-            throw new InvalidOperationException("The captioning decoder has no vocabulary projection layer.");
-
-        var projection = Layers[projectionIndex].GetWeights();
-        if (projection is null || projection.Rank != 2 || projection.Shape[0] != width || token >= projection.Shape[1])
+        var projection = VocabularyProjectionWeights(width);
+        if (token < 0 || token >= projection.Shape[1])
             throw new InvalidOperationException(
                 "The captioning vocabulary projection must hold [CaptioningDecoderDim, VocabSize] weights.");
 

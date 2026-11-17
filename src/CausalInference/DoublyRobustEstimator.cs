@@ -82,7 +82,6 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
-    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
@@ -592,6 +591,10 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     }
 
     #region IFullModel Implementation
+
+    /// <inheritdoc />
+    protected override void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
+        => base.RegisterGeneratedParameterComponents(registry);
 
     /// <inheritdoc />
     /// <remarks>

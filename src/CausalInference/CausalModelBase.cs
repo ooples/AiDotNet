@@ -677,6 +677,8 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
     /// </summary>
     protected Matrix<T> ExtractCovariates(Matrix<T> input)
     {
+        EnsureFitted();
+
         if (input.Columns == NumFeatures)
         {
             return input;

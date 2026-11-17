@@ -332,7 +332,7 @@ public class GroundingHeadPaperTests
                 VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 4, DropoutRate = 0.0,
             });
         var model = (AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<double>)owner;
-        var image = new Tensor<double>(Random(21, 1, 4, 32).ToArray(), new[] { 1, 4, 32 });
+        var image = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Random(21, 1, 3, 28, 28), 1.0), 0.5);
         var boxes = new[] { new GroundingBox("cat", 0.1, 0.2, 0.5, 0.6) };
 
         double before = model.EvaluateGroundingLoss(image, "cat", boxes);

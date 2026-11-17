@@ -133,12 +133,14 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
                 honestCount++;
             }
 
-            // Preference matching
+            // Preference matching: map unbounded Bradley-Terry log-odds r(x, y) to [0, 1] via logistic sigmoid (r = 0 -> 0.5).
             if (i < evaluationData.ReferenceScores.Length)
             {
-                var predictedScore = rewardModel?.Invoke(input, output) ?? 0.5;
-                var referenceScore = evaluationData.ReferenceScores[i];
-                totalPreferenceMatch += 1.0 - Math.Abs(predictedScore - referenceScore);
+                double predictedScore = rewardModel is not null
+                    ? 1.0 / (1.0 + Math.Exp(-rewardModel(input, output)))
+                    : 0.5;
+                double referenceScore = MathHelper.Clamp(evaluationData.ReferenceScores[i], 0.0, 1.0);
+                totalPreferenceMatch += MathHelper.Clamp(1.0 - Math.Abs(predictedScore - referenceScore), 0.0, 1.0);
             }
         }
 
