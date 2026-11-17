@@ -185,7 +185,8 @@ const ENUMERATE = (path: string) => {
       const norm = (v: string) => v.replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*|\d+/gi, 'N');
       const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && !a.name.startsWith('data-crawl-') && a.value.length < 40)
         .map((a) => `[${a.name}=${norm(a.value)}]`).sort().join('');
-      const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(label)}${data}`;
+      const controlName = el.matches('tbody .copy-key-btn') ? 'Copy license key' : label;
+      const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(controlName)}${data}`;
       return {
         key: `${scope} ${el.id ? `#${el.id}` : generic}`,
         selector: cssPath(el),
@@ -204,6 +205,7 @@ const ENUMERATE = (path: string) => {
 
 export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const { page, request, origin } = o;
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
   const findings: Finding[] = [];
   const tag = o.persona?.kind ?? 'anon';
   const add = (pg: string, control: string, problem: string) => {
@@ -211,7 +213,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     console.log(`[crawl ${tag}] FINDING ${pg} | ${control} -> ${problem}`);
   };
   const visited: string[] = [];
-  const queue = [...new Set(o.seeds)];
+  const queue = [...new Set(o.seeds.map((seed) => new URL(seed, origin).pathname))];
   const queued = new Set(queue);
   const exercised = new Set<string>();
   const keys = new Set<string>();
@@ -349,7 +351,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     current = { page: path, control: '' };
     await ensureSession();
     responses.length = 0;
-    const res = await page.goto(path, { waitUntil: 'load', timeout: 30_000 }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
+    const res = await page.goto(new URL(path, origin).href, { waitUntil: 'load', timeout: 30_000 }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
     if (!res) return false;
     if (res.status() >= 400) { add(path, '(page load)', `HTTP ${res.status()}`); return false; }
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
@@ -571,6 +573,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (o.dedicated.some(([re]) => re.test(c.key))) return false;
       return true;
     });
+    if (!todo.length) return;
     for (const c of todo) {
       if (exercised.has(c.key)) continue;
       doneOnPage.add(c.key);
@@ -597,6 +600,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       }
       if (o.persona && !(await hasSession(page).catch(() => false))) await ensureSession();
     }
+    // Collapsing a section or finishing an asynchronous render can expose controls that were
+    // absent from the original sibling list. Re-enumerate this state until no new controls
+    // remain; doneOnPage prevents retries of unreachable controls and cycles.
+    if (depth < maxDepth && new URL(page.url()).pathname === pg) await explore(pg, path, depth, doneOnPage);
   }
 
   for (const seed of queue) { const f = familyOf(seed); if (f) familyVisits.set(f, (familyVisits.get(f) ?? 0) + 1); }

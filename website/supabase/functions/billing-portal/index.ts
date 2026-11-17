@@ -1,5 +1,5 @@
 import { serve as serveHttp } from "https://deno.land/std@0.177.0/http/server.ts";
-import { withCors } from "../_shared/cors.ts";
+import { withCors, websiteOrigin } from "../_shared/cors.ts";
 const serve = (handler: (req: Request) => Response | Promise<Response>) => serveHttp(withCors(handler));
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
@@ -139,7 +139,7 @@ serve(async (req: Request) => {
   }
   const returnPath = typeof body.return_path === "string" && /^\/(account|pricing)\/[\w\-/]*$/.test(body.return_path)
     ? body.return_path : "/account/billing/";
-  const returnUrl = `${ALLOWED_ORIGIN}${returnPath}`;
+  const returnUrl = `${websiteOrigin(req) ?? ALLOWED_ORIGIN}${returnPath}`;
 
   const admin = createClient(url, service);
   const { data: profile, error: profileError } = await admin

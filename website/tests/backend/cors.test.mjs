@@ -7,7 +7,7 @@ import { runInNewContext } from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import ts from 'typescript';
 
-function loadHandler(name) {
+function loadHandler(name, dependencies = {}) {
   let handler;
   const cache = new Map();
   function load(path) {
@@ -19,11 +19,11 @@ function loadHandler(name) {
     }).outputText;
     runInNewContext(code, {
       exports, Request, Response, Headers, crypto: webcrypto, TextEncoder, TextDecoder, Uint8Array, atob, btoa,
-      Deno: { env: { get: () => undefined } }, console,
+      Deno: { env: { get: (key) => dependencies.env?.[key] } }, console,
       require(id) {
         if (id.includes('deno.land')) return { serve: (fn) => { handler = fn; } };
-        if (id.includes('supabase-js')) return { createClient() { throw new Error('CORS checks must not call the backend'); } };
-        if (id.includes('stripe@')) return class Stripe {};
+        if (id.includes('supabase-js')) return { createClient: dependencies.createClient ?? (() => { throw new Error('CORS checks must not call the backend'); }) };
+        if (id.includes('stripe@')) return dependencies.Stripe ?? class Stripe {};
         if (id.startsWith('.')) return load(resolve(dirname(path), id));
         throw new Error(`Unexpected dependency: ${id}`);
       },
@@ -33,6 +33,34 @@ function loadHandler(name) {
   load(fileURLToPath(new URL(`../../supabase/functions/${name}/index.ts`, import.meta.url)));
   return handler;
 }
+
+test('billing portal returns customers to the originating approved website', async () => {
+  const sessions = [];
+  class Stripe {
+    static createFetchHttpClient() { return {}; }
+    prices = { async *list() {} };
+    billingPortal = {
+      configurations: { async *list() { yield { id: 'config', metadata: { tag: 'aidotnet-plans-v1', products: '[]' } }; } },
+      sessions: { async create(params) { sessions.push(params); return { url: 'https://billing.stripe.com/session' }; } },
+    };
+  }
+  const handler = loadHandler('billing-portal', {
+    Stripe,
+    env: { SUPABASE_URL: 'https://fixture.invalid', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service', STRIPE_SECRET_KEY: 'stripe' },
+    createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
+      from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { stripe_customer_id: 'customer' } }) }) }) }),
+    }),
+  });
+  for (const origin of ['https://test.aidotnet.dev', 'https://www.aidotnet.dev', 'https://attacker.example']) {
+    const response = await handler(new Request('https://fixture.invalid', {
+      method: 'POST', headers: { Origin: origin, Authorization: 'Bearer session' },
+      body: JSON.stringify({ action: 'manage', return_path: '/pricing/' }),
+    }));
+    assert.equal(response.status, 200);
+    assert.equal(sessions.at(-1).return_url, `${origin.includes('attacker') ? 'https://www.aidotnet.dev' : origin}/pricing/`);
+  }
+});
 
 for (const name of ['billing-portal', 'delete-account', 'register-community-license', 'issue-license', 'admin-resend-license-email', 'validate-license']) {
   test(`${name}: production and preview preflight and error responses have correct CORS`, async () => {

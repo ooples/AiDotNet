@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Logged-in user — API keys', () => {
-  test('full create → reveal → revoke round-trip', async ({ page }) => {
+  test('full create → reveal → revoke round-trip', async ({ page, context, baseURL }) => {
     // The key name carries the test-run timestamp so repeated CI runs
     // don't collide on the same row, and so we can grep for this row
     // later to make assertions like "only our key was revoked".
@@ -24,11 +24,7 @@ test.describe('Logged-in user — API keys', () => {
     await page.getByLabel('Key Name').fill(keyName);
     // 'Inference' scope is pre-checked; leave the defaults to prove the
     // default-scope contract still holds.
-    // Submit via requestSubmit() rather than .click() so the test is
-    // immune to any layout issue that could intercept the button click
-    // (modal backdrop, z-index quirks, animation overlays). The form's
-    // submit listener fires the same code path either way.
-    await page.locator('#create-key-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
+    await page.locator('#create-key-form button[type="submit"]').click();
 
     // --- Reveal (one-time-only modal) ---
     // If the INSERT fails (RLS, constraint violation, network error), the
@@ -60,7 +56,10 @@ test.describe('Logged-in user — API keys', () => {
       /^adn_[0-9a-f]{64}$/,
     );
 
-    await page.getByRole('button', { name: /I've copied my key/ }).click();
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(baseURL!).origin });
+    await page.locator('#copy-key-btn').click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(revealedKey);
+    await page.locator('#close-new-key').click();
     await expect(newKeyModal).toBeHidden();
 
     // --- Appears in the list with a masked preview, not the full key ---

@@ -4,10 +4,7 @@ import { test, expect } from '@playwright/test';
 // toggle, features search / clear / category expand / copy, homepage code tabs, OAuth buttons,
 // and the mobile menu. Each test asserts the control's effect, not just that it rendered.
 
-const desktopOnly = (name: string) => name !== 'anon-desktop';
-
 test('theme toggle switches dark mode and the choice survives a reload', async ({ page }, info) => {
-  test.skip(desktopOnly(info.project.name), 'desktop only');
   await page.goto('/');
   const isDark = () => page.evaluate(() => document.documentElement.classList.contains('dark'));
   const before = await isDark();
@@ -20,7 +17,6 @@ test('theme toggle switches dark mode and the choice survives a reload', async (
 });
 
 test('pricing monthly/yearly toggle swaps every price and back', async ({ page }, info) => {
-  test.skip(desktopOnly(info.project.name), 'desktop only');
   await page.goto('/pricing/');
   const prices = page.locator('[data-monthly-price][data-yearly-price]');
   const n = await prices.count();
@@ -34,7 +30,6 @@ test('pricing monthly/yearly toggle swaps every price and back', async ({ page }
 });
 
 test('features search filters, reports no results, clears, and expands categories', async ({ page, context, baseURL }, info) => {
-  test.skip(desktopOnly(info.project.name), 'desktop only');
   await page.goto('/features/');
   const categories = page.locator('.feature-category');
   const total = await categories.count();
@@ -79,7 +74,6 @@ test('features search filters, reports no results, clears, and expands categorie
 });
 
 test('homepage code tabs switch panels and selection state', async ({ page }, info) => {
-  test.skip(desktopOnly(info.project.name), 'desktop only');
   await page.goto('/');
   const tabs = page.locator('.code-tab');
   const n = await tabs.count();
@@ -100,7 +94,6 @@ for (const [path, ids, destination] of [
   ['/signup/', ['github-signup', 'google-signup'], null],
 ] as const) {
   test(`${path} OAuth buttons start the provider sign-in with our callback`, async ({ page, baseURL }, info) => {
-    test.skip(desktopOnly(info.project.name), 'desktop only');
     for (const id of ids) {
       const provider = id.split('-')[0];
       let authorize: URL | undefined;

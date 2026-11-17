@@ -77,7 +77,7 @@ export async function generateLink(
   redirectTo: string,
   password?: string,
 ): Promise<string> {
-  const res = await request.post(`${env('SUPABASE_URL')}/auth/v1/admin/generate_link`, {
+  const res = await request.post(`${env('SUPABASE_URL')}/auth/v1/admin/generate_link?redirect_to=${encodeURIComponent(redirectTo)}`, {
     headers: adminHeaders(),
     data: { type, email, password, redirect_to: redirectTo },
   });

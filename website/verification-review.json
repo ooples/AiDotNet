@@ -3,21 +3,58 @@
   "baseline_commit": "f9f5daae24da0723084ae85d02079bbb89365d26",
   "release_verified": false,
   "verification_results": {
-    "preview_browser": { "passed": 414, "failed": 0, "skipped": 10, "duration": "2.3 minutes", "report": "playwright-report/preview/index.html", "note": "Skipped cases are duplicate or inapplicable viewport checks; real-backend projects are excluded from this preview config." },
-    "backend_handler_contracts": { "passed": 15, "failed": 0, "scope": "Checkout webhook and CORS for six functions" },
-    "postgres_policy_tests": { "passed": 20, "failed": 0, "scope": "Disposable local PostgreSQL; baseline owner-to-admin escalation reproduced before applying the migration" },
-    "frontend_type_check": { "errors": 0, "warnings": 0, "hints": 21 },
+    "preview_browser": {
+      "passed": 414,
+      "failed": 0,
+      "skipped": 10,
+      "duration": "2.3 minutes",
+      "report": "playwright-report/preview/index.html",
+      "note": "Skipped cases are duplicate or inapplicable viewport checks; real-backend projects are excluded from this preview config."
+    },
+    "backend_handler_contracts": {
+      "passed": 15,
+      "failed": 0,
+      "scope": "Checkout webhook and CORS for six functions"
+    },
+    "postgres_policy_tests": {
+      "passed": 20,
+      "failed": 0,
+      "scope": "Disposable local PostgreSQL; baseline owner-to-admin escalation reproduced before applying the migration"
+    },
+    "frontend_type_check": {
+      "errors": 0,
+      "warnings": 0,
+      "hints": 21
+    },
     "git_diff_check": "passed",
     "production_writes_performed": false,
-    "deployed": false
+    "deployed": false,
+    "deployed_baseline": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44131778451",
+      "passed": 420,
+      "failed": 4,
+      "skipped": 12,
+      "did_not_run": 6,
+      "note": "Failures: Stripe external selector, signup confirmation redirect, setup-snippet render timing, and real license email. Subsequent targeted license lifecycle passed after the user updated the Supabase Resend secret."
+    },
+    "license_email_after_secret_update": {
+      "passed": 3,
+      "failed": 0,
+      "report": "playwright-report/deployed/index.html",
+      "note": "Actual issue, email, resend, SDK validation, revoke, online rejection and signed CRL checks passed. This targeted report is replaced by later deployed runs."
+    },
+    "backend_handler_tests": {
+      "passed": 16,
+      "failed": 0,
+      "note": "Boundary doubles execute real handlers; includes approved-origin Stripe return URLs. Not live payment settlement."
+    }
   },
   "scope": "Adversarial review of website, browser coverage, and checkout webhook; isolated preview verification first",
   "existing_preview_environment": {
     "url": "https://test.aidotnet.dev",
-    "discovered_from": "supabase/config.toml auth.additional_redirect_urls and HTTP verification",
-    "access_observed": "Redirects to Vercel SSO login; application and backend configuration not yet inspected",
-    "github_environment": "Preview – aidotnet_website",
-    "note": "An existing website preview does not require a new Supabase branch. Historical generated preview deployment URLs checked on 2026-11-17 returned HTTP 410."
+    "deployment": "dpl_6e2Kp2nXYp5vahnh2Gt2cGpXFYjF",
+    "access_observed": "Protected preview is accessible using a temporary same-origin automation cookie. Refreshed preview includes 12222 built routes.",
+    "backend": "Existing shared Supabase project yfkqwpgjahoamlgckjib; no new branch or paid environment created."
   },
   "findings": [
     {
@@ -25,47 +62,60 @@
       "problem": "Deployed legacy admin_update_all_profiles permits owners to update their own role and billing fields; permissive policies OR together, bypassing the stricter policy. API key update policies also bypass immutable-field checks, and api_usage permits public INSERT.",
       "status": "Migration prepared and verified locally; not applied remotely",
       "implementation": "supabase/migrations/20261117000000_close_legacy_policy_bypasses.sql",
-      "tests": ["tests/database/rls.test.mjs"],
+      "tests": [
+        "tests/database/rls.test.mjs"
+      ],
       "evidence": "Read-only pg_policies inspection of the deployed database, followed by reproducing owner-to-admin escalation in disposable PostgreSQL using the observed policy combination. Twenty post-fix tests cover protected fields, normal profile saves, multi-key revocation, admin operations, service writes, email sync, and forged usage."
     },
     {
       "severity": "high",
       "problem": "Six deployed edge functions reject the existing preview origin via CORS by returning Access-Control-Allow-Origin: https://www.aidotnet.dev to requests from https://test.aidotnet.dev.",
-      "status": "Fixed and tested locally; not deployed",
+      "status": "Deployed minimal CORS wrapper to six existing handlers; preflight verified and community registration passed against preview",
       "implementation": "supabase/functions/_shared/cors.ts",
-      "tests": ["tests/backend/cors.test.mjs"],
+      "tests": [
+        "tests/backend/cors.test.mjs"
+      ],
       "evidence": "Read-only OPTIONS checks against billing-portal, delete-account, register-community-license, issue-license, admin-resend-license-email, and validate-license. Regression tests cover preflight and actual error responses, production and preview origins, rejected lookalikes, and concurrent request isolation."
     },
     {
       "severity": "high",
       "problem": "Login accepted external redirect destinations; callback path checks allowed backslash/control-character origin escapes.",
-      "status": "fixed locally",
+      "status": "Deployed to preview and browser regressions passed",
       "implementation": "src/lib/redirect.ts",
-      "tests": ["tests/e2e/auth/callback.spec.ts", "tests/e2e/billing-preview.spec.ts"]
+      "tests": [
+        "tests/e2e/auth/callback.spec.ts",
+        "tests/e2e/billing-preview.spec.ts"
+      ]
     },
     {
       "severity": "high",
       "problem": "An unpaid Checkout completion granted entitlements; checkout.session.async_payment_succeeded was ignored.",
       "status": "fixed locally",
       "implementation": "supabase/functions/stripe-webhook/index.ts",
-      "tests": ["tests/backend/stripe-webhook.test.mjs"],
+      "tests": [
+        "tests/backend/stripe-webhook.test.mjs"
+      ],
       "remaining": "The deployed Stripe endpoint must subscribe to checkout.session.async_payment_succeeded. The handler tests use boundary doubles, not live Stripe or a database.",
       "reference": "https://docs.stripe.com/checkout/fulfillment.md?ui=full-page"
     },
     {
       "severity": "high",
       "problem": "Crawler handlers leaked across passes; request emission and unsuccessful clipboard operations could count as success; unexplored visible controls could be silently omitted.",
-      "status": "fixed locally",
+      "status": "Committed coverage-gate fixes; real persona crawls exposed additional gaps under repair",
       "implementation": "tests/e2e/helpers/crawler.ts",
-      "tests": ["tests/e2e/crawler.spec.ts"],
-      "remaining": "An observable effect still does not establish the correct business outcome; dedicated journey assertions remain necessary. Template sampling and mobile key deduplication remain explicit coverage limits."
+      "tests": [
+        "tests/e2e/crawler.spec.ts"
+      ],
+      "remaining": "Template sampling remains explicit. Phone crawls now re-exercise shared controls with a real mobile device context. Real business outcomes are asserted separately."
     },
     {
       "severity": "medium",
       "problem": "The docs root depended on a Vercel redirect and produced an empty delayed-redirect document on static previews.",
-      "status": "fixed locally",
+      "status": "Deployed to preview and browser check passed",
       "implementation": "src/pages/docs/index.astro",
-      "tests": ["tests/e2e/docs.spec.ts"]
+      "tests": [
+        "tests/e2e/docs.spec.ts"
+      ]
     },
     {
       "severity": "medium",
@@ -77,7 +127,11 @@
       "severity": "medium",
       "problem": "Navigation tests hard-coded the production hostname, sampled links, and raced asynchronous auth redirects. Some tests silently passed when expected controls were absent.",
       "status": "fixed for navigation, landing CTA, and landing internal links",
-      "tests": ["tests/e2e/navigation.spec.ts", "tests/e2e/landing-page.spec.ts", "tests/e2e/links.spec.ts"]
+      "tests": [
+        "tests/e2e/navigation.spec.ts",
+        "tests/e2e/landing-page.spec.ts",
+        "tests/e2e/links.spec.ts"
+      ]
     }
   ],
   "integration_requirements": [
@@ -97,14 +151,35 @@
     "Existing admin crawler stubs writes; dedicated integration tests must prove persistence.",
     "A passing test count is not a claim that every possible user state or path was exercised."
   ],
-  "commands": ["npm run check", "npm run test:backend", "npm run test:rls", "npm run test:preview"],
+  "commands": [
+    "npm run check",
+    "npm run test:backend",
+    "npm run test:rls",
+    "npm run test:preview"
+  ],
   "backend_access_observed": {
     "github_supabase_secret_name_exists": true,
     "github_preview_environment_secrets": [],
     "supabase_tools_exposed_in_this_session": true,
     "verified_project": "yfkqwpgjahoamlgckjib",
     "project_status": "ACTIVE_HEALTHY",
-    "available_branches": ["main"],
+    "available_branches": [
+      "main"
+    ],
     "note": "Supabase OAuth and MCP tools verified after CLI daemon restart. Project, branches, migrations, security advisors, and log access work. A preview branch creation attempt made no changes because Supabase requires cost confirmation."
+  },
+  "remote_changes": {
+    "production_frontend_deployed": false,
+    "database_migration_applied": false,
+    "checkout_webhook_fix_deployed": false,
+    "shared_backend_functions": [
+      "billing-portal",
+      "delete-account",
+      "register-community-license",
+      "issue-license",
+      "admin-resend-license-email",
+      "validate-license"
+    ],
+    "note": "Minimal CORS deployment preserved existing business logic and authentication. billing-portal additionally returns customers to their originating approved website. The user replaced the Supabase Resend secret. Disposable labelled records were created for actual integration verification."
   }
 }

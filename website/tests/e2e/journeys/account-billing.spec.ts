@@ -120,7 +120,7 @@ test.describe('Pro bought online', () => {
     await page.getByRole('button', { name: /^confirm/i }).click();
     // The persona's trial has no card, so Stripe asks for one before it changes the plan. A live-mode
     // card cannot be entered here, so the test stops at that step and leaves the plan untouched.
-    await expect(page.getByRole('heading', { name: /update your payment method/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Update your payment method', { exact: true })).toBeVisible({ timeout: 30_000 });
     await Promise.all([
       page.waitForURL((u) => u.href.startsWith(`${baseURL}/pricing/`), { timeout: 60_000 }),
       page.getByRole('link', { name: /return to/i }).click(),
