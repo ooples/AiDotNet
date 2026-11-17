@@ -158,8 +158,11 @@ class GateTests(unittest.TestCase):
             path = Path(temporary) / "manifest.json"
             hashes = {"pytorch_benchmark": "a" * 64}
             run = {"artifacts": hashes, "artifact_paths": {"hifigan_reference_manifest": str(path)}}
-            def bind(source):
-                path.write_text(json.dumps({"benchmark_source_sha256": source}))
+            def bind(source, exporter=None):
+                manifest = {"benchmark_source_sha256": source}
+                if exporter is not None:
+                    manifest["exporter_source_sha256"] = exporter
+                path.write_text(json.dumps(manifest))
                 hashes["hifigan_reference_manifest"] = hashlib.sha256(path.read_bytes()).hexdigest()
             bind(hashes["pytorch_benchmark"])
             self.assertEqual("pass", reference_recipe_gate(run)["status"])
@@ -172,6 +175,11 @@ class GateTests(unittest.TestCase):
             bind(None)
             self.assertEqual("unverified", reference_recipe_gate(run)["status"])
             bind("a" * 64)
+            hashes["reference_exporter"] = "c" * 64
+            bind("a" * 64, exporter="d" * 64)
+            self.assertIn("exporter hash does not match", reference_recipe_gate(run)["reason"])
+            bind("a" * 64, exporter=hashes["reference_exporter"])
+            self.assertEqual("pass", reference_recipe_gate(run)["status"])
             hashes.pop("pytorch_benchmark")
             self.assertEqual("unverified", reference_recipe_gate(run)["status"])
 
