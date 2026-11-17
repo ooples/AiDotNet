@@ -39,6 +39,7 @@ PROVIDERS = {
     "aidotnet_cpu_requests": ("aidotnet", {"cpu_framework_requested"}),
     "aidotnet_gpu_requests": ("aidotnet", {"gpu_framework_requested"}),
     "aidotnet_compiled_workspace_loans": ("aidotnet", {"gpu_framework_requested"}),
+    "aidotnet_step_scratch_reuse": ("aidotnet", {"gpu_framework_requested"}),
     "aidotnet_cuda_backing_api": ("aidotnet", {"gpu_backing"}),
     "torch_cpu_memory_events": ("pytorch", {"cpu_framework_requested", "cpu_backing"}),
     "torch_cuda_requests": ("pytorch", {"gpu_framework_requested"}),
@@ -213,6 +214,7 @@ def provider_values(run: dict, phases: list[dict], provider: str) -> dict[str, d
         "aidotnet_cpu_requests": ("cpu_storage_requested", "partial_numeric_storage_request_boundaries"),
         "aidotnet_gpu_requests": ("gpu_buffer_requested", "primitive8_32_backend_buffer_api_only"),
         "aidotnet_compiled_workspace_loans": ("gpu_compiled_workspace_loan_requested", "successful_compiled_broker_loans_only"),
+        "aidotnet_step_scratch_reuse": ("gpu_step_scratch_reuse_requested", "successful_step_scratch_free_loans_only"),
         "aidotnet_cuda_backing_api": ("gpu_native_api_requested", "cuda_tracker_hook_sites_only"),
     }[provider]
     def select(event):

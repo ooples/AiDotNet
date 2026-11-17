@@ -228,17 +228,19 @@ class ContractTests(unittest.TestCase):
     def test_compiled_workspace_loans_are_requests_and_cannot_be_backing(self):
         run = self.run_fixture()
         phases = checked_phases(run)
-        for index, event in enumerate(phases):
-            event["allocator_diagnostics"]["gpu_compiled_workspace_loan_requested"] = {
-                "bytes": (index + 1) * 64, "count": index + 1,
-                "coverage": "successful_compiled_broker_loans_only"}
-        values = provider_values(run, phases, "aidotnet_compiled_workspace_loans")
-        self.assertEqual(256, sum(value["bytes"] for value in values.values()))
-        self.assertEqual(4, sum(value["count"] for value in values.values()))
-        claim = copy.deepcopy(self.contract["allocations"]["aidotnet"]["cpu_backing"])
-        claim.update(scope=SCOPES["gpu_backing"], providers=["aidotnet_compiled_workspace_loans"])
-        with self.assertRaises(ValueError):
-            audit_coverage("gpu_backing", claim, run)
+        for provider, field, coverage in (
+            ("aidotnet_compiled_workspace_loans", "gpu_compiled_workspace_loan_requested", "successful_compiled_broker_loans_only"),
+            ("aidotnet_step_scratch_reuse", "gpu_step_scratch_reuse_requested", "successful_step_scratch_free_loans_only"),
+        ):
+            for index, event in enumerate(phases):
+                event["allocator_diagnostics"][field] = {"bytes": (index + 1) * 64, "count": index + 1, "coverage": coverage}
+            values = provider_values(run, phases, provider)
+            self.assertEqual(256, sum(value["bytes"] for value in values.values()))
+            self.assertEqual(4, sum(value["count"] for value in values.values()))
+            claim = copy.deepcopy(self.contract["allocations"]["aidotnet"]["cpu_backing"])
+            claim.update(scope=SCOPES["gpu_backing"], providers=[provider])
+            with self.assertRaises(ValueError):
+                audit_coverage("gpu_backing", claim, run)
 
     def test_allocation_count_fails_independently_of_byte_win(self):
         runs = [self.run_fixture(side, pair, mode) for pair in range(5)
