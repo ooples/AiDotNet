@@ -134,7 +134,9 @@ const REACHABLE = (selector: string) => {
   const r = el.getBoundingClientRect();
   if (r.width === 0 || r.height === 0 || (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) === false) return false;
   const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
-  return !modal || modal.contains(el);
+  if (modal && !modal.contains(el)) return false;
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return !!hit && (hit === el || el.contains(hit));
 };
 
 const ENUMERATE = (path: string) => {
@@ -560,6 +562,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   }
 
   async function reachable(selector: string) {
+    try { await page.locator(selector).first().scrollIntoViewIfNeeded({ timeout: 3_000 }); }
+    catch { return false; }
     return page.evaluate(REACHABLE, selector).catch(() => false);
   }
 

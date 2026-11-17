@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, devices } from '@playwright/test';
 
 test.describe('Admin — licenses', () => {
   test('renders header, filter dropdowns, and the issue-license modal', async ({ page }) => {
@@ -50,5 +50,26 @@ test.describe('Admin — licenses', () => {
     await expect(page.locator('#issue-modal')).toBeHidden();
 
     expect(consoleErrors, 'admin licenses should emit zero console errors').toEqual([]);
+  });
+});
+
+test.describe('Phone admin license dialog', () => {
+  test.use({ ...devices['Pixel 5'] });
+
+  test('the issuance form scrolls and its Cancel button accepts a real phone tap', async ({ page }) => {
+    await page.goto('/admin/licenses/');
+    await expect(page.locator('#licenses-loading')).toBeHidden();
+    await page.getByRole('button', { name: 'Issue License', exact: true }).click();
+    const modal = page.locator('#issue-modal');
+    await expect(modal).toBeVisible();
+    await page.locator('#issue-product').selectOption('aidotnet');
+    await page.locator('#issue-email').fill('delivered+e2e-phone-cancel@resend.dev');
+    await page.locator('#issue-customer-name').fill('E2E phone dialog cancellation');
+    await page.locator('#issue-notes').fill('The Cancel action must be reachable without zooming or horizontal panning.');
+    const cancel = page.locator('#cancel-issue-btn');
+    await cancel.scrollIntoViewIfNeeded();
+    await expect(cancel).toBeInViewport();
+    await cancel.click();
+    await expect(modal).toBeHidden();
   });
 });

@@ -150,7 +150,7 @@ test('a new customer signs up, buys Pro, manages their account and recovers thei
     await page.goto('/account/licenses/');
     const copy = page.locator('.copy-key-btn').first();
     await expect(copy).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/professional/i).first()).toBeVisible();
+    await expect(page.locator('#licenses-container').getByText(/^professional$/i)).toBeVisible();
     await copy.click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(licenseKey);
   });
