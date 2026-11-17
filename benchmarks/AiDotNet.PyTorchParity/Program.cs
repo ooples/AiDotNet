@@ -128,6 +128,18 @@ if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
         Flag("--series-length", 20_000), Flag("--seed", 42), only);
 }
 
+int hifiReferenceAt = Array.IndexOf(args, "--verify-hifigan");
+if (hifiReferenceAt >= 0)
+{
+    if (hifiReferenceAt + 1 >= args.Length) throw new ArgumentException("--verify-hifigan requires a reference directory.");
+    string directory = args[hifiReferenceAt + 1];
+    int outputAt = Array.IndexOf(args, "--output");
+    string output = outputAt >= 0 && outputAt + 1 < args.Length ? args[outputAt + 1]
+        : Path.Combine(directory, "aidotnet-equivalence.json");
+    return HifiGanReferenceVerifier.Run(directory, output);
+}
+
+
 var benchOptions = BenchmarkOptions.Parse(args);
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
