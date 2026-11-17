@@ -965,13 +965,15 @@
         "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs",
-        "src/AiDotNet.Tensors/ElementWiseBaseline.txt"
+        "src/AiDotNet.Tensors/ElementWiseBaseline.txt",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs"
       ],
       "file_scope_limits": {
         "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs": "ONLY LgammaBackward/DigammaBackward scalar special-function guards and bounded recurrence; preserve Antigravity ops.ToDouble widening and GroupNorm code.",
         "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs": "ONLY loss-root validation and structural gradient enrollment traversal near lines 10054-10100; preserve GroupNorm and other replay work.",
         "tests/AiDotNet.Tensors.Tests/LinearAlgebra/RankDeficientSvdConvergenceTests.cs": "ONLY decimal.Abs -> Math.Abs portable overload, identical tolerance/assertion.",
-        "src/AiDotNet.Tensors/ElementWiseBaseline.txt": "ONLY remove the two obsolete LgammaBackward/DigammaBackward 2-count TENS0011 entries after engine multiplication removes those generic numeric loops. No increases/exemptions."
+        "src/AiDotNet.Tensors/ElementWiseBaseline.txt": "ONLY remove the two obsolete LgammaBackward/DigammaBackward 2-count TENS0011 entries after engine multiplication removes those generic numeric loops. No increases/exemptions.",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
       "status": "PUSHED root-reviewed captured batch after prior cycle terminal. 165 focused tests pass0skip; net471/net462 test builds pass. Full exact-head GitHub CI monitoring underway. CUDA numeric assertion unresolved until real execution. No independent PR source pushes until cycle terminal; no public release or merge.",
@@ -1532,7 +1534,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T17:50:56.262980+00:00",
+  "updated_utc": "2026-11-17T18:16:04.903787+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
