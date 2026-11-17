@@ -646,8 +646,9 @@ internal sealed class DifferentiableMel<T>
     private readonly IEngine _engine;
     private readonly int _fft;
     private readonly int _hop;
-    private readonly Tensor<T> _cos;
-    private readonly Tensor<T> _sin;
+    private readonly Tensor<T>? _cos;
+    private readonly Tensor<T>? _sin;
+    private readonly Tensor<T>? _fftWindow;
     private readonly Tensor<T> _mel;
 
     /// <param name="singlePrecisionBasis">librosa's float32 filterbank exactly (its default dtype, as references that keep
@@ -660,25 +661,53 @@ internal sealed class DifferentiableMel<T>
         _fft = fftSize;
         _hop = hopSize;
         int bins = fftSize / 2 + 1;
-        // Periodic Hann window of the window length, centred in the FFT frame (torch.stft pads the window).
-        var window = new double[fftSize];
-        int offset = (fftSize - windowSize) / 2;
-        for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
-        _cos = new Tensor<T>(new[] { fftSize, bins });
-        _sin = new Tensor<T>(new[] { fftSize, bins });
-        for (int n = 0; n < fftSize; n++)
-            for (int k = 0; k < bins; k++)
-            {
-                double a = 2 * Math.PI * n * k / fftSize;
-                _cos[n, k] = ops.FromDouble(window[n] * Math.Cos(a));
-                _sin[n, k] = ops.FromDouble(-window[n] * Math.Sin(a));
-            }
+        if (typeof(T) == typeof(float) && engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())
+        {
+            // Separate FP32 windowing is part of the real-FFT recipe. Folding a
+            // double-precision window into DFT tables changes quiet-band VJPs.
+            _fftWindow = (Tensor<T>)(object)new Tensor<float>(PeriodicHannFloat(fftSize, windowSize), new[] { 1, fftSize });
+        }
+        else
+        {
+            // Retain the established CPU/default and generic-type DFT recipe.
+            var window = new double[fftSize];
+            int offset = (fftSize - windowSize) / 2;
+            for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
+            _cos = new Tensor<T>(new[] { fftSize, bins });
+            _sin = new Tensor<T>(new[] { fftSize, bins });
+            for (int n = 0; n < fftSize; n++)
+                for (int k = 0; k < bins; k++)
+                {
+                    double a = 2 * Math.PI * n * k / fftSize;
+                    _cos[n, k] = ops.FromDouble(window[n] * Math.Cos(a));
+                    _sin[n, k] = ops.FromDouble(-window[n] * Math.Sin(a));
+                }
+        }
         var basis = singlePrecisionBasis ? TacotronSpectrogram.LibrosaFloat32MelBasis(sampleRate, fftSize, melChannels, fMin, fMax)
             : new TacotronSpectrogram(sampleRate, fftSize, hopSize, windowSize, melChannels, fMin, fMax).MelBasis;
         _mel = new Tensor<T>(new[] { bins, melChannels });
         for (int m = 0; m < melChannels; m++)
             for (int k = 0; k < bins; k++) _mel[k, m] = ops.FromDouble(basis[m, k]);
     }
+
+    [AiDotNet.Attributes.ScalarKernel("Builds immutable FP32 Hann coefficients once, without reading audio/tensor values; separate rounded stages preserve the reference construction recipe.")]
+    private static float[] PeriodicHannFloat(int fftSize, int windowSize)
+    {
+        var result = new float[fftSize];
+        int offset = (fftSize - windowSize) / 2;
+        if (windowSize == 1) { result[offset] = 1; return result; }
+        float step = (float)(2 * Math.PI / windowSize);
+        for (int n = 0; n < windowSize; n++)
+            result[offset + n] = HannAdd(HannMultiply(MathF.Cos(HannMultiply(n, step)), -.5f), .5f);
+        return result;
+    }
+
+    // Window construction consists of distinct FP32 stages, as in separate
+    // arange/multiply/cos/multiply/add operations; do not contract them to FMA.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static float HannMultiply(float a, float b) => a * b;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static float HannAdd(float a, float b) => a + b;
 
     /// <summary>The source index of position <paramref name="i"/> under reflect padding (repeated reflection when the pad
     /// exceeds the signal, where PyTorch would refuse).</summary>
@@ -724,8 +753,10 @@ internal sealed class DifferentiableMel<T>
         for (int f = 0; f < frames; f++)
             rows[f] = _engine.Reshape(_engine.TensorSlice(padded, new[] { f * _hop, 0 }, new[] { _fft, 1 }), new[] { 1, _fft });
         var framed = frames == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);                       // [frames, fft]
-        var re = _engine.TensorMatMul(framed, _cos);
-        var im = _engine.TensorMatMul(framed, _sin);
+        if (_fftWindow is not null)
+            return _engine.TensorRfftMagnitude(_engine.TensorMultiply(framed, _fftWindow), epsilon);
+        var re = _engine.TensorMatMul(framed, _cos!);
+        var im = _engine.TensorMatMul(framed, _sin!);
         return _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),
             ops.FromDouble(epsilon)), ops.FromDouble(0.5));
     }
