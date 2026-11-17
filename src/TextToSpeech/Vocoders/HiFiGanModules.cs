@@ -565,7 +565,7 @@ internal sealed class HiFiGanDiscriminators<T>
 
 /// <summary>
 /// The log-mel spectrogram of a waveform on the autodiff tape (reference <c>meldataset.mel_spectrogram</c>): reflect
-/// padding of (n_fft − hop) / 2, a Hann-windowed DFT of each hop-spaced frame as matrix products, magnitude
+/// padding of (n_fft − hop) / 2, a Hann-windowed transform of each hop-spaced frame, magnitude
 /// <c>√(re² + im² + 1e-9)</c>, librosa's Slaney mel filterbank, and <c>log(max(x, 1e-5))</c>.
 /// </summary>
 internal sealed class DifferentiableMel<T>
@@ -625,7 +625,15 @@ internal sealed class DifferentiableMel<T>
         if (windowSize == 1) { result[offset] = 1; return result; }
         float step = (float)(2 * Math.PI / windowSize);
         for (int n = 0; n < windowSize; n++)
-            result[offset + n] = HannAdd(HannMultiply(MathF.Cos(HannMultiply(n, step)), -.5f), .5f);
+        {
+            float angle = HannMultiply(n, step);
+#if NET5_0_OR_GREATER
+            float cosine = MathF.Cos(angle);
+#else
+            float cosine = (float)Math.Cos(angle);
+#endif
+            result[offset + n] = HannAdd(HannMultiply(cosine, -.5f), .5f);
+        }
         return result;
     }
 
