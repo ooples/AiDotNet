@@ -177,6 +177,14 @@ internal sealed class CompiledNeuralPredictor<T>
                               && epoch == AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
                 if (stable || ++attempt >= 2) break;
             }
+            if (program.Nodes.Count == 0)
+            {
+                // A forward that recorded zero tensor operations (such as an identity or host-only override) has no
+                // compilable program; defer to the graph-capture tier so per-shape capture limitations and
+                // ThrowOnFailure are enforced consistently.
+                _programDisabled = true;
+                return false;
+            }
             var package = new ProgramPackage(program);
             if (ResolveParameters(package) is not { } traced)
             {
@@ -199,6 +207,7 @@ internal sealed class CompiledNeuralPredictor<T>
     // A loaded package's parameters were saved by stable id and shape only; attach the model's live tensors.
     private bool TryBind(ProgramPackage package)
     {
+        if (package.Program.Nodes.Count == 0) return false;
         if (ResolveParameters(package) is not { } bound)
         {
             System.Diagnostics.Trace.TraceWarning(
