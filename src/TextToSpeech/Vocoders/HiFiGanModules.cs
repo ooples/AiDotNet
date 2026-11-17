@@ -34,6 +34,7 @@ internal sealed class HiFiGanGenerator<T>
     private readonly T _residualAverageScale;
     private readonly bool _tanhOutput;
     private readonly int _outputReflectPad;
+    private readonly (int Rate, int Offset)[] _upsampleGeometry;
 
     /// <param name="engine">The engine.</param>
     /// <param name="inChannels">Input channels (mel bands, or VITS's latent).</param>
@@ -62,6 +63,8 @@ internal sealed class HiFiGanGenerator<T>
         bool conditionInEachUpsamplingLayer = false)
     {
         _engine = engine;
+        _upsampleGeometry = upsampleRates.Select((rate, i) =>
+            (Rate: rate, Offset: upsampleKernels[i] - rate - 2 * ((upsampleKernels[i] - rate) / 2))).ToArray();
         _resblockType1 = resblockType1;
         // Every upsampling stage has the same parallel residual branches. This is one architecture scalar,
         // converted before the stage loops; an empty stage still fails at its existing missing-branch guard.
@@ -325,6 +328,15 @@ internal sealed class HiFiGanGenerator<T>
         var x = _pre.Forward(features);
         if (condition is not null && Condition is not null)
             x = _engine.TensorAdd(x, _engine.TensorTile(Condition.Forward(condition), new[] { 1, 1, x.Shape[2] }));
+        // The branch arena resets after every residual pair, so its carry cannot own the sum.
+        // One separate, maximum-stage buffer survives those resets and is reused by every stage.
+        // Keep custom engines and an identity average on their existing ownership path.
+        int accumulatorLength = recycle && _engine.Unwrap().GetType() == typeof(CpuEngine)
+            && _blocks.Count > 0 && _blocks[0].Count > 1 && !ops.Equals(_residualAverageScale, ops.One)
+                ? ResidualAccumulatorLength(x)
+                : 0;
+        var accumulatorOwner = accumulatorLength > 0 ? TensorArena.Current : null;
+        Tensor<T>? accumulator = null;
         for (int i = 0; i < _ups.Count; i++)
         {
             x = _ups[i].Forward(LeakyRelu(x, Slope));
@@ -345,6 +357,18 @@ internal sealed class HiFiGanGenerator<T>
                 if (sum is null)
                 {
                     if (scratch is null) sum = h;
+                    else if (accumulatorOwner is not null && h.Length <= accumulatorLength)
+                    {
+                        if (accumulator is null)
+                        {
+                            using (accumulatorOwner.Activate())
+                                accumulator = TensorAllocator.RentUninitialized<T>(new[] { accumulatorLength });
+                        }
+                        sum = Tensor<T>.FromMemory(accumulator.DataUnmarked.Slice(0, h.Length), h.Shape.ToArray());
+                        using var sourceKeep = new KeepAliveScope(h);
+                        using var destinationKeep = new KeepAliveScope(sum);
+                        h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
+                    }
                     else
                     {
                         // Own the first branch's sum outside the recyclable carry pool. Consume later branches
@@ -364,6 +388,26 @@ internal sealed class HiFiGanGenerator<T>
         if (_outputReflectPad > 0) x = VocoderOps.ReflectPad(_engine, x, _outputReflectPad, 0);
         var y = _post.Forward(x);
         return _tanhOutput ? _engine.Tanh(y) : y;
+    }
+
+    private int ResidualAccumulatorLength(Tensor<T> preOutput)
+    {
+        long time = preOutput.Shape[2];
+        long maximum = 0;
+        for (int i = 0; i < _upsampleGeometry.Length; i++)
+        {
+            // ConvTranspose1D: (time - 1) * rate + kernel - 2 * padding.
+            // The offset also preserves odd kernel/rate differences instead of assuming time * rate.
+            var geometry = _upsampleGeometry[i];
+            time = time * geometry.Rate + geometry.Offset;
+            // Leave unrepresentable/empty shapes on the existing convolution/error path.
+            if (time <= 0 || time > int.MaxValue || preOutput.Shape[0] <= 0) return 0;
+            long elements = time * (preOutput.Shape[1] >> (i + 1));
+            if (elements <= 0 || elements > int.MaxValue / preOutput.Shape[0]) return 0;
+            elements *= preOutput.Shape[0];
+            maximum = Math.Max(maximum, elements);
+        }
+        return (int)maximum;
     }
 
 }
