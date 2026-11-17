@@ -40,7 +40,8 @@ PROVIDERS = {
     "aidotnet_gpu_requests": ("aidotnet", {"gpu_framework_requested"}),
     "aidotnet_compiled_workspace_loans": ("aidotnet", {"gpu_framework_requested"}),
     "aidotnet_step_scratch_reuse": ("aidotnet", {"gpu_framework_requested"}),
-    "aidotnet_cuda_backing_api": ("aidotnet", {"gpu_backing"}),
+    "aidotnet_cuda_backing_api": ("aidotnet", {"gpu_framework_requested", "gpu_backing"}),
+    "aidotnet_cudnn_workspace": ("aidotnet", {"gpu_framework_requested", "gpu_backing"}),
     "torch_cpu_memory_events": ("pytorch", {"cpu_framework_requested", "cpu_backing"}),
     "torch_cuda_requests": ("pytorch", {"gpu_framework_requested"}),
     "torch_cuda_segments": ("pytorch", {"gpu_backing"}),
@@ -216,6 +217,7 @@ def provider_values(run: dict, phases: list[dict], provider: str) -> dict[str, d
         "aidotnet_compiled_workspace_loans": ("gpu_compiled_workspace_loan_requested", "successful_compiled_broker_loans_only"),
         "aidotnet_step_scratch_reuse": ("gpu_step_scratch_reuse_requested", "successful_step_scratch_free_loans_only"),
         "aidotnet_cuda_backing_api": ("gpu_native_api_requested", "cuda_tracker_hook_sites_only"),
+        "aidotnet_cudnn_workspace": ("gpu_cudnn_workspace_acquired", "successful_cudnn_conv_workspace_growth_only"),
     }[provider]
     def select(event):
         diagnostics = event.get("allocator_diagnostics") or {}
@@ -256,6 +258,8 @@ def audit_coverage(category: str, claim: dict, run: dict) -> list[str]:
             raise ValueError("Provider is incompatible with allocation side/category: " + str(provider))
     if "clr_arrays" in providers and claim["bound"] != "upper":
         raise ValueError("All-array/header-inclusive coverage is a conservative upper bound, not exact numeric storage.")
+    if category == "gpu_framework_requested" and {"aidotnet_cuda_backing_api", "aidotnet_cudnn_workspace"} & set(providers) and claim["bound"] != "upper":
+        raise ValueError("Backing acquisitions supplement requested storage conservatively; they are not exact request bytes.")
     if run["side"] == "pytorch" and "torch_runtime" not in run["artifacts"]:
         raise ValueError("Torch allocator runtime identity is not hash-bound to the launch.")
     if claim.get("bound") != "lower" and claim.get("unmeasured_routes") != []:
@@ -279,6 +283,8 @@ def audit_coverage(category: str, claim: dict, run: dict) -> list[str]:
                     raise ValueError("Instrumented partial CPU requests do not bound every fresh array.")
                 if role == "framework_pool_borrows" and "clr_arrays" in assigned:
                     raise ValueError("Array callbacks do not observe reused pool/arena borrows.")
+                if role == "framework_pool_borrows" and {"aidotnet_cuda_backing_api", "aidotnet_cudnn_workspace"} & set(assigned):
+                    raise ValueError("Native backing acquisitions do not observe reused workspace loans.")
             used.update(assigned)
         elif route.get("status") != "inactive" and not (claim["bound"] == "lower" and route.get("status") == "excluded_lower_bound"):
             raise ValueError("Allocation route is unknown or partially covered: " + role)
