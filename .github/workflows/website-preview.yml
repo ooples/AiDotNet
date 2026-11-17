@@ -79,7 +79,7 @@ jobs:
           printf '%s\n' '{"name":"aidotnet-preview","version":"1.0.0","private":true}' > "$RUNNER_TEMP/preview-stage/website/package.json"
           node --input-type=module -e "import fs from 'node:fs'; const config=JSON.parse(fs.readFileSync('vercel.json','utf8')); Object.assign(config,{framework:null,outputDirectory:'dist',buildCommand:'true'}); fs.writeFileSync(process.env.RUNNER_TEMP+'/preview-stage/website/vercel.json',JSON.stringify(config));"
           vercel deploy "$RUNNER_TEMP/preview-stage" --project aidotnet_website --scope franklins-projects-02a0b5a0 --environment preview --archive=tgz --yes --json --token="$VERCEL_TOKEN" > "$RUNNER_TEMP/preview-deployment.json"
-          url=$(jq -er '.deployment.url' "$RUNNER_TEMP/preview-deployment.json")
+          url=$(jq -er '.url // .deployment.url' "$RUNNER_TEMP/preview-deployment.json")
           vercel alias set "$url" test.aidotnet.dev --scope franklins-projects-02a0b5a0 --token="$VERCEL_TOKEN"
           printf 'Verified preview deployment: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"
         env:
