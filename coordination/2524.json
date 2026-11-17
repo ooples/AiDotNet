@@ -231,7 +231,7 @@
         "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/FeatureSelectionSweepReferenceTests.cs",
         "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs"
       ],
-      "status": "Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) integrated; five root-review follow-ups (antigravity-review-garch-half-probes, antigravity-review-nlinear-scaler-state, antigravity-review-ar-mean-persistence, antigravity-review-fairness-even-median, antigravity-review-wavelet-normalizer) + oracle regression tests queued next on fixer-3/fixer-4; Batch 1 (c471ab3cf0) in Gate E verification on verifier-1; Batch 2 (PINN44/MultiFidelityPINN24) in progress on fixer-2"
+      "status": "Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) integrated (5 root-review follow-ups queued next on fixer-3/fixer-4); Wave 1 Batch 1 (c471ab3cf0, 78/78 local) in Gate E verification on verifier-1; Wave 1 Batch 2 (7ce3cb5cf9, 244/244 local + 15/15 PhysicsInformedPaperReferenceTests) in Gate A-E verification on verifier-2"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -512,6 +512,28 @@
         "src/AiDotNet.Generators/TestScaffoldGenerator.cs": "Only add Lagrangian to existing HNN/PINN ResolveModelDeclaredInputShape route near17796. Preserve model width guard and canonical acceleration target; no hardcoded4, production/base/native changes, or compiled-opt-out changes."
       },
       "verification": "Use the unchanged twelve recorded Lagrangian generated failures as regression. Add a new test only if it proves independent behavior rather than matching generated text. Coordinate any later PINN/autodiff issue with its existing owner. Keep source fix local until cycle end."
+    },
+    {
+      "owner": "Antigravity swarm (Wave 3: fixer-2)",
+      "scope": "Wave 3 Batch 8 unclaimed consumer failures: CausalInference (PropensityScoreMatching caliper/seed reproducibility, DoublyRobustEstimator 3-block parameter split, InverseProbabilityWeighting unfitted Predict guard), AdversarialTraining JPEG [0,1] range clip & RLHFAlignment preference match, BayesianOptimizer byte-exact checkpoint round-trip, RelationalGCN NumRelations/NumNodes perturbation geometry, and GroundingHead/SigLIP2 caption training shapes",
+      "files": [
+        "src/CausalInference/PropensityScoreMatching.cs",
+        "src/CausalInference/DoublyRobustEstimator.cs",
+        "src/CausalInference/InverseProbabilityWeighting.cs",
+        "src/CausalInference/CausalModelBase.cs",
+        "src/AdversarialRobustness/Defenses/AdversarialTraining.cs",
+        "src/AdversarialRobustness/Alignment/RLHFAlignment.cs",
+        "src/Optimizers/BayesianOptimizer.cs",
+        "src/HyperparameterOptimization/BayesianOptimizer.cs",
+        "src/Finance/Graph/RelationalGCN.cs",
+        "src/Models/Options/RelationalGCNOptions.cs",
+        "src/VisionLanguage/Grounding/GroundingHeadModule.cs",
+        "src/VisionLanguage/Encoders/SigLIP2.cs",
+        "src/VisionLanguage/Encoders/SigLIP2Options.cs",
+        "src/Diffusion/Conditioning/SigLIP2TextConditioner.cs",
+        "src/Diffusion/Conditioning/SigLIP2TextConditionerOptions.cs"
+      ],
+      "status": "claimed; Batch 8 dispatched to fixer-2"
     }
   ],
   "verification": {
@@ -887,6 +909,16 @@
       "owner": "Antigravity coordinator/verifiers",
       "finding": "Coordination reports223/223 TimeSeries and199/199 preprocessing, but review has no linked TRX/stdout/command evidence yet.",
       "request": "Post exact tested commit, framework, command/filter and concise TRX/stdout locations or artifact URLs; include independent fk8 source/reference and rationale for fairness median change."
+    },
+    {
+      "id": "antigravity-pinn-runtime-fidelity-ratchet-11",
+      "status": "pending-owner-reconciliation",
+      "from": "Antigravity swarm (Wave 1 Batch 2 commit 7ce3cb5cf948c273b273ff171df9f826c1c0e373, undergoing Gate A-E verification)",
+      "owner": "this session and its agents (owner of tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs)",
+      "files": "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs (not touched by Antigravity)",
+      "finding": "With PINN44 PinnAutodiff.InputGradient empty-tape and collocation arena-lifetime repairs (244/244 non-ratchet PINN/MultiFidelity/MultiScale/DeepONet tests passing), PINN training now genuinely executes and 11 options previously baselined as OptionSensitivityOutcome.Insensitive in RuntimeFidelityBaseline.cs now genuinely change observable behaviour, failing OptionSensitivityHarness.Enforce stale-baseline ratchet: DeepRitzMethod`1::NumQuadraturePoints; DomainDecompositionPINN`1::InterfaceGradientWeight, InterfaceWeight; MultiFidelityPINN`1::HighFidelityWeight, NumCollocationPoints, PdeWeight; PhysicsInformedNeuralNetwork`1::DataWeight, NumCollocationPoints, PdeWeight; VariationalPINN`1::NumQuadraturePoints, NumTestFunctions.",
+      "proposed_fix": "Antigravity left RuntimeFidelityBaseline.cs untouched per ownership rules; once 7ce3cb5cf9 is verified and integrated onto codex/2524-ci-coordination, owner of RuntimeFidelityBaseline.cs drops those 11 stale Insensitive entries (or authorizes Antigravity to drop those exact 11 lines).",
+      "alternatives": "None without weakening the ratchet."
     }
   ],
   "question_protocol": [
@@ -896,7 +928,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T01:44:40.199229Z",
+  "updated_utc": "2026-11-17T01:52:14.894109Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -966,7 +998,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 3; no overlapping edits",
       "root": "RelationalGCN fixture geometry perturbations",
       "observed_failure_entries": 2,
       "jobs": [
