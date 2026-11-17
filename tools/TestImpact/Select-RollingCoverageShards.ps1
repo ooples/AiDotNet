@@ -25,7 +25,7 @@
     Optional. The rolling map built on that anchor, for per-shard measured commits.
 
 .PARAMETER ShardScriptPath
-    .github/scripts/Invoke-Shard.ps1, which defines the heavy and timing shard lists.
+    .github/scripts/Get-ShardCoveragePolicy.ps1, the canonical heavy and timing shard policy.
 
 .PARAMETER BudgetMinutes
     Predicted extra runner-minutes (repository variable TEST_IMPACT_ROLLING_BUDGET_MINUTES). Empty is the
@@ -40,7 +40,7 @@ param(
     [Parameter(Mandatory)] [string] $ShardManifestFile,
     [Parameter(Mandatory)] [string] $AnchorMapFile,
     [string] $RollingMapFile,
-    [string] $ShardScriptPath = "$PSScriptRoot/../../.github/scripts/Invoke-Shard.ps1",
+    [string] $ShardScriptPath = "$PSScriptRoot/../../.github/scripts/Get-ShardCoveragePolicy.ps1",
     [string] $BudgetMinutes,
     [string] $SelectorPath = "$PSScriptRoot/Select-Shards.ps1",
     [Parameter(Mandatory)] [string] $OutFile

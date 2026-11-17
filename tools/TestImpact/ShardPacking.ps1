@@ -558,14 +558,16 @@ function Assert-ShardPackComplete {
 
 function Get-ShardPackWeights {
     <#
-        Heavy and timing shards by name, read from the script that decides them (Invoke-Shard.ps1) through the
-        rolling map's reader, so there is no second list to drift.
+        Heavy and timing shards by name, read from Invoke-Shard.ps1's canonical adjacent coverage policy
+        through the rolling map's reader, so there is no second list to drift.
     #>
     param([Parameter(Mandatory)] [string] $ShardScriptPath)
     if (-not (Get-Command Get-NoCoverageShardLists -ErrorAction SilentlyContinue)) { . "$PSScriptRoot/RollingShardMap.ps1" }
     # The reader also folds in a manifest's `heavy: true` entries; Group-ShardSlices reads those from the
     # slices themselves, so it gets a manifest with none.
-    $lists = Get-NoCoverageShardLists -ScriptLines @(Get-Content -LiteralPath $ShardScriptPath) -Manifest @([pscustomobject]@{ name = '' })
+    $shardScript = Get-Item -LiteralPath $ShardScriptPath -ErrorAction Stop
+    $policyPath = Join-Path $shardScript.DirectoryName 'Get-ShardCoveragePolicy.ps1'
+    $lists = Get-NoCoverageShardLists -ScriptLines @(Get-Content -LiteralPath $policyPath -ErrorAction Stop) -Manifest @([pscustomobject]@{ name = '' })
     $timing = @($lists.Timing)
     return [pscustomobject]@{
         Heavy  = @($lists.NoCoverage | Where-Object { $_ -cnotin $timing })

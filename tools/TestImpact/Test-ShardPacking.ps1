@@ -557,6 +557,7 @@ try {
         $fixture = Join-Path $scratch 'selection'
         New-Item -ItemType Directory -Path (Join-Path $fixture '.github/scripts') -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $repositoryRoot '.github/scripts/Invoke-Shard.ps1') -Destination (Join-Path $fixture '.github/scripts/Invoke-Shard.ps1')
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot '.github/scripts/Get-ShardCoveragePolicy.ps1') -Destination (Join-Path $fixture '.github/scripts/Get-ShardCoveragePolicy.ps1')
         $chosen = @((New-Slice 'Sel 1'), (New-Slice 'Sel 2'), (New-Slice 'Sel 3' @{ env = [pscustomobject]@{ AIDOTNET_X = '1' }; hangTimeout = '20min' }),
             (New-Slice 'Sel Heavy' @{ heavy = $true }), (New-Slice 'Sel Long' @{ timeout = 60 }), (New-Slice 'Sel New'))
         $chosenJson = ConvertTo-Json -InputObject $chosen -Depth 6 -Compress
@@ -645,6 +646,12 @@ try {
         Assert-Equal '' $run.Outputs['matrix'] 'an error while packing did not leave the matrix one job per shard'
         Assert-True ($run.Log -match '::warning::shard repacking unavailable') 'an error while packing was not reported'
         Copy-Item -LiteralPath (Join-Path $repositoryRoot '.github/scripts/Invoke-Shard.ps1') -Destination $brokenScript
+        $brokenPolicy = Join-Path $fixture '.github/scripts/Get-ShardCoveragePolicy.ps1'
+        Remove-Item -LiteralPath $brokenPolicy -Force
+        $run = Invoke-Selection -Flag 'on'
+        Assert-Equal '' $run.Outputs['matrix'] 'slices were packed without the canonical coverage policy'
+        Assert-True ($run.Log -match '::warning::shard repacking unavailable') 'a missing canonical coverage policy was not reported'
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot '.github/scripts/Get-ShardCoveragePolicy.ps1') -Destination $brokenPolicy
 
         # The narrowed path calls the same function with the slices it kept and the TypeImpact plan's classes.
         $tokens = $null; $errors = $null
