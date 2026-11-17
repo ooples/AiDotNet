@@ -26,12 +26,13 @@
   "owner": "this session/artifact_feed SearchSorted replay",
   "repository": "ooples/AiDotNet.Tensors",
   "files": [
-    "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
+    "src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.MissingKernels.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs",
     "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
     "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
     "tests/AiDotNet.Tensors.Tests/Engines/Compilation/SearchSortedReplayTests.cs"
   ],
-  "scope": "Only TensorSearchSorted forward replay, necessary two-input forward-only cross-type node dependency/signature/storage support, and focused exact-value tests. Preserve unary differentiable casts and other operators.",
+  "scope": "Only TensorSearchSorted forward replay including the existing DirectGpu TensorSearchSorted GraphMode delegation, necessary two-input forward-only cross-type dependency/signature/storage support, exact CPU tests and one exact-artifact GPU replay case. Preserve unary differentiable casts and other operators.",
   "status": "USER APPROVED recommended bounded native replay repair on November17; no public package release; root review and artifact validation required"
 },
 {
@@ -41,7 +42,7 @@
     "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
     "tests/AiDotNet.Tensors.Tests/Engines/Compilation/BatchNormReplayTests.cs"
   ],
-  "scope": "Only BatchNorm generic training trace lazy forward, saved normalization/backward state and output statistics; focused double/rank3/value-rebind replay tests. Excludes GroupNorm and unrelated CpuEngine regions.",
+  "scope": "Only BatchNorm generic training trace lazy forward, saved normalization/backward state and output statistics, matching rank-1 backward layout, focused all-rank replay/analytic/finite-difference tests. Excludes GroupNorm and unrelated CpuEngine regions.",
   "status": "USER APPROVED recommended bounded native replay repair on November17; implementation not started; preserve1760 other process edits; artifact only"
 },
     {
