@@ -4,9 +4,11 @@ import BaseLayout from './BaseLayout.astro';
 interface Props {
   title: string;
   description?: string;
+  /** The entry's source file relative to the project root (content entry filePath). */
+  sourcePath?: string;
 }
 
-const { title, description = '' } = Astro.props;
+const { title, description = '', sourcePath } = Astro.props;
 const base = import.meta.env.BASE_URL;
 
 const sidebar = [
@@ -73,8 +75,11 @@ const sidebar = [
 ];
 
 const currentPath = Astro.url.pathname;
-const docsSlug = currentPath.replace(/^\/docs\//, '').replace(/\/$/, '');
-const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/content/docs/${docsSlug}.md`;
+// Link the page's real source file (index.md, .mdx). The API reference is generated at deploy
+// time from the library's XML docs and is not in the repository, so it gets no edit link.
+const editUrl = sourcePath && !/(^|\/)src\/content\/docs\/reference\/wiki\//.test(sourcePath)
+  ? `https://github.com/ooples/AiDotNet/edit/master/website/${sourcePath.replace(/^\.?\/?/, '')}`
+  : null;
 ---
 
 <BaseLayout title={`${title} - AiDotNet Docs`} description={description || `${title} documentation for AiDotNet`}>
@@ -155,7 +160,7 @@ const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/cont
           </article>
 
           <!-- Edit on GitHub link -->
-          <div class="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800">
+          {editUrl && <div class="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800">
             <a
               href={editUrl}
               target="_blank"
@@ -164,7 +169,7 @@ const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/cont
             >
               Edit this page on GitHub
             </a>
-          </div>
+          </div>}
         </div>
       </div>
     </div>
