@@ -554,6 +554,12 @@
     "status": "OWNER ACTION REQUIRED: unavailable on origin; explicit SHA fetch returned not our ref, confirmed by root and review agent.",
     "required": "Contributor must publish a reachable ref or patch plus verification evidence before review/integration or removal of the eleven baseline exceptions."
   },
+  "claude_helper_owner_action": {
+    "candidate": "b4bd771",
+    "status": "OWNER ACTION REQUIRED: HiftModules host reads at244/258/284 and CodecWaveformGan.Detached at45 (x.ToArray) are unchanged on both branches, confirmed by artifact agent.",
+    "failures": "Four Cosy failures map to HiftModules; two Spark/Seed failures map to CodecWaveformGan.Detached.",
+    "required": "Claude must confirm exact bounded helper ownership and fix these reads, or explicitly hand off. Root will not make overlapping helper edits. Native BatchNorm/SearchSorted scope remains pending user decision and is not claimed here."
+  },
   "verification": {
     "validation_cycle_864c": {
       "source": "864c81714c57d116a324e29f07fb3ed93e844ea7",
