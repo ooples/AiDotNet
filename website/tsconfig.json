@@ -1,5 +1,6 @@
 {
   "extends": "astro/tsconfigs/strict",
+  "exclude": ["dist", "node_modules", "supabase/functions"],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {

@@ -1,7 +1,8 @@
-import type { APIRequestContext, Page, Request, Response } from '@playwright/test';
+import type { APIRequestContext, Page, Request, Response, Route } from '@playwright/test';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import type { EventEmitter } from 'node:events';
 import { randomPassword, testUserEmail } from './backend';
 import { hasSession, signIn, type Persona } from './personas';
 
@@ -11,8 +12,9 @@ import { hasSession, signIn, type Persona } from './personas';
 // Links:     no href / "#" / "javascript:" (unless an in-page anchor to an element that exists);
 //            internal targets must answer < 400; external targets must not be 404/410/unreachable.
 // Controls:  each visible, enabled control is clicked (forms are filled first) and must DO
-//            something observable: navigate, open a popup or download, show a dialog, send a
-//            request, write the clipboard, or change what is on screen. While it runs there must be
+//            something observable: navigate, open a popup or download, show a dialog,
+//            write the clipboard, or change what is on screen. A request alone is not a result.
+//            While it runs there must be
 //            no page error, no console error, no error-looking alert, and no backend response
 //            >= 400 (signed-in personas) unless the test lists that exact case as expected.
 //            Controls revealed by a click (menus, modals) are explored too, depth-first.
@@ -223,10 +225,19 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const httpOnly: string[] = [];
   const pageStatus = new Map<string, number>();   // url -> status, for pages fetched over HTTP
 
+  // Desktop and mobile reuse this page. Keep instrumentation scoped to this
+  // pass, including when navigation or fixture cleanup throws.
+  const events = ['dialog', 'pageerror', 'console', 'requestfailed', 'request', 'response'] as const;
+  const emitter = page as unknown as EventEmitter;
+  const existingListeners = new Map(events.map((event) => [event, new Set(emitter.listeners(event))]));
+  const delayedFindings = new Set<ReturnType<typeof setTimeout>>();
+  let intercept: ((route: Route) => Promise<void>) | undefined;
+  try {
+
   // ---- instrumentation shared by every action ----
   const externalNavs: string[] = [];
   const stubbed: string[] = [];
-  await page.route('**/*', async (route) => {
+  intercept = async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     if (req.isNavigationRequest() && req.frame() === page.mainFrame() && url.origin !== origin) {
@@ -259,7 +270,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       return route.fulfill({ status: 200, contentType: 'application/json', body });
     }
     return route.continue();
-  });
+  };
+  await page.route('**/*', intercept);
   await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
   await page.addInitScript(() => {
     const w = window as unknown as { __fx: { mut: number; clip: number; open: number } };
@@ -270,12 +282,16 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const clip = navigator.clipboard;
     if (clip) {
       const orig = clip.writeText?.bind(clip);
-      clip.writeText = async (t: string) => { w.__fx.clip++; try { await orig?.(t); } catch { /* headless */ } };
+      if (orig) clip.writeText = async (t: string) => { await orig(t); w.__fx.clip++; };
       const origWrite = clip.write?.bind(clip);
-      if (origWrite) clip.write = async (d) => { w.__fx.clip++; try { await origWrite(d); } catch { /* headless */ } };
+      if (origWrite) clip.write = async (d) => { await origWrite(d); w.__fx.clip++; };
     }
     const origExec = document.execCommand.bind(document);
-    document.execCommand = (c: string, ...rest: unknown[]) => { if (c === 'copy') w.__fx.clip++; return origExec(c, ...(rest as [boolean, string])); };
+    document.execCommand = (c: string, ...rest: unknown[]) => {
+      const succeeded = origExec(c, ...(rest as [boolean, string]));
+      if (c === 'copy' && succeeded) w.__fx.clip++;
+      return succeeded;
+    };
     const origOpen = window.open.bind(window);
     window.open = (...a: Parameters<typeof window.open>) => { w.__fx.open++; return origOpen(...a); };
   });
@@ -301,12 +317,14 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     // A fetch the crawler's own navigation cut off (net::ERR_ABORTED) is not the site's failure;
     // anything else is reported with the request that failed. requestfailed can trail the log line.
     const at = Date.now();
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      delayedFindings.delete(timer);
       const near = failedRequests.filter((f) => Math.abs(f.at - at) < 3_000);
       if (near.length && near.every((f) => /ERR_ABORTED/.test(f.error))) return;
       const which = near.map((f) => `${f.method} ${f.url} (${f.error})`).join('; ') || 'no failed request seen';
       add(where.page, where.control, `console error: ${t.slice(0, 120)} [${which.slice(0, 200)}]`);
     }, 1_000);
+    delayedFindings.add(timer);
   });
   const failedRequests: Array<{ at: number; method: string; url: string; error: string }> = [];
   page.on('requestfailed', (r) => {
@@ -331,7 +349,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     current = { page: path, control: '' };
     await ensureSession();
     responses.length = 0;
-    const res = await page.goto(path, { waitUntil: 'load' }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
+    const res = await page.goto(path, { waitUntil: 'load', timeout: 30_000 }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
     if (!res) return false;
     if (res.status() >= 400) { add(path, '(page load)', `HTTP ${res.status()}`); return false; }
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
@@ -516,13 +534,13 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (opened) await opened.close().catch(() => {});
     const final = (await snapshot()) ?? after;
     const effect = final.url !== before.url || after.url !== before.url || externalNavs.length > navsBefore
-      || !!opened || !!dl || dialogs.length > dialogsBefore || pending.length > 0
-      || final.clip > before.clip || final.open > before.open
+      || !!opened || !!dl || dialogs.length > dialogsBefore
+      || final.clip > before.clip
       || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
       || (!noisy.count && final.visibleCount !== before.visibleCount)
       || (!noisy.state && final.stateHash !== before.stateHash)
       || final.htmlClass !== before.htmlClass;
-    if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, request, dialog, clipboard or screen change)`);
+    if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);
     for (const nav of externalNavs.slice(navsBefore)) {
       if (!externalLinks.has(nav)) externalLinks.set(nav, `${pg} via ${c.key}`);
@@ -567,6 +585,15 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       const result = await act(pg, c);
       if (result === 'same' && depth < maxDepth) {
         await explore(pg, [...path, c.selector], depth + 1, doneOnPage);
+      } else if (result === 'same') {
+        // Reaching the exploration limit must not silently count newly
+        // revealed controls as covered. Report them unless another path
+        // exercises them or a dedicated test explicitly owns them.
+        const revealed = await page.evaluate(ENUMERATE, pg);
+        for (const control of revealed.controls) {
+          keys.add(control.key);
+          if (control.visible && !control.disabled) enabledSeen.add(control.key);
+        }
       }
       if (o.persona && !(await hasSession(page).catch(() => false))) await ensureSession();
     }
@@ -639,6 +666,11 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   });
 
   // ---- coverage contract ----
+  for (const key of enabledSeen) {
+    if (!exercised.has(key) && !o.skipKeys?.has(key) && !o.dedicated.some(([re]) => re.test(key))) {
+      add('(coverage)', key, 'visible enabled control was not exercised (unreachable state or exploration depth limit)');
+    }
+  }
   for (const [key, pg] of disabledSeen) {
     if (!o.dedicated.some(([re]) => re.test(key))) add(pg, key, 'control is disabled and nothing in the crawl enabled it; cover it with a dedicated test and list it');
   }
@@ -646,8 +678,18 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (!opts?.optional && ![...keys].some((k) => re.test(k))) add('(dedicated list)', String(re), `matches no control on any page (stale entry for: ${why})`);
   }
 
-  await page.unroute('**/*');
+  // Deferred console errors must be included in the result before it is read.
+  if (delayedFindings.size) await page.waitForTimeout(1_100);
   return { findings, pages: visited, httpPages: fetched, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
+  } finally {
+    for (const timer of delayedFindings) clearTimeout(timer);
+    for (const event of events) {
+      for (const listener of emitter.listeners(event)) {
+        if (!existingListeners.get(event)!.has(listener)) emitter.removeListener(event, listener);
+      }
+    }
+    if (intercept) await page.unroute('**/*', intercept);
+  }
 }
 
 export function formatFindings(f: Finding[]): string {

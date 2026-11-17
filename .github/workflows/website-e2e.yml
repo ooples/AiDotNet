@@ -7,20 +7,32 @@ name: Website E2E (production)
 
 on:
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: 'Preview checks to run'
+        type: choice
+        options: [suite, all, anon, free, pro-stripe, pro-granted, admin]
+        default: suite
+      repair_email:
+        description: 'Verify the existing repository mail key and synchronize the function mail secret'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   e2e:
-    name: Playwright against production (${{ matrix.part }})
+    name: Playwright (${{ matrix.part }})
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'Preview' || 'Production' }}
     runs-on: ubuntu-latest
     # One job runs the suite; the full-site crawl runs as one job per kind of visitor, in parallel.
     # Run back to back on one worker, with failures retried, they took hours.
     strategy:
       fail-fast: false
       matrix:
-        part: [suite, anon, free, pro-stripe, pro-granted, admin]
+        part: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.part != 'all' && format('["{0}"]', inputs.part) || '["suite","anon","free","pro-stripe","pro-granted","admin"]') }}
     timeout-minutes: 60
     # The license-lifecycle spec writes to production; never run two suites at once. Each crawl
     # makes its own throwaway users, so only the same part of two runs is serialized.
@@ -87,18 +99,41 @@ jobs:
           echo "::add-mask::$key"
           echo "SUPABASE_SERVICE_ROLE_KEY=$key" >> "$GITHUB_ENV"
 
+      - name: Verify and synchronize the existing mail key
+        id: mail
+        continue-on-error: true
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.repair_email && matrix.part == 'suite' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          : "${RESEND_API_KEY:?Missing RESEND_API_KEY}"
+          trap 'rm -f "$RUNNER_TEMP/mail-check.json" "$RUNNER_TEMP/function-mail.env"' EXIT
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/mail-check.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $RESEND_API_KEY" -H 'Content-Type: application/json' \
+            --data '{"from":"AiDotNet <noreply@aidotnet.dev>","to":["delivered@resend.dev"],"subject":"AiDotNet automated delivery check","html":"Automated test inbox verification."}' \
+            https://api.resend.com/emails)
+          [ "$code" = 200 ] || [ "$code" = 201 ] || { echo "::error::Repository mail credential failed verification: HTTP $code"; exit 1; }
+          printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/function-mail.env"
+          supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/function-mail.env"
+
       - name: Run Playwright E2E smoke tests
         # Nothing is retried. A crawl re-run reaches the same broken link again, and a suite test that
         # passes only on a retry is a flaky check that should show red, not spend the job's budget.
         run: |
+          config=playwright.config.ts
+          if [ "$PREVIEW_RUN" = true ]; then config=playwright.deployed.config.ts; fi
           if [ "$PART" = suite ]; then
-            npx playwright test --grep-invert "every link and control works for" --retries=0
+            npx playwright test --config "$config" --grep-invert "every link and control works for" --retries=0
           else
-            npx playwright test --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
+            npx playwright test --config "$config" --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
           fi
         env:
           PART: ${{ matrix.part }}
-          PLAYWRIGHT_BASE_URL: https://www.aidotnet.dev
+          PREVIEW_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+          PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && 'https://test.aidotnet.dev' || 'https://www.aidotnet.dev' }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
           PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
@@ -107,6 +142,12 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           CI: '1'
+
+      - name: Keep a failed email verification visible
+        if: ${{ always() && steps.mail.outcome == 'failure' }}
+        run: |
+          echo "::error::The preview journeys ran, but the existing mail credential could not be verified or synchronized."
+          exit 1
 
       - name: Upload Playwright report
         # Always upload (success or fail) — on failure the HTML report +

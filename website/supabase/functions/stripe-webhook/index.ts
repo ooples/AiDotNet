@@ -105,6 +105,7 @@ serve(async (req: Request) => {
   try {
     switch (event.type) {
       case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
         await handleCheckoutCompleted(serviceClient, event.data.object as Stripe.Checkout.Session);
         break;
 
@@ -181,6 +182,15 @@ async function handleCheckoutCompleted(
   client: SupabaseClient,
   session: Stripe.Checkout.Session,
 ) {
+  // Checkout can complete while a bank payment is still processing. Stripe
+  // sends async_payment_succeeded later; only then may we grant access.
+  if (session.payment_status === "unpaid") {
+    console.log(`Checkout ${session.id} is unpaid; awaiting payment confirmation.`);
+    return;
+  }
+  if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+    throw new Error(`Checkout ${session.id} has an unknown payment status`);
+  }
   const userId = await resolveUserIdFromSession(client, session);
   if (!userId) {
     // The payment succeeded but we can't find a user. Log loudly — the

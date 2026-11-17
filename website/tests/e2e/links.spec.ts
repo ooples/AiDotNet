@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BASE = '';
 
 test.describe('Link Validation', () => {
-  test('internal navigation links on landing page work', async ({ page }) => {
+  test('internal navigation links on landing page work', async ({ page, context }) => {
     await page.goto(`${BASE}/`);
     const internalLinks = page.locator('a[href^="/"]');
     const hrefs: string[] = [];
@@ -16,15 +16,19 @@ test.describe('Link Validation', () => {
       }
     }
 
-    // Check a sample of internal links (first 15 to keep test fast)
-    const sampled = hrefs.slice(0, 15);
-    for (const href of sampled) {
-      const response = await page.goto(href, { waitUntil: 'domcontentloaded' });
-      // response can be null for same-page navigations; verify page loaded by checking h1
-      if (response) {
-        expect(response.status(), `Link ${href} should return 200`).toBe(200);
-      } else {
-        await expect(page.locator('body')).not.toBeEmpty();
+    // Use a fresh page for every target: a protected page's delayed auth
+    // redirect must not race the next link's navigation. Check every link.
+    for (const href of hrefs) {
+      const target = await context.newPage();
+      try {
+        const response = await target.goto(href, { waitUntil: 'load' });
+        expect(response?.status(), `Link ${href} should return 200`).toBe(200);
+        if (/^\/(account|admin)(\/|$)/.test(href)) {
+          await expect(target).toHaveURL(/\/login\//);
+        }
+        await expect(target.locator('h1')).toBeVisible();
+      } finally {
+        await target.close();
       }
     }
   });
