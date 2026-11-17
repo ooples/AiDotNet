@@ -1749,8 +1749,11 @@ class HifiGanV1(nn.Module):
 
     def compile_parts(self) -> None:
         """--compile: train_step calls the networks directly, so compile them rather than only forward."""
-        self.generator = torch.compile(self.generator)
-        self.discriminators = torch.compile(self.discriminators)
+        # The protocol fixes training to 32 frames and inference to 256 at b1/b8/b16.
+        # Automatic dynamic promotion can leave MPD reflection padding symbolic when the
+        # frozen discriminator recompiles for generator gradients. Specialize every shape.
+        self.generator = torch.compile(self.generator, dynamic=False)
+        self.discriminators = torch.compile(self.discriminators, dynamic=False)
 
     def train_step(self, mel: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
         if mel.shape[0] != 1:
