@@ -42,7 +42,7 @@ internal sealed class CodecWaveformGan<T>
     private Tensor<T> Mean(Tensor<T> value) => _engine.Reshape(_engine.ReduceMean(value,
         Enumerable.Range(0, value.Rank).ToArray(), false), new[] { 1 });
     private Tensor<T> Square(Tensor<T> value) => _engine.TensorMultiply(value, value);
-    private static Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), new Vector<T>(x.ToArray()));
+    private Tensor<T> Detached(Tensor<T> x) => _engine.StopGradient(x);
 
     private List<(Tensor<T> Score, List<Tensor<T>> Features)> Discriminate(Tensor<T> audio)
     {
