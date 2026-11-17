@@ -759,6 +759,7 @@
       "scope": "Single-coordinator governance (user-approved master plan): Group 1A adversarial review blocker repairs + post-master re-verification of 804dc94d1f..a0d60fd723: (1) antigravity-pinn-review-gradient-domain-and-sentinel; (2) review-financial-a2c-half-logprob-selection + review-tensormodeltrainer-compiled-owner-removal; (3) review-kmax-semantic-atrous-exemption",
       "files": [
         "src/PhysicsInformed/PINNs/MultiScalePINN.cs",
+        "src/NeuralNetworks/NeuralNetworkBase.cs",
         "tests/AiDotNet.Tests/UnitTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs",
         "src/Finance/Trading/Agents/FinancialA2CAgent.cs",
         "src/Helpers/PolicyDistributionHelper.cs",
@@ -781,6 +782,9 @@
         "tests/AiDotNet.Tests/ComputerVision/KMaXOptionFixture.cs",
         "tests/AiDotNet.Tests/UnitTests/Helpers/PolicyDistributionNumericsTests.cs"
       ],
+      "file_scope_limits": {
+        "src/NeuralNetworks/NeuralNetworkBase.cs": "ONLY private -> private protected visibility modifiers on AcquireTrainSentinel, struct TrainSentinel, DecayExcludedParameters, ResolveCustomStepOptimizer, PublishEagerFallbackGradients, LayerGraphBreakReason, and InvalidateWeightCachesAfterSuccessfulWeightUpdate for MultiScalePINN shared training lifecycle (0 logic changes, 0 public API changes)."
+      },
       "status": "CLAIMED under approved single-coordinator master plan; Stage A active"
     },
     {
@@ -1436,7 +1440,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T14:12:00Z",
+  "updated_utc": "2026-11-17T14:18:30Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
