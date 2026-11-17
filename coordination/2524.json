@@ -595,7 +595,7 @@
         "src/NeuralNetworks/SyntheticData/CausalGANGenerator.cs",
         "src/NeuralNetworks/SyntheticData/SyntheticTensorOps.cs"
       ],
-      "status": "claimed; queued for next free fixer"
+      "status": "claimed; dispatched to fixer-3"
     },
     {
       "owner": "Antigravity swarm (Wave 4B)",
@@ -1074,6 +1074,16 @@
       "finding": "With PINN44 PinnAutodiff.InputGradient empty-tape and collocation arena-lifetime repairs (244/244 non-ratchet PINN/MultiFidelity/MultiScale/DeepONet tests passing), PINN training now genuinely executes and 11 options previously baselined as OptionSensitivityOutcome.Insensitive in RuntimeFidelityBaseline.cs now genuinely change observable behaviour, failing OptionSensitivityHarness.Enforce stale-baseline ratchet: DeepRitzMethod`1::NumQuadraturePoints; DomainDecompositionPINN`1::InterfaceGradientWeight, InterfaceWeight; MultiFidelityPINN`1::HighFidelityWeight, NumCollocationPoints, PdeWeight; PhysicsInformedNeuralNetwork`1::DataWeight, NumCollocationPoints, PdeWeight; VariationalPINN`1::NumQuadraturePoints, NumTestFunctions.",
       "proposed_fix": "Antigravity left RuntimeFidelityBaseline.cs untouched per ownership rules; once 7ce3cb5cf9 is verified and integrated onto codex/2524-ci-coordination, owner of RuntimeFidelityBaseline.cs drops those 11 stale Insensitive entries (or authorizes Antigravity to drop those exact 11 lines).",
       "alternatives": "None without weakening the ratchet."
+    },
+    {
+      "id": "timeseriesmodelbase-half-serialize-convertible",
+      "status": "owner-action-requested",
+      "from": "Antigravity swarm (Wave 1 Batch 3 review follow-up)",
+      "owner": "this session and its agents (owner of src/TimeSeries/TimeSeriesModelBase.cs)",
+      "files": "src/TimeSeries/TimeSeriesModelBase.cs (lines 1318 and 1327; not touched by Antigravity)",
+      "finding": "While adding the NLinearModel<Half> subnormal [0, 0, 0, Half.Epsilon] Serialize/Clone/DeepCopy oracle requested in antigravity-review-nlinear-scaler-state, TimeSeriesModelBase<Half>.Serialize() throws System.InvalidCastException (Unable to cast System.Half to System.IConvertible) at line 1318 writer.Write(Convert.ToDouble(parameterSnapshot[i])) and line 1327 writer.Write(Convert.ToDouble(kvp.Value)), whereas Deserialize at lines 1433 & 1443 already uses NumOps.FromDouble(reader.ReadDouble()). CloneAutomationAnalyzer (ADN0060) forbids overriding Serialize/Deserialize on concrete NLinearModel<T>.",
+      "proposed_fix": "Owner of TimeSeriesModelBase.cs replaces Convert.ToDouble(...) with NumOps.ToDouble(...) at lines 1318 and 1327 (or authorizes Antigravity to make that 2-line edit). Meanwhile NLinearModel<T> persists exact double scaler statistics via DeclareExactDouble, verified on Half train+PredictSingle+SerializeCore/DeserializeCore and float full Serialize/Clone/DeepCopy.",
+      "alternatives": "None without touching TimeSeriesModelBase.cs."
     }
   ],
   "question_protocol": [
@@ -1083,7 +1093,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T04:06:40.979064Z",
+  "updated_utc": "2026-11-17T04:22:19.041030Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
