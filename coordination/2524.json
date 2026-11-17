@@ -976,8 +976,8 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "Round2 precision fix pushed572da5ec8;33local precision tests pass0skip and three follow-up threads resolved with evidence. Priorb817 fullCIgreen33success/15conditional skips. ThirdCI44156354579 running. Newly USER APPROVED bounded retained-output epoch batch claimed before edits. Tensors pushes allowed after local verification; no merge/public release.",
-      "commit": "572da5ec8c0313deee13aa293f8f6583c9040ef7",
+      "status": "All approved review/CI and retained-epoch edits pushed35ba2468c. Latest pre-push review snapshot23threads0unresolved.49local retention/streaming cases pass0skip;33precision cases pass0skip. Priorb817 fullCIgreen33success/15conditional skips. Third572cycle superseded by user-authorized immediate Tensors push; cancelled/incomplete, not a pass. Full latest CI44158617211 monitoring underway. No further source changes planned unless concrete failures/findings. No merge/public release.",
+      "commit": "35ba2468ce1f8ea00ff056db406ee19120e2c189",
       "verification": {
         "focused_net10": {
           "passed": 165,
@@ -998,7 +998,7 @@
           "skipped": 0
         }
       },
-      "ci_run": 44156354579,
+      "ci_run": 44158617211,
       "pending_local_commits": [],
       "ci_cpu": {
         "total": 26382,
@@ -1010,7 +1010,7 @@
       },
       "pending_scope_decision": {
         "finding": "Reused nonpersistent tape can publish stale named outputs when its next completed forward retains no outputs",
-        "status": "USER APPROVED bounded epoch validation and regression tests",
+        "status": "USER APPROVED, ROOT REVIEWED, and PUSHED35ba2468c;49focused retention/streaming cases passed0skip, including9newregressions",
         "scope": "PublishEager validates nonnegative registration epoch equals current recording or immediately preceding destructive-backward epoch; older maps publish empty. Preserve immediate post-backward publication, retained persistent graph reuse, Reset/Dispose invalidation and all lexical guards.",
         "files": [
           "src/AiDotNet.Tensors/Engines/Autodiff/RetainedOutputCapture.cs",
@@ -1018,6 +1018,13 @@
         ],
         "owner": "artifact_feed implementation; root review and consolidated verification",
         "branch": "codex/1766-retained-publication-epoch at572da5ec8",
+        "commit": "35ba2468ce1f8ea00ff056db406ee19120e2c189",
+        "verification": {
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0,
+          "new_cases": 9
+        },
         "effort": "bounded30-45min; no GradientTape multi-exit redesign or public API change"
       },
       "round2_review_batch": {
@@ -1037,7 +1044,7 @@
       },
       "retained_epoch_batch": {
         "finding": "Reused nonpersistent tape can publish stale named outputs when its next completed forward retains no outputs",
-        "status": "USER APPROVED bounded epoch validation and regression tests",
+        "status": "USER APPROVED, ROOT REVIEWED, and PUSHED35ba2468c;49focused retention/streaming cases passed0skip, including9newregressions",
         "scope": "PublishEager validates nonnegative registration epoch equals current recording or immediately preceding destructive-backward epoch; older maps publish empty. Preserve immediate post-backward publication, retained persistent graph reuse, Reset/Dispose invalidation and all lexical guards.",
         "files": [
           "src/AiDotNet.Tensors/Engines/Autodiff/RetainedOutputCapture.cs",
@@ -1045,6 +1052,13 @@
         ],
         "owner": "artifact_feed implementation; root review and consolidated verification",
         "branch": "codex/1766-retained-publication-epoch at572da5ec8",
+        "commit": "35ba2468ce1f8ea00ff056db406ee19120e2c189",
+        "verification": {
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0,
+          "new_cases": 9
+        },
         "effort": "bounded30-45min; no GradientTape multi-exit redesign or public API change"
       },
       "push_policy": "USER CLARIFIED: Tensors reviewed fixes may be pushed immediately after local verification without waiting for active CI. Wait-for-entire-cycle rule applies only to AiDotNet PR2524. Monitor full CI on latest Tensors head."
@@ -1593,7 +1607,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T19:20:02.374847+00:00",
+  "updated_utc": "2026-11-17T19:30:12.893168+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
