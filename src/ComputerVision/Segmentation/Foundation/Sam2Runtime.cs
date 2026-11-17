@@ -351,6 +351,7 @@ internal sealed class Sam2Runtime<T>
     public Sam2FrameOutput<T>[] Track(IReadOnlyList<Tensor<T>> frames, IReadOnlyDictionary<int, Sam2Prompt<T>> prompts, bool freshReverse = false)
     {
         if (frames.Count == 0) throw new ArgumentException("No frames.", nameof(frames));
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var _ = new NoGradScope<T>();
         var tracker = new Sam2VideoTracker<T>(_engine, Network);
         return tracker.Propagate(frames.Count, t => Network.EncodeFeatures(Preprocess(frames[t], video: true)), prompts, freshReverse);
@@ -362,6 +363,7 @@ internal sealed class Sam2Runtime<T>
     {
         if (_bank is null) throw new InvalidOperationException("This model has no memory bank.");
         if (images.Count == 0) throw new ArgumentException("No images.", nameof(images));
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var _ = new NoGradScope<T>();
         var tracker = new Sam2VideoTracker<T>(_engine, Network) { Bank = new Sam2SortedMemoryBank<T>(_bank), BankRandom = new Random(seed) };
         return tracker.RunImageSet(images.Count, t => Network.EncodeFeatures(Preprocess(images[t], video: true)), prompts);
@@ -377,6 +379,7 @@ internal sealed class Sam2Runtime<T>
     /// <summary>The image predictor on one frame <c>[1, 3, H, W]</c>: the features with the no-memory embedding.</summary>
     public (Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeImage(Tensor<T> frame)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var _ = new NoGradScope<T>();
         return Network.EncodeImage(Preprocess(frame));
     }
@@ -387,6 +390,7 @@ internal sealed class Sam2Runtime<T>
     public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeImage((Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1) features,
         Tensor<T>? points, Tensor<T>? labels, Tensor<T>? lowResLogits, bool multimask)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var _ = new NoGradScope<T>();
         var (sparse, dense) = Network.EncodePrompts(points, labels, null, lowResLogits);
         return Network.DecodeMasks(features.Embedding, features.HighRes0, features.HighRes1, Network.DensePositional(), sparse, dense, multimask);
@@ -399,6 +403,7 @@ internal sealed class Sam2Runtime<T>
     /// <c>[F, H, W]</c>.</summary>
     public (List<Tensor<T>> Images, List<double[]> Masks) Example(Tensor<T> input, Tensor<T> target)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         bool single = input.Rank == 3;
         if (!single && input.Rank != 4) throw new ArgumentException("SAM 2 trains on a frame [C, H, W] or a video [F, C, H, W].", nameof(input));
         int frames = single ? 1 : input.Shape[0], height = input.Shape[^2], width = input.Shape[^1], size = ImageSize;
@@ -451,10 +456,18 @@ internal sealed class Sam2Runtime<T>
         bool bank = false)
     {
         if (examples.Count == 0) throw new ArgumentException("No training examples.", nameof(examples));
-        var trainer = Trainer(bank);
-        var prepared = examples.Select(e => Example(e.Input, e.Target)).ToList();
-        var plans = prepared.Select(e => trainer.Draw(e.Masks, TrainingRandom)).ToList();
-        var (parameters, optimizer) = TrainingState();
+        Sam2VideoTraining<T> trainer;
+        List<(List<Tensor<T>> Images, List<double[]> Masks)> prepared;
+        List<Sam2VideoTraining<T>.Plan> plans;
+        List<Tensor<T>> parameters;
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            trainer = Trainer(bank);
+            prepared = examples.Select(e => Example(e.Input, e.Target)).ToList();
+            plans = prepared.Select(e => trainer.Draw(e.Masks, TrainingRandom)).ToList();
+            (parameters, optimizer) = TrainingState();
+        }
         Network.TrainingRandom = TrainingRandom;
         Tensor<T> Objective()
         {
@@ -473,6 +486,7 @@ internal sealed class Sam2Runtime<T>
     /// path and dropout masks drawn from one fixed seed, so two evaluations compare the same objective.</summary>
     public T Evaluate(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples, bool bank = false)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         const int draws = 4;
         var prepared = examples.Select(e => Example(e.Input, e.Target)).ToList();
         var trainer = Trainer(bank);

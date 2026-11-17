@@ -348,6 +348,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
     /// predictor's decoder on the model's empty prompt, resized to each image.</summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
         int b = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
@@ -366,6 +367,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
 
     private static IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target, IEngine engine)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (input.Rank == 3) return new[] { (input, target) };
         if (input.Rank != 4) throw new ArgumentException("SAM 2.1 trains on images [C, H, W] or [B, C, H, W].", nameof(input));
         int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];

@@ -378,6 +378,8 @@ internal sealed partial class Sam2Network<T>
     public (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeFeatures(Tensor<T> images)
     {
         var c = Configuration;
+        if (images.Rank != 4 || images.Shape[1] != c.Channels)
+            throw new ArgumentException($"Expected normalized images [B, {c.Channels}, H, W], got [{string.Join(", ", images.Shape.ToArray())}].", nameof(images));
         int b = images.Shape[0];
         if (c.PlainVit) return (EncodeVit(images), null, null);
         var patches = Convolve(PatchProjection, images, c.PatchKernel, c.PatchStride, c.PatchPadding);       // [B, C, H, W]

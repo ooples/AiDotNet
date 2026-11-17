@@ -263,6 +263,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
 
     private Tensor<T> Forward(Tensor<T> input)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (input.Rank == 5)
         {
             var videos = new Tensor<T>[input.Shape[0]];
@@ -317,6 +318,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
     /// masks <c>[B, F, H, W]</c>.</summary>
     private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Videos(Tensor<T> input, Tensor<T> target)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (input.Rank != 5) return new[] { (input, target) };
         int b = input.Shape[0], f = input.Shape[1], c = input.Shape[2], h = input.Shape[3], w = input.Shape[4];
         if (target.Length != b * f * h * w) throw new ArgumentException($"The target is one {h}x{w} mask per frame.", nameof(target));
