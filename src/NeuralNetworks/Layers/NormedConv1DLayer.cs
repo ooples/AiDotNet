@@ -320,7 +320,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         {
             var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
                 NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
-            var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
+            // Broadcast one scale per output channel instead of materializing a scale for every kernel element.
+            var scale = Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms);
             return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
         }
 
@@ -362,7 +363,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
         for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
-        var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
+        var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
     }
 
@@ -412,7 +413,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         int outTime = y.Shape[3];
         if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
-        var bias = Engine.TensorTile(Engine.Reshape(_bias, new[] { 1, _out, 1, 1 }), new[] { batch, 1, 1, outTime });
+        // Broadcast the channel bias over batch and time; its gradient reduces those axes directly.
+        var bias = Engine.Reshape(_bias, new[] { 1, _out, 1, 1 });
         return Engine.Reshape(Engine.TensorAdd(y, bias), new[] { batch, _out, outTime });
     }
 
