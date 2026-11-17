@@ -98,9 +98,22 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var lowFidelity = _lowFidelityNetwork.Forward(input);
-        var correlationInput = Engine.TensorConcatenate(new[] { input, lowFidelity }, 1);
-        return Engine.TensorAdd(_linearCorrelation.Forward(correlationInput), base.Forward(correlationInput));
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        bool singlePoint = input.Rank == 1;
+        var rows = singlePoint ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
+        if (rows.Rank != 2)
+        {
+            throw new ArgumentException("Input must be [inputDim] or [batch, inputDim].", nameof(input));
+        }
+
+        var lowFidelity = _lowFidelityNetwork.Forward(rows);
+        var correlationInput = Engine.TensorConcatenate(new[] { rows, lowFidelity }, 1);
+        var output = Engine.TensorAdd(_linearCorrelation.Forward(correlationInput), base.Forward(correlationInput));
+        return singlePoint ? Engine.Reshape(output, new[] { output.Shape[1] }) : output;
     }
 
     /// <inheritdoc />
@@ -118,7 +131,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// <summary>
     /// The linear correlation network F_l: one dense layer without activation over [x, u_LF(x)].
     /// </summary>
-    private readonly AiDotNet.NeuralNetworks.Layers.DenseLayer<T> _linearCorrelation;
+    private AiDotNet.NeuralNetworks.Layers.DenseLayer<T> _linearCorrelation;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -215,6 +228,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                    NumCollocationPoints = options.NumCollocationPoints,
                    PdeWeight = options.PdeWeight,
                    BoundaryWeight = options.BoundaryWeight,
+                   Seed = options.Seed,
                })
     {
         options.Validate();
@@ -226,8 +240,16 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         _correlationWeight = options.CorrelationWeight;
         _freezeLowFidelityAfterPretraining = options.FreezeLowFidelityAfterPretraining;
         _lowFidelityFrozen = false;
+        using var _ = TensorArena.Suspend();
+        int correlationInputDim = pdeSpecification.InputDimension + pdeSpecification.OutputDimension;
         _linearCorrelation = new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
-            pdeSpecification.OutputDimension, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            pdeSpecification.OutputDimension,
+            (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+        _linearCorrelation.ResolveFromShape(new[] { correlationInputDim });
+        if (architecture.Layers is null || architecture.Layers.Count == 0)
+        {
+            ResolveLayerChainShapes(Layers, new[] { correlationInputDim });
+        }
 
         // Create or use provided low-fidelity network
         if (lowFidelityNetwork != null)
@@ -248,11 +270,27 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                     NumCollocationPoints = options.NumCollocationPoints / 2, // Fewer for LF
                     PdeWeight = 0.0,  // NN_L is a fit to the low-fidelity data (Meng and Karniadakis 2020, Sec. 2.2)
                     BoundaryWeight = options.BoundaryWeight,
+                    Seed = options.Seed.HasValue ? unchecked(options.Seed.Value + 1) : null,
                 });
+            ResolveLayerChainShapes(_lowFidelityNetwork.Layers, new[] { pdeSpecification.InputDimension });
         }
 
         // Create optimizer for this network
         _multiFidelityOptimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    private static void ResolveLayerChainShapes(IList<ILayer<T>> layers, int[] inputShape)
+    {
+        int[] running = inputShape;
+        foreach (var layer in layers)
+        {
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(running);
+            }
+
+            running = layer.GetOutputShape();
+        }
     }
 
     /// <summary>
@@ -262,12 +300,23 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         NeuralNetworkArchitecture<T> hfArchitecture,
         IPDESpecification<T> pdeSpec)
     {
-        // Low-fidelity network typically has fewer layers/neurons
+        // Low-fidelity network uses a smaller smooth Tanh MLP (Meng and Karniadakis 2020, Sec. 2.2)
+        var tanh = (IActivationFunction<T>)new AiDotNet.ActivationFunctions.TanhActivation<T>();
+        var identity = (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>();
+        const int hiddenWidth = 20;
+        var layers = new List<ILayer<T>>
+        {
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(hiddenWidth, tanh),
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(hiddenWidth, tanh),
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(pdeSpec.OutputDimension, identity),
+        };
+
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: pdeSpec.InputDimension,
-            outputSize: pdeSpec.OutputDimension);
+            outputSize: pdeSpec.OutputDimension,
+            layers: layers);
     }
 
     /// <summary>

@@ -244,6 +244,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </remarks>
         private Tensor<T> GenerateCollocationPoints()
         {
+            using var _ = TensorArena.Suspend();
             int inputDim = _pdeSpecification.InputDimension;
             var random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
             return Engine.TensorRandomUniformRange<T>(
@@ -323,7 +324,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
             {
                 new Training.TrainingObjective<T>(
                     new[] { input, target, _collocationPoints },
-                    data => ComputeTrainingLoss(data[0], data[1], data[2]))
+                    data =>
+                    {
+                        var rows = data[0].Rank == 1 ? Engine.Reshape(data[0], new[] { 1, data[0].Shape[0] }) : data[0];
+                        var targets = data[1].Rank == 1 ? Engine.Reshape(data[1], new[] { rows.Shape[0], data[1].Length / rows.Shape[0] }) : data[1];
+                        return ComputeTrainingLoss(rows, targets, data[2]);
+                    })
             };
         }
 

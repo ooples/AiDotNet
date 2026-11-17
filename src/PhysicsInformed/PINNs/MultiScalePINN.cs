@@ -205,8 +205,45 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int scaleIndex,
             int outputDimension)
         {
-            // For finer scales, use deeper networks with Fourier features
-            int depthMultiplier = 1 + scaleIndex; // Finer scales are deeper
+            // Finer scales use deeper smooth (Tanh) PINN sub-networks so second- and higher-order PDE derivatives
+            // do not vanish (FeedForwardNeuralNetwork's default ReLU layers have zero second derivative everywhere).
+            int depthMultiplier = 1 + scaleIndex;
+            var templateArchitecture = new NeuralNetworkArchitecture<T>(
+                baseArchitecture.InputType,
+                baseArchitecture.TaskType,
+                baseArchitecture.Complexity,
+                baseArchitecture.InputSize,
+                baseArchitecture.InputHeight,
+                baseArchitecture.InputWidth,
+                baseArchitecture.InputDepth,
+                outputDimension,
+                null,
+                baseArchitecture.ShouldReturnFullSequence);
+            int hiddenLayerCount = 2 * depthMultiplier;
+            const int hiddenWidth = 32;
+            IActivationFunction<T> hiddenActivation = new AiDotNet.ActivationFunctions.TanhActivation<T>();
+            IActivationFunction<T> outputActivation = new AiDotNet.ActivationFunctions.IdentityActivation<T>();
+            var scaleLayers = new List<ILayer<T>>(hiddenLayerCount + 1);
+            for (int h = 0; h < hiddenLayerCount; h++)
+            {
+                scaleLayers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(hiddenWidth, hiddenActivation));
+            }
+
+            scaleLayers.Add(new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(outputDimension, outputActivation));
+            var inputShape = templateArchitecture.GetInputShape();
+            if (inputShape is not null && inputShape.Length > 0 && inputShape.All(d => d > 0))
+            {
+                int[] running = inputShape;
+                foreach (var layer in scaleLayers)
+                {
+                    if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                    {
+                        lb.ResolveFromShape(running);
+                    }
+
+                    running = layer.GetOutputShape();
+                }
+            }
 
             return new NeuralNetworkArchitecture<T>(
                 baseArchitecture.InputType,
@@ -217,7 +254,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 baseArchitecture.InputWidth,
                 baseArchitecture.InputDepth,
                 outputDimension,
-                null, // Let LayerHelper create default layers
+                scaleLayers,
                 baseArchitecture.ShouldReturnFullSequence);
         }
 
@@ -237,6 +274,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         private void GenerateCollocationPoints()
         {
+            using var _ = TensorArena.Suspend();
             int inputDim = _multiScalePDE.InputDimension;
             int totalPoints = _numCollocationPointsPerScale * _multiScalePDE.NumberOfScales;
 
@@ -438,15 +476,27 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int batchSize = Math.Min(256, numPoints);
             var losses = new List<T>();
 
-            for (int batchStart = 0; batchStart < numPoints; batchStart += batchSize)
+            // ComputeMultiScaleLoss differentiates each scale network with respect to its inputs via nested
+            // PinnAutodiff inside the step and varies active scales and adaptive weights across epochs, which a
+            // compile-once plan cannot replay; run Solve steps on the eager tape.
+            bool wasFusedDisabled = IsFusedTrainingDisabled;
+            IsFusedTrainingDisabled = true;
+            try
             {
-                int actualBatchSize = Math.Min(batchSize, numPoints - batchStart);
-                var batch = Engine.TensorSlice(_collocationPoints, new[] { batchStart, 0 }, new[] { actualBatchSize, inputDim });
+                for (int batchStart = 0; batchStart < numPoints; batchStart += batchSize)
+                {
+                    int actualBatchSize = Math.Min(batchSize, numPoints - batchStart);
+                    var batch = Engine.TensorSlice(_collocationPoints, new[] { batchStart, 0 }, new[] { actualBatchSize, inputDim });
 
-                // One tape step on the multi-scale loss: the gradient reaches every active scale network. The
-                // step used to call the optimizer with no backward pass, so no network ever trained.
-                losses.Add(TrainCustomTapeStep(
-                    batch, batch, points => points, (points, _) => ComputeMultiScaleLoss(points), _optimizer));
+                    // One tape step on the multi-scale loss: the gradient reaches every active scale network. The
+                    // step used to call the optimizer with no backward pass, so no network ever trained.
+                    losses.Add(TrainCustomTapeStep(
+                        batch, batch, points => points, (points, _) => ComputeMultiScaleLoss(points), _optimizer));
+                }
+            }
+            finally
+            {
+                IsFusedTrainingDisabled = wasFusedDisabled;
             }
 
             var lossTensor = Tensor<T>.FromVector(Vector<T>.FromList(losses));

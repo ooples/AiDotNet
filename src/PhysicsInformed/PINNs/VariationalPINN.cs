@@ -170,9 +170,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
             }
 
-            (_quadraturePoints, _quadratureWeights) = BuildQuadrature(perAxis, dimension);
-            _numQuadraturePoints = _quadraturePoints.Shape[0];
-            (_testValues, _testGradients) = BuildTestFunctions(_quadraturePoints, _numTestFunctions);
+            using (TensorArena.Suspend())
+            {
+                (_quadraturePoints, _quadratureWeights) = BuildQuadrature(perAxis, dimension);
+                _numQuadraturePoints = _quadraturePoints.Shape[0];
+                (_testValues, _testGradients) = BuildTestFunctions(_quadraturePoints, _numTestFunctions);
+            }
         }
 
         protected override void InitializeLayers()
