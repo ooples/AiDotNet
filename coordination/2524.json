@@ -1122,14 +1122,20 @@
     {
       "scope": "Consume published Tensors release containing merged1766; preserve stable-vs-artifact guard behavior; review existing completed395606fa05 wrapper repair and integrate verified coordination batches. Own codec and HiFT repairs remain with Codex; all Antigravity Round2Group1A/1B file claims preserved. No new native/package release work.",
       "repository": "ooples/AiDotNet",
-      "status": "ACTIVE. PR7784 full cycle terminal:167 shards21 pretest wrapper failures146 cancellations; no new complete regression verdict. Upcoming stable0.151.2 release pipeline completed, NuGet availability under check. Agents prepare exclusive CodecWaveformGan/Spark and HiftModules/HiftReplay source for root review; cuda_capture monitors exact CI evidence. Do not push incomplete owner changes to PR.",
+      "status": "ACTIVE. PR7784 full cycle terminal:167 shards21 pretest wrapper failures146 cancellations; no new complete regression verdict. Upcoming stable0.151.2 release pipeline completed, NuGet availability under check. Agents prepare exclusive CodecWaveformGan/Spark and HiftModules/HiftReplay source for root review; cuda_capture monitors exact CI evidence. Do not push incomplete owner changes to PR. Root also resumes assigned shared Half serialization two-site repair with existing regression upgraded to exercise public persistence.",
       "files": [
         "Directory.Packages.props",
         ".github/workflows/tensors-validation-preflight.yml",
-        ".github/scripts/Test-TensorsValidationFeed.ps1"
+        ".github/scripts/Test-TensorsValidationFeed.ps1",
+        "src/TimeSeries/TimeSeriesModelBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs"
       ],
       "branch": "codex/2524-post1766-ci",
-      "owner": "Codex coordinator / root (post-1766 consumer CI batch)"
+      "owner": "Codex coordinator / root (post-1766 consumer CI batch)",
+      "file_scope_limits": {
+        "src/TimeSeries/TimeSeriesModelBase.cs": "ONLY two Serialize Convert.ToDouble -> NumOps.ToDouble sites, existing assigned Codex fix",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs": "ONLY existing NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone method: replace reflection/envelope workaround with actual public Serialize/Deserialize plus clone/deepcopy while retaining independent numeric assertions. Existing author batch complete; no other time-series method edits."
+      }
     }
   ],
   "codex_assignments": {
@@ -1675,7 +1681,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:27:57.3114027Z",
+  "updated_utc": "2026-11-17T21:30:03.7804875Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
