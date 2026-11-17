@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from benchmark_telemetry import cpu_storage_events
-from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group
+from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
 
 
 class GateTests(unittest.TestCase):
@@ -153,6 +153,28 @@ class GateTests(unittest.TestCase):
         self.assertNotIn("construction_gpu_allocator_peak_allocated_bytes", gpu_allocator_peaks(phases))
         self.assertEqual({}, gpu_allocator_peaks([{"gpu_memory_interval": {"coverage": "unavailable"}}]))
 
+    def test_reference_recipe_must_match_scored_source_and_hashed_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "manifest.json"
+            hashes = {"pytorch_benchmark": "a" * 64}
+            run = {"artifacts": hashes, "artifact_paths": {"hifigan_reference_manifest": str(path)}}
+            def bind(source):
+                path.write_text(json.dumps({"benchmark_source_sha256": source}))
+                hashes["hifigan_reference_manifest"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            bind(hashes["pytorch_benchmark"])
+            self.assertEqual("pass", reference_recipe_gate(run)["status"])
+            # Even a correctly rehashed manifest must not validate a different training recipe.
+            bind("b" * 64)
+            self.assertIn("recipe does not match", reference_recipe_gate(run)["reason"])
+            bind(hashes["pytorch_benchmark"])
+            path.write_text("changed")
+            self.assertEqual("unverified", reference_recipe_gate(run)["status"])
+            bind(None)
+            self.assertEqual("unverified", reference_recipe_gate(run)["status"])
+            bind("a" * 64)
+            hashes.pop("pytorch_benchmark")
+            self.assertEqual("unverified", reference_recipe_gate(run)["status"])
+
     def test_equivalence_receipt_must_match_binaries_reference_and_fused_updates(self):
         hashes = {"AiDotNet": "a" * 64, "Tensors": "b" * 64, "hifigan_reference_manifest": "c" * 64}
         required, learned, common = hifigan_required_checks()
@@ -172,7 +194,13 @@ class GateTests(unittest.TestCase):
                    "reference_manifest_sha256": hashes["hifigan_reference_manifest"]}
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "equivalence.json"
-            run = {"model": "hifigan-v1", "device": "cuda", "artifacts": hashes}
+            manifest_path = Path(temporary) / "manifest.json"
+            hashes["pytorch_benchmark"] = "e" * 64
+            manifest_path.write_text(json.dumps({"benchmark_source_sha256": hashes["pytorch_benchmark"]}))
+            hashes["hifigan_reference_manifest"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            receipt["reference_manifest_sha256"] = hashes["hifigan_reference_manifest"]
+            run = {"model": "hifigan-v1", "device": "cuda", "artifacts": hashes,
+                   "artifact_paths": {"hifigan_reference_manifest": str(manifest_path)}}
             def bind(value):
                 path.write_text(json.dumps(value))
                 run["correctness_receipt"] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
