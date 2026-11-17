@@ -102,13 +102,13 @@ public partial class MelSpectrogram<T>
     /// <summary>
     /// Mel filterbank matrix [nMels, nFreqs].
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
+    [AiDotNet.Attributes.Buffer]
     private readonly Tensor<T> _melFilterbank;
 
     /// <summary>
     /// Window tensor for IEngine operations.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
+    [AiDotNet.Attributes.Buffer]
     private readonly Tensor<T> _windowTensor;
 
     /// <summary>
@@ -221,7 +221,10 @@ public partial class MelSpectrogram<T>
         // Hop is derived from the REQUESTED nFft, matching librosa's default of nFft/4.
         _hopLength = hopLength ?? nFft / 4;
 
-        // Create Mel filterbank against the effective FFT size
+        // Create Mel filterbank and window tensor outside any caller TensorArena or gradient tape so
+        // persistent front-end buffers are never recycled across arena resets.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         _melFilterbank = CreateMelFilterbank(nMels, _nFft, sampleRate, _fMin, _fMax);
 
         // Create window tensor for direct IEngine operations
@@ -439,6 +442,11 @@ public partial class MelSpectrogram<T>
     /// <returns>Filterbank matrix [nMels, nFreqs].</returns>
     private static Tensor<T> CreateMelFilterbank(int nMels, int nFft, int sampleRate, double fMin, double fMax)
     {
+        // Suspend any active caller TensorArena and gradient tape: CreateMelFilterbank is also reachable directly
+        // and builds a long-lived filterbank matrix whose storage and shape must survive step-arena resets.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        using var noGradT = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         int numFreqs = nFft / 2 + 1;
         var shape = new[] { nMels, numFreqs };
@@ -486,10 +494,14 @@ public partial class MelSpectrogram<T>
         // Normalize each filter to have unit area (Slaney-style normalization); filters summing to at most
         // 1e-8 are left unnormalized
         var sums = engine.TensorBroadcastTo(engine.ReduceSum(filterbank, new[] { 1 }, true), shape);
-        return engine.TensorWhere(
+        var normalized = engine.TensorWhere(
             engine.TensorGreaterThan(sums, NumOps.FromDouble(1e-8)),
             engine.TensorDivide(filterbank, sums),
             filterbank);
+
+        var owned = new Tensor<T>(new[] { nMels, numFreqs });
+        normalized.Data.Span.CopyTo(owned.Data.Span);
+        return owned;
     }
 
     /// <summary>

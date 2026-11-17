@@ -141,7 +141,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001,
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, MaxGradientNorm = 0.0,
                     Source = "Lu et al. 2021, Sec. 4: in all problems the Adam optimizer is used with a "
                             + "learning rate of 0.001, the number of iterations chosen to guarantee "
                             + "convergence. The 0.01 and 0.0001 rates elsewhere in the paper belong to its "
@@ -211,7 +211,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             DeepOperatorNetworkOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
-                NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
+                NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 0.0)
         {
             options ??= new DeepOperatorNetworkOptions();
             _options = options;

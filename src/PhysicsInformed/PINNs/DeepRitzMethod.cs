@@ -155,6 +155,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </remarks>
         private Tensor<T> SampleQuadraturePoints()
         {
+            using var _ = TensorArena.Suspend();
             return Engine.TensorRandomUniformRange<T>(
                 new[] { _numQuadraturePoints, Architecture.InputSize }, NumOps.Zero, NumOps.One, _sampler.Next());
         }

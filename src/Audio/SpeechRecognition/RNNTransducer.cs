@@ -55,6 +55,8 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
 [PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 1e-4, Momentum = 0.9,
                 Source = "Graves 2012: a learning rate of 1e-4 and a momentum of 0.9 with steepest descent.")]
+[PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)]
 public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

@@ -241,15 +241,18 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         }
 
         // XPINN enforces each subdomain's residual on points inside that subdomain. The sub-networks sample
-        // the unit cube; map each one's points onto its subdomain's box.
-        for (int i = 0; i < _subdomainNetworks.Count; i++)
+        // the unit cube; map each one's points onto its subdomain's box outside any active TensorArena.
+        using (TensorArena.Suspend())
         {
-            var network = _subdomainNetworks[i];
-            network.SetCollocationPoints(MapUnitPointsToBox(network.CollocationPoints, _subdomains[i]));
-        }
+            for (int i = 0; i < _subdomainNetworks.Count; i++)
+            {
+                var network = _subdomainNetworks[i];
+                network.SetCollocationPoints(MapUnitPointsToBox(network.CollocationPoints, _subdomains[i]));
+            }
 
-        // Automatically detect interfaces between subdomains
-        _interfaces = DetectInterfaces(subdomains);
+            // Automatically detect interfaces between subdomains
+            _interfaces = DetectInterfaces(subdomains);
+        }
     }
 
     /// <summary>
