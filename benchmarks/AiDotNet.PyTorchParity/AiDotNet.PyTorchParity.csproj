@@ -30,6 +30,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="native/**/*.cs" />
     <!-- Bias the GC toward releasing committed memory back to the OS (0-9; higher
          = more aggressive). Set via runtimeconfig so it applies to the published
          DLL path too, not just launchSettings. -->
