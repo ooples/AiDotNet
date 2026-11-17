@@ -63,8 +63,10 @@ public sealed class HiFiGanResidentMelTests
             var input = new Tensor<float>(Input().ToArray().Select(value => (float)value).ToArray(), new[] { Length });
             using var graph = GraphMode.EnableTraining(new[] { input });
             var magnitude = mel.Magnitude(input, Epsilon);
-            Assert.NotNull(magnitude.LazySource);
-            Assert.Equal("TensorRfftMagnitude", magnitude.LazySource!.OpName);
+            // LazySource belongs to the Tensors assembly's internal graph ABI.
+            var node = typeof(TensorBase<float>).GetField("LazySource", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(magnitude);
+            Assert.NotNull(node);
+            Assert.Equal("TensorRfftMagnitude", node!.GetType().GetProperty("OpName")!.GetValue(node));
             Assert.Equal(new[] { Length / Hop, N / 2 + 1 }, magnitude.Shape.ToArray());
         }
         finally { AiDotNetEngine.Current = previous; }
