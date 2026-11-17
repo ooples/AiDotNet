@@ -240,7 +240,7 @@
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
         "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/FeatureSelectionSweepReferenceTests.cs",
         "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
+        "tests/AiDotNet.Tests/UnitTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
       ],
       "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal queued next on fixer-2), Batch 3 (fc423039d3 + review follow-up 4a50a798fe, verified 191/191 by verifier-1), and Batch 4 (dd714d3ae0; 2 review follow-ups in Gate E verification on verifier-2)"
     },
@@ -548,7 +548,7 @@
         "tests/AiDotNet.Tests/UnitTests/CausalInference/BootstrapStandardErrorSeedTests.cs",
         "tests/AiDotNet.Tests/UnitTests/Models/AiModelResultAccessorTests.cs"
       ],
-      "status": "claimed; Batch 8 in progress on fixer-2 (7 production fixes implemented, 3 stale-fixture test files added)"
+      "status": "Batch 8 (885432fdec, 441/441 local) undergoing Gate A-E verification on verifier-1"
     },
     {
       "owner": "this session/cuda_capture worker",
@@ -624,7 +624,7 @@
         "src/Finance/Forecasting/Foundation/CSDI.cs",
         "src/CausalDiscovery/DeepLearning/GraNDAGAlgorithm.cs"
       ],
-      "status": "claimed; queued for next free fixer"
+      "status": "claimed; queued on fixer-2 immediately after MultiScalePINN lifecycle follow-up"
     },
     {
       "owner": "Antigravity swarm (Wave 4C2)",
@@ -1097,7 +1097,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T05:17:13.625139Z",
+  "updated_utc": "2026-11-17T05:18:30.996086Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
