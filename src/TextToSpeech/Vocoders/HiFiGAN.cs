@@ -147,7 +147,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(_lossMel!.Forward(real));
         var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),

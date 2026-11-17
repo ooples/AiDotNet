@@ -1566,7 +1566,7 @@ public static class CompiledTapeTrainingStep<T>
                 object[] leaves;
                 string? reason;
                 using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
-                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
+                    probe = closure.Probe(objective, parameters, out signature, out leaves, out reason);
                 if (probe == ClosureGuardResult.Matched && signature is not null)
                 {
                     entry = closure.Find(signature);

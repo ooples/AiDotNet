@@ -17305,7 +17305,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // reductions started from different weights through this entry point than through every other one.
         if (GradientValueClip > 0.0)
             return RefuseUnsupportedDeclaredBreak("The declared closure step clips model gradients by value.");
-        if (HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
+        // Group boundaries matter only when the model actually clips by norm. An override may select a GAN's
+        // active parameter group even when its paper disables clipping; refusing it then prevents any fused attempt.
+        if (MaxGradNormValue > 0.0 && HasCustomGradientClippingGroups()
+            && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
             return RefuseUnsupportedDeclaredBreak("The declared closure step uses custom gradient clipping groups.");
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.
