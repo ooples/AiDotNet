@@ -1145,6 +1145,16 @@
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs": "ONLY12 stale Insensitive entries proven by posted PINN11/KMaXMaxGradNorm1 TRX evidence; worker pinn_review, root review before consolidated checks. No other entries/harness edits.",
         ".github/test-shards.yml": "ONLY exact routing clause for new CompiledStepRandomDataTests into appropriate existing unit shard, if canonical inventory requires it; no catchall/newshard/changed checks."
       }
+    },
+    {
+      "status": "CLAIMED before edits; root approved bounded2file design. Implement direct FP32 numeric/zero/tiny/subULP/freeze/skip/clip/checkpoint/copy/reset/rebind/refusal regressions. Separate batch from already-complete codec/Halfserialization/12ratchets; root reviews complete diff before one focused build.",
+      "files": [
+        "src/Optimizers/AdamOptimizer.cs",
+        "tests/AiDotNet.Tests/UnitTests/Optimizers/AdamHalfStateTests.cs"
+      ],
+      "repository": "ooples/AiDotNet",
+      "owner": "Codex/pinn_review Half tape Adam completion",
+      "scope": "Necessary completion of user-approved shared FP32 Adam master/moment continuity repair: per-parameter Half tape slots FP32master/M/V/rawAMSmax/publishedHalf/acceptedage after existing anomaly+clipping preflight. Preserve originalepsilon and all options; do not overlap Antigravity FinancialA2C source. Existing declared-state RegisterState hook carries native float arrays + canonical parameter index/shape, independent restore/copy and strict malformed/oldT-state refusal. Explicit Half sharded export refusal because current Tensor<T>-only transport cannot preserve promoted state; no partial/rounded export."
     }
   ],
   "codex_assignments": {
@@ -1822,7 +1832,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:42:51.4232102Z",
+  "updated_utc": "2026-11-17T21:46:09.3940082Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
