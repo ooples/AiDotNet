@@ -119,12 +119,15 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var rows = DimensionalityReductionOps.NeighborhoodRows(x, neighbors);
         var centered = engine.TensorSubtract(rows, engine.ReduceMean(rows, new[] { 1 }, true));
 
-        // Local PCA: top d eigenvectors of X_i^T X_i, then tangent coordinates Y_i = X_i V_i [n, k, d]
+        // Local PCA: top d eigenvectors of X_i^T X_i, then unit-norm tangent coordinates U_i [n, k, d] (matching
+        // scikit-learn's svd(Gi, full_matrices=False)[0][:, :d])
         var scatter = DimensionalityReductionOps.BatchTransposeMatMul(centered, centered);
         var (_, principal) = DimensionalityReductionOps.SymmetricEigenEach(scatter, descending: true);
-        var tangent = engine.TensorBatchMatMul(centered, engine.TensorNarrow(principal, 2, 0, d));
+        var tangent = DimensionalityReductionOps.OrthonormalizeColumnsEach(
+            engine.TensorBatchMatMul(centered, engine.TensorNarrow(principal, 2, 0, d)), unitFallback: false);
 
-        // Hessian estimator G = [1, y_1..y_d, y_a y_b for a <= b] [n, k, nCols]
+        // Hessian estimator G = [1, y_1..y_d, y_a y_b for a <= b] [n, k, nCols], padded to [n, k, k] when k > nCols
+        // so Gram-Schmidt with unit completion yields the full [k, k] orthonormal factor Q of scipy.linalg.qr(Yi)
         var first = new int[dp];
         var second = new int[dp];
         int col = 0;
@@ -143,10 +146,14 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             engine.TensorIndexSelect(tangent, DimensionalityReductionOps.IndexTensor(second), 2));
         var estimator = engine.TensorConcatenate(
             new[] { DimensionalityReductionOps.Full(new[] { n, k, 1 }, NumOps.One), tangent, quadratic }, 2);
+        if (k > nCols)
+        {
+            estimator = engine.TensorConcatenate(new[] { estimator, new Tensor<T>(new[] { n, k, k - nCols }) }, 2);
+        }
 
-        // Orthonormal factor Q of G (Gram-Schmidt); the columns after [1, y] span the Hessian part
+        // Full orthonormal factor Q of G; the columns after [1, y] span the Hessian and local null-space part
         var q = DimensionalityReductionOps.OrthonormalizeColumnsEach(estimator, unitFallback: true);
-        int available = Math.Min(k, nCols);
+        int available = q.Shape[2];
         Tensor<T> h;
         if (available > 1 + d)
         {

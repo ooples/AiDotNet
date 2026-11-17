@@ -180,13 +180,15 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     private double FindOptimalLambda(Tensor<T> values)
     {
+        // Evaluated in float64 like scipy / scikit-learn: evaluating TransformColumn in Half quantized Brent's
+        // lambda probes to 10-bit steps and overflowed powers (x + 1)^lambda past 65504 on values near 300.
+        var wideValues = values.Cast<double>();
         var jacobianTerms = _method == PowerTransformMethod.BoxCox
-            ? Engine.TensorLog(values)
-            : Engine.TensorMultiply(Engine.TensorSign(values), Engine.TensorLog1p(Engine.TensorAbs(values)));
-        // Reduced as numpy does (float32 intermediates for float16), not in Half, whose sum stops growing
+            ? Engine.TensorLog(wideValues)
+            : Engine.TensorMultiply(Engine.TensorSign(wideValues), Engine.TensorLog1p(Engine.TensorAbs(wideValues)));
         double jacobian = ScalerTensorOps.Sum(jacobianTerms);
-        double n = values.Length;
-        return BrentMinimizer.Minimize(lambda => -ComputeLogLikelihood(values, lambda, n, jacobian), -2.0, 2.0);
+        double n = wideValues.Length;
+        return BrentMinimizer.Minimize(lambda => -ComputeLogLikelihood(wideValues, lambda, n, jacobian), -2.0, 2.0);
     }
 
     /// <summary>
@@ -211,11 +213,11 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// The profile log-likelihood of <paramref name="lambda"/>; transformed data whose variance is below the
     /// smallest normal double gives negative infinity (scikit-learn returns +inf for the negated value).
     /// </summary>
-    private double ComputeLogLikelihood(Tensor<T> values, double lambda, double n, double jacobian)
+    private double ComputeLogLikelihood(Tensor<double> values, double lambda, double n, double jacobian)
     {
-        var transformed = TransformColumn(values, NumOps.FromDouble(lambda));
+        var transformed = TransformColumnCore(values, lambda, _method);
         double variance = ScalerTensorOps.Variance(transformed);
-        if (!(variance >= Float64Tiny))
+        if (variance < Float64Tiny || double.IsNaN(variance))
         {
             return double.NegativeInfinity;
         }
@@ -224,19 +226,51 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>The Box-Cox or Yeo-Johnson transform of a column (NaN passes through).</summary>
-    private Tensor<T> TransformColumn(Tensor<T> column, T lambda) =>
-        _method == PowerTransformMethod.BoxCox ? BoxCoxTransform(column, lambda) : YeoJohnsonTransform(column, lambda);
+    private Tensor<T> TransformColumn(Tensor<T> column, T lambda)
+    {
+        double lambdaValue = NumOps.ToDouble(lambda);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            return TransformColumnCore(column.Cast<double>(), lambdaValue, _method).Cast<T>();
+        }
+
+        return TransformColumnCore(column, lambdaValue, _method);
+    }
+
+    private Tensor<T> InverseTransformColumn(Tensor<T> y, T lambda)
+    {
+        double lambdaValue = NumOps.ToDouble(lambda);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            return InverseTransformColumnCore(y.Cast<double>(), lambdaValue, _method).Cast<T>();
+        }
+
+        return InverseTransformColumnCore(y, lambdaValue, _method);
+    }
+
+    private static Tensor<TW> TransformColumnCore<TW>(Tensor<TW> column, double lambdaValue, PowerTransformMethod method) =>
+        method == PowerTransformMethod.BoxCox
+            ? BoxCoxTransformCore(column, lambdaValue)
+            : YeoJohnsonTransformCore(column, lambdaValue);
+
+    private static Tensor<TW> InverseTransformColumnCore<TW>(Tensor<TW> y, double lambdaValue, PowerTransformMethod method) =>
+        method == PowerTransformMethod.BoxCox
+            ? InverseBoxCoxTransformCore(y, lambdaValue)
+            : InverseYeoJohnsonTransformCore(y, lambdaValue);
 
     /// <summary>scikit-learn's <c>_box_cox</c> (SciPy <c>special.boxcox</c>): <c>expm1(lambda log x) / lambda</c>, or <c>log x</c> at lambda 0.</summary>
-    private Tensor<T> BoxCoxTransform(Tensor<T> x, T lambda)
+    private static Tensor<TW> BoxCoxTransformCore<TW>(Tensor<TW> x, double lambdaValue)
     {
-        var logX = Engine.TensorLog(x);
-        if (Math.Abs(NumOps.ToDouble(lambda)) < BoxCoxZero)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var logX = engine.TensorLog(x);
+        if (Math.Abs(lambdaValue) < BoxCoxZero)
         {
             return logX;
         }
 
-        return Engine.TensorDivideScalar(Engine.TensorExpm1(Engine.TensorMultiplyScalar(logX, lambda)), lambda);
+        TW lambda = ops.FromDouble(lambdaValue);
+        return engine.TensorDivideScalar(engine.TensorExpm1(engine.TensorMultiplyScalar(logX, lambda)), lambda);
     }
 
     /// <summary>
@@ -244,72 +278,79 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <c>log1p(x)</c> when |lambda| &lt; eps); for x &lt; 0, <c>-((1 - x)^(2 - lambda) - 1) / (2 - lambda)</c> (or
     /// <c>-log1p(-x)</c> when |lambda - 2| &lt;= eps).
     /// </summary>
-    private Tensor<T> YeoJohnsonTransform(Tensor<T> x, T lambda)
+    private static Tensor<TW> YeoJohnsonTransformCore<TW>(Tensor<TW> x, double lambdaValue)
     {
-        double lambdaValue = NumOps.ToDouble(lambda);
-        var negative = Engine.TensorLessThan(x, NumOps.Zero);
-        var zeros = new Tensor<T>(x.Shape.ToArray());
-        var positivePart = Engine.TensorWhere(negative, zeros, x);
-        var negativePart = Engine.TensorWhere(negative, x, zeros);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var negative = engine.TensorLessThan(x, ops.Zero);
+        var zeros = new Tensor<TW>(x.Shape.ToArray());
+        var positivePart = engine.TensorWhere(negative, zeros, x);
+        var negativePart = engine.TensorWhere(negative, x, zeros);
 
-        Tensor<T> positive = Math.Abs(lambdaValue) < Float64Spacing
-            ? Engine.TensorLog1p(positivePart)
-            : Engine.TensorDivideScalar(
-                Engine.TensorSubtractScalar(Engine.TensorPower(Engine.TensorAddScalar(positivePart, NumOps.One), lambda), NumOps.One),
+        TW lambda = ops.FromDouble(lambdaValue);
+        Tensor<TW> positive = Math.Abs(lambdaValue) < Float64Spacing
+            ? engine.TensorLog1p(positivePart)
+            : engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(engine.TensorPower(engine.TensorAddScalar(positivePart, ops.One), lambda), ops.One),
                 lambda);
 
-        T twoMinusLambda = NumOps.FromDouble(2 - lambdaValue);
-        Tensor<T> negativeValues = Math.Abs(lambdaValue - 2) > Float64Spacing
-            ? Engine.TensorNegate(Engine.TensorDivideScalar(
-                Engine.TensorSubtractScalar(
-                    Engine.TensorPower(Engine.TensorAddScalar(Engine.TensorNegate(negativePart), NumOps.One), twoMinusLambda), NumOps.One),
+        TW twoMinusLambda = ops.FromDouble(2 - lambdaValue);
+        Tensor<TW> negativeValues = Math.Abs(lambdaValue - 2) > Float64Spacing
+            ? engine.TensorNegate(engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(
+                    engine.TensorPower(engine.TensorAddScalar(engine.TensorNegate(negativePart), ops.One), twoMinusLambda), ops.One),
                 twoMinusLambda))
-            : Engine.TensorNegate(Engine.TensorLog1p(Engine.TensorNegate(negativePart)));
+            : engine.TensorNegate(engine.TensorLog1p(engine.TensorNegate(negativePart)));
 
-        return Engine.TensorWhere(negative, negativeValues, positive);
+        return engine.TensorWhere(negative, negativeValues, positive);
     }
 
     /// <summary>scikit-learn's inverse Yeo-Johnson transform.</summary>
-    private Tensor<T> InverseYeoJohnsonTransform(Tensor<T> y, T lambda)
+    private static Tensor<TW> InverseYeoJohnsonTransformCore<TW>(Tensor<TW> y, double lambdaValue)
     {
-        double lambdaValue = NumOps.ToDouble(lambda);
-        var negative = Engine.TensorLessThan(y, NumOps.Zero);
-        var zeros = new Tensor<T>(y.Shape.ToArray());
-        var positivePart = Engine.TensorWhere(negative, zeros, y);
-        var negativePart = Engine.TensorWhere(negative, y, zeros);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var negative = engine.TensorLessThan(y, ops.Zero);
+        var zeros = new Tensor<TW>(y.Shape.ToArray());
+        var positivePart = engine.TensorWhere(negative, zeros, y);
+        var negativePart = engine.TensorWhere(negative, y, zeros);
 
-        Tensor<T> positive = Math.Abs(lambdaValue) < Float64Spacing
-            ? Engine.TensorExpm1(positivePart)
-            : Engine.TensorSubtractScalar(
-                Engine.TensorPower(
-                    Engine.TensorAddScalar(Engine.TensorMultiplyScalar(positivePart, lambda), NumOps.One),
-                    NumOps.FromDouble(1 / lambdaValue)),
-                NumOps.One);
+        TW lambda = ops.FromDouble(lambdaValue);
+        Tensor<TW> positive = Math.Abs(lambdaValue) < Float64Spacing
+            ? engine.TensorExpm1(positivePart)
+            : engine.TensorSubtractScalar(
+                engine.TensorPower(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(positivePart, lambda), ops.One),
+                    ops.FromDouble(1 / lambdaValue)),
+                ops.One);
 
-        Tensor<T> negativeValues;
+        Tensor<TW> negativeValues;
         if (Math.Abs(lambdaValue - 2) > Float64Spacing)
         {
-            var bases = Engine.TensorAddScalar(
-                Engine.TensorMultiplyScalar(negativePart, NumOps.FromDouble(-(2 - lambdaValue))), NumOps.One);
-            negativeValues = PreprocessingTensorOps.OneMinus(Engine.TensorPower(bases, NumOps.FromDouble(1 / (2 - lambdaValue))));
+            var bases = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(negativePart, ops.FromDouble(-(2 - lambdaValue))), ops.One);
+            negativeValues = PreprocessingTensorOps.OneMinus(engine.TensorPower(bases, ops.FromDouble(1 / (2 - lambdaValue))));
         }
         else
         {
-            negativeValues = PreprocessingTensorOps.OneMinus(Engine.TensorExp(Engine.TensorNegate(negativePart)));
+            negativeValues = PreprocessingTensorOps.OneMinus(engine.TensorExp(engine.TensorNegate(negativePart)));
         }
 
-        return Engine.TensorWhere(negative, negativeValues, positive);
+        return engine.TensorWhere(negative, negativeValues, positive);
     }
 
     /// <summary>SciPy's <c>special.inv_boxcox</c>: <c>exp(log1p(lambda y) / lambda)</c>, or <c>exp(y)</c> at lambda 0.</summary>
-    private Tensor<T> InverseBoxCoxTransform(Tensor<T> y, T lambda)
+    private static Tensor<TW> InverseBoxCoxTransformCore<TW>(Tensor<TW> y, double lambdaValue)
     {
-        if (Math.Abs(NumOps.ToDouble(lambda)) < BoxCoxZero)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        if (Math.Abs(lambdaValue) < BoxCoxZero)
         {
-            return Engine.TensorExp(y);
+            return engine.TensorExp(y);
         }
 
-        return Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorLog1p(Engine.TensorMultiplyScalar(y, lambda)), lambda));
+        TW lambda = ops.FromDouble(lambdaValue);
+        return engine.TensorExp(engine.TensorDivideScalar(engine.TensorLog1p(engine.TensorMultiplyScalar(y, lambda)), lambda));
     }
 
     /// <summary>numpy's <c>spacing(1.0)</c>, the threshold scikit-learn uses for lambda 0 / 2 in Yeo-Johnson.</summary>
@@ -364,7 +405,7 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Undo standardization first
         var y = standardize ? Engine.TensorAddScalar(Engine.TensorMultiplyScalar(column, std), mean) : column;
-        return _method == PowerTransformMethod.BoxCox ? InverseBoxCoxTransform(y, lambda) : InverseYeoJohnsonTransform(y, lambda);
+        return InverseTransformColumn(y, lambda);
     }
 
     /// <summary>

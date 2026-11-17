@@ -110,26 +110,29 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         IsFitted = true;
     }
 
-    // Linear regression R^2 of the centred target on a feature subset: beta solves (X_S' X_S + 1e-6 I) beta =
-    // X_S' (y - mean y) on the raw features, predictions are mean y + X_S beta, and R^2 = max(0, 1 - SSres / SStot)
-    // (0 for an empty subset or a constant target).
+    // Linear regression R^2 with intercept on a feature subset: both features and target are centred (so the
+    // intercept is mean(y) - mean(X_S) beta), beta solves (X_c,S' X_c,S + 1e-6 I) beta = X_c,S' (y - mean y) in
+    // double (preventing Half Gram-matrix overflow), and R^2 = max(0, 1 - SSres / SStot) (0 for an empty subset or
+    // a constant target).
     private sealed class SubsetRegression
     {
-        private readonly Tensor<T> _x;
-        private readonly Tensor<T> _centered;
-        private readonly Tensor<T> _gram;
-        private readonly Tensor<T> _cross;
-        private readonly T _totalSquares;
+        private readonly Tensor<double> _x;
+        private readonly Tensor<double> _centered;
+        private readonly Tensor<double> _gram;
+        private readonly Tensor<double> _cross;
+        private readonly double _totalSquares;
 
         public SubsetRegression(Tensor<T> x, Tensor<T> y)
         {
             var engine = AiDotNetEngine.Current;
             int n = x.Shape[0];
-            _x = x;
-            _centered = engine.TensorSubtractScalar(y, engine.TensorMean(y));
-            _gram = engine.TensorMatMul(engine.TensorTranspose(x), x);
+            var wideX = x.Cast<double>();
+            var wideY = y.Cast<double>();
+            _x = FilterStatisticTensorOps.CenterColumns(wideX);
+            _centered = engine.TensorSubtractScalar(wideY, engine.TensorMean(wideY));
+            _gram = engine.TensorMatMul(engine.TensorTranspose(_x), _x);
             _cross = engine.Reshape(
-                engine.TensorMatMul(engine.TensorTranspose(x), engine.Reshape(_centered, new[] { n, 1 })), new[] { x.Shape[1] });
+                engine.TensorMatMul(engine.TensorTranspose(_x), engine.Reshape(_centered, new[] { n, 1 })), new[] { _x.Shape[1] });
             _totalSquares = TensorReductionHelper.SumOfSquares(engine, _centered);
         }
 
@@ -138,18 +141,18 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var ops = MathHelper.GetNumericOperations<T>();
             var engine = AiDotNetEngine.Current;
             int k = subset.Length;
-            if (k == 0 || !ops.GreaterThan(_totalSquares, ops.FromDouble(1e-10)))
+            if (k == 0 || _totalSquares <= 1e-10)
                 return ops.Zero;
 
             var index = new Tensor<int>((int[])subset.Clone(), new[] { k });
             var gram = engine.TensorIndexSelect(engine.TensorIndexSelect(_gram, index, 0), index, 1);
-            var system = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ops.FromDouble(1e-6)));
+            var system = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<double>(k), 1e-6));
             var beta = PreprocessingTensorOps.Solve(system, engine.Reshape(engine.TensorIndexSelect(_cross, index, 0), new[] { k, 1 }));
             var columns = engine.TensorIndexSelect(_x, index, 1);
             var fitted = engine.Reshape(engine.TensorMatMul(columns, beta), new[] { _x.Shape[0] });
-            T residual = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(_centered, fitted));
-            T rSquared = ops.Subtract(ops.One, ops.Divide(residual, _totalSquares));
-            return ops.GreaterThan(rSquared, ops.Zero) ? rSquared : ops.Zero;
+            double residual = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(_centered, fitted));
+            double rSquared = 1.0 - residual / _totalSquares;
+            return rSquared > 0.0 ? ops.FromDouble(rSquared) : ops.Zero;
         }
     }
 

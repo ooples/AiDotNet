@@ -21,9 +21,22 @@ internal static class PopulationSearchOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = data.Rows;
-        int p = data.Columns;
         var x = Tensor<T>.FromMatrix(data);
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        // Half and BFloat16 evaluate in float and cast once: in Half, raw deviation sums overflow 65504 past 256,
+        // scaled sums of 1s stop growing at 2048, and sqrt(n) * sqrt(n) loses the 3rd decimal place (e.g. n = 300).
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return AbsTargetCorrelationsCore(x.Cast<float>(), y.Cast<float>(), (float)ops.ToDouble(undefined)).Cast<T>();
+
+        return AbsTargetCorrelationsCore(x, y, undefined);
+    }
+
+    private static Tensor<T> AbsTargetCorrelationsCore<T>(Tensor<T> x, Tensor<T> y, T undefined)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
