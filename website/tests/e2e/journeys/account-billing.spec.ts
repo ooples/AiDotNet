@@ -176,9 +176,12 @@ test.describe('Pro bought online', () => {
     await signIn(page, p);
     await billingLoaded(page);
     await openStripe(page, () => page.locator('#billing-cancel').click());
-    await page.getByRole('button', { name: /cancel (subscription|plan)/i }).last().click();
+    await page.getByRole('button', { name: /^cancel (subscription|plan)$/i }).click();
     await page.waitForURL((u) => u.href.startsWith(`${baseURL}/account/billing/`), { timeout: 60_000 });
-    await expect.poll(async () => (await getSubscription(request, p.stripe!.subscriptionId)).cancel_at_period_end, { timeout: 30_000 }).toBe(true);
+    await expect.poll(async () => {
+      const subscription = await getSubscription(request, p.stripe!.subscriptionId);
+      return { status: subscription.status, cancel_at_period_end: subscription.cancel_at_period_end };
+    }, { timeout: 30_000 }).toMatchObject({ cancel_at_period_end: true });
 
     await billingLoaded(page);
     await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
