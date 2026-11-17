@@ -161,12 +161,7 @@ internal sealed class HiFiGanGenerator<T>
     }
 
     private Tensor<T> LeakyRelu(Tensor<T> x, double slope)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        // max(x, slope · x) = slope · x + (1 − slope) · relu(x)
-        return _engine.TensorAdd(_engine.TensorMultiplyScalar(x, ops.FromDouble(slope)),
-            _engine.TensorMultiplyScalar(_engine.ReLU(x), ops.FromDouble(1 - slope)));
-    }
+        => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(slope));
 
     private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
     {
@@ -472,11 +467,7 @@ internal sealed class HiFiGanDiscriminators<T>
     }
 
     private Tensor<T> LeakyRelu(Tensor<T> x)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        return _engine.TensorAdd(_engine.TensorMultiplyScalar(x, ops.FromDouble(_slope)),
-            _engine.TensorMultiplyScalar(_engine.ReLU(x), ops.FromDouble(1 - _slope)));
-    }
+        => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(_slope));
 
     /// <summary>Every sub-discriminator's score and feature maps for <paramref name="audio"/> <c>[samples]</c>.</summary>
     public List<(Tensor<T> Score, List<Tensor<T>> Features)> Forward(Tensor<T> audio)

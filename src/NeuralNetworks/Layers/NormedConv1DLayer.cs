@@ -423,9 +423,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         int outTime = y.Shape[3];
         if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
-        // Broadcast the channel bias over batch and time; its gradient reduces those axes directly.
-        var bias = Engine.Reshape(_bias, new[] { 1, _out, 1, 1 });
-        return Engine.Reshape(Engine.TensorAdd(y, bias), new[] { batch, _out, outTime });
+        // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.
+        return Engine.Reshape(Engine.TensorChannelBiasAdd(y, _bias), new[] { batch, _out, outTime });
     }
 
     /// <summary>
