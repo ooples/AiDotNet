@@ -1,11 +1,12 @@
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from benchmark_telemetry import cpu_storage_events
-from finish_gate import cache_environment, contending_processes, evaluate, gpu_allocator_peaks, memory_metrics, metrics, normalize, paired_gate, phase_group
+from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group
 
 
 class GateTests(unittest.TestCase):
@@ -151,6 +152,49 @@ class GateTests(unittest.TestCase):
         phases[0]["gpu_memory_interval"]["devices"]["cuda:1"] = {"PeakAllocatedBytes": 900}
         self.assertNotIn("construction_gpu_allocator_peak_allocated_bytes", gpu_allocator_peaks(phases))
         self.assertEqual({}, gpu_allocator_peaks([{"gpu_memory_interval": {"coverage": "unavailable"}}]))
+
+    def test_equivalence_receipt_must_match_binaries_reference_and_fused_updates(self):
+        hashes = {"AiDotNet": "a" * 64, "Tensors": "b" * 64, "hifigan_reference_manifest": "c" * 64}
+        required, learned, common = hifigan_required_checks()
+        self.assertEqual((1615, 388, 404), (len(required), len(learned), len(common)))
+        checks = {name: {"name": name, "pass": True, "finite": True, "elements": 1} for name in required}
+        first_learned, first_common = min(learned), min(common)
+        checks["isolated-gradient/" + first_learned]["elements"] += 84_660_721 - len(learned)
+        for step in (1, 2, 3):
+            checks[f"train/step{step}/" + first_common]["elements"] += 84_679_257 - len(common)
+        for batch in (1, 8, 16):
+            checks[f"inference/output/{batch}"]["elements"] = batch * 65_536
+        checks["generator/output0"]["elements"] = 8192
+        receipt = {"schema": "hifigan-v1-equivalence-receipt-v1", "model": "hifigan-v1", "device": "cuda",
+                   "pass": True, "checks": list(checks.values()),
+                   "errors": [], "fused_steps": 6, "eager_steps": 0, "assemblies_sha256": {key: hashes[key] for key in ("AiDotNet", "Tensors")},
+                   "tolerance": {"absolute": 2e-4, "relative": 3e-3, "gradient_relative": .03, "gradient_cosine": .995},
+                   "reference_manifest_sha256": hashes["hifigan_reference_manifest"]}
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "equivalence.json"
+            run = {"model": "hifigan-v1", "device": "cuda", "artifacts": hashes}
+            def bind(value):
+                path.write_text(json.dumps(value))
+                run["correctness_receipt"] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            bind(receipt)
+            self.assertEqual("pass", correctness_gate(run)["status"])
+            bind(dict(receipt, eager_steps=1))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, tolerance={"absolute": 1}))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, reference_manifest_sha256="d" * 64))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, checks=[]))
+            self.assertEqual("fail", correctness_gate(run)["status"])
+            bind(dict(receipt, checks=list(checks.values())[:-1]))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, checks=[*checks.values(), next(iter(checks.values()))]))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, **{"pass": False}))
+            self.assertEqual("fail", correctness_gate(run)["status"])
+            bind(receipt)
+            path.write_text("changed")
+            self.assertEqual("unverified", correctness_gate(run)["status"])
 
 
 if __name__ == "__main__":

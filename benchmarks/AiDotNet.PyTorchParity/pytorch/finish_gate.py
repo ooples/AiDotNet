@@ -299,6 +299,11 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     for key in ("PROFILE_RANGE", "PROFILE_INFERENCE_BATCH", "BENCH_MEMSTEP", "AIDOTNET_FUSED_DIAG"):
         env.pop(key, None)
     metadata = provenance(config)
+    receipt_path = config.get("correctness_receipts", {}).get(model, {}).get(device)
+    if receipt_path:
+        receipt_file = Path(receipt_path).resolve()
+        metadata["correctness_receipt"] = {"path": str(receipt_file),
+            "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
     metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
                     cache_state=cache_state,
                     environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
@@ -336,6 +341,74 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     write_json(run_dir / "measurement.json", metadata)
     write_json(run_dir / "memory-samples.json", samples)
     return {"path": str(run_dir), **metadata}
+
+
+def hifigan_required_checks() -> tuple[set[str], set[str], set[str]]:
+    learned, common = set(), set()
+    for family, layers in (("generator", 78), ("discriminator", 54)):
+        for layer in range(layers):
+            prefix = f"{family}/{layer:03d}/"
+            roles = {"direction", "bias"}
+            spectral = family == "discriminator" and 30 <= layer <= 37
+            if not spectral:
+                roles.add("gain")
+            learned.update(prefix + role for role in roles)
+            common.update(prefix + role for role in roles | ({"u", "v"} if spectral else set()))
+    required = {"isolated-gradient/" + key for key in learned}
+    required.update("train/step" + str(step) + "/" + key for step in (1, 2, 3) for key in common)
+    required.update("isolated-gradient-summary/" + family for family in ("generator", "discriminator"))
+    required.update("inference/output/" + str(batch) for batch in (1, 8, 16))
+    required.update("isolated/" + name for name in ("discriminator_loss", "adversarial", "feature_matching", "mel_l1",
+                                                  "components_total", "production_generator_loss"))
+    required.update("train/generator_loss/" + str(step) for step in (0, 1, 2))
+    required.add("generator/output0")
+    return required, learned, common
+
+
+def correctness_gate(run: dict) -> dict:
+    """Bind a successful full-V1 equivalence receipt to the exact scored binaries/reference."""
+    binding = run.get("correctness_receipt") or {}
+    if run.get("model") != "hifigan-v1":
+        return {"status": "unverified", "reason": "This family has no validated numerical-equivalence receipt contract."}
+    path = Path(binding.get("path", ""))
+    if not path.is_file() or binding.get("sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
+        return {"status": "unverified", "reason": "Missing or changed numerical-equivalence receipt."}
+    receipt = read_json(path)
+    if receipt.get("schema") != "hifigan-v1-equivalence-receipt-v1" or receipt.get("model") != run["model"] or receipt.get("device") != run["device"]:
+        return {"status": "unverified", "reason": "Numerical receipt schema/model/device mismatch."}
+    budgets = {"cpu": {"absolute": 2e-5, "relative": 1e-3, "gradient_relative": .01, "gradient_cosine": .999},
+               "cuda": {"absolute": 2e-4, "relative": 3e-3, "gradient_relative": .03, "gradient_cosine": .995}}
+    if receipt.get("tolerance") != budgets.get(run["device"]):
+        return {"status": "unverified", "reason": "Numerical receipt does not use the fixed reviewed error budgets."}
+    hashes = run.get("artifacts", {})
+    assemblies = receipt.get("assemblies_sha256") or {}
+    if any(not hashes.get(name) or assemblies.get(name) != hashes[name] for name in ("AiDotNet", "Tensors")):
+        return {"status": "unverified", "reason": "Numerical receipt does not bind the scored assembly hashes."}
+    if not hashes.get("hifigan_reference_manifest") or receipt.get("reference_manifest_sha256") != hashes["hifigan_reference_manifest"]:
+        return {"status": "unverified", "reason": "Numerical receipt reference-manifest hash mismatch."}
+    checks = receipt.get("checks") or []
+    valid_checks = bool(checks) and all(check.get("pass") is True and check.get("finite") is True
+                                       and (number(check.get("elements")) or 0) > 0 for check in checks)
+    if receipt.get("pass") is not True or receipt.get("errors") != [] or not valid_checks:
+        return {"status": "fail", "reason": "Numerical equivalence has a failing, empty, or nonfinite check."}
+    required, learned, common = hifigan_required_checks()
+    names = [check.get("name") for check in checks]
+    if len(names) != len(required) or set(names) != required:
+        return {"status": "unverified", "reason": "Receipt must contain exactly all 1615 required V1 checks, without duplicates or omitted tensors."}
+    by_name = {check["name"]: check for check in checks}
+    if sum(by_name["isolated-gradient/" + key]["elements"] for key in learned) != 84_660_721:
+        return {"status": "unverified", "reason": "Receipt does not cover all 84,660,721 learned gradient scalars."}
+    for step in (1, 2, 3):
+        if sum(by_name[f"train/step{step}/" + key]["elements"] for key in common) != 84_679_257:
+            return {"status": "unverified", "reason": "Receipt omits learned weights or active spectral state from a fused update."}
+    for batch in (1, 8, 16):
+        if by_name[f"inference/output/{batch}"]["elements"] != batch * 65_536:
+            return {"status": "unverified", "reason": "Receipt inference is not the full 256-frame V1 configuration."}
+    if by_name["generator/output0"]["elements"] != 8192:
+        return {"status": "unverified", "reason": "Receipt isolated training crop is not 8192 samples."}
+    if receipt.get("fused_steps") != 6 or receipt.get("eager_steps") != 0:
+        return {"status": "unverified", "reason": "Receipt did not prove the three actual fused discriminator/generator updates."}
+    return {"status": "pass", "receipt_sha256": binding["sha256"], "checks": len(checks)}
 
 
 def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
@@ -400,6 +473,12 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         for kind in ("cpu_framework_requested", "cpu_backing", *( ("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
             for unit in ("bytes", "count"):
                 outcomes[f"{kind}_{unit}"] = {"status": "unverified", "reason": "Allocator coverage contract not yet verified on both frameworks."}
+        numerical = [correctness_gate(run) for run in scored]
+        outcomes["numerical_equivalence"] = {
+            "status": "pass" if numerical and all(row["status"] == "pass" for row in numerical) else
+                      "fail" if any(row["status"] == "fail" for row in numerical) else "unverified",
+            "receipts": numerical,
+        }
         failures = [error for side in rows.values() for _, errors in side for error in errors]
         if not scored:
             failures.append("required model/device has no scored runs")
