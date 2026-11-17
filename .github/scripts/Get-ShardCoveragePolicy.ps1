@@ -233,5 +233,6 @@ function Get-ShardCoveragePolicy {
       if (-not $Quiet) { Write-Host 'previous map classified this memory/timing-bound shard as always-run - executing correctness tests without instrumentation' }
     }
     return [pscustomobject]@{ HeavyShard = $heavyShard; MeasuresTiming = $measuresTiming; CollectCoverage = [bool]$collectCoverage
-        CoverageDisposition = $coverageDisposition.ToString(); ForcedCoverageRun = $forcedCoverageRun; RollingCoverage = $rollingCoverage }
+        CoverageDisposition = $coverageDisposition.ToString(); ForcedCoverageRun = $forcedCoverageRun; RollingCoverage = $rollingCoverage
+        PullRequest = [bool]$pullRequest }
 }
