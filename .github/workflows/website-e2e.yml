@@ -12,7 +12,7 @@ on:
       part:
         description: 'Preview checks to run'
         type: choice
-        options: [suite, all, anon, free, pro-stripe, pro-granted, admin]
+        options: [suite, all, anon, free, pro-stripe, pro-granted, admin, auth-config]
         default: suite
       repair_email:
         description: 'Verify the existing repository mail key and synchronize the function mail secret'
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   preview-auth:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.configure_preview_auth }}
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.configure_preview_auth || inputs.part == 'auth-config') }}
     environment: Preview
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -43,6 +43,7 @@ jobs:
         run: node website/scripts/configure-preview-auth.mjs
 
   e2e:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.part != 'auth-config' }}
     name: Playwright (${{ matrix.part }})
     environment: ${{ github.event_name == 'workflow_dispatch' && 'Preview' || 'Production' }}
     runs-on: ubuntu-latest
