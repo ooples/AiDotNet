@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
@@ -7,8 +9,8 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
 /// <summary>
-/// ARIMAX packs and reads its parameters in one order ([AR..., MA..., exogenous..., intercept]), so a
-/// parameter vector survives every get/set/with path and leaves the forecast unchanged.
+/// ARIMAX uses the generated registry's manifest order,
+/// so every get/set/with path restores the same coefficient storage and preserves forecasts.
 /// </summary>
 public class ARIMAXParameterRoundTripTests
 {
@@ -93,15 +95,35 @@ public class ARIMAXParameterRoundTripTests
         // AR, MA, exogenous coefficients and the intercept: 1 + 1 + 1 + 1
         Assert.Equal(4, count);
 
-        // Distinct values so any reordering is visible: AR 0.1, MA 0.2, exogenous 0.3, intercept 0.4
-        var distinct = new Vector<double>(new[] { 0.1, 0.2, 0.3, 0.4 });
+        // Pack by durable field identity: resizable sources can occupy the manifest tail.
+        // The expected coefficients and forecast remain independent of their flat offsets.
+        var distinct = new Vector<double>(count);
+        var slots = model.ParameterLayout.Slots;
+        var assignedOffsets = new HashSet<long>();
+        void Assign(string field, double value)
+        {
+            var slot = Assert.Single(slots.Where(item =>
+                item.StableId.EndsWith("::" + field, StringComparison.Ordinal)));
+            Assert.Equal(1L, slot.ParameterCount);
+            Assert.True(slot.Offset.HasValue);
+            Assert.True(assignedOffsets.Add(slot.Offset.Value), "Each coefficient must occupy an independent flat slot.");
+            distinct[checked((int)slot.Offset.Value)] = value;
+        }
+        Assign("_arCoefficients", 0.1);
+        Assign("_exogenousCoefficients", 0.2);
+        Assign("_intercept", 0.3);
+        Assign("_maCoefficients", 0.4);
+        Assert.Equal(count, assignedOffsets.Count);
 
         var viaWith = model.WithParameters(distinct);
         AssertSame(distinct, viaWith.GetParameters());
 
         model.SetParameters(distinct);
         AssertSame(distinct, model.GetParameters());
-        Assert.Equal(0.4, Convert.ToDouble(model.GetModelMetadata().AdditionalInfo["Intercept"]));
+        Assert.Equal(0.3, Convert.ToDouble(model.GetModelMetadata().AdditionalInfo["Intercept"]));
+        var forecast = model.Predict(x);
+        for (int i = 0; i < x.Rows; i++)
+            Assert.Equal(0.3 + 0.2 * x[i, 0], forecast[i], 12);
 
         // Both paths hold the same coefficients, so they forecast the same values
         AssertSame(model.Predict(x), viaWith.Predict(x));

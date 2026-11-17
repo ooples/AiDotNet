@@ -46,7 +46,8 @@ internal static class OptionSensitivityFixtureSetup
             : network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+        => network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> && DevaOptionFixture.Handles(option) ? "deva-video-" + option
+            : AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
             // TryTrainOption trains this option on a two-second recording, not the fixture input, so its control must too.
             : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "lid-two-second-recording"
@@ -216,6 +217,20 @@ internal static class OptionSensitivityFixtureSetup
             return KokoroOptionFixture.Observe(kokoro, option);
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> deva && DevaOptionFixture.Handles(option))
+            task = OptionSensitivityHarness.Combine(task, DevaOptionFixture.Observe(deva, option));
+
+        if (network is AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T> hamiltonian
+            && option is "SymplecticSolverTolerance" or "SymplecticSolverMaxIterations")
+        {
+            // These options control the implicit simulation step, not Predict/Train. At this
+            // finite nonseparable state, a single correction has a measurable momentum residual.
+            var initial = new Vector<T>(Enumerable.Repeat(ops.FromDouble(1), input.Shape[^1]).ToArray());
+            var trajectory = hamiltonian.Simulate(initial, ops.FromDouble(4), 3);
+            task = OptionSensitivityHarness.Combine(task,
+                OptionSensitivityHarness.Fingerprint(trajectory.ToArray().Select(ops.ToDouble)));
+        }
+
         // Vector.Select materializes another full vector (and a double copy for float models).
         // Stream conversions so a paper-scale model needs only the existing parameter snapshot.
         var parameters = network.GetParameters();

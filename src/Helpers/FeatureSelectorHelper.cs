@@ -308,29 +308,14 @@ public static class FeatureSelectorHelper<T, TInput>
         }
         else if (source.Rank == 3 || source.Rank == 4)
         {
-            // Copy the whole [1, 1, d2(, d3)] block of this sample's feature in one slice.
-            int rank = source.Rank;
-            var start = new int[rank];
-            var length = new int[rank];
-            start[0] = sampleIndex;
-            start[1] = sourceFeatureIndex;
-            length[0] = 1;
-            length[1] = 1;
-            for (int d = 2; d < rank; d++)
-            {
-                length[d] = source.Shape[d];
-            }
-
-            Tensor<T> block;
+            // Fix sample and feature, leaving the complete trailing dimensions.
+            // TensorCopy writes through the destination view's live storage and offset.
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                block = AiDotNetEngine.Current.TensorSlice(source, start, length);
+                using var from = source.SubTensor(sampleIndex, sourceFeatureIndex);
+                using var to = destination.SubTensor(sampleIndex, destFeatureIndex);
+                AiDotNetEngine.Current.TensorCopy(from, to);
             }
-
-            var destStart = new int[rank];
-            destStart[0] = sampleIndex;
-            destStart[1] = destFeatureIndex;
-            destination.SetSubTensor(destStart, block);
         }
         else
         {

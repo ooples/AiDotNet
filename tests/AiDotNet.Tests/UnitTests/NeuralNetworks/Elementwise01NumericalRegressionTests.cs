@@ -108,7 +108,8 @@ public partial class Elementwise01NumericalRegressionTests
         var embedding = new EmbeddingLayer<Half>(2052, 1);
         Assert.Throws<InputContractViolationException>(() => embedding.Forward(labels));
         var embeddingError = Assert.Throws<TargetInvocationException>(() =>
-            Invoke(typeof(EmbeddingLayer<Half>), embedding, "ValidateIndicesOrThrow", labels, 2052));
+            Invoke(typeof(EmbeddingLayer<Half>), null, "ValidateIndicesOrThrow",
+                AiDotNet.Tensors.Engines.AiDotNetEngine.Current, labels, 2052));
         Assert.IsType<ArgumentException>(embeddingError.InnerException);
         var parameters = embedding.GetParameters();
         parameters.AsWritableSpan().Fill((Half)0);
@@ -121,6 +122,11 @@ public partial class Elementwise01NumericalRegressionTests
         var crfError = Assert.Throws<TargetInvocationException>(() =>
             Invoke(typeof(ConditionalRandomFieldLayer<Half>), crf, "BuildLabelOneHotForBatch", labels, 0, 1, 2052));
         Assert.IsType<ArgumentOutOfRangeException>(crfError.InnerException);
+        var validCrf = Assert.IsType<Tensor<Half>>(
+            Invoke(typeof(ConditionalRandomFieldLayer<Half>), crf, "BuildLabelOneHotForBatch", valid, 0, 1, 2052));
+        Assert.Equal(new[] { 1, 2052 }, validCrf.Shape.ToArray());
+        for (int i = 0; i < validCrf.Length; i++)
+            Assert.Equal((Half)(i == 2050 ? 1 : 0), validCrf.GetFlat(i));
     }
 
     [Fact]

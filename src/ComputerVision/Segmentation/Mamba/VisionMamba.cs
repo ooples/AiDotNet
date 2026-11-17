@@ -205,8 +205,8 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
             TrainWithCustomLoss(image, _ =>
             {
                 var (logits, auxiliary) = network.Forward(image, training: true, _trainingRandom, withAuxiliary: true);
-                return Engine.TensorAdd(PixelCrossEntropy(Crop(logits, height, width), target),
-                    Engine.TensorMultiplyScalar(PixelCrossEntropy(Crop(auxiliary!, height, width), target),
+                return Engine.TensorAdd(PixelCrossEntropy(Engine, Crop(logits, height, width), target),
+                    Engine.TensorMultiplyScalar(PixelCrossEntropy(Engine, Crop(auxiliary!, height, width), target),
                         NumOps.FromDouble(network.Configuration.AuxiliaryWeight)));
             }, Optimizer);
         }
@@ -218,23 +218,13 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     }
 
     /// <summary>The mean over pixels of −Σ_c t_c·log softmax(x)_c, the class axis being axis 1.</summary>
-    private Tensor<T> PixelCrossEntropy(Tensor<T> logits, Tensor<T> target)
+    internal static Tensor<T> PixelCrossEntropy(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> logits, Tensor<T> target)
     {
-        var shape = logits.Shape.ToArray();
-        // Subtracting a per-pixel constant leaves the softmax unchanged; the maximum is taken without a gradient.
-        var maximum = new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
-        for (int b = 0; b < shape[0]; b++)
-            for (int p = 0; p < shape[2] * shape[3]; p++)
-            {
-                double m = double.NegativeInfinity;
-                for (int c = 0; c < shape[1]; c++) m = Math.Max(m, NumOps.ToDouble(logits[(b * shape[1] + c) * shape[2] * shape[3] + p]));
-                maximum[b * shape[2] * shape[3] + p] = NumOps.FromDouble(m);
-            }
-        var centered = Engine.TensorSubtract(logits, Engine.TensorBroadcastTo(maximum, shape));
-        var logSumExp = Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(centered), new[] { 1 }, false));
-        var picked = Engine.ReduceSum(Engine.TensorMultiply(centered, target), new[] { 1 }, false);
-        var mass = Engine.ReduceSum(target, new[] { 1 }, false);
-        return Engine.ReduceMean(Engine.TensorSubtract(Engine.TensorMultiply(logSumExp, mass), picked), new[] { 0, 1, 2 }, false);
+        // Native log-softmax keeps the stabilization and its current logits inside the replay graph.
+        // Average over every pixel, including zero-mass targets, as the original objective does.
+        var logProbabilities = engine.TensorLogSoftmax(logits, axis: 1);
+        var picked = engine.ReduceSum(engine.TensorMultiply(logProbabilities, target), new[] { 1 }, false);
+        return engine.TensorNegate(engine.ReduceMean(picked, new[] { 0, 1, 2 }, false));
     }
 
     /// <inheritdoc />

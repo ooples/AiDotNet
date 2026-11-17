@@ -170,22 +170,76 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <summary>The coarse and fine logits <c>[1, 256, samples]</c> of every sample of <paramref name="audio"/>
     /// given its previous samples and coarse byte (teacher forcing; the sample before the first is silence).</summary>
     public (Tensor<T> Coarse, Tensor<T> Fine) Logits(Tensor<T> mel, Tensor<T> audio)
+        => LogitsFromBytes(mel, QuantizedBytes(Engine, audio));
+
+    // A same-T discrete data node keeps the original double quantizer off the graph while declaring
+    // its current waveform dependency. No derivative flows through byte rounding or teacher forcing.
+    internal static Tensor<T> QuantizedBytes(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> audio)
+    {
+        void Compute(AiDotNet.Tensors.Engines.IEngine replayEngine, Tensor<T> output)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noDoubleGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            var x = replayEngine.Reshape(TensorCopyHelper.CastLogical<T, double>(audio), new[] { audio.Length });
+            var sixteen = replayEngine.TensorClamp(replayEngine.TensorRound(replayEngine.TensorMultiplyScalar(
+                replayEngine.TensorAddScalar(replayEngine.TensorClamp(x, -1.0, 1.0), 1.0), 32767.5)), 0.0, 65535.0);
+            var high = replayEngine.TensorFloor(replayEngine.TensorDivideScalar(sixteen, 256.0));
+            var low = replayEngine.TensorSubtract(sixteen, replayEngine.TensorMultiplyScalar(high, 256.0));
+            var value = TensorCopyHelper.CastLogical<double, T>(replayEngine.TensorStack(new[] { high, low }, 0));
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, output);
+        }
+        var shape = new[] { 2, audio.Length };
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var value = new Tensor<T>(shape);
+            Compute(engine, value);
+            return value;
+        }
+        return scope.RecordUnary(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "WaveRnnQuantizedBytes", audio, shape, Compute, static (_, _, _, _, _, _) => { });
+    }
+
+    private static Tensor<T> ScaleByteTensor(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> bytes)
+    {
+        void Compute(AiDotNet.Tensors.Engines.IEngine replayEngine, Tensor<T> output)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noDoubleGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            var values = replayEngine.TensorAddScalar(
+                replayEngine.TensorDivideScalar(TensorCopyHelper.CastLogical<T, double>(bytes), 127.5), -1.0);
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine,
+                TensorCopyHelper.CastLogical<double, T>(values), output);
+        }
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var value = new Tensor<T>(bytes._shape);
+            Compute(engine, value);
+            return value;
+        }
+        return scope.RecordUnary(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "WaveRnnScaledBytes", bytes, bytes._shape, Compute, static (_, _, _, _, _, _) => { });
+    }
+
+    private (Tensor<T> Coarse, Tensor<T> Fine) LogitsFromBytes(Tensor<T> mel, Tensor<T> bytes)
     {
         mel = MelInput(mel);
-        var (coarse, fine) = Split(Flat(audio));
-        int n = coarse.Length;
-        // Rows: previous coarse, previous fine (the sample before the first is silence), current coarse
+        int n = bytes.Shape[1];
+        Tensor<T> Row(int index) => Engine.Reshape(Engine.TensorSlice(bytes, new[] { index, 0 }, new[] { 1, n }),
+            new[] { 1, 1, n });
+        var coarse = Row(0);
+        var fine = Row(1);
         int silence = ToSixteenBit(0);
-        var bytes = new int[3 * n];
-        if (n > 0)
+        Tensor<T> Previous(Tensor<T> row, int initial)
         {
-            bytes[0] = silence >> 8;
-            Array.Copy(coarse, 0, bytes, 1, n - 1);
-            bytes[n] = silence & 255;
-            Array.Copy(fine, 0, bytes, n + 1, n - 1);
-            Array.Copy(coarse, 0, bytes, 2 * n, n);
+            if (n == 0) return row;
+            var first = Tensor<T>.CreateDefault(new[] { 1, 1, 1 }, NumOps.FromDouble(initial));
+            return n == 1 ? first : Engine.TensorConcatenate(new[]
+                { first, Engine.TensorSlice(row, new[] { 0, 0, 0 }, new[] { 1, 1, n - 1 }) }, 2);
         }
-        var scaled = ScaledBytes(bytes, 3);
+        var scaled = ScaleByteTensor(Engine, Engine.TensorConcatenate(new[]
+            { Previous(coarse, silence >> 8), Previous(fine, silence & 255), coarse }, 1));
         var previous = Engine.TensorNarrow(scaled, 1, 0, 2);
         var current = Engine.TensorNarrow(scaled, 1, 2, 1);
         var inputs = Core.Inputs(previous, current, Condition(mel, n));
@@ -204,9 +258,21 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <remarks>The negative log-likelihood per sample, −log P(c_t) − log P(f_t | c_t).</remarks>
     protected override Tensor<T> TrainingObjective(Tensor<T> mel, Tensor<T> audio, Random random)
     {
-        var (coarse, fine) = Split(audio);
-        var (coarseLogits, fineLogits) = Logits(mel, audio);
-        return Engine.TensorAdd(ClassCrossEntropy(coarseLogits, coarse), ClassCrossEntropy(fineLogits, fine));
+        var bytes = QuantizedBytes(Engine, audio);
+        var (coarseLogits, fineLogits) = LogitsFromBytes(mel, bytes);
+        int n = audio.Length;
+        Tensor<T> Targets(int row) => Engine.Reshape(Engine.TensorSlice(bytes, new[] { row, 0 }, new[] { 1, n }),
+            new[] { 1, 1, n });
+        Tensor<T> CrossEntropy(Tensor<T> logits, Tensor<T> targets)
+        {
+            var shape = logits.Shape.ToArray();
+            var classes = Engine.Reshape(Engine.TensorArange<T>(0, 256), new[] { 1, 256, 1 });
+            var oneHot = Engine.TensorEquals(Engine.TensorBroadcastTo(classes, shape),
+                Engine.TensorBroadcastTo(targets, shape));
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(oneHot,
+                LogSoftmaxOverClasses(logits)), new[] { 0, 1, 2 }, keepDims: false), NumOps.FromDouble(-1.0 / n));
+        }
+        return Engine.TensorAdd(CrossEntropy(coarseLogits, Targets(0)), CrossEntropy(fineLogits, Targets(1)));
     }
 
     /// <inheritdoc />

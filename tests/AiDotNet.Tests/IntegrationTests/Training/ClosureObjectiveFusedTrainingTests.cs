@@ -259,7 +259,8 @@ public class ClosureObjectiveFusedTrainingTests
     private static FusedTrainingStepRequest<double> ClosureRequest(Tensor<double>[] weights,
         AdamOptimizer<double, Tensor<double>, Tensor<double>> optimizer, Func<Tensor<double>> objective,
         double clip = 0, bool declaredBreak = false, bool allowBreak = false,
-        Action<IReadOnlyDictionary<Tensor<double>, Tensor<double>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<double>, Tensor<double>>>? onGradients = null,
+        bool excludesDecay = false)
     {
         var placeholder = new Tensor<double>(new[] { 1 });
         return new FusedTrainingStepRequest<double>
@@ -276,6 +277,7 @@ public class ClosureObjectiveFusedTrainingTests
             GraphBreakReason = declaredBreak ? "This step logs its current loss on the host." : null,
             ClosureGraphBreakPolicy = allowBreak ? ClosureGraphBreakPolicy.UseConfiguredOptimizer : ClosureGraphBreakPolicy.Disallow,
             OnGradients = onGradients,
+            ExcludesParametersFromWeightDecay = () => excludesDecay,
         };
     }
 
@@ -546,6 +548,83 @@ public class ClosureObjectiveFusedTrainingTests
             Assert.Equal(state, optimizer.Serialize());
             Assert.Equal(2, owner.FusedStepCount);
             Assert.Equal(0, owner.HybridStepCount);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<double>.Invalidate();
+        }
+    }
+
+    [Theory]
+    [InlineData("excluded-decay")]
+    [InlineData("value-clip")]
+    [InlineData("non-l2")]
+    public void Unsupported_declared_hybrid_settings_preserve_the_committed_optimizer_for_resume(string unsupported)
+    {
+        var original = TensorCodecOptions.Current;
+        try
+        {
+            Tensor<double>[] Run(bool rejectStep)
+            {
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+                CompiledTapeTrainingStep<double>.Invalidate();
+                var weights = Clone(InitialWeights());
+                var options = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+                {
+                    InitialLearningRate = 0.01, EnableGradientClipping = false,
+                };
+                var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, options);
+                var regularization = new AiDotNet.Regularization.L2Regularization<double, Tensor<double>, Tensor<double>>(
+                    new RegularizationOptions { Strength = 0.1 });
+                optimizer.SetRegularization(regularization);
+                var owner = TapeTrainingStepper<double>.ForOwner(optimizer);
+                int step = 0, evaluations = 0;
+                var inner = Objective(weights, () => step, _ => 8);
+                Tensor<double> CountedObjective() { evaluations++; return inner(); }
+                for (; step < 2; step++) owner.Step(ClosureRequest(weights, optimizer, CountedObjective));
+                Assert.True(owner.Session.IsCommitted);
+                if (rejectStep)
+                {
+                    var before = Clone(weights);
+                    var plan = CompiledTapeTrainingStep<double>.ConfiguredPlanIdentity;
+                    int evaluationsBefore = evaluations;
+                    options.EnableGradientClipping = unsupported == "value-clip";
+                    options.GradientClippingMethod = GradientClippingMethod.ByValue;
+                    if (unsupported == "non-l2")
+                        optimizer.SetRegularization(new AiDotNet.Regularization.L1Regularization<double, Tensor<double>, Tensor<double>>(
+                            new RegularizationOptions { Strength = 0.1 }));
+                    byte[] optimizerState = optimizer.Serialize();
+                    var error = Assert.Throws<InvalidOperationException>(() => owner.Step(ClosureRequest(weights,
+                        optimizer, CountedObjective, declaredBreak: true, allowBreak: true,
+                        excludesDecay: unsupported == "excluded-decay")));
+                    Assert.Contains(unsupported switch
+                    {
+                        "value-clip" => "clips gradients by value",
+                        "excluded-decay" => "excluded from weight decay",
+                        _ => "has no fused form",
+                    }, error.ToString());
+                    Assert.Equal(evaluationsBefore, evaluations);
+                    for (int p = 0; p < weights.Length; p++) Assert.Equal(before[p].ToArray(), weights[p].ToArray());
+                    Assert.Equal(optimizerState, optimizer.Serialize());
+                    Assert.True(owner.Session.IsCommitted);
+                    Assert.Same(plan, CompiledTapeTrainingStep<double>.ConfiguredPlanIdentity);
+                    Assert.Equal(2, owner.FusedStepCount);
+                    Assert.Equal(0, owner.HybridStepCount);
+                    Assert.Equal(0, owner.EagerStepCount);
+                    options.EnableGradientClipping = false;
+                    options.GradientClippingMethod = GradientClippingMethod.ByNorm;
+                    optimizer.SetRegularization(regularization);
+                }
+                owner.Step(ClosureRequest(weights, optimizer, CountedObjective, declaredBreak: true, allowBreak: true));
+                for (step++; step < 5; step++) owner.Step(ClosureRequest(weights, optimizer, CountedObjective));
+                Assert.True(owner.Session.IsCommitted);
+                Assert.Equal(4, owner.FusedStepCount);
+                Assert.Equal(1, owner.HybridStepCount);
+                Assert.Equal(0, owner.EagerStepCount);
+                return Clone(weights);
+            }
+            AssertSameWeights(Run(false), Run(true));
         }
         finally
         {

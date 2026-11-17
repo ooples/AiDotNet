@@ -18,12 +18,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/RollingShardMap.ps1"
 
-# Invoke-Shard.ps1's own enum; its coverage decision is evaluated below exactly as written there.
-enum CoverageDisposition {
-    Instrument
-    Carried
-    RunWithoutCoverage
-}
+# Load the exact function and enum used by Invoke-Shard.ps1, rather than copied definitions or extracted code.
+$coveragePolicy = Join-Path $PSScriptRoot '../../.github/scripts/Get-ShardCoveragePolicy.ps1'
+. $coveragePolicy
 
 $failures = [System.Collections.Generic.List[string]]::new()
 function Assert-True {
@@ -95,39 +92,48 @@ Assert-True ((Resolve-RollingBudgetMinutes 'lots' 6>$null) -eq 450 -and (Resolve
 
 # ---- the no-coverage lists come from the script that decides coverage
 $shardScript = Join-Path $PSScriptRoot '../../.github/scripts/Invoke-Shard.ps1'
-$shardScriptLines = @(Get-Content -LiteralPath $shardScript)
-$lists = Get-NoCoverageShardLists -ScriptLines $shardScriptLines -Manifest @([pscustomobject]@{ name = 'Declared heavy'; heavy = $true }, [pscustomobject]@{ name = 'Light' })
+$shardSource = Get-Content -LiteralPath $shardScript -Raw
+Assert-True ($shardSource.Contains('. "$PSScriptRoot/Get-ShardCoveragePolicy.ps1"') -and
+    $shardSource.Contains('$policy = Get-ShardCoveragePolicy ')) 'Invoke-Shard no longer uses the canonical coverage policy'
+$policyLines = @(Get-Content -LiteralPath $coveragePolicy)
+$lists = Get-NoCoverageShardLists -ScriptLines $policyLines -Manifest @([pscustomobject]@{ name = 'Declared heavy'; heavy = $true }, [pscustomobject]@{ name = 'Light' })
 Assert-True (($lists.Timing -join '|') -ceq 'Integration - Serial Perf|Integration - CPU Parallelism Probe') "the timing shards were read as '$($lists.Timing -join '|')'"
 Assert-True ($lists.NoCoverage.Count -ge 50 -and $lists.NoCoverage -ccontains 'Declared heavy' -and $lists.NoCoverage -ccontains 'Integration S' -and
     $lists.NoCoverage -ccontains 'Integration - CPU Parallelism Probe' -and $lists.NoCoverage -cnotcontains 'Light') 'the no-coverage list does not hold the named heavy shards, the manifest''s heavy entries and the timing shards'
 Assert-ThrowsLike { Get-NoCoverageShardLists -ScriptLines @('$other = @(', "'x'", ')') -Manifest @([pscustomobject]@{ name = 'a' }) } 'no longer defines' 'a shard script without the heavy list was accepted'
+Assert-ThrowsLike { Get-NoCoverageShardLists -ScriptLines @('$heavyShards = @(', ')', '$performanceShards = @(', "'timing'", ')') -Manifest @([pscustomobject]@{ name = 'a' }) } 'could not be read' 'an empty canonical heavy list was accepted'
+Assert-ThrowsLike { Get-NoCoverageShardLists -ScriptLines @('$heavyShards = @(', "'heavy'") -Manifest @([pscustomobject]@{ name = 'a' }) } 'could not be read' 'an unterminated canonical heavy list was accepted'
 
-# ---- flag off: Invoke-Shard.ps1's coverage decision is the rule it was, for every shard kind and event
-$decisionBlock = [regex]::Match((Get-Content -LiteralPath $shardScript -Raw), '(?ms)^\$forcedCoverageRun = .*?(?=^if \(\$forcedCoverageRun -and \$coverageDisposition)')
-Assert-True $decisionBlock.Success 'the coverage decision could not be found in Invoke-Shard.ps1'
-if ($decisionBlock.Success) {
-    $decide = [scriptblock]::Create($decisionBlock.Value + "`n`$collectCoverage")
-    $saved = @{ Event = $env:GITHUB_EVENT_NAME; Force = $env:SHARD_FORCE_COVERAGE; Rolling = $env:COVERAGE_ROLLING }
-    try {
-        $shardName = 'Heavy 001'
-        foreach ($heavyShard in $true, $false) { foreach ($measuresTiming in $true, $false) {
-        foreach ($eventName in 'pull_request', 'push', 'schedule', 'workflow_dispatch', 'merge_group') {
-        foreach ($forced in 'true', '') { foreach ($coverageDisposition in [CoverageDisposition]::Instrument, [CoverageDisposition]::Carried) {
-            $env:GITHUB_EVENT_NAME = $eventName
-            $env:SHARD_FORCE_COVERAGE = $forced
-            $legacy = if ($forced -eq 'true') { $coverageDisposition -eq [CoverageDisposition]::Instrument } elseif ($eventName -eq 'pull_request') { $false } else { -not ($heavyShard -or $measuresTiming) }
-            $where = "heavy=$heavyShard timing=$measuresTiming event=$eventName forced='$forced' disposition=$coverageDisposition"
-            foreach ($unset in $null, '', '[]', '["Another shard"]', 'not json') {
-                $env:COVERAGE_ROLLING = $unset
-                Assert-True ([bool] (& $decide 6>$null) -eq [bool] $legacy) "COVERAGE_ROLLING='$unset' changed the coverage decision ($where)"
-            }
-            $env:COVERAGE_ROLLING = '["Heavy 001"]'
-            $expected = $legacy -or ($eventName -eq 'schedule' -and $forced -ne 'true' -and -not $measuresTiming)
-            Assert-True ([bool] (& $decide 6>$null) -eq [bool] $expected) "a shard named in COVERAGE_ROLLING decided coverage=$(-not $expected) ($where)"
-        } } } } }
+# ---- the actual policy preserves the independent coverage oracle for every shard kind and event
+foreach ($heavyShard in $true, $false) { foreach ($measuresTiming in $true, $false) {
+foreach ($eventName in 'pull_request', 'push', 'schedule', 'workflow_dispatch', 'merge_group') {
+foreach ($forced in 'true', '') { foreach ($disposition in [CoverageDisposition]::Instrument, [CoverageDisposition]::Carried, [CoverageDisposition]::RunWithoutCoverage) {
+    $shardName = if ($measuresTiming) { 'Integration - CPU Parallelism Probe' } else { 'Heavy 001' }
+    $named = ConvertTo-Json -InputObject @($shardName) -Compress
+    $carried = if ($disposition -eq [CoverageDisposition]::Carried) { $named } else { '[]' }
+    $without = if ($disposition -eq [CoverageDisposition]::RunWithoutCoverage) { $named } else { '[]' }
+    $arguments = @{ ShardName = $shardName; Heavy = $heavyShard; EventName = $eventName; ForceCoverage = $forced
+        CarriedJson = $carried; RunWithoutCoverageJson = $without; Quiet = $true }
+    $where = "heavy=$heavyShard timing=$measuresTiming event=$eventName forced='$forced' disposition=$disposition"
+    $invalid = $forced -eq 'true' -and $disposition -ne [CoverageDisposition]::Instrument -and -not ($heavyShard -or $measuresTiming)
+    $baseline = if ($forced -eq 'true') { $disposition -eq [CoverageDisposition]::Instrument } elseif ($eventName -eq 'pull_request') { $false } else { -not ($heavyShard -or $measuresTiming) }
+    foreach ($unset in $null, '', '[]', '["Another shard"]', 'not json') {
+        if ($invalid) {
+            Assert-ThrowsLike { Get-ShardCoveragePolicy @arguments -RollingJson $unset } 'invalid for coverage-producing shard' "an impossible disposition was accepted ($where)"
+        } else {
+            $actual = Get-ShardCoveragePolicy @arguments -RollingJson $unset
+            Assert-True ($actual.HeavyShard -eq $heavyShard -and $actual.MeasuresTiming -eq $measuresTiming) "the fixture did not reach its declared shard kind ($where)"
+            Assert-True ($actual.CollectCoverage -eq [bool] $baseline) "COVERAGE_ROLLING='$unset' changed the coverage decision ($where)"
+        }
     }
-    finally { $env:GITHUB_EVENT_NAME = $saved.Event; $env:SHARD_FORCE_COVERAGE = $saved.Force; $env:COVERAGE_ROLLING = $saved.Rolling }
-}
+    if ($invalid) {
+        Assert-ThrowsLike { Get-ShardCoveragePolicy @arguments -RollingJson $named } 'invalid for coverage-producing shard' "rolling coverage accepted an impossible disposition ($where)"
+    } else {
+        $expected = $baseline -or ($eventName -eq 'schedule' -and $forced -ne 'true' -and -not $measuresTiming)
+        Assert-True ((Get-ShardCoveragePolicy @arguments -RollingJson $named).CollectCoverage -eq [bool] $expected) "a named rolling shard changed the coverage decision ($where)"
+    }
+} } } } }
+Assert-ThrowsLike { Get-ShardCoveragePolicy -ShardName 'Heavy 001' -Heavy $true -ForceCoverage true -CarriedJson '["Heavy 001"]' -RunWithoutCoverageJson '["Heavy 001"]' -Quiet } 'both Carried and RunWithoutCoverage' 'overlapping dispositions were accepted'
 
 # ---- the map builder: which digests may enter
 $shaA = 'a' * 40; $shaB = 'b' * 40; $shaC = 'c' * 40; $blob = 'd' * 40
@@ -648,7 +654,7 @@ try {
         Assert-True (@($viaThree.rolling.layers).Count -eq 3) 'the selection against three measured commits does not report three'
 
         # ---- the nightly's budget selection, from this repository's state.
-        $shardScriptCopy = Join-Path $out 'Invoke-Shard.ps1'
+        $shardScriptCopy = Join-Path $out 'Get-ShardCoveragePolicy.ps1'
         @('$heavyShards = @(', "  'Early',", "  'Shifted',", "  'Late',", "  'Moved',", "  'Always'", ')', '$performanceShards = @(', "  'Timing'", ')') | Set-Content -LiteralPath $shardScriptCopy -Encoding utf8
         $planFile = Join-Path $out 'rolling-source.json'
         & $budgetSelector -ShardManifestFile $manifestFile -AnchorMapFile $anchorFile -RollingMapFile (Join-Path $rollingThree 'rolling-shard-map.json') `

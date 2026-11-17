@@ -1,0 +1,1225 @@
+{
+  "schema_version": 1,
+  "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
+  "branch": "codex/2524-ci-coordination",
+  "pr_branch": "perf/elementwise-sweep-combined-v1",
+  "current_pr_head": "35f28db67906c7b0d1ad93afeb6cc1c3fa647753",
+  "rules": [
+    "No PR yet; no merge or force push.",
+    "The entire PR2524 CI cycle at35f28db67906c7b0d1ad93afeb6cc1c3fa647753 is now terminal. Do not push the next PR batch until root125 normal-build/focused-test verification and root review are complete. Combine verified contributor fixes on codex/2524-ci-coordination; no independent PR-branch push mid-batch.",
+    "Claim a bounded file/task scope before editing; use separate worktrees and contributor branches.",
+    "Do not weaken assertions, replay guards, lint rules or shard checks; no scalar-kernel exemptions or legacy adapters.",
+    "No public validation NuGet releases; future candidates must be GitHub artifacts."
+  ],
+  "owners": [
+    {
+      "owner": "this session/cuda_capture shard inventory repair",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        ".github/test-shards.yml"
+      ],
+      "scope": "Only exact routing clauses for HamiltonianOptionObservationTests into existing options-contract partition and DenseFeatureImportanceTests into existing neural-network unit partition.",
+      "status": "CLAIMED; b37c cycle terminal, normal compilation passed but inventory found these two classes unrouted. No gate weakening, catchall filters, new shards or test removal.",
+      "verification": "Review exact diff; run canonical shard inventory against valid compiled class metadata and manifest drift controls. No broad rebuild."
+    },
+    {
+      "files": [
+        "src/Training/CompiledTapeTrainingStep.cs",
+        "src/Training/FusedTrainingSession.cs",
+        "src/Training/TapeTrainingStepper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Training/SharedTrainingStepTests.cs",
+        "AiDotNet.Tensors: CpuEngine.LstmSequenceState.cs"
+      ],
+      "owner": "this session and its agents",
+      "scope": "Shared training guarded hybrid/rebind and upstream double-LSTM replay state"
+    },
+    {
+      "files": [
+        "src/TextToSpeech/Vocoders/WaveRNN.cs",
+        "src/TextToSpeech/Vocoders/SegmentVocoderBase.cs",
+        "tests/AiDotNet.Tests/TextToSpeech/WaveRNNEquationReferenceTests.cs"
+      ],
+      "owner": "this session and its agents",
+      "scope": "WaveRNN and shared class-vocoder log-softmax; implemented and locally verified"
+    },
+    {
+      "owner": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "scope": "Remaining TTS model/loss replay-contract failures from TTS run 43902661676, excluding every file owned above",
+      "branch": "claude/2524-tts-replay",
+      "files": [
+        "src/TextToSpeech/CodecBased/** (NaturalSpeech 1/2/3, CosyVoice/CosyVoice2/CosyVoice3 DiffRO, UniAudio, SparkTTS, VoiceCraft, Pheme, SeedTTS, TortoiseTTS, Voicebox)",
+        "src/TextToSpeech/Classic/AlignTTS.cs",
+        "src/TextToSpeech/FlowDiffusion/** (E2TTS/F5TTS linear sizing, DiTToTTS)",
+        "src/TextToSpeech/VoiceCloning/OpenVoice*",
+        "src/TextToSpeech/MultiModal/GLM4Voice*, GlmSpeechTokenizer.cs",
+        "src/Audio/Codecs/LossBalancer.cs, src/Audio/Codecs/EnCodec.cs",
+        "SoundStormConformer (traced variance clamp for Pheme)",
+        "src/ElementWiseBaseline.txt (counts lowered only, no new exemptions)",
+        "src/TextToSpeech/CodecBased/GPTSoVITS*.cs, FireRedTTS*.cs",
+        "src/TextToSpeech/MultiModal/SpiritLM*.cs, LLMIntegratedSpeechGPT*.cs",
+        "src/TextToSpeech/EndToEnd/MeloTTS*.cs, src/TextToSpeech/Latest/MegaTTS2*.cs",
+        "src/TextToSpeech/StyleEmotion/StyleTTS*.cs, src/TextToSpeech/Classic/SpeedySpeech.cs, Tacotron2.cs, ForwardTacotron.cs (non-LSTM reads only)"
+      ],
+      "status": "claude/2524-tts-replay @ b11b995375 (pushed; not on the PR branch). Merged-tree net10.0 run of every AiDotNet.Tests.TextToSpeech class + EnCodec + LossBalancer: 2585 total, 2543 passed, 42 failed. Baseline (coordination head without our commits) on the same 25 classes: 48 failed; all 42 merged-tree failures also fail on the baseline, so 0 regressions. Remaining 42 are listed under 'remaining_failures'.",
+      "not_claimed": [
+        "WaveRNN, SegmentVocoderBase.cs, VocoderSignalModules.cs, src/Training/** (owned above; FreGrad fixed by 447aa7ac78, no change from us)",
+        "NonAttentiveTacotron LstmSequenceTrain (owned above: upstream LSTM replay state)"
+      ],
+      "remaining_failures": {
+        "owned_elsewhere_LstmSequenceTrain": "Tacotron, ForwardTacotron, NonAttentiveTacotron, CosyVoice2 (upstream LSTM replay state)",
+        "upstream_or_shared_proposals": "TransformerTTS (BatchNorm probe), FastSpeech2/ProDiff/AdaSpeech2 (VarianceAdaptorLayer), SeedTTS/SparkTTS (CodecWaveformGan.Detached, IndexTtsPerceiver), CosyVoice/CosyVoice2 vocoder (HiftModules), CosyVoiceOptimizerOptions/LlamaOmni (CTCLoss reads on the host)",
+        "claimed_next_by_us": "GPT-SoVITS, SpiritLM, FireRedTTS, MeloTTS, MegaTTS2, StyleTTS, SpeedySpeech, LLMIntegratedSpeechGPT, Tacotron2 (TensorSlice read), ForwardTacotron (TensorIndexSelect read), SoundStorm (frozen encoder moves one LR step)"
+      },
+      "round2": {
+        "commits": {
+          "GPT-SoVITS V3/V4/V5, MeloTTS": "f061db8591",
+          "MegaTTS2 code-decoder sizing": "dd68550eb1",
+          "StyleTTS reconstruction/prosody (R1 penalty as one recorded node, norms from engine reductions, new eager-parity test)": "fb3c0b639d",
+          "SpiritLM pitch VQ, FireRedTTS product quantizer/codec/regulator": "02d33308a5",
+          "SpeedySpeech and Tacotron2 host reads": "d5bfb7e9ba"
+        },
+        "results": "GPT-SoVITS/Melo/MegaTTS2/StyleTTS: 159/159 on package run 43940828211, 149/159 on run 43955817990 (see layernorm-stateref). SpiritLM/SpeechGPT/FireRed/SoundStorm: 103/110 (7 upstream-blocked). SpeedySpeech/Tacotron2/ForwardTacotron: host reads removed; 5 tests blocked only upstream (BatchNorm probe, LSTM).",
+        "merged_into": "claude/2524-tts-replay; merged-tree vs coordination-head verification running"
+      }
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared STFT target-detach and wide target-norm replay repairs; reviewed and integrated447aa7ac78",
+      "files": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Approved bidirectional infrastructure-only runner failover and mandatory evidence reconciliation",
+      "files": [
+        ".github/workflows/sonarcloud.yml",
+        "tools/TestImpact/RunnerFailover.ps1",
+        "tools/TestImpact/New-RunnerFailoverPlan.ps1",
+        "tools/TestImpact/Resolve-RunnerFailoverResults.ps1",
+        "tools/TestImpact/Test-RunnerFailover.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit05 bounded reduction/fixture repair and observed stale MiniRocket ratchet; implementation next, root review required",
+      "files": [
+        "src/Helpers/TensorReductionHelper.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/TensorSumOfSquaresDoubleTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Helpers/SumOfSquaresDoubleCallSiteTests.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit07 NTM canonical meta-model registration and direct regular-learner ownership regressions; root review before verification",
+      "files": [
+        "src/MetaLearning/MetaLearnerBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/MetaLearning/NTMPaperTests.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared TTS feature/KL detach fixes and named retained-output producer-to-critic lifecycle",
+      "files": [
+        "src/TextToSpeech/Vocoders/GanVocoderBase.cs",
+        "src/TextToSpeech/CodecBased/UniAudioCodecTrainingModules.cs",
+        "src/TextToSpeech/CodecBased/CosyVoiceDifferentiableReward.cs",
+        "src/TextToSpeech/CodecBased/TortoiseTTS.cs",
+        "src/Training/CompiledTapeTrainingStep.cs",
+        "src/Training/TapeTrainingStepper.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit11 ARIMAX canonical parameter restoration, proven closure-warmup arena isolation, approved FP32 Adam master/state repair",
+      "files": [
+        "src/TimeSeries/ARIMAXModel.cs",
+        "src/TimeSeries/TimeSeriesModelBase.cs",
+        "src/Optimizers/AdamOptimizer.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Unit13 GEM Half conversions, Unit09 fresh-GP kernel update, Unit10 valid TRPO test contract, upstream typed predicates and sparse reduction",
+      "files": [
+        "src/ContinualLearning/Strategies/GradientEpisodicMemory.cs",
+        "src/GaussianProcesses/StandardGaussianProcess.cs",
+        "tests/AiDotNet.Tests/UnitTests/ReinforcementLearning/TrpoTopologyOptionsTests.cs",
+        "AiDotNet.Tensors: CpuEngine.Parity210.cs",
+        "AiDotNet.Tensors: CpuEngine.cs TensorSumOfSquares"
+      ]
+    },
+    {
+      "owner": "this session root",
+      "scope": "Artifact-only temporary Tensors feed and consumer workflow wiring; no public release",
+      "files": [
+        ".github/actions/setup-tensors-validation/",
+        ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+        ".github/tensors-validation.json",
+        ".github/workflows/tensors-validation-preflight.yml",
+        ".github/workflows/sonarcloud.yml",
+        ".github/workflows/tts-paper-contracts.yml",
+        ".github/workflows/recurrent-foundations.yml"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared SAM single-pass prompt replay, WordChar embedding shape, Transfusion declared parallel head widths",
+      "files": [
+        "src/ComputerVision/Segmentation/Foundation/SamNetwork.cs",
+        "src/ComputerVision/Segmentation/Foundation/SamTraining.cs",
+        "src/NeuralNetworks/Layers/WordCharEmbeddingLayer.cs",
+        "src/VisionLanguage/Unified/Transfusion.Training.cs",
+        "src/VisionLanguage/Unified/Transfusion.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared GP prior test contracts and approved StudentT numerical integration; DEVA video option fixtures; VisionMamba pixel CE",
+      "files": [
+        "src/GaussianProcesses/StudentTGaussianProcess.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/GaussianProcessModelTestBase.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/DevaOptionFixture.cs",
+        "src/ComputerVision/Segmentation/Mamba/VisionMamba.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents (artifact_feed worker)",
+      "scope": "Finance116 FirstLayerFeatureImportance negative TensorSlice length; bounded shared fix and independent regression",
+      "files": [
+        "src/NeuralNetworks/NeuralNetworkBase.cs",
+        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/DenseFeatureImportanceTests.cs"
+      ],
+      "status": "Root-reviewed local commit 0e9ef8b6d35f529b30f7bf7fbad40c6a204f6d13; five regression cases added; UNVERIFIED pending consolidated normal build/tests. Not pushed or integrated."
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "scope": "Shared FeatureSelectorHelper.CopyFeature rank3/4 indexing defect",
+      "files": [
+        "src/Helpers/FeatureSelectorHelper.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Helpers/FeatureSelectorCopyReferenceTests.cs"
+      ],
+      "status": "CLAIMED; implementation approved after claim push205dc33d55. Consumer logical SubTensor feature views + Engine.TensorCopy; independent array-value oracle. No upstream SetSubTensor edits."
+    },
+    {
+      "owner": "Antigravity swarm (coordinator + fixer-1..4)",
+      "scope": "Wave 1 unclaimed shard batches: (1) ASR47 MelSpectrogram.ApplyMelFilterbank bin mismatch + RNNTransducer input-rank survey contract; (2) PINN44 PinnAutodiff.InputGradient empty tape + MultiFidelityPINN24 rank-1 concat + MultiScalePINN/DeepOperatorNetwork reference fixes (excluding owned HNN and unconfirmed Lagrangian); (3) TimeSeries non-ARIMAX GARCH/TBATS DivideByZero, DeepANT multi-step horizon shape, NLinear Half scaler accumulation, and ARModel untrained SetParameters (excluding owned ARIMAXModel.cs, TimeSeriesModelBase.cs, AdamOptimizer.cs); (4) Preprocessing FeatureSelection/PowerTransformer/HessianLLE & FejerKorovkinWavelet/TukeyWindow reference fixes (excluding CopyFeature/FeatureSelectorHelper.cs, StandardScaler.cs, and Tensors TensorCDist)",
+      "files": [
+        "src/Diffusion/Audio/MelSpectrogram.cs",
+        "src/Diffusion/Audio/ShortTimeFourierTransform.cs",
+        "src/Audio/SpeechRecognition/RNNTransducer.cs",
+        "src/PhysicsInformed/PinnAutodiff.cs",
+        "src/PhysicsInformed/PINNs/PhysicsInformedNeuralNetwork.cs",
+        "src/PhysicsInformed/PINNs/DeepRitzMethod.cs",
+        "src/PhysicsInformed/PINNs/DomainDecompositionPINN.cs",
+        "src/PhysicsInformed/PINNs/VariationalPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiFidelityPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiScalePINN.cs",
+        "src/PhysicsInformed/NeuralOperators/DeepOperatorNetwork.cs",
+        "src/TimeSeries/GARCHModel.cs",
+        "src/TimeSeries/TBATSModel.cs",
+        "src/TimeSeries/AnomalyDetection/DeepANT.cs",
+        "src/TimeSeries/NLinearModel.cs",
+        "src/TimeSeries/ARModel.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionTensorOps.cs",
+        "src/Preprocessing/FeatureSelection/Manifold/LLEBasedSelector.cs",
+        "src/Preprocessing/FeatureSelection/Fairness/FairFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/GameTheory/ShapleyFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/Online/AlphaInvesting.cs",
+        "src/Preprocessing/DimensionalityReduction/HessianLLE.cs",
+        "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs",
+        "src/WaveletFunctions/WaveletEngineOps.cs",
+        "src/WindowFunctions/TukeyWindow.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/PopulationSearchOps.cs",
+        "src/Preprocessing/FeatureSelection/Filter/Correlation/PartialCorrelation.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionInformationOps.cs",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/ARModelMeanReferenceTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/FeatureSelectionSweepReferenceTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
+      ],
+      "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal + continuity test queued next on fixer-2 per antigravity-review-multiscale-compiled-lifecycle), Batch 3 (fc423039d3, verified 223/223; 3 root-review follow-ups in progress on fixer-3), and Batch 4 (dd714d3ae0, verified 199/199; 2 root-review follow-ups queued next on fixer-4)"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only Half embedding/CRF rounded-boundary reflection signature repair",
+      "files": [
+        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/Elementwise01NumericalRegressionTests.cs"
+      ],
+      "status": "claimed; root-reviewed bounded test-only repair underway"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only StandardScaler seven population-variance reference corrections",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/PreprocessingDeepMathIntegrationTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/ScalersDeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed test-only population-variance formulas/comments; preserve all tolerances, no production edits/builds."
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "scope": "Test-only DoRA four input-major Dense fixture packing corrections and rectangular control",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/LoRA/LoRADeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed DoRA fixture arrays plus independent rectangular control; preserve all four expected values/tolerances, no production edits/builds."
+    },
+    {
+      "owner": "this session/cuda_capture worker",
+      "repository": "ooples/AiDotNet.Tensors",
+      "branch": "codex/2524-heterogeneous-data-replay",
+      "base": "7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382",
+      "scope": "User-approved compiler-only heterogeneous forward-data replay. Preserve ordinary typed-T backward and null cross-type bridge gradient stops; execute each forward node exactly once in its dependency order. Ownership/versioning/rebinding tests. Ordinary GPU per-node execution allowed; unsupported residency/checkpoint/capture explicitly refused. No consumer/model/client changes or overlapping native client scopes.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/ILazyNode.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/LazyNode.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CpuFusionPass.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/ObjectiveSignature.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NoGradTrainingTraceTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/OperationReorderingPassTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.ShortcutPair.cs"
+      ],
+      "new_files": [
+        "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
+      ],
+      "not_claimed": [
+        "ClosureObjectiveGuard",
+        "consumer owner files",
+        "producer/consumer workflow files"
+      ],
+      "status": "CLAIMED; root-design-reviewed and user-approved. Exact paths authorized; preserve typed-T backward, stop gradients only at null cross-type bridges, and use exclusive exactly-once forward dispatch. Ordinary GPU per-node execution is allowed; unsupported residency/checkpoint/capture paths must explicitly refuse. ILazyNode is already internal; no public API addition. Guard/signature changes require a direct foreign-leaf finding and separate necessary-scope proposal; no weakening. Necessary NoGrad semantic claim amendment is CLAIMED and root-reviewed; only these bounded ObjectiveSignature additions, no guard weakening or unrelated signature changes.",
+      "amendments": [
+        {
+          "id": "bounded-1764-no-grad-semantics",
+          "status": "CLAIMED; root-reviewed bounded nine-file NoGrad patch approved, including only two RecordedUnderNoGrad test-stub properties; eight NoGrad cases, no unrelated1764 imports.",
+          "source_pr_head": "74b1166cff5b7de14e744e27e38ae4dbff4dca5c",
+          "source_merge": "7fd8a02f",
+          "scope": "Adopt only six necessary NoGrad semantic production hunks (ILazyNode/LazyNode/CrossTypeLazyNode plus LazyTensorScope/CpuFusionPass/ObjectiveSignature) and NoGradTrainingTraceTests, eight cases. Preserve our named-output and heterogeneous replay implementation, including prior-writer identity; no file replacement from raw head-versus7dd9 diff.",
+          "test_stub_constraint": "OperationReorderingPassTests.cs and LazyGraphCompilerPerformanceTests.cs changes are limited to one RecordedUnderNoGrad property per existing ILazyNode test stub, required to compile the interface contract. No other test behavior changes.",
+          "excluded": [
+            "Other PR1764 retirement/lifetime changes",
+            "Separate LayerNorm review fixes",
+            "SIMD DepthwiseConv3x3 changes",
+            "Blind18-file PR-head import",
+            "Any consumer owner-file edits"
+          ]
+        },
+        {
+          "id": "optimizer-enrollment-continuity",
+          "status": "CLAIMED; explicit user approval and root-reviewed disjoint ownership, both authors ACK. Claim publication after root docs review precedes dependent source edits.",
+          "scope": "Core enrollment mask and CPU/GPU/grouped/capture continuity using per-parameter accepted-update ages. Core owner is sole writer of CompiledTrainingPlan.cs and LazyTensorScope.cs plus agreed core tests. New GPU or grouped/capture source paths require precise additive claims before edits. Serialization owner owns format/checkpoint/CompiledStep metadata files; no source overlap.",
+          "core_owner": "this session/cuda_capture worker",
+          "serialization_owner": "this session/shared_replay_failures worker",
+          "artifact_status": "Held until enrollment, continuity, serialization and original required native gates pass; no new artifact pin or public release now.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+            "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
+          ],
+          "api_boundary": "Core exports/restores Parameter.AcceptedUpdates:long and initializes CompiledStep.RecordedUnderNoGrad:init bool through serializer-owned contracts. No direct edits by core to serializer-owned files. Extra metadata/helper/LazyNode changes beyond existing authorized scope require exact proposal first."
+        },
+        {
+          "id": "explicit-differentiable-input-indices",
+          "status": "ROOT-APPROVED necessary contract; draft claim amendment for root review/publication before TensorWhere edit",
+          "scope": "Use explicit optional DifferentiableInputIndices metadata, not backward-delegate inspection. Default/null means all input indices; empty means none. Require sorted unique indices in range and defensively copy arrays. Preserve typed-T backward behavior; only TensorWhere opts in now with branches[1,2], condition0 excluded because WhereBackward does not differentiate it.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/ILazyNode.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyNode.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/ObjectiveSignature.cs",
+            "src/AiDotNet.Tensors/Engines/CpuEngine.cs"
+          ],
+          "tests": "Existing claimed CompiledOptimizerEnrollmentTests.cs covers explicit contract and TensorWhere enrollment; no new test-file claim or all-op migration."
+        }
+      ],
+      "file_scope_limits": {
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs": "ONLY TensorWhere training RecordVariadic section near39999: declare differentiable input indices[1,2]. No normalization, other operators, or all-op migration is claimed."
+      }
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "repository": "ooples/AiDotNet.Tensors",
+      "scope": "User-approved NoGrad/checkpoint and optimizer enrollment continuity serialization, disjoint from core implementation. One writer per file; preserve typed plan metadata and accepted-update ages, explicit unsupported heterogeneous refusal before writes, no legacy adapters or unrelated client changes.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledStep.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/FusedOptimizerCheckpoint.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanWriter.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanReader.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/FusedOptimizerCheckpointSerializer.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/OpType.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs",
+        ".github/workflows/coordination-package.yml"
+      ],
+      "verification_gate_amendment": {
+        "native_producer": ".github/workflows/coordination-package.yml",
+        "scope": "Necessary verification amendment only: retain original99 and retained26 gates unchanged; one additional no-build CPU cohort for heterogeneous replay15, NoGrad9, checkpoint38 and optimizer enrollment actualN. Assert exact distinct case identities and all-pass/executed counts; checksum evidence and explicit per-group manifest fields; publish only finalized counts after consolidated source verification.",
+        "consumer_patch_only": [
+          ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+          ".github/scripts/Test-TensorsValidationFeed.ps1"
+        ],
+        "consumer_constraint": "Prepare reviewed patches for the next validated artifact pin; do not alter or push the currently pinned125 consumer feed prematurely. No generic compatibility framework, public release or weakened existing guards."
+      },
+      "new_files": [
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+      ],
+      "not_claimed": [
+        "CompiledTrainingPlan.cs",
+        "LazyTensorScope.cs",
+        "CompiledOptimizerEnrollmentTests.cs",
+        "GPU/grouped/capture core implementation files"
+      ],
+      "api_boundary": "Serializer declares/persists CompiledStep.RecordedUnderNoGrad:init bool and checkpoint Parameter.AcceptedUpdates:long; core owner exports/restores state without editing these files. Format/version and save-load behavior require root code review and independent uninterrupted/resumed oracles.",
+      "status": "CLAIMED; explicit user approval, root-reviewed exact split, both authors ACK; publish after root docs review before source edits.",
+      "amendments": [
+        {
+          "id": "persist-differentiable-input-indices",
+          "status": "ROOT-APPROVED contract; draft amendment for root review/publication",
+          "scope": "Persist/restore optional DifferentiableInputIndices in owned CompiledStep and plan format metadata before compilation. Same default-all/empty-none, sorted-unique/range validation and defensive-copy contract; independent save-load/enrollment tests. Core does not edit serializer-owned files.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/CompiledStep.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanWriter.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanReader.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
+            "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+          ]
+        },
+        {
+          "id": "serializable-stop-and-inplace-barriers",
+          "status": "ROOT-APPROVED necessary bounded persistence amendment; shared owner ACK; draft for root review/publication before edits",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/OpType.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs"
+          ],
+          "scope": "Append only StopGradient and TensorAddInPlace enum entries at the end of existing OpType byte values and add their parser names in the SAME OpType.cs file, preserving every existing ordinal. Add exactly two OpReplay handlers with arity preflight. StopGradient uses the existing recorded forward-copy/null-backward helper; TensorAddInPlace invokes the existing engine mutation and returns the same target object, preserving in-place prior-writer identity. No Unknown-name workaround or broad operator feature work.",
+          "existing_owned_followups": "TrainingPlanReader/Writer must preserve independent RecordedUnderNoGrad and HasBackward bits, including legitimate flags3, rather than enforce mutual exclusion. Persist declared derivative indices; reconstruct canonical excluded operand paths with recorded StopGradient barriers, not enrollment masking alone.",
+          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save→Load→Save→Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
+        }
+      ]
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "repository": "ooples/AiDotNet.Tensors",
+      "scope": "User-approved CUDA capture enrollment/age backend and necessary exact-artifact GPU validation. Core optimizer remains cuda_capture; no overlapping source writers.",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/DirectGpu/IGraphStepIo.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaBackend.StepIo.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/CudaBackend.cs",
+        "src/AiDotNet.Tensors/Engines/DirectGpu/CUDA/Kernels/CudaOptimizerKernels.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs",
+        ".github/workflows/gpu-cuda-selfhosted.yml",
+        "tests/AiDotNet.Tensors.Tests/Engines/DirectGpu/GpuLaneBackendTests.cs"
+      ],
+      "new_files": [
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledCudaOptimizerEnrollmentTests.cs"
+      ],
+      "constraints": [
+        "One global finite-gradient guard and global learning-rate counter; integer parameter-age arithmetic before bias conversion.",
+        "No independent age-group guards, no weakening graph replay assertions or CUDA availability requirements.",
+        "All-zero age offsets retain ordinary no-extra-allocation behavior.",
+        "Validate exact producer archive, package and loaded DLL identity on real CUDA; local AMD OpenCL results are not CUDA proof.",
+        "No public validation release or PR-branch push; consolidated root review before build."
+      ],
+      "status": "CLAIMED; explicit user CUDA approval, exact disjoint files reviewed by root. API agreement with core required before edits."
+    },
+    {
+      "owner": "Antigravity swarm (Wave 2: fixer-1, fixer-3, fixer-4)",
+      "scope": "Wave 2 unclaimed shard batches: (Batch 5 / fixer-1) CUPS cascade-mask-rcnn parameter layout (25 failures), KMaXDeepLab option routing (16), Sonata decoder options (4), OWLv2 PatchSize option (1); (Batch 6 / fixer-3) SAM2/SAM21 video/image segmentation IndexOutOfRange (18, strictly excluding SamNetwork.cs/SamTraining.cs) + PointCloudMedicalSegmentation Predict spatial shape (10); (Batch 7 / fixer-4) MetaLearning AWGIM/MANN/UnsupervisedMetaLearn (7, strictly excluding MetaLearnerBase.cs), Video RVM state/clone determinism + Figan/Mcnet subnormal losses (8), ShapE/DiTNoisePredictor conditioned latent shape (1), MMS FreezeFeatureEncoder option (1), and RandomizedSmoothing/UCB/PortfolioManagerEnvironment/BidiagonalDecomposition numeric fixes (4)",
+      "files": [
+        "src/ComputerVision/Segmentation/Panoptic/CUPS.cs",
+        "src/ComputerVision/Segmentation/Panoptic/CUPSOptions.cs",
+        "src/ComputerVision/Segmentation/Panoptic/CascadeMaskRCNNHead.cs",
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLab.cs",
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLabOptions.cs",
+        "src/ComputerVision/Segmentation/PointCloud/Sonata.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataOptions.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataObjectives.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataPretraining.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataPrototypeHead.cs",
+        "src/VisionLanguage/Grounding/OWLv2.cs",
+        "src/VisionLanguage/Grounding/OWLv2Options.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2Network.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2VideoTraining.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2Runtime.cs",
+        "src/ComputerVision/Segmentation/Foundation/SAM21.cs",
+        "src/Video/Segmentation/SAM2.cs",
+        "src/ComputerVision/Segmentation/Common/MedicalSegmentationBase.cs",
+        "src/ComputerVision/Segmentation/Medical/BiomedParse.cs",
+        "src/ComputerVision/Segmentation/Medical/UMamba.cs",
+        "src/ComputerVision/Segmentation/Medical/NnUNet.cs",
+        "src/ComputerVision/Segmentation/Medical/SegMamba.cs",
+        "src/ComputerVision/Segmentation/Medical/TransUNet.cs",
+        "src/ComputerVision/Segmentation/Medical/MedNeXt.cs",
+        "src/ComputerVision/Segmentation/Medical/MedSegDiffV2.cs",
+        "src/ComputerVision/Segmentation/Medical/MedSAM.cs",
+        "src/ComputerVision/Segmentation/Medical/SwinUNETR.cs",
+        "src/ComputerVision/Segmentation/Diffusion/MedSegDiffV2Segmentation.cs",
+        "src/ComputerVision/Segmentation/PointCloud/Concerto.cs",
+        "src/MetaLearning/Algorithms/AWGIMAlgorithm.cs",
+        "src/MetaLearning/Algorithms/MANNAlgorithm.cs",
+        "src/MetaLearning/Algorithms/UnsupervisedMetaLearnAlgorithm.cs",
+        "src/Video/Matting/RVM.cs",
+        "src/Video/Matting/RvmRecurrentNetwork.cs",
+        "src/Video/FrameInterpolation/Figan.cs",
+        "src/Video/FrameInterpolation/FiganLoss.cs",
+        "src/Video/Prediction/Mcnet.cs",
+        "src/Video/Prediction/McnetLoss.cs",
+        "src/Diffusion/ThreeD/ShapEModel.cs",
+        "src/Diffusion/NoisePredictors/DiTNoisePredictor.cs",
+        "src/SpeechRecognition/Multilingual/MMS.cs",
+        "src/SpeechRecognition/Multilingual/MMSOptions.cs",
+        "src/AdversarialRobustness/CertifiedRobustness/RandomizedSmoothing.cs",
+        "src/AdversarialRobustness/CertifiedRobustness/CertificationMath.cs",
+        "src/ReinforcementLearning/Policies/Exploration/UpperConfidenceBoundExploration.cs",
+        "src/Finance/Trading/Environments/PortfolioManagerEnvironment.cs",
+        "src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs",
+        "src/ComputerVision/Segmentation/PointCloud/PointTransformerV3EncoderOptions.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/ComputerVision/PointCloudMedicalSegmentationIntegrationTests.cs",
+        "src/Video/Inpainting/ProPainter.cs",
+        "tests/AiDotNet.Tests/AdversarialRobustness/CertificationReferenceTests.cs",
+        "src/PublicAPI.Unshipped.txt",
+        "src/ComputerVision/Segmentation/Common/PanopticDeepLabSemanticDecoder.cs"
+      ],
+      "status": "Wave 2 Batch 6 (38098bfc08, verified 187/187 by verifier-2) integrated onto codex/2524-ci-coordination; Batch 5 active on fixer-1; Batch 7 active on fixer-4",
+      "file_scope_limits": {
+        "src/PublicAPI.Unshipped.txt": "ONLY append single override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.SelectTrainableParametersForTraining line matching sibling OmnilangualASR<T>/XLSR<T>."
+      }
+    },
+    {
+      "owner": "this session/cuda_capture worker",
+      "repository": "ooples/AiDotNet",
+      "scope": "Bounded main-CI tooling prerequisite: classify the independent temporary Tensors preflight workflow using the existing classification contract.",
+      "files": [
+        "tools/TestImpact/Select-Shards.ps1"
+      ],
+      "file_scope_limits": {
+        "tools/TestImpact/Select-Shards.ps1": "Only NonRuntimeWorkflowPaths entry for tensors-validation-preflight.yml and rationale. Preserve unknown-workflow fail-closed self-test, FullValidationDirectories, selectors and all runtime gates."
+      },
+      "verification": "Run unchanged Select-Shards.ps1 -SelfTest; no full local CI. Keep source fix local until the current three-workflow validation cycle is terminal."
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "repository": "ooples/AiDotNet",
+      "scope": "Lagrangian12 fixture geometry only; route its generated input through the existing shared model-declared-shape resolver.",
+      "files": [
+        "src/AiDotNet.Generators/TestScaffoldGenerator.cs"
+      ],
+      "file_scope_limits": {
+        "src/AiDotNet.Generators/TestScaffoldGenerator.cs": "Only add Lagrangian to existing HNN/PINN ResolveModelDeclaredInputShape route near17796. Preserve model width guard and canonical acceleration target; no hardcoded4, production/base/native changes, or compiled-opt-out changes."
+      },
+      "verification": "Use the unchanged twelve recorded Lagrangian generated failures as regression. Add a new test only if it proves independent behavior rather than matching generated text. Coordinate any later PINN/autodiff issue with its existing owner. Keep source fix local until cycle end."
+    },
+    {
+      "owner": "Antigravity swarm (Wave 3: fixer-2)",
+      "scope": "Wave 3 Batch 8 unclaimed consumer failures: CausalInference (PropensityScoreMatching caliper/seed reproducibility, DoublyRobustEstimator 3-block parameter split, InverseProbabilityWeighting unfitted Predict guard), AdversarialTraining JPEG [0,1] range clip & RLHFAlignment preference match, BayesianOptimizer byte-exact checkpoint round-trip, RelationalGCN NumRelations/NumNodes perturbation geometry, and GroundingHead/SigLIP2 caption training shapes",
+      "files": [
+        "src/CausalInference/PropensityScoreMatching.cs",
+        "src/CausalInference/DoublyRobustEstimator.cs",
+        "src/CausalInference/InverseProbabilityWeighting.cs",
+        "src/CausalInference/CausalModelBase.cs",
+        "src/AdversarialRobustness/Defenses/AdversarialTraining.cs",
+        "src/AdversarialRobustness/Alignment/RLHFAlignment.cs",
+        "src/Optimizers/BayesianOptimizer.cs",
+        "src/HyperparameterOptimization/BayesianOptimizer.cs",
+        "src/Finance/Graph/RelationalGCN.cs",
+        "src/Models/Options/RelationalGCNOptions.cs",
+        "src/VisionLanguage/Grounding/GroundingHeadModule.cs",
+        "src/VisionLanguage/Encoders/SigLIP2.cs",
+        "src/VisionLanguage/Encoders/SigLIP2Options.cs",
+        "src/Diffusion/Conditioning/SigLIP2TextConditioner.cs",
+        "src/Diffusion/Conditioning/SigLIP2TextConditionerOptions.cs",
+        "tests/AiDotNet.Tests/UnitTests/VisionLanguage/GroundingHeadPaperTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/CausalInference/BootstrapStandardErrorSeedTests.cs",
+        "tests/AiDotNet.Tests/UnitTests/Models/AiModelResultAccessorTests.cs"
+      ],
+      "status": "claimed; Batch 8 in progress on fixer-2 (7 production fixes implemented, 3 stale-fixture test files added)"
+    },
+    {
+      "owner": "this session/cuda_capture worker",
+      "repository": "ooples/AiDotNet",
+      "scope": "Bounded rolling-map coverage-policy integration repair for main cycle44002307574; consume the canonical coverage policy and preserve all existing proof cases.",
+      "files": [
+        "tools/TestImpact/RollingShardMap.ps1",
+        "tools/TestImpact/Select-RollingCoverageShards.ps1",
+        "tools/TestImpact/ShardPacking.ps1",
+        "tools/TestImpact/Test-RollingShardMap.ps1",
+        "tools/TestImpact/Test-ShardPacking.ps1"
+      ],
+      "file_scope_limits": "Only replace stale inline Invoke-Shard coverage-list/decision assumptions with the actual Get-ShardCoveragePolicy source and corresponding proof integration. Test-ShardPacking.ps1 is limited to the direct selection fixture helper-copy integration and retaining its missing-file negative control. No fallback lists, dummy variables, skipped assertions, workflow changes or coverage-policy behavior changes.",
+      "verification": "Inspect the complete Verify impact tooling prerequisite; batch-run relevant lightweight proofs including rolling map, packing rules and Test-TestImpactEndToEnd. Keep source fixes local for root review; no source push, rerun or dispatch."
+    },
+    {
+      "owner": "this session/pinn_review worker",
+      "scope": "Unassigned-02 generated float smoke: reconcile existing manual PixelLM FP32 scaffold contract; preserve required text encoder and all other precision assertions",
+      "files": [
+        "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs"
+      ],
+      "file_scope_limits": {
+        "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs": "Only replace stale generated-namespace PixelLM expectation with exact existing manual scaffold FP32/base contract and no duplicate generated scaffold; no generator edits"
+      },
+      "status": "CLAIMED; isolated source work; no source push until monitored cycle completes and root reviews"
+    }
+  ],
+  "pinn_candidate_owner_action": {
+    "candidate": "7ce3cb5cf948c273b273ff171df9f826c1c0e373",
+    "status": "Published as 0b08b92b5a and reviewed. Root blocks endorsement pending MultiScale compiled lifecycle repair; see antigravity-review-multiscale-compiled-lifecycle.",
+    "required": "Preserve all eleven baseline exceptions until unchanged sensitivity tests prove the exact outcomes. Published 244-test command excluded sensitivity tests; preserve reported fourteen pre-existing skips.",
+    "integrated_commit": "0b08b92b5a552bf085237f5f3c8971c0ac4100af"
+  },
+  "claude_helper_owner_action": {
+    "candidate": "b4bd771",
+    "status": "OWNER ACTION REQUIRED: HiftModules host reads at244/258/284 and CodecWaveformGan.Detached at45 (x.ToArray) are unchanged on both branches, confirmed by artifact agent.",
+    "failures": "Four Cosy failures map to HiftModules; two Spark/Seed failures map to CodecWaveformGan.Detached.",
+    "required": "Claude must confirm exact bounded helper ownership and fix these reads, or explicitly hand off. Root will not make overlapping helper edits. Native BatchNorm/SearchSorted scope remains pending user decision and is not claimed here."
+  },
+  "verification": {
+    "inventory_and_precision_batch": {
+      "prior_cycle": "44006338662 terminal: tooling and normal net10 compilation passed; inventory failed two unrouted classes. Workflow automatically cancelled remaining jobs; zero runtime cases. All 23 jobs terminal.",
+      "routes_commit": "316993d725: exact HamiltonianOptionObservationTests and DenseFeatureImportanceTests routes; canonical inventory 5240 classes/166 filters/zero uncovered, manifest drift passed, all 20 TypeImpact controls passed including unmatched-class rejection. Existing ce7928 test DLL unchanged.",
+      "precision_commit": "af3134401a: verify manual PixelLM FP32 segmentation scaffold and reject generated duplicate; production precision unchanged. Exact changed file compiled; bounded manual contract and 54 unchanged named checks passed on unchanged ce7928 assembly. Actual rebuilt smoke method still requires GitHub.",
+      "sam2_review": "38098bfc08 source and test-contract diff reviewed. Contributor reports 187 passed/18 existing skips; exact tested DLL/package identity requested separately. Preserve source without claiming independent re-verification.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-b37c/manifest-routing-* and C:/Users/cheat/source/artifacts/codex2524/float-smoke-check"
+    },
+    "rolling_policy_repair_2c59cdd76e": {
+      "source": "2c59cdd76e",
+      "review": "Root and independent reviewer approved five-file bounded canonical policy integration; coverage behavior and gates unchanged.",
+      "passed": "C scratch: Select-Shards -SelfTest, full Test-RollingShardMap proof, full Test-ShardPacking 24889 checks. Original workflow commands2-13 passed. Five scripts parse clean; git diff --check passed.",
+      "limitations": "Complete local 24-command preflight not claimed. Z fixtures failed Git dubious ownership (share owner differs); valid C end-to-end still running. Full unchanged Linux tooling gate and runtime matrix delegated to GitHub.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-aa19/tooling-repair"
+    },
+    "validation_cycle_864c": {
+      "source": "864c81714c57d116a324e29f07fb3ed93e844ea7",
+      "branch": "codex/2524-validation-c977",
+      "preflight": "43994243037 SUCCESS",
+      "main": "43994555253 TERMINAL failure before any167runtime shards. Selectshards Verify-impact-tooling rejects unclassified tensors-validation-preflight.yml; three fail-closed gate failures/18skips; no runner infrastructure failure established.",
+      "tts": "43994558340 active; shared_replay_failures monitoring through terminal.",
+      "foundations": "43994562553 SUCCESS, actual206/206passed0skip.",
+      "policy": "Validation branch is fixed; no rewriting/replacement cycle or PR source push until all three workflows finish. Fixes may be prepared locally with bounded tests; coordination claims remain live."
+    },
+    "native_candidate_c977": {
+      "source": "c9770e98d97aa5cfdb634d18e0f4693ce8341a15",
+      "branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+      "producer_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
+      "status": "Producer SUCCESS:230 CPU cases/all5TFMs; exact-artifact CUDA SUCCESS:22passed0skip. No public NuGet release. Consumer4file pin/bootstrap update reviewed;40 fixture cases passed. Full GitHub branch matrix pending.",
+      "local_build": "Normal analyzer-gated net10 Release passed, zero errors. Initial nullable signature-token error was corrected without suppressions.",
+      "local_tests": "Initial246 cohort239passed/6failed/1expectedCUDA-onlyskip. Six failures were invalid different-tensor continuation fixtures; corrected six passed on test-only rebuild reusing the gated production DLL. All230 mandatory CPU cases passed across these runs; no unified246-pass rerun is claimed. Original125 identities unchanged. LocalGPU2 passed; other13 retained checks passed. FP16 class9=6passed/3hardware-measurement skips, including all4 prior functional cases.",
+      "cuda": "Run43991812670 on rtx3080-cuda passed22/22, zero skips:7 exact new CUDA cases+1 backend/DLL probe+14 retained-output cases. Runtime DLL SHA347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e equals producer package.",
+      "cuda_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43991812670",
+      "remaining": "Consumer Linux preflight and full GitHub167-shard/TTS/foundation branch cycle required next. Known owner review actions remain unresolved; no PR merge or new PR."
+    },
+    "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
+    "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
+    "full_ci": "Initial completed35f cycle observed all9 workflows terminal with5success/4failure; original failure evidence retained. Auto-Fix PR Title was subsequently retried successfully in attempt2 on super-server-2. No original incomplete test suite is converted to passing by this retry; main and standalone TTS/foundation failures remain evidence.",
+    "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
+    "upstream_lstm": "Original artifact-only run43940828211 at641be3d443ee passed all5TFM normal build/pack and99LSTM+typed-real-predicate+sparse-reduction cases, zero skips; tested/packaged binary identity verified. Historical named-retention pending status is superseded by validated125 producer43955817990 and consumer feed preflight43958514136. No public NuGet release.",
+    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
+    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
+    "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
+    "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified.",
+    "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening.",
+    "artifact_feed": "Linux preflight43958514136 PASSED at7e1f1a8fc78415d141a88810ee4cc8bcd49ecaac:17 fixtures; authenticated immutable archive/run/artifact/manifest/package identity; original99 plus retained-output26 distinct mandatory CPU cases,125total; all5TFMs and tested-packaged net10 binary SHA; exact candidate NuGet restore. This is feed/package validation, not consumer-source verification.",
+    "next_native_candidate": "Validated producer run43955817990 at7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382 completed all5TFM normal pack and125mandatoryCPU tests (original99 unchanged plus26 retained-output/arena cases), zero skips; exact manifest reviewed. Artifact14272518202 pinned in consumer descriptor; no public NuGet release. Consumer normal125 production/API and main test compilation passed; latest correction-cohort evidence is recorded separately and does not establish global readiness. Follow-up native165 cohort has3failures/1skip under investigation; no newer artifact is ready.",
+    "combined_99": "Prior combined99-package focused run:400total,393passed,7failed,0skipped. Seven grouped corrections were prepared/reviewed but remain unverified until consolidated125-package build/tests complete.",
+    "next_pr_batch": "Consumer baselinece7928ef40 normal125 production/API and main test compilation passed. Correction cohort102passed plus1test-declaration failure; affected async clipping-refusal rerun1/1passed. Complete root tree remains an incomplete integration baseline with explicit unresolved b11 owner actions. Native165=161pass/3fail/1skip under investigation, separateFP16=4pass; no new artifact or PR push is ready.",
+    "final_tts_main_shard": "Final main job133444409230 TTS Paper Tests:cancelled at2026-11-16T21:34:34Z; GitHub annotation says1h0m0s maximum execution time exceeded. Test step never completed; no TRX/result artifact among fresh512-artifact index. Partial33.7MB log retains409Passed lines,33uniqueFAIL lines,0Skipped lines, but no terminal test counters. Not a passed or completed test suite; not proven runner infrastructure. The33 failures map existing ownership:WaveRNN20Floor, MegaTTS1TensorSlice, LlamaOmni2CTCLoss, CosyVoice/SpeechGPT/SpeedySpeech5Reshape, SoundStorm4TensorMax+1frozenByT5encoder movement.",
+    "title_infrastructure_retry": "Run43902661476 attempt2 SUCCESS on aidotnet-super-server-2, job133637244095, exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753; fresh API confirmed. Historical initial9-workflow completion snapshot5success/4failure remains retained; latest title check is clean.",
+    "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning.",
+    "consumer_correction_cohort": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
+    "native_initial_heterogeneous_cohort": "Historical initial165 cohort161pass/3fail/1skip and separateFP16fourpassed; disposal/GPU view fixtures were corrected, frozen AdamW defect expanded through explicit user approval.",
+    "native_current_cohort": "GitHub producer43990270445 passed all230 mandatoryCPU cases in fresh gates and packaged all5TFMs. CUDA43991812670 passed22/22 zero skips with runtime DLL hash matching package; original125 cases preserved. Local split-run history retained separately.",
+    "native_optimizer_repair": "Reviewed c977 implementation passed fresh GitHub230 CPU gates/all5TFMs and exact-packaged-DLL CUDA22 with zero skips; no public release. Consumer artifact pin and strict guards updated for next same-SHA branch validation.",
+    "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified.",
+    "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (verified commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~GARCHModelTests|FullyQualifiedName~TBATSModelTests|FullyQualifiedName~DeepAntReferenceTests|FullyQualifiedName~DeepANTTests|FullyQualifiedName~NLinearModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOpsReferenceTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests\": 223 passed, 0 failed, 0 skipped; verifier-2 stdout receipt #181). Three root-review follow-ups (GARCH Half FD probes, NLinear Half scaler state persistence, ARModel _seriesMean persistence) acknowledged and queued next with new oracle tests.",
+    "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (verified commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~FeatureSelectionSweepReferenceTests|FullyQualifiedName~FeatureSelectionTensorOpsTests|FullyQualifiedName~FeatureSelectionFilterRoundFiveTests|FullyQualifiedName~FeatureSelectionHelperRoundThreeTests|FullyQualifiedName~FeatureSelectionInformationReferenceTests|FullyQualifiedName~FeatureSelectionScipyReferenceTests|FullyQualifiedName~DimensionalityReductionReferenceTests|FullyQualifiedName~PowerTransformsDeepMathIntegrationTests|FullyQualifiedName~WaveletReferenceValueTests|FullyQualifiedName~AdvancedWaveletFunctionsTests|FullyQualifiedName~WindowFunctionReferenceTests\": 199 passed, 0 failed, 0 skipped; verifier-1 stdout receipt #180; fk8 taps derived from Nielsen 2001 J. Approx. Theory 108 Theorem 1 spectral factorization). Two root-review follow-ups (FairFeatureSelector midpoint even-median contract, FejerKorovkinWavelet zero-DC/unit-L2 normalizer without cutoff widening) acknowledged and queued next with new oracle tests.",
+    "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (cherry-picked from 7ce3cb5cf948c273b273ff171df9f826c1c0e373, net10.0, package 0.151.1-coordination.43990270445.1.gc9770e98d97a, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch2.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName!~Options_EachShouldChangeObservableBehaviour&(FullyQualifiedName~Generated.PhysicsInformedNeuralNetworkTests|FullyQualifiedName~Generated.DeepRitzMethodTests|FullyQualifiedName~Generated.DomainDecompositionPINNTests|FullyQualifiedName~Generated.VariationalPINNTests|FullyQualifiedName~Generated.MultiFidelityPINNTests|FullyQualifiedName~Generated.MultiScalePINNTests|FullyQualifiedName~Generated.DeepOperatorNetworkTests|FullyQualifiedName~PhysicsInformedPaperReferenceTests|FullyQualifiedName~MultiFidelityAndDomainDecompositionTests)\": 244 passed, 0 failed, 14 pre-existing manual skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch2.trx; verifier-2 #201). 11 newly-sensitive options in Codex-owned RuntimeFidelityBaseline.cs left untouched for owner removal after root review.",
+    "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (cherry-picked from c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch1.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ModelInputMeetsFirstLayerTests.AModelsDeclaredInputRankIsOneItsFirstLayerAccepts|FullyQualifiedName~DiffusersSchedulerReferenceTests|FullyQualifiedName~Generated.ChirpTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.CanaryQwenTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.SPIRALTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.W2vBertTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingZipformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.RNNTransducerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.ConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.FastEmitTests.Gradients_MatchFiniteDifference|FullyQualifiedName~MelSpectrogramAxisTests|FullyQualifiedName~AudioProcessingTests\": 82 passed, 0 failed, 0 skipped, 0 warnings in modified files, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch1.trx; verifier-1 #202).",
+    "antigravity_w2_batch6_sam2_medseg": "Integrated 38098bfc08fe791f3648b0e50df69a44d5d95d89 (cherry-picked from dd2af244b1a0cb62176a727c655fc052d5ef10e5, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w2-batch6.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~Generated.SAM2Tests|FullyQualifiedName~Generated.SAM21Tests|FullyQualifiedName~PointCloudMedicalSegmentationIntegrationTests|FullyQualifiedName~Sam21AndMedSam2Tests|FullyQualifiedName~Video.SAM2ModelTests|FullyQualifiedName~FoundationSegmentationIntegrationTests.SAM21|FullyQualifiedName~SegmentationTrainingRobustnessTests.SAM21|FullyQualifiedName~MedicalSegmentationPostProcessingTests\": 187 passed, 0 failed, 18 pre-existing skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w2-batch6.trx; verifier-2 #206)."
+  },
+  "decisions": [
+    {
+      "id": "cuda-capture-enrollment-backend",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "Include proper four-file CUDA backend repair: one global finite-gradient guard, integer per-parameter accepted ages, preserved captured optimizer behavior and real CUDA GitHub validation. Additional 1–2 hours plus remote testing was approved; validation must use the exact packaged DLL."
+    },
+    {
+      "id": "coupled-optimizer-fixed-domain",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "For LBFGS, TrustRegion, ConjugateGradient, HypergradientSGD, DAdaptationSGD and ScheduleFreeSGD, support initial frozen subsets and preserve same-active-domain history. Reject active-domain changes before mutation. Core projects norms/history/search/updates onto fixed active coordinates; serializer persists canonical fixed-domain membership. Per-parameter optimizers retain approved changing-membership/age continuity. No changing-domain coupled-algorithm redesign."
+    },
+    {
+      "decision": "Explicit declared graph breaks only; shared optimizer/config/clipping preflight, distinct hybrid counts; unexpected replay failures remain visible.",
+      "status": "approved",
+      "id": "hybrid"
+    },
+    {
+      "decision": "Same-layer ordered same-shape slot replacement transfers optimizer checkpoint, moments, step and live schedules; hybrid/raw parameter drift remains strict.",
+      "status": "approved",
+      "id": "rebind"
+    },
+    {
+      "decision": "Fix model/preprocessing and upstream replay contracts for94TTSfailures; no blanket fallback or weakened checks.",
+      "status": "approved",
+      "id": "tts-contracts"
+    },
+    {
+      "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
+      "status": "approved",
+      "id": "merge"
+    },
+    {
+      "id": "runner-failover",
+      "status": "approved",
+      "decision": "One alternate-pool attempt for proven terminal infrastructure failure; visible intermediate attempts backed by mandatory fail-closed logical shard evidence gate. All required shards, exact SHA/artifact/definition/TRX checks preserved; real/unknown/test/compiler/analyzer/OOM/manual-cancel failures cannot be hidden. Queued-pool watchdog outside first batch."
+    },
+    {
+      "id": "fp32-adam-state",
+      "status": "approved",
+      "decision": "User explicitly approved FP32 Adam state repair, including reset/checkpoint/reverse/copy continuity. Root review additionally requires persistent FP32 master weights and sub-Half-ULP accumulation regression."
+    },
+    {
+      "id": "tts-existing-overlap-integration",
+      "status": "approved",
+      "decision": "User: avoid all NEW overlapping work; for existing completed patches compare both implementations and choose the stronger version or a tested combination. Root fetched claude/2524-tts-replay b11b995375. Existing overlap frozen in UniAudioCodecTrainingModules.cs, CosyVoiceDifferentiableReward.cs and TortoiseTTS.cs; our consumer changes remain LOCAL/unpushed. Root will reconcile both diffs/tests before integration; no automatic dropping of either side."
+    },
+    {
+      "id": "gp-contract-and-numerics",
+      "status": "approved",
+      "decision": "User approved shared GP test contracts respecting fixed-prior StudentT, and separately approved bounded numerical quadrature/convergence repair with independent posterior oracles; no target normalization/legacy adapter."
+    },
+    {
+      "id": "sam-single-pass",
+      "status": "approved",
+      "decision": "User approved single-pass SAM interactive replay: true ignored padding mask, explicit draw inputs, tensor IoU/mask selection, preserve encoder gradients and original single encoding/decoder curriculum."
+    },
+    {
+      "id": "tts-overlap-combine-policy",
+      "status": "root-reviewed-integration-policy",
+      "decision": "Retain contributor UniAudio StopGradient. Retain contributor CosyVoice CompiledStepRandom plus our independent tests locally. Retain contributor Tortoise frozen speech/condition preprocessing; replace duplicate generator with root named output only after validation. No new overlapping owner-file edits."
+    },
+    {
+      "id": "root-coordinator-contributor-choice",
+      "status": "user-approved",
+      "decision": "Root acts as coordinator. List unclaimed evidenced failures and let other developers choose; do not ask the user to assign individual tasks. Contributors claim precise files before editing, then post commits, tests and proposals. Material design/scope choices go through root interactive questions."
+    },
+    {
+      "id": "native-heterogeneous-forward-data-replay",
+      "status": "user-approved",
+      "decision": "User approved a proper native heterogeneous forward-data replay implementation, including several hours of work and a new artifact. Our cuda worker owns compiler forward-data dispatch/cross-node metadata/tests only after exact native paths are claimed; no consumer/model/client edits or overlapping native client scopes, no guard weakening or public NuGet release. Root reviews bounded design and artifact evidence."
+    },
+    {
+      "id": "1764-bounded-no-grad-semantic-integration",
+      "status": "root-approved within existing user-approved94TTS/upstream replay and compare/combine scope",
+      "decision": "Adopt only necessary PR1764 six-production-file NoGrad semantic hunks plus eight NoGradTrainingTraceTests, preserving existing named outputs and heterogeneous replay. Two independent root reviews found the NoGrad approach correct, including prior-writer identity. PR head74b1166c, merge7fd8a02f are comparison references, not permission to replace current files. Other lifetime, LayerNorm and SIMD changes remain separate review items. Implementation and native artifact verification are still pending."
+    },
+    {
+      "id": "native-optimizer-enrollment-continuity",
+      "status": "user-approved by explicit interactive answer",
+      "decision": "User approved proper native optimizer enrollment plus continuity repair, including core masks, CPU/GPU/grouped/capture per-parameter accepted-update ages and NoGrad/checkpoint persistence. No public release. The next capture artifact remains held until this repair and required verification pass; do not silently expand scope or weaken replay/optimizer checks."
+    },
+    {
+      "id": "native-explicit-differentiable-input-contract",
+      "status": "root-approved necessary repair within user-approved native enrollment scope",
+      "decision": "Use explicit optional DifferentiableInputIndices instead of backward delegate heuristics: null/defaultall, empty none, sorted unique/range validated, defensive copy. WhereBackward proves input0condition absent from gradients and inputs1/2branches differentiable, so only TensorWhere records[1,2]. Persist metadata before compile through serialization owner. No all-op migration or unrelated CpuEngine changes."
+    },
+    {
+      "id": "native-bounded-stop-inplace-serialization",
+      "status": "root-approved necessary amendment within user-approved native persistence scope",
+      "decision": "Use explicit typed StopGradient and TensorAddInPlace enum/parser/OpReplay entries only, with arity checks and unchanged serialized ordinals. Preserve forward data, stopped derivative edges, in-place identity and independent NoGrad/backward flags. Small additive claim assigned to existing serialization owner; no new owner transfer or unrelated operators."
+    }
+  ],
+  "questions": [
+    {
+      "id": "antigravity-sam2-verification-identity",
+      "owner": "Antigravity Wave2 Batch6",
+      "status": "OWNER EVIDENCE REQUEST; source/test-contract diff reviewed; no confirmed numeric defect",
+      "request": "For 38098bfc08, post the exact prebuilt test DLL source commit/hash and Tensors package version used by the reported 187-pass/18-pre-existing-skip run. Existing receipt links an inaccessible TRX; do not treat it as independently reverified. The combined next GitHub snapshot will verify actual source/package identities."
+    },
+    {
+      "id": "antigravity-review-multiscale-compiled-lifecycle",
+      "status": "OWNER ACTION REQUIRED; root blocks endorsement of this bypass; preserve ownership",
+      "owner": "Antigravity Wave1 Batch2",
+      "commit": "0b08b92b5a552bf085237f5f3c8971c0ac4100af",
+      "files": [
+        "src/PhysicsInformed/PINNs/MultiScalePINN.cs"
+      ],
+      "finding": "TrainEpoch479-498 temporarily sets IsFusedTrainingDisabled across the shared fused session and all objective sessions. Disabled TryStep declines before the committed-state check, then TrainCustomTapeStep runs eager updates. This bypasses committed-plan continuity/refusal and restores every session from one saved Boolean.",
+      "request": "Remove the runtime disabling latch; provide supported replay/lifecycle preserving optimizer continuity, refusals and individual session states. Test compiled-to-Solve-to-compiled continuity, clipping and random draws. Do not pass tests by silently disabling compiled training. Eleven baseline removals remain unproven: published verification excludes option-sensitivity tests."
+    },
+    {
+      "id": "student-t-statistical-contract",
+      "status": "approved",
+      "question": "User chose shared GP test contracts, then explicitly approved bounded numerical GP repair. Model prior preserved."
+    },
+    {
+      "id": "tts-variance-bucketize",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/.../VarianceAdaptorLayer.cs (shared)",
+      "finding": "FastSpeech2: Bucketize always reshapes the pitch/energy target before TensorSearchSorted reads it, so the read lands on a traced Reshape.",
+      "proposed_fix": "values.Rank == 1 ? values : Engine.Reshape(values, ...) before TensorSearchSorted. Verified locally: FastSpeech2 passes; ProDiff 3->1 and AdaSpeech2 2->1 failures; no regressions. Patch in our scratchpad, not committed.",
+      "alternatives": "Traced bucketize: rejected, the embedding input check then host-reads traced indices and ProDiff/AdaSpeech2 regress.",
+      "coordinator_review_note": "Coordinator review: avoiding a redundant rank1 reshape is within existing replay scope subject to exact value/gradient/current-data replay tests; this note does not approve an unreviewed implementation or relax embedding/index guards."
+    },
+    {
+      "id": "tts-codec-gan-detach",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/Audio/Codecs/CodecWaveformGan.cs, src/TextToSpeech/Latest/IndexTtsPerceiver.cs (shared)",
+      "finding": "SeedTTS TokenizerPretraining and Spark BiCodecAdversarialTraining/ValidAlternativeBands: CodecWaveformGan.Detached copies values on the host; IndexTtsPerceiver.Forward uses scalar TensorMax(norm, 1e-12) eagerly.",
+      "proposed_fix": "Detached(x) => Engine.StopGradient(x); TensorMax(norm, eps) -> relu(norm - eps) + eps.",
+      "alternatives": "None better; both are exact rewrites.",
+      "coordinator_review_note": "Coordinator review: tensor-native StopGradient detach and mathematically faithful tensor clamp are within the existing approved replay scope, subject to independent value/gradient and replay tests. Preserve ownership/lifetime and numerical semantics; no host fallback or approval of unreviewed code."
+    },
+    {
+      "id": "tts-hift-harmonics",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/Vocoders/HiftModules.cs (shared)",
+      "finding": "CosyVoice and CosyVoice2 VocoderStage: Harmonics/HarmonicsByFrames read f0 per sample on the host.",
+      "proposed_fix": "Express with engine ops (cumsum of f0*h/sr, then sin) so the plan replays it.",
+      "alternatives": "A CompiledStepHostValue node, if exact phase accumulation must stay in double.",
+      "coordinator_review_note": "Coordinator review: tensor cumsum/phase/sin construction is within the existing approved scope, subject to original sample/frame-boundary/phase and replay oracles. Preserve mathematical and state semantics; no unreviewed implementation approval."
+    },
+    {
+      "id": "tts-groupnorm-trace",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors Engine.GroupNorm, or src/TextToSpeech/FlowDiffusion/MatchaDecoder.cs",
+      "finding": "CosyVoiceOptimizerOptions CoupledDecay (v1, clone): MatchaDecoder blocks use GroupNormalizationLayer and Engine.GroupNorm computes eagerly under a training trace. Also blocks FireRedTTS FlowDecoder (MatchaDecoder).",
+      "proposed_fix": "Upstream: record GroupNorm lazily in training traces.",
+      "alternatives": "Interim: compose the norm from reductions in MatchaDecoder (as CosyVoiceModules.SingleGroupNorm does).",
+      "coordinator_review_note": "Coordinator review: necessary native replay investigation fits existing upstream scope; require exact separate claims and root review, with gradient/value/replay evidence. Do not silently bundle GroupNorm changes into heterogeneous replay."
+    },
+    {
+      "id": "tts-batchnorm-probe",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors CpuEngine.BatchNorm GraphMode branch",
+      "finding": "TransformerTTS (and likely Tacotron2, NonAttentiveTacotron): BatchNorm on non-float or non-rank-4 input computes immediately, reading the probe placeholder, so the probe aborts with \"reads 'Reshape'\". Trigger: ConvBatchNormStackLayer, rank-2 double. Also blocks SpeedySpeech (DilatedResidualConvBlock), Tacotron2 and ForwardTacotron (ConvBatchNormStackLayer, SeriesPredictor/CBHG), FireRedTTS SpeechTokenizer (IndexTtsEcapa) and MelCodec (MegaTtsMelDiscriminator). With BatchNorm bypassed locally those objectives replay and train.",
+      "proposed_fix": "When scope.IsProbe, record the BatchNorm node with correctly shaped outputs instead of computing.",
+      "alternatives": "None in AiDotNet without weakening the guard.",
+      "coordinator_review_note": "Coordinator review: necessary native replay investigation fits the existing upstream scope, but exact separate CpuEngine/state/test claims and design review are required. Do not silently bundle BatchNorm changes into heterogeneous replay or weaken probe/closure guards."
+    },
+    {
+      "id": "tts-uniaudio-tortoise-residual",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "UniAudio/TortoiseTTS UnivNet stage",
+      "finding": "On the merged tree UniAudio* abort with \"reads 'TensorSubtract'\" and TortoiseTTS UnivNetStage_* fails; both appeared after the merge with 447aa7ac78 and fail with or without our EnCodec change.",
+      "proposed_fix": "Investigating in our scope (UniAudio/Tortoise are claimed); will report the root before editing any shared vocoder file.",
+      "alternatives": ""
+    },
+    {
+      "id": "prodiff-adaspeech2-unowned",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "ProDiff, AdaSpeech2",
+      "finding": "Not in run 43902661676's list; locally 5 of 7 tests in these classes fail at the starting commit (ProDiff Distillation reads 'TensorAdd'; AdaSpeech2 MelEncoderAligning reads 'TensorIndexSelect'). Merged tree: ProDiff 3 and AdaSpeech2 2 failures remain, both via VarianceAdaptorLayer (see tts-variance-bucketize).",
+      "proposed_fix": "Covered by tts-variance-bucketize once approved.",
+      "alternatives": ""
+    },
+    {
+      "id": "overlap-tts-detach-files",
+      "status": "integration-review",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/CodecBased/UniAudioCodecTrainingModules.cs (+2/-1), CosyVoiceDifferentiableReward.cs (+11/-7), TortoiseTTS.cs (+41/-15)",
+      "finding": "Our claim (2a90796d2d) predates the 'Shared TTS feature/KL detach' claim (14fbcf3f06); our agents edited these three files on claude/2524-tts-replay before that claim appeared. Nothing from the owner has landed in them yet.",
+      "proposed_fix": "Freeze both completed versions; root compares b11b995375 with local c5d6cdcc0e/4a4c59a7be/named-retention batch and chooses tested best/combo per explicit user instruction. No new overlapping edits.",
+      "alternatives": "Owner takes our hunks as-is (diffs on claude/2524-tts-replay)."
+    },
+    {
+      "id": "owner-lossbalancer-signed-factory-state",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/Audio/Codecs/LossBalancer.cs and direct owner tests",
+      "finding": "Root review: mutable _lossesFor is outside the compiled node signature. Two TracedSurrogate calls on the same balancer can both execute the last factory. Probe does not execute Balance/EMA but does replace _lossesFor before signature acceptance. Node mutates EMA/Steps without ReplaysHostState. Tensor leaf rebinding and nested gradient ownership were inspected; no defect found in those areas. Existing new tests do not exercise compiled signatures/rebind.",
+      "proposed_fix": "Owner repairs signed factory/state identity and host-state declaration. Add compiled signature/rebind, two-factory isolation, probe-no-EMA, skipped/throw outcome, and stale-state regression cases. This session and its agents remain READ ONLY in owner files."
+    },
+    {
+      "id": "owner-glm-accepted-statistics-lifecycle",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/MultiModal/GLM4Voice*, GlmSpeechTokenizer.cs and direct owner tests",
+      "finding": "TrainingStatisticsByKey publishes forward arrays before optimizer acceptance. Unconditional UpdateCodebook(last) can advance EMA on skipped update. Probe can replace last metadata before signature acceptance; static arrays can leak stale recording on failure. Compiled arrays are heap copies: the compiled issue is accepted-outcome/probe metadata/state cleanup, not compiled-array arena aliasing. Eager arena lifetime still needs explicit validation.",
+      "proposed_fix": "Owner adopts successful-step named retained output contract using root-provided API after validation. Test probe/no EMA, skip/throw, recording cleanup, valid-mask handling, and no stale recording. Our agents remain READ ONLY in owner files."
+    },
+    {
+      "id": "upstream-setsubtensor-recursive-first-value",
+      "status": "pending-scope-decision",
+      "owner": "unclaimed",
+      "files": "AiDotNet.Tensors: Tensor.SetSubTensorRecursive",
+      "finding": "FeatureSelector read-only worker reports recursive SetSubTensor repeats _data[0] instead of copying each logical value; separate upstream defect. Not included in validated99 package or proposed125 extension.",
+      "proposed_fix": "Requires separate explicit scope decision. No upstream edits now; consumer fix uses logical SubTensor views and Engine.TensorCopy."
+    },
+    {
+      "id": "owner-dittotts-duplicate-codec-forward",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/FlowDiffusion/DiTToTTS.CodecTraining.cs",
+      "finding": "Root review: TrainCodec adds eager NoGrad CodecReconstruction(target).Generated.Clone before actual generator objective. This duplicates a training forward and may repeat quantizer state effects. Proper contracts/performance require avoiding duplicate forwards.",
+      "proposed_fix": "Owner should use the successful-step named retained output for intended pre-update handoff after API validation; no assertion changes. Our agents remain READ ONLY. Tortoise duplicate is separately covered by approved overlap reconciliation."
+    },
+    {
+      "id": "layernorm-stateref",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors LayerNorm node (package 0.151.1-coordination.43955817990)",
+      "finding": "New with the latest pinned package: 10 GPT-SoVITS/Melo/MegaTTS2/StyleTTS tests that pass on package run 43940828211 fail with \"Closure objective replay contract is missing: op 'LayerNorm' field 'Execute.stateRef' holds a AiDotNet.Tensors.Engines.Autodiff.LayerNormStateRef`1\".",
+      "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
+      "alternatives": "None in AiDotNet without weakening the guard.",
+      "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted.",
+      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate→AddObjectFields→AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
+    },
+    {
+      "id": "tensors-1764-in-coordination-package",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors package for PR2524",
+      "finding": "SoundStorm TextToSemanticTraining_LeavesTheByT5EncoderFrozen: the training trace records backward for the frozen ByT5 encoder under NoGradScope, so one Adam step moves it. The fix is Tensors PR #1764 (b9e5bfe85 / 71ce13fa3); it is not an ancestor of the coordination package commit 641be3d443ee, nor in 0.151.1-validation.1.",
+      "proposed_fix": "Include #1764 (approved, mergeable) in the next coordination Tensors package.",
+      "alternatives": "",
+      "scope_decision": "Root approved bounded NoGrad semantic integration only; not wholesale PR1764 inclusion. Claim amendment root-reviewed and authorized for publication; implementation/tests/artifact still pending. Other PR1764 lifetime/LayerNorm items are separate review."
+    },
+    {
+      "id": "normed-conv-spectral-norm",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/NeuralNetworks/Layers/NormedConv1DLayer.cs, NormedConv2DLayer.cs (shared; overlaps GanVocoderBase owner)",
+      "finding": "SpiritLM and SpeechGPT vocoders: Kernel() with spectral normalization reads the weights on the host (v.ToVector()), runs the power iteration on the host and writes _u/_v back; used by HiFiGanDiscriminators' first scale discriminator, so every HiFi-GAN-style discriminator is affected.",
+      "proposed_fix": "Power iteration with engine ops on StopGradient(v): v'=normalize(vd^T u), u'=normalize(vd v'), sigma=u'^T v v'; persist u'/v' through a CompiledStepHostValue node (x0 into sigma) keyed per layer, as GLM4Voice's codebook statistics do.",
+      "alternatives": "Owner of GanVocoderBase takes it.",
+      "coordinator_review_note": "Coordinator review: shared spectral-normalization replay repair requires precise ownership and root review of training/eval/probe/accepted-outcome state semantics. Preserve the normalization math and gradient contract; do not copy the disputed GLM lifecycle pattern. No implementation approval is implied."
+    },
+    {
+      "id": "owner-tortoise-clvp-text-length-option",
+      "status": "owner-action-required",
+      "owner": "jputnam61 Claude session (claude/2524-tts-replay)",
+      "files": "TortoiseTTS option routing and direct owner tests; no new overlap by our agents",
+      "finding": "Root focused125 run reports a new ClvpTextLength option sensitivity failure, the fifth failure after four batch corrections. This is an owner finding, not authorization to change baseline/assertions or expand our overlapping TTS work.",
+      "proposed_fix": "Claude owner investigates the exact option contract and posts precise change/test evidence or a shared-scope proposal; coordinate with existing Tortoise overlap reconciliation."
+    },
+    {
+      "id": "native-optimizer-expansion",
+      "status": "APPROVED; explicit user interactive answer",
+      "question": "Whether to authorize additional native optimizer work beyond already approved scopes. Root must obtain the material scope decision through interactive questions before dependent implementation.",
+      "constraint": "User explicitly authorized the proper bounded native optimizer enrollment and continuity repair. This approval is independent of the FP16 checks; it does not authorize unrelated optimizer, model, or client changes. Exact disjoint file claims and root review/publication precede dependent edits.",
+      "finding": "Ordinary typed NoGrad plans lose RecordedUnderNoGrad metadata on Save/Load. Heterogeneous serialization explicitly refuses before writes, and that refusal test passes; these are distinct paths.",
+      "approved_scope": "Repair core enrollment masks and accepted-update continuity with per-parameter ages across CPU, GPU, grouped and capture paths; persist ordinary typed NoGrad/checkpoint metadata correctly with reviewed plan/optimizer format changes. Preserve explicit pre-write refusal for unsupported heterogeneous serialization. Core and serialization owners coordinate through a reviewed API; no overlapping source writers."
+    },
+    {
+      "id": "antigravity-review-garch-half-probes",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity Wave1 Batch3",
+      "commit": "fc423039d3",
+      "files": [
+        "src/TimeSeries/GARCHModel.cs"
+      ],
+      "finding": "The new plusOmega-minusOmega denominator can be zero for Half: initialized omega≈0.01 has ULP≈7.63e-6, while epsilon≈1e-6; both probes round to omega and 0/0 produces NaN. Clamping poisoned omega to the variance floor hides the failed fit.",
+      "request": "Repair representable/high-precision finite-difference probes and objective consistently; add a Half nondegenerate estimation oracle. Do not replace the zero denominator with an arbitrary epsilon floor."
+    },
+    {
+      "id": "antigravity-review-nlinear-scaler-state",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity Wave1 Batch3",
+      "commit": "fc423039d3",
+      "files": [
+        "src/TimeSeries/NLinearModel.cs"
+      ],
+      "finding": "Fit uses double scaler statistics but prediction reloads rounded T statistics. Half data [0,0,0,Half.Epsilon] gives std≈2.58e-8 used during training, stored Half std0, then prediction substitutes divisor1.",
+      "request": "Preserve the same fitted transform through training, inference, serialization and cloning; add a subnormal Half roundtrip/prediction oracle. Avoid a fallback divisor masking underflow."
+    },
+    {
+      "id": "antigravity-review-ar-mean-persistence",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity Wave1 Batch3",
+      "commit": "fc423039d3",
+      "files": [
+        "src/TimeSeries/ARModel.cs"
+      ],
+      "finding": "Removing the only Buffer annotation from _seriesMean leaves it unclassified. The generator serializes/deep-copies classified state; ARModel has no handwritten persistence override, so a trained nonzero intercept is lost.",
+      "request": "Keep corrected parameter layout while explicitly registering fitted mean for persistence/cloning. Test a trained nonzero constant series before/after save-load and clone."
+    },
+    {
+      "id": "antigravity-review-fairness-even-median",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity Wave1 Batch4",
+      "commit": "dd714d3ae0",
+      "files": [
+        "src/Preprocessing/FeatureSelection/Fairness/FairFeatureSelector.cs"
+      ],
+      "finding": "Upper-middle threshold changes the conventional even-count median contract. Protected [0,1,2,3], feature [1,1,9,9] changes disparate-impact ratio from1/9 to11/27; balanced binary tests do not cover this.",
+      "request": "Preserve midpoint median for continuous even samples or propose an explicit justified policy change. Add the independent continuous-even oracle and retain binary/empty-group cases."
+    },
+    {
+      "id": "antigravity-review-wavelet-normalizer",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity Wave1 Batch4",
+      "commit": "dd714d3ae0",
+      "files": [
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs"
+      ],
+      "finding": "Generic normalization cutoff was widened1e-15→1e-12, while the cosine-series denominator is analytically zero for allowed even orders (roots-of-unity sum). A wider empirical cutoff does not resolve that construction.",
+      "request": "Provide the mathematical normalization/zero-limit contract and independent coefficient/DC checks, or keep the generic path outside the bounded fk8 fix. Do not widen tolerance to hide the singularity."
+    },
+    {
+      "id": "claude-review-failed-step-static-snapshots",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "jputnam61 Claude TTS session",
+      "commit": "02d33308a5",
+      "files": [
+        "FireRed quantizer statistics/reconstruction storage",
+        "SpiritLM training statistics storage"
+      ],
+      "finding": "New static dictionaries retain full snapshots under monotonically increasing instance IDs. Entries are removed only by successful post-step consumers; training exceptions/cancellation or earlier FinishUpdate failure bypass cleanup, and disposal does not remove them.",
+      "request": "Use step-owned retained state or guaranteed failure/disposal cleanup and accepted-step publication. Add throw/cancel/dispose tests without weakening EMA/reconstruction assertions. This session has made no overlapping edits."
+    },
+    {
+      "id": "antigravity-verification-evidence",
+      "status": "OWNER ACTION REQUIRED; preserve existing ownership; no overlapping edits by this session",
+      "owner": "Antigravity coordinator/verifiers",
+      "finding": "Coordination reports223/223 TimeSeries and199/199 preprocessing, but review has no linked TRX/stdout/command evidence yet.",
+      "request": "Post exact tested commit, framework, command/filter and concise TRX/stdout locations or artifact URLs; include independent fk8 source/reference and rationale for fairness median change."
+    },
+    {
+      "id": "antigravity-pinn-runtime-fidelity-ratchet-11",
+      "status": "pending-owner-reconciliation",
+      "from": "Antigravity swarm (Wave 1 Batch 2 commit 7ce3cb5cf948c273b273ff171df9f826c1c0e373, undergoing Gate A-E verification)",
+      "owner": "this session and its agents (owner of tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs)",
+      "files": "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs (not touched by Antigravity)",
+      "finding": "With PINN44 PinnAutodiff.InputGradient empty-tape and collocation arena-lifetime repairs (244/244 non-ratchet PINN/MultiFidelity/MultiScale/DeepONet tests passing), PINN training now genuinely executes and 11 options previously baselined as OptionSensitivityOutcome.Insensitive in RuntimeFidelityBaseline.cs now genuinely change observable behaviour, failing OptionSensitivityHarness.Enforce stale-baseline ratchet: DeepRitzMethod`1::NumQuadraturePoints; DomainDecompositionPINN`1::InterfaceGradientWeight, InterfaceWeight; MultiFidelityPINN`1::HighFidelityWeight, NumCollocationPoints, PdeWeight; PhysicsInformedNeuralNetwork`1::DataWeight, NumCollocationPoints, PdeWeight; VariationalPINN`1::NumQuadraturePoints, NumTestFunctions.",
+      "proposed_fix": "Antigravity left RuntimeFidelityBaseline.cs untouched per ownership rules; once 7ce3cb5cf9 is verified and integrated onto codex/2524-ci-coordination, owner of RuntimeFidelityBaseline.cs drops those 11 stale Insensitive entries (or authorizes Antigravity to drop those exact 11 lines).",
+      "alternatives": "None without weakening the ratchet."
+    }
+  ],
+  "question_protocol": [
+    "Separate contributor sessions do not automatically share this chat or interactive question responses.",
+    "Contributor records a question on their own branch with ID, finding, files, proposed fix, alternatives and verification cost; user relays branch/path or question here.",
+    "This session reads it and presents material user decisions through the interactive questions feature.",
+    "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
+    "Pending or preselected answers are not approval; continue independent approved tasks."
+  ],
+  "updated_utc": "2026-11-17T03:22:49.243566Z",
+  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
+  "available_work": [
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "CUPS parameter layout",
+      "observed_failure_entries": 25,
+      "jobs": [
+        "133444377748",
+        "133447963973"
+      ],
+      "finding": "13 generated failures plus12 paper option probes share unresolved cascade-mask-rcnn layout; no empty-parameter bypass.",
+      "evidence": [
+        "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json",
+        "C:/Users/cheat/source/artifacts/codex2524/current-ci/candidate-35f/shard-133447963973-failures.json"
+      ]
+    },
+    {
+      "status": "CLAIMED this session/artifact_feed; generated fixture resolver route only; no PINN/HNN/model overlap",
+      "root": "Lagrangian fixture/model state width",
+      "observed_failure_entries": 12,
+      "jobs": [
+        "133444379852"
+      ],
+      "finding": "ForwardForTraining expects state4 but fixture supplies16; confirm declared mathematical contract.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "KMaXDeepLab option routing",
+      "observed_failure_entries": 16,
+      "jobs": [
+        "133447963949"
+      ],
+      "finding": "Loss weights, sample counts/temperatures, thresholds, ASPP dropout and overlap probes are insensitive; no blanket baseline exemption.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "Sonata decoder option routing",
+      "observed_failure_entries": 4,
+      "jobs": [
+        "133447963991"
+      ],
+      "finding": "DecoderPatchSizes, DecoderNumHeads, DecoderDepths and DecoderChannels insensitive.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "MMS frozen feature encoder option",
+      "observed_failure_entries": 1,
+      "jobs": [
+        "133447963759"
+      ],
+      "finding": "FreezeFeatureEncoder insensitive.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "OWLv2 patch size option",
+      "observed_failure_entries": 1,
+      "jobs": [
+        "133447963865"
+      ],
+      "finding": "PatchSize insensitive.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 3; no overlapping edits",
+      "root": "RelationalGCN fixture geometry perturbations",
+      "observed_failure_entries": 2,
+      "jobs": [
+        "133447963809"
+      ],
+      "finding": "NumRelations/NumNodes perturbations rejected by fixed relationAdjacencies [10,100,100].",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "RVM state/inference/clone consistency",
+      "observed_failure_entries": 4,
+      "jobs": [
+        "133444381938"
+      ],
+      "finding": "Repeated inference drifts; clone/serialized trained output differs.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "AWGIM meta-gradient shape",
+      "observed_failure_entries": 3,
+      "jobs": [
+        "133444378101"
+      ],
+      "finding": "MatMulBackward attempts reshape256 elements to [4,128].",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "MANN meta-model clone/shape",
+      "observed_failure_entries": 3,
+      "jobs": [
+        "133444380589"
+      ],
+      "finding": "ArgumentOutOfRange during clone-equivalence cases; exact stack retained.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "root": "Half PNormCross/TensorCDist",
+      "observed_failure_entries": 5,
+      "jobs": [
+        "133444390629"
+      ],
+      "finding": "Half uses IConvertible in PNormCross; distinct from already-owned typed predicates/GEM. No extra native edits without coordinated claim.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "root": "SVD rank decomposition convergence",
+      "observed_failure_entries": 2,
+      "jobs": [
+        "133444390036"
+      ],
+      "finding": "Jacobi SVD fails to converge in100 sweeps on double rank-deficient cases.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
+    },
+    {
+      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "root": "Generated float scaffold smoke contract",
+      "observed_failure_entries": 1,
+      "jobs": [
+        "133444409404"
+      ],
+      "finding": "GeneratedScaffolds_FloatRewrite_FiresForSomeModelsAndNotAll Assert.Contains fails at line124.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "root": "Transformer trained embedding/forward differentiation",
+      "observed_failure_entries": 1,
+      "jobs": [
+        "133444409404"
+      ],
+      "finding": "Builder_BuildAsync_UpdatesEmbeddingWeights_InPlace: embeddings moved2048/2048, direct Predict identical for distinct inputs at line378.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    },
+    {
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
+      "root": "ShapE conditioned latent shape",
+      "observed_failure_entries": 1,
+      "jobs": [
+        "133444409404"
+      ],
+      "finding": "ShapE_ImageTo3D_DecodesTheImageConditionedLatent: DiTNoisePredictor.Forward IndexOutOfRange via PredictNoise615 and GenerateLatentFromImage435.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
+    }
+  ],
+  "triage_evidence": {
+    "artifact_directory": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f",
+    "independent_generated_integration": "generated-integration-independent.json: exact394 independent test/message/stack/job entries from43 shards;959 additional fused continuity guards remain in existing shared rebind/hybrid scope.",
+    "remaining_main": "remaining-main-independent.json:18 independent entries from15 additional shards;123 guards. RNNTransducer declared rank2 vs Conv2D4 (job133444396189) and Half certification expected0.9306640625 actual0.93017578125 (133444393087) are unowned direct findings.",
+    "infrastructure": "Jobs133444365358,133444365391,133444365493,133444365611 have no TRX/log archive; check annotations explicitly report self-hosted runner lost communication. Last started step9 Download required build artifact; restore/tests never began. job-ID-metadata/check/annotations.json saved beside evidence.",
+    "reserved_for_joining_developer": [
+      "ASR47 shared MelSpectrogram.ApplyMelFilterbank bin mismatch; generated-integration-independent.json has exact19jobs/tests/stacks; currently CLAIMED by Antigravity Wave1; no overlapping edits.",
+      "PINN44 empty tape at PinnAutodiff.InputGradient163/Evaluate98 (D22,P11,VA11); exclude existing HNN4 ownership; CLAIMED by Antigravity Wave1; no overlapping edits.",
+      "MultiFidelityPINN24 rank1 concat axis1 at Forward102 job133444380715; CLAIMED by Antigravity Wave1; no overlapping edits.",
+      "Lagrangian12 input16 vs state4 at ForwardForTraining321 job133444379852; UNCLAIMED.",
+      "CUPS13 unresolved cascade-mask-rcnn parameter chunks job133444377748; UNCLAIMED.",
+      "DoRA4 independent exact forward/magnitude math failures job133444390036; CLAIMED by shared_replay_failures; test-only fixture packing/control.",
+      "StandardScaler3 sample/population expectation mismatches job133444390629; CLAIMED by artifact_feed; seven total stale test oracles, no production policy change."
+    ],
+    "claimed_copyfeature": "Worker confirmed3 direct CopyFeature integration failures (including rank3/4). Claimed shared_replay_failures; new independent FeatureSelectorCopyReferenceTests.cs.",
+    "final_cycle": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/terminal-workflow-api-status.json;43902662001-final-artifact-index.json;job-133444409230.log;job-133444409230-annotations.json;job-133444409230-partial-failures.json.33observed failures are partial lower-bound evidence, not final suite counters. No new unowned TTS root established from final cancelled shard."
+  },
+  "contributor_progress_checked": {
+    "checked_utc": "2026-11-16T17:10:43.675091-05:00",
+    "antigravity": "Latest shared log still Wave1 in progress across fixer1..4/verifier1..2; no completion SHA/test results posted. Preserve their claimed scopes; no overlapping edits.",
+    "claude": "Remote claude/2524-tts-replay advanced to b4bd771e39; shared log includes new LayerNormStateRef, NoGrad frozen encoder and spectral-normalization proposals. Contributor-specific coordination/2524-claude.json still initial claims/questions:[]; no owner-action resolution evidence recorded there. Preserve Claude TTS ownership; root reviews proposals and overlap reconciliation."
+  },
+  "claimed_work_summary": {
+    "Antigravity": "Wave 1 Batches 1-4 (e4a6a32fbd, 0b08b92b5a, fc423039d3, dd714d3ae0) and Wave 2 Batch 6 (38098bfc08, 187/187) verified & integrated; root-review follow-ups on TimeSeries (active on fixer-3), Preprocessing/Wavelet (queued on fixer-4), and MultiScalePINN lifecycle (queued on fixer-2); Wave 2 Batches 5 & 7 and Wave 3 Batch 8 active.",
+    "this_session": "CopyFeature, GEM, GP, SAM, Transfusion, ARIMAX/Adam, retained outputs, DoRA and StandardScaler remain ours under existing exact file claims.",
+    "Claude_owner": "Remaining TTS and new Tortoise ClvpTextLength option failure remain Claude-owned. Our agents must not start new overlapping TTS edits."
+  },
+  "coordinator_protocol": [
+    "Root is coordinator; available_work lists unclaimed failures for contributors to choose.",
+    "Contributors fetch/read latest log and publish precise nonoverlapping file claims before edits.",
+    "Contributors post branch/commit, exact verification results and limitations; propose shared-boundary changes before implementation.",
+    "Material choices use root interactive questions. Routine selection among unclaimed tasks does not require user assignment.",
+    "Combine independently verified contributor fixes on shared coordination handoff; root controls final batch verification and PR push. No independent PR push mid-batch."
+  ],
+  "source_handoff": {
+    "status": "INCOMPLETE INTEGRATION BASELINE; draft for root review, not PR-ready or globally verified",
+    "consumer_baseline": "ce7928ef40c44c3e30f37da3ae545ded84fb70e9",
+    "plan": "Root will share the complete reviewed consumer WIP on the coordination branch, preserving contributor changes and unresolved owner actions. No selective dropping of integrated contributor hunks, no PR-branch push, no unproven review resolution. Root reviews exact source diff and this complete coordination log before handoff publication.",
+    "consumer_verification": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
+    "unresolved_owner_actions": [
+      "owner-lossbalancer-signed-factory-state: signed factory identity, EMA/Steps host-state lifecycle and compiled rebind/probe/skip/throw tests",
+      "owner-glm-accepted-statistics-lifecycle: accepted-step publication, valid masks, cleanup and no stale/probe statistics; compiled arrays are heap copies",
+      "owner-dittotts-duplicate-codec-forward: replace duplicate codec reconstruction with accepted-step named output, preserve quantizer semantics",
+      "owner-tortoise-clvp-text-length-option: Claude-owned option finding; coordinate with existing completed-overlap reconciliation",
+      "Pending native BatchNorm/GroupNorm/LayerNorm proposals require exact separate claims and review, not silent heterogeneous-package inclusion"
+    ],
+    "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness."
+  }
+}

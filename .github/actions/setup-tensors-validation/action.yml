@@ -1,0 +1,18 @@
+name: Set up temporary Tensors validation feed
+description: Verify an immutable producer artifact and configure a job-local NuGet feed.
+inputs:
+  artifact-token:
+    description: Existing token with read access to producer Actions artifacts; trusted same-repository events only.
+    required: false
+outputs:
+  active:
+    description: Whether the pinned coordination package is in use.
+    value: ${{ steps.feed.outputs.active }}
+runs:
+  using: composite
+  steps:
+    - id: feed
+      shell: pwsh
+      env:
+        TENSORS_ARTIFACT_TOKEN: ${{ inputs.artifact-token }}
+      run: '& "${{ github.action_path }}/../../scripts/Initialize-TensorsValidationFeed.ps1"'

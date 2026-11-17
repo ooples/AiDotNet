@@ -1,5 +1,9 @@
 <Project>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/RetainedGenerationHandoffTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/CosyVoiceDiffROReplayTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/GanFeatureMatchingReplayTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MultiResolutionStftReplayTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsEmbeddingValidationTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsAlignmentReplayTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsSplineReplayTests.cs" />

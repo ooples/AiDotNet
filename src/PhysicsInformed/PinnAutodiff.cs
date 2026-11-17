@@ -77,75 +77,92 @@ namespace AiDotNet.PhysicsInformed
             var x = new Tensor<T>(points.Shape.ToArray());
             points.AsSpan().CopyTo(x.AsWritableSpan());
 
-            // Outside any step arena: the derivatives outlive this tape, and an arena may reissue a step's tensors
-            // at a tape boundary (the same reason WGAN-GP's penalty suspends it).
-            using var noArena = TensorArena.Suspend();
-            using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
-
-            var outputs = forward(x);
-            if (outputs.Rank != 2 || outputs.Shape[0] != n)
+            // Whether an enclosing tape is actively recording parameter gradients. When the caller suppressed
+            // recording with NoGradScope (for example TrainCustomTapeStep's shape warm-up or an inference residual
+            // evaluation), input derivatives still define the PDE operator and must record on this inner tape,
+            // without leaking operations onto any suppressed enclosing tape.
+            bool enclosingTapeActive = GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed;
+            int savedSuppression = NoGradScope<T>.SuspendSuppression();
+            try
             {
-                throw new InvalidOperationException(
-                    $"The network must map [N, {inputDim}] points to [N, outputDim] values; got rank {outputs.Rank}.");
-            }
+                // Outside any step arena: the derivatives outlive this tape, and an arena may reissue a step's tensors
+                // at a tape boundary (the same reason WGAN-GP's penalty suspends it).
+                using var noArena = TensorArena.Suspend();
+                using var enclosingScope = GradientTape<T>.RecordOn(enclosingTapeActive ? GradientTape<T>.Current : null);
+                using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true, SuppressArenaScope = true });
 
-            int outputDim = outputs.Shape[1];
-
-            // Level 1: one gradient per output component, each [N, in].
-            var first = new Tensor<T>[outputDim];
-            for (int k = 0; k < outputDim; k++)
-            {
-                first[k] = InputGradient(tape, engine, Column(engine, outputs, k), x);
-            }
-
-            derivatives.FirstDerivatives = engine.TensorStack(first, 1);
-            if (order == 1)
-            {
-                return outputs;
-            }
-
-            // Level 2: d/dx of every first-derivative column, [N, in] per (k, i).
-            var second = new Tensor<T>[outputDim];
-            var secondColumns = new Tensor<T>[outputDim][];
-            for (int k = 0; k < outputDim; k++)
-            {
-                var rows = new Tensor<T>[inputDim];
-                for (int i = 0; i < inputDim; i++)
+                var outputs = forward(x);
+                if (outputs.Rank != 2 || outputs.Shape[0] != n)
                 {
-                    rows[i] = InputGradient(tape, engine, Column(engine, first[k], i), x);
+                    throw new InvalidOperationException(
+                        $"The network must map [N, {inputDim}] points to [N, outputDim] values; got rank {outputs.Rank}.");
                 }
 
-                secondColumns[k] = rows;
-                second[k] = engine.TensorStack(rows, 1);
-            }
+                int outputDim = outputs.Shape[1];
 
-            derivatives.SecondDerivatives = engine.TensorStack(second, 1);
-            if (order == 2)
-            {
-                return outputs;
-            }
+                // Level 1: one gradient per output component, each [N, in].
+                var first = new Tensor<T>[outputDim];
+                for (int k = 0; k < outputDim; k++)
+                {
+                    first[k] = InputGradient(tape, engine, Column(engine, outputs, k), x);
+                }
 
-            // Level 3: d/dx of every Hessian column, [N, in] per (k, i, j).
-            var third = new Tensor<T>[outputDim];
-            for (int k = 0; k < outputDim; k++)
-            {
-                var planes = new Tensor<T>[inputDim];
-                for (int i = 0; i < inputDim; i++)
+                var firstStacked = engine.TensorStack(first, 1);
+                derivatives.FirstDerivatives = enclosingTapeActive ? firstStacked : engine.StopGradient(firstStacked);
+                if (order == 1)
+                {
+                    return enclosingTapeActive ? outputs : engine.StopGradient(outputs);
+                }
+
+                // Level 2: d/dx of every first-derivative column, [N, in] per (k, i).
+                var second = new Tensor<T>[outputDim];
+                var secondColumns = new Tensor<T>[outputDim][];
+                for (int k = 0; k < outputDim; k++)
                 {
                     var rows = new Tensor<T>[inputDim];
-                    for (int j = 0; j < inputDim; j++)
+                    for (int i = 0; i < inputDim; i++)
                     {
-                        rows[j] = InputGradient(tape, engine, Column(engine, secondColumns[k][i], j), x);
+                        rows[i] = InputGradient(tape, engine, Column(engine, first[k], i), x);
                     }
 
-                    planes[i] = engine.TensorStack(rows, 1);
+                    secondColumns[k] = rows;
+                    second[k] = engine.TensorStack(rows, 1);
                 }
 
-                third[k] = engine.TensorStack(planes, 1);
-            }
+                var secondStacked = engine.TensorStack(second, 1);
+                derivatives.SecondDerivatives = enclosingTapeActive ? secondStacked : engine.StopGradient(secondStacked);
+                if (order == 2)
+                {
+                    return enclosingTapeActive ? outputs : engine.StopGradient(outputs);
+                }
 
-            derivatives.ThirdDerivatives = engine.TensorStack(third, 1);
-            return outputs;
+                // Level 3: d/dx of every Hessian column, [N, in] per (k, i, j).
+                var third = new Tensor<T>[outputDim];
+                for (int k = 0; k < outputDim; k++)
+                {
+                    var planes = new Tensor<T>[inputDim];
+                    for (int i = 0; i < inputDim; i++)
+                    {
+                        var rows = new Tensor<T>[inputDim];
+                        for (int j = 0; j < inputDim; j++)
+                        {
+                            rows[j] = InputGradient(tape, engine, Column(engine, secondColumns[k][i], j), x);
+                        }
+
+                        planes[i] = engine.TensorStack(rows, 1);
+                    }
+
+                    third[k] = engine.TensorStack(planes, 1);
+                }
+
+                var thirdStacked = engine.TensorStack(third, 1);
+                derivatives.ThirdDerivatives = enclosingTapeActive ? thirdStacked : engine.StopGradient(thirdStacked);
+                return enclosingTapeActive ? outputs : engine.StopGradient(outputs);
+            }
+            finally
+            {
+                NoGradScope<T>.RestoreSuppression(savedSuppression);
+            }
         }
 
         /// <summary>

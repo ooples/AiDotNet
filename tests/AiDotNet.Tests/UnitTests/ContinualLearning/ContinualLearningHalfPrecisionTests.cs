@@ -141,7 +141,8 @@ public class ContinualLearningHalfPrecisionTests
     public void GemState_TaskGradients_AreWrittenAsDoubleArrays()
     {
         // Master's state format: LoadStateFromSerialization reads each gradient element with GetDouble.
-        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(new MeanSquaredErrorLoss<Half>());
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { Margin = 0.375 });
         var type = gem.GetType();
         var gradientsField = type.GetField("_taskGradients", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(gradientsField);
@@ -157,6 +158,62 @@ public class ContinualLearningHalfPrecisionTests
         var written = Assert.IsType<System.Collections.Generic.List<double[]>>(state?["TaskGradients"]);
         Assert.Single(written);
         Assert.Equal(new[] { 1.5, -0.25, 300.0 }, written[0]);
+        Assert.Equal(0.375, Assert.IsType<double>(state?["Margin"]));
+    }
+
+    [Fact]
+    public void GemStoredGradient_Half_RecordsTheThreeFourFiveNormAsDouble()
+    {
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { NormalizeGradients = false });
+
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)3, (Half)4 }));
+
+        Assert.Equal(5.0, Assert.IsType<double>(gem.GetMetrics()["Task0_GradientNorm"]));
+    }
+
+    [Fact]
+    public void GemConstraint_Half_ChecksEveryStoredTask()
+    {
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { NormalizeGradients = false, Margin = 0.5 });
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0, (Half)0 })));
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)1, (Half)0 }));
+        gem.FinalizeTask(Moq.Mock.Of<AiDotNet.Interfaces.IFullModel<Half, Tensor<Half>, Tensor<Half>>>());
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)0, (Half)1 }));
+
+        Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)1, (Half)0.25 })));
+        Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.25, (Half)1 })));
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.5, (Half)0.5 })));
+    }
+
+    [Fact]
+    public void GemConstraint_Half_PreservesTheMarginBoundary()
+    {
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { NormalizeGradients = false, Margin = 0.5 });
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)1, (Half)0 }));
+
+        Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.25, (Half)0 })));
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.5, (Half)0 })));
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)1, (Half)0 })));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GemProjection_Half_ChangesOnlyTheViolatingDirection(bool useAGEM)
+    {
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(),
+            new GEMOptions<Half> { NormalizeGradients = false, UseAGEM = useAGEM, Margin = 0.0 });
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)2, (Half)0 }));
+
+        // The constraint is 2*g[0] >= 0. Its Euclidean projection leaves g[1] unchanged.
+        var projected = gem.ProjectGradient(new Vector<Half>(new[] { (Half)(-1), (Half)3 }));
+
+        Assert.Equal(0.0, (double)projected[0], 3);
+        Assert.Equal((Half)3, projected[1]);
     }
 
     [Fact]

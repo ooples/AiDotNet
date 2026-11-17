@@ -125,10 +125,9 @@ function Resolve-RollingBudgetMinutes {
 
 function Get-NoCoverageShardLists {
     <#
-        The shards that collect no coverage on an ordinary run, read from the script that decides it
-        (.github/scripts/Invoke-Shard.ps1: $heavyShards and $performanceShards) plus the manifest's
-        heavy: true entries, so there is no second list to drift. Matched on the trimmed line being exactly
-        the definition, as the coverage-everywhere parser does.
+        The shards that collect no coverage on an ordinary run, read from the canonical coverage policy
+        (.github/scripts/Get-ShardCoveragePolicy.ps1: $heavyShards and $performanceShards) plus the manifest's
+        heavy: true entries, so there is no second list to drift. Match the trimmed definition line exactly.
     #>
     param([Parameter(Mandatory)] [AllowEmptyString()] [string[]] $ScriptLines, [Parameter(Mandatory)] [object[]] $Manifest)
 
@@ -173,7 +172,7 @@ function Select-RollingCoverageShards {
         Never instrumented here, whatever the order says:
           * a light shard: every non-pull-request run already collects its coverage, at no extra cost;
           * a timing shard: instrumentation distorts the ratios it asserts, and this run is the correctness
-            net under selection (Invoke-Shard.ps1, $performanceShards);
+            net under selection (Get-ShardCoveragePolicy.ps1, $performanceShards);
           * a heavy or timing shard the anchor lists as always-run: the weekly run already tried to instrument
             it and got no digest (Select-CoverageShards.ps1, RunWithoutCoverage). The weekly run's
             ReattemptShards stays the only way back.

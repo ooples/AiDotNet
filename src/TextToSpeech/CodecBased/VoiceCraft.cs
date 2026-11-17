@@ -266,7 +266,10 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
         if (_scaledAdamOptions is not null && _optimizer is ScaledAdamOptimizer<T, Tensor<T>, Tensor<T>> scaled)
             scaled.SetScheduledLearningRate(EdenLearningRate(_trainingStep));
-        T loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
+        // The phones, codes and masked layout are this step's data: read and drawn once, before the objective a compiled
+        // plan replays (the codes are read on the host and the spans are drawn from the model's generator).
+        var prepared = PrepareObjective(sample);
+        T loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(prepared), _optimizer);
         _trainingStep++;
         return loss;
     }
@@ -353,7 +356,9 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return metadata;
     }
 
-    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample)
+    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample) => BuildObjective(PrepareObjective(sample));
+
+    private (int[] Text, (List<int[]> Rows, List<int> Masks, int[][] Labels) Layout) PrepareObjective(TtsTrainingSample<T> sample)
     {
         int[] text = NormalizePhones(VoiceCraftOps<T>.IdsOf(sample.Tokens));
         int[,] codes = sample.CodecTokens is not null
@@ -361,7 +366,12 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             : sample.Audio is not null
                 ? _codec!.Encode(sample.Audio)
                 : throw new ArgumentException("VoiceCraft training requires Audio or CodecTokens.", nameof(sample));
-        var layout = BuildTrainingLayout(codes);
+        return (text, BuildTrainingLayout(codes));
+    }
+
+    private Tensor<T> BuildObjective((int[] Text, (List<int[]> Rows, List<int> Masks, int[][] Labels) Layout) prepared)
+    {
+        var (text, layout) = prepared;
         var logits = _network!.Forward(text, layout.Rows, layout.Masks);
         Tensor<T>? total = null;
         var codebookWeights = new Tensor<double>(_options.CodebookLossWeights, new[] { _options.CodebookLossWeights.Length }).Cast<T>().ToArray();

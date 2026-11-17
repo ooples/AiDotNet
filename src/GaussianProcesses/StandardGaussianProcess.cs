@@ -223,7 +223,8 @@ public partial class StandardGaussianProcess<T> : GaussianProcessBase<T>
     public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
-        if (_X != null && _y != null)
+        // Fresh models hold empty training buffers; only refit an existing set of observations.
+        if (_X != null && _y != null && _X.Rows > 0)
         {
             Fit(_X, _y);
         }

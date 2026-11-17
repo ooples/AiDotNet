@@ -297,13 +297,17 @@ internal static class FeatureSelectionTensorOps
         var divisor = engine.TensorWhere(normalizable, sum, engine.TensorSquare(scale));
         weights = engine.TensorDivide(weights, divisor);
 
-        // Scatter-added straight into [n, n] (a repeated neighbour accumulates, as in the dense sum): an [n, k, n]
-        // one-hot product needed k times the output's storage, 8 GB for n = 10000 and k = 10 in double.
-        return engine.TensorScatterAdd(
-            new Tensor<T>(new[] { n, n }),
-            new Tensor<int>((int[])neighborIndices.Clone(), new[] { n, k }),
-            engine.Reshape(weights, new[] { n, k }),
-            1);
+        // Scatter-added straight into [n, n] via 1-D index_add (a repeated neighbour accumulates, as in the dense sum):
+        // an [n, k, n] one-hot product needed k times the output's storage, 8 GB for n = 10000 and k = 10 in double.
+        var rowOffsets = engine.TensorBroadcastTo(
+            engine.TensorMultiplyScalar(engine.Reshape(engine.TensorArange<int>(0, n, 1), new[] { n, 1 }), n),
+            new[] { n, k });
+        var flatIndices = engine.Reshape(
+            engine.TensorAdd(rowOffsets, new Tensor<int>((int[])neighborIndices.Clone(), new[] { n, k })),
+            new[] { n * k });
+        var accumulated = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { n * n }), 0, flatIndices, engine.Reshape(weights, new[] { n * k }));
+        return engine.Reshape(accumulated, new[] { n, n });
     }
 
     /// <summary>

@@ -48,7 +48,10 @@ internal sealed partial class ChannelLayerNormLayer<T> : LayerBase<T>
         var mean = Engine.ReduceMean(input, new[] { 1 }, keepDims: true);
         var centred = Engine.TensorSubtract(input, Engine.TensorTile(mean, new[] { 1, _channels, 1 }));
         var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), new[] { 1 }, keepDims: true);
-        var clamped = Engine.TensorMax(variance, NumOps.FromDouble(_epsilon));
+        // max(variance, ε) as ReLU(variance − ε) + ε: a recorded op whose shape a closure-objective probe derives itself.
+        // The scalar TensorMax runs eagerly while a plan is traced and a later step's probe can only look its shape up
+        // by position, so a step whose objective changed structure before it aborted instead of tracing a new plan.
+        var clamped = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(variance, NumOps.FromDouble(-_epsilon))), NumOps.FromDouble(_epsilon));
         var inverse = Engine.TensorPow(clamped, NumOps.FromDouble(-0.5));
         var gamma = Engine.TensorTile(Engine.Reshape(_gamma, new[] { 1, _channels, 1 }), new[] { batch, 1, time });
         return Engine.TensorMultiply(Engine.TensorMultiply(centred, Engine.TensorTile(inverse, new[] { 1, _channels, 1 })), gamma);

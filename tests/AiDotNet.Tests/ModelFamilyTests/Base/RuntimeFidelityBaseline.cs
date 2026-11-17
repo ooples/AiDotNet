@@ -6929,8 +6929,6 @@ public static class RuntimeFidelityBaseline
     public static readonly ISet<string> ToyTaskFailures =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            "AiDotNet.Classification.TimeSeries.MiniRocketClassifier`1::LearnsToyTask_SeparableBlobs",
-            "AiDotNet.Classification.TimeSeries.RocketClassifier`1::LearnsToyTask_SeparableBlobs",
             "AiDotNet.ReinforcementLearning.Agents.AdvancedRL.LinearSARSAAgent`1::LearnsToyTask_TwoArmedBandit",
             "AiDotNet.ReinforcementLearning.Agents.EligibilityTraces.SARSALambdaAgent`1::LearnsToyTask_TwoArmedBandit",
         };

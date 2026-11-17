@@ -225,6 +225,8 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+
         run: |
           ./tools/TestImpact/Resolve-CiValidationReuse.ps1 `
             -Repository '${{ github.repository }}' `
@@ -296,6 +298,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Build (Release, net10.0)
         run: |
           dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
@@ -358,6 +366,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Restore dependencies
         run: dotnet restore
@@ -572,6 +586,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Restore dependencies
         run: dotnet restore
 
@@ -677,8 +697,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs: build-compat
-    # Not on a coverage-everywhere run. The shard matrix needs only `build`, never `build-compat`,
-    # so a compat or pack failure cannot invalidate one shard's coverage, and the map builder
+    # Not on a coverage-everywhere run. There the shard matrix runs past a failed `build-compat` (its
+    # `if` allows it), because a compat or pack failure cannot invalidate one shard's coverage, and the map builder
     # harvests a failed run as long as every shard completed. Cancelling here threw away the whole
     # weekly map source instead: in run 43536907336 (2026-11-14) `Build` was green and 11 shards
     # had finished when a benchmark project failed to compile in the compat build, and the other
@@ -1628,10 +1648,25 @@ jobs:
 
   test-net10-sharded:
     name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
+    # Attempts are visible and non-fatal only here; the mandatory evidence gate decides validation.
+    continue-on-error: true
+    env:
+      SHARD_ATTEMPT: primary
+      FAILOVER_PLAN_ID: ''
+      FAILOVER_PLAN_DIGEST: ''
+      COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+      COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+      COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
+      SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+
     # select-shards routes some shards to online self-hosted runners (secrets.SELF_HOSTED_RUNNERS);
     # the rest stay on the hosted pool.
     runs-on: ${{ matrix.shard.runner || 'ubuntu-latest' }}
-    needs: [build, validation-source, select-shards]
+    # Both builds: a red compat build skips every shard instead of leaving the run to be cancelled by
+    # a watcher job that itself queues for a runner (#2598: shards ran for 10+ minutes after
+    # build-compat failed while that watcher waited). The nightly coverage-everywhere run still
+    # tests past a compat failure; see cancel-after-compat-build-failure for why.
+    needs: [build, build-compat, validation-source, select-shards]
     # Forced coverage materially extends both test execution and post-test digest work. The live
     # all-shard experiment proved 50 minutes is too short: Generated Layers U passed every test at
     # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation gets a
@@ -1649,7 +1684,7 @@ jobs:
     # requires_shards is the build-only gate: a change that can break the compile but cannot reach
     # any test (.editorconfig) keeps requires_validation true so the build still runs, and turns
     # this off. Every other path leaves it true, and an escalation forces it true.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ !cancelled() && needs.validation-source.result == 'success' && needs.select-shards.result == 'success' && needs.build.result == 'success' && needs.build-compat.result != 'cancelled' && !(needs.build-compat.result == 'failure' && !inputs.collect_coverage_everywhere) && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -1660,7 +1695,7 @@ jobs:
         # whenever it is not confident, so the default behaviour is the full test matrix.
         shard: ${{ fromJSON(needs.build.outputs.matrix || needs.select-shards.outputs.matrix) }}
 
-    steps:
+    steps: &shard-attempt-steps
       # Invoke-Shard.ps1 counts a packed job's slice deadline from here, so the setup steps below are inside it.
       - name: Record job start
         shell: pwsh
@@ -1668,6 +1703,21 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Verify alternate attempt authorization
+        if: env.SHARD_ATTEMPT == 'alternate'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELF_HOSTED_RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
+          TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          SHARD_JSON: ${{ toJSON(matrix.shard) }}
+        run: |
+          ./tools/TestImpact/Assert-RunnerAlternateAuthorization.ps1 -ShardJson $env:SHARD_JSON `
+            -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -TestedSha $env:GITHUB_SHA -PlanArtifactId $env:FAILOVER_PLAN_ID -PlanArtifactDigest $env:FAILOVER_PLAN_DIGEST `
+            -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
+
 
       - name: Ensure GitHub CLI is available on self-hosted runners
         if: runner.environment == 'self-hosted'
@@ -1760,6 +1810,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       # HOSTED RUNNERS ARE NOT ONE MACHINE. The pool mixes AMD EPYC (no AVX-512) with Intel Xeon (AVX-512), and
       # the managed kernels, oneDNN and OpenBLAS all take different code paths on each. A model test that failed
@@ -2044,6 +2100,32 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 7
 
+      - name: Record immutable shard attempt receipt
+        id: attempt-receipt
+        if: always() && steps.download-build-artifacts.outcome == 'success'
+        shell: pwsh
+        env:
+          SHARD_JSON: ${{ toJSON(matrix.shard) }}
+          TEST_OUTCOME: ${{ steps.shard-tests.outcome }}
+          SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+        run: |
+          ./tools/TestImpact/Write-ShardAttemptReceipt.ps1 -ShardJson $env:SHARD_JSON `
+            -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
+            -TestOutcome $env:TEST_OUTCOME -Attempt $env:SHARD_ATTEMPT
+
+
+      - name: Resolve physical attempt artifact name
+        id: attempt-slug
+        if: always()
+        shell: pwsh
+        env:
+          SHARD_NAME: ${{ matrix.shard.name }}
+        run: |
+          $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
+          "slug=$slug" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+
       - name: Set artifact name
         if: always()
         shell: pwsh
@@ -2100,7 +2182,7 @@ jobs:
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true
         with:
-          name: impact-digest-${{ env.ARTIFACT_NAME }}
+          name: impact-digest-${{ env.SHARD_ATTEMPT }}-${{ env.ARTIFACT_NAME }}-${{ github.run_attempt }}
           path: impact-digest/*.digest.json
           if-no-files-found: ignore
           # A coverage-everywhere run is the map's only source, and the map workflow rebuilds the
@@ -2114,13 +2196,32 @@ jobs:
           # digest for up to 10 days (RollingMaxDigestAgeDays); 14 keeps them that long. Otherwise 7, as before.
           retention-days: ${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && 14) || 7 }}
 
+      - name: Upload immutable attempt evidence
+        id: attempt-evidence
+        if: always() && steps.attempt-receipt.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: shard-attempt-${{ env.SHARD_ATTEMPT }}-${{ github.sha }}-${{ steps.attempt-slug.outputs.slug }}-${{ github.run_attempt }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/shard-attempt.json
+            TestResults/**/coverage-invocation.json
+          if-no-files-found: error
+          retention-days: 30
+
+
       - name: Upload coverage + test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: ${{ env.ARTIFACT_NAME }}
           path: |
+            TestResults/shard-attempt.json
+            TestResults/**/coverage-invocation.json
+
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx
             TestResults/shard-metadata.json
@@ -2134,11 +2235,16 @@ jobs:
       # the regression ledger, the delta import, the retry baseline and Sonar read it as they always have.
       - name: Upload coverage + test results (packed slice 1)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
           path: |
+            TestResults/slot-0/shard-attempt.json
+            TestResults/slot-0/**/coverage-invocation.json
+
             TestResults/slot-0/**/coverage.opencover.xml
             TestResults/slot-0/**/*.trx
             TestResults/slot-0/shard-metadata.json
@@ -2148,11 +2254,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 2)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
           path: |
+            TestResults/slot-1/shard-attempt.json
+            TestResults/slot-1/**/coverage-invocation.json
+
             TestResults/slot-1/**/coverage.opencover.xml
             TestResults/slot-1/**/*.trx
             TestResults/slot-1/shard-metadata.json
@@ -2162,11 +2273,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 3)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
           path: |
+            TestResults/slot-2/shard-attempt.json
+            TestResults/slot-2/**/coverage-invocation.json
+
             TestResults/slot-2/**/coverage.opencover.xml
             TestResults/slot-2/**/*.trx
             TestResults/slot-2/shard-metadata.json
@@ -2176,11 +2292,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 4)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
           path: |
+            TestResults/slot-3/shard-attempt.json
+            TestResults/slot-3/**/coverage-invocation.json
+
             TestResults/slot-3/**/coverage.opencover.xml
             TestResults/slot-3/**/*.trx
             TestResults/slot-3/shard-metadata.json
@@ -2190,11 +2311,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 5)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
           path: |
+            TestResults/slot-4/shard-attempt.json
+            TestResults/slot-4/**/coverage-invocation.json
+
             TestResults/slot-4/**/coverage.opencover.xml
             TestResults/slot-4/**/*.trx
             TestResults/slot-4/shard-metadata.json
@@ -2204,11 +2330,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 6)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
           path: |
+            TestResults/slot-5/shard-attempt.json
+            TestResults/slot-5/**/coverage-invocation.json
+
             TestResults/slot-5/**/coverage.opencover.xml
             TestResults/slot-5/**/*.trx
             TestResults/slot-5/shard-metadata.json
@@ -2218,11 +2349,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 7)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
           path: |
+            TestResults/slot-6/shard-attempt.json
+            TestResults/slot-6/**/coverage-invocation.json
+
             TestResults/slot-6/**/coverage.opencover.xml
             TestResults/slot-6/**/*.trx
             TestResults/slot-6/shard-metadata.json
@@ -2232,11 +2368,16 @@ jobs:
 
       - name: Upload coverage + test results (packed slice 8)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: coverage-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
           path: |
+            TestResults/slot-7/shard-attempt.json
+            TestResults/slot-7/**/coverage-invocation.json
+
             TestResults/slot-7/**/coverage.opencover.xml
             TestResults/slot-7/**/*.trx
             TestResults/slot-7/shard-metadata.json
@@ -2253,7 +2394,7 @@ jobs:
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true
         with:
-          name: crash-evidence-${{ github.sha }}-${{ strategy.job-index }}
+          name: crash-evidence-${{ env.SHARD_ATTEMPT }}-${{ github.sha }}-${{ strategy.job-index }}-${{ github.run_attempt }}
           path: |
             TestResults/**/Sequence*.xml
             TestResults/**/gpu-diagnostics.txt
@@ -2265,11 +2406,16 @@ jobs:
       # retains hang-sequence evidence that the coverage artifact intentionally omits.
       - name: Upload compact test diagnostics
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: ${{ env.TEST_RESULTS_ARTIFACT_NAME }}
           path: |
+            TestResults/shard-attempt.json
+            TestResults/**/coverage-invocation.json
+
             TestResults/**/*.trx
             TestResults/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2277,11 +2423,16 @@ jobs:
       # PACKED JOB: the same compact diagnostics, one artifact per slice under its own shard's name.
       - name: Upload compact test diagnostics (packed slice 1)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
           path: |
+            TestResults/slot-0/shard-attempt.json
+            TestResults/slot-0/**/coverage-invocation.json
+
             TestResults/slot-0/**/*.trx
             TestResults/slot-0/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2289,11 +2440,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 2)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
           path: |
+            TestResults/slot-1/shard-attempt.json
+            TestResults/slot-1/**/coverage-invocation.json
+
             TestResults/slot-1/**/*.trx
             TestResults/slot-1/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2301,11 +2457,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 3)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
           path: |
+            TestResults/slot-2/shard-attempt.json
+            TestResults/slot-2/**/coverage-invocation.json
+
             TestResults/slot-2/**/*.trx
             TestResults/slot-2/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2313,11 +2474,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 4)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
           path: |
+            TestResults/slot-3/shard-attempt.json
+            TestResults/slot-3/**/coverage-invocation.json
+
             TestResults/slot-3/**/*.trx
             TestResults/slot-3/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2325,11 +2491,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 5)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
           path: |
+            TestResults/slot-4/shard-attempt.json
+            TestResults/slot-4/**/coverage-invocation.json
+
             TestResults/slot-4/**/*.trx
             TestResults/slot-4/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2337,11 +2508,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 6)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
           path: |
+            TestResults/slot-5/shard-attempt.json
+            TestResults/slot-5/**/coverage-invocation.json
+
             TestResults/slot-5/**/*.trx
             TestResults/slot-5/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2349,11 +2525,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 7)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
           path: |
+            TestResults/slot-6/shard-attempt.json
+            TestResults/slot-6/**/coverage-invocation.json
+
             TestResults/slot-6/**/*.trx
             TestResults/slot-6/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2361,11 +2542,16 @@ jobs:
 
       - name: Upload compact test diagnostics (packed slice 8)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7 && steps.shard-tests.outcome == 'success' && steps.attempt-receipt.outcome == 'success' && steps.attempt-evidence.outcome == 'success'
         continue-on-error: true
         with:
+          overwrite: ${{ env.SHARD_ATTEMPT == 'alternate' }}
+
           name: test-results-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
           path: |
+            TestResults/slot-7/shard-attempt.json
+            TestResults/slot-7/**/coverage-invocation.json
+
             TestResults/slot-7/**/*.trx
             TestResults/slot-7/**/Sequence*.xml
           if-no-files-found: ignore
@@ -2378,10 +2564,156 @@ jobs:
   # narrow - a generator change without a base build, a non-C# runtime file, a shared base reaching
   # more classes than TypeImpact narrows to - the full sweep runs instead, in the same slices
   # paper-fidelity-nightly.yml runs every night. tools/PaperFidelity/PaperFidelity.ps1 has the rule.
+  runner-failover-plan:
+    name: Plan terminal runner infrastructure recovery
+    runs-on: ubuntu-latest
+    needs:
+    - build
+    - build-compat
+    - validation-source
+    - select-shards
+    - test-net10-sharded
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && needs.build-compat.result == 'success' && needs.validation-source.outputs.execute_validation == 'true' && needs.select-shards.outputs.requires_tests == 'true' }}
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_recovery: ${{ steps.plan.outputs.has_recovery }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}
+    env:
+      COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+      COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+      COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
+      SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+      SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+      SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+      TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+      SELF_HOSTED_RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
+    steps:
+    - &runner-failover-checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Classify original attempt evidence
+      id: plan
+      shell: pwsh
+      run: |
+        ./tools/TestImpact/New-RunnerFailoverPlan.ps1 -MatrixJson $env:MATRIX_JSON `
+          -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+          -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
+          -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
+    - name: Preserve immutable infrastructure recovery authorization
+      id: upload
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: runner-failover-plan-${{ github.sha }}-${{ github.run_attempt }}
+        path: runner-failover-plan/plan.json
+        if-no-files-found: error
+        retention-days: 30
+  test-net10-alternate:
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}
+    permissions:
+      actions: read
+      contents: read
+    name: Alternate attempt (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
+    runs-on: ${{ matrix.shard.runner }}
+    needs:
+    - build
+    - build-compat
+    - validation-source
+    - select-shards
+    - runner-failover-plan
+    if: ${{ !cancelled() && needs.runner-failover-plan.outputs.has_recovery == 'true' }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: ${{ fromJSON(needs.runner-failover-plan.outputs.matrix) }}
+    env:
+      COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+      COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+      COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
+      SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+      SHARD_ATTEMPT: alternate
+      FAILOVER_PLAN_ID: ${{ needs.runner-failover-plan.outputs.artifact_id }}
+      FAILOVER_PLAN_DIGEST: ${{ needs.runner-failover-plan.outputs.artifact_digest }}
+    steps: *shard-attempt-steps
+  reconcile-shard-attempts:
+    name: Verify every logical shard result and provenance
+    runs-on: ubuntu-latest
+    needs:
+    - build
+    - build-compat
+    - validation-source
+    - select-shards
+    - test-net10-sharded
+    - runner-failover-plan
+    - test-net10-alternate
+    if: ${{ always() && !cancelled() && needs.select-shards.result == 'success' && needs.validation-source.outputs.execute_validation == 'true' && ((needs.select-shards.outputs.requires_tests == 'true' && needs.build.result == 'success' && needs.build-compat.result == 'success') || needs.select-shards.outputs.requires_tests == 'false') }}
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      proof_artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      proof_artifact_digest: ${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}
+    env:
+      REQUIRES_VALIDATION: ${{ needs.select-shards.outputs.requires_validation }}
+      REQUIRES_TESTS: ${{ needs.select-shards.outputs.requires_tests }}
+      COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+      COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+      COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
+      SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+      SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+      SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+      TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+      SELF_HOSTED_RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
+      PLAN_ARTIFACT_ID: ${{ needs.runner-failover-plan.outputs.artifact_id }}
+      PLAN_ARTIFACT_DIGEST: ${{ needs.runner-failover-plan.outputs.artifact_digest }}
+    steps:
+    - *runner-failover-checkout
+    - name: Verify immutable recovery plan archive
+      if: needs.select-shards.outputs.requires_tests == 'true'
+      shell: pwsh
+      run: |
+        ./tools/TestImpact/Receive-RequiredArtifact.ps1 -Repository $env:GITHUB_REPOSITORY `
+          -ArtifactId $env:PLAN_ARTIFACT_ID -ExpectedDigest $env:PLAN_ARTIFACT_DIGEST `
+          -Destination runner-failover-plan -RunId $env:GITHUB_RUN_ID -JobIndex 0
+    - name: Require complete canonical shard evidence
+      if: needs.select-shards.outputs.requires_tests == 'true'
+      shell: pwsh
+      run: |
+        ./tools/TestImpact/Resolve-RunnerFailoverResults.ps1 -MatrixJson $env:MATRIX_JSON -PlanPath runner-failover-plan/plan.json `
+          -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+          -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
+          -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
+    - name: Bind an explicitly empty shard selection
+      if: needs.select-shards.outputs.requires_tests == 'false'
+      shell: pwsh
+      run: |
+        ./tools/TestImpact/Write-EmptyShardProof.ps1 -MatrixJson $env:MATRIX_JSON `
+          -RequiresValidation $env:REQUIRES_VALIDATION -RequiresTests $env:REQUIRES_TESTS
+    - name: Preserve original attempts and logical shard evidence
+      id: upload
+      if: always() && hashFiles('runner-failover-proof/proof.json') != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: runner-failover-proof-${{ github.sha }}-${{ github.run_attempt }}
+        path: runner-failover-proof/
+        if-no-files-found: error
+        retention-days: 30
+
+
   paper-fidelity-plan:
     name: Paper fidelity - plan
     runs-on: ubuntu-latest
-    needs: [build, validation-source, select-shards]
+    needs: [build, build-compat, validation-source, select-shards]
     # Full mode downloads the build artifact (up to 25 minutes) and discovers the classes.
     timeout-minutes: 40
     permissions:
@@ -2437,6 +2769,13 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        if: steps.plan.outputs.mode == 'Full'
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Download required build artifact
         if: steps.plan.outputs.mode == 'Full'
@@ -2512,6 +2851,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Download required build artifact
         timeout-minutes: 25
         shell: pwsh
@@ -2563,8 +2908,10 @@ jobs:
     name: Test regression analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
+      - reconcile-shard-attempts
+
       - build
       - test-net10-sharded
       - validation-source
@@ -2881,8 +3228,10 @@ jobs:
     #
     # The required check remains a lightweight successful job for non-runtime changes. Runtime
     # analysis still requires the build; every expensive step below consumes the same typed flag.
-    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (!fromJSON((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || needs.validation-source.outputs.reuse == 'true' || needs.build.result == 'success' || inputs.sonar_only) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && (needs.reconcile-shard-attempts.result == 'success' || needs.validation-source.outputs.reuse == 'true' || inputs.sonar_only) && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (!fromJSON((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || needs.validation-source.outputs.reuse == 'true' || needs.build.result == 'success' || inputs.sonar_only) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
+      - reconcile-shard-attempts
+
       - build
       - test-net10-sharded
       - validation-source
@@ -2988,6 +3337,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Cache SonarCloud packages
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
@@ -3194,7 +3549,7 @@ jobs:
     if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     name: Artifact Size Check
     runs-on: ubuntu-latest
-    needs: [build, validation-source, select-shards]
+    needs: [build, build-compat, validation-source, select-shards]
     timeout-minutes: 10
 
     steps:
@@ -3219,6 +3574,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Restore and publish for size analysis
         run: |
@@ -3263,8 +3624,10 @@ jobs:
     name: Test analysis (aggregate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
+      - reconcile-shard-attempts
+
       - test-net10-sharded
       - validation-source
       - select-shards
@@ -3325,6 +3688,12 @@ jobs:
             -DestinationDirectory TestDiagnostics -ArtifactPrefix test-results `
             -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
 
+      - name: Download verified logical shard provenance
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.reconcile-shard-attempts.outputs.proof_artifact_id }}
+          path: verified-shard-provenance
+
       - name: Collect shard states and latest merged baseline
         shell: pwsh
         env:
@@ -3354,7 +3723,14 @@ jobs:
             $jobs += @($response.jobs)
             $page++
           } while ($response.jobs.Count -eq $perPage)
-          @($jobs) | ConvertTo-Json -Depth 8 | Set-Content current-jobs.json
+          $proof = Get-Content verified-shard-provenance/proof.json -Raw | ConvertFrom-Json
+          if ($proof.complete -ne $true -or $proof.testedSha -cne $env:GITHUB_SHA -or
+              [string]$proof.runId -cne $env:GITHUB_RUN_ID -or [string]$proof.runAttempt -cne $env:GITHUB_RUN_ATTEMPT) {
+            throw 'Logical shard provenance is incomplete or bound to a different run.'
+          }
+          $logicalJobs = @(Get-Content verified-shard-provenance/resolved-jobs.json -Raw | ConvertFrom-Json)
+          $jobs = @($jobs | Where-Object { $_.name -notlike 'Tests (*) - *' -and $_.name -notlike 'Alternate attempt (*) - *' }) + $logicalJobs
+          @($jobs) | ConvertTo-Json -Depth 20 | Set-Content current-jobs.json
 
           $baselinePath = '.github/ci-test-baseline.json'
           $baselineSource = 'checked-in seed'
@@ -3499,6 +3875,8 @@ jobs:
     timeout-minutes: 5
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
+      - reconcile-shard-attempts
+
       - validation-source
       - build
       - build-compat
@@ -3525,7 +3903,7 @@ jobs:
             -SelectResult '${{ needs.select-shards.result }}' `
             -BuildResult '${{ needs.build.result }}' `
             -BuildCompatResult '${{ needs.build-compat.result }}' `
-            -TestsResult '${{ needs.test-net10-sharded.result }}' `
+            -TestsResult '${{ needs.reconcile-shard-attempts.result }}' `
             -RegressionAnalysisResult '${{ needs.test-regression-analysis.result }}' `
             -VerdictEnforced '${{ needs.test-regression-analysis.outputs.verdict_enforced || 'false' }}' `
             -AggregateAnalysisResult '${{ needs.ci-test-analysis.result }}' `
@@ -3540,8 +3918,8 @@ jobs:
     name: Publish expensive validation proof
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: "${{ always() && !cancelled() && needs.validation-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
-    needs: [validation-gate, validation-source, select-shards]
+    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && needs.validation-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
+    needs: [validation-gate, validation-source, select-shards, reconcile-shard-attempts]
     permissions:
       contents: read
     steps:
@@ -3561,6 +3939,10 @@ jobs:
             -TestedTree $testedTree `
             -EventName '${{ github.event_name }}' `
             -RequiresValidation $requiresValidation `
+            -RequiresTests ([bool]::Parse('${{ needs.select-shards.outputs.requires_tests }}')) `
+            -RunnerFailoverProofArtifactId '${{ needs.reconcile-shard-attempts.outputs.proof_artifact_id }}' `
+            -RunnerFailoverProofDigest '${{ needs.reconcile-shard-attempts.outputs.proof_artifact_digest }}' `
+            -RunnerFailoverRunAttempt '${{ github.run_attempt }}' `
             -OutFile validation-certificate.json
 
       - name: Upload validation certificate
@@ -3693,8 +4075,8 @@ jobs:
     name: Publish complete validation proof
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [ci-gate, select-shards]
-    if: "${{ always() && !cancelled() && needs.ci-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
+    needs: [ci-gate, select-shards, reconcile-shard-attempts]
+    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && needs.ci-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
     permissions:
       contents: read
 
@@ -3715,6 +4097,10 @@ jobs:
             -TestedTree $testedTree `
             -EventName '${{ github.event_name }}' `
             -RequiresValidation $requiresValidation `
+            -RequiresTests ([bool]::Parse('${{ needs.select-shards.outputs.requires_tests }}')) `
+            -RunnerFailoverProofArtifactId '${{ needs.reconcile-shard-attempts.outputs.proof_artifact_id }}' `
+            -RunnerFailoverProofDigest '${{ needs.reconcile-shard-attempts.outputs.proof_artifact_digest }}' `
+            -RunnerFailoverRunAttempt '${{ github.run_attempt }}' `
             -OutFile validation-certificate.json
 
       - name: Upload validation certificate

@@ -64,7 +64,7 @@ function Get-StepBlock {
 function Get-JobHeader {
     param([string] $JobBlock)
 
-    $steps = [Regex]::Match($JobBlock, '(?m)^    steps:\s*$')
+    $steps = [Regex]::Match($JobBlock, '(?m)^    steps:(?:[ \t]+[&*][A-Za-z0-9_-]+)?[ \t]*\r?$')
     if (-not $steps.Success) { return '' }
     return $JobBlock.Substring(0, $steps.Index)
 }
@@ -100,9 +100,9 @@ function Test-JobDependency {
     }
     if ($inline) { return $inline.Trim("'`"") -ceq $Dependency }
 
-    $list = [Regex]::Match($JobHeader, '(?ms)^    needs:[ \t]*\r?\n(?<items>(?:      - [^\r\n]+\r?\n?)+)')
+    $list = [Regex]::Match($JobHeader, '(?ms)^    needs:[ \t]*\r?\n(?<items>(?:(?: {4,6}- [^\r\n]+\r?\n)|(?:[ \t]*\r?\n))+)')
     if (-not $list.Success) { return $false }
-    $values = @([Regex]::Matches($list.Groups['items'].Value, '(?m)^      -[ \t]*(?<value>[^\r\n]+?)[ \t]*\r?$') |
+    $values = @([Regex]::Matches($list.Groups['items'].Value, '(?m)^ {4,6}-[ \t]*(?<value>[^\r\n]+?)[ \t]*\r?$') |
         ForEach-Object { $_.Groups['value'].Value.Trim().Trim("'`"") })
     return $values -ccontains $Dependency
 }
@@ -720,7 +720,8 @@ foreach ($job in $artifactConsumers) {
 # undispatchable (HTTP 422). Every assertion below is about what the shard job DOES, not about
 # which file the text sits in, so the job block and the script it calls are checked as one.
 $testConsumer = (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') +
-    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw)
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw) +
+    "`n" + (Get-Content -LiteralPath '.github/scripts/Get-ShardCoveragePolicy.ps1' -Raw)
 Assert-Contract ($testConsumer.Contains('enum CoverageDisposition')) `
     'coverage execution state is represented by string comparisons instead of a closed enum'
 Assert-Contract ($testConsumer.Contains(
@@ -791,39 +792,17 @@ if ($testRunLine -ge 0) {
     Assert-Contract (@($parseErrors).Count -eq 0) `
         "the embedded sharded-test PowerShell has syntax errors: $parseErrorMessages"
 
-    # Execute the exact checked-in decision block for the failure that motivated this state. This
-    # is intentionally extracted from the workflow rather than restating its algorithm in the
-    # test: Integration D must be recognized as heavy, consume the selected disposition, and leave
-    # XPlat instrumentation disabled. The dotnet invocation begins immediately after the slice.
-    $decisionStart = $testRunScript.IndexOf('$heavyShards = @(', [StringComparison]::Ordinal)
-    $decisionEnd = $testRunScript.IndexOf('$dotnetArgs = @(', [StringComparison]::Ordinal)
-    Assert-Contract ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) `
-        'the executable coverage-decision block could not be isolated from the workflow'
-    if ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) {
-        $decisionBody = $testRunScript.Substring($decisionStart, $decisionEnd - $decisionStart)
-        # The forced-coverage flag used to be a ${{ }} interpolation the parse step rewrote to
-        # 'placeholder', which this then swapped for 'true'. The script reads the real env var now,
-        # so drive that instead - the proof exercises the actual input rather than a rewritten one.
-        $decisionProof = @"
-`$env:SHARD_FORCE_COVERAGE = 'true'
-`$shardName = 'Integration D'
-`$env:COVERAGE_CARRIED = '[]'
-`$env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION = '["Integration D"]'
-$decisionBody
-[pscustomobject]@{
-    Heavy = `$heavyShard
-    CollectCoverage = `$collectCoverage
-    Disposition = [string] `$coverageDisposition
-}
-"@
-        $decisionResult = @(& ([scriptblock]::Create($decisionProof))) | Select-Object -Last 1
-        Assert-Contract ([bool] $decisionResult.Heavy) `
-            'the production workflow no longer recognizes Integration D as a heavy shard'
-        Assert-Contract (-not [bool] $decisionResult.CollectCoverage) `
-            'RunWithoutCoverage still adds instrumentation to Integration D'
-        Assert-Contract ($decisionResult.Disposition -ceq 'RunWithoutCoverage') `
-            'Integration D did not consume the typed RunWithoutCoverage disposition'
-    }
+    # Execute the shared production policy called by the parsed shard program.
+    # Integration D must retain its heavy classification and RunWithoutCoverage behavior.
+    . '.github/scripts/Get-ShardCoveragePolicy.ps1'
+    $decisionResult = Get-ShardCoveragePolicy -ShardName 'Integration D' -Heavy $false -EventName 'workflow_dispatch' `
+        -ForceCoverage 'true' -CarriedJson '[]' -RunWithoutCoverageJson '["Integration D"]' -RollingJson '[]' -Quiet
+    Assert-Contract ([bool] $decisionResult.HeavyShard) `
+        'the production workflow no longer recognizes Integration D as a heavy shard'
+    Assert-Contract (-not [bool] $decisionResult.CollectCoverage) `
+        'RunWithoutCoverage still adds instrumentation to Integration D'
+    Assert-Contract ($decisionResult.CoverageDisposition -ceq 'RunWithoutCoverage') `
+        'Integration D did not consume the typed RunWithoutCoverage disposition'
 }
 foreach ($stepName in @(
     'Upload test-impact digest',
@@ -955,7 +934,8 @@ Assert-Contract ($shardRun.Contains('SHARD_ENV: ${{ toJSON(matrix.shard.env) }}'
     'the shard step does not receive the entry env as data'
 Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps1 -Json $env:SHARD_ENV')) `
     'the shard step does not apply the entry env through the validated helper'
-Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
+Assert-Contract ($shardRun.Contains('-Heavy ($env:SHARD_HEAVY -eq ''true'')') -and
+    $testConsumer.Contains('$heavyShard = ($heavyShards -contains $shardName) -or ($Heavy)')) `
     'a shard declaring heavy: true does not get the heavy path'
 # The 45 sweep and conformance shards exercise every model, so the map puts them on nearly every
 # pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run by
@@ -1243,8 +1223,17 @@ Assert-Contract ($compatCanceller -match "(?m)^    if: \`$\{\{ always\(\) && nee
     'a compat build failure cancels the coverage-everywhere shard matrix that feeds the map'
 $shardJobHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded')
 $shardNeeds = [regex]::Match($shardJobHeader, '(?m)^    needs: \[(?<needs>[^\]]*)\]\s*$')
-Assert-Contract ($shardNeeds.Success -and
-        @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -cnotcontains 'build-compat') `
+# The matrix may wait for the compat build (so an ordinary run never starts shards a red compat build
+# will throw away), but only if its own condition still lets a coverage-everywhere run proceed past a
+# compat failure: without !cancelled() a failed need skips the job before the condition is read.
+$shardIf = [regex]::Match($shardJobHeader, '(?m)^    if:[^
+]+').Value
+$waitsForCompat = $shardNeeds.Success -and
+    @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -ccontains 'build-compat'
+Assert-Contract ($shardNeeds.Success -and (-not $waitsForCompat -or (
+        $shardIf.Contains('!cancelled()') -and
+        $shardIf.Contains("needs.build.result == 'success'") -and
+        $shardIf.Contains("!(needs.build-compat.result == 'failure' && !inputs.collect_coverage_everywhere)")))) `
     'the shard matrix depends on the compat build, so a coverage run can no longer outlive its failure'
 
 # The source must outlive more than one weekly cycle, or a single lost run leaves nothing to rebuild from.
@@ -1415,9 +1404,13 @@ Assert-Contract ($selectorOutputs.Contains('coverage_rolling: ${{ steps.select.o
 Assert-Contract ($shardJobHeader.Contains("timeout-minutes: `${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}")) `
     'the shard job''s timeout is not the previous expression with one term that is false for an empty rolling list'
 Assert-Contract ($testConsumer.Contains('COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}')) 'the shard job does not receive the rolling instrumentation list'
-$rollingShardScript = Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw
-Assert-Contract ($rollingShardScript -match '(?s)\$rollingCoverage = \$false\r?\nif \(\$env:COVERAGE_ROLLING -and -not \$forcedCoverageRun -and -not \$measuresTiming -and\r?\n\s+"\$\(\$env:GITHUB_EVENT_NAME\)" -eq ''schedule''\)') `
+$rollingShardScript = Get-Content -LiteralPath '.github/scripts/Get-ShardCoveragePolicy.ps1' -Raw
+Assert-Contract ($rollingShardScript -match '(?s)\$rollingCoverage = \$false\r?\n\s*if \(\$RollingJson -and -not \$forcedCoverageRun -and -not \$measuresTiming -and\r?\n\s+"\$\(\$EventName\)" -eq ''schedule''\)') `
     'Invoke-Shard.ps1 can instrument for the rolling map outside a scheduled run, on a timing shard, or without a list'
+Assert-Contract ($testConsumer.Contains('. "$PSScriptRoot/Get-ShardCoveragePolicy.ps1"') -and
+    $testConsumer.Contains('$policy = Get-ShardCoveragePolicy -ShardName $shardName') -and
+    $testConsumer.Contains('$collectCoverage = $policy.CollectCoverage')) `
+    'the executed shard does not consume the shared coverage policy it publishes in attempt evidence'
 $rollingDigestUpload = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') -Step 'Upload test-impact digest'
 Assert-Contract ($rollingDigestUpload.Contains("retention-days: `${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && $rollingFlag && 14) || 7 }}")) `
     'digest retention is not the previous expression with one term that is false when the rolling map is off'
@@ -1428,6 +1421,46 @@ Assert-Contract ($rollingBuild.Contains("if: `${{ steps.audit.outputs.certified 
         $rollingBuild.Contains('-AnchorMapFile certified-map/shard-map.json -AnchorCertificateFile certified-map/certification.json') -and
         $map.IndexOf('- name: Upload certified map') -lt $map.IndexOf('- name: Build the rolling map')) `
     'the rolling map is not built by, and bound to, the run that certified its anchor, after that anchor is uploaded'
+
+# Runner recovery is an intermediate attempt. The independently required reconciler decides
+# whether each original logical shard has trustworthy evidence before downstream consumers run.
+$primaryAttempt = Get-JobBlock $validation 'test-net10-sharded'
+$alternateAttempt = Get-JobBlock $validation 'test-net10-alternate'
+$primaryAttemptHeader = Get-JobHeader $primaryAttempt
+$alternateAttemptHeader = Get-JobHeader $alternateAttempt
+$reconciliation = Get-JobBlock $validation 'reconcile-shard-attempts'
+$reconciliationHeader = Get-JobHeader $reconciliation
+Assert-Contract ($primaryAttempt -match '(?m)^    steps: &shard-attempt-steps\r?$' -and
+    $alternateAttempt -match '(?m)^    steps: \*shard-attempt-steps\r?$' -and
+    $alternateAttempt -notmatch '(?m)^      - ') 'primary and alternate attempts do not share the exact same step object'
+foreach ($header in @($primaryAttemptHeader, $alternateAttemptHeader)) {
+    Assert-Contract ($header -match '(?m)^    continue-on-error: true\r?$') 'intermediate runner attempts must defer their outcome to mandatory reconciliation'
+}
+foreach ($key in @('COVERAGE_CARRIED', 'COVERAGE_RUN_WITHOUT_INSTRUMENTATION', 'COVERAGE_ROLLING', 'SHARD_FORCE_COVERAGE')) {
+    $pattern = '(?m)^      ' + [regex]::Escape($key) + ':[ \t]*(?<value>[^\r\n]+)\r?$'
+    $primaryPolicy = [regex]::Matches($primaryAttemptHeader, $pattern)
+    $alternatePolicy = [regex]::Matches($alternateAttemptHeader, $pattern)
+    Assert-Contract ($primaryPolicy.Count -eq 1 -and $alternatePolicy.Count -eq 1 -and
+        $primaryPolicy[0].Groups['value'].Value.Trim() -ceq $alternatePolicy[0].Groups['value'].Value.Trim()) "alternate coverage input $key differs from primary"
+}
+Assert-Contract ($alternateAttemptHeader.Contains("needs.runner-failover-plan.outputs.has_recovery == 'true'") -and
+    $primaryAttempt.Contains('Assert-RunnerAlternateAuthorization.ps1') -and
+    $primaryAttempt.Contains("env.SHARD_ATTEMPT == 'alternate'")) 'alternate execution is not bound to independently authorized runner-loss evidence'
+Assert-Contract ($reconciliationHeader.Contains('always()') -and $reconciliationHeader -notmatch '(?m)^    continue-on-error:') `
+    'logical shard reconciliation can be skipped by an attempt failure or treated as nonfatal'
+foreach ($attemptJob in @('test-net10-sharded', 'test-net10-alternate', 'runner-failover-plan')) {
+    Assert-Contract (Test-JobDependency $reconciliationHeader $attemptJob) "reconciliation does not await $attemptJob"
+}
+foreach ($consumerJob in @('test-regression-analysis', 'ci-test-analysis', 'validation-gate')) {
+    $consumerHeader = Get-JobHeader (Get-JobBlock $validation $consumerJob)
+    Assert-Contract (Test-JobDependency $consumerHeader 'reconcile-shard-attempts') "$consumerJob does not require logical shard reconciliation"
+}
+Assert-Contract ((Get-JobBlock $validation 'validation-gate').Contains('-TestsResult ''${{ needs.reconcile-shard-attempts.result }}''')) `
+    'validation gate does not evaluate the reconciled logical shard result'
+Assert-Contract ((Get-JobBlock $validation 'ci-gate').Contains('-ValidationGateResult ''${{ needs.validation-gate.result }}''')) `
+    'CI Gate does not require the validation gate that enforces reconciliation'
+Assert-Contract ($primaryAttempt -notmatch '(?m)^          overwrite: true\s*$' -and
+    $primaryAttempt.Contains("overwrite: `${{ env.SHARD_ATTEMPT == 'alternate' }}")) 'canonical uploads can overwrite a successful primary without an authorized alternate'
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI impact workflow contract FAILED:'

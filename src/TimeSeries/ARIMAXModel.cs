@@ -136,8 +136,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// 
     /// If all other factors were zero, the prediction would equal this intercept value.
     /// </remarks>
-    // Declared so the parameter surface carries it: the layout is [AR..., MA..., exogenous..., intercept],
-    // the declaration order of the fitted fields, and both the packed copy and ApplyParameters use it.
+    // The generated manifest defines flat offsets by stable field identity and source readiness.
     [AiDotNet.Attributes.FittedParameter]
     private T _intercept;
 
@@ -416,9 +415,8 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private void UpdateModelParameters()
     {
-        // [AR..., MA..., exogenous..., intercept]: the parameter-surface order ApplyParameters reads back
-        ModelParameters = Vector<T>.Concatenate(
-            _arCoefficients, _maCoefficients, _exogenousCoefficients, new Vector<T>(new[] { _intercept }));
+        // The generated registry owns the layout; keep the auxiliary packed view in that same order.
+        ModelParameters = GetParameters();
     }
 
     /// <summary>
@@ -533,36 +531,6 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         return new ARIMAXModel<T>(optionsClone);
     }
 
-    /// <summary>
-    /// Applies the provided parameters to the model.
-    /// </summary>
-    /// <param name="parameters">The vector of parameters to apply.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method updates all the numerical values that determine
-    /// how the model behaves. It's like replacing all the settings that control how
-    /// the model makes predictions.
-    /// </para>
-    /// </remarks>
-    protected override void ApplyParameters(Vector<T> parameters)
-    {
-        int index = 0;
-
-        // Apply base parameters first
-        int baseParamCount = 0;
-        base.ApplyParameters(parameters);
-        index += baseParamCount;
-
-        // Apply ARIMAX-specific parameters into the existing coefficient vectors, in the
-        // [AR..., MA..., exogenous..., intercept] order GetParameters and UpdateModelParameters use
-        parameters.GetSubVector(index, _arCoefficients.Length).CopyTo(_arCoefficients.AsWritableSpan());
-        index += _arCoefficients.Length;
-        parameters.GetSubVector(index, _maCoefficients.Length).CopyTo(_maCoefficients.AsWritableSpan());
-        index += _maCoefficients.Length;
-        parameters.GetSubVector(index, _exogenousCoefficients.Length).CopyTo(_exogenousCoefficients.AsWritableSpan());
-        index += _exogenousCoefficients.Length;
-        _intercept = parameters[index];
-    }
 
     /// <summary>
     /// Gets metadata about the ARIMAX model.

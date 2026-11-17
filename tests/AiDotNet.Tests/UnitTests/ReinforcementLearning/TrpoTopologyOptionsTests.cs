@@ -55,8 +55,8 @@ public sealed class TrpoTopologyOptionsTests
 
         var computed = typeof(TRPOAgent<double>).GetMethod("ComputeAdvantages", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.Invoke(agent, null) ?? throw new InvalidOperationException("ComputeAdvantages missing.");
-        var advantages = (List<double>)(computed.GetType().GetField("Item3")?.GetValue(computed)
-            ?? throw new InvalidOperationException("advantages missing."));
+        var batch = Assert.IsType<(Tensor<double> States, double[] Advantages, double[] Returns)>(computed);
+        var advantages = batch.Advantages;
 
         var valueNetwork = Network(agent, "_valueNetwork");
         double V(Vector<double> s) => valueNetwork.Predict(Tensor<double>.FromVector(s)).ToVector()[0];
@@ -65,12 +65,18 @@ public sealed class TrpoTopologyOptionsTests
         double a0 = 1.0 - V(s0);
         var raw = new[] { a0, a1, a2 };
         double mean = AiDotNet.Helpers.StatisticsHelper<double>.CalculateMean(raw);
-        double std = AiDotNet.Helpers.StatisticsHelper<double>.CalculateStandardDeviation(raw);
+        // The policy standardizes the empirical advantage batch using population variance.
+        double sumSquaredDeviations = 0;
+        foreach (double advantage in raw) sumSquaredDeviations += (advantage - mean) * (advantage - mean);
+        double std = Math.Sqrt(sumSquaredDeviations / raw.Length);
 
-        Assert.Equal(3, advantages.Count);
+        Assert.Equal(3, advantages.Length);
+        Assert.Equal(3, batch.Returns.Length);
+        var baselineValues = new[] { V(s0), V(s1), V(s2) };
         for (int i = 0; i < 3; i++)
         {
             Assert.Equal((raw[i] - mean) / std, advantages[i], 9);
+            Assert.Equal(raw[i] + baselineValues[i], batch.Returns[i], 9);
         }
     }
 

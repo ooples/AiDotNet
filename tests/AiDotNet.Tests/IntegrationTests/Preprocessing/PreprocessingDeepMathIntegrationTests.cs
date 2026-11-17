@@ -35,16 +35,16 @@ public class PreprocessingDeepMathIntegrationTests
     public async Task StandardScaler_HandCalculated_ExactTransformValues()
     {
         // data col0: [1, 2, 3, 4, 5]
-        // mean = 3, variance (sample, n-1) = sum([4,1,0,1,4])/4 = 10/4 = 2.5
-        // std = sqrt(2.5) = 1.58113883...
+        // mean = 3, population variance (ddof=0) = sum([4,1,0,1,4])/5 = 10/5 = 2
+        // std = sqrt(2) = 1.41421356...
         // z-scores = [(1-3)/std, (2-3)/std, (3-3)/std, (4-3)/std, (5-3)/std]
-        //          = [-1.26491, -0.63246, 0, 0.63246, 1.26491]
+        //          = [-1.41421, -0.70711, 0, 0.70711, 1.41421]
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 
         var result = scaler.FitTransform(data);
 
-        double std = Math.Sqrt(2.5);
+        double std = Math.Sqrt(2.0);
         AssertCell(result, 0, 0, (1.0 - 3.0) / std);
         AssertCell(result, 1, 0, (2.0 - 3.0) / std);
         AssertCell(result, 2, 0, 0.0);
@@ -56,14 +56,14 @@ public class PreprocessingDeepMathIntegrationTests
     public async Task StandardScaler_WithoutMean_OnlyDividesByStd()
     {
         // withMean=false: only divide by std, don't subtract mean
-        // data: [2, 4, 6], mean=4, std=sqrt(var)=sqrt(4)=2 (sample var = [(2-4)^2+(4-4)^2+(6-4)^2]/2 = 8/2 = 4)
-        // result should be: [2/2, 4/2, 6/2] = [1, 2, 3]
+        // data: [2, 4, 6], mean=4, population variance = (4+0+4)/3 = 8/3
+        // result should be [2, 4, 6] / sqrt(8/3); centering is disabled, variance still uses the mean
         var scaler = new StandardScaler<double>(withMean: false, withStd: true);
         var data = M(new double[,] { { 2 }, { 4 }, { 6 } });
 
         var result = scaler.FitTransform(data);
 
-        double std = 2.0; // sqrt(4.0)
+        double std = Math.Sqrt(8.0 / 3.0);
         AssertCell(result, 0, 0, 2.0 / std);
         AssertCell(result, 1, 0, 4.0 / std);
         AssertCell(result, 2, 0, 6.0 / std);
@@ -750,14 +750,15 @@ public class PreprocessingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_FitExposesCorrectParameters()
     {
-        // data: [2, 4, 6], mean=4, sample_var=4, std=2
+        // data: [2, 4, 6], mean=4, population variance=8/3, std=sqrt(8/3)
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 2 }, { 4 }, { 6 } });
 
         scaler.Fit(data);
 
         Assert.True(Math.Abs((scaler.Mean ?? throw new InvalidOperationException("scaler.Mean is null where it is required."))[0] - 4.0) < 1e-10, $"Mean: expected 4, got {scaler.Mean[0]}");
-        Assert.True(Math.Abs((scaler.StandardDeviation ?? throw new InvalidOperationException("scaler.StandardDeviation is null where it is required."))[0] - 2.0) < 1e-10, $"Std: expected 2, got {scaler.StandardDeviation[0]}");
+        double expectedStd = Math.Sqrt(8.0 / 3.0);
+        Assert.True(Math.Abs((scaler.StandardDeviation ?? throw new InvalidOperationException("scaler.StandardDeviation is null where it is required."))[0] - expectedStd) < 1e-10, $"Std: expected {expectedStd}, got {scaler.StandardDeviation[0]}");
     }
 
     [Fact(Timeout = 120000)]

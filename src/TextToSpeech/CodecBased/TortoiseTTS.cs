@@ -199,7 +199,14 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         RequirePipeline();
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
         if (_options.TrainingComponent == TortoiseTrainingComponent.UnivNet) return TrainVocoder(sample);
-        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
+        // The speech codes are the step's data: the frozen VQ-VAE's nearest-code search reads its features on the host,
+        // so it runs before the objective a compiled plan replays.
+        // The frozen conditioning encoder's speaker vector is the same kind of step data (its perceiver reads its norm
+        // on the host).
+        int[]? speech = _options.TrainingComponent == TortoiseTrainingComponent.SpeechTokenizer ? null : SpeechIds(sample);
+        bool conditioned = _options.TrainingComponent is TortoiseTrainingComponent.Autoregressive or TortoiseTrainingComponent.Diffusion;
+        Tensor<T>? condition = conditioned ? Conditioning(sample) : null;
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, speech, condition), _optimizer);
     }
 
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
@@ -258,13 +265,24 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         Tensor<T> mel;
         using (new NoGradScope<T>()) mel = DiffusionMel(audio);
         bool adversarial = _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps;
+        int noiseSeed = _options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue);
         Tensor<T>? savedGeneration = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+        T loss;
+        using (var outputs = adversarial ? AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin() : null)
         {
-            var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue)));
-            savedGeneration = new Tensor<T>(generated.Shape.ToArray(), new Vector<T>(generated.ToArray()));
-            return _vocoderTraining!.Generator(audio, generated, adversarial);
-        }, _optimizer!);
+            loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+            {
+                var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(noiseSeed));
+                if (adversarial && AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput("tortoise-generation", Engine.StopGradient(generated));
+                return _vocoderTraining!.Generator(audio, generated, adversarial);
+            }, _optimizer!);
+            if (outputs is not null)
+            {
+                outputs.Complete();
+                savedGeneration = outputs.Get("tortoise-generation");
+            }
+        }
         if (adversarial)
         {
             _vocoderDiscriminatorTurn = true;
@@ -347,7 +365,25 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return _univNet!.Generate(mel, random);
     }
 
-    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample)
+    private int[] SpeechIds(TtsTrainingSample<T> sample)
+    {
+        var audio = sample.Audio ?? throw new ArgumentException("TorToiSe training requires Audio.", nameof(sample));
+        return sample.CodecTokens is not null
+            ? TortoiseOps<T>.IdsOf(sample.CodecTokens)
+            : TortoiseOps<T>.IdsOf(EncodeToTokens(audio));
+    }
+
+    private Tensor<T> Conditioning(TtsTrainingSample<T> sample)
+    {
+        var audio = sample.Audio ?? throw new ArgumentException("TorToiSe training requires Audio.", nameof(sample));
+        var reference = sample.SpeakerReference ?? audio;
+        using var _ = new NoGradScope<T>();
+        var reference22 = Resample(reference, _options.SampleRate, _options.TokenizerSampleRate);
+        return _autoregressive!.Conditioning(AutoregressiveMel(PrefixOrPad(reference22, _options.ConditioningSamples)), false,
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
+    }
+
+    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample, int[]? speechIds = null, Tensor<T>? condition = null)
     {
         var audio = sample.Audio ?? throw new ArgumentException("TorToiSe training requires Audio.", nameof(sample));
         if (_options.TrainingComponent == TortoiseTrainingComponent.UnivNet)
@@ -357,14 +393,11 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
             return _vocoderTraining!.Generator(audio, generated, _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps);
         }
         int[] text = TextIds(sample.Tokens);
-        int[] speech = sample.CodecTokens is not null
-            ? TortoiseOps<T>.IdsOf(sample.CodecTokens)
-            : TortoiseOps<T>.IdsOf(EncodeToTokens(audio));
         var reference = sample.SpeakerReference ?? audio;
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17);
 
         if (_options.TrainingComponent == TortoiseTrainingComponent.Clvp)
-            return _clvp!.ContrastiveLoss(text, speech, random);
+            return _clvp!.ContrastiveLoss(text, speechIds ?? SpeechIds(sample), random);
 
         var mel22 = AutoregressiveMel(Resample(audio, _options.SampleRate, _options.TokenizerSampleRate));
         if (_options.TrainingComponent == TortoiseTrainingComponent.SpeechTokenizer)
@@ -380,13 +413,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
             return loss;
         }
 
-        Tensor<T> condition;
-        using (new NoGradScope<T>())
-        {
-            var reference22 = Resample(reference, _options.SampleRate, _options.TokenizerSampleRate);
-            condition = _autoregressive!.Conditioning(AutoregressiveMel(
-                PrefixOrPad(reference22, _options.ConditioningSamples)), false, random);
-        }
+        condition ??= Conditioning(sample);
+        int[] speech = speechIds ?? SpeechIds(sample);
         if (_options.TrainingComponent == TortoiseTrainingComponent.Autoregressive)
             return _autoregressive!.Loss(text, speech, condition, true, random);
 

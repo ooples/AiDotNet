@@ -14880,6 +14880,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var resolvedOptimizer = ResolveCustomStepOptimizer(optimizer);
         var session = sessionPerOptimizer ? ObjectiveSession(resolvedOptimizer) : FusedSession;
+        var layerGraphBreak = LayerGraphBreakReason();
+        bool declaredClosureBreak = closureObjective is not null && layerGraphBreak is not null;
 
         // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
         // exist when it is built. A custom objective can reach layers the network's own forward never does (a
@@ -14892,7 +14894,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for a gradient penalty, which records nothing under the warm-up's no-grad scope), and the eager step it
         // replaces never ran it twice. If it cannot run there, the objective trains on its eager step.
         bool objective = warmupKey is not null;
-        if (input.Length > 0 && (!objective || HasUninitializedParameters) && _warmedCustomForwards.Add(warmupKey ?? forward.Method))
+        if (!declaredClosureBreak && input.Length > 0 && (!objective || HasUninitializedParameters)
+            && _warmedCustomForwards.Add(warmupKey ?? forward.Method))
         {
             bool wasTraining = IsTrainingMode;
             SetTrainingMode(false);
@@ -14945,7 +14948,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Only their ordinary independent Train path must defer to the parent graph.
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
-                : LayerGraphBreakReason(),
+                : layerGraphBreak,
+            // Only an explicit layer declaration may bridge a committed closure step to the plan's optimizer.
+            ClosureGraphBreakPolicy = declaredClosureBreak && session.IsCommitted
+                ? Training.ClosureGraphBreakPolicy.UseConfiguredOptimizer
+                : Training.ClosureGraphBreakPolicy.Disallow,
             VerifyReplayAgreement = verifyReplayAgreement,
             EagerReplay = eagerFallback,
             ObjectiveKey = verifyReplayAgreement ? warmupKey ?? forward.Method : null,
@@ -17114,6 +17121,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             Owner = this,
             Optimizer = opt,
+            ReportsRetainedOutputOutcome = Training.TapeTrainingStepper<T>.ReportsRetainedOutputOutcome(opt),
+
             RegularizeGradients = isDistributed ? OptimizerRegularizer(opt) : null,
             ModelGradientClip = isDistributed && clipCustomObjective ? MaxGradNormValue : 0.0,
             // An armed probe only ever ADDS questions: its tensors are differentiated, never updated.
@@ -17282,19 +17291,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // time, after the trace had already advanced the forward's per-step state (stochastic depth and SpecAugment
         // draws, batch-norm running statistics), and the model trained on a different trajectory than its eager step.
         if (!SupportsFusedCompiledTraining) return false;
+        var declaredSession = LayerGraphBreakReason() is not null
+            ? ObjectiveSession(ResolveCustomStepOptimizer(optimizer)) : null;
+        bool RefuseUnsupportedDeclaredBreak(string reason)
+        {
+            if (declaredSession?.IsCommitted == true)
+                throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(new InvalidOperationException(reason));
+            return false;
+        }
         // The groups are asked only of a model that names any. Collecting the trainable tensors is not free of effect
         // on a model whose lazily shaped layers have not seen an input yet: it allocates their weights early, and their
         // seeded initialization then differs from the one the first forward alone gives. CLAP's patch-merging
         // reductions started from different weights through this entry point than through every other one.
-        if (GradientValueClip > 0.0) return false;
+        if (GradientValueClip > 0.0)
+            return RefuseUnsupportedDeclaredBreak("The declared closure step clips model gradients by value.");
         if (HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
-            return false;
+            return RefuseUnsupportedDeclaredBreak("The declared closure step uses custom gradient clipping groups.");
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.
         var resolved = ResolveCustomStepOptimizer(optimizer);
-        if (ObjectiveSession(resolved).IsDisabled) return false;
-        return !Training.FusedTrainingSession<T>.OverridesStepBelowFusedSpec(resolved.GetType())
-            && Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(resolved, out _);
+        var session = ObjectiveSession(resolved);
+        if (session.IsDisabled) return false;
+        // An uncommitted declared break takes its ordinary eager step without probing or consuming a warm-up draw.
+        if (LayerGraphBreakReason() is not null && !session.IsCommitted) return false;
+        if (Training.FusedTrainingSession<T>.OverridesStepBelowFusedSpec(resolved.GetType()))
+            return RefuseUnsupportedDeclaredBreak("The declared closure step's optimizer overrides its mapped step.");
+        if (!Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(resolved, out _))
+            return RefuseUnsupportedDeclaredBreak("The declared closure step's optimizer has no fused configuration.");
+        return true;
     }
 
     /// <summary>
@@ -22489,13 +22513,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return importance;
         }
 
-        // Get the weights from the first layer
-        Vector<T> weights = firstLayer.GetParameters();
-        int featureCount = firstLayer.GetInputShape()[0];
-        int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
+        int featureCount;
+        Tensor<T> featureScores;
+        if (firstLayer is DenseLayer<T> dense)
+        {
+            // A lazy dense layer has no input width or weights to attribute yet. As with
+            // a model with no layers, attribution is unavailable until shapes are resolved;
+            // introspection must not invent a width or initialize random weights for it.
+            if (!dense.IsShapeResolved) return importance;
 
-        // Calculate feature importance by summing absolute weights per input feature
-        var featureScores = FirstLayerFeatureImportance(weights, featureCount, outputSize);
+            // Dense is feature-last, including batched/sequence inputs. Its weight matrix
+            // is [features, outputs]; leading input axes and the bias are not features.
+            using var noGrad = new NoGradScope<T>();
+            var denseWeights = dense.GetWeights();
+            featureCount = denseWeights.Shape[0];
+            featureScores = Engine.ReduceSum(Engine.TensorAbs(denseWeights), new[] { 1 }, false);
+        }
+        else
+        {
+            Vector<T> weights = firstLayer.GetParameters();
+            featureCount = firstLayer.GetInputShape()[0];
+            int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
+            featureScores = FirstLayerFeatureImportance(weights, featureCount, outputSize);
+        }
 
         // Normalize the scores to sum to 1
         T totalScore = Engine.TensorSum(featureScores);

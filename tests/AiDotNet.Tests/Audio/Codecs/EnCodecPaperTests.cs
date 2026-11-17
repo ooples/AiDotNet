@@ -169,6 +169,50 @@ public class EnCodecPaperTests
         Assert.Equal(100.0, balancer.AveragedNorms["2"], 12);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task TracedBalancer_MatchesTheReferenceAndReportsTheWeightedLoss()
+    {
+        await Task.Yield();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var balancer = new LossBalancer<double>(engine, new Dictionary<string, double> { ["1"] = 1, ["2"] = 1 });
+        var x = new Tensor<double>(new[] { 1 });
+        var shift = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        Dictionary<Tensor<double>, Tensor<double>> gradients;
+        double weighted;
+        using (var tape = new GradientTape<double>())
+        {
+            var (surrogate, loss) = balancer.TracedSurrogate(x, new[] { shift }, context =>
+                new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                {
+                    ["1"] = y => engine.TensorAbs(engine.TensorSubtract(y, context[0])),
+                    ["2"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(engine.TensorAdd(y, context[0])), 100.0),
+                });
+            gradients = tape.ComputeGradients(surrogate, new[] { x });
+            weighted = loss.GetFlat(0);
+        }
+        Assert.Equal(0.0, gradients[x][0], 12);
+        Assert.Equal(101.0, weighted, 12);
+        Assert.Equal(1, balancer.Steps);
+    }
+
+    [Fact(Timeout = 600000)]
+    public async Task BalancedTraining_UpdatesTheNormAveragesOncePerGeneratorStep()
+    {
+        await Task.Yield();
+        using var model = new EnCodec<double>(Architecture(), TinyOptions());
+        var audio = new Tensor<double>(new[] { 96 });
+        for (int i = 0; i < audio.Length; i++) audio[i] = 0.5 * Math.Sin(2 * Math.PI * 1500 * i / 24000.0);
+        const int steps = 6;
+        for (int i = 0; i < steps; i++) model.Train(audio, audio);
+        // Every balanced generator step ran a compiled plan, none the eager tape.
+        Assert.True(model.CustomFusedStepCount >= steps, $"fused steps {model.CustomFusedStepCount}");
+        Assert.Equal(0, model.CustomEagerStepCount);
+        Assert.Equal(0, model.CustomOutsidePlanStepCount);
+        var balancer = model.Balancer!;
+        Assert.Equal(steps, balancer.Steps);
+        Assert.All(balancer.AveragedNorms.Values, norm => Assert.True(norm > 0 && !double.IsInfinity(norm), $"norm {norm}"));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Streamable_OutputDoesNotDependOnFutureInput()
     {

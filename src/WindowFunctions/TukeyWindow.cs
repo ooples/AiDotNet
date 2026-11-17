@@ -154,8 +154,9 @@ public class TukeyWindow<T> : IWindowFunction<T>
             return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.5, 0.5);
         }
 
-        // The index n, 2n/(alpha N) and the region tests are formed in double: Half holds integers exactly only
-        // up to 2048, so an index formed in Half merges neighbouring samples of a longer window.
+        // The index n, both cosine tapers and the region tests are formed in double and converted once at the end
+        // (like WindowFunctionHelper.GeneralCosine): Half holds integers exactly only up to 2048, and rounding
+        // 2n/(alpha N) to Half before subtracting 2/alpha - 1 and multiplying by pi amplified rounding on the right taper.
         var engine = AiDotNetEngine.Current;
         double alpha = _numOps.ToDouble(_alpha);
         double N = windowSize - 1;
@@ -163,25 +164,23 @@ public class TukeyWindow<T> : IWindowFunction<T>
         Tensor<double> n = WindowFunctionHelper.SampleIndices<double>(windowSize);
 
         // 2n/(alpha N), shared by both tapers
-        Tensor<T> scaled = TensorCopyHelper.CastLogical<double, T>(
-            engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, 2.0), alpha * N));
-        T pi = _numOps.FromDouble(Math.PI);
-        T half = _numOps.FromDouble(0.5);
+        Tensor<double> scaled = engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, 2.0), alpha * N);
 
         // Left taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 1)))
-        Tensor<T> left = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
-            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scaled, _numOps.One), pi)), _numOps.One), half);
+        Tensor<double> left = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scaled, 1.0), Math.PI)), 1.0), 0.5);
 
         // Right taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 2/alpha + 1)))
-        T rightShift = _numOps.Subtract(_numOps.One, _numOps.Divide(_numOps.FromDouble(2), _alpha));
-        Tensor<T> right = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
-            engine.TensorMultiplyScalar(engine.TensorAddScalar(scaled, rightShift), pi)), _numOps.One), half);
+        double rightShift = 1.0 - 2.0 / alpha;
+        Tensor<double> right = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(scaled, rightShift), Math.PI)), 1.0), 0.5);
 
         // Flat region: n < N - alpha N / 2 (and past the left taper)
-        Tensor<T> flat = Tensor<T>.CreateDefault(new[] { windowSize }, _numOps.One);
-        Tensor<T> beforeRight = TensorCopyHelper.CastLogical<double, T>(engine.TensorLessThan(n, N - halfAlphaN));
-        Tensor<T> afterLeft = TensorCopyHelper.CastLogical<double, T>(engine.TensorGreaterThan(n, halfAlphaN));
-        return engine.TensorWhere(afterLeft, engine.TensorWhere(beforeRight, flat, right), left).ToVector();
+        Tensor<double> flat = Tensor<double>.CreateDefault(new[] { windowSize }, 1.0);
+        Tensor<double> beforeRight = engine.TensorLessThan(n, N - halfAlphaN);
+        Tensor<double> afterLeft = engine.TensorGreaterThan(n, halfAlphaN);
+        Tensor<double> window = engine.TensorWhere(afterLeft, engine.TensorWhere(beforeRight, flat, right), left);
+        return TensorCopyHelper.CastLogical<double, T>(window).ToVector();
     }
 
     /// <summary>

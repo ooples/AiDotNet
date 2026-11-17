@@ -17795,7 +17795,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // so the fixture derives it from the model instead of restating a generic 16.
                 sb.AppendLine(model.ClassName is "HamiltonianNeuralNetwork" or "PhysicsInformedNeuralNetwork"
                         or "MultiFidelityPINN" or "DomainDecompositionPINN" or "DeepRitzMethod" or "VariationalPINN"
-                        or "MultiScalePINN" or "InverseProblemPINN"
+                        or "MultiScalePINN" or "InverseProblemPINN" or "LagrangianNeuralNetwork"
                     ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
                     : $"    protected override int[] InputShape => new[] {{ {dim} }};");
                 sb.AppendLine(model.ClassName is "QuantumNeuralNetwork" or "PhysicsInformedNeuralNetwork"

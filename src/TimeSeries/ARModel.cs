@@ -86,7 +86,6 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
 
     // Mean of the training series. The AR coefficients are fitted on the de-meaned series, so every
     // prediction is mean + Σ φ_i (y[t-i] - mean) (statsmodels AutoReg / ARIMA with trend 'c').
-    [Buffer]
     private T _seriesMean;
 
     /// <summary>
@@ -363,7 +362,8 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     {
         // VECTORIZED: Use dot product for AR prediction
         // ŷ[t] = μ + Σ φ_i (y[t-i] - μ): the coefficients were fitted on the de-meaned series
-        int availableHistory = Math.Min(_arOrder, t);
+        int effectiveOrder = Math.Min(_arOrder, _arCoefficients.Length);
+        int availableHistory = Math.Min(effectiveOrder, t);
         if (availableHistory == 0)
         {
             return _seriesMean;
@@ -372,7 +372,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
         // Past deviations y[t-1] - μ, ..., y[t-availableHistory] - μ (most recent first)
         Vector<T> pastVector = TimeSeriesEngineOps<T>.Reverse(y.GetSubVector(t - availableHistory, availableHistory));
         Vector<T> pastDeviations = Engine.Subtract(pastVector, Engine.Fill(availableHistory, _seriesMean));
-        Vector<T> coeffSlice = availableHistory < _arOrder
+        Vector<T> coeffSlice = availableHistory < _arCoefficients.Length
             ? _arCoefficients.Slice(0, availableHistory)
             : _arCoefficients;
 

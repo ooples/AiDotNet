@@ -98,6 +98,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model, Features, 0.0, 10.0)) return;
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: 0.01);
 
         model.Fit(trainX, trainY);
@@ -135,6 +137,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model, Features, 10.0, 100.0)) return;
         // Cluster training data near origin
         var trainX = new Matrix<double>(20, Features);
         var trainY = new Vector<double>(20);
@@ -183,6 +187,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model, Features, 0.0, 1.0)) return;
         // Use small dataset with low noise for clear interpolation test
         var (trainX, trainY) = GenerateNormalizedLinearData(15, Features, rng, noise: 0.001);
 
@@ -352,6 +358,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model, Features, 0.0, 10.0)) return;
         double noiseStd = 0.1;
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: noiseStd);
 
@@ -398,7 +406,9 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var model1 = CreateModel();
+        using var model1 = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model1, Features, 1.0, 10.0)) return;
         var model2 = CreateModel();
 
         var (trainX1, trainY1) = GenerateNormalizedLinearData(TrainSamples, Features, rng1, noise: 0.01);
@@ -440,7 +450,9 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var model1 = CreateModel();
+        using var model1 = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model1, Features, 1.0, 101.0)) return;
         var model2 = CreateModel();
 
         var (trainX1, trainY1) = GenerateNormalizedLinearData(TrainSamples, Features, rng1, noise: 0.01);
@@ -481,6 +493,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
+        // Verify the declared likelihood and prior instead of assuming Gaussian smoothing.
+        if (GaussianProcessPosteriorContract.VerifyFixedPrior(model, Features, 1.0, 100.0)) return;
         var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
@@ -533,7 +547,8 @@ public abstract class GaussianProcessModelTestBase
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var modelSmall = CreateModel();
+        using var modelSmall = CreateModel();
+        if (GaussianProcessPosteriorContract.VerifyIndependentAdditionalData(modelSmall, Features)) return;
         var modelLarge = CreateModel();
 
         // Small dataset: 10 points

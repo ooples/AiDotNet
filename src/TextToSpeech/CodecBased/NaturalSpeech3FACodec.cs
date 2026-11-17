@@ -106,7 +106,9 @@ internal sealed class FACodecModel<T>
     /// latent (v2: from the prosody features <c>[1, mels, frames]</c>), z_c from the latent, z_d from the latent minus
     /// stop(z_p + z_c); h_t the mean over frames of the timbre Transformer on the latent.
     /// </summary>
-    public FACodecFactors<T> Factorize(Tensor<T> latent, Tensor<T>? prosodyFeature, bool training, Random? random)
+    /// <remarks>Without <paramref name="readCodes"/> the factors carry no codes: reading them is a host argmax, which a
+    /// training objective that only needs the quantized groups must not do.</remarks>
+    public FACodecFactors<T> Factorize(Tensor<T> latent, Tensor<T>? prosodyFeature, bool training, Random? random, bool readCodes = true)
     {
         var prosodyInput = latent;
         if (_c.MelProsody)
@@ -120,9 +122,9 @@ internal sealed class FACodecModel<T>
         var detailInput = _engine.TensorSubtract(latent, Ns2Ops.Detach(_engine.TensorAdd(zp, zc)));
         var zd = Quantizers[2].Forward(detailInput);
         int frames = latent.Shape[2], codebooks = _c.Codebooks;
-        var codes = new int[codebooks, frames];
+        var codes = new int[readCodes ? codebooks : 0, readCodes ? frames : 0];
         int row = 0;
-        foreach (var q in Quantizers)
+        foreach (var q in readCodes ? Quantizers : Enumerable.Empty<FactorizedVectorQuantizerLayer<T>>())
         {
             var c = q.LastCodes!;
             for (int k = 0; k < c.GetLength(0); k++, row++)

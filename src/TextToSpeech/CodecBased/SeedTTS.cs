@@ -223,10 +223,12 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             _discriminatorTurn = true;
             try
             {
+                // The generator's waveform is the discriminator step's data: computed before its objective, so the codec
+                // GAN's detach copies a value of this step rather than reading the traced generator on the host.
+                Tensor<T> generated;
+                using (new NoGradScope<T>()) generated = Snapshot(CodecTrainingWaveform(sample.Audio!));
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    Tensor<T> generated;
-                    using (new NoGradScope<T>()) generated = CodecTrainingWaveform(sample.Audio!);
                     var real = Engine.TensorNarrow(Engine.Reshape(sample.Audio!, new[] { sample.Audio!.Length }), 0, 0, generated.Length);
                     return _codecGan!.DiscriminatorLoss(real, generated);
                 }, _discriminatorOptimizer!);
@@ -449,7 +451,11 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return IdTensor(ids);
     }
 
-    private static Tensor<T> Detached(Tensor<T> tensor) => new(tensor._shape, tensor.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> tensor) => Engine.StopGradient(tensor);
+
+    // A host copy of an eager pass's output, taken outside the traced objective.
+    private static Tensor<T> Snapshot(Tensor<T> x) => new(x._shape, x.ToVector());
 
     private int[] IdsOf(Tensor<T> tensor, int vocabulary)
         => FrontEnd.TtsTokenIds.Read(tensor, vocabulary, int.MaxValue, "Seed-TTS");
