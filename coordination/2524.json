@@ -976,7 +976,7 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "PUSHED root-reviewed captured batch after prior cycle terminal. 165 focused tests pass0skip; net471/net462 test builds pass. Full exact-head GitHub CI monitoring underway. CUDA numeric assertion unresolved until real execution. No independent PR source pushes until cycle terminal; no public release or merge.",
+      "status": "CI44141107008:31success,1CPUfailure,15conditional skips,1CUDAactive. SoleCPUfailure is old host-loss test expecting plan construction despite newly approved explicit-producer refusal; test-only update preserves both original guard checks and adds exact compile exception. Local15targeted tests pass0skip. Hold both local commits until CUDA terminal, then reconcile/push verified batch. Separate stale-map finding awaits user decision; NOT implemented. No merge/release.",
       "commit": "580ec37781da678b62c15c806c5ae823e9fc8ab4",
       "verification": {
         "focused_net10": {
@@ -986,9 +986,32 @@
         },
         "build_net471": "success",
         "build_net462": "success",
-        "cuda": "pending actual GitHub execution"
+        "cuda": "pending actual GitHub execution",
+        "host_loss_and_handover": {
+          "passed": 15,
+          "failed": 0,
+          "skipped": 0
+        }
       },
-      "ci_run": 44141107008
+      "ci_run": 44141107008,
+      "pending_local_commits": [
+        "dc827d7d0",
+        "b81749a23"
+      ],
+      "ci_cpu": {
+        "total": 26382,
+        "passed": 17099,
+        "failed": 1,
+        "skipped": 9282,
+        "failure": "ClosureObjectiveHostLossTests.Host_loss_with_a_recorded_backward_records_no_guard",
+        "local_correction": "b81749a23; passing targeted verification"
+      },
+      "pending_scope_decision": {
+        "finding": "Reused nonpersistent tape can publish stale named outputs if next forward retains no outputs",
+        "status": "interactive question pending; no implementation or repro build",
+        "exposure": "Native reuse supported; observed ordinary consumer steps create fresh tapes",
+        "proposal": "Bounded registration/publication epoch validation and regressions, 30-45 minutes"
+      }
     }
   ],
   "codex_assignments": {
@@ -1534,7 +1557,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T18:16:04.903787+00:00",
+  "updated_utc": "2026-11-17T18:18:50.805074+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
