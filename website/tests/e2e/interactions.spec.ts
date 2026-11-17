@@ -100,6 +100,14 @@ for (const [path, ids, destination] of [
       // Stop at Supabase's authorize endpoint: following it would leave for GitHub/Google.
       await page.route('**/auth/v1/authorize**', async (route) => {
         authorize = new URL(route.request().url());
+        if (authorize.hostname !== 'preview-test.supabase.co') {
+          const response = await route.fetch({ maxRedirects: 0, timeout: 15_000 });
+          expect(response.status(), `${provider} is enabled and starts a real provider authorization`).toBe(302);
+          const destination = new URL(response.headers()['location']);
+          expect(destination.hostname).toBe(provider === 'github' ? 'github.com' : 'accounts.google.com');
+          expect(new URL(destination.searchParams.get('redirect_uri')!).hostname).toBe(authorize.hostname);
+          await response.dispose();
+        }
         await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>provider redirect (stubbed by test)</p>' });
       });
       await page.goto(path);

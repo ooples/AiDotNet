@@ -21,6 +21,39 @@ function docRoutes(): string[] {
   return [...new Set(['/docs/', ...out])].sort();
 }
 
+test('documentation search finds a page, opens its result, and clears an empty search', async ({ page }) => {
+  await page.goto('/docs/getting-started/installation/');
+  const search = page.locator('#docs-search input');
+  await expect(search).toBeVisible();
+  await search.fill('installation');
+  const result = page.locator('#docs-search .pagefind-ui__result-link').first();
+  await expect(result).toBeVisible({ timeout: 15_000 });
+  const target = await result.getAttribute('href');
+  expect(target).toBeTruthy();
+  await result.click();
+  await expect(page).toHaveURL(new RegExp(new URL(target!, page.url()).pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  await expect(page.locator('article h1').or(page.locator('main h1')).first()).toBeVisible();
+  // Quoting asks Pagefind for an exact phrase; unquoted queries intentionally fall back to
+  // shorter prefix matches and can find one-letter identifiers in the generated API docs.
+  await page.locator('#docs-search input').fill('"zzqxxvvppllkknnzzqxxvv"');
+  await expect(page.locator('#docs-search .pagefind-ui__message')).toContainText(/no results/i, { timeout: 15_000 });
+  await page.locator('#docs-search .pagefind-ui__search-clear').click();
+  await expect(page.locator('#docs-search input')).toHaveValue('');
+  await expect(page.locator('#docs-search .pagefind-ui__result-link')).toHaveCount(0);
+});
+
+test('phone documentation navigation opens and follows a destination', async ({ page }, info) => {
+  test.skip(info.project.name !== 'anon-mobile', 'phone navigation only');
+  await page.goto('/docs/getting-started/installation/');
+  const nav = page.locator('details').filter({ has: page.getByText('Documentation Navigation', { exact: true }) });
+  await nav.locator('summary').click();
+  const link = nav.getByRole('link', { name: 'Quick Start', exact: true });
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(/\/docs\/getting-started\/quickstart\//);
+  await expect(page.locator('h1')).toBeVisible();
+});
+
 test('every docs page renders with a heading and no page errors', async ({ page }, info) => {
   test.skip(info.project.name !== 'anon-desktop', 'run once');
   test.setTimeout(240_000);
