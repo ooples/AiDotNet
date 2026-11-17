@@ -77,7 +77,7 @@ public sealed class UnmatchedGradientPublicationTests
             Assert.Null(layer.ScatteredParameterGradients);
 
             var gradient = new Tensor<float>(Enumerable.Repeat(2f, parameter.Length).ToArray(), parameter.Shape.ToArray());
-            var alias = gradient.ReshapeView(new[] { gradient.Length });
+            var alias = gradient.Reshape(new[] { gradient.Length });
             var matching = new Dictionary<Tensor<float>, Tensor<float>> { [parameter] = alias };
             Assert.Equal(parameter.Length, layer.ScatterParameterGradients(matching, GradientSourceOwnership.Plan));
             gradient.AsWritableSpan().Fill(5f);
