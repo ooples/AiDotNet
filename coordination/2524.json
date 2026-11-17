@@ -707,6 +707,17 @@
     }
   ],
   "questions": [
+{
+  "id": "antigravity-review-multiscale-compiled-lifecycle",
+  "status": "OWNER ACTION REQUIRED; root blocks endorsement of this bypass; preserve ownership",
+  "owner": "Antigravity Wave1 Batch2",
+  "commit": "0b08b92b5a552bf085237f5f3c8971c0ac4100af",
+  "files": [
+    "src/PhysicsInformed/PINNs/MultiScalePINN.cs"
+  ],
+  "finding": "TrainEpoch479-498 temporarily sets IsFusedTrainingDisabled across the shared fused session and all objective sessions. Disabled TryStep declines before the committed-state check, then TrainCustomTapeStep runs eager updates. This bypasses committed-plan continuity/refusal and restores every session from one saved Boolean.",
+  "request": "Remove the runtime disabling latch; provide supported replay/lifecycle preserving optimizer continuity, refusals and individual session states. Test compiled-to-Solve-to-compiled continuity, clipping and random draws. Do not pass tests by silently disabling compiled training. Eleven baseline removals remain unproven: published verification excludes option-sensitivity tests."
+},
     {
       "id": "student-t-statistical-contract",
       "status": "approved",
