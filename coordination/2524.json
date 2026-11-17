@@ -28,10 +28,15 @@
       "repository": "ooples/AiDotNet",
       "files": [
         "src/TextToSpeech/Vocoders/HiftModules.cs",
-        "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs"
+        "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs",
+        "src/Training/CompiledStepRandom.cs",
+        "tests/AiDotNet.Tests/UnitTests/Training/CompiledStepRandomDataTests.cs"
       ],
-      "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests.",
-      "status": "ACTIVE under same exclusive HiftModules/HiftReplay claim. Preserve harmonic algorithm, per-step phase/noise draws, detached F0 and trainable Merge. Root review before consolidated build. Antigravity1B excluded these paths."
+      "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests. Necessary bounded shared internal typed-data draw hook and independent mixed-type ordering, dtype/shape mismatch, no-probe-draw, suppression and plan-refill regressions. Root reviews complete4file diff before build.",
+      "status": "ACTIVE root-approved necessary shared hook. Existing draw recorder is primary-T only; internal mixed-payload support avoids narrowing double HiFT draws. Estimated additional30-45min; no acceptance changes or new package release.",
+      "file_scope_limits": {
+        "src/Training/CompiledStepRandom.cs": "ONLY internal DrawData<TData> under same primary-T recorder/suppression/capture/replay. Keep public Draw behavior; typed refill/version/invalidation, capture dtype+shape checks. Preserve exact double phase/noise RNG for float/Half; no hidden Random capture or public/native API change."
+      }
     },
     {
       "owner": "this session/root native replay validation",
@@ -1681,7 +1686,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:33:00Z",
+  "updated_utc": "2026-11-17T21:33:33.4385657Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
