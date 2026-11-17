@@ -589,6 +589,13 @@
     "required": "Claude must confirm exact bounded helper ownership and fix these reads, or explicitly hand off. Root will not make overlapping helper edits. Native BatchNorm/SearchSorted scope remains pending user decision and is not claimed here."
   },
   "verification": {
+    "inventory_and_precision_batch": {
+      "prior_cycle": "44006338662 terminal: tooling and normal net10 compilation passed; inventory failed two unrouted classes. Workflow automatically cancelled remaining jobs; zero runtime cases. All 23 jobs terminal.",
+      "routes_commit": "316993d725: exact HamiltonianOptionObservationTests and DenseFeatureImportanceTests routes; canonical inventory 5240 classes/166 filters/zero uncovered, manifest drift passed, all 20 TypeImpact controls passed including unmatched-class rejection. Existing ce7928 test DLL unchanged.",
+      "precision_commit": "af3134401a: verify manual PixelLM FP32 segmentation scaffold and reject generated duplicate; production precision unchanged. Exact changed file compiled; bounded manual contract and 54 unchanged named checks passed on unchanged ce7928 assembly. Actual rebuilt smoke method still requires GitHub.",
+      "sam2_review": "38098bfc08 source and test-contract diff reviewed. Contributor reports 187 passed/18 existing skips; exact tested DLL/package identity requested separately. Preserve source without claiming independent re-verification.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-b37c/manifest-routing-* and C:/Users/cheat/source/artifacts/codex2524/float-smoke-check"
+    },
     "rolling_policy_repair_2c59cdd76e": {
       "source": "2c59cdd76e",
       "review": "Root and independent reviewer approved five-file bounded canonical policy integration; coverage behavior and gates unchanged.",
@@ -737,6 +744,12 @@
     }
   ],
   "questions": [
+    {
+      "id": "antigravity-sam2-verification-identity",
+      "owner": "Antigravity Wave2 Batch6",
+      "status": "OWNER EVIDENCE REQUEST; source/test-contract diff reviewed; no confirmed numeric defect",
+      "request": "For 38098bfc08, post the exact prebuilt test DLL source commit/hash and Tensors package version used by the reported 187-pass/18-pre-existing-skip run. Existing receipt links an inaccessible TRX; do not treat it as independently reverified. The combined next GitHub snapshot will verify actual source/package identities."
+    },
     {
       "id": "antigravity-review-multiscale-compiled-lifecycle",
       "status": "OWNER ACTION REQUIRED; root blocks endorsement of this bypass; preserve ownership",
