@@ -227,7 +227,7 @@
         "src/Preprocessing/FeatureSelection/Filter/Correlation/PartialCorrelation.cs",
         "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionInformationOps.cs"
       ],
-      "status": "claimed; Wave 1 in progress across isolated fixer-1..4 + adversarial verifier-1..2 worktrees"
+      "status": "Wave 1 Batch 1 (c471ab3cf0, 78/78 local), Batch 3 (45c8bb9480, 125/125 local), and Batch 4 (c66248d6bd, 199/199 local) undergoing independent adversarial verification; Batch 2 (PINN44/MultiFidelityPINN24) in progress on fixer-2"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -361,7 +361,6 @@
         ],
         "consumer_constraint": "Prepare reviewed patches for the next validated artifact pin; do not alter or push the currently pinned125 consumer feed prematurely. No generic compatibility framework, public release or weakened existing guards."
       },
-
       "new_files": [
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
       ],
@@ -423,6 +422,60 @@
         "No public validation release or PR-branch push; consolidated root review before build."
       ],
       "status": "CLAIMED; explicit user CUDA approval, exact disjoint files reviewed by root. API agreement with core required before edits."
+    },
+    {
+      "owner": "Antigravity swarm (Wave 2: fixer-1, fixer-3, fixer-4)",
+      "scope": "Wave 2 unclaimed shard batches: (Batch 5 / fixer-1) CUPS cascade-mask-rcnn parameter layout (25 failures), KMaXDeepLab option routing (16), Sonata decoder options (4), OWLv2 PatchSize option (1); (Batch 6 / fixer-3) SAM2/SAM21 video/image segmentation IndexOutOfRange (18, strictly excluding SamNetwork.cs/SamTraining.cs) + PointCloudMedicalSegmentation Predict spatial shape (10); (Batch 7 / fixer-4) MetaLearning AWGIM/MANN/UnsupervisedMetaLearn (7, strictly excluding MetaLearnerBase.cs), Video RVM state/clone determinism + Figan/Mcnet subnormal losses (8), ShapE/DiTNoisePredictor conditioned latent shape (1), MMS FreezeFeatureEncoder option (1), and RandomizedSmoothing/UCB/PortfolioManagerEnvironment/BidiagonalDecomposition numeric fixes (4)",
+      "files": [
+        "src/ComputerVision/Segmentation/Panoptic/CUPS.cs",
+        "src/ComputerVision/Segmentation/Panoptic/CUPSOptions.cs",
+        "src/ComputerVision/Segmentation/Panoptic/CascadeMaskRCNNHead.cs",
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLab.cs",
+        "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLabOptions.cs",
+        "src/ComputerVision/Segmentation/PointCloud/Sonata.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataOptions.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataObjectives.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataPretraining.cs",
+        "src/ComputerVision/Segmentation/PointCloud/SonataPrototypeHead.cs",
+        "src/VisionLanguage/Grounding/OWLv2.cs",
+        "src/VisionLanguage/Grounding/OWLv2Options.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2Network.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2VideoTraining.cs",
+        "src/ComputerVision/Segmentation/Foundation/Sam2Runtime.cs",
+        "src/ComputerVision/Segmentation/Foundation/SAM21.cs",
+        "src/Video/Segmentation/SAM2.cs",
+        "src/ComputerVision/Segmentation/Common/MedicalSegmentationBase.cs",
+        "src/ComputerVision/Segmentation/Medical/BiomedParse.cs",
+        "src/ComputerVision/Segmentation/Medical/UMamba.cs",
+        "src/ComputerVision/Segmentation/Medical/NnUNet.cs",
+        "src/ComputerVision/Segmentation/Medical/SegMamba.cs",
+        "src/ComputerVision/Segmentation/Medical/TransUNet.cs",
+        "src/ComputerVision/Segmentation/Medical/MedNeXt.cs",
+        "src/ComputerVision/Segmentation/Medical/MedSegDiffV2.cs",
+        "src/ComputerVision/Segmentation/Medical/MedSAM.cs",
+        "src/ComputerVision/Segmentation/Medical/SwinUNETR.cs",
+        "src/ComputerVision/Segmentation/Diffusion/MedSegDiffV2Segmentation.cs",
+        "src/ComputerVision/Segmentation/PointCloud/Concerto.cs",
+        "src/MetaLearning/Algorithms/AWGIMAlgorithm.cs",
+        "src/MetaLearning/Algorithms/MANNAlgorithm.cs",
+        "src/MetaLearning/Algorithms/UnsupervisedMetaLearnAlgorithm.cs",
+        "src/Video/Matting/RVM.cs",
+        "src/Video/Matting/RvmRecurrentNetwork.cs",
+        "src/Video/FrameInterpolation/Figan.cs",
+        "src/Video/FrameInterpolation/FiganLoss.cs",
+        "src/Video/Prediction/Mcnet.cs",
+        "src/Video/Prediction/McnetLoss.cs",
+        "src/Diffusion/ThreeD/ShapEModel.cs",
+        "src/Diffusion/NoisePredictors/DiTNoisePredictor.cs",
+        "src/SpeechRecognition/Multilingual/MMS.cs",
+        "src/SpeechRecognition/Multilingual/MMSOptions.cs",
+        "src/AdversarialRobustness/CertifiedRobustness/RandomizedSmoothing.cs",
+        "src/AdversarialRobustness/CertifiedRobustness/CertificationMath.cs",
+        "src/ReinforcementLearning/Policies/Exploration/UpperConfidenceBoundExploration.cs",
+        "src/Finance/Trading/Environments/PortfolioManagerEnvironment.cs",
+        "src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs"
+      ],
+      "status": "claimed; Wave 2 in progress on fixer-1, fixer-3, fixer-4 while Wave 1 commits (c471ab3cf0, 45c8bb9480, c66248d6bd) undergo adversarial Gate A-E verification"
     }
   ],
   "verification": {
@@ -459,7 +512,6 @@
       "status": "user-approved by explicit interactive answer",
       "decision": "For LBFGS, TrustRegion, ConjugateGradient, HypergradientSGD, DAdaptationSGD and ScheduleFreeSGD, support initial frozen subsets and preserve same-active-domain history. Reject active-domain changes before mutation. Core projects norms/history/search/updates onto fixed active coordinates; serializer persists canonical fixed-domain membership. Per-parameter optimizers retain approved changing-membership/age continuity. No changing-domain coupled-algorithm redesign."
     },
-
     {
       "decision": "Explicit declared graph breaks only; shared optimizer/config/clipping preflight, distinct hybrid counts; unexpected replay failures remain visible.",
       "status": "approved",
@@ -711,13 +763,13 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T23:31:10.420901+00:00",
+  "updated_utc": "2026-11-17T00:15:39.9372240Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
   "available_work": [
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "CUPS parameter layout",
       "observed_failure_entries": 25,
       "jobs": [
@@ -741,7 +793,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "KMaXDeepLab option routing",
       "observed_failure_entries": 16,
       "jobs": [
@@ -751,7 +803,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "Sonata decoder option routing",
       "observed_failure_entries": 4,
       "jobs": [
@@ -761,7 +813,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "MMS frozen feature encoder option",
       "observed_failure_entries": 1,
       "jobs": [
@@ -771,7 +823,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "OWLv2 patch size option",
       "observed_failure_entries": 1,
       "jobs": [
@@ -791,7 +843,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "RVM state/inference/clone consistency",
       "observed_failure_entries": 4,
       "jobs": [
@@ -801,7 +853,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "AWGIM meta-gradient shape",
       "observed_failure_entries": 3,
       "jobs": [
@@ -811,7 +863,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/generated-integration-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "MANN meta-model clone/shape",
       "observed_failure_entries": 3,
       "jobs": [
@@ -861,7 +913,7 @@
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/candidate-35f/last13-independent.json"
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED by Antigravity Wave 2; no overlapping edits",
       "root": "ShapE conditioned latent shape",
       "observed_failure_entries": 1,
       "jobs": [
