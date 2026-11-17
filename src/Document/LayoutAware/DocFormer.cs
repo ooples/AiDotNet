@@ -505,6 +505,7 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        using var _ = IsTrainingMode ? null : Tensors.Helpers.TensorArena.Suspend();
         var preprocessed = PreprocessDocument(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
