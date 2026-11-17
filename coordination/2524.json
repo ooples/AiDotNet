@@ -480,9 +480,43 @@
         "tests/AiDotNet.Tests/AdversarialRobustness/CertificationReferenceTests.cs"
       ],
       "status": "claimed; Wave 2 in progress on fixer-1 (Batch 5), fixer-3 (Batch 6), fixer-4 (Batch 7); Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) verified and integrated"
+    },
+    {
+      "owner": "this session/cuda_capture worker",
+      "repository": "ooples/AiDotNet",
+      "scope": "Bounded main-CI tooling prerequisite: classify the independent temporary Tensors preflight workflow using the existing classification contract.",
+      "files": [
+        "tools/TestImpact/Select-Shards.ps1"
+      ],
+      "file_scope_limits": {
+        "tools/TestImpact/Select-Shards.ps1": "Only NonRuntimeWorkflowPaths entry for tensors-validation-preflight.yml and rationale. Preserve unknown-workflow fail-closed self-test, FullValidationDirectories, selectors and all runtime gates."
+      },
+      "verification": "Run unchanged Select-Shards.ps1 -SelfTest; no full local CI. Keep source fix local until the current three-workflow validation cycle is terminal."
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "repository": "ooples/AiDotNet",
+      "scope": "Lagrangian12 fixture geometry only; route its generated input through the existing shared model-declared-shape resolver.",
+      "files": [
+        "src/AiDotNet.Generators/TestScaffoldGenerator.cs"
+      ],
+      "file_scope_limits": {
+        "src/AiDotNet.Generators/TestScaffoldGenerator.cs": "Only add Lagrangian to existing HNN/PINN ResolveModelDeclaredInputShape route near17796. Preserve model width guard and canonical acceleration target; no hardcoded4, production/base/native changes, or compiled-opt-out changes."
+      },
+      "verification": "Use the unchanged twelve recorded Lagrangian generated failures as regression. Add a new test only if it proves independent behavior rather than matching generated text. Coordinate any later PINN/autodiff issue with its existing owner. Keep source fix local until cycle end."
     }
   ],
   "verification": {
+    "validation_cycle_864c": {
+      "source": "864c81714c57d116a324e29f07fb3ed93e844ea7",
+      "branch": "codex/2524-validation-c977",
+      "preflight": "43994243037 SUCCESS",
+      "main": "43994555253 TERMINAL failure before any167runtime shards. Selectshards Verify-impact-tooling rejects unclassified tensors-validation-preflight.yml; three fail-closed gate failures/18skips; no runner infrastructure failure established.",
+      "tts": "43994558340 active; shared_replay_failures monitoring through terminal.",
+      "foundations": "43994562553 SUCCESS, actual206/206passed0skip.",
+      "policy": "Validation branch is fixed; no rewriting/replacement cycle or PR source push until all three workflows finish. Fixes may be prepared locally with bounded tests; coordination claims remain live."
+    },
+
     "native_candidate_c977": {
       "source": "c9770e98d97aa5cfdb634d18e0f4693ce8341a15",
       "branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
@@ -855,7 +889,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T01:15:54.121Z",
+  "updated_utc": "2026-11-17T01:29:07.592Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -875,7 +909,7 @@
       ]
     },
     {
-      "status": "UNCLAIMED; contributors choose a bounded item and publish precise file claims before editing",
+      "status": "CLAIMED this session/artifact_feed; generated fixture resolver route only; no PINN/HNN/model overlap",
       "root": "Lagrangian fixture/model state width",
       "observed_failure_entries": 12,
       "jobs": [
