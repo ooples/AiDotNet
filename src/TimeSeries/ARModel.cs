@@ -86,6 +86,9 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
 
     // Mean of the training series. The AR coefficients are fitted on the de-meaned series, so every
     // prediction is mean + Σ φ_i (y[t-i] - mean) (statsmodels AutoReg / ARIMA with trend 'c').
+    // InputSized = true registers the fitted intercept for generated state persistence and cloning
+    // without adding a slot to the flat AR coefficient parameter vector.
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private T _seriesMean;
 
     /// <summary>
