@@ -426,6 +426,17 @@
     }
   ],
   "verification": {
+    "native_candidate_c977": {
+      "source": "c9770e98d97aa5cfdb634d18e0f4693ce8341a15",
+      "branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+      "producer_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
+      "status": "GitHub all-five-framework artifact producer in progress; no public NuGet release. Consumer remains pinned to validated125 until producer and exact-artifact CUDA gates pass.",
+      "local_build": "Normal analyzer-gated net10 Release passed, zero errors. Initial nullable signature-token error was corrected without suppressions.",
+      "local_tests": "Initial246 cohort239passed/6failed/1expectedCUDA-onlyskip. Six failures were invalid different-tensor continuation fixtures; corrected six passed on test-only rebuild reusing the gated production DLL. All230 mandatory CPU cases passed across these runs; no unified246-pass rerun is claimed. Original125 identities unchanged. LocalGPU2 passed; other13 retained checks passed. FP16 class9=6passed/3hardware-measurement skips, including all4 prior functional cases.",
+      "cuda": "Seven cases discovered, not executed locally. Local GPU is AMD OpenCL. Required actual CUDA capture and packaged-DLL hash proof follow producer success; two sm86 runners online and CUDA_RUNNER_ENABLED=true.",
+      "remaining": "Exact-artifact CUDA gates, consumer pin/bootstrap update and full GitHub matrix remain required. Known contributor owner actions in source_handoff remain unresolved; no PR merge or new PR."
+    },
+
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
     "full_ci": "Initial completed35f cycle observed all9 workflows terminal with5success/4failure; original failure evidence retained. Auto-Fix PR Title was subsequently retried successfully in attempt2 on super-server-2. No original incomplete test suite is converted to passing by this retry; main and standalone TTS/foundation failures remain evidence.",
@@ -444,8 +455,9 @@
     "title_infrastructure_retry": "Run43902661476 attempt2 SUCCESS on aidotnet-super-server-2, job133637244095, exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753; fresh API confirmed. Historical initial9-workflow completion snapshot5success/4failure remains retained; latest title check is clean.",
     "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning.",
     "consumer_correction_cohort": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
-    "native_current_cohort": "Original125 mandatory CPU cases remain all passing. Current native165 cohort:161passed,3failed,1skipped, with heterogeneous replay failures under investigation. Separate FP16 focused check4/4passed. No new native artifact is ready; retain the validated125 consumer package pin. Passing FP16 checks do not approve broader native optimizer work.",
-    "native_optimizer_repair": "Explicit user approval now recorded for proper enrollment/continuity and NoGrad/checkpoint persistence. Existing native165=161pass/3fail/1skip and separate FP16=4pass are diagnostic evidence, not artifact readiness. Capture artifact stays held until repair, root review, required CPU/GPU/grouped/capture and persistence checks, then all5TFM producer packaging/evidence validation.",
+    "native_initial_heterogeneous_cohort": "Historical initial165 cohort161pass/3fail/1skip and separateFP16fourpassed; disposal/GPU view fixtures were corrected, frozen AdamW defect expanded through explicit user approval.",
+    "native_current_cohort": "c977 candidate: normal gated build passed; initial246=239pass/6fixturefail/1CUDA-onlyskip, corrected6rerun6pass. All230 mandatoryCPU cases individually passed across runs with original125 identities unchanged. Actual packaged CUDA7 validation remains pending; current125consumer pin unchanged.",
+    "native_optimizer_repair": "Reviewed implementation pushed as native c9770e98d after local normal build and bounded tests. Proper enrollment, per-parameter ages, fixed coupled domain, full L-BFGS history, and CUDA backend changes included. Fresh producer230 CPU gate and actual packaged-DLL CUDA7 validation pending; no public release.",
     "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified."
   },
   "decisions": [
@@ -711,7 +723,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T23:31:10.420901+00:00",
+  "updated_utc": "2026-11-17T00:47:09Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
