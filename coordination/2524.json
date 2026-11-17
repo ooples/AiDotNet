@@ -12,16 +12,16 @@
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
   ],
   "owners": [
-{
-  "owner": "this session/cuda_capture shard inventory repair",
-  "repository": "ooples/AiDotNet",
-  "files": [
-    ".github/test-shards.yml"
-  ],
-  "scope": "Only exact routing clauses for HamiltonianOptionObservationTests into existing options-contract partition and DenseFeatureImportanceTests into existing neural-network unit partition.",
-  "status": "CLAIMED; b37c cycle terminal, normal compilation passed but inventory found these two classes unrouted. No gate weakening, catchall filters, new shards or test removal.",
-  "verification": "Review exact diff; run canonical shard inventory against valid compiled class metadata and manifest drift controls. No broad rebuild."
-},
+    {
+      "owner": "this session/cuda_capture shard inventory repair",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        ".github/test-shards.yml"
+      ],
+      "scope": "Only exact routing clauses for HamiltonianOptionObservationTests into existing options-contract partition and DenseFeatureImportanceTests into existing neural-network unit partition.",
+      "status": "CLAIMED; b37c cycle terminal, normal compilation passed but inventory found these two classes unrouted. No gate weakening, catchall filters, new shards or test removal.",
+      "verification": "Review exact diff; run canonical shard inventory against valid compiled class metadata and manifest drift controls. No broad rebuild."
+    },
     {
       "files": [
         "src/Training/CompiledTapeTrainingStep.cs",
@@ -239,9 +239,10 @@
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/ARModelMeanReferenceTests.cs",
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
         "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/FeatureSelectionSweepReferenceTests.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs"
+        "tests/AiDotNet.Tests/IntegrationTests/WaveletFunctions/WaveletReferenceValueTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/PhysicsInformed/PhysicsInformedPaperReferenceTests.cs"
       ],
-      "status": "ALL 4 Wave 1 batches verified and integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82 by verifier-1), Batch 2 (0b08b92b5a, verified 244/244 by verifier-2), Batch 3 (fc423039d3, verified 223/223; 3 root-review follow-ups in progress on fixer-3), and Batch 4 (dd714d3ae0, verified 199/199; 2 root-review follow-ups queued next on fixer-4)"
+      "status": "ALL 4 Wave 1 batches integrated onto codex/2524-ci-coordination: Batch 1 (e4a6a32fbd, verified 82/82), Batch 2 (0b08b92b5a, verified 244/244; MultiScalePINN IsFusedTrainingDisabled removal + continuity test queued next on fixer-2 per antigravity-review-multiscale-compiled-lifecycle), Batch 3 (fc423039d3, verified 223/223; 3 root-review follow-ups in progress on fixer-3), and Batch 4 (dd714d3ae0, verified 199/199; 2 root-review follow-ups queued next on fixer-4)"
     },
     {
       "owner": "this session/artifact_feed worker",
@@ -495,7 +496,7 @@
         "src/PublicAPI.Unshipped.txt",
         "src/ComputerVision/Segmentation/Common/PanopticDeepLabSemanticDecoder.cs"
       ],
-      "status": "claimed; Batch 5 active on fixer-1 (PanopticDeepLabSemanticDecoder added), Batch 6 (dd2af244b1, 187/187 local) in Gate E verification on verifier-2, Batch 7 active on fixer-4",
+      "status": "Wave 2 Batch 6 (38098bfc08, verified 187/187 by verifier-2) integrated onto codex/2524-ci-coordination; Batch 5 active on fixer-1; Batch 7 active on fixer-4",
       "file_scope_limits": {
         "src/PublicAPI.Unshipped.txt": "ONLY append single override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.SelectTrainableParametersForTraining line matching sibling OmnilangualASR<T>/XLSR<T>."
       }
@@ -640,7 +641,8 @@
     "antigravity_w1_batch3_timeseries": "Integrated fc423039d3 (verified commit 45c8bb948046fc5b33a8814e6ba93acbfe3df437, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~GARCHModelTests|FullyQualifiedName~TBATSModelTests|FullyQualifiedName~DeepAntReferenceTests|FullyQualifiedName~DeepANTTests|FullyQualifiedName~NLinearModelTests|FullyQualifiedName~ARModelTests|FullyQualifiedName~ARModelMeanReferenceTests|FullyQualifiedName~TimeSeriesEngineOpsReferenceTests|FullyQualifiedName~TimeSeriesExtendedDeepMathIntegrationTests\": 223 passed, 0 failed, 0 skipped; verifier-2 stdout receipt #181). Three root-review follow-ups (GARCH Half FD probes, NLinear Half scaler state persistence, ARModel _seriesMean persistence) acknowledged and queued next with new oracle tests.",
     "antigravity_w1_batch4_preprocessing": "Integrated dd714d3ae0 (verified commit c66248d6bd173caee85eaf7f13dcaac665f04f64, net10.0 Release, package 0.151.1-coordination.43955817990.1.g7dd9b68c8f9e, command: dotnet test tests/AiDotNet.Tests/AiDotNet.Tests.csproj -c Release -f net10.0 --no-build --filter \"FullyQualifiedName~FeatureSelectionSweepReferenceTests|FullyQualifiedName~FeatureSelectionTensorOpsTests|FullyQualifiedName~FeatureSelectionFilterRoundFiveTests|FullyQualifiedName~FeatureSelectionHelperRoundThreeTests|FullyQualifiedName~FeatureSelectionInformationReferenceTests|FullyQualifiedName~FeatureSelectionScipyReferenceTests|FullyQualifiedName~DimensionalityReductionReferenceTests|FullyQualifiedName~PowerTransformsDeepMathIntegrationTests|FullyQualifiedName~WaveletReferenceValueTests|FullyQualifiedName~AdvancedWaveletFunctionsTests|FullyQualifiedName~WindowFunctionReferenceTests\": 199 passed, 0 failed, 0 skipped; verifier-1 stdout receipt #180; fk8 taps derived from Nielsen 2001 J. Approx. Theory 108 Theorem 1 spectral factorization). Two root-review follow-ups (FairFeatureSelector midpoint even-median contract, FejerKorovkinWavelet zero-DC/unit-L2 normalizer without cutoff widening) acknowledged and queued next with new oracle tests.",
     "antigravity_w1_batch2_pinn": "Integrated 0b08b92b5a552bf085237f5f3c8971c0ac4100af (cherry-picked from 7ce3cb5cf948c273b273ff171df9f826c1c0e373, net10.0, package 0.151.1-coordination.43990270445.1.gc9770e98d97a, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch2.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName!~Options_EachShouldChangeObservableBehaviour&(FullyQualifiedName~Generated.PhysicsInformedNeuralNetworkTests|FullyQualifiedName~Generated.DeepRitzMethodTests|FullyQualifiedName~Generated.DomainDecompositionPINNTests|FullyQualifiedName~Generated.VariationalPINNTests|FullyQualifiedName~Generated.MultiFidelityPINNTests|FullyQualifiedName~Generated.MultiScalePINNTests|FullyQualifiedName~Generated.DeepOperatorNetworkTests|FullyQualifiedName~PhysicsInformedPaperReferenceTests|FullyQualifiedName~MultiFidelityAndDomainDecompositionTests)\": 244 passed, 0 failed, 14 pre-existing manual skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch2.trx; verifier-2 #201). 11 newly-sensitive options in Codex-owned RuntimeFidelityBaseline.cs left untouched for owner removal after root review.",
-    "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (cherry-picked from c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch1.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ModelInputMeetsFirstLayerTests.AModelsDeclaredInputRankIsOneItsFirstLayerAccepts|FullyQualifiedName~DiffusersSchedulerReferenceTests|FullyQualifiedName~Generated.ChirpTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.CanaryQwenTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.SPIRALTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.W2vBertTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingZipformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.RNNTransducerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.ConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.FastEmitTests.Gradients_MatchFiniteDifference|FullyQualifiedName~MelSpectrogramAxisTests|FullyQualifiedName~AudioProcessingTests\": 82 passed, 0 failed, 0 skipped, 0 warnings in modified files, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch1.trx; verifier-1 #202)."
+    "antigravity_w1_batch1_asr": "Integrated e4a6a32fbdb9a5214a902c09428fe9aa1967a80b (cherry-picked from c471ab3cf08e3c7fb8c61eb78b5c09c5c749ac29, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w1-batch1.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~ModelInputMeetsFirstLayerTests.AModelsDeclaredInputRankIsOneItsFirstLayerAccepts|FullyQualifiedName~DiffusersSchedulerReferenceTests|FullyQualifiedName~Generated.ChirpTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.CanaryQwenTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.SPIRALTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.W2vBertTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingZipformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.RNNTransducerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.ConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.StreamingConformerTests.Gradients_MatchFiniteDifference|FullyQualifiedName~Generated.FastEmitTests.Gradients_MatchFiniteDifference|FullyQualifiedName~MelSpectrogramAxisTests|FullyQualifiedName~AudioProcessingTests\": 82 passed, 0 failed, 0 skipped, 0 warnings in modified files, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w1-batch1.trx; verifier-1 #202).",
+    "antigravity_w2_batch6_sam2_medseg": "Integrated 38098bfc08fe791f3648b0e50df69a44d5d95d89 (cherry-picked from dd2af244b1a0cb62176a727c655fc052d5ef10e5, net10.0, command: dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -f net10.0 --no-build --no-restore -m:2 /p:UseSharedCompilation=false --disable-build-servers --logger \"trx;LogFileName=w2-batch6.trx\" --results-directory \"E:\\aidn-2524-swarm\\.tmp\\trx\" --filter \"FullyQualifiedName~Generated.SAM2Tests|FullyQualifiedName~Generated.SAM21Tests|FullyQualifiedName~PointCloudMedicalSegmentationIntegrationTests|FullyQualifiedName~Sam21AndMedSam2Tests|FullyQualifiedName~Video.SAM2ModelTests|FullyQualifiedName~FoundationSegmentationIntegrationTests.SAM21|FullyQualifiedName~SegmentationTrainingRobustnessTests.SAM21|FullyQualifiedName~MedicalSegmentationPostProcessingTests\": 187 passed, 0 failed, 18 pre-existing skips, 0 new analyzer warnings, 0 null-forgiving operators; TRX E:/aidn-2524-swarm/.tmp/trx/w2-batch6.trx; verifier-2 #206)."
   },
   "decisions": [
     {
@@ -999,7 +1001,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T03:06:34.5879165Z",
+  "updated_utc": "2026-11-17T03:22:49.243566Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -1182,7 +1184,7 @@
     "claude": "Remote claude/2524-tts-replay advanced to b4bd771e39; shared log includes new LayerNormStateRef, NoGrad frozen encoder and spectral-normalization proposals. Contributor-specific coordination/2524-claude.json still initial claims/questions:[]; no owner-action resolution evidence recorded there. Preserve Claude TTS ownership; root reviews proposals and overlap reconciliation."
   },
   "claimed_work_summary": {
-    "Antigravity": "All 4 Wave 1 batches verified & integrated: Batch 1 (e4a6a32fbd, 82/82), Batch 2 (0b08b92b5a, 244/244), Batch 3 (fc423039d3, 223/223; 3 review follow-ups active), Batch 4 (dd714d3ae0, 199/199; 2 review follow-ups queued). Wave 2 Batch 6 in Gate E verification; Wave 2 Batches 5 & 7 and Wave 3 Batch 8 active.",
+    "Antigravity": "Wave 1 Batches 1-4 (e4a6a32fbd, 0b08b92b5a, fc423039d3, dd714d3ae0) and Wave 2 Batch 6 (38098bfc08, 187/187) verified & integrated; root-review follow-ups on TimeSeries (active on fixer-3), Preprocessing/Wavelet (queued on fixer-4), and MultiScalePINN lifecycle (queued on fixer-2); Wave 2 Batches 5 & 7 and Wave 3 Batch 8 active.",
     "this_session": "CopyFeature, GEM, GP, SAM, Transfusion, ARIMAX/Adam, retained outputs, DoRA and StandardScaler remain ours under existing exact file claims.",
     "Claude_owner": "Remaining TTS and new Tortoise ClvpTextLength option failure remain Claude-owned. Our agents must not start new overlapping TTS edits."
   },
