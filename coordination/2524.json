@@ -976,7 +976,7 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "All posted inline and outside-diff findings addressed in source at62d0afa1e.23inline threads resolved; full review bodies checked (3 known substantive reviews, no new findings).51focused lifecycle cases pass0skip. Prior35ba fullCIgreen33success15skips with CPU Gamma12 and CUDA enrollment8+retention9 proven. Latest fullCI44169260756 monitoring underway; formal CodeRabbit changes-requested review requires reviewer refresh, not dismissed. No merge/public release.",
+      "status": "COMPLETE: reviewed fixes pushed at 62d0afa1e; latest CI 44169260756 success (33 passed, 15 conditional skips, 0 failed); all 23 inline threads resolved and full review bodies checked; review APPROVED. GitHub reports merged by ooples at 2026-11-17T21:04:22Z. No merge or public release performed by this session.",
       "commit": "62d0afa1eb43479de8d40dc58b867c20bccf7562",
       "verification": {
         "focused_net10": {
@@ -986,7 +986,7 @@
         },
         "build_net471": "success",
         "build_net462": "success",
-        "cuda": "pending actual GitHub execution",
+        "cuda": "PASS: DirectGpu 6888 passed/1356 skipped; rest 9515 passed/414 skipped; interop 6 passed/2 skipped; 0 failures",
         "host_loss_and_handover": {
           "passed": 15,
           "failed": 0,
@@ -1007,12 +1007,10 @@
       "ci_run": 44169260756,
       "pending_local_commits": [],
       "ci_cpu": {
-        "total": 26382,
-        "passed": 17099,
-        "failed": 1,
-        "skipped": 9282,
-        "failure": "ClosureObjectiveHostLossTests.Host_loss_with_a_recorded_backward_records_no_guard",
-        "local_correction": "b81749a23; passing targeted verification"
+        "failed": 0,
+        "total": 26406,
+        "passed": 17124,
+        "skipped": 9282
       },
       "pending_scope_decision": {
         "finding": "Reused nonpersistent tape can publish stale named outputs when its next completed forward retains no outputs",
@@ -1046,7 +1044,7 @@
           "src/AiDotNet.Tensors/Engines/Autodiff/BackwardFunctions.cs",
           "tests/AiDotNet.Tensors.Tests/Engines/GammaBackwardDomainTests.cs"
         ],
-        "status": "ROOT REVIEWED local572da5ec8. 33focused precision cases passed0skip, including12newHalf/float rows. Preserved all nonfinite/signed-zero/near-pole regressions and higher-order branches. No new exemptions/baseline increases. Hold next source push until CI44148717444 terminal and fresh thread/coordination check."
+        "status": "COMPLETE: integrated and pushed; latest full CI green and all findings resolved"
       },
       "retained_epoch_batch": {
         "finding": "Reused nonpersistent tape can publish stale named outputs when its next completed forward retains no outputs",
@@ -1080,6 +1078,44 @@
         "older_outside_findings": "Verified current source: active-only parity buffers and restore-failure Dispose/rethrow already addressed by753ad7ee49; corresponding existing CUDA numeric test and checkpoint rejection test passed",
         "status": "ROOT REVIEWED and PUSHED62d0afa1e;51 retention/streaming tests passed0skip including2 new disposal recovery/nesting cases",
         "response": "https://github.com/ooples/AiDotNet.Tensors/pull/1766#issuecomment-6960035871"
+      },
+      "latest_accepted_ci": {
+        "head": "62d0afa1eb43479de8d40dc58b867c20bccf7562",
+        "run": 44169260756,
+        "finalUtc": "2026-11-17T21:05:39.4365552Z",
+        "terminal": true,
+        "ciConclusion": "success",
+        "jobs": 48,
+        "aggregate": [
+          {
+            "Name": "completed, skipped",
+            "Count": 15
+          },
+          {
+            "Name": "completed, success",
+            "Count": 33
+          }
+        ],
+        "cpuDisposalPassed": 2,
+        "cpuRetentionPassed": 9,
+        "cpuGammaPassed": 12,
+        "cudaEnrollmentPassed": 8,
+        "cudaDisposalPassed": 2,
+        "cudaRetentionPassed": 9,
+        "reviewThreads": 23,
+        "unresolvedThreads": 0,
+        "reviewDecision": "APPROVED",
+        "changedNonemptyReviewBodies": 0,
+        "packageValidation": "Not a step in this PR workflow; master-only publish skipped",
+        "mutations": "No retries, manual cancellations, edits, pushes, merges or releases by this monitor"
+      },
+      "review_decision": "APPROVED",
+      "merge": {
+        "merged_at": "2026-11-17T21:04:22Z",
+        "merged_by": "ooples",
+        "merge_commit_sha": "dcfcf5ad1fceddfddf7008c2590a30463c82e141",
+        "performed_by_this_session": false,
+        "merged": true
       }
     }
   ],
@@ -1626,7 +1662,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T20:28:30.1044657Z",
+  "updated_utc": "2026-11-17T21:14:09.9983674Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
