@@ -232,20 +232,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             if (slot is not null)
             {
                 ValidateHalfTapeSlot(slot);
-                if (!parameter.Shape.SequenceEqual(slot.Shape) || (_options.UseAMSGrad && slot.VMax is null))
+                if (!parameter.Shape.Span.SequenceEqual(slot.Shape) || (_options.UseAMSGrad && slot.VMax is null))
                     throw new InvalidOperationException("Half Adam tape parameter shape or AMSGrad state changed; no update was applied.");
             }
             int[]? sparseRows = null;
             Tensor<T> gradient;
             if (!TryGetHalfSparseRows(context, parameter, out gradient, out sparseRows))
             {
-                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out gradient)) continue;
-                if (!parameter.Shape.SequenceEqual(gradient.Shape))
+                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var resolvedGradient)) continue;
+                gradient = resolvedGradient ?? throw new InvalidOperationException("Half Adam gradient resolution returned no gradient.");
+                if (!parameter.Shape.Equals(gradient.Shape))
                     throw new ArgumentException("Half Adam tape gradient shape must match its parameter.", nameof(context));
             }
             if (slot is null)
             {
-                var published = TensorCopyHelper.CastLogical<T, float>(parameter).ToArray();
+                var published = parameter.Cast<float>().ToArray();
                 slot = new HalfTapeSlot
                 {
                     Shape = parameter.Shape.ToArray(), Master = (float[])published.Clone(), Published = published,
@@ -263,7 +264,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         foreach (var binding in bindings)
         {
             var slot = binding.Slot;
-            var current = TensorCopyHelper.CastLogical<T, float>(binding.Parameter).ToArray();
+            var current = binding.Parameter.Cast<float>().ToArray();
             if (!current.AsSpan().SequenceEqual(slot.Published)) current.CopyTo(slot.Master, 0);
             slot.Age++;
             if (binding.SparseRows is { } rows)
@@ -279,7 +280,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             else UpdateHalfTapeRegion(slot, binding.Gradient, 0, slot.Shape);
             var master = Tensor<float>.FromMemory(slot.Master.AsMemory(), slot.Shape);
             Engine.TensorCopy(master.Cast<T>(), binding.Parameter);
-            TensorCopyHelper.CastLogical<T, float>(binding.Parameter).CopyLogicalTo(slot.Published);
+            binding.Parameter.Cast<float>().CopyLogicalTo(slot.Published);
             _halfTapeSlots[binding.Parameter] = slot;
         }
         ReportRetainedOutputUpdateAccepted();
@@ -315,7 +316,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var master = Tensor<float>.FromMemory(slot.Master.AsMemory(offset, length), shape);
         var mState = Tensor<float>.FromMemory(slot.M.AsMemory(offset, length), shape);
         var vState = Tensor<float>.FromMemory(slot.V.AsMemory(offset, length), shape);
-        var gradient = TensorCopyHelper.CastLogical<T, float>(sourceGradient);
+        var gradient = sourceGradient.Cast<float>();
         var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(mState, (float)_options.Beta1),
             Engine.TensorMultiplyScalar(gradient, (float)(1 - _options.Beta1)));
         var v = Engine.TensorAdd(Engine.TensorMultiplyScalar(vState, (float)_options.Beta2),

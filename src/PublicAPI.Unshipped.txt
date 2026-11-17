@@ -3,6 +3,7 @@ virtual AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.Repor
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateAccepted() -> void
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateRejected() -> void
 override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
+override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.Deserialize(byte[]! data) -> void
 virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RequiresRetainedGeneration.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RequiresRetainedGeneration.get -> bool
 *REMOVED*override AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
