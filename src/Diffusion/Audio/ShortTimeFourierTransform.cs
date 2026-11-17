@@ -92,8 +92,8 @@ public partial class ShortTimeFourierTransform<T>
     /// <summary>
     /// Window function as a tensor (for IEngine operations).
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _windowTensor;
+    [AiDotNet.Attributes.Buffer]
+    private readonly Tensor<T> _windowTensor;
 
     /// <summary>
     /// Gets the FFT size.
@@ -164,7 +164,10 @@ public partial class ShortTimeFourierTransform<T>
         if (_windowLength <= 0 || _windowLength > nFft)
             throw new ArgumentOutOfRangeException(nameof(windowLength), "Window length must be positive and <= nFft.");
 
-        // Create window function - default to Hanning (industry standard for audio STFT)
+        // Create window function outside any caller TensorArena or gradient tape so persistent window
+        // buffers outlive step-arena resets.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var window = windowFunction ?? new HanningWindow<T>();
         var windowVector = window.Create(_windowLength);
 
