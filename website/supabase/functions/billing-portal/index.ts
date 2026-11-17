@@ -112,6 +112,7 @@ function summarize(sub: Stripe.Subscription | null) {
       quantity: item?.quantity ?? 1,
       current_period_end: sub.current_period_end,
       cancel_at_period_end: sub.cancel_at_period_end,
+      cancel_at: sub.cancel_at ?? null,
       trial_end: sub.trial_end,
     },
   };
@@ -170,7 +171,7 @@ serve(async (req: Request) => {
         return json({ error: "no_active_subscription", message: "No active subscription was found on your billing account." }, 409);
       }
       if (action === "cancel") {
-        if (sub.cancel_at_period_end) {
+        if (sub.cancel_at_period_end || sub.cancel_at != null) {
           return json({ error: "already_cancelling", message: "Your subscription is already set to end at the close of this billing period." }, 409);
         }
         params.flow_data = {

@@ -180,8 +180,8 @@ test.describe('Pro bought online', () => {
     await page.waitForURL((u) => u.href.startsWith(`${baseURL}/account/billing/`), { timeout: 60_000 });
     await expect.poll(async () => {
       const subscription = await getSubscription(request, p.stripe!.subscriptionId);
-      return { status: subscription.status, cancel_at_period_end: subscription.cancel_at_period_end };
-    }, { timeout: 30_000 }).toMatchObject({ cancel_at_period_end: true });
+      return subscription.cancel_at_period_end || (subscription.cancel_at != null && subscription.cancel_at === subscription.current_period_end);
+    }, { timeout: 30_000 }).toBe(true);
 
     await billingLoaded(page);
     await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
@@ -190,6 +190,8 @@ test.describe('Pro bought online', () => {
     await pricingLoaded(page);
     await expect(page.locator('#current-plan-text')).toHaveText(/It ends on /);
     await expect(page.locator('[data-plan-status="enterprise"]')).toHaveText('Ends at the close of this billing period');
+    await expect(card(page, 'community')).toHaveText('Downgrade scheduled');
+    await expect(card(page, 'community')).toBeDisabled();
   });
 
   test('deleting the account revokes its licenses into the CRL and ends sign-in', async ({ page, request }) => {

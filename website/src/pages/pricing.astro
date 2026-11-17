@@ -251,7 +251,7 @@ const base = import.meta.env.BASE_URL;
 
   <script>
     import { supabase } from '../lib/supabase';
-    import { loadBillingState, openPortal, formatDate, TIER_LABEL, type BillingState, type PaidTier } from '../lib/billing';
+    import { loadBillingState, openPortal, formatDate, cancellationDate, TIER_LABEL, type BillingState, type PaidTier } from '../lib/billing';
 
     document.addEventListener('DOMContentLoaded', () => {
       // Check for success/cancel URL params
@@ -339,6 +339,7 @@ const base = import.meta.env.BASE_URL;
         const current = billing.subscription?.tier ?? billing.tier;
         const currentInterval = billing.subscription?.interval ?? null;
         const live = billing.hasBillingAccount && !!billing.subscription;
+        const cancellationAt = cancellationDate(billing.subscription);
         const wantedInterval = isYearly ? 'year' : 'month';
         document.querySelectorAll<HTMLButtonElement>('.checkout-btn').forEach((btn) => {
           const tier = btn.dataset.tier!;
@@ -351,15 +352,15 @@ const base = import.meta.env.BASE_URL;
             if (tier === current && (!live || !currentInterval || currentInterval === wantedInterval)) {
               mode = 'current';
               label = 'Current plan';
-              note = billing!.subscription?.cancel_at_period_end ? 'Ends at the close of this billing period' : '';
+              note = cancellationAt ? (cancellationAt === billing!.subscription?.current_period_end ? 'Ends at the close of this billing period' : `Ends on ${formatDate(cancellationAt)}`) : '';
             } else if (tier === current) {
               mode = 'change';
               label = wantedInterval === 'year' ? 'Switch to yearly billing' : 'Switch to monthly billing';
             } else if (tier === 'community') {
               if (live) {
-                mode = 'cancel';
-                label = 'Downgrade to Community';
-                note = `Cancels ${CARD_LABEL[current]} at the end of the billing period`;
+                mode = cancellationAt ? 'current' : 'cancel';
+                label = cancellationAt ? 'Downgrade scheduled' : 'Downgrade to Community';
+                note = cancellationAt ? `Starts after ${formatDate(cancellationAt)}` : `Cancels ${CARD_LABEL[current]} at the end of the billing period`;
               }
             } else if (live) {
               mode = 'change';
@@ -389,7 +390,8 @@ const base = import.meta.env.BASE_URL;
             const sub = state.subscription;
             let text = `You are on the ${TIER_LABEL[current]} plan`;
             if (sub?.interval) text += `, billed ${sub.interval === 'year' ? 'yearly' : 'monthly'}`;
-            if (sub?.cancel_at_period_end) text += `. It ends on ${formatDate(sub.current_period_end)}.`;
+            const cancellationAt = cancellationDate(sub);
+            if (cancellationAt) text += `. It ends on ${formatDate(cancellationAt)}.`;
             else if (sub) text += `. Renews on ${formatDate(sub.current_period_end)}.`;
             else text += '.';
             document.getElementById('current-plan-text')!.textContent = text;

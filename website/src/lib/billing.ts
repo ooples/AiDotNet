@@ -15,6 +15,7 @@ export interface SubscriptionSummary {
   quantity: number;
   current_period_end: number;
   cancel_at_period_end: boolean;
+  cancel_at?: number | null;
   trial_end: number | null;
 }
 
@@ -103,3 +104,8 @@ export function formatDate(unixSeconds: number): string {
 }
 
 export const TIER_LABEL: Record<PlanTier, string> = { free: 'Free', pro: 'Pro', enterprise: 'Enterprise' };
+
+/** Stripe's portal can schedule the end through cancel_at while leaving the legacy flag false. */
+export function cancellationDate(subscription: SubscriptionSummary | null | undefined): number | null {
+  return subscription?.cancel_at ?? (subscription?.cancel_at_period_end ? subscription.current_period_end : null);
+}

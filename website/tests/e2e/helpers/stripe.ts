@@ -59,7 +59,7 @@ export async function createTrialSubscription(request: APIRequestContext, email:
 }
 
 export async function getSubscription(request: APIRequestContext, id: string) {
-  return stripe<{ status: string; cancel_at_period_end: boolean; items: { data: Array<{ price: StripePrice }> } }>(request, 'GET', `/subscriptions/${id}`);
+  return stripe<{ status: string; cancel_at_period_end: boolean; cancel_at: number | null; current_period_end: number; items: { data: Array<{ price: StripePrice }> } }>(request, 'GET', `/subscriptions/${id}`);
 }
 
 /** Moves the subscription's only item to another price, as the portal does once it has a card. */

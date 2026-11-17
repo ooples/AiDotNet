@@ -62,6 +62,31 @@ test('billing portal returns customers to the originating approved website', asy
   }
 });
 
+test('billing portal rejects a duplicate cancellation scheduled through cancel_at', async () => {
+  class Stripe {
+    static createFetchHttpClient() { return {}; }
+    prices = { async *list() {} };
+    subscriptions = { async *list() { yield { id: 'subscription', status: 'trialing', created: 1, cancel_at_period_end: false, cancel_at: 200 }; } };
+    billingPortal = {
+      configurations: { async *list() { yield { id: 'config', metadata: { tag: 'aidotnet-plans-v1', products: '[]' } }; } },
+      sessions: { async create() { throw new Error('A duplicate cancellation must not open a new portal session'); } },
+    };
+  }
+  const handler = loadHandler('billing-portal', {
+    Stripe,
+    env: { SUPABASE_URL: 'https://fixture.invalid', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service', STRIPE_SECRET_KEY: 'stripe' },
+    createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
+      from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { stripe_customer_id: 'customer' } }) }) }) }),
+    }),
+  });
+  const response = await handler(new Request('https://fixture.invalid', {
+    method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel' }),
+  }));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'already_cancelling');
+});
+
 for (const name of ['billing-portal', 'delete-account', 'register-community-license', 'issue-license', 'admin-resend-license-email', 'validate-license']) {
   test(`${name}: production and preview preflight and error responses have correct CORS`, async () => {
     const handler = loadHandler(name);

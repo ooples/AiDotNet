@@ -11,7 +11,7 @@ const user = {
 };
 const subscription = {
   status: 'active', tier: 'pro', interval: 'month', unit_amount: 2900, currency: 'usd', quantity: 2,
-  current_period_end: 1893456000, cancel_at_period_end: false, trial_end: null,
+  current_period_end: 1893456000, cancel_at_period_end: false, cancel_at: null as number | null, trial_end: null,
 };
 
 async function installBackend(page: Page, options: {
@@ -58,6 +58,8 @@ for (const state of [
   { name: 'Pro subscription', tier: 'pro', customer: true, sub: subscription, label: 'Pro', price: '$58/month (2 seats)' },
   { name: 'Enterprise overrides a stale Pro profile', tier: 'pro', customer: true, sub: { ...subscription, tier: 'enterprise', unit_amount: 9900, quantity: 1 }, label: 'Enterprise', price: '$99/month' },
   { name: 'scheduled cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at_period_end: true }, label: 'Pro', price: '$58/month (2 seats)' },
+  { name: 'date-based cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end }, label: 'Pro', price: '$58/month (2 seats)' },
+  { name: 'custom-date cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end - 86400 }, label: 'Pro', price: '$58/month (2 seats)' },
   { name: 'past due', tier: 'pro', customer: true, sub: { ...subscription, status: 'past_due' }, label: 'Pro', price: '$58/month (2 seats)' },
 ]) {
   test(`billing displays ${state.name} and the correct available actions`, async ({ page }) => {
@@ -69,9 +71,9 @@ for (const state of [
     await expect(page.locator('#billing-price')).toHaveText(state.price);
     await expect(page.locator('#portal-section')).toBeVisible({ visible: state.customer });
     await expect(page.locator('#billing-no-account')).toBeVisible({ visible: !state.customer && state.tier !== 'free' });
-    await expect(page.locator('#billing-cancel')).toBeVisible({ visible: !!state.sub && !state.sub.cancel_at_period_end });
-    if (state.sub?.cancel_at_period_end) {
-      await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+    await expect(page.locator('#billing-cancel')).toBeVisible({ visible: !!state.sub && !state.sub.cancel_at_period_end && !state.sub.cancel_at });
+    if (state.sub?.cancel_at_period_end || state.sub?.cancel_at) {
+      await expect(page.locator('#billing-badge')).toHaveText(state.sub.cancel_at && state.sub.cancel_at !== state.sub.current_period_end ? 'Cancellation scheduled' : 'Cancels at period end');
       await expect(page.locator('#billing-renewal')).toHaveText(/^Your access ends on /);
     }
     if (state.sub?.status === 'past_due') await expect(page.locator('#billing-badge')).toHaveText('past due');

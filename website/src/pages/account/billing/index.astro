@@ -121,7 +121,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
   </div>
 
   <script>
-    import { loadBillingState, openPortal, formatMoney, formatDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
+    import { loadBillingState, openPortal, formatMoney, formatDate, cancellationDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
 
     const FEATURES: Record<PlanTier, string[]> = {
       free: ['Training and inference (always free)', 'All 8,100+ public classes', 'GPU acceleration (any vendor)', 'Model save/load with a free Community license key'],
@@ -177,7 +177,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
       $('billing-plan')!.textContent = TIER_LABEL[tier];
       const status = sub?.status ?? state.status;
-      if (sub?.cancel_at_period_end) badge('Cancels at period end', 'warn');
+      const cancellationAt = cancellationDate(sub);
+      if (cancellationAt) badge(cancellationAt === sub?.current_period_end ? 'Cancels at period end' : 'Cancellation scheduled', 'warn');
       else if (status === 'active') badge('Active', 'ok');
       else if (status === 'trialing') badge('Trial', 'ok');
       else badge(status.replace(/_/g, ' '), status === 'past_due' || status === 'suspended' ? 'bad' : 'warn');
@@ -188,8 +189,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
       if (sub) {
         const renewal = $('billing-renewal')!;
-        renewal.textContent = sub.cancel_at_period_end
-          ? `Your access ends on ${formatDate(sub.current_period_end)}.`
+        renewal.textContent = cancellationAt
+          ? `Your access ends on ${formatDate(cancellationAt)}.`
           : sub.status === 'trialing' && sub.trial_end
             ? `Trial ends on ${formatDate(sub.trial_end)}.`
             : `Renews on ${formatDate(sub.current_period_end)}.`;
@@ -210,7 +211,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
       if (state.hasBillingAccount) {
         $('portal-section')!.classList.remove('hidden');
-        if (sub && !sub.cancel_at_period_end) $('billing-cancel')!.classList.remove('hidden');
+        if (sub && !cancellationAt) $('billing-cancel')!.classList.remove('hidden');
       } else if (paid) {
         $('billing-no-account')!.classList.remove('hidden');
       }

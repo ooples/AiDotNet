@@ -22,9 +22,10 @@ const SIGNED_IN_DEDICATED: Array<[RegExp, string]> = [
   [/^\/account\/api-keys\/ #copy-key-btn$/, 'user/api-keys.spec: create, copy the exact revealed key, dismiss, and revoke'],
   [/^\/account\/api-keys\/ #close-new-key$/, 'user/api-keys.spec: dismiss the revealed key and verify the masked list'],
 ];
-const PRO_STRIPE_DEDICATED: Array<[RegExp, string]> = [
+const PRO_STRIPE_DEDICATED: CrawlOptions['dedicated'] = [
   ...SIGNED_IN_DEDICATED,
   [/^\/pricing\/ button::Current plan.*\[data-tier=pro\]/, 'account-billing.spec: the current plan is shown and cannot be bought again'],
+  [/^\/pricing\/ button::Downgrade scheduled/, 'account-billing.spec: cancellation shows the scheduled Community downgrade', { optional: true }],
 ];
 const PRO_GRANTED_DEDICATED = PRO_STRIPE_DEDICATED;
 
