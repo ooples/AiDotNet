@@ -61,6 +61,67 @@ public sealed class NormedConvInferenceWeightCacheTests
         Assert.NotSame(updated, layer.Kernel());
     }
 
+    [Fact]
+    public void InferenceModeWritesThroughGainViewsInvalidateTheCachedWeights()
+    {
+        using var layer = Create();
+        var first = layer.Kernel();
+        var before = first.ToArray();
+        var gain = layer.GetTrainableParameters()[1];
+        int version = gain.Version;
+        using (new InferenceModeScope<float>())
+        {
+            var alias = AiDotNetEngine.Current.Reshape(gain, new[] { 1, gain.Length });
+            AiDotNetEngine.Current.TensorMultiplyScalarInPlace(alias, 1.5f);
+            Assert.Equal(version, gain.Version);
+            var current = layer.Kernel();
+            Assert.NotSame(first, current);
+            var actual = current.ToArray();
+            for (int i = 0; i < actual.Length; i++) Assert.InRange(Math.Abs(actual[i] - before[i] * 1.5f), 0, 1e-6);
+        }
+    }
+
+    [Fact]
+    public void PredictAfterSetParametersInInferenceModeMatchesAFreshModel()
+    {
+        using var candidate = HiFiGanFusedExecutionTests.Create();
+        using var reference = HiFiGanFusedExecutionTests.Create();
+        var mel = new Tensor<float>(new[] { 1, 8, 4 }, new Vector<float>(Enumerable.Range(0, 32).Select(i => .1f * (i + 1))));
+        candidate.Predict(mel);
+        var parameters = candidate.GetParameters();
+        parameters[0] += .5f;
+        using (new InferenceModeScope<float>()) candidate.SetParameters(parameters);
+        reference.SetParameters(parameters);
+        var expected = reference.Predict(mel).ToArray();
+        var actual = candidate.Predict(mel).ToArray();
+        Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PredictAfterTrainingMatchesAFreshModelWithTheUpdatedParameters(bool compile)
+    {
+        bool previous = TensorCodecOptions.Current.EnableCompilation;
+        try
+        {
+            TensorCodecOptions.Current.EnableCompilation = compile;
+            using var candidate = HiFiGanFusedExecutionTests.Create();
+            using var reference = HiFiGanFusedExecutionTests.Create();
+            var audio = new Tensor<float>(new[] { 512 }, new Vector<float>(
+                Enumerable.Range(0, 512).Select(i => (float)(.5 * Math.Sin(i * .31)))));
+            var mel = candidate.ComputeMel(audio);
+            candidate.Predict(mel);
+            candidate.Train(mel, audio);
+            reference.SetParameters(candidate.GetParameters());
+            var expected = reference.Predict(mel).ToArray();
+            var actual = candidate.Predict(mel).ToArray();
+            Assert.Equal(expected.Length, actual.Length);
+            for (int i = 0; i < actual.Length; i++) Assert.InRange(Math.Abs(actual[i] - expected[i]), 0, 1e-5);
+        }
+        finally { TensorCodecOptions.Current.EnableCompilation = previous; }
+    }
+
     private static float[] Gradients(NormedConv1DLayer<float> layer)
     {
         var parameters = layer.GetTrainableParameters().Take(2).ToArray();

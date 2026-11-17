@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 [Collection("FusedTrainingSerial")]
 public class HiFiGanFusedExecutionTests
 {
-    private static HiFiGAN<float> Create() => new(
+    internal static HiFiGAN<float> Create() => new(
         new NeuralNetworkArchitecture<float>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 8, outputSize: 64) { RandomSeed = 11 },
         new HiFiGANOptions

@@ -4,8 +4,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Holds one tensor derived from up to four source tensors (a stacked gate weight, a folded bias) and rebuilds it only
-/// when it could differ: a source was replaced, a source's <see cref="Tensor{T}.Version"/> moved (every in-place write
-/// advances it: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed. A writer that
+/// when it could differ: a source was replaced, its storage mutation epoch moved (including writes through views or
+/// in inference mode: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed. A writer that
 /// changes a source without advancing its version must call <see cref="Invalidate"/> before the derived tensor is
 /// reused.
 /// </summary>
@@ -73,7 +73,7 @@ internal sealed class DerivedTensorCache<T>
         for (int i = 0; i < count; i++)
         {
             _sources[i] = sources[i];
-            _versions[i] = sources[i].Version;
+            _versions[i] = sources[i].StorageMutationVersion;
         }
 
         _sourceCount = count;
@@ -102,7 +102,7 @@ internal sealed class DerivedTensorCache<T>
     }
 
     private bool Matches(int index, Tensor<T>? source)
-        => source is not null && ReferenceEquals((object?)_sources[index], (object)source) && _versions[index] == source.Version;
+        => source is not null && ReferenceEquals((object?)_sources[index], (object)source) && _versions[index] == source.StorageMutationVersion;
 }
 
 /// <summary>
