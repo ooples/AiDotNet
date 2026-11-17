@@ -475,7 +475,9 @@
         "src/Finance/Trading/Environments/PortfolioManagerEnvironment.cs",
         "src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs",
         "src/ComputerVision/Segmentation/PointCloud/PointTransformerV3EncoderOptions.cs",
-        "tests/AiDotNet.Tests/IntegrationTests/ComputerVision/PointCloudMedicalSegmentationIntegrationTests.cs"
+        "tests/AiDotNet.Tests/IntegrationTests/ComputerVision/PointCloudMedicalSegmentationIntegrationTests.cs",
+        "src/Video/Inpainting/ProPainter.cs",
+        "tests/AiDotNet.Tests/AdversarialRobustness/CertificationReferenceTests.cs"
       ],
       "status": "claimed; Wave 2 in progress on fixer-1 (Batch 5), fixer-3 (Batch 6), fixer-4 (Batch 7); Wave 1 Batch 3 (fc423039d3) and Batch 4 (dd714d3ae0) verified and integrated"
     }
@@ -491,7 +493,6 @@
       "cuda": "Seven cases discovered, not executed locally. Local GPU is AMD OpenCL. Required actual CUDA capture and packaged-DLL hash proof follow producer success; two sm86 runners online and CUDA_RUNNER_ENABLED=true.",
       "remaining": "Exact-artifact CUDA gates, consumer pin/bootstrap update and full GitHub matrix remain required. Known contributor owner actions in source_handoff remain unresolved; no PR merge or new PR."
     },
-
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
     "full_ci": "Initial completed35f cycle observed all9 workflows terminal with5success/4failure; original failure evidence retained. Auto-Fix PR Title was subsequently retried successfully in attempt2 on super-server-2. No original incomplete test suite is converted to passing by this retry; main and standalone TTS/foundation failures remain evidence.",
@@ -779,7 +780,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T00:50:10.603Z",
+  "updated_utc": "2026-11-17T01:10:46.818203Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
