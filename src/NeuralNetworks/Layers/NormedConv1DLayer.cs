@@ -365,13 +365,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        int rows = direction.Shape[0], per = direction.Length / rows;
-        var matrix = engine.Reshape(direction, new[] { rows, per });
-        var norms = engine.TensorPow(engine.TensorAddScalar(engine.ReduceSum(engine.TensorMultiply(matrix, matrix),
-            new[] { 1 }, keepDims: true), ops.FromDouble(1e-24)), ops.FromDouble(-0.5));
-        var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), norms);
-        var kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
+        // A single semantic operation preserves the per-first-dimension gain (also for transposed weights) without
+        // retaining a full squared-weight tensor and two full broadcast-gradient products in a compiled training plan.
+        var kernel = engine.TensorWeightNorm(direction, gain, epsilon: 1e-24);
         // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
         engine.InvalidatePersistentTensor(kernel);
         return kernel;
