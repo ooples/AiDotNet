@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "postbuild": "pagefind --site dist",
+    "postbuild": "pagefind --site dist && node scripts/build-route-inventory.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test:e2e": "npx playwright test",
