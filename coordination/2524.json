@@ -903,10 +903,14 @@
         "tests/AiDotNet.Tests/TextToSpeech/LlamaOmniModulesReferenceTests.cs",
         "tests/AiDotNet.Tests/TextToSpeech/HiFiGANPaperTests.cs",
         "tests/AiDotNet.Tests/Audio/SenseVoicePaperTests.cs",
-        "tests/AiDotNet.Tests/Audio/SenseVoiceLargePaperTests.cs"
+        "tests/AiDotNet.Tests/Audio/SenseVoiceLargePaperTests.cs",
+        "src/Optimizers/AdamWOptimizer.cs",
+        "src/PublicAPI.Unshipped.txt"
       ],
       "file_scope_limits": {
-        "src/ElementWiseBaseline.txt": "Strictly lower or remove baseline counts only (0 increases, 0 new exemptions)."
+        "src/ElementWiseBaseline.txt": "Strictly lower or remove baseline counts only (0 increases, 0 new exemptions).",
+        "src/Optimizers/AdamWOptimizer.cs": "ONLY ReportsRetainedOutputUpdateOutcome => true and ReportRetainedOutputUpdateRejected/ReportRetainedOutputUpdateAccepted in StepCore matching AdamOptimizer in 2788406d77.",
+        "src/PublicAPI.Unshipped.txt": "ONLY 1-line AdamWOptimizer<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool override entry."
       },
       "status": "CLAIMED by Antigravity swarm; Stage A active"
     },
@@ -1476,7 +1480,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T14:56:30Z",
+  "updated_utc": "2026-11-17T14:59:30Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
