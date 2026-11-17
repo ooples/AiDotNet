@@ -74,6 +74,11 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
+    // The native generator retains only parameters and owned normalized-weight caches. Its activations are
+    // per-call results; the Predict funnel keeps the returned waveform and frees the other GPU intermediates.
+    // Custom architecture layers and ONNX execution have not made this lifetime declaration.
+    protected override bool ReleasesInferenceIntermediates => HasPaperLayers && _generator is not null;
+
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
