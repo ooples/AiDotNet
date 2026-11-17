@@ -1138,7 +1138,9 @@
         "src/TimeSeries/TimeSeriesModelBase.cs",
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs",
-        ".github/test-shards.yml"
+        ".github/test-shards.yml",
+        ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+        ".github/tensors-validation.json"
       ],
       "branch": "codex/2524-post1766-ci",
       "owner": "Codex coordinator / root (post-1766 consumer CI batch)",
@@ -1147,7 +1149,10 @@
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs": "ONLY existing NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone method: replace reflection/envelope workaround with actual public Serialize/Deserialize plus clone/deepcopy while retaining independent numeric assertions. Existing author batch complete; no other time-series method edits.",
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs": "ONLY12 stale Insensitive entries proven by posted PINN11/KMaXMaxGradNorm1 TRX evidence; worker pinn_review, root review before consolidated checks. No other entries/harness edits.",
         ".github/test-shards.yml": "ONLY exact routing clause for new CompiledStepRandomDataTests into appropriate existing unit shard, if canonical inventory requires it; no catchall/newshard/changed checks.",
-        "src/ElementWiseBaseline.txt": "ONLY4obsoleteHiFTharmonic keys and1obsoleteADNELEM001 TimeSeriesModelBase.Serialize key (confirmed actualanalyzergate); no adds/increases."
+        "src/ElementWiseBaseline.txt": "ONLY4obsoleteHiFTharmonic keys and1obsoleteADNELEM001 TimeSeriesModelBase.Serialize key (confirmed actualanalyzergate); no adds/increases.",
+        ".github/scripts/Initialize-TensorsValidationFeed.ps1": "ONLY guard extension for new20normalizationSearch cases and updated100/46/112/20 artifact278inventory; preserve immutable provenance/package/DLL/TRX checks. First100anchored2Infinitycanonicalidentity consistentproducer. No legacy-schema fallback.",
+        ".github/scripts/Test-TensorsValidationFeed.ps1": "ONLY update existing synthetic evidence fixtures for additional required group and first-group identity ifguarded; meaningfulmissing/skipped/duplicate/replaced/checksumnegativecases. Do not change existingproductionchecks.",
+        ".github/tensors-validation.json": "Root updates immutable099966a87 producer44193760010 onlyafteractualartifactcomplete; artifactID/digest/packagehash/DLLhash fromrealmanifest. No placeholderspublished."
       }
     },
     {
@@ -1290,7 +1295,14 @@
       "status": "ACTIVE; exactheadmonitor cuda_capture session54573",
       "hotfix": "3CP0008records exactintentionalAPIremoval, positive+negativeSDKfixturepassed; userdirectedpush"
     },
-    "post1766_policy_trainer_review": "Root-independent agent reviewed exact6files from1a9ec438c6: stableTensorLogSoftmax/Where and eager/compiled trainer numeric/refusal tests correct; one Half model-epsilonoverride blocker above. Shared Adam repair design under existing Codex scope; no new publicrelease."
+    "post1766_policy_trainer_review": "Root-independent agent reviewed exact6files from1a9ec438c6: stableTensorLogSoftmax/Where and eager/compiled trainer numeric/refusal tests correct; one Half model-epsilonoverride blocker above. Shared Adam repair design under existing Codex scope; no new publicrelease.",
+    "native_replay_1512": {
+      "producer": 44193760010,
+      "status": "PUSHED reviewed7source/testfiles+2workflows; local278CPU passed0fail0skip, all5TFMs/exactpackageGPUpending; artifactonly0.151.3coordnopublicrelease",
+      "gpu": "Preserveprior22exactartifactresults(CPUcontrols included) +2actualGPUcases;24uniquePassedrequired",
+      "branch": "codex/2524-native-replay-1512",
+      "source": "099966a8726a9313abd4fb8e89ea11597eaf601d"
+    }
   },
   "decisions": [
     {
@@ -1841,7 +1853,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T22:39:15.3552906Z",
+  "updated_utc": "2026-11-17T22:55:13.1920784Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
