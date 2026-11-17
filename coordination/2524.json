@@ -13,6 +13,16 @@
   ],
   "owners": [
 {
+  "owner": "this session/cuda_capture accepted API removals",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    "src/CompatibilitySuppressions.xml"
+  ],
+  "scope": "Exactly six baseline CP0008 records for the two intentional generated-registrar interface removals on net10.0/net471/net8.0, plus explanatory XML comment, using documented accepted pre-v1 break policy.",
+  "status": "CLAIMED; user authorizes breaking changes and fixing reviewed build issues. No dummy interface/dead state, blanket suppression, baseline version change, or disabled package validation.",
+  "verification": "Exact semantic XML diff; match actual CI diagnostics; focused ApiCompat positive/unrelated negative fixture; full real package gate remains required."
+},
+{
   "owner": "this session/artifact_feed SearchSorted replay",
   "repository": "ooples/AiDotNet.Tensors",
   "files": [
