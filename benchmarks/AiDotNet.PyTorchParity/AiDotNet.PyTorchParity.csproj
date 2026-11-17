@@ -12,6 +12,8 @@
     <!-- This is a manual benchmark harness, not a unit-test project. Exclude
          it from coverage and keep it out of the default `dotnet test` run. -->
     <IsTestProject>false</IsTestProject>
+    <!-- An explicit staged core can be shared by isolated benchmark worktrees. The gate records its binary hash. -->
+    <BenchmarkAiDotNetProject Condition="'$(BenchmarkAiDotNetProject)' == ''">..\..\src\AiDotNet.csproj</BenchmarkAiDotNetProject>
 
     <!-- Memory fairness vs PyTorch-CPU (issue #1566). .NET Server GC commits a
          heap segment per logical core and is reluctant to return memory to the
@@ -41,7 +43,7 @@
          the PR #1469 fused-training gate + FeedForwardNeuralNetwork.Predict ->
          MlpForward wiring — without waiting for a NuGet publish. AIsEval, by
          contrast, can only benchmark a released package. -->
-    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+    <ProjectReference Include="$(BenchmarkAiDotNetProject)" />
   </ItemGroup>
 
 </Project>
