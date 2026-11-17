@@ -1,15 +1,15 @@
 {
   "repository": "ooples/AiDotNet.Tensors",
-  "runId": 43955817990,
+  "runId": 43990270445,
   "runAttempt": 1,
-  "sourceCommit": "7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382",
+  "sourceCommit": "c9770e98d97aa5cfdb634d18e0f4693ce8341a15",
   "workflowPath": ".github/workflows/coordination-package.yml",
-  "artifactId": 14272518202,
-  "artifactName": "tensors-coordination-7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382-43955817990-1",
-  "artifactDigest": "sha256:59963424dc01439c4b3bb7355ff1743fc2fa9dc897717498ab0e45a568aa1347",
-  "packageVersion": "0.151.1-coordination.43955817990.1.g7dd9b68c8f9e",
-  "packageSha256": "93785ea454156ab2cbfc5a28bdfb3599ed470d634b76729f79698534def53a70",
-  "testedAndPackagedNet10BinarySha256": "ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073",
+  "artifactId": 14286634992,
+  "artifactName": "tensors-coordination-c9770e98d97aa5cfdb634d18e0f4693ce8341a15-43990270445-1",
+  "artifactDigest": "sha256:8d40eaf63e19d8a997eae4c077f9b4298b74e3422a0b7f5e6838bdf23fe06a14",
+  "packageVersion": "0.151.1-coordination.43990270445.1.gc9770e98d97a",
+  "packageSha256": "ecf48e683ef53c2b7607085f421995d03b46b4909d157c2e855ecc35dee53555",
+  "testedAndPackagedNet10BinarySha256": "347648f6e6373ad365cd96a8bcb3d49b5c1e3e382dac43bb084e4eaf7b69e82e",
   "testCount": 99,
   "targetFrameworks": [
     "net10.0",
@@ -19,5 +19,13 @@
     "netstandard2.0"
   ],
   "retainedOutputTestCount": 26,
-  "mandatoryCpuTestCount": 125
+  "mandatoryCpuTestCount": 230,
+  "heterogeneousReplayTestCount": 15,
+  "heterogeneousReplayTestCasesSha256": "de0075e3f1733158969ac80614c060ec5503fca2c224f1d20a7fc639921b4d6d",
+  "noGradTestCount": 9,
+  "noGradTestCasesSha256": "337e7ee0a35bee20cfbd1eac8233c492ef750437ab57409b4a29fe5af3ae05e5",
+  "optimizerEnrollmentTestCount": 43,
+  "optimizerEnrollmentTestCasesSha256": "359f487a34663544290a09d33b38529875bedf4e6719aff3b82aa931782b691f",
+  "enrollmentCheckpointTestCount": 38,
+  "enrollmentCheckpointTestCasesSha256": "71f778ef513854883c35373163eb00e8fc4978b5a43c930cf8b1ccf411c41cd0"
 }

@@ -4,10 +4,25 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'Initialize-TensorsValidationFeed.ps1'
 $root = Join-Path ([IO.Path]::GetTempPath()) "tensors-feed-test-$([guid]::NewGuid().ToString('N'))"
-[void](New-Item -ItemType Directory -Path "$root/.github", "$root/evidence/packages", "$root/lib")
+[void](New-Item -ItemType Directory -Path "$root/.github", "$root/evidence/packages", "$root/evidence/TestResults", "$root/lib")
 try {
     $pin = Get-Content (Join-Path $PSScriptRoot '../tensors-validation.json') -Raw | ConvertFrom-Json
     $version = $pin.packageVersion
+    $fixtureCpuGroups = @(
+        @{ Prefix = 'heterogeneousReplay'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.ForwardOnlyHeterogeneousTrainingTests' }
+        @{ Prefix = 'noGrad'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NoGradTrainingTraceTests' }
+        @{ Prefix = 'optimizerEnrollment'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledOptimizerEnrollmentTests' }
+        @{ Prefix = 'enrollmentCheckpoint'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledEnrollmentCheckpointTests' }
+    )
+    $fixtureCpuCases = @{}
+    foreach ($group in $fixtureCpuGroups) {
+        $cases = [string[]]@(1..2 | ForEach-Object { "$($group.Class).FixtureCase$_" })
+        $fixtureCpuCases[$group.Prefix] = $cases
+        $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([string]::Join("`n", $cases)))).ToLowerInvariant()
+        $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCount') -NotePropertyValue 2 -Force
+        $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCasesSha256') -NotePropertyValue $digest -Force
+    }
+    $pin.mandatoryCpuTestCount = $pin.testCount + $pin.retainedOutputTestCount + 8
     $props = "<Project><ItemGroup><PackageVersion Include=`"AiDotNet.Tensors`" Version=`"$version`" /></ItemGroup></Project>"
     Set-Content "$root/Directory.Packages.props" $props
     Add-Type -AssemblyName System.IO.Compression.ZipFile
@@ -39,6 +54,19 @@ try {
     foreach ($outcome in @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')) {
         $manifest.retainedOutputTestCounters[$outcome] = 0
     }
+    $zeroOutcomes = @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')
+    foreach ($group in $fixtureCpuGroups) {
+        $groupCounters = @{ total = 2; executed = 2; passed = 2 }
+        foreach ($outcome in $zeroOutcomes) { $groupCounters[$outcome] = 0 }
+        $manifest[$group.Prefix + 'TestCounters'] = $groupCounters
+        $manifest[$group.Prefix + 'TestCases'] = $fixtureCpuCases[$group.Prefix]
+    }
+    $trxCases = @($fixtureCpuGroups | ForEach-Object { $fixtureCpuCases[$_.Prefix] } | ForEach-Object { "<UnitTestResult testName=`"$_`" outcome=`"Passed`" />" })
+    $trxCounters = 'total="8" executed="8" passed="8" ' + (($zeroOutcomes | ForEach-Object { "$_=`"0`"" }) -join ' ')
+    $unionTrx = "<TestRun><Results>$($trxCases -join '')</Results><ResultSummary outcome=`"Completed`"><Counters $trxCounters /></ResultSummary></TestRun>"
+    $unionTrxPath = "$root/evidence/TestResults/optimizer-enrollment-signature.trx"
+    Set-Content -LiteralPath $unionTrxPath -Value $unionTrx -Encoding utf8 -NoNewline
+    $manifest.sha256['TestResults/optimizer-enrollment-signature.trx'] = (Get-FileHash $unionTrxPath -Algorithm SHA256).Hash.ToLowerInvariant()
     function Test-Case([string] $Name, [scriptblock] $Mutate, [string] $ExpectedError) {
         $case = $manifest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
         & $Mutate $case
@@ -57,6 +85,23 @@ try {
     Test-Case 'skipped retained-output tests' { param($m) $m.retainedOutputTestCounters.notExecuted = 1 } 'Nonzero retained-output test outcome'
     Test-Case 'duplicate retained-output identities' { param($m) $m.retainedOutputTestCases[1] = $m.retainedOutputTestCases[0] } 'must be nonempty and unique'
     Test-Case 'missing retained-output identity' { param($m) $m.retainedOutputTestCases = @($m.retainedOutputTestCases | Select-Object -Skip 1) } 'test identity count'
+    foreach ($group in $fixtureCpuGroups) {
+        $prefix = $group.Prefix
+        Test-Case "$prefix missing counters" { param($m) $m.PSObject.Properties.Remove($prefix + 'TestCounters') } 'Missing mandatory CPU test group'
+        Test-Case "$prefix skipped case" { param($m) $m.($prefix + 'TestCounters').notExecuted = 1 } 'Nonzero mandatory CPU test outcome'
+        Test-Case "$prefix wrong count" { param($m) $m.($prefix + 'TestCounters').total = 1 } 'Mandatory CPU group count did not match'
+        Test-Case "$prefix duplicate identity" { param($m) $m.($prefix + 'TestCases')[1] = $m.($prefix + 'TestCases')[0] } 'must be nonempty and unique'
+        Test-Case "$prefix replaced identity" { param($m) $m.($prefix + 'TestCases')[1] = "$($group.Class).UnexpectedCase" } 'Mandatory CPU test identity digest did not match'
+    }
+    try {
+        Set-Content -LiteralPath $unionTrxPath -Value ($unionTrx.Replace('outcome="Passed"', 'outcome="NotExecuted"')) -Encoding utf8 -NoNewline
+        Test-Case 'checksummed TRX still rejects skipped cases' { param($m) $m.sha256.'TestResults/optimizer-enrollment-signature.trx' = (Get-FileHash $unionTrxPath -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU union TRX cases must be distinct and passed'
+        Set-Content -LiteralPath $unionTrxPath -Value ($unionTrx.Replace('.FixtureCase2', '.DifferentCase2')) -Encoding utf8 -NoNewline
+        Test-Case 'checksummed TRX still rejects replaced cases' { param($m) $m.sha256.'TestResults/optimizer-enrollment-signature.trx' = (Get-FileHash $unionTrxPath -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU TRX identities did not match'
+        Test-Case 'changed TRX without checksum update' {} 'Mandatory CPU union TRX checksum did not match'
+    } finally {
+        Set-Content -LiteralPath $unionTrxPath -Value $unionTrx -Encoding utf8 -NoNewline
+    }
     Test-Case 'wrong mandatory CPU total' { param($m) $m.mandatoryCpuTestCount-- } 'Mandatory CPU test total'
     Test-Case 'missing target framework' { param($m) $m.targetFrameworks = @('net10.0') } 'target frameworks'
     Test-Case 'wrong package hash' { param($m) $m.sha256."packages/AiDotNet.Tensors.$version.nupkg" = 'wrong' } 'Package hash'

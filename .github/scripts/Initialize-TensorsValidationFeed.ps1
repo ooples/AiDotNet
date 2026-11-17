@@ -12,6 +12,12 @@ function Assert-Feed([bool] $Condition, [string] $Message) {
     if (-not $Condition) { throw $Message }
 }
 function Get-Sha256([string] $Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Get-CaseDigest([string[]] $Cases) {
+    $ordered = [string[]]@($Cases)
+    [Array]::Sort($ordered, [StringComparer]::Ordinal)
+    $bytes = [Text.Encoding]::UTF8.GetBytes([string]::Join("`n", $ordered))
+    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
 [xml] $props = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'Directory.Packages.props') -Raw
 $versions = @($props.SelectNodes('//PackageVersion[@Include="AiDotNet.Tensors"]'))
 Assert-Feed ($versions.Count -eq 1) 'Expected exactly one central AiDotNet.Tensors version.'
@@ -79,7 +85,63 @@ $uniqueCases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordi
 foreach ($case in $retainedCases) {
     Assert-Feed (-not [string]::IsNullOrWhiteSpace($case) -and $uniqueCases.Add($case)) 'Retained-output test identities must be nonempty and unique.'
 }
-Assert-Feed ($pin.mandatoryCpuTestCount -eq ($pin.testCount + $pin.retainedOutputTestCount) -and $manifest.mandatoryCpuTestCount -eq $pin.mandatoryCpuTestCount -and ([int]$counters.total + [int]$retainedCounters.total) -eq $pin.mandatoryCpuTestCount) 'Mandatory CPU test total did not match.'
+$newCpuGroups = @(
+    @{ Prefix = 'heterogeneousReplay'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.ForwardOnlyHeterogeneousTrainingTests' }
+    @{ Prefix = 'noGrad'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NoGradTrainingTraceTests' }
+    @{ Prefix = 'optimizerEnrollment'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledOptimizerEnrollmentTests' }
+    @{ Prefix = 'enrollmentCheckpoint'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledEnrollmentCheckpointTests' }
+)
+$relativeNewTrx = 'TestResults/optimizer-enrollment-signature.trx'
+$newTrxPath = Join-Path $EvidenceDirectory $relativeNewTrx
+Assert-Feed ($null -ne $manifest.sha256.PSObject.Properties[$relativeNewTrx] -and
+    $manifest.sha256.$relativeNewTrx -cmatch '^[0-9a-f]{64}$' -and (Test-Path -LiteralPath $newTrxPath) -and
+    (Get-Sha256 $newTrxPath) -ceq $manifest.sha256.$relativeNewTrx) 'Mandatory CPU union TRX checksum did not match.'
+[xml]$newTrx = Get-Content -LiteralPath $newTrxPath -Raw
+$newResults = @($newTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+$newCounters = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+$newSummary = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]')
+Assert-Feed ($null -ne $newCounters -and $null -ne $newSummary -and $newSummary.GetAttribute('outcome') -ceq 'Completed') 'Mandatory CPU union TRX did not complete.'
+$newNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($result in $newResults) {
+    Assert-Feed ($result.GetAttribute('outcome') -ceq 'Passed' -and $newNames.Add($result.GetAttribute('testName'))) 'Mandatory CPU union TRX cases must be distinct and passed.'
+}
+$newExpectedTotal = 0
+$newManifestTotal = 0
+foreach ($group in $newCpuGroups) {
+    $counterField = $group.Prefix + 'TestCounters'
+    $caseField = $group.Prefix + 'TestCases'
+    $countField = $group.Prefix + 'TestCount'
+    $digestField = $group.Prefix + 'TestCasesSha256'
+    Assert-Feed ($null -ne $pin.PSObject.Properties[$countField] -and $null -ne $pin.PSObject.Properties[$digestField]) "Missing pinned mandatory CPU group: $($group.Prefix)"
+    $expectedCount = [int]$pin.$countField
+    Assert-Feed ($expectedCount -gt 0 -and $pin.$digestField -cmatch '^[0-9a-f]{64}$') "Invalid pinned mandatory CPU group: $($group.Prefix)"
+    Assert-Feed ($null -ne $manifest.PSObject.Properties[$counterField]) "Missing mandatory CPU test group: $($group.Prefix)"
+    $groupCounters = $manifest.$counterField
+    Assert-Feed ([int]$groupCounters.total -eq $expectedCount -and [int]$groupCounters.executed -eq $expectedCount -and [int]$groupCounters.passed -eq $expectedCount) "Mandatory CPU group count did not match: $($group.Prefix)"
+    foreach ($outcome in @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')) {
+        Assert-Feed ($null -ne $groupCounters.PSObject.Properties[$outcome]) "Missing mandatory CPU test outcome: $($group.Prefix).$outcome"
+    }
+    foreach ($counter in $groupCounters.PSObject.Properties) {
+        if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero mandatory CPU test outcome: $($group.Prefix).$($counter.Name)" }
+    }
+    Assert-Feed ($null -ne $manifest.PSObject.Properties[$caseField]) "Missing mandatory CPU test identities: $($group.Prefix)"
+    $cases = [string[]]@($manifest.$caseField)
+    Assert-Feed ($cases.Count -eq $expectedCount) "Mandatory CPU test identity count did not match: $($group.Prefix)"
+    $identities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($case in $cases) {
+        Assert-Feed (-not [string]::IsNullOrWhiteSpace($case) -and $case.StartsWith($group.Class + '.', [StringComparison]::Ordinal) -and $identities.Add($case)) 'Mandatory CPU test identities must be nonempty and unique and belong to the pinned class.'
+    }
+    Assert-Feed ((Get-CaseDigest $cases) -ceq $pin.$digestField) "Mandatory CPU test identity digest did not match: $($group.Prefix)"
+    $trxCases = [string[]]@($newResults | Where-Object { $_.GetAttribute('testName').StartsWith($group.Class + '.', [StringComparison]::Ordinal) } | ForEach-Object { $_.GetAttribute('testName') })
+    Assert-Feed ($trxCases.Count -eq $expectedCount -and (Get-CaseDigest $trxCases) -ceq $pin.$digestField) "Mandatory CPU TRX identities did not match: $($group.Prefix)"
+    $newExpectedTotal += $expectedCount
+    $newManifestTotal += [int]$groupCounters.total
+}
+Assert-Feed ($newResults.Count -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('total') -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('executed') -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('passed') -eq $newExpectedTotal) 'Mandatory CPU union TRX count did not match.'
+foreach ($counter in $newCounters.Attributes) {
+    if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero mandatory CPU union TRX outcome: $($counter.Name)" }
+}
+Assert-Feed ($pin.mandatoryCpuTestCount -eq ($pin.testCount + $pin.retainedOutputTestCount + $newExpectedTotal) -and $manifest.mandatoryCpuTestCount -eq $pin.mandatoryCpuTestCount -and ([int]$counters.total + [int]$retainedCounters.total + $newManifestTotal) -eq $pin.mandatoryCpuTestCount) 'Mandatory CPU test total did not match.'
 $relativePackage = "packages/AiDotNet.Tensors.$version.nupkg"
 $package = Join-Path $EvidenceDirectory $relativePackage
 Assert-Feed ($manifest.sha256.$relativePackage -ceq $pin.packageSha256 -and (Get-Sha256 $package) -ceq $pin.packageSha256) 'Package hash did not match.'
