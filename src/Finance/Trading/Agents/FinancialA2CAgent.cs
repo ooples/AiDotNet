@@ -126,12 +126,34 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
         EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
 
-        _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        var lossFunction = TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>();
+        _actor = new NeuralNetwork<T>(actorArchitecture, optimizer: CreateNetworkOptimizerOrDefault(), lossFunction: lossFunction);
+        _critic = new NeuralNetwork<T>(criticArchitecture, optimizer: CreateNetworkOptimizerOrDefault(), lossFunction: lossFunction);
         // Registered for disposal. The replay buffer that used to be built here went with master's
         // move to a rollout held in _policyRuntime.Pending; the two networks still need owning.
         Networks.Add(_actor);
         Networks.Add(_critic);
+    }
+
+    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateNetworkOptimizerOrDefault()
+    {
+        // Preserve NeuralNetwork<T>'s exact default optimizer when 1e-8 is representable (float/double/decimal).
+        // In Half, (Half)1e-8 underflows to zero, turning zero-gradient Adam denominators (e.g. masked or
+        // saturated actions) into 0 / 0 = NaN; use 1e-5 (matching FinancialPPOAgentOptions.AdamEpsilon).
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (!numOps.Equals(numOps.FromDouble(1e-8), numOps.Zero))
+        {
+            return null;
+        }
+
+        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = 5e-4,
+                Epsilon = 1e-5,
+            });
     }
 
     /// <summary>
@@ -422,7 +444,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
             : engine.TensorConcatenate([states, actionMask, advantageColumn], axis: 1);
 
         var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
-        var logSoftmaxFloor = NumOps.FromDouble(1e-8);
         var trainableActor = (NeuralNetworkBase<T>)_actor;
         T policyLoss;
         trainableActor.SetTrainingMode(true);
@@ -444,12 +465,10 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
                 var stepAdvantages = engine.Reshape(engine.TensorSlice(packed, [0, advOffset], [rows, 1]), [rows]);
                 var actorOutput = trainableActor.ForwardForTraining(stepStates);
                 var logits = stepMaskBias is null ? actorOutput : engine.TensorAdd(actorOutput, stepMaskBias);
-                var softmaxed = engine.Softmax(logits);
-                var safeSoftmax = engine.TensorAddScalar(softmaxed, logSoftmaxFloor);
-                var logProbsAll = engine.TensorLog(safeSoftmax);
-                var logProbs = engine.ReduceSum(engine.TensorMultiply(logProbsAll, stepActions), [1], keepDims: false);
+                var logProbsAll = engine.TensorLogSoftmax(logits, axis: 1);
+                var logProbs = PolicyDistributionHelper<T>.SelectDiscreteLogProbFromLogProbs(engine, logProbsAll, stepActions);
                 var policyObjective = engine.TensorMultiply(logProbs, stepAdvantages);
-                var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
+                var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropyFromLogProbs(engine, logProbsAll);
                 var objective = engine.TensorAdd(policyObjective, engine.TensorMultiplyScalar(entropy, entropyCoefficient));
                 var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
                 return engine.TensorNegate(engine.ReduceMean(objective, allAxes, keepDims: false));
