@@ -63722,4 +63722,50 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <!-- Accepted pre-v1 API break: iTAML and CACTUs no longer implement IGeneratedParameterRegistrar<T>
+       after algorithm corrections removed obsolete teacher/clustering state and all owned generated
+       parameter fields. MetaLearnerBase still registers their canonical meta-model. Do not restore
+       obsolete state or marker adapters solely for compatibility with the 0.234.0 baseline. -->
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.iTAMLAlgorithm`3</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.iTAMLAlgorithm`3</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.iTAMLAlgorithm`3</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.UnsupervisedMetaLearnAlgorithm`3</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.UnsupervisedMetaLearnAlgorithm`3</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0008</DiagnosticId>
+    <Target>T:AiDotNet.MetaLearning.Algorithms.UnsupervisedMetaLearnAlgorithm`3</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
