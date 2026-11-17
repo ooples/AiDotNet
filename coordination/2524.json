@@ -13,6 +13,19 @@
   ],
   "owners": [
 {
+  "owner": "this session/artifact_feed KMaX option follow-up",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLabOptions.cs",
+    "src/ComputerVision/Segmentation/Panoptic/KMaXDeepLab.cs",
+    "tests/AiDotNet.Tests/ModelFamilyTests/Base/OptionSensitivityFixtureSetup.cs",
+    "tests/AiDotNet.Tests/ComputerVision/KMaXOptionFixture.cs",
+    "tests/AiDotNet.Tests/UnitTests/ComputerVision/PanopticVideoFewShotSegmentationReferenceTests.cs"
+  ],
+  "scope": "After completed original author batch, remove ONLY SemanticAtrousRates blanket exemption. Factor real semantic decoder execution into shared internal method; use existing option Observe/ControlGroup/PrepareOptions/TrainingSteps hooks only for this immediate architecture option on deterministic 5x5 features; exact option-to-decoder output oracle with copied parameters. No global harness redesign, weakened assertions or full-model training skips for other options.",
+  "status": "USER-DIRECTED REVIEW FIX CLAIMED before edits; prior owner batch complete. Root reviews diff before focused verification; hold PR push until active cycle terminal."
+},
+{
   "owner": "this session/pinn_review consumer review repairs",
   "repository": "ooples/AiDotNet",
   "files": [
