@@ -613,7 +613,8 @@
         "src/ReinforcementLearning/Agents/SACAgent.cs",
         "src/Finance/Trading/Evaluation/PortfolioAgentTraining.cs",
         "src/ComputerVision/TensorModelTrainer.cs",
-        "src/Finance/Trading/Agents/FinancialA2CAgent.cs"
+        "src/Finance/Trading/Agents/FinancialA2CAgent.cs",
+        "src/Inference/CompiledNeuralPredictor.cs"
       ],
       "file_scope_limits": {
         "tests/AiDotNet.Tests/IntegrationTests/MetaLearning/MetaLearningCoverageIntegrationTests.cs": "ONLY RelationNetwork_ModelAndModuleCoverage around line 921; do NOT touch NTM_LstmController_And_MemoryCoverage (Codex NTM scope)."
@@ -1105,7 +1106,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T05:55:27.131582Z",
+  "updated_utc": "2026-11-17T06:05:20.720560Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
