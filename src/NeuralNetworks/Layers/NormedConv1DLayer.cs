@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -328,40 +329,29 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
         // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
         // stored u and v unchanged.
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
-        if (IsTrainingMode)
+        Tensor<T> uT, vT;
+        // Power iteration treats u/v as state, not differentiable functions of the weights. Keep the matrix and
+        // state updates on the engine: downloading V and walking its elements dominated GPU vocoder training.
+        using (new NoGradScope<T>())
         {
-            var vHost = v.ToVector();
-            void Normalize(double[] a)
+            uT = Engine.Reshape(_u, new[] { 1, rows });
+            vT = Engine.Reshape(_v, new[] { per, 1 });
+            if (IsTrainingMode)
             {
-                double n = Math.Sqrt(a.Sum(x => x * x));
-                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+                Tensor<T> Normalize(Tensor<T> x)
+                {
+                    var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), null));
+                    return Engine.TensorMultiply(x, Engine.TensorReciprocal(Engine.TensorMax(norm, NumOps.FromDouble(1e-12))));
+                }
+                var nextV = Normalize(Engine.TensorMatMul(uT, v));
+                var nextU = Normalize(Engine.TensorMatMul(v, Engine.Reshape(nextV, new[] { per, 1 })));
+                Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
+                Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
+                // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
+                uT = Engine.Reshape(Engine.TensorAddScalar(_u, NumOps.Zero), new[] { 1, rows });
+                vT = Engine.Reshape(Engine.TensorAddScalar(_v, NumOps.Zero), new[] { per, 1 });
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(vHost[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
-            Engine.InvalidatePersistentTensor(_u);
-            Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
         var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
