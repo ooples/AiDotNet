@@ -1,6 +1,13 @@
 name: Build and verify existing website preview
 on:
   workflow_dispatch: null
+  push:
+    branches:
+      - fix/e2e-findings-1
+    paths:
+      - website/**
+      - .github/workflows/website-preview.yml
+      - .github/workflows/website-e2e.yml
 permissions:
   contents: read
 concurrency:
