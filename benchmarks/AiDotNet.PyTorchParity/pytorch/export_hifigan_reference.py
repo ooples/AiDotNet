@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import warnings
 from pathlib import Path
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -113,10 +114,48 @@ def batch(step: int, device: torch.device, frames: int = 32):
     return mel, audio
 
 
+def unsupported_determinism_warnings(warnings_seen):
+    return [row for row in warnings_seen if "deterministic" in row["message"].lower()
+            and any(text in row["message"].lower() for text in
+                    ("does not have", "nondeterministic", "non-deterministic"))]
+
+
+def write_warning_receipt(out: Path, device: torch.device, warnings_seen, completed: bool):
+    receipt = {"schema": 1, "device": str(device), "reference_completed": completed,
+               "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+               "deterministic_warn_only": torch.is_deterministic_algorithms_warn_only_enabled(),
+               "bitwise_determinism_claim": False,
+               "unsupported_determinism_warnings": unsupported_determinism_warnings(warnings_seen),
+               "warnings": warnings_seen,
+               "exporter_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    path = out / "determinism-warnings.json"
+    path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def export(out: Path, device: torch.device, seed: int, compile_model: bool):
+    warnings_seen = []
+    completed = False
+    with warnings.catch_warnings():
+        previous_showwarning = warnings.showwarning
+        def observe(message, category, filename, lineno, file=None, line=None):
+            warnings_seen.append({"message": str(message), "category": category.__name__,
+                                  "filename": filename, "lineno": lineno})
+            previous_showwarning(message, category, filename, lineno, file, line)
+        warnings.showwarning = observe
+        try:
+            _export(out, device, seed, compile_model, warnings_seen)
+            completed = True
+        finally:
+            write_warning_receipt(out, device, warnings_seen, completed)
+
+
+def _export(out: Path, device: torch.device, seed: int, compile_model: bool, warnings_seen):
     torch.manual_seed(seed)
     torch.set_num_threads(8)
-    torch.use_deterministic_algorithms(True)
+    # CUDA reflection-pad backward has no deterministic implementation. Keep deterministic
+    # choices where available and report unsupported kernels rather than changing the math.
+    torch.use_deterministic_algorithms(True, warn_only=device.type == "cuda")
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     model = HifiGanV1().to(device)
@@ -178,6 +217,7 @@ def export(out: Path, device: torch.device, seed: int, compile_model: bool):
     write_safetensors(out / "reference.safetensors", reference)
     names = ("initial", "isolated-gradients", "step1", "step2", "step3", "reference")
     files = {name + ".safetensors": hashlib.sha256((out / (name + ".safetensors")).read_bytes()).hexdigest() for name in names}
+    warning_receipt_hash = write_warning_receipt(out, device, warnings_seen, completed=True)
     manifest = {
         "schema": "hifigan-v1-equivalence-v1", "model": "hifigan-v1", "device": str(device),
         "torch_version": torch.__version__, "compiled": compile_model, "seed": seed, "steps": 3, "crop_start_frame": 0,
@@ -186,7 +226,13 @@ def export(out: Path, device: torch.device, seed: int, compile_model: bool):
                      "generator_layers": 78, "discriminator_layers": 54},
         "trainable_parameters": sum(p.numel() for p in model.parameters()),
         "optimizer": {"type": "AdamW", "lr": 2e-4, "betas": [.8, .99], "eps": 1e-8, "weight_decay": .01},
-        "tf32": False, "deterministic_algorithms": True, "files_sha256": files,
+        "tf32": False, "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "deterministic_warn_only": torch.is_deterministic_algorithms_warn_only_enabled(),
+        "bitwise_determinism_claim": False,
+        "unsupported_determinism_warnings": unsupported_determinism_warnings(warnings_seen),
+        "determinism_warning_receipt": {"file": "determinism-warnings.json", "sha256": warning_receipt_hash},
+        "exporter_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "files_sha256": files,
         "benchmark_source_sha256": hashlib.sha256(Path(__file__).with_name("benchmark.py").read_bytes()).hexdigest(),
         "layers": [{"key": prefix, "torch_name": name,
                     "normalization": "spectral" if not hasattr(conv.parametrizations.weight, "original1") else "weight",

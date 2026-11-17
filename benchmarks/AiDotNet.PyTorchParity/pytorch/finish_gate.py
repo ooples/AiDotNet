@@ -235,6 +235,9 @@ def reference_recipe_gate(run: dict) -> dict:
         manifest = json.loads(payload)
         if not isinstance(manifest, dict) or not hashes.get("pytorch_benchmark") or manifest.get("benchmark_source_sha256") != hashes["pytorch_benchmark"]:
             return {"status": "unverified", "reason": "Reference manifest benchmark recipe does not match the scored PyTorch benchmark hash."}
+        exporter_hash = manifest.get("exporter_source_sha256")
+        if exporter_hash is not None and (not hashes.get("reference_exporter") or exporter_hash != hashes["reference_exporter"]):
+            return {"status": "unverified", "reason": "Reference manifest exporter hash does not match the per-reference exporter artifact."}
     except (OSError, ValueError, TypeError):
         return {"status": "unverified", "reason": "Missing or invalid reference manifest for recipe validation."}
     return {"status": "pass"}
