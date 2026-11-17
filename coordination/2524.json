@@ -30,12 +30,14 @@
         "src/TextToSpeech/Vocoders/HiftModules.cs",
         "tests/AiDotNet.Tests/TextToSpeech/HiftReplayTests.cs",
         "src/Training/CompiledStepRandom.cs",
-        "tests/AiDotNet.Tests/UnitTests/Training/CompiledStepRandomDataTests.cs"
+        "tests/AiDotNet.Tests/UnitTests/Training/CompiledStepRandomDataTests.cs",
+        "src/ElementWiseBaseline.txt"
       ],
       "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests. Necessary bounded shared internal typed-data draw hook and independent mixed-type ordering, dtype/shape mismatch, no-probe-draw, suppression and plan-refill regressions. Root reviews complete4file diff before build.",
-      "status": "ACTIVE root-approved necessary shared hook. Existing draw recorder is primary-T only; internal mixed-payload support avoids narrowing double HiFT draws. Estimated additional30-45min; no acceptance changes or new package release.",
+      "status": "ROOT REVIEWED localeb3bccd9ae fourfilebatch; independent old-kernel/analytic-gradient/typedRNG/probe tests unrun. Root integrates with published0.151.2 then one consolidated normalbuild/focusedchecks; baseline4exactobsoletekeys removed only.",
       "file_scope_limits": {
-        "src/Training/CompiledStepRandom.cs": "ONLY internal DrawData<TData> under same primary-T recorder/suppression/capture/replay. Keep public Draw behavior; typed refill/version/invalidation, capture dtype+shape checks. Preserve exact double phase/noise RNG for float/Half; no hidden Random capture or public/native API change."
+        "src/Training/CompiledStepRandom.cs": "ONLY internal DrawData<TData> under same primary-T recorder/suppression/capture/replay. Keep public Draw behavior; typed refill/version/invalidation, capture dtype+shape checks. Preserve exact double phase/noise RNG for float/Half; no hidden Random capture or public/native API change.",
+        "src/ElementWiseBaseline.txt": "ONLY remove4now-unused exact HiftGenerator.Harmonics/HarmonicsByFrames ADNELEM001/002 keys, old2/3counts. Public methods now wrappers; newpure-doublecores+bulkcasts introduce no scalar exemption/baseline increase. Other owners keys unchanged."
       }
     },
     {
@@ -1832,7 +1834,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:46:09.3940082Z",
+  "updated_utc": "2026-11-17T21:53:53.2416202Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
