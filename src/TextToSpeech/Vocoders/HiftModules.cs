@@ -269,7 +269,7 @@ internal sealed class HiftGenerator<T>
     private static Tensor<T> HarmonicsByFramesCore(Tensor<T> f0, double[] initialPhases, double[,] noise, HarmonicSettings c)
     {
         int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
-        using var frequencies = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(f0);
+        using var frequencies = f0.Cast<double>();
         var f0Values = frequencies.ToArray();
         var sines = new double[harmonics * samples];
         // F.interpolate(mode="linear", align_corners=False) with a scale factor: source = (i + 0.5) / factor − 0.5,
@@ -316,7 +316,7 @@ internal sealed class HiftGenerator<T>
             }
         }
         using var result = new Tensor<double>(sines, new[] { 1, harmonics, samples });
-        return AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(result);
+        return result.Cast<T>();
     }
 
     /// <summary>
@@ -335,7 +335,7 @@ internal sealed class HiftGenerator<T>
     private static Tensor<T> HarmonicsCore(Tensor<T> f0, double[] phases, double[,] noise, HarmonicSettings c)
     {
         int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
-        using var frequencies = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(f0);
+        using var frequencies = f0.Cast<double>();
         var f0Values = frequencies.ToArray();
         var sines = new double[harmonics * samples];
         for (int h = 0; h < harmonics; h++)
@@ -352,7 +352,7 @@ internal sealed class HiftGenerator<T>
             }
         }
         using var result = new Tensor<double>(sines, new[] { 1, harmonics, samples });
-        return AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(result);
+        return result.Cast<T>();
     }
 
     /// <summary>The merged excitation <c>[1, 1, samples]</c> of harmonics <c>[1, H+1, samples]</c>: tanh of the linear merge.</summary>

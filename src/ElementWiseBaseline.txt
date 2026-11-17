@@ -2708,7 +2708,6 @@
 2	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Interfaces.ILossFunction<T>?)
 1	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.Deserialize(byte[])
 1	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.LookbackWindow(System.Collections.Generic.IReadOnlyList<T>, int, int, bool)
-1	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.Serialize()
 5	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.TryForecastTimeIndex(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, int, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>, T>, out AiDotNet.Tensors.LinearAlgebra.Vector<T>, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>, int, AiDotNet.Tensors.LinearAlgebra.Vector<T>>?, bool)
 1	ADNELEM001|AiDotNet.TimeSeries.TimeSeriesModelBase<T>.TryScoreSeries(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, int, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>, T>, out AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 3	ADNELEM001|AiDotNet.TimeSeries.TransferFunctionModel<T>.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix<T>)
