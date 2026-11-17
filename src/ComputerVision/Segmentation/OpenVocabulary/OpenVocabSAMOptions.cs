@@ -64,7 +64,7 @@ public class OpenVocabSAMOptions : TextQueriedSegmentationOptions
     public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>Gets or sets the AdamW weight decay.</summary>
-    public double WeightDecay { get; set; } = 0.05;
+    public double WeightDecay { get; set; } = 1e-4;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

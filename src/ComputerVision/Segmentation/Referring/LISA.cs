@@ -63,6 +63,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LISA: Reasoning Segmentation via Large Language Model", "https://arxiv.org/abs/2308.00692", Year = 2024, Authors = "Lai et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0, WarmupSteps = 100,
+                Source = "Lai et al. 2024, Sec. 4.1: AdamW optimizer with the learning rate and weight "
+                        + "decay set to 0.0003 and 0, respectively, and WarmupDecayLR with 100 warmup "
+                        + "iterations. Routing is handled by SegmentationModelBase.CreateDefaultOptimizer, "
+                        + "which consults PaperOptimizerFactory itself.")]
 public partial class LISA<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly LISAOptions _options;

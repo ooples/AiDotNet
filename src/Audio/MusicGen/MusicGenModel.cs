@@ -506,8 +506,10 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         double rate = o.LearningRate ?? (UsesDAdaptation ? 1.0 : 1e-4);
         int warmup = o.WarmupSteps, total = Math.Max(o.TrainingSteps, warmup + 1);
         // audiocraft CosineLRScheduler: linear warmup, then a half cosine to zero at the last step.
+        // LambdaLRScheduler evaluates step 0 on batch 1, so 1-index the warmup numerator/denominator
+        // to keep batch 1 non-zero while preserving strict monotonic warmup across WarmupSteps batches.
         var schedule = new LambdaLRScheduler(rate, step =>
-            step < warmup ? (double)step / Math.Max(1, warmup)
+            step < warmup ? (step + 1.0) / (warmup + 1.0)
             : step <= total ? 0.5 * (1 + Math.Cos(Math.PI * (step - warmup) / (total - warmup)))
             : 0.0);
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer = UsesDAdaptation

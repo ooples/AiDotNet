@@ -92,6 +92,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         if (_network is null) tokens = ConformerAsrNetwork<T>.GreedyCtc(Logits(waveform, training: false));
         else
         {
+            EnsureRotaryAndCausalAttention();
             using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
             var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
             tokens = _network.GreedyAttention(encoded, _options.MaxTextLength);
@@ -129,6 +130,9 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         if (!_useNativeMode) return;
         _network = null;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // Suspend any active caller TensorArena while building persistent RoPE cos/sin caches and layer tables so
+        // later per-step training arenas or clones never alias and overwrite long-lived model buffers.
+        using var noArena = Tensors.Helpers.TensorArena.Suspend();
         // The paper network (see the class remarks). It used to be a generic template.
         var layers = new List<LayerBase<T>>();
         _network = new ConformerAsrNetwork<T>(Engine, layers, _options.ToConfiguration());
@@ -154,11 +158,41 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         return samples;
     }
 
+    // Re-applies Moonshine's rotary positional encoding and causal decoder self-attention flags if a
+    // clone/deserialization layer reconstruction recreated any MultiHeadAttentionLayer from constructor args alone.
+    private void EnsureRotaryAndCausalAttention()
+    {
+        if (_network is null) return;
+        var c = _network.Configuration;
+        double theta = c.RopeTheta > 0 ? c.RopeTheta : 10000.0;
+        if (c.RopeTheta > 0)
+        {
+            foreach (var block in _network.TransformerBlocks)
+            {
+                if (block.Attention.PositionalEncoding != PositionalEncodingType.Rotary)
+                {
+                    using var noArena = Tensors.Helpers.TensorArena.Suspend();
+                    block.Attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, theta, 2048);
+                }
+            }
+        }
+        foreach (var block in _network.DecoderBlocks)
+        {
+            block.SelfAttention.UseCausalMask = true;
+            if (c.DecoderRotary && block.SelfAttention.PositionalEncoding != PositionalEncodingType.Rotary)
+            {
+                using var noArena = Tensors.Helpers.TensorArena.Suspend();
+                block.SelfAttention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, theta, 2048);
+            }
+        }
+    }
+
     // The decoder's logits [1, vocabulary] for the first token of a waveform [S], or [batch, 1, vocabulary] for [batch, S].
     private Tensor<T> Logits(Tensor<T> input, bool training)
     {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        EnsureRotaryAndCausalAttention();
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
@@ -201,6 +235,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     {
         var network = _network;
         if (network is null) return false;
+        EnsureRotaryAndCausalAttention();
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
         var labels = new int[rows][];
         for (int r = 0; r < rows; r++)
@@ -232,6 +267,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        EnsureRotaryAndCausalAttention();
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
         double total = 0;
