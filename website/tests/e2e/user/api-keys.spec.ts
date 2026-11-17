@@ -87,12 +87,18 @@ test.describe('Logged-in user — API keys', () => {
   });
 
   test('create-modal Cancel button dismisses the modal without creating a key', async ({ page }) => {
+    const loaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().includes('/rest/v1/user_api_keys'));
     await page.goto('/account/api-keys/');
+    await loaded;
+    await page.waitForLoadState('networkidle');
 
     const rowCountBefore = await page.locator('#keys-body tr').count();
+    const inserts: string[] = [];
+    page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/rest/v1/user_api_keys')) inserts.push(r.url()); });
 
     await page.getByRole('button', { name: /Create New Key/ }).click();
     await expect(page.locator('#create-modal')).toBeVisible();
+    await page.getByLabel('Key Name').fill(`cancelled-key-${Date.now()}`);
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('#create-modal')).toBeHidden();
 
@@ -101,5 +107,6 @@ test.describe('Logged-in user — API keys', () => {
     // appear. Re-count to confirm nothing was added.
     const rowCountAfter = await page.locator('#keys-body tr').count();
     expect(rowCountAfter).toBe(rowCountBefore);
+    expect(inserts, 'Cancel must not submit an insert').toEqual([]);
   });
 });

@@ -343,6 +343,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   async function ensureSession() {
     if (!o.persona) return;
+    // An external checkout/portal navigation cannot read this site's localStorage. Return to
+    // this origin before deciding whether a login is necessary; /login redirects an existing
+    // session to /account, where waiting for email fields would otherwise hang the crawl.
+    if (!page.url().startsWith(origin)) await page.goto(origin, { timeout: 30_000 });
     if (page.url().startsWith(origin) && await hasSession(page).catch(() => false)) return;
     await signIn(page, o.persona);
   }
