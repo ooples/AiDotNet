@@ -20,6 +20,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 internal sealed class HiFiGanGenerator<T>
 {
     private const double Slope = 0.1;
+    private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
+    private string? _gpuLifetimeDiagnosticState;
+
     private readonly IEngine _engine;
     private readonly List<LayerBase<T>> _layers = new();
     private readonly NormedConv1DLayer<T> _pre;
@@ -274,8 +277,35 @@ internal sealed class HiFiGanGenerator<T>
     }
 
 
+    private void TraceGpuInferenceEligibility(Tensor<T> features, DirectGpuTensorEngine gpu)
+    {
+        int trainingLayers = _layers.Count(layer => layer.InTrainingMode);
+        int reasons = (gpu.ResidentStepActive ? 1 : 0)
+            | (gpu.InferenceCaptureActive ? 2 : 0)
+            | (AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive ? 4 : 0)
+            | (GradientTape<T>.Current is not null ? 8 : 0)
+            | (GraphMode.IsActive ? 16 : 0)
+            | (GraphCaptureCompatibility.IsActive ? 32 : 0)
+            | (AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ? 64 : 0)
+            | (trainingLayers > 0 ? 128 : 0);
+        string shape = string.Join(",", features.Shape.ToArray());
+        string signature = $"{reasons}:{shape}";
+        if (System.Threading.Interlocked.Exchange(ref _gpuLifetimeDiagnosticState, signature) == signature) return;
+        Console.Error.WriteLine($"[HIFI-GPU-LIFETIME] enabled={reasons == 0} reasons={reasons} shape=[{shape}] " +
+            $"resident={gpu.ResidentStepActive} inference_capture={gpu.InferenceCaptureActive} " +
+            $"release_deferred={AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive} " +
+            $"current_tape={GradientTape<T>.Current is not null} any_tape={AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()} " +
+            $"recording={GradientRecording.IsRecording<T>()} graph={GraphMode.IsActive} compatibility={GraphCaptureCompatibility.IsActive} " +
+            $"observer={AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null} " +
+            $"training_layers={trainingLayers}/{_layers.Count} outer_scope={TensorScope.Current is not null}");
+    }
+
+
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
     {
+        if (s_gpuLifetimeDiagnostics && _engine.TryGet<DirectGpuTensorEngine>(out var diagnosticGpu))
+            TraceGpuInferenceEligibility(features, diagnosticGpu);
+
         if (_engine.TryGet<DirectGpuTensorEngine>(out var gpu)
             && !gpu.ResidentStepActive && !gpu.InferenceCaptureActive
             && !AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive
