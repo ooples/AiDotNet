@@ -13,6 +13,22 @@
   ],
   "owners": [
 {
+  "owner": "this session/pinn_review consumer review repairs",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    "src/Finance/Trading/Agents/FinancialA2CAgent.cs",
+    "src/Helpers/PolicyDistributionHelper.cs",
+    "src/ComputerVision/TensorModelTrainer.cs",
+    "tests/AiDotNet.Tests/UnitTests/Helpers/PolicyDistributionNumericsTests.cs",
+    "tests/AiDotNet.Tests/UnitTests/Finance/FinancialA2CPolicyDistributionTests.cs",
+    "tests/AiDotNet.Tests/UnitTests/ComputerVision/TensorModelTrainerFusedTests.cs",
+    "tests/AiDotNet.Tests/UnitTests/ComputerVision/CvReviewRegressionTests.cs"
+  ],
+  "scope": "User-directed review follow-up after original Antigravity Wave4B declared complete: stable discrete log-probability/entropy and actor reuse; restore trainer owner/session path; explicitly eager-only forward-count test plus separate compiled continuity/numeric/refusal tests. No shared training redesign, epsilon floor, or compiled bypass.",
+  "status": "CLAIMED before edits; original author batch integrated/complete. Coordinator owns these precise corrections now; other scopes remain unchanged.",
+  "verification": "Root diff review before focused checks; new Helpers class already routed by Unit05 namespace clause. Hold PR source push until active CI cycle terminal."
+},
+{
   "owner": "this session/cuda_capture accepted API removals",
   "repository": "ooples/AiDotNet",
   "files": [
