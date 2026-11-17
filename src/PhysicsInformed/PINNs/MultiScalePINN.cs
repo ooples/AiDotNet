@@ -386,6 +386,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <returns>Training history.</returns>
         public TrainingHistory<T> Solve(int epochs = 1000, double learningRate = 0.001, bool verbose = true)
         {
+            ThrowIfCannotTrain();
+            using var reentrancyGuard = AcquireTrainSentinel();
             var history = new TrainingHistory<T>();
 
             if (_usesDefaultOptimizer
@@ -511,28 +513,23 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private T StepMultiScaleBatch(Tensor<T> batch)
         {
             ThrowIfCannotTrain();
-            var stepOptimizer = _usesDefaultOptimizer ? GetOrCreateBaseOptimizer() : _optimizer;
+            var stepOptimizer = ResolveCustomStepOptimizer(_usesDefaultOptimizer ? null : _optimizer);
+            var layerGraphBreak = LayerGraphBreakReason();
+            string? graphBreakReason = !SupportsFusedCompiledTraining
+                ? "model opts out of fused compiled training (per-step host state)"
+                : layerGraphBreak;
 
-            if (!SupportsFusedCompiledTraining)
+            if (!SupportsFusedCompiledTraining && FusedSession.IsCommitted)
             {
-                if (FusedSession.IsCommitted)
-                {
-                    throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
-                        new InvalidOperationException("MultiScalePINN.Solve cannot continue a committed fused plan after opting out of fused compiled training."));
-                }
-
-                return TrainWithCustomObjective(batch, batch, (points, _) => ComputeMultiScaleLoss(points), stepOptimizer);
+                throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
+                    new InvalidOperationException("MultiScalePINN.Solve cannot continue a committed fused plan after opting out of fused compiled training."));
             }
 
-            if (GradientValueClip > 0.0)
+            double valueClip = GradientValueClip;
+            if (valueClip > 0.0 && FusedSession.IsCommitted)
             {
-                if (FusedSession.IsCommitted)
-                {
-                    throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
-                        new InvalidOperationException("MultiScalePINN.Solve cannot switch a committed fused plan to model value clipping."));
-                }
-
-                return TrainWithCustomObjective(batch, batch, (points, _) => ComputeMultiScaleLoss(points), stepOptimizer);
+                throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
+                    new InvalidOperationException("MultiScalePINN.Solve cannot switch a committed fused plan to model value clipping."));
             }
 
             EnsureLayerRandomSeedsWired();
@@ -555,9 +552,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 return loss;
             }
 
+            bool canTryFused = SupportsFusedCompiledTraining
+                && valueClip <= 0.0
+                && (layerGraphBreak is null || FusedSession.IsCommitted);
             var request = new Training.FusedTrainingStepRequest<T>
             {
-                Layers = Layers.OfType<ITrainableLayer<T>>().ToList(),
+                Layers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers),
                 Input = batch,
                 Target = placeholderTarget,
                 Forward = _ => Objective(),
@@ -566,36 +566,25 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 ExtraParameters = null,
                 Selection = null,
                 ModelGradientClip = MaxGradNormValue,
+                ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
                 RegularizeGradients = GetDistributedOptimizerRegularizer(stepOptimizer),
-                GraphBreakReason = !SupportsFusedCompiledTraining ? "model opts out of fused compiled training (per-step host state)" : null,
+                GraphBreakReason = graphBreakReason,
+                ClosureGraphBreakPolicy = layerGraphBreak is not null && FusedSession.IsCommitted
+                    ? Training.ClosureGraphBreakPolicy.UseConfiguredOptimizer
+                    : Training.ClosureGraphBreakPolicy.Disallow,
                 OnGradients = ScatterFusedGradients,
-                OnEagerGradients = grads =>
-                {
-                    var copied = new Dictionary<Tensor<T>, Tensor<T>>(grads.Count, TensorReferenceComparer<Tensor<T>>.Instance);
-                    using (TensorArena.Suspend())
-                    {
-                        foreach (var kv in grads)
-                        {
-                            if (kv.Value is not null)
-                            {
-                                copied[kv.Key] = kv.Value.Clone();
-                            }
-                        }
-                    }
-
-                    ScatterFusedGradients(copied);
-                },
-                ClosureObjective = Objective,
+                OnEagerGradients = PublishEagerFallbackGradients,
+                ClosureObjective = canTryFused ? Objective : null,
             };
 
             MarkTrainMutationStarted();
             T lossValue = NumOps.Zero;
-            var outcome = parameters.Count == 0
+            var outcome = !canTryFused || parameters.Count == 0
                 ? Training.FusedStepOutcome.Declined
                 : FusedSession.TryStep(request, out lossValue);
             if (outcome == Training.FusedStepOutcome.Stepped)
             {
-                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
             }
             else
             {
@@ -606,7 +595,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                 using (TensorArena.Create())
                 {
-                    lossValue = Training.TapeTrainingStepper<T>.EagerStep(request, this);
+                    lossValue = valueClip > 0.0
+                        ? StepMultiScaleBatchValueClippedEager(batch, placeholderTarget, Objective, stepOptimizer, valueClip)
+                        : Training.TapeTrainingStepper<T>.EagerStep(request, this);
                 }
 
                 InvalidateWeightCachesAfterSuccessfulWeightUpdate();
@@ -622,6 +613,68 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return lossValue;
         }
 
+        private T StepMultiScaleBatchValueClippedEager(
+            Tensor<T> batch,
+            Tensor<T> placeholderTarget,
+            Func<Tensor<T>> objective,
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> stepOptimizer,
+            double valueClip)
+        {
+            foreach (var layer in Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers))
+            {
+                layer.ZeroGrad();
+            }
+
+            Dictionary<Tensor<T>, Tensor<T>>? stepGradients = null;
+            T lower = NumOps.FromDouble(-valueClip);
+            T upper = NumOps.FromDouble(valueClip);
+            return Training.TapeTrainingStepper<T>.EagerTapeStep(
+                objective,
+                CollectModelTrainableTensors,
+                context =>
+                {
+                    stepOptimizer.Step(context);
+                    StepSchedulerIfSupported(stepOptimizer);
+                },
+                batch,
+                placeholderTarget,
+                (_, _) => objective(),
+                static (loss, _) => loss,
+                new Training.TapeTrainingStepper<T>.EagerStepHooks
+                {
+                    Owner = this,
+                    OnGradients = grads =>
+                    {
+                        stepGradients = grads as Dictionary<Tensor<T>, Tensor<T>>;
+                        PublishEagerFallbackGradients(grads);
+                    },
+                    RegularizeGradients = GetDistributedOptimizerRegularizer(stepOptimizer),
+                    ModelGradientClip = MaxGradNormValue,
+                    Optimizer = stepOptimizer,
+                    ReportsRetainedOutputOutcome = Training.TapeTrainingStepper<T>.ReportsRetainedOutputOutcome(stepOptimizer),
+                    BeforeUpdate = () =>
+                    {
+                        if (stepGradients is null || stepGradients.Count == 0)
+                        {
+                            return;
+                        }
+
+                        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                        {
+                            foreach (var g in stepGradients.Values)
+                            {
+                                if (g is not null && g.Length > 0)
+                                {
+                                    Engine.TensorClampInPlace(g, lower, upper);
+                                }
+                            }
+                        }
+
+                        PublishEagerFallbackGradients(stepGradients);
+                    },
+                });
+        }
+
         /// <summary>
         /// The multi-scale physics-informed loss at a batch of collocation points: sum_s w_s mean(R_s^2) plus
         /// the coupling weight times mean(C^2) for each adjacent pair of active scales.
@@ -629,7 +682,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <remarks>
         /// Scale outputs and spatial/temporal derivatives up to order 3 are propagated analytically with pure
         /// engine tensor operations over each scale MLP's live weights, so both compiled closure plans and the
-        /// eager gradient tape differentiate through the identical graph.
+        /// eager gradient tape differentiate through the identical graph while leaving genuinely unreferenced
+        /// output biases structurally absent from the gradient domain.
         /// </remarks>
         private Tensor<T> ComputeMultiScaleLoss(Tensor<T> points)
         {
@@ -643,7 +697,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             Tensor<T>? total = null;
-            T zero = NumOps.Zero;
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
                 var residual = _multiScalePDE.ComputeScaleResidual(scale, points, outputs[scale], derivatives[scale]);
@@ -654,14 +707,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     weightLeaf = Tensor<T>.CreateDefault(meanSq._shape, _scaleWeights[scale]);
                 }
 
-                // Anchor outputs[scale] with exact zero weight so pure-derivative PDEs (where d(residual)/d(b_out) == 0)
-                // still register output-layer biases in the compiled plan and decay their Adam moments identically to eager.
-                var outputMean = Engine.ReduceMean(
-                    outputs[scale],
-                    Enumerable.Range(0, outputs[scale].Rank).ToArray(),
-                    keepDims: false);
-                var outputAnchor = Engine.TensorMultiplyScalar(outputMean, zero);
-                var term = Engine.TensorAdd(Engine.TensorMultiply(meanSq, weightLeaf), outputAnchor);
+                var term = Engine.TensorMultiply(meanSq, weightLeaf);
                 total = total is null ? term : Engine.TensorAdd(total, term);
             }
 
