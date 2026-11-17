@@ -16,6 +16,7 @@ from pathlib import Path
 import platform
 import random
 import re
+import shutil
 import statistics
 import subprocess
 import threading
@@ -114,6 +115,27 @@ def nvidia_query(gpu_id: str, fields: str) -> str | None:
         return None
 
 
+def contending_processes(excluded: set[int] | None = None) -> list[dict]:
+    """Record active CI workers/test hosts without stopping them or collecting their arguments."""
+    excluded = (excluded or set()) | {os.getpid()}
+    found = []
+    for process in psutil.process_iter(["pid", "name", "create_time"]):
+        if process.pid in excluded:
+            continue
+        try:
+            name = (process.info["name"] or "").lower().removesuffix(".exe")
+            active = name in ("runner.worker", "testhost", "vstest.console") or name.startswith("testhost.")
+            if name == "dotnet":
+                active = any(Path(arg).name.lower() in ("testhost.dll", "vstest.console.dll")
+                             for arg in process.cmdline())
+            if active:
+                found.append({"pid": process.pid, "name": process.info["name"],
+                              "create_time": process.info["create_time"]})
+        except psutil.Error:
+            continue
+    return found
+
+
 class Sampler:
     """CPU RSS every 10 ms, separate device-wide NVIDIA memory sampling every 100 ms.
 
@@ -125,8 +147,10 @@ class Sampler:
         self.gpu_id = gpu_id
         self.stop = threading.Event()
         self.samples: list[dict] = []
+        self.contention: list[dict] = []
         self.lock = threading.Lock()
-        self.threads = [threading.Thread(target=self.cpu, daemon=True)]
+        self.threads = [threading.Thread(target=self.cpu, daemon=True),
+                        threading.Thread(target=self.audit_contention, daemon=True)]
         if gpu_id is not None:
             self.threads.append(threading.Thread(target=self.gpu, daemon=True))
 
@@ -156,6 +180,16 @@ class Sampler:
         for thread in self.threads:
             thread.start()
 
+    def audit_contention(self) -> None:
+        while not self.stop.is_set():
+            excluded = {self.process.pid}
+            with contextlib.suppress(psutil.Error):
+                excluded.update(child.pid for child in self.process.children(recursive=True))
+            blockers = contending_processes(excluded)
+            if blockers:
+                self.contention.append({"unix_ms": time.time_ns() // 1_000_000, "processes": blockers})
+            self.stop.wait(.25)
+
     def finish(self) -> list[dict]:
         self.stop.set()
         for thread in self.threads:
@@ -180,6 +214,40 @@ def provenance(config: dict) -> dict:
             if config.get("gpu_id") else None, "cache_policy": config["cache_policy"]}
 
 
+def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str, str], dict]:
+    """Own every redirected cache directory; never clear or mutate the user's shared caches.
+
+    An independent hash-checked warm seed is copied for each fresh process. Redirecting
+    known caches does not prove an inventory of every framework/vendor cache is complete.
+    That coverage remains explicit and cannot be established by a `verified` boolean.
+    """
+    root = run_dir / "cache"
+    root.mkdir()
+    regime = policy.get("regime")
+    if regime not in ("cold", "warm"):
+        raise ValueError("cache_policy.regime must be cold or warm.")
+    known = {"CUDA_CACHE_PATH": "cuda-driver", "AIDOTNET_KERNEL_CACHE_DIR": "aidotnet-kernels",
+             "AIDOTNET_DIRECT_PTX_CACHE_PATH": "aidotnet-kernels/CUDA/DirectPtx"}
+    if side == "pytorch":
+        known.update(TORCHINDUCTOR_CACHE_DIR="torchinductor", TRITON_CACHE_DIR="triton")
+    seed_receipt = None
+    if regime == "warm":
+        seed = Path(policy["warm_seeds"][side]["path"]).resolve()
+        expected = policy["warm_seeds"][side]["sha256"]
+        actual = {path.relative_to(seed).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                  for path in sorted(seed.rglob("*")) if path.is_file()}
+        if not actual or actual != expected:
+            raise ValueError("Warm cache seed is empty or differs from its exact file hash receipt.")
+        shutil.copytree(seed, root, dirs_exist_ok=True)
+        seed_receipt = actual
+    env = {key: str(root / directory) for key, directory in known.items()}
+    for directory in env.values():
+        Path(directory).mkdir(parents=True, exist_ok=True)
+    return env, {"regime": regime, "redirected_environment": env, "warm_seed": seed_receipt,
+                 "coverage": "known_environment_redirects_only",
+                 "unverified": "Framework/vendor caches not honoring these environment variables require source and runtime verification."}
+
+
 def launch(config: dict, side: str, model: str, device: str, pair: int, mode: str, output_dir: Path) -> dict:
     run_dir = output_dir / f"{model}-{device}-{mode}-{pair}-{side}"
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -190,8 +258,12 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     argv = [str(arg).format_map(bindings) for arg in command["argv"]]
     env = os.environ.copy()
     env.update({key: str(value).format_map(bindings) for key, value in command.get("env", {}).items()})
+    cache_env, cache_state = cache_environment(run_dir, config["cache_policy"], side)
+    env.update(cache_env)
     env.update(AIDOTNET_BENCH_PHASE_FILE=str(run_dir / "phases.jsonl"), AIDOTNET_BENCH_EXTERNAL_MONITOR="1",
-               AIDOTNET_BENCH_DIAGNOSTICS="1" if mode == "diagnostic" else "0")
+               AIDOTNET_BENCH_DIAGNOSTICS="1" if mode == "diagnostic" else "0",
+               AIDOTNET_BUFFER_ALLOC_DIAG="1" if mode == "diagnostic" else "0",
+               AIDOTNET_GPU_MEMTRACK="0", AIDOTNET_GPU_MEMTRACK_PEAKDUMP="0")
     if mode == "diagnostic" and side == "pytorch":
         env["AIDOTNET_BENCH_CPU_ALLOCATION_TRACE"] = str(run_dir / "cpu-allocations.json")
     else:
@@ -200,7 +272,17 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         env.pop(key, None)
     metadata = provenance(config)
     metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
-                    environment_overrides={key: env[key] for key in command.get("env", {})})
+                    cache_state=cache_state,
+                    environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
+                        {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
+                         "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
+    blockers = contending_processes()
+    if mode == "score" and blockers:
+        metadata.update(return_code=-2, memory={}, phase_events=[], contention=[{
+            "unix_ms": time.time_ns() // 1_000_000, "processes": blockers}],
+            invalid_reason="An external CI worker/testhost is active; scoring was not launched.")
+        write_json(run_dir / "measurement.json", metadata)
+        return {"path": str(run_dir), **metadata}
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
         sampler = Sampler(process.pid, config.get("gpu_id") if device == "cuda" else None)
@@ -219,6 +301,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
+                    contention=sampler.contention,
                     peak_method={"cpu": "10ms sampled RSS; Windows OS whole-process HWM when available",
                                  "gpu": "100ms device-wide nvidia-smi sampled peak; requires exclusive GPU"})
     write_json(run_dir / "measurement.json", metadata)
@@ -236,6 +319,8 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     if model is None:
         return {}, ["requested model missing"]
     errors = []
+    if run.get("mode") == "score" and run.get("contention"):
+        errors.append("external CI worker/testhost contention observed during scoring")
     if model.get("device") != run["device"]:
         errors.append("device mismatch")
     for name in ("epochs", "train_batches", "batch_size", "inference_iterations", "warmup_iterations", "warmup_min_ms", "seed", "inference_batch_sizes"):
@@ -263,8 +348,8 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     return values, errors
 
 
-def evaluate(runs: list[dict], maximum: float) -> dict:
-    groups = sorted({(run["model"], run["device"]) for run in runs})
+def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None) -> dict:
+    groups = sorted({(run["model"], run["device"]) for run in runs} | set(required or []))
     output = {}
     for model, device in groups:
         scored = [run for run in runs if (run["model"], run["device"], run["mode"]) == (model, device, "score")]
@@ -275,11 +360,16 @@ def evaluate(runs: list[dict], maximum: float) -> dict:
         names = sorted(set().union(*(row[0].keys() for side in rows.values() for row in side)))
         outcomes = {name: paired_gate([row[0].get(name) for row in rows["aidotnet"]],
                                       [row[0].get(name) for row in rows["pytorch"]], maximum) for name in names}
+        # Disk-cache redirection alone cannot prove a complete cold/warm regime across vendor libraries.
+        outcomes["first_epoch_cache_coverage"] = {"status": "unverified", "reason":
+            "Known cache directories are isolated; complete framework/vendor cache coverage is not yet proven."}
         # Requested and actual backing allocations are independent gates. Unsupported counter coverage stays red.
-        for kind in ("cpu_tensor_requested", "cpu_backing", *( ("gpu_tensor_requested", "gpu_backing") if device == "cuda" else ())):
+        for kind in ("cpu_framework_requested", "cpu_backing", *( ("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
             for unit in ("bytes", "count"):
                 outcomes[f"{kind}_{unit}"] = {"status": "unverified", "reason": "Allocator coverage contract not yet verified on both frameworks."}
         failures = [error for side in rows.values() for _, errors in side for error in errors]
+        if not scored:
+            failures.append("required model/device has no scored runs")
         signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu")}, sort_keys=True)
                       for run in scored}
         if len(signatures) != 1:
@@ -310,8 +400,8 @@ def main() -> None:
     if not args.evaluate_only:
         if config.get("pairs", 0) < 5 or not 0 < config.get("maximum_ratio", .9) <= .9:
             raise ValueError("At least five pairs and a >=10% gate are required.")
-        if config["cache_policy"].get("verified") is not True:
-            raise ValueError("Cold/warm cache isolation must be established and recorded before scoring.")
+        if config["cache_policy"].get("regime") not in ("cold", "warm"):
+            raise ValueError("An explicit cold or warm cache regime is required.")
         runs = []
         for model in config["models"]:
             for device in config["devices"]:
@@ -321,9 +411,14 @@ def main() -> None:
                             print(f"{mode} pair {pair + 1}: {model}/{device}/{side}", flush=True)
                             runs.append(launch(config, side, model, device, pair, mode, args.output))
                             write_json(run_index, runs)
+                            if mode == "score" and runs[-1].get("contention"):
+                                required = [(name, target) for name in config["models"] for target in config["devices"]]
+                                write_json(args.output / "gate.json", evaluate(runs, config.get("maximum_ratio", .9), required))
+                                raise SystemExit("Scoring invalidated by an external CI worker/testhost; see measurement.json.")
     else:
         runs = read_json(run_index)
-    results = evaluate(runs, config.get("maximum_ratio", .9))
+    required = [(model, device) for model in config["models"] for device in config["devices"]]
+    results = evaluate(runs, config.get("maximum_ratio", .9), required)
     write_json(args.output / "gate.json", results)
     print(json.dumps(results, indent=2))
     raise SystemExit(0 if results and all(row["status"] == "pass" for row in results.values()) else 1)

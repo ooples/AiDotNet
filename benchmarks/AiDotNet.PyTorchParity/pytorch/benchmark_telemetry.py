@@ -23,15 +23,17 @@ def mark_phase(model: str, phase: str) -> None:
         if torch.cuda.is_initialized() and torch.cuda.get_allocator_backend() == "native":
             stats = torch.cuda.memory_stats()
             record["allocators"] = {
-                "gpu_tensor_requested": {
+                "gpu_framework_requested": {
                     "bytes": stats.get("requested_bytes.all.allocated"),
                     "count": stats.get("allocation.all.allocated"),
                     "source": "pytorch_native_caching_allocator_requests",
+                    "scope": "Framework storage and workspace requests through the CUDA caching allocator; excludes vendor allocations bypassing it.",
                 },
                 "gpu_backing": {
                     "bytes": stats.get("reserved_bytes.all.allocated"),
                     "count": stats.get("segment.all.allocated"),
                     "source": "pytorch_native_caching_allocator_segments",
+                    "scope": "CUDA caching-allocator segments; excludes vendor allocations bypassing it.",
                 },
             }
     with Path(output).open("a", encoding="utf-8") as stream:
@@ -45,4 +47,5 @@ def cpu_storage_events(trace_path: Path) -> dict[str, object]:
                 and event.get("args", {}).get("Device Type") == 0
                 and event.get("args", {}).get("Bytes", 0) > 0]
     return {"bytes": sum(event["args"]["Bytes"] for event in positive), "count": len(positive),
-            "source": "pytorch_profiler_cpu_allocator_events", "diagnostic_only": True}
+            "source": "pytorch_profiler_cpu_allocator_events", "diagnostic_only": True,
+            "scope": "Positive CPU allocator events including framework workspaces; excludes Python objects and vendor allocations bypassing the allocator."}
