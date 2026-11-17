@@ -205,6 +205,8 @@ $script:IndependentToolPaths = @(
 #     cancellation-report runs after a cancelled run and explains it. None can make a shard pass or be skipped.
 #   - separate checks with their own jobs and triggers: layer-factory-architecture, recurrent-foundations,
 #     tts-paper-contracts, test-attribution-canary, self-hosted-routing-check (manual dispatch).
+#   - tensors-validation-preflight only checks candidate restore in its own push/dispatch job; it is not called
+#     by the pipeline and supplies no build artifact, coverage map or selection input.
 #   - nightlies: cross-isa-agreement-nightly, heavy-timeout-nightly, paper-fidelity-nightly,
 #     model-performance-census.
 # The scripts they run stay classified by their own paths (.github/scripts, .github/actions, tools/TestImpact).
@@ -237,6 +239,7 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/release.yml.disabled',
     '.github/workflows/samples.yml',
     '.github/workflows/self-hosted-routing-check.yml',
+    '.github/workflows/tensors-validation-preflight.yml',
     '.github/workflows/test-attribution-canary.yml',
     '.github/workflows/tts-paper-contracts.yml',
     '.github/workflows/website-alert.yml',
