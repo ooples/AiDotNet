@@ -555,14 +555,12 @@
     },
     {
       "owner": "this session/pinn_review worker",
-      "scope": "Unassigned-02 generated float smoke: restore PixelLM scaffold eligibility and required text encoder factory only; preserve FP32 policy and every existing float/double assertion",
+      "scope": "Unassigned-02 generated float smoke: reconcile existing manual PixelLM FP32 scaffold contract; preserve required text encoder and all other precision assertions",
       "files": [
-        "src/AiDotNet.Generators/TestScaffoldGenerator.cs",
         "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs"
       ],
       "file_scope_limits": {
-        "src/AiDotNet.Generators/TestScaffoldGenerator.cs": "Only PixelLM explicit eligibility/factory and necessary generated fixture helper wiring; no Lagrangian resolver or other generator regions",
-        "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs": "Only direct PixelLM factory/dependency regression; retain all precision-route assertions"
+        "tests/AiDotNet.Tests/Generators/GeneratedFloatScaffoldSmokeTests.cs": "Only replace stale generated-namespace PixelLM expectation with exact existing manual scaffold FP32/base contract and no duplicate generated scaffold; no generator edits"
       },
       "status": "CLAIMED; isolated source work; no source push until monitored cycle completes and root reviews"
     }
@@ -991,7 +989,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T03:05:53.5112975Z",
+  "updated_utc": "2026-11-17T03:06:34.5879165Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
