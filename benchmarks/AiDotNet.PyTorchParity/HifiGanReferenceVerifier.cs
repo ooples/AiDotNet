@@ -252,7 +252,7 @@ internal static class HifiGanReferenceVerifier
             TensorCodecOptions.Current.EnableCompilation = false;
             var mel = Read(reference, "mel/0");
             var real = Read(reference, "audio/0");
-            if (!mel.Shape.SequenceEqual(new[] { 1, 80, 32 }) || real.Rank != 1 || real.Length != 8192)
+            if (!mel.Shape.ToArray().SequenceEqual(new[] { 1, 80, 32 }) || real.Rank != 1 || real.Length != 8192)
                 throw new InvalidDataException("The full-V1 reference must use one fixed 32-frame/8192-sample crop.");
             model.SetTrainingMode(false);
             using (new NoGradScope<float>())
@@ -261,7 +261,7 @@ internal static class HifiGanReferenceVerifier
                 foreach (int count in new[] { 1, 8, 16 })
                 {
                     var input = Read(reference, $"inference/mel/{count}");
-                    if (!input.Shape.SequenceEqual(new[] { count, 80, 256 }))
+                    if (!input.Shape.ToArray().SequenceEqual(new[] { count, 80, 256 }))
                         throw new InvalidDataException($"Inference batch {count} changes the full256-frame geometry.");
                     using var arena = TensorArena.Create();
                     using var scope = TensorScope.Begin();
@@ -310,7 +310,7 @@ internal static class HifiGanReferenceVerifier
             {
                 var stepMel = Read(reference, $"mel/{step}");
                 var stepAudio = Read(reference, $"audio/{step}");
-                if (!stepMel.Shape.SequenceEqual(new[] { 1, 80, 32 }) || stepAudio.Rank != 1 || stepAudio.Length != 8192)
+                if (!stepMel.Shape.ToArray().SequenceEqual(new[] { 1, 80, 32 }) || stepAudio.Rank != 1 || stepAudio.Length != 8192)
                     throw new InvalidDataException($"Step {step} changes the fixed crop geometry.");
                 model.Train(stepMel, stepAudio);
                 checks.Add(Compare($"train/generator_loss/{step}", new[] { model.GetLastLoss() },
