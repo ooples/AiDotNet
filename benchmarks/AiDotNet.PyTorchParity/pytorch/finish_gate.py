@@ -390,6 +390,26 @@ def hifigan_required_checks() -> tuple[set[str], set[str], set[str]]:
     return required, learned, common
 
 
+def hifigan_comparison_policy(device: str) -> dict:
+    relative, cosine = {"cpu": (1e-3, .999), "cuda": (3e-3, .995)}[device]
+    return {"schema": "hifigan-v1-calibrated-learned-state-v1",
+            "learned_state_checks": 1164, "spectral_state_checks": 48, "unchanged_checks": 451,
+            "learned_state": {"finite_required": True, "relative_l2_max": relative,
+                              "cosine_min": cosine, "max_absolute_error_gate": False},
+            "other_criteria": "unchanged_original"}
+
+
+def hifigan_comparison_kinds() -> dict[str, str]:
+    required, learned, common = hifigan_required_checks()
+    kinds = dict.fromkeys(required, "standard")
+    for family in ("generator", "discriminator"):
+        kinds["isolated-gradient-summary/" + family] = "gradient_summary"
+    for step in (1, 2, 3):
+        for key in common:
+            kinds[f"train/step{step}/" + key] = "learned_state" if key in learned else "spectral_state"
+    return kinds
+
+
 def correctness_gate(run: dict) -> dict:
     """Bind a successful full-V1 equivalence receipt to the exact scored binaries/reference."""
     binding = run.get("correctness_receipt") or {}
@@ -403,8 +423,10 @@ def correctness_gate(run: dict) -> dict:
         return {"status": "unverified", "reason": "Numerical receipt schema/model/device mismatch."}
     budgets = {"cpu": {"absolute": 2e-5, "relative": 1e-3, "gradient_relative": .01, "gradient_cosine": .999},
                "cuda": {"absolute": 2e-4, "relative": 3e-3, "gradient_relative": .03, "gradient_cosine": .995}}
-    if receipt.get("tolerance") != budgets.get(run["device"]):
+    if run["device"] not in budgets or receipt.get("tolerance") != budgets.get(run["device"]):
         return {"status": "unverified", "reason": "Numerical receipt does not use the fixed reviewed error budgets."}
+    if receipt.get("comparison_policy") != hifigan_comparison_policy(run["device"]):
+        return {"status": "unverified", "reason": "Numerical receipt is missing or changes the authorized learned-state comparison policy."}
     hashes = run.get("artifacts", {})
     assemblies = receipt.get("assemblies_sha256") or {}
     if any(not hashes.get(name) or assemblies.get(name) != hashes[name] for name in ("AiDotNet", "Tensors")):
@@ -424,6 +446,27 @@ def correctness_gate(run: dict) -> dict:
     if len(names) != len(required) or set(names) != required:
         return {"status": "unverified", "reason": "Receipt must contain exactly all 1615 required V1 checks, without duplicates or omitted tensors."}
     by_name = {check["name"]: check for check in checks}
+    kinds = hifigan_comparison_kinds()
+    tolerance = budgets[run["device"]]
+    for name, check in by_name.items():
+        kind = kinds[name]
+        if check.get("comparison_kind") != kind:
+            return {"status": "unverified", "reason": "Numerical check comparison kind differs from its authorized tensor scope: " + name}
+        fields = ("max_absolute_error", "relative_l2", "cosine", "norm_ratio", "reference_max_absolute_value")
+        measured = {field: number(check.get(field)) for field in fields}
+        if any(value is None for value in measured.values()) or any(measured[field] < 0 for field in fields if field != "cosine"):
+            return {"status": "unverified", "reason": "Numerical check has missing or invalid comparison metrics: " + name}
+        error, relative, cosine, ratio, scale = (measured[field] for field in fields)
+        if kind == "learned_state":
+            accepted = relative <= tolerance["relative"] and cosine >= tolerance["gradient_cosine"]
+        elif kind == "gradient_summary":
+            accepted = (relative <= tolerance["gradient_relative"] and abs(ratio - 1) <= tolerance["gradient_relative"]
+                        and cosine >= tolerance["gradient_cosine"])
+        else:
+            accepted = (error <= tolerance["absolute"] + tolerance["relative"] * scale
+                        and (relative <= tolerance["relative"] or error <= tolerance["absolute"]))
+        if not accepted:
+            return {"status": "fail", "reason": "Numerical check violates its authorized comparison criteria: " + name}
     if sum(by_name["isolated-gradient/" + key]["elements"] for key in learned) != 84_660_721:
         return {"status": "unverified", "reason": "Receipt does not cover all 84,660,721 learned gradient scalars."}
     for step in (1, 2, 3):

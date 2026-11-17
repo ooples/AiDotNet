@@ -50,8 +50,10 @@ internal static class HifiGanReferenceVerifier
     }
 
     private sealed record Binding(string Key, NormedConv1DLayer<float> Layer);
+    private enum ComparisonKind { Standard, LearnedState, SpectralState }
     private sealed record Check(string Name, bool Pass, bool Finite, int Elements,
-        double MaxAbsoluteError, double RelativeL2, double Cosine, double NormRatio);
+        double MaxAbsoluteError, double RelativeL2, double Cosine, double NormRatio,
+        double ReferenceMaxAbsoluteValue, string ComparisonKind);
     private sealed class GradientTotals
     {
         internal double ExpectedSquared, ActualSquared, ErrorSquared, Dot;
@@ -126,16 +128,17 @@ internal static class HifiGanReferenceVerifier
     }
 
     private static Check Compare(string name, Tensor<float> actual, TorchCheckpointFile source, string key,
-        Tolerance tolerance, GradientTotals? total = null)
+        Tolerance tolerance, GradientTotals? total = null, ComparisonKind kind = ComparisonKind.Standard)
     {
         // The engine represents reductions as rank-zero tensors; the reference serializes each scalar as [1].
         int[] shape = actual.Length == 1 && source.ShapeOf(key)?.Aggregate(1L, (a, b) => a * b) == 1
             ? Array.Empty<int>() : actual.Shape.ToArray();
         var expected = source.Read(key, shape);
-        return Compare(name, actual.ToArray(), expected, tolerance, total);
+        return Compare(name, actual.ToArray(), expected, tolerance, total, kind);
     }
 
-    private static Check Compare(string name, float[] actual, double[] expected, Tolerance tolerance, GradientTotals? total = null)
+    private static Check Compare(string name, float[] actual, double[] expected, Tolerance tolerance,
+        GradientTotals? total = null, ComparisonKind kind = ComparisonKind.Standard)
     {
         if (actual.Length != expected.Length) throw new InvalidDataException($"{name}: tensor lengths differ.");
         double errorSquared = 0, expectedSquared = 0, actualSquared = 0, dot = 0, worst = 0, scale = 0;
@@ -156,14 +159,17 @@ internal static class HifiGanReferenceVerifier
         double ratio = expectedSquared > 0 ? Math.Sqrt(actualSquared / expectedSquared) : actualSquared == 0 ? 1 : 0;
         double cosine = expectedSquared > 0 && actualSquared > 0 ? dot / Math.Sqrt(expectedSquared * actualSquared)
             : expectedSquared == actualSquared ? 1 : 0;
-        bool pass = finite && worst <= tolerance.Absolute + tolerance.Relative * scale
-            && (relative <= tolerance.Relative || worst <= tolerance.Absolute);
+        bool pass = kind == ComparisonKind.LearnedState
+            ? finite && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
+            : finite && worst <= tolerance.Absolute + tolerance.Relative * scale
+                && (relative <= tolerance.Relative || worst <= tolerance.Absolute);
         if (total is not null)
         {
             total.ExpectedSquared += expectedSquared; total.ActualSquared += actualSquared;
             total.ErrorSquared += errorSquared; total.Dot += dot; total.Elements += actual.Length; total.Finite &= finite;
         }
-        return new Check(name, pass, finite, actual.Length, worst, relative, cosine, ratio);
+        return new Check(name, pass, finite, actual.Length, worst, relative, cosine, ratio, scale,
+            kind switch { ComparisonKind.LearnedState => "learned_state", ComparisonKind.SpectralState => "spectral_state", _ => "standard" });
     }
 
     private static Check GradientSummary(string name, GradientTotals total, Tolerance tolerance)
@@ -174,7 +180,7 @@ internal static class HifiGanReferenceVerifier
         bool pass = total.Finite && total.Elements > 0 && total.ExpectedSquared > 0
             && relative <= tolerance.GradientRelative && Math.Abs(ratio - 1) <= tolerance.GradientRelative
             && cosine >= tolerance.GradientCosine;
-        return new Check(name, pass, total.Finite, total.Elements, 0, relative, cosine, ratio);
+        return new Check(name, pass, total.Finite, total.Elements, 0, relative, cosine, ratio, 0, "gradient_summary");
     }
 
     private static void CompareGradients(Binding[] bindings, string family, IReadOnlyDictionary<Tensor<float>, Tensor<float>> gradients,
@@ -201,7 +207,13 @@ internal static class HifiGanReferenceVerifier
             {
                 string key = binding.Key + "/" + role;
                 names.Add(key);
-                checks.Add(Compare(phase + "/" + key, tensor, expected, key, tolerance));
+                var kind = role switch
+                {
+                    "direction" or "gain" or "bias" => ComparisonKind.LearnedState,
+                    "u" or "v" => ComparisonKind.SpectralState,
+                    _ => throw new InvalidDataException($"Unauthorized state comparison role: {role}."),
+                };
+                checks.Add(Compare(phase + "/" + key, tensor, expected, key, tolerance, kind: kind));
             }
         if (!names.SetEquals(expected.Names)) throw new InvalidDataException($"{phase}: missing/extra reference state fields.");
     }
@@ -325,12 +337,24 @@ internal static class HifiGanReferenceVerifier
         }
         catch (Exception ex) { errors.Add(ex.ToString()); }
         finally { TensorCodecOptions.Current.EnableCompilation = previous; }
-        bool pass = errors.Count == 0 && checks.Count > 0 && checks.All(check => check.Pass);
+        if (checks.Count != 1615 || checks.Count(check => check.ComparisonKind == "learned_state") != 1164
+            || checks.Count(check => check.ComparisonKind == "spectral_state") != 48
+            || checks.Count(check => check.ComparisonKind != "learned_state") != 451)
+            errors.Add("The receipt requires 1164 learned-state checks and 451 unchanged checks, including 48 spectral-state checks.");
+        bool pass = errors.Count == 0 && checks.All(check => check.Pass);
         var receipt = new
         {
             schema = "hifigan-v1-equivalence-receipt-v1", model = "hifigan-v1", device, pass,
             reference_manifest_sha256 = Hash(Path.Combine(directory, "manifest.json")),
             engine = AiDotNetEngine.Current.Name, tolerance, fused_steps = fused, eager_steps = eager,
+            comparison_policy = new
+            {
+                schema = "hifigan-v1-calibrated-learned-state-v1",
+                learned_state_checks = 1164, spectral_state_checks = 48, unchanged_checks = 451,
+                learned_state = new { finite_required = true, relative_l2_max = tolerance.Relative,
+                    cosine_min = tolerance.GradientCosine, max_absolute_error_gate = false },
+                other_criteria = "unchanged_original",
+            },
             checks, errors,
             assemblies_sha256 = new Dictionary<string, string>
             {

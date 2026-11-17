@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from benchmark_telemetry import cpu_storage_events
-from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
+from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_comparison_kinds, hifigan_comparison_policy, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
 
 
 class GateTests(unittest.TestCase):
@@ -187,7 +187,13 @@ class GateTests(unittest.TestCase):
         hashes = {"AiDotNet": "a" * 64, "Tensors": "b" * 64, "hifigan_reference_manifest": "c" * 64}
         required, learned, common = hifigan_required_checks()
         self.assertEqual((1615, 388, 404), (len(required), len(learned), len(common)))
-        checks = {name: {"name": name, "pass": True, "finite": True, "elements": 1} for name in required}
+        kinds = hifigan_comparison_kinds()
+        self.assertEqual(1164, sum(kind == "learned_state" for kind in kinds.values()))
+        self.assertEqual(48, sum(kind == "spectral_state" for kind in kinds.values()))
+        self.assertEqual(451, sum(kind != "learned_state" for kind in kinds.values()))
+        checks = {name: {"name": name, "pass": True, "finite": True, "elements": 1,
+                         "comparison_kind": kinds[name], "max_absolute_error": 0, "relative_l2": 0,
+                         "cosine": 1, "norm_ratio": 1, "reference_max_absolute_value": 1} for name in required}
         first_learned, first_common = min(learned), min(common)
         checks["isolated-gradient/" + first_learned]["elements"] += 84_660_721 - len(learned)
         for step in (1, 2, 3):
@@ -199,7 +205,8 @@ class GateTests(unittest.TestCase):
                    "pass": True, "checks": list(checks.values()),
                    "errors": [], "fused_steps": 6, "eager_steps": 0, "assemblies_sha256": {key: hashes[key] for key in ("AiDotNet", "Tensors")},
                    "tolerance": {"absolute": 2e-4, "relative": 3e-3, "gradient_relative": .03, "gradient_cosine": .995},
-                   "reference_manifest_sha256": hashes["hifigan_reference_manifest"]}
+                   "reference_manifest_sha256": hashes["hifigan_reference_manifest"],
+                   "comparison_policy": hifigan_comparison_policy("cuda")}
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "equivalence.json"
             manifest_path = Path(temporary) / "manifest.json"
@@ -228,6 +235,41 @@ class GateTests(unittest.TestCase):
             self.assertEqual("unverified", correctness_gate(run)["status"])
             bind(dict(receipt, **{"pass": False}))
             self.assertEqual("fail", correctness_gate(run)["status"])
+            legacy = dict(receipt)
+            legacy.pop("comparison_policy")
+            bind(legacy)
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            bind(dict(receipt, comparison_policy=dict(receipt["comparison_policy"], learned_state_checks=1163)))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            policy = dict(receipt["comparison_policy"], learned_state=dict(receipt["comparison_policy"]["learned_state"], cosine_min=.1))
+            bind(dict(receipt, comparison_policy=policy))
+            self.assertEqual("unverified", correctness_gate(run)["status"])
+            def altered(name, **fields):
+                return [dict(row, **fields) if row["name"] == name else row for row in checks.values()]
+            learned_state = "train/step1/" + first_learned
+            for device, absolute, relative, gradient_relative, cosine in (("cpu", 2e-5, 1e-3, .01, .999), ("cuda", 2e-4, 3e-3, .03, .995)):
+                run["device"] = device
+                current = dict(receipt, device=device,
+                               tolerance={"absolute": absolute, "relative": relative,
+                                          "gradient_relative": gradient_relative, "gradient_cosine": cosine},
+                               comparison_policy=hifigan_comparison_policy(device))
+                bind(dict(current, checks=altered(learned_state, max_absolute_error=100)))
+                self.assertEqual("pass", correctness_gate(run)["status"])
+                bind(dict(current, checks=altered(learned_state, relative_l2=relative * 1.01)))
+                self.assertEqual("fail", correctness_gate(run)["status"])
+                bind(dict(current, checks=altered(learned_state, cosine=cosine - 1e-5)))
+                self.assertEqual("fail", correctness_gate(run)["status"])
+                bind(dict(current, checks=altered(learned_state, finite=False)))
+                self.assertEqual("fail", correctness_gate(run)["status"])
+                spectral_state = "train/step1/" + min(common - learned)
+                for original_check in ("isolated-gradient/" + first_learned, spectral_state, "generator/output0"):
+                    bind(dict(current, checks=altered(original_check, max_absolute_error=1, relative_l2=1)))
+                    self.assertEqual("fail", correctness_gate(run)["status"])
+                bind(dict(current, checks=altered("isolated-gradient-summary/generator", norm_ratio=1 + 2 * gradient_relative)))
+                self.assertEqual("fail", correctness_gate(run)["status"])
+                bind(dict(current, checks=altered(spectral_state, comparison_kind="learned_state")))
+                self.assertEqual("unverified", correctness_gate(run)["status"])
+            run["device"] = "cuda"
             bind(receipt)
             path.write_text("changed")
             self.assertEqual("unverified", correctness_gate(run)["status"])
