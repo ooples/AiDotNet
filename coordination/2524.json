@@ -593,9 +593,13 @@
         "src/NeuralNetworks/Options/SpikingNeuralNetworkOptions.cs",
         "src/NeuralNetworks/SpikingNeuralNetwork.cs",
         "src/NeuralNetworks/SyntheticData/CausalGANGenerator.cs",
-        "src/NeuralNetworks/SyntheticData/SyntheticTensorOps.cs"
+        "src/NeuralNetworks/SyntheticData/SyntheticTensorOps.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Evaluation/ClassificationMetricsDeepMathIntegrationTests.cs"
       ],
-      "status": "claimed; dispatched to fixer-3"
+      "status": "claimed; dispatched to fixer-3",
+      "file_scope_limits": {
+        "tests/AiDotNet.Tests/IntegrationTests/Evaluation/ClassificationMetricsDeepMathIntegrationTests.cs": "ONLY update stale pre-0e77ac7549 AUCROC_TiedScores_DependsOnOriginalOrder (lines 85-104) to match Fawcett (2006) / sklearn.metrics.roc_auc_score tie-grouped 0.5 contract pinned by EvaluationTieReferenceTests, preserving 1e-10 tolerance across permutations."
+      }
     },
     {
       "owner": "Antigravity swarm (Wave 4B)",
@@ -1097,7 +1101,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T05:18:30.996086Z",
+  "updated_utc": "2026-11-17T05:21:26.066935Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
