@@ -99,6 +99,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     private readonly Common.KMaXLossSettings _lossSettings;
     // Draws the auxiliary losses' pixel samples (Gumbel top-k); seeded from Options.Seed when one is set.
     private readonly Random _lossRandom;
+    // Retained verbatim (including null) so ClonePlanGenerator passes null on default-objective clones rather than
+    // NeuralNetworkBase.LossFunction's non-null fallback, keeping _usesSetPredictionLoss true across clones.
+    private readonly ILossFunction<T>? _lossFunction;
     // True when no loss function was supplied: training then uses the paper's set-prediction loss.
     private readonly bool _usesSetPredictionLoss;
     #endregion
@@ -136,6 +139,10 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
         _options = options; Options = _options;
+        _options.Validate();
+        if (double.IsNaN(_options.MaxGradNorm) || double.IsInfinity(_options.MaxGradNorm))
+            throw new ArgumentException("MaxGradNorm must be finite.", nameof(options));
+        MaxGradNorm = NumOps.FromDouble(_options.MaxGradNorm);
         // KMaXDeepLab's own fallback input geometry is 640x640, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
@@ -143,6 +150,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         (_numClusters, _pixelDim, _kMeansIterations) = ValidateHead(_options);
         (_decoderShape, _semanticShape, _lossSettings, _lossRandom) = DecoderSettings(_options, _pixelDim);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
+        _lossFunction = lossFunction;
         _usesSetPredictionLoss = lossFunction is null;
         InitializeLayers();
     }
@@ -170,6 +178,10 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
         _options = options; Options = _options;
+        _options.Validate();
+        if (double.IsNaN(_options.MaxGradNorm) || double.IsInfinity(_options.MaxGradNorm))
+            throw new ArgumentException("MaxGradNorm must be finite.", nameof(options));
+        MaxGradNorm = NumOps.FromDouble(_options.MaxGradNorm);
         // KMaXDeepLab's own fallback input geometry is 640x640, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
@@ -247,12 +259,14 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             : null;
         var discriminationWeight = NumOps.FromDouble(settings.InstanceDiscriminationWeight / b);
         var final = decoded.Predictions[decoded.Predictions.Count - 1];
-        var matchings = Common.MaskSetPredictionLoss.KMaXMatching(
-            final.ClassLogits, ToInputResolution(final.MaskLogits, final.Height, final.Width, h, w), segments);
+        var finalMasks = ToInputResolution(final.MaskLogits, final.Height, final.Width, h, w);
+        var matchings = Common.MaskSetPredictionLoss.KMaXMatching(final.ClassLogits, finalMasks, segments);
         Tensor<T>? total = null;
         foreach (var prediction in decoded.Predictions)
         {
-            var masks = ToInputResolution(prediction.MaskLogits, prediction.Height, prediction.Width, h, w);
+            var masks = ReferenceEquals(prediction, final)
+                ? finalMasks
+                : ToInputResolution(prediction.MaskLogits, prediction.Height, prediction.Width, h, w);
             var term = Common.MaskSetPredictionLoss.KMaX(prediction.ClassLogits, masks, segments, settings, matchings);
             if (instanceSamples is not null && prediction.PixelFeatures is not null)
             {
@@ -262,7 +276,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
                 Tensor<T>? discrimination = null;
                 for (int i = 0; i < b; i++)
                 {
-                    var image = Engine.Reshape(Engine.TensorSlice(features, new[] { i, 0, 0 }, new[] { 1, d, h * w }), new[] { d, h * w });
+                    var image = b == 1
+                        ? Engine.Reshape(features, new[] { d, h * w })
+                        : Engine.Reshape(Engine.TensorSlice(features, new[] { i, 0, 0 }, new[] { 1, d, h * w }), new[] { d, h * w });
                     var loss = Common.MaskSetPredictionLoss.InstanceDiscrimination(
                         image, segments[i], instanceSamples[i], settings.InstanceDiscriminationTemperature);
                     discrimination = discrimination is null ? loss : Engine.TensorAdd(discrimination, loss);
@@ -286,7 +302,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             {
                 var sampled = Common.MaskSetPredictionLoss.SamplePixels(
                     segments[i], settings.SemanticSampleCount, settings.SemanticSampleTemperature, _lossRandom);
-                var image = Engine.Reshape(Engine.TensorSlice(logits, new[] { i, 0, 0 }, new[] { 1, k, h * w }), new[] { k, h * w });
+                var image = b == 1
+                    ? Engine.Reshape(logits, new[] { k, h * w })
+                    : Engine.Reshape(Engine.TensorSlice(logits, new[] { i, 0, 0 }, new[] { 1, k, h * w }), new[] { k, h * w });
                 var loss = Common.MaskSetPredictionLoss.SemanticCrossEntropy(image, segments[i], sampled);
                 semanticLoss = semanticLoss is null ? loss : Engine.TensorAdd(semanticLoss, loss);
             }
@@ -609,11 +627,31 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (_lazyShapesResolved) return;
         if (Layers is null || Layers.Count == 0) return;
         if (!_useNativeMode) { _lazyShapesResolved = true; return; }
-        using (InferenceMode.Enter())
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        bool restoreTraining = IsTrainingMode;
+        if (restoreTraining)
         {
-            // The auxiliary semantic decoder is included: inference skips it, so a probe through Forward left its
-            // lazy convolutions unsized, and the parameter vector grew on the first training step.
-            Decode(new Tensor<T>([1, _channels, _height, _width]), includeSemantic: true);
+            foreach (var layer in Layers) layer.SetTrainingMode(false);
+        }
+        try
+        {
+            using (InferenceMode.Enter())
+            {
+                // The auxiliary semantic decoder is included: inference skips it, so a probe through Forward left its
+                // lazy convolutions unsized, and the parameter vector grew on the first training step. Every layer in
+                // KMaXDeepLab sizes weights by channel count rather than spatial extent, so capping the probe at 32x32
+                // preserves all four backbone pyramid levels without allocating full-resolution 640x640 feature maps.
+                int probeHeight = Architecture.Layers is { Count: > 0 } || _height <= 32 ? _height : 32;
+                int probeWidth = Architecture.Layers is { Count: > 0 } || _width <= 32 ? _width : 32;
+                Decode(new Tensor<T>([1, _channels, probeHeight, probeWidth]), includeSemantic: true);
+            }
+        }
+        finally
+        {
+            if (restoreTraining)
+            {
+                foreach (var layer in Layers) layer.SetTrainingMode(true);
+            }
         }
         _lazyShapesResolved = true;
     }

@@ -79,15 +79,19 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
     public int[] EncoderPatchSizes { get; set; } = { 1024, 1024, 1024, 1024, 1024 };
 
     /// <summary>Blocks per decoder stage, finest first. Default: (2, 2, 2, 2).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Sonata uses PT-v3m2 encoder-only (Wu et al. 2025, Sec. 3.1: the U-Net decoder is removed and multi-level features are up-cast directly to the linear probe), so inherited PTv3 decoder stage settings are unused.", ModelType = typeof(Sonata<>))]
     public int[] DecoderDepths { get; set; } = { 2, 2, 2, 2 };
 
     /// <summary>Channels per decoder stage, finest first. Default: (64, 64, 128, 256).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Sonata uses PT-v3m2 encoder-only (Wu et al. 2025, Sec. 3.1: the U-Net decoder is removed and multi-level features are up-cast directly to the linear probe), so inherited PTv3 decoder stage settings are unused.", ModelType = typeof(Sonata<>))]
     public int[] DecoderChannels { get; set; } = { 64, 64, 128, 256 };
 
     /// <summary>Attention heads per decoder stage, finest first. Default: (4, 4, 8, 16).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Sonata uses PT-v3m2 encoder-only (Wu et al. 2025, Sec. 3.1: the U-Net decoder is removed and multi-level features are up-cast directly to the linear probe), so inherited PTv3 decoder stage settings are unused.", ModelType = typeof(Sonata<>))]
     public int[] DecoderNumHeads { get; set; } = { 4, 4, 8, 16 };
 
     /// <summary>Serialized patch size per decoder stage, finest first. Default: 1024 for every stage.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Sonata uses PT-v3m2 encoder-only (Wu et al. 2025, Sec. 3.1: the U-Net decoder is removed and multi-level features are up-cast directly to the linear probe), so inherited PTv3 decoder stage settings are unused.", ModelType = typeof(Sonata<>))]
     public int[] DecoderPatchSizes { get; set; } = { 1024, 1024, 1024, 1024 };
 
     /// <summary>Ratio of the MLP hidden width to the block width. Default: 4.</summary>

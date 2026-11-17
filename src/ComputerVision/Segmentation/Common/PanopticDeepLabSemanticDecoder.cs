@@ -224,22 +224,26 @@ internal static class PanopticDeepLabSemanticDecoder
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
-        int gh = (h + rate - 1) / rate, gw = (w + rate - 1) / rate;
+        // Along an axis of extent <= rate, no two valid indices are separated by rate (a - rate < 0 and a + rate >= h),
+        // so sub-grids at offsets >= extent contain only zero padding and are sliced away after batch-to-space.
+        int rh = Math.Min(rate, h), rw = Math.Min(rate, w);
+        if (rh == 1 && rw == 1) return convolution.Forward(input);
+        int gh = (h + rh - 1) / rh, gw = (w + rw - 1) / rw;
         var padded = input;
-        if (gh * rate > h)
-            padded = engine.TensorConcatenate(new[] { padded, Tensor<T>.CreateDefault(new[] { b, c, gh * rate - h, w }, ops.Zero) }, 2);
-        if (gw * rate > w)
-            padded = engine.TensorConcatenate(new[] { padded, Tensor<T>.CreateDefault(new[] { b, c, gh * rate, gw * rate - w }, ops.Zero) }, 3);
+        if (gh * rh > h)
+            padded = engine.TensorConcatenate(new[] { padded, Tensor<T>.CreateDefault(new[] { b, c, gh * rh - h, w }, ops.Zero) }, 2);
+        if (gw * rw > w)
+            padded = engine.TensorConcatenate(new[] { padded, Tensor<T>.CreateDefault(new[] { b, c, gh * rh, gw * rw - w }, ops.Zero) }, 3);
 
-        // [B, C, gh, r, gw, r] -> [r, r, B, C, gh, gw]: sub-grid (a, d) holds the pixels (i * r + a, j * r + d).
+        // [B, C, gh, rh, gw, rw] -> [rh, rw, B, C, gh, gw]: sub-grid (a, d) holds the pixels (i * rh + a, j * rw + d).
         var grids = engine.Reshape(
-            engine.TensorPermute(engine.Reshape(padded, new[] { b, c, gh, rate, gw, rate }), new[] { 3, 5, 0, 1, 2, 4 }),
-            new[] { rate * rate * b, c, gh, gw });
-        var convolved = convolution.Forward(grids);                                                      // [r*r*B, O, gh, gw]
+            engine.TensorPermute(engine.Reshape(padded, new[] { b, c, gh, rh, gw, rw }), new[] { 3, 5, 0, 1, 2, 4 }),
+            new[] { rh * rw * b, c, gh, gw });
+        var convolved = convolution.Forward(grids);                                                      // [rh*rw*B, O, gh, gw]
         int o = convolved.Shape[1];
         var merged = engine.Reshape(
-            engine.TensorPermute(engine.Reshape(convolved, new[] { rate, rate, b, o, gh, gw }), new[] { 2, 3, 4, 0, 5, 1 }),
-            new[] { b, o, gh * rate, gw * rate });
-        return gh * rate == h && gw * rate == w ? merged : engine.TensorSlice(merged, new[] { 0, 0, 0, 0 }, new[] { b, o, h, w });
+            engine.TensorPermute(engine.Reshape(convolved, new[] { rh, rw, b, o, gh, gw }), new[] { 2, 3, 4, 0, 5, 1 }),
+            new[] { b, o, gh * rh, gw * rw });
+        return gh * rh == h && gw * rw == w ? merged : engine.TensorSlice(merged, new[] { 0, 0, 0, 0 }, new[] { b, o, h, w });
     }
 }

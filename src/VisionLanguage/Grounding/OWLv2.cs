@@ -245,6 +245,14 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             if (_patchEmbedding is null)
             {
                 _patchEmbedding = new PatchEmbeddingLayer<T>(_options.PatchSize, _options.VisionDim, expectedInputChannels: 3);
+                // Materialize the [3 * PatchSize * PatchSize, VisionDim] projection weights at construction so
+                // ParameterCount and GetParameters reflect PatchSize before an image forward runs; RefreshLivePatchGrid
+                // still adapts the patch grid to any runtime image resolution.
+                using (var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+                using (InferenceMode.Enter())
+                {
+                    _patchEmbedding.Forward(new Tensor<T>(new[] { 1, 3, _options.PatchSize, _options.PatchSize }));
+                }
                 _groundingHeadLayers.Add(_patchEmbedding);
             }
         }

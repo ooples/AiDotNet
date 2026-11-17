@@ -402,11 +402,13 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         if (_lazyShapesResolved) return;
         if (Layers is null || Layers.Count == 0) return;
         if (!_useNativeMode) { _lazyShapesResolved = true; return; }
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using (InferenceMode.Enter())
         {
             var (encoded, taps) = RunBackbone(new Tensor<T>(new[] { 1, _channels, _height, _width }));
             Decode(encoded);
             if (taps.Count >= FpnLevels) Fpn(taps);
+            _instanceHead?.Materialize();
         }
 
         _lazyShapesResolved = true;
