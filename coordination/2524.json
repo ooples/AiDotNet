@@ -12,6 +12,16 @@
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
   ],
   "owners": [
+{
+  "owner": "this session/cuda_capture shard inventory repair",
+  "repository": "ooples/AiDotNet",
+  "files": [
+    ".github/test-shards.yml"
+  ],
+  "scope": "Only exact routing clauses for HamiltonianOptionObservationTests into existing options-contract partition and DenseFeatureImportanceTests into existing neural-network unit partition.",
+  "status": "CLAIMED; b37c cycle terminal, normal compilation passed but inventory found these two classes unrouted. No gate weakening, catchall filters, new shards or test removal.",
+  "verification": "Review exact diff; run canonical shard inventory against valid compiled class metadata and manifest drift controls. No broad rebuild."
+},
     {
       "files": [
         "src/Training/CompiledTapeTrainingStep.cs",
