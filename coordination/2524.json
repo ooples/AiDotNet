@@ -1146,18 +1146,23 @@
         "src/TimeSeries/TimeSeriesModelBase.cs": "ONLY two Serialize Convert.ToDouble -> NumOps.ToDouble sites, existing assigned Codex fix",
         "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs": "ONLY existing NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone method: replace reflection/envelope workaround with actual public Serialize/Deserialize plus clone/deepcopy while retaining independent numeric assertions. Existing author batch complete; no other time-series method edits.",
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs": "ONLY12 stale Insensitive entries proven by posted PINN11/KMaXMaxGradNorm1 TRX evidence; worker pinn_review, root review before consolidated checks. No other entries/harness edits.",
-        ".github/test-shards.yml": "ONLY exact routing clause for new CompiledStepRandomDataTests into appropriate existing unit shard, if canonical inventory requires it; no catchall/newshard/changed checks."
+        ".github/test-shards.yml": "ONLY exact routing clause for new CompiledStepRandomDataTests into appropriate existing unit shard, if canonical inventory requires it; no catchall/newshard/changed checks.",
+        "src/ElementWiseBaseline.txt": "ONLY4obsoleteHiFTharmonic keys and1obsoleteADNELEM001 TimeSeriesModelBase.Serialize key (confirmed actualanalyzergate); no adds/increases."
       }
     },
     {
-      "status": "CLAIMED before edits; root approved bounded2file design. Implement direct FP32 numeric/zero/tiny/subULP/freeze/skip/clip/checkpoint/copy/reset/rebind/refusal regressions. Separate batch from already-complete codec/Halfserialization/12ratchets; root reviews complete diff before one focused build.",
+      "status": "ROOT REVIEWED grouped23cases+production; firstbuild exposed TensorShape/nullability/API inventory compile issues, grouped fixes pending. Actual1512nativeTensor.Cast already materializes and honorsviews, so newadapterusesremoved while keepingviewtests. Noepsilonchange/scalarexemption.",
       "files": [
         "src/Optimizers/AdamOptimizer.cs",
-        "tests/AiDotNet.Tests/UnitTests/Optimizers/AdamHalfStateTests.cs"
+        "tests/AiDotNet.Tests/UnitTests/Optimizers/AdamHalfStateTests.cs",
+        "src/PublicAPI.Unshipped.txt"
       ],
       "repository": "ooples/AiDotNet",
       "owner": "Codex/pinn_review Half tape Adam completion",
-      "scope": "Necessary completion of user-approved shared FP32 Adam master/moment continuity repair: per-parameter Half tape slots FP32master/M/V/rawAMSmax/publishedHalf/acceptedage after existing anomaly+clipping preflight. Preserve originalepsilon and all options; do not overlap Antigravity FinancialA2C source. Existing declared-state RegisterState hook carries native float arrays + canonical parameter index/shape, independent restore/copy and strict malformed/oldT-state refusal. Explicit Half sharded export refusal because current Tensor<T>-only transport cannot preserve promoted state; no partial/rounded export."
+      "scope": "Necessary completion of user-approved shared FP32 Adam master/moment continuity repair: per-parameter Half tape slots FP32master/M/V/rawAMSmax/publishedHalf/acceptedage after existing anomaly+clipping preflight. Preserve originalepsilon and all options; do not overlap Antigravity FinancialA2C source. Existing declared-state RegisterState hook carries native float arrays + canonical parameter index/shape, independent restore/copy and strict malformed/oldT-state refusal. Explicit Half sharded export refusal because current Tensor<T>-only transport cannot preserve promoted state; no partial/rounded export.",
+      "file_scope_limits": {
+        "src/PublicAPI.Unshipped.txt": "ONLY exact RS0016-required override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.Deserialize(byte[]! data) -> void entry. No other symbols or baseline changes."
+      }
     }
   ],
   "codex_assignments": {
@@ -1836,7 +1841,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T22:20:20.1821718Z",
+  "updated_utc": "2026-11-17T22:39:15.3552906Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
