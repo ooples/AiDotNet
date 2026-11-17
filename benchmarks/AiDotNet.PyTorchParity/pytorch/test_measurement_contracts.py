@@ -256,6 +256,23 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit_coverage("gpu_framework_requested", claim, run)
 
+    def test_cudnn_workspace_acquisitions_can_close_the_owned_vendor_boundary(self):
+        run = self.run_fixture()
+        phases = checked_phases(run)
+        for index, event in enumerate(phases):
+            event["allocator_diagnostics"]["gpu_cudnn_workspace_acquired"] = {
+                "bytes": (index + 1) * 64, "count": index + 1,
+                "coverage": "successful_cudnn_conv_workspace_growth_only"}
+        values = provider_values(run, phases, "aidotnet_cudnn_workspace")
+        self.assertEqual(256, sum(value["bytes"] for value in values.values()))
+        claim = {"scope": SCOPES["gpu_backing"], "window": "fixed_work_construction_training_epochs_inference_steady",
+            "bound": "exact", "providers": ["aidotnet_cuda_backing_api", "aidotnet_cudnn_workspace"],
+            "unmeasured_routes": [], "reviewer": "synthetic-unit-fixture",
+            "exclusions": ["vendor_internal_allocations_bypassing_framework_allocators"], "routes": {
+                "backend_allocation_api": {"status": "measured", "provider": "aidotnet_cuda_backing_api", **self.audit()},
+                "framework_owned_vendor_workspaces": {"status": "measured", "provider": "aidotnet_cudnn_workspace", **self.audit()}}}
+        self.assertEqual(claim["providers"], audit_coverage("gpu_backing", claim, run))
+
     def test_allocation_count_fails_independently_of_byte_win(self):
         runs = [self.run_fixture(side, pair, mode) for pair in range(5)
                 for side in ("aidotnet", "pytorch") for mode in ("score", "diagnostic")]
