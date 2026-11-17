@@ -19,6 +19,64 @@ public sealed class NormedConvSpectralTrajectoryTests
     [InlineData(true)]
     public void DoubleTwoForwardsAndAdamWMatchAnalyticTrajectory(bool compiled) => Check<double>(compiled, 1e-9);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NonconvergedFloatStateUsesModernParametrizationOrder(bool compiled) => CheckNonconvergedState<float>(compiled, 3e-6);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NonconvergedDoubleStateUsesModernParametrizationOrder(bool compiled) => CheckNonconvergedState<double>(compiled, 1e-12);
+
+    private static void CheckNonconvergedState<T>(bool compiled, double tolerance)
+    {
+        var previous = AiDotNetEngine.Current;
+        var engine = new CpuEngine();
+        AiDotNetEngine.Current = engine;
+        try
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            using var layer = new NormedConv1DLayer<T>(2, 2, 1, 1, 1, 1, 0, false, ConvolutionNormalization.Spectral);
+            layer.SetTrainingMode(true);
+            Tensor<T> Field(string name) => (Tensor<T>)typeof(NormedConv1DLayer<T>)
+                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layer)!;
+            var direction = Field("_direction");
+            foreach (var (name, values) in new[]
+            {
+                ("_direction", new[] { 1.0, 2.0, 3.0, -1.0 }),
+                ("_u", new[] { 1.0, 0.0 }), ("_v", new[] { 0.0, 1.0 })
+            })
+            {
+                var field = Field(name);
+                for (int i = 0; i < values.Length; i++) field[i] = ops.FromDouble(values[i]);
+                engine.InvalidatePersistentTensor(field);
+            }
+            // W=[[1,2],[3,-1]], oldv=[0,1]: newu=[2,-1]/sqrt(5), newv=[-1,5]/sqrt(26).
+            // Reversing the iteration instead produces newu=[5,1]/sqrt(26), so convergence cannot hide the error.
+            double sigma = Math.Sqrt(26.0 / 5.0);
+            double loss;
+            if (compiled)
+            {
+                CompiledTrainingPlan<T> plan;
+                using (var scope = GraphMode.EnableTraining(new[] { direction }))
+                    plan = scope.CompileTraining(new[] { direction }, engine.ReduceSum(layer.Kernel(), null, false));
+                using (plan)
+                {
+                    plan.ConfigureOptimizer(OptimizerType.SGD, .01);
+                    loss = ops.ToDouble(plan.Step()[0]);
+                }
+            }
+            else loss = ops.ToDouble(engine.ReduceSum(layer.Kernel(), null, false)[0]);
+            Close(new[] { 5 / sigma }, new[] { loss }, tolerance, "nonconverged/loss");
+            Close(new[] { 2 / Math.Sqrt(5), -1 / Math.Sqrt(5) }, Field("_u").ToArray().Select(ops.ToDouble).ToArray(),
+                tolerance, "nonconverged/u");
+            Close(new[] { -1 / Math.Sqrt(26), 5 / Math.Sqrt(26) }, Field("_v").ToArray().Select(ops.ToDouble).ToArray(),
+                tolerance, "nonconverged/v");
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     private static void Check<T>(bool compiled, double tolerance)
     {
         var previous = AiDotNetEngine.Current;
