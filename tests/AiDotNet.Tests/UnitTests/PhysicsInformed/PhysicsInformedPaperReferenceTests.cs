@@ -618,6 +618,602 @@ public class PhysicsInformedPaperReferenceTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MultiScalePinn_CompiledTrainToSolveToCompiledTrain_PreservesOptimizerContinuity(bool explicitOptimizer)
+    {
+        var x1 = new Tensor<float>(new[] { 0.1f, 0.2f, 0.4f, 0.3f, 0.7f, 0.6f, 0.9f, 0.8f }, new[] { 4, 2 });
+        var y1 = new Tensor<float>(new[] { 0.5f, -0.3f, 0.8f, 0.2f }, new[] { 4, 1 });
+        var x2 = new Tensor<float>(new[] { 0.2f, 0.5f, 0.6f, 0.1f, 0.8f, 0.4f, 0.3f, 0.9f }, new[] { 4, 2 });
+        var y2 = new Tensor<float>(new[] { -0.2f, 0.6f, 0.1f, -0.4f }, new[] { 4, 1 });
+
+        MultiScalePINN<float> CreatePinn(Vector<float>? initialParameters, out AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>? optimizer)
+        {
+            var arch = new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1)
+            {
+                RandomSeed = 1337
+            };
+            optimizer = explicitOptimizer
+                ? new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                    null,
+                    new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        InitialLearningRate = 0.01,
+                        UseAdaptiveLearningRate = false,
+                        EnableGradientClipping = false,
+                    })
+                : null;
+            var model = new MultiScalePINN<float>(
+                arch,
+                new TwoScalePoissonProblem<float>(),
+                Array.Empty<IBoundaryCondition<float>>(),
+                trainingOptions: new MultiScaleTrainingOptions<float> { UseAdaptiveScaleWeighting = false },
+                optimizer: optimizer,
+                options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 8 });
+            if (initialParameters is not null)
+            {
+                model.SetParameters(initialParameters);
+            }
+
+            return model;
+        }
+
+        static void ResetMoments(MultiScalePINN<float> model, AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>? opt)
+        {
+            if (opt is not null)
+            {
+                opt.Reset();
+            }
+            else
+            {
+                model.ResetBaseTrainOptimizerState();
+            }
+        }
+
+        Vector<float> RunTrajectory(bool compiled, Vector<float>? init, bool resetBetweenPhases, out MultiScalePINN<float> model)
+        {
+            var codecOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            bool saved = codecOptions.EnableCompilation;
+            try
+            {
+                codecOptions.EnableCompilation = compiled;
+                model = CreatePinn(init, out var opt);
+                model.Train(x1, y1);
+                model.Train(x1, y1);
+                if (compiled)
+                {
+                    Assert.True(model.FusedSession.IsCommitted, "Supervised Train before Solve must commit the fused plan.");
+                    Assert.False(model.FusedSession.IsDisabled);
+                }
+
+                if (resetBetweenPhases)
+                {
+                    ResetMoments(model, opt);
+                }
+
+                model.Solve(epochs: 1, verbose: false);
+                if (compiled)
+                {
+                    Assert.True(model.FusedSession.IsCommitted, "First Solve must continue the committed fused session without disabling it.");
+                    Assert.False(model.FusedSession.IsDisabled);
+                }
+
+                if (resetBetweenPhases)
+                {
+                    ResetMoments(model, opt);
+                }
+
+                model.Solve(epochs: 1, verbose: false);
+                if (compiled)
+                {
+                    Assert.True(model.FusedSession.IsCommitted, "Consecutive Solve calls must preserve the committed fused session and Adam moments.");
+                    Assert.False(model.FusedSession.IsDisabled);
+                }
+
+                if (resetBetweenPhases)
+                {
+                    ResetMoments(model, opt);
+                }
+
+                model.Train(x2, y2);
+                model.Train(x2, y2);
+                if (compiled)
+                {
+                    Assert.True(model.FusedSession.IsCommitted, "Supervised Train after Solve must stay on the committed fused session.");
+                }
+
+                return model.GetParameters();
+            }
+            finally
+            {
+                codecOptions.EnableCompilation = saved;
+            }
+        }
+
+        var initial = CreatePinn(null, out _).GetParameters();
+        var eagerParams = RunTrajectory(compiled: false, initial, resetBetweenPhases: false, out _);
+        var resetParams = RunTrajectory(compiled: false, initial, resetBetweenPhases: true, out _);
+        var compiledParams = RunTrajectory(compiled: true, initial, resetBetweenPhases: false, out _);
+
+        double maxDiffVsEager = eagerParams.ToArray().Zip(compiledParams.ToArray(), (a, b) => Math.Abs((double)a - b)).Max();
+        double maxDiffIfMomentsLost = eagerParams.ToArray().Zip(resetParams.ToArray(), (a, b) => Math.Abs((double)a - b)).Max();
+
+        double minExpectedResetDivergence = explicitOptimizer ? 5e-4 : 1e-4;
+        double maxAllowedCompiledDrift = explicitOptimizer ? 1e-4 : 1e-5;
+        Assert.True(maxDiffIfMomentsLost > minExpectedResetDivergence, $"Reset-moments control did not diverge enough ({maxDiffIfMomentsLost:E3}).");
+        Assert.True(maxDiffVsEager < maxAllowedCompiledDrift, $"Compiled-to-Solve-to-compiled trajectory diverged from eager by {maxDiffVsEager:E3}.");
+    }
+
+    [Fact]
+    public void MultiScalePinn_SolvePreservesIndividualObjectiveSessions_AndEnforcesCommittedRefusals()
+    {
+        var codecOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        bool saved = codecOptions.EnableCompilation;
+        try
+        {
+            codecOptions.EnableCompilation = true;
+            var arch = new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1)
+            {
+                RandomSeed = 99
+            };
+            var primaryOptimizer = new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                null,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 0.01,
+                    UseAdaptiveLearningRate = false,
+                });
+            var togglePde = new HostReadToggleMultiScalePde();
+            var pinn = new MultiScalePINN<float>(
+                arch,
+                togglePde,
+                Array.Empty<IBoundaryCondition<float>>(),
+                trainingOptions: new MultiScaleTrainingOptions<float> { UseAdaptiveScaleWeighting = false },
+                optimizer: primaryOptimizer,
+                options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 6 });
+
+            var x = new Tensor<float>(new[] { 0.2f, 0.3f, 0.7f, 0.8f }, new[] { 2, 2 });
+            var y = new Tensor<float>(new[] { 0.4f, -0.1f }, new[] { 2, 1 });
+
+            // 1. Commit an independent custom-objective session on secondaryOptimizer, and record a declined custom-objective
+            // session on tertiaryOptimizer (value clipping has no fused form) BEFORE FusedSession is committed.
+            var secondaryOptimizer = new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                null,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 0.005,
+                    UseAdaptiveLearningRate = false,
+                });
+            pinn.TrainWithCustomLoss(
+                x,
+                pred => AiDotNetEngine.Current.ReduceMean(AiDotNetEngine.Current.TensorMultiply(pred, pred), new[] { 0, 1 }, keepDims: false),
+                secondaryOptimizer);
+            Assert.True(pinn.ObjectiveSessionCommitted, "Secondary custom-objective session must commit independently.");
+
+            var tertiaryOptimizer = new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                null,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 0.005,
+                    UseAdaptiveLearningRate = false,
+                    EnableGradientClipping = true,
+                    GradientClippingMethod = AiDotNet.Models.Options.GradientClippingMethod.ByValue,
+                });
+            pinn.TrainWithCustomLoss(
+                x,
+                pred => AiDotNetEngine.Current.ReduceMean(AiDotNetEngine.Current.TensorMultiply(pred, pred), new[] { 0, 1 }, keepDims: false),
+                tertiaryOptimizer);
+
+            Assert.False(pinn.FusedSession.IsCommitted, "Primary FusedSession has not run yet.");
+            Assert.False(pinn.FusedSession.IsDisabled, "Primary FusedSession must remain enabled when another objective session declines.");
+            Assert.True(pinn.ObjectiveSessionCommitted);
+            Assert.NotNull(pinn.LastObjectiveMissReason);
+
+            // 2. Run Solve BEFORE Train even though ObjectiveSessionCommitted is true on secondaryOptimizer: Solve must commit
+            // primary FusedSession directly (not misroute into _objectiveSessions[primaryOptimizer]), and subsequent Train + Solve must continue it.
+            pinn.Solve(epochs: 1, verbose: false);
+            Assert.True(pinn.FusedSession.IsCommitted, "Solve must commit primary FusedSession even when another optimizer holds a committed objective session.");
+            Assert.False(pinn.FusedSession.IsDisabled);
+            pinn.Train(x, y);
+            Assert.True(pinn.FusedSession.IsCommitted);
+            pinn.Solve(epochs: 1, verbose: false);
+            Assert.True(pinn.FusedSession.IsCommitted);
+            Assert.False(pinn.FusedSession.IsDisabled);
+            Assert.True(pinn.ObjectiveSessionCommitted);
+            Assert.NotNull(pinn.LastObjectiveMissReason);
+
+            // Now flip the PDE to perform an undeclared host read after FusedSession has committed: Solve must refuse before mutating weights.
+            var beforeRefusal = pinn.GetParameters().ToArray();
+            togglePde.ReadOutputOnHost = true;
+            Assert.Throws<InvalidOperationException>(() => pinn.Solve(epochs: 1, verbose: false));
+            Assert.Equal(beforeRefusal, pinn.GetParameters().ToArray());
+            Assert.True(pinn.FusedSession.IsCommitted);
+        }
+        finally
+        {
+            codecOptions.EnableCompilation = saved;
+        }
+    }
+
+    [Fact]
+    public void MultiScalePinn_SolveAppliesGradientClipping_AndMatchesEager()
+    {
+        static (Vector<float> Params, bool Committed) RunClippedSolve(bool compiled, double clipNorm, Vector<float>? init)
+        {
+            var codecOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            bool saved = codecOptions.EnableCompilation;
+            try
+            {
+                codecOptions.EnableCompilation = compiled;
+                var arch = new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: 2,
+                    outputSize: 1)
+                {
+                    RandomSeed = 2026
+                };
+                var sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+                    null,
+                    new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        InitialLearningRate = 0.05,
+                        UseAdaptiveLearningRate = false,
+                        EnableGradientClipping = clipNorm > 0.0,
+                        MaxGradientNorm = clipNorm > 0.0 ? clipNorm : 1000.0,
+                    });
+                var pinn = new MultiScalePINN<float>(
+                    arch,
+                    new LargeForcingPoissonPde(),
+                    Array.Empty<IBoundaryCondition<float>>(),
+                    trainingOptions: new MultiScaleTrainingOptions<float> { UseAdaptiveScaleWeighting = false },
+                    optimizer: sgd,
+                    options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 8 });
+                if (init is not null)
+                {
+                    pinn.SetParameters(init);
+                }
+
+                if (clipNorm >= 0.0)
+                {
+                    pinn.Solve(epochs: 3, verbose: false);
+                }
+
+                return (pinn.GetParameters(), pinn.FusedSession.IsCommitted);
+            }
+            finally
+            {
+                codecOptions.EnableCompilation = saved;
+            }
+        }
+
+        var initVec = RunClippedSolve(compiled: false, clipNorm: -1.0, init: null).Params;
+        var initial = initVec.ToArray();
+        var (eagerClipped, _) = RunClippedSolve(compiled: false, clipNorm: 0.02, initVec);
+        var (compiledClipped, committed) = RunClippedSolve(compiled: true, clipNorm: 0.02, initVec);
+        var (compiledDefaultModelClip, unclippedCommitted) = RunClippedSolve(compiled: true, clipNorm: 0.0, initVec);
+
+        Assert.True(committed, "Clipped Solve must commit a fused plan.");
+        Assert.True(unclippedCommitted, "Default model-clipped Solve must commit a fused plan.");
+
+        double clippedStepNorm = Math.Sqrt(compiledClipped.ToArray().Zip(initial, (a, b) => ((double)a - b) * ((double)a - b)).Sum());
+        double widerStepNorm = Math.Sqrt(compiledDefaultModelClip.ToArray().Zip(initial, (a, b) => ((double)a - b) * ((double)a - b)).Sum());
+        double eagerDiff = eagerClipped.ToArray().Zip(compiledClipped.ToArray(), (a, b) => Math.Abs((double)a - b)).Max();
+
+        Assert.True(clippedStepNorm < 0.1 * widerStepNorm,
+            $"Gradient clipping did not bound the Solve update (tight={clippedStepNorm:E3}, modelClip={widerStepNorm:E3}).");
+        Assert.True(eagerDiff < 1e-4, $"Compiled clipped Solve diverged from eager clipped Solve by {eagerDiff:E3}.");
+    }
+
+    [Fact]
+    public void MultiScalePinn_SolveReplaysPerStepRandomDraws_AndMatchesEager()
+    {
+        var x = new Tensor<float>(new[] { 0.15f, 0.25f, 0.65f, 0.75f }, new[] { 2, 2 });
+        var y = new Tensor<float>(new[] { 0.3f, -0.2f }, new[] { 2, 1 });
+
+        Vector<float> RunStochasticSolve(bool compiled, bool freezeNoise, Vector<float>? init)
+        {
+            var codecOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            bool saved = codecOptions.EnableCompilation;
+            try
+            {
+                codecOptions.EnableCompilation = compiled;
+                var arch = new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: 2,
+                    outputSize: 1)
+                {
+                    RandomSeed = 314
+                };
+                var adam = new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                    null,
+                    new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        InitialLearningRate = 0.01,
+                        UseAdaptiveLearningRate = false,
+                    });
+                var pde = new StochasticForcingMultiScalePde(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(77), freezeNoise);
+                var pinn = new MultiScalePINN<float>(
+                    arch,
+                    pde,
+                    Array.Empty<IBoundaryCondition<float>>(),
+                    trainingOptions: new MultiScaleTrainingOptions<float> { UseAdaptiveScaleWeighting = false },
+                    optimizer: adam,
+                    options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 8 });
+                if (init is not null)
+                {
+                    pinn.SetParameters(init);
+                }
+
+                pinn.Train(x, y);
+                pinn.Solve(epochs: 4, verbose: false);
+                pinn.Train(x, y);
+                if (compiled)
+                {
+                    Assert.True(pinn.FusedSession.IsCommitted);
+                }
+
+                return pinn.GetParameters();
+            }
+            finally
+            {
+                codecOptions.EnableCompilation = saved;
+            }
+        }
+
+        var init = RunStochasticSolve(compiled: false, freezeNoise: false, init: null);
+        var eager = RunStochasticSolve(compiled: false, freezeNoise: false, init);
+        var compiled = RunStochasticSolve(compiled: true, freezeNoise: false, init);
+        var frozenControl = RunStochasticSolve(compiled: false, freezeNoise: true, init);
+
+        double diffVsEager = eager.ToArray().Zip(compiled.ToArray(), (a, b) => Math.Abs((double)a - b)).Max();
+        double diffVsFrozen = eager.ToArray().Zip(frozenControl.ToArray(), (a, b) => Math.Abs((double)a - b)).Max();
+
+        Assert.True(diffVsFrozen > 1e-4, $"Frozen-noise control did not differ from per-step draws ({diffVsFrozen:E3}).");
+        Assert.True(diffVsEager < 1e-4, $"Compiled Solve with CompiledStepRandom draws diverged from eager by {diffVsEager:E3}.");
+    }
+
+    [Fact]
+    public void MultiScalePinn_ThirdOrderPdeJetMatchesAutodiff_AndCompiledSolveMatchesEager()
+    {
+        var points = new Tensor<double>(new[]
+        {
+            0.0, 0.0,
+            0.25, 0.70,
+            -0.40, 0.30,
+            0.80, -0.50,
+            0.10, 0.90,
+        }, new[] { 5, 2 });
+
+        static MultiScalePINN<double> CreateThirdOrderPinn(Vector<double>? init)
+        {
+            var arch = Architecture(2, 1);
+            var model = new MultiScalePINN<double>(
+                arch,
+                new ThirdOrderKdVMultiScalePde(),
+                Array.Empty<IBoundaryCondition<double>>(),
+                trainingOptions: new MultiScaleTrainingOptions<double> { UseAdaptiveScaleWeighting = false },
+                options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 6 });
+            if (init is not null)
+            {
+                model.SetParameters(init);
+            }
+
+            return model;
+        }
+
+        var probeModel = CreateThirdOrderPinn(null);
+        for (int scale = 0; scale < probeModel.ScaleNetworks.Count; scale++)
+        {
+            var scaleNet = probeModel.ScaleNetworks[scale];
+            var jetOut = probeModel.EvaluateScaleNetwork(scaleNet, points, order: 3, out var jetDerivs);
+            var autoOut = PinnAutodiff<double>.Evaluate(
+                x =>
+                {
+                    var current = x;
+                    foreach (var layer in scaleNet.Layers)
+                    {
+                        current = layer.Forward(current);
+                    }
+
+                    return current;
+                },
+                points,
+                order: 3,
+                out var autoDerivs);
+
+            Assert.NotNull(jetDerivs.FirstDerivatives);
+            Assert.NotNull(jetDerivs.SecondDerivatives);
+            Assert.NotNull(jetDerivs.ThirdDerivatives);
+            Assert.NotNull(autoDerivs.FirstDerivatives);
+            Assert.NotNull(autoDerivs.SecondDerivatives);
+            Assert.NotNull(autoDerivs.ThirdDerivatives);
+
+            double outDiff = jetOut.ToArray().Zip(autoOut.ToArray(), (a, b) => Math.Abs(a - b)).Max();
+            double d1Diff = (jetDerivs.FirstDerivatives ?? throw new InvalidOperationException()).ToArray()
+                .Zip((autoDerivs.FirstDerivatives ?? throw new InvalidOperationException()).ToArray(), (a, b) => Math.Abs(a - b)).Max();
+            double d2Diff = (jetDerivs.SecondDerivatives ?? throw new InvalidOperationException()).ToArray()
+                .Zip((autoDerivs.SecondDerivatives ?? throw new InvalidOperationException()).ToArray(), (a, b) => Math.Abs(a - b)).Max();
+            double d3Diff = (jetDerivs.ThirdDerivatives ?? throw new InvalidOperationException()).ToArray()
+                .Zip((autoDerivs.ThirdDerivatives ?? throw new InvalidOperationException()).ToArray(), (a, b) => Math.Abs(a - b)).Max();
+
+            Assert.True(outDiff < 1e-12, $"Scale {scale} output differed by {outDiff:E3}.");
+            Assert.True(d1Diff < 1e-12, $"Scale {scale} first derivatives differed by {d1Diff:E3}.");
+            Assert.True(d2Diff < 1e-12, $"Scale {scale} second derivatives differed by {d2Diff:E3}.");
+            Assert.True(d3Diff < 1e-12, $"Scale {scale} third derivatives differed by {d3Diff:E3}.");
+        }
+
+        var initial = probeModel.GetParameters();
+        var codecOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        bool saved = codecOptions.EnableCompilation;
+        Vector<double> eagerParams;
+        Vector<double> compiledParams;
+        try
+        {
+            codecOptions.EnableCompilation = false;
+            var eagerModel = CreateThirdOrderPinn(initial);
+            eagerModel.Solve(epochs: 3, verbose: false);
+            eagerParams = eagerModel.GetParameters();
+
+            codecOptions.EnableCompilation = true;
+            var compiledModel = CreateThirdOrderPinn(initial);
+            compiledModel.Solve(epochs: 3, verbose: false);
+            Assert.True(compiledModel.FusedSession.IsCommitted, "Third-order MultiScalePINN Solve must commit a fused plan.");
+            Assert.False(compiledModel.FusedSession.IsDisabled);
+            compiledParams = compiledModel.GetParameters();
+        }
+        finally
+        {
+            codecOptions.EnableCompilation = saved;
+        }
+
+        double maxParamDiff = eagerParams.ToArray().Zip(compiledParams.ToArray(), (a, b) => Math.Abs(a - b)).Max();
+        Assert.True(maxParamDiff < 1e-11, $"Third-order compiled Solve diverged from eager by {maxParamDiff:E3}.");
+    }
+
+    private sealed class ThirdOrderKdVMultiScalePde : PDESpecificationBase<double>, IMultiScalePDE<double>
+    {
+        private readonly KortewegDeVriesEquation<double> _coarse = new KortewegDeVriesEquation<double>(6.0, 1.0);
+        private readonly KortewegDeVriesEquation<double> _fine = new KortewegDeVriesEquation<double>(6.0, 0.1);
+
+        public override int DerivativeOrder => 3;
+        public int NumberOfScales => 2;
+        public double[] ScaleCharacteristicLengths => new[] { 1.0, 0.1 };
+        public override int InputDimension => 2;
+        public override int OutputDimension => 1;
+        public override string Name => "Two-scale Korteweg-de Vries";
+        public override double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
+            => _coarse.ComputeResidual(inputs, outputs, derivatives);
+        public Tensor<double> ComputeScaleResidual(int scaleIndex, Tensor<double> inputs, Tensor<double> outputs, PDEDerivatives<double> derivatives)
+            => scaleIndex == 0
+                ? _coarse.ComputeTapeResidual(inputs, outputs, derivatives)
+                : _fine.ComputeTapeResidual(inputs, outputs, derivatives);
+        public Tensor<double> ComputeScaleCoupling(
+            int coarseIndex, int fineIndex, Tensor<double> inputs,
+            Tensor<double> coarseOutputs, Tensor<double> fineOutputs,
+            PDEDerivatives<double> coarseDerivatives, PDEDerivatives<double> fineDerivatives)
+            => AiDotNetEngine.Current.TensorSubtract(
+                AiDotNetEngine.Current.TensorSelect(coarseOutputs, 1, 0),
+                AiDotNetEngine.Current.TensorSelect(fineOutputs, 1, 0));
+        public double GetScaleLossWeight(int scaleIndex) => 1.0;
+        public int GetScaleOutputDimension(int scaleIndex) => 1;
+    }
+
+    private sealed class HostReadToggleMultiScalePde : IMultiScalePDE<float>
+    {
+        private readonly PoissonEquation<float> _poisson = new PoissonEquation<float>();
+        public bool ReadOutputOnHost { get; set; }
+        public int NumberOfScales => 2;
+        public float[] ScaleCharacteristicLengths => new[] { 1.0f, 0.1f };
+        public int InputDimension => 2;
+        public int OutputDimension => 1;
+        public string Name => "Host-read toggle multi-scale Poisson";
+        public float ComputeResidual(Vector<float> inputs, Vector<float> outputs, PDEDerivatives<float> derivatives)
+            => _poisson.ComputeResidual(inputs, outputs, derivatives);
+        public Tensor<float> ComputeScaleResidual(int scaleIndex, Tensor<float> inputs, Tensor<float> outputs, PDEDerivatives<float> derivatives)
+        {
+            var residual = _poisson.ComputeTapeResidual(inputs, outputs, derivatives);
+            if (!ReadOutputOnHost)
+            {
+                return residual;
+            }
+
+            float first = outputs[0, 0];
+            return AiDotNetEngine.Current.TensorMultiplyScalar(residual, first >= 0f ? 1.5f : 0.5f);
+        }
+        public Tensor<float> ComputeScaleCoupling(
+            int coarseIndex, int fineIndex, Tensor<float> inputs,
+            Tensor<float> coarseOutputs, Tensor<float> fineOutputs,
+            PDEDerivatives<float> coarseDerivatives, PDEDerivatives<float> fineDerivatives)
+            => AiDotNetEngine.Current.TensorSubtract(
+                AiDotNetEngine.Current.TensorSelect(coarseOutputs, 1, 0),
+                AiDotNetEngine.Current.TensorSelect(fineOutputs, 1, 0));
+        public float GetScaleLossWeight(int scaleIndex) => 1.0f;
+        public int GetScaleOutputDimension(int scaleIndex) => 1;
+    }
+
+    private sealed class LargeForcingPoissonPde : IMultiScalePDE<float>
+    {
+        private readonly PoissonEquation<float> _poisson = new PoissonEquation<float>(
+            points => Tensor<float>.CreateDefault(new[] { points.Shape[0] }, 50.0f));
+        public int NumberOfScales => 2;
+        public float[] ScaleCharacteristicLengths => new[] { 1.0f, 0.1f };
+        public int InputDimension => 2;
+        public int OutputDimension => 1;
+        public string Name => "Large-forcing two-scale Poisson";
+        public float ComputeResidual(Vector<float> inputs, Vector<float> outputs, PDEDerivatives<float> derivatives)
+            => _poisson.ComputeResidual(inputs, outputs, derivatives);
+        public Tensor<float> ComputeScaleResidual(int scaleIndex, Tensor<float> inputs, Tensor<float> outputs, PDEDerivatives<float> derivatives)
+            => _poisson.ComputeTapeResidual(inputs, outputs, derivatives);
+        public Tensor<float> ComputeScaleCoupling(
+            int coarseIndex, int fineIndex, Tensor<float> inputs,
+            Tensor<float> coarseOutputs, Tensor<float> fineOutputs,
+            PDEDerivatives<float> coarseDerivatives, PDEDerivatives<float> fineDerivatives)
+            => AiDotNetEngine.Current.TensorSubtract(
+                AiDotNetEngine.Current.TensorSelect(coarseOutputs, 1, 0),
+                AiDotNetEngine.Current.TensorSelect(fineOutputs, 1, 0));
+        public float GetScaleLossWeight(int scaleIndex) => 1.0f;
+        public int GetScaleOutputDimension(int scaleIndex) => 1;
+    }
+
+    private sealed class StochasticForcingMultiScalePde : IMultiScalePDE<float>
+    {
+        private readonly PoissonEquation<float> _poisson = new PoissonEquation<float>();
+        private readonly Random _random;
+        private readonly bool _freezeNoise;
+        private Tensor<float>? _frozenDraw;
+
+        public StochasticForcingMultiScalePde(Random random, bool freezeNoise)
+        {
+            _random = random;
+            _freezeNoise = freezeNoise;
+        }
+
+        public int NumberOfScales => 2;
+        public float[] ScaleCharacteristicLengths => new[] { 1.0f, 0.1f };
+        public int InputDimension => 2;
+        public int OutputDimension => 1;
+        public string Name => "Stochastic-forcing two-scale Poisson";
+        public float ComputeResidual(Vector<float> inputs, Vector<float> outputs, PDEDerivatives<float> derivatives)
+            => _poisson.ComputeResidual(inputs, outputs, derivatives);
+        public Tensor<float> ComputeScaleResidual(int scaleIndex, Tensor<float> inputs, Tensor<float> outputs, PDEDerivatives<float> derivatives)
+        {
+            var baseResidual = _poisson.ComputeTapeResidual(inputs, outputs, derivatives);
+            var u = AiDotNetEngine.Current.TensorSelect(outputs, 1, 0);
+            Tensor<float> draw;
+            if (_freezeNoise)
+            {
+                _frozenDraw ??= AiDotNet.Training.CompiledStepRandom<float>.StandardNormal(new[] { inputs.Shape[0] }, _random);
+                draw = _frozenDraw;
+            }
+            else
+            {
+                draw = AiDotNet.Training.CompiledStepRandom<float>.StandardNormal(new[] { inputs.Shape[0] }, _random);
+            }
+
+            return AiDotNetEngine.Current.TensorAdd(baseResidual, AiDotNetEngine.Current.TensorMultiply(u, draw));
+        }
+        public Tensor<float> ComputeScaleCoupling(
+            int coarseIndex, int fineIndex, Tensor<float> inputs,
+            Tensor<float> coarseOutputs, Tensor<float> fineOutputs,
+            PDEDerivatives<float> coarseDerivatives, PDEDerivatives<float> fineDerivatives)
+            => AiDotNetEngine.Current.TensorSubtract(
+                AiDotNetEngine.Current.TensorSelect(coarseOutputs, 1, 0),
+                AiDotNetEngine.Current.TensorSelect(fineOutputs, 1, 0));
+        public float GetScaleLossWeight(int scaleIndex) => 1.0f;
+        public int GetScaleOutputDimension(int scaleIndex) => 1;
+    }
+
     private sealed class DiffusivityIdentification : IInverseProblem<double>
     {
         public DiffusivityIdentification(IReadOnlyList<(double[] location, double[] value)> observations)
