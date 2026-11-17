@@ -862,6 +862,30 @@
   ],
   "questions": [
 {
+  "id": "review-financial-a2c-half-logprob-selection",
+  "owner": "Antigravity Wave4B",
+  "status": "OWNER ACTION REQUIRED; do not push this new source to PR before repair",
+  "commit": "564d276dd5",
+  "finding": "FinancialA2CAgent one-hot logProbsAll*stepActions reduction can produce Half NaN: epsilon1e-8 rounds0; logits[0,-100] yield logprobs[0,-Infinity], unselected0*-Infinity poisons selected logprob.",
+  "request": "Use stable tensor-native log-softmax and index/Where selection that does not multiply unselected infinities; add Half/extreme-logit regression preserving gradients and masking. No larger arbitrary epsilon floor."
+},
+{
+  "id": "review-tensormodeltrainer-compiled-owner-removal",
+  "owner": "Antigravity Wave4B",
+  "status": "OWNER ACTION REQUIRED; no overlapping root edit",
+  "commit": "564d276dd5",
+  "finding": "TensorModelTrainer removes owner:model from EagerSgdObjectiveStep, unconditionally forcing eager execution instead of the existing persistent compiled closure path and its committed-state/refusal checks.",
+  "request": "Preserve owner/session routing and repair warmup/lifecycle correctly, or propose an explicit supported contract with continuity/refusal tests. Do not disable requested compiled execution just to pass."
+},
+{
+  "id": "review-kmax-semantic-atrous-exemption",
+  "owner": "Antigravity Wave2 Batch5",
+  "status": "OWNER ACTION REQUIRED; existing option behavior check must remain meaningful",
+  "commit": "e11d5e3b40",
+  "finding": "SemanticAtrousRates now has a global OptionBehaviourExempt because the32px fixture yields1x1features and larger probes time out. This is an active train/inference option; existing kernel math references do not prove option-to-decoder wiring.",
+  "request": "Replace the fixture limitation with a bounded multi-pixel option-wiring/numeric oracle instead of exempting the model option. Preserve strict behavior checks and numeric assertions."
+},
+{
   "id": "antigravity-pinn-review-gradient-domain-and-sentinel",
   "owner": "Antigravity MultiScalePINN follow-up",
   "status": "OWNER ACTION REQUIRED; new review findings, no overlapping source edits",
