@@ -54,7 +54,8 @@ test.describe('Admin — licenses', () => {
 });
 
 test.describe('Phone admin license dialog', () => {
-  test.use({ ...devices['Pixel 5'] });
+  const phone = devices['Pixel 5'];
+  test.use({ viewport: phone.viewport, userAgent: phone.userAgent, deviceScaleFactor: phone.deviceScaleFactor, isMobile: true, hasTouch: true });
 
   test('the issuance form scrolls and its Cancel button accepts a real phone tap', async ({ page }) => {
     await page.goto('/admin/licenses/');
