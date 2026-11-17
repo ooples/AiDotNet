@@ -92,10 +92,13 @@ public sealed class NormedConvSpectralStateTests
             double norm = Math.Max(Math.Sqrt(values.Sum(x => x * x)), 1e-12);
             return values.Select(x => x / norm).ToArray();
         }
-        var expectedV = Normalize(Enumerable.Range(0, 6)
-            .Select(c => weights[c] * initialU[0] + weights[6 + c] * initialU[1]).ToArray());
+        // PyTorch's parametrization updates the left vector from the OLD right vector, then the right from NEW left.
+        // Deliberately use inconsistent initial u/v so a reversed iteration cannot pass from a converged initial state.
+        var initialV = Enumerable.Range(0, 6).Select(i => .1 * (i + 1)).ToArray();
         var expectedU = Normalize(Enumerable.Range(0, 2)
-            .Select(r => Enumerable.Range(0, 6).Sum(c => weights[r * 6 + c] * expectedV[c])).ToArray());
+            .Select(r => Enumerable.Range(0, 6).Sum(c => weights[r * 6 + c] * initialV[c])).ToArray());
+        var expectedV = Normalize(Enumerable.Range(0, 6)
+            .Select(c => weights[c] * expectedU[0] + weights[6 + c] * expectedU[1]).ToArray());
         double sigma = Enumerable.Range(0, 12).Sum(i => expectedU[i / 6] * weights[i] * expectedV[i % 6]);
         var upstreamValues = Enumerable.Range(0, 12).Select(i => .1 + .03 * i).ToArray();
         var upstream = new Tensor<T>(direction.Shape.ToArray(), new Vector<T>(upstreamValues.Select(ops.FromDouble)));
