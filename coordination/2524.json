@@ -1133,13 +1133,17 @@
         ".github/workflows/tensors-validation-preflight.yml",
         ".github/scripts/Test-TensorsValidationFeed.ps1",
         "src/TimeSeries/TimeSeriesModelBase.cs",
-        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs"
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs",
+        ".github/test-shards.yml"
       ],
       "branch": "codex/2524-post1766-ci",
       "owner": "Codex coordinator / root (post-1766 consumer CI batch)",
       "file_scope_limits": {
         "src/TimeSeries/TimeSeriesModelBase.cs": "ONLY two Serialize Convert.ToDouble -> NumOps.ToDouble sites, existing assigned Codex fix",
-        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs": "ONLY existing NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone method: replace reflection/envelope workaround with actual public Serialize/Deserialize plus clone/deepcopy while retaining independent numeric assertions. Existing author batch complete; no other time-series method edits."
+        "tests/AiDotNet.Tests/UnitTests/TimeSeries/TimeSeriesEngineOpsReferenceTests.cs": "ONLY existing NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone method: replace reflection/envelope workaround with actual public Serialize/Deserialize plus clone/deepcopy while retaining independent numeric assertions. Existing author batch complete; no other time-series method edits.",
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs": "ONLY12 stale Insensitive entries proven by posted PINN11/KMaXMaxGradNorm1 TRX evidence; worker pinn_review, root review before consolidated checks. No other entries/harness edits.",
+        ".github/test-shards.yml": "ONLY exact routing clause for new CompiledStepRandomDataTests into appropriate existing unit shard, if canonical inventory requires it; no catchall/newshard/changed checks."
       }
     }
   ],
@@ -1659,7 +1663,7 @@
     },
     {
       "id": "antigravity-pinn-runtime-fidelity-ratchet-11",
-      "status": "pending-owner-reconciliation",
+      "status": "ACTIVE Codex owner repair: exact existing-evidence12line removal; root review and current-dependency focused validation pending",
       "from": "Antigravity swarm (Wave 1 Batch 2 commit 0b08b92b5a + MultiScalePINN lifecycle follow-up 0386adb67a2b3d0fe3db947d5dc0912ec97ff4fa, verified #273 by verifier-2)",
       "owner": "this session and its agents (owner of tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs)",
       "files": "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs (not touched by Antigravity)",
@@ -1680,7 +1684,7 @@
     },
     {
       "id": "antigravity-kmaxdeeplab-maxgradnorm-ratchet-1",
-      "status": "pending-owner-reconciliation",
+      "status": "ACTIVE Codex owner repair: exact existing-evidence12line removal; root review and current-dependency focused validation pending",
       "from": "Antigravity swarm (Wave 2 Batch 5 commit e11d5e3b40d4af1d5818535626f52315e9c79a87)",
       "owner": "this session and its agents (owner of tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs)",
       "files": "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs (line 828; not touched by Antigravity)",
@@ -1696,7 +1700,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T21:35:00Z",
+  "updated_utc": "2026-11-17T21:35:21.2078439Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
