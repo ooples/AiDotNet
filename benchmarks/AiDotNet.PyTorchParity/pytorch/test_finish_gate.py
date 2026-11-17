@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from benchmark_telemetry import cpu_storage_events
-from finish_gate import cache_environment, contending_processes, evaluate, memory_metrics, metrics, normalize, paired_gate, phase_group
+from finish_gate import cache_environment, contending_processes, evaluate, gpu_allocator_peaks, memory_metrics, metrics, normalize, paired_gate, phase_group
 
 
 class GateTests(unittest.TestCase):
@@ -137,6 +137,20 @@ class GateTests(unittest.TestCase):
             blockers = contending_processes({2})
         self.assertEqual({1, 4}, {process["pid"] for process in blockers})
         self.assertTrue(all("arguments" not in process for process in blockers))
+
+    def test_allocator_peaks_belong_to_previous_interval_and_missing_or_multiple_devices_stay_unknown(self):
+        phases = [{"gpu_memory_interval": {"previous_phase": "construction", "coverage": "owning_backend_buffers_and_registered_driver_pools",
+                   "devices": {"cuda:0": {"PeakAllocatedBytes": 100, "PeakReservedBytes": 400}}}},
+                  {"gpu_memory_interval": {"previous_phase": "inference-b16-steady", "coverage": "torch_cuda_caching_allocator",
+                   "devices": {"0": {"peak_allocated_bytes": 150, "peak_reserved_bytes": 800}}}}]
+        result = gpu_allocator_peaks(phases)
+        self.assertEqual(400, result["construction_gpu_allocator_peak_reserved_bytes"])
+        self.assertEqual(150, result["inference_b16_gpu_allocator_peak_allocated_bytes"])
+        self.assertEqual(800, result["whole_process_gpu_allocator_peak_reserved_bytes"])
+        self.assertNotIn("training_gpu_allocator_peak_reserved_bytes", result)
+        phases[0]["gpu_memory_interval"]["devices"]["cuda:1"] = {"PeakAllocatedBytes": 900}
+        self.assertNotIn("construction_gpu_allocator_peak_allocated_bytes", gpu_allocator_peaks(phases))
+        self.assertEqual({}, gpu_allocator_peaks([{"gpu_memory_interval": {"coverage": "unavailable"}}]))
 
 
 if __name__ == "__main__":

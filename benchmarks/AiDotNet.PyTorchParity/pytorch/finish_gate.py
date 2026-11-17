@@ -106,6 +106,33 @@ def memory_metrics(samples: list[dict], phases: list[dict]) -> dict[str, float |
     return result
 
 
+def gpu_allocator_peaks(phases: list[dict]) -> dict[str, float]:
+    """Interval high-water marks are independent of device-wide sampled VRAM.
+
+    Single-device fresh processes are required: adding independent device peaks would
+    overstate a simultaneous process peak. Unknown scopes/missing counters stay absent.
+    """
+    result = {}
+    for event in phases:
+        interval = normalize(event.get("gpu_memory_interval", {}))
+        if not isinstance(interval, dict) or interval.get("coverage") not in ("owning_backend_buffers_and_registered_driver_pools", "torch_cuda_caching_allocator"):
+            continue
+        devices = interval.get("devices", {})
+        if not isinstance(devices, dict) or len(devices) != 1:
+            continue
+        device = next(iter(devices.values()))
+        if not isinstance(device, dict):
+            continue
+        group = phase_group(interval.get("previous_phase", "startup"))
+        for kind in ("allocated", "reserved"):
+            value = number(device.get("peak_" + kind + "_bytes"))
+            if value is not None and value >= 0:
+                for label in (group, "whole_process"):
+                    key = f"{label}_gpu_allocator_peak_{kind}_bytes"
+                    result[key] = max(result.get(key, 0), value)
+    return result
+
+
 def nvidia_query(gpu_id: str, fields: str) -> str | None:
     try:
         return subprocess.check_output(["nvidia-smi", "--id=" + gpu_id, "--query-gpu=" + fields,
@@ -261,6 +288,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     cache_env, cache_state = cache_environment(run_dir, config["cache_policy"], side)
     env.update(cache_env)
     env.update(AIDOTNET_BENCH_PHASE_FILE=str(run_dir / "phases.jsonl"), AIDOTNET_BENCH_EXTERNAL_MONITOR="1",
+               AIDOTNET_BENCH_DEVICE=device,
                AIDOTNET_BENCH_DIAGNOSTICS="1" if mode == "diagnostic" else "0",
                AIDOTNET_BUFFER_ALLOC_DIAG="1" if mode == "diagnostic" else "0",
                AIDOTNET_GPU_MEMTRACK="0", AIDOTNET_GPU_MEMTRACK_PEAKDUMP="0")
@@ -301,6 +329,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
+                    gpu_allocator_peaks=gpu_allocator_peaks(phases),
                     contention=sampler.contention,
                     peak_method={"cpu": "10ms sampled RSS; Windows OS whole-process HWM when available",
                                  "gpu": "100ms device-wide nvidia-smi sampled peak; requires exclusive GPU"})
@@ -345,6 +374,10 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     for group in ("whole_process", "construction", "training", *("inference_b" + str(batch) for batch in run["protocol"]["inference_batch_sizes"])):
         for kind in (["rss_bytes", "gpu_device_bytes"] if run["device"] == "cuda" else ["rss_bytes"]):
             values[group + "_" + kind] = memory.get(group + "_" + kind)
+        if run["device"] == "cuda":
+            for kind in ("allocated", "reserved"):
+                key = f"{group}_gpu_allocator_peak_{kind}_bytes"
+                values[key] = run.get("gpu_allocator_peaks", {}).get(key)
     return values, errors
 
 

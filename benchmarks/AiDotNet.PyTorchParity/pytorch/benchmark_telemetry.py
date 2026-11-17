@@ -6,8 +6,11 @@ import os
 import time
 from pathlib import Path
 
+_previous_phase: str | None = None
+
 
 def mark_phase(model: str, phase: str) -> None:
+    global _previous_phase
     output = os.environ.get("AIDOTNET_BENCH_PHASE_FILE")
     if not output:
         return
@@ -16,11 +19,27 @@ def mark_phase(model: str, phase: str) -> None:
         "schema": 1, "pid": os.getpid(), "unix_ms": time.time_ns() // 1_000_000,
         "model": model, "phase": phase, "diagnostics": diagnostics,
     }
+    import torch
+    if torch.cuda.is_initialized() and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":
+        stats = torch.cuda.memory_stats()
+        record["gpu_memory_interval"] = {
+            "previous_phase": _previous_phase or "startup",
+            "coverage": "torch_cuda_caching_allocator" if torch.cuda.get_allocator_backend() == "native" else "unsupported_allocator_backend",
+            "scope": "CUDA allocator allocated/reserved high-water marks; excludes context/vendor allocations bypassing it.",
+            "devices": {str(torch.cuda.current_device()): {
+                "allocated_bytes": stats.get("allocated_bytes.all.current"),
+                "peak_allocated_bytes": stats.get("allocated_bytes.all.peak"),
+                "reserved_bytes": stats.get("reserved_bytes.all.current"),
+                "peak_reserved_bytes": stats.get("reserved_bytes.all.peak"),
+            }},
+        }
+        torch.cuda.reset_peak_memory_stats()
+    else:
+        record["gpu_memory_interval"] = {"coverage": "inactive_or_uninitialized"}
     if diagnostics:
-        import torch
         # Native CUDA caching-allocator requests are distinct from segments acquired from the driver.
         # These counters do not measure Python objects, CPU storage, or allocations inside vendor libraries.
-        if torch.cuda.is_initialized() and torch.cuda.get_allocator_backend() == "native":
+        if torch.cuda.is_initialized() and torch.cuda.get_allocator_backend() == "native" and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":
             stats = torch.cuda.memory_stats()
             record["allocators"] = {
                 "gpu_framework_requested": {
@@ -38,6 +57,7 @@ def mark_phase(model: str, phase: str) -> None:
             }
     with Path(output).open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record, allow_nan=False) + "\n")
+    _previous_phase = phase
 
 
 def cpu_storage_events(trace_path: Path) -> dict[str, object]:
