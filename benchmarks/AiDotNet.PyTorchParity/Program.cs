@@ -128,6 +128,15 @@ if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
         Flag("--series-length", 20_000), Flag("--seed", 42), only);
 }
 
+int hifiFingerprintAt = Array.IndexOf(args, "--hash-hifigan-initial-state");
+if (hifiFingerprintAt >= 0)
+{
+    if (hifiFingerprintAt + 1 >= args.Length) throw new ArgumentException("--hash-hifigan-initial-state requires a fresh output path.");
+    int seedAt = Array.IndexOf(args, "--seed");
+    int seed = seedAt >= 0 ? int.Parse(args[seedAt + 1], System.Globalization.CultureInfo.InvariantCulture) : 1234;
+    return HifiGanInitialStateFingerprint.Run(args[hifiFingerprintAt + 1], seed);
+}
+
 int hifiReferenceAt = Array.IndexOf(args, "--verify-hifigan");
 if (hifiReferenceAt >= 0)
 {

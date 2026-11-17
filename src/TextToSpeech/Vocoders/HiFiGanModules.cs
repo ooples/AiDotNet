@@ -56,10 +56,12 @@ internal sealed class HiFiGanGenerator<T>
     /// PyTorch's default initialization everywhere.</param>
     /// <param name="conditionInEachUpsamplingLayer">Also project and add the global condition after every upsampler
     /// (XTTS-v2's <c>cond_in_each_up_layer</c>).</param>
+    /// <param name="defaultInitialization">Optional stream for every layer's default weights, biases and spectral
+    /// vectors, separate from the paper's normal reinitialization stream.</param>
     public HiFiGanGenerator(IEngine engine, int inChannels, int initialChannels, int[] upsampleRates, int[] upsampleKernels,
         int[] resblockKernels, int[][] resblockDilations, bool resblockType1, int conditionChannels = 0, bool plainEnds = false,
         int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null, bool plainOutputBias = false,
-        bool conditionInEachUpsamplingLayer = false)
+        bool conditionInEachUpsamplingLayer = false, Random? defaultInitialization = null)
     {
         _engine = engine;
         _resblockType1 = resblockType1;
@@ -71,35 +73,35 @@ internal sealed class HiFiGanGenerator<T>
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
         _pre = Add(plainEnds
-            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None)
-            : Conv(inChannels, initialChannels, 7, 1, 1, 3));
-        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
+            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, defaultInitialization)
+            : Conv(inChannels, initialChannels, 7, 1, 1, 3, defaultInitialization));
+        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None, defaultInitialization));
         int channels = initialChannels;
         for (int i = 0; i < upsampleRates.Length; i++)
         {
             int next = initialChannels >> (i + 1);
             _ups.Add(Add(new NormedConv1DLayer<T>(channels, next, upsampleKernels[i], upsampleRates[i], 1, 1,
-                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight)));
+                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight, defaultInitialization)));
             if (conditionInEachUpsamplingLayer)
                 _stageConditions.Add(Add(new NormedConv1DLayer<T>(conditionChannels, next, 1, 1, 1, 1, 0, false,
-                    ConvolutionNormalization.None)));
+                    ConvolutionNormalization.None, defaultInitialization)));
             channels = next;
             var stage = new List<(List<NormedConv1DLayer<T>>, List<NormedConv1DLayer<T>>)>();
             for (int j = 0; j < resblockKernels.Length; j++)
             {
                 int k = resblockKernels[j];
                 var dilations = resblockType1 ? resblockDilations[j] : resblockDilations[j].Take(2).ToArray();
-                var first = dilations.Select(d => Add(Conv(channels, channels, k, 1, d, (k * d - d) / 2))).ToList();
+                var first = dilations.Select(d => Add(Conv(channels, channels, k, 1, d, (k * d - d) / 2, defaultInitialization))).ToList();
                 var second = resblockType1
-                    ? dilations.Select(_ => Add(Conv(channels, channels, k, 1, 1, (k - 1) / 2))).ToList()
+                    ? dilations.Select(_ => Add(Conv(channels, channels, k, 1, 1, (k - 1) / 2, defaultInitialization))).ToList()
                     : new List<NormedConv1DLayer<T>>();
                 stage.Add((first, second));
             }
             _blocks.Add(stage);
         }
         _post = Add(plainEnds
-            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, useBias: plainOutputBias)
-            : Conv(channels, outputChannels, 7, 1, 1, 3));
+            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, defaultInitialization, useBias: plainOutputBias)
+            : Conv(channels, outputChannels, 7, 1, 1, 3, defaultInitialization));
         if (initialization is not null)
         {
             Func<double> normal = () =>
@@ -159,8 +161,8 @@ internal sealed class HiFiGanGenerator<T>
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
-    private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding)
-        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight);
+    private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding, Random? initialization = null)
+        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight, initialization);
 
     private TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
     {
@@ -397,22 +399,27 @@ internal sealed class HiFiGanDiscriminators<T>
     /// <param name="vitsScale">Build VITS's scale discriminator (jaywalnut310/vits <c>DiscriminatorS</c>, also MeloTTS's):
     /// MelGAN's widths 16, 64, 256, 1024, 1024, 1024 with stride-4 grouped convolutions (groups 4, 16, 64, 256), in place
     /// of HiFi-GAN's 128-to-1024 layout.</param>
+    /// <param name="initialization">Optional stream for all default directions, biases and spectral vectors.</param>
     public HiFiGanDiscriminators(IEngine engine, int[] periods, int scales, bool useScaleDiscriminator = true, int widthDivisor = 1,
-        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false, bool vitsScale = false)
+        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false, bool vitsScale = false,
+        Random? initialization = null)
     {
         _engine = engine;
         _padFullPeriod = padFullPeriod;
         _slope = slope;
         int W(int c) => Math.Max(1, c / Math.Max(1, widthDivisor));
+        NormedConv1DLayer<T> Build(int input, int output, int kernel, int stride, int dilation, int groups, int padding,
+            bool transposed, ConvolutionNormalization normalization) =>
+            new(input, output, kernel, stride, dilation, groups, padding, transposed, normalization, initialization);
         var widths = periodChannels ?? new[] { 32, 128, 512, 1024, 1024 };
         if (widths.Length != 5) throw new ArgumentException("A period discriminator has five convolutions.", nameof(periodChannels));
         foreach (int p in periods)
         {
             int[] channels = { 1, W(widths[0]), W(widths[1]), W(widths[2]), W(widths[3]) };
             var convs = new List<NormedConv1DLayer<T>>();
-            for (int i = 0; i < 4; i++) convs.Add(Add(new NormedConv1DLayer<T>(channels[i], channels[i + 1], 5, 3, 1, 1, 2, false, ConvolutionNormalization.Weight)));
-            convs.Add(Add(new NormedConv1DLayer<T>(W(widths[3]), W(widths[4]), 5, 1, 1, 1, 2, false, ConvolutionNormalization.Weight)));
-            _periods.Add((p, convs, Add(new NormedConv1DLayer<T>(W(widths[4]), 1, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Weight))));
+            for (int i = 0; i < 4; i++) convs.Add(Add(Build(channels[i], channels[i + 1], 5, 3, 1, 1, 2, false, ConvolutionNormalization.Weight)));
+            convs.Add(Add(Build(W(widths[3]), W(widths[4]), 5, 1, 1, 1, 2, false, ConvolutionNormalization.Weight)));
+            _periods.Add((p, convs, Add(Build(W(widths[4]), 1, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Weight))));
         }
         if (!useScaleDiscriminator) return;
         for (int s = 0; s < scales; s++)
@@ -422,27 +429,27 @@ internal sealed class HiFiGanDiscriminators<T>
             {
                 var vits = new List<NormedConv1DLayer<T>>
                 {
-                    Add(new NormedConv1DLayer<T>(1, W(16), 15, 1, 1, 1, 7, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(16), W(64), 41, 4, 1, Groups(W(16), 4), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(64), W(256), 41, 4, 1, Groups(W(64), 16), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(256), W(1024), 41, 4, 1, Groups(W(256), 64), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 41, 4, 1, Groups(W(1024), 256), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
+                    Add(Build(1, W(16), 15, 1, 1, 1, 7, false, norm)),
+                    Add(Build(W(16), W(64), 41, 4, 1, Groups(W(16), 4), 20, false, norm)),
+                    Add(Build(W(64), W(256), 41, 4, 1, Groups(W(64), 16), 20, false, norm)),
+                    Add(Build(W(256), W(1024), 41, 4, 1, Groups(W(256), 64), 20, false, norm)),
+                    Add(Build(W(1024), W(1024), 41, 4, 1, Groups(W(1024), 256), 20, false, norm)),
+                    Add(Build(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
                 };
-                _scales.Add((vits, Add(new NormedConv1DLayer<T>(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
+                _scales.Add((vits, Add(Build(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
                 continue;
             }
             var convs = new List<NormedConv1DLayer<T>>
             {
-                Add(new NormedConv1DLayer<T>(1, W(128), 15, 1, 1, 1, 7, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(128), W(128), 41, 2, 1, Groups(W(128), 4), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(128), W(256), 41, 2, 1, Groups(W(128), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(256), W(512), 41, 4, 1, Groups(W(256), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(512), W(1024), 41, 4, 1, Groups(W(512), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(1024), W(1024), 41, 1, 1, Groups(W(1024), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
+                Add(Build(1, W(128), 15, 1, 1, 1, 7, false, norm)),
+                Add(Build(W(128), W(128), 41, 2, 1, Groups(W(128), 4), 20, false, norm)),
+                Add(Build(W(128), W(256), 41, 2, 1, Groups(W(128), 16), 20, false, norm)),
+                Add(Build(W(256), W(512), 41, 4, 1, Groups(W(256), 16), 20, false, norm)),
+                Add(Build(W(512), W(1024), 41, 4, 1, Groups(W(512), 16), 20, false, norm)),
+                Add(Build(W(1024), W(1024), 41, 1, 1, Groups(W(1024), 16), 20, false, norm)),
+                Add(Build(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
             };
-            _scales.Add((convs, Add(new NormedConv1DLayer<T>(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
+            _scales.Add((convs, Add(Build(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
         }
     }
 
