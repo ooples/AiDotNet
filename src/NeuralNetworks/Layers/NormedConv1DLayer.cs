@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -66,6 +68,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _u;
     [Buffer]
     private Tensor<T> _v;
+
+    private readonly DerivedTensorCache<T> _inferenceWeightKernel = new();
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -314,17 +318,19 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
-        int rows = _direction.Shape[0], per = _direction.Length / rows;
         if (_normalization == ConvolutionNormalization.None) return _direction;
-        var v = Engine.Reshape(_direction, new[] { rows, per });
         if (_normalization == ConvolutionNormalization.Weight)
         {
-            var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
-                NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
-            // Broadcast one scale per output channel instead of materializing a scale for every kernel element.
-            var scale = Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms);
-            return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
+            // Eval reuses the same effective weights until their sources change. Keeping their owned storage also
+            // lets convolution backends retain a packed kernel instead of packing fresh normalization scratch.
+            if (!IsTrainingMode && !GraphMode.IsActive
+                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed))
+                return _inferenceWeightKernel.GetOrBuild(Engine,
+                    static (engine, sources) => WeightNormalizedKernel(engine, sources[0], sources[1]), _direction, _gain);
+            return WeightNormalizedKernel(Engine, _direction, _gain);
         }
+        int rows = _direction.Shape[0], per = _direction.Length / rows;
+        var v = Engine.Reshape(_direction, new[] { rows, per });
 
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
         // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
@@ -355,6 +361,20 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
         var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+    }
+
+    private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = direction.Shape[0], per = direction.Length / rows;
+        var matrix = engine.Reshape(direction, new[] { rows, per });
+        var norms = engine.TensorPow(engine.TensorAddScalar(engine.ReduceSum(engine.TensorMultiply(matrix, matrix),
+            new[] { 1 }, keepDims: true), ops.FromDouble(1e-24)), ops.FromDouble(-0.5));
+        var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), norms);
+        var kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
+        // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
+        engine.InvalidatePersistentTensor(kernel);
+        return kernel;
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)
