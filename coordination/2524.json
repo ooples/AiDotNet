@@ -976,8 +976,8 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ClosureObjectiveHostLossTests.cs": "ONLY adapt Host_loss_with_a_recorded_backward_records_no_guard to assert the approved fail-fast explicit-loss-producer contract while preserving existing host-read/custom-tape guard refusals. No catch-all helper changes or production weakening. Confirmed sole CPU failure in run44141107008."
       },
       "branch": "fix/2524-proven-replay-fixes",
-      "status": "CI35ba green33success15skips and23inline threads resolved. Final review-body inspection found one still-valid outside-diff capture-disposal finding; bounded correction claimed. Tensors push allowed after local verification; no merge/release or review dismissal.",
-      "commit": "35ba2468ce1f8ea00ff056db406ee19120e2c189",
+      "status": "All posted inline and outside-diff findings addressed in source at62d0afa1e.23inline threads resolved; full review bodies checked (3 known substantive reviews, no new findings).51focused lifecycle cases pass0skip. Prior35ba fullCIgreen33success15skips with CPU Gamma12 and CUDA enrollment8+retention9 proven. Latest fullCI44169260756 monitoring underway; formal CodeRabbit changes-requested review requires reviewer refresh, not dismissed. No merge/public release.",
+      "commit": "62d0afa1eb43479de8d40dc58b867c20bccf7562",
       "verification": {
         "focused_net10": {
           "passed": 165,
@@ -996,9 +996,15 @@
           "passed": 33,
           "failed": 0,
           "skipped": 0
+        },
+        "capture_dispose_owner": {
+          "passed": 51,
+          "new_cases": 2,
+          "skipped": 0,
+          "failed": 0
         }
       },
-      "ci_run": 44158617211,
+      "ci_run": 44169260756,
       "pending_local_commits": [],
       "ci_cpu": {
         "total": 26382,
@@ -1071,8 +1077,9 @@
         "finding": "Reject capture Dispose while an owned update scope remains active",
         "owner": "artifact_feed implementation; root review/verification",
         "scope": "RetainedOutputCapture.Dispose owner-state guard before any mutation, with recovery and valid nested-child disposal tests",
-        "older_outside_findings": "Parity active-only buffers and TrainingPlanReader restore cleanup already addressed in753ad7ee49; root confirming source",
-        "status": "CLAIMED before edits under approved review-fix objective; no new API or redesign"
+        "older_outside_findings": "Verified current source: active-only parity buffers and restore-failure Dispose/rethrow already addressed by753ad7ee49; corresponding existing CUDA numeric test and checkpoint rejection test passed",
+        "status": "ROOT REVIEWED and PUSHED62d0afa1e;51 retention/streaming tests passed0skip including2 new disposal recovery/nesting cases",
+        "response": "https://github.com/ooples/AiDotNet.Tensors/pull/1766#issuecomment-6960035871"
       }
     }
   ],
@@ -1619,7 +1626,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T20:19:51.4021063Z",
+  "updated_utc": "2026-11-17T20:28:30.1044657Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
