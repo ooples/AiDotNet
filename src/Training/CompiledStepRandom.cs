@@ -33,14 +33,18 @@ public static class CompiledStepRandom<T>
 
     internal sealed class RecordedDraw
     {
-        public RecordedDraw(Tensor<T> tensor, Action<Tensor<T>> redraw)
-        {
-            Tensor = tensor;
-            Redraw = redraw;
-        }
+        private readonly Action<IEngine> _redraw;
+        private RecordedDraw(Action<IEngine> redraw) => _redraw = redraw;
 
-        public Tensor<T> Tensor { get; }
-        public Action<Tensor<T>> Redraw { get; }
+        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill)
+            => new(engine =>
+            {
+                fill(tensor);
+                tensor.IncrementVersion();
+                engine.InvalidatePersistentTensor(tensor);
+            });
+
+        internal void Redraw(IEngine engine) => _redraw(engine);
     }
 
     // The draws made while the current thread traces a plan; null when nothing is tracing.
@@ -91,19 +95,26 @@ public static class CompiledStepRandom<T>
     /// A forward that runs only to resolve lazily shaped layers draws nothing (the tensor is zeros and
     /// <paramref name="fill"/> is not called), so the model's generator advances exactly as on the eager tape.
     /// </remarks>
-    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill)
+    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
+
+    /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
+    internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill)
     {
         Guard.NotNull(shape);
         Guard.NotNull(fill);
-        var tensor = new Tensor<T>(shape);
+        var tensor = new Tensor<TData>(shape);
         if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
             return tensor;
-        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count && SameShape(replay.Draws[t_replayIndex], shape))
-            replay.Draws[t_replayIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
+        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count
+            && replay.Draws[t_replayIndex] is Tensor<TData> previous && SameShape(previous, shape))
+        {
+            previous.AsSpan().CopyTo(tensor.AsWritableSpan());
+            t_replayIndex++;
+        }
         else
             fill(tensor);
         t_captured?.Draws.Add(tensor);
-        t_recording?.Add(new RecordedDraw(tensor, fill));
+        t_recording?.Add(RecordedDraw.Create(tensor, fill));
         return tensor;
     }
 
@@ -195,7 +206,7 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_replayCounterIndex;
 
-    private static bool SameShape(Tensor<T> tensor, int[] shape)
+    private static bool SameShape<TData>(Tensor<TData> tensor, int[] shape)
     {
         var own = tensor._shape;
         if (own.Length != shape.Length)
@@ -231,7 +242,7 @@ public static class CompiledStepRandom<T>
             t_captured = this;
         }
 
-        internal List<Tensor<T>> Draws { get; } = new List<Tensor<T>>();
+        internal List<object> Draws { get; } = new List<object>();
 
         internal List<ulong> Counters { get; } = new List<ulong>();
 
@@ -349,9 +360,7 @@ public static class CompiledStepRandom<T>
         var engine = AiDotNetEngine.Current;
         foreach (var draw in draws)
         {
-            draw.Redraw(draw.Tensor);
-            draw.Tensor.IncrementVersion();
-            engine.InvalidatePersistentTensor(draw.Tensor);
+            draw.Redraw(engine);
         }
     }
 
