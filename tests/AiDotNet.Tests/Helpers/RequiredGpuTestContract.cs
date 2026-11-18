@@ -78,7 +78,7 @@ internal sealed class RequiredGpuTestContract : IDisposable
         // cannot attribute a dispatch when the other workers are running concurrently.
         var backing = result.GetBackingArrayUnsafe();
         Assert.NotNull(backing);
-        Assert.True(DeferredArrayMaterializer.IsPending(backing), "MatrixMultiply returned a CPU result in the required GPU lane.");
+        Assert.True(AiDotNet.Tensors.Helpers.HostSync.IsPending(backing), "MatrixMultiply returned a CPU result in the required GPU lane.");
         Assert.Equal(16, result.Rows);
         Assert.Equal(16, result.Columns);
         for (int i = 0; i < 16; i++)
