@@ -225,6 +225,7 @@ async function handleCheckoutCompleted(
     ? session.subscription
     : session.subscription?.id ?? null;
   let issuanceStatus: "active" | "suspended" = "active";
+  let subscriptionLicenseExists = false;
 
   // Events can arrive after cancellation or a plan change. The signed snapshot
   // proves payment, but the current subscription decides whether access is valid.
@@ -256,7 +257,7 @@ async function handleCheckoutCompleted(
       // Reconcile the existing entitlement across tier changes rather than
       // searching only the new tier and issuing a second key for this sub.
       await handleSubscriptionUpdated(client, current);
-      return;
+      subscriptionLicenseExists = true;
     }
   }
 
@@ -272,6 +273,9 @@ async function handleCheckoutCompleted(
   if (profileError) {
     throw profileError;
   }
+  // A retry must also repair a missing/stale customer link by user ID, even
+  // when subscription reconciliation's customer-based profile lookup found no row.
+  if (subscriptionLicenseExists) return;
 
   // At-most-one-active-per-(user, product, tier) is enforced in the DB by
   // idx_license_keys_one_active_per_user_product_tier (migration

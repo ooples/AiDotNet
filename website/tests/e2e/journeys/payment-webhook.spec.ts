@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { journeySkipReason, postSignedStripeEvent, restSelect } from '../helpers/backend';
+import { journeySkipReason, postSignedStripeEvent, restPatch, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona } from '../helpers/personas';
 import { changeSubscriptionPrice, deleteCustomer, planPrice } from '../helpers/stripe';
 
@@ -38,6 +38,12 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
     expect(issued[0]).toMatchObject({ status: 'active', stripe_subscription_id: subscriptionId });
     await deliver('checkout.session.async_payment_succeeded', 'paid');
     expect(await licenses(), 'replayed success does not create another key').toEqual(issued);
+    await restPatch(request, `profiles?id=eq.${persona.id}`, { stripe_customer_id: null, subscription_tier: 'free' });
+    await deliver('checkout.session.async_payment_succeeded', 'paid');
+    const profiles = await restSelect<Array<{ stripe_customer_id: string; subscription_tier: string }>>(
+      request, `profiles?select=stripe_customer_id,subscription_tier&id=eq.${persona.id}`);
+    expect(profiles).toEqual([{ stripe_customer_id: customerId, subscription_tier: 'pro' }]);
+    expect(await licenses(), 'repairing the profile does not replace the key').toEqual(issued);
 
     const enterprise = await planPrice(request, 'enterprise');
     await changeSubscriptionPrice(request, subscriptionId, enterprise.id);

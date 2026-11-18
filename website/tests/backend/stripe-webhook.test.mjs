@@ -177,6 +177,14 @@ for (const recovery of ['invoice.paid', 'customer.subscription.updated']) {
   });
 }
 
+test('Checkout replay repairs the customer link even when a subscription license already exists', async () => {
+  const f = fixture({ existingLicense: true });
+  assert.equal((await f.send()).status, 200);
+  assert.ok(f.writes.some(w => w.table === 'profiles' && w.data.stripe_customer_id === 'cus_fixture'));
+  assert.equal(f.licenses.length, 1);
+  assert.equal(f.writes.filter(w => w.operation === 'insert').length, 0);
+});
+
 test('Checkout replay after a tier change reconciles the one subscription license', async () => {
   const f = fixture();
   assert.equal((await f.send()).status, 200);
