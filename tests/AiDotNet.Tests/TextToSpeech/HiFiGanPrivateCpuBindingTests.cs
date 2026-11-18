@@ -6,7 +6,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.TextToSpeech;
 
-[Collection("GpuBackend")]
+[Collection("FusedTrainingSerial")]
 public sealed class HiFiGanPrivateCpuBindingTests
 {
     [Theory]
