@@ -17,15 +17,51 @@ def file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def tensor_bytes(value) -> bytes:
-    return value.detach().to(device="cpu").contiguous().numpy().tobytes(order="C")
+READBACK_ELEMENTS = 262144  # At most1MiB per GPU-to-host observation chunk.
 
 
-def descriptor(value) -> dict:
+def tensor_bytes(value) -> memoryview:
+    """CPU-contiguous read-only bytes without a field-sized identity-observer copy."""
+    value = value.detach()
+    if value.device.type != "cpu" or not value.is_contiguous():
+        raise ValueError("A CPU contiguous view is required; use the bounded chunk observer otherwise.")
+    return memoryview(value.numpy()).cast("B").toreadonly()
+
+
+class TensorHashReader:
+    def __init__(self):
+        self.host = None
+
+    def chunks(self, value):
+        import torch
+        value = value.detach()
+        if not value.is_contiguous():
+            if value.numel() > READBACK_ELEMENTS:
+                raise ValueError("An unbounded noncontiguous identity-observer copy is forbidden.")
+            value = value.contiguous()  # Only small cropped-input scratch; never a whole weight field.
+        flat = value.reshape(-1)
+        if flat.device.type == "cpu":
+            view = tensor_bytes(flat)
+            for offset in range(0, len(view), READBACK_ELEMENTS * 4):
+                yield view[offset:offset + READBACK_ELEMENTS * 4]
+        else:
+            if self.host is None:
+                self.host = torch.empty(READBACK_ELEMENTS, dtype=torch.float32, device="cpu")
+            for offset in range(0, flat.numel(), READBACK_ELEMENTS):
+                count = min(READBACK_ELEMENTS, flat.numel() - offset)
+                host = self.host[:count]
+                host.copy_(flat[offset:offset + count])
+                yield tensor_bytes(host)
+
+
+def descriptor(value, reader=None) -> dict:
     import torch
     if value.dtype != torch.float32:
         raise ValueError("The shared workload permits only explicit FP32 tensors.")
-    return {"dtype": "F32", "shape": list(value.shape), "sha256": hashlib.sha256(tensor_bytes(value)).hexdigest()}
+    digest = hashlib.sha256()
+    for chunk in (reader or TensorHashReader()).chunks(value):
+        digest.update(chunk)
+    return {"dtype": "F32", "shape": list(value.shape), "sha256": digest.hexdigest()}
 
 
 def aggregate(descriptors: dict[str, dict], payloads: dict[str, bytes]) -> str:
@@ -126,12 +162,13 @@ class HifiBenchmarkFixture:
             raise ValueError("Exactly the actual three training pairs and three inference inputs are required.")
         self.input_values = {}
         self.actual_inputs = {}
+        reader = TensorHashReader()
         with TensorFile(self.root / "inputs.safetensors") as source:
             if source.names != set(self.manifest["inputs"]):
                 raise ValueError("Missing or extra shared input tensors.")
             for name in sorted(source.names):
                 value = source.tensor(name).to(device=device)
-                actual = descriptor(value)
+                actual = descriptor(value, reader)
                 if actual != self.manifest["inputs"][name]:
                     raise ValueError("Actual loaded input differs: " + name)
                 self.input_values[name] = value
@@ -150,8 +187,8 @@ class HifiBenchmarkFixture:
             if not isinstance(start, int) or not 0 <= start <= 224:
                 raise ValueError("Invalid canonical crop.")
             mel, audio = self.pool[step["pool_index"]]
-            actual_mel = descriptor(mel[:, :, start:start + 32])
-            actual_audio = descriptor(audio[:, start * 256:(start + 32) * 256])
+            actual_mel = descriptor(mel[:, :, start:start + 32], reader)
+            actual_audio = descriptor(audio[:, start * 256:(start + 32) * 256], reader)
             if actual_mel != step["cropped_mel"] or actual_audio != step["cropped_audio"] or step["mel"] != self.actual_inputs[step["mel_key"]] or step["audio"] != self.actual_inputs[step["audio_key"]]:
                 raise ValueError("Actual loaded cropped training input differs.")
             self.actual_steps.append({**step, "cropped_mel": actual_mel, "cropped_audio": actual_audio})
@@ -167,6 +204,7 @@ class HifiBenchmarkFixture:
         targets = {prefix + "/" + role: (target, role)
                    for prefix, _, conv in ordered_layers(model) for role, target in fields(conv)}
         digest = hashlib.sha256()
+        reader = TensorHashReader()
         with TensorFile(self.root / "initial.safetensors") as source, torch.no_grad():
             if set(targets) != source.names or source.names != set(self.manifest["state"]) or len(source.names) != 404:
                 raise ValueError("Missing/extra active shared state.")
@@ -177,14 +215,19 @@ class HifiBenchmarkFixture:
                 if descriptor(value) != expected or value.numel() != target.numel():
                     raise ValueError("Canonical state/shape differs: " + name)
                 target.copy_(value.reshape(target.shape))
+                version = target._version
                 stored = logical(target.detach(), role)
-                payload = tensor_bytes(stored)
+                digest.update((name + "|" + ",".join(map(str, stored.shape)) + "|").encode())
+                field_digest = hashlib.sha256()
+                for chunk in reader.chunks(stored):
+                    field_digest.update(chunk)
+                    digest.update(chunk)
                 actual[name] = {"dtype": "F32", "shape": list(stored.shape),
-                                "sha256": hashlib.sha256(payload).hexdigest()}
+                                "sha256": field_digest.hexdigest()}
                 if actual[name] != expected:
                     raise ValueError("Actual imported404 field differs: " + name)
-                digest.update((name + "|" + ",".join(map(str, actual[name]["shape"])) + "|").encode())
-                digest.update(payload)
+                if target._version != version:
+                    raise ValueError("The state identity observer mutated its source.")
                 if role in ("direction", "gain", "bias"):
                     learned += target.numel()
             if learned != 84_660_721:
@@ -220,14 +263,19 @@ class HifiBenchmarkFixture:
                           "state_sha256": self.manifest["state_sha256"], "state": actual,
                           "inputs": self.actual_inputs, "training_steps": self.actual_steps,
                           "consumed_steps": [], "inference_batches_consumed": [],
-                          "state_checkpoint_retained": False}
+                          "state_checkpoint_retained": False,
+                          "hash_observer": {"cpu_payload_clone": False, "gpu_chunk_bytes_max": READBACK_ELEMENTS * 4,
+                                            "gpu_scratch_reused_within_observation": True,
+                                            "gpu_scratch_retained_during_measurement": False,
+                                            "source_version_unchanged": True}}
         self.receipt.write_text(json.dumps(self.preflight, indent=2) + "\n", encoding="utf-8")
 
     def complete(self):
         if self.preflight is None or self.consumed_count != 9 or self.inference_consumed != [1, 8, 16]:
             raise ValueError("The actual benchmark did not consume the complete canonical workload.")
+        reader = TensorHashReader()
         for name, value in self.input_values.items():
-            if descriptor(value) != self.manifest["inputs"][name]:
+            if descriptor(value, reader) != self.manifest["inputs"][name]:
                 raise ValueError("The actual training/inference mutated shared data: " + name)
         self.preflight["pass"] = True
         self.preflight["consumed_steps"] = [{key: step[key] for key in ("index", "pool_index", "crop_start")}

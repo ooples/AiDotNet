@@ -13,6 +13,14 @@ namespace AiDotNet.PyTorchParity;
 // Explicit benchmark sampling/state input control. The production model, objectives and optimizers are unchanged.
 internal sealed class HifiBenchmarkFixture
 {
+    // Existing read-only storage access: no payload clone, version write or escape mark. The owner stays alive
+    // through each SHA operation; no span is stored in the fixture or returned to a benchmark caller.
+    private delegate ReadOnlySpan<float> TensorReadSpan(TensorBase<float> owner);
+    private static readonly TensorReadSpan s_readSpan = (typeof(TensorBase<float>)
+        .GetMethod("AsSpanUnmarked", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException("The validated read-only tensor storage contract changed."))
+        .CreateDelegate<TensorReadSpan>();
+
     private readonly string _directory, _receiptPath, _manifestHash;
     private readonly JObject _manifest;
     private readonly (Tensor<float> Input, Tensor<float> Label)[] _pool = new (Tensor<float>, Tensor<float>)[3];
@@ -70,8 +78,7 @@ internal sealed class HifiBenchmarkFixture
                     ?? throw new InvalidDataException("Missing shape: " + name);
                 var value = new Tensor<float>(shape);
                 source.CopyTo(name, shape, value);
-                CheckDescriptor(name, value, Object(_manifest, "inputs")[name]!);
-                _actualInputs[name] = Describe(value.ToArray(), shape);
+                _actualInputs[name] = CheckDescriptor(name, value, Object(_manifest, "inputs")[name]!);
                 _inputs.Add(name, value);
             }
         }
@@ -90,12 +97,11 @@ internal sealed class HifiBenchmarkFixture
         foreach (var step in steps)
         {
             int pool = (int)step["pool_index"]!, start = (int)step["crop_start"]!;
-            float[] mel = _pool[pool].Input.ToArray(), audio = _pool[pool].Label.ToArray();
-            var melCrop = new float[80 * 32];
-            for (int channel = 0; channel < 80; channel++)
-                Array.Copy(mel, channel * 256 + start, melCrop, channel * 32, 32);
-            var melDescription = Describe(melCrop, new[] { 1, 80, 32 });
-            var audioDescription = Describe(audio.AsSpan(start * 256, 8192), new[] { 1, 8192 });
+            ReadOnlySpan<float> mel = s_readSpan(_pool[pool].Input), audio = s_readSpan(_pool[pool].Label);
+            var melDescription = DescribeMelCrop(mel, start);
+            var audioDescription = Describe(audio.Slice(start * 256, 8192), new[] { 1, 8192 });
+            GC.KeepAlive(_pool[pool].Input);
+            GC.KeepAlive(_pool[pool].Label);
             if (!JToken.DeepEquals(step["mel"], Object(_manifest, "inputs")[$"train/{pool}/mel"])
                 || !JToken.DeepEquals(step["audio"], Object(_manifest, "inputs")[$"train/{pool}/audio"])
                 || !JToken.DeepEquals(step["cropped_mel"], melDescription) || !JToken.DeepEquals(step["cropped_audio"], audioDescription))
@@ -122,14 +128,17 @@ internal sealed class HifiBenchmarkFixture
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         foreach (var field in fields)
         {
-            float[] values = field.Value.ToArray();
+            long version = field.Value.Version;
+            ReadOnlySpan<float> values = s_readSpan(field.Value);
             int[] shape = field.Value.Shape.ToArray();
             var entry = Describe(values, shape);
             if (!JToken.DeepEquals(entry, Object(_manifest, "state")[field.Name]))
                 throw new InvalidDataException("Actual imported404 field differs: " + field.Name);
             actual[field.Name] = entry;
             digest.AppendData(Encoding.UTF8.GetBytes(field.Name + "|" + string.Join(",", shape) + "|"));
-            digest.AppendData(MemoryMarshal.AsBytes(values.AsSpan()));
+            digest.AppendData(MemoryMarshal.AsBytes(values));
+            GC.KeepAlive(field.Value);
+            if (field.Value.Version != version) throw new InvalidDataException("The state identity observer mutated its source.");
         }
         string aggregate = Convert.ToHexString(digest.GetHashAndReset()).ToLowerInvariant();
         if (aggregate != (string?)_manifest["state_sha256"]) throw new InvalidDataException("Imported404 aggregate differs.");
@@ -145,6 +154,8 @@ internal sealed class HifiBenchmarkFixture
             ["preflight_pass"]=true,["fixture_manifest_sha256"]=_manifestHash,["state_sha256"]=aggregate,
             ["state"]=actual,["inputs"]=_actualInputs.DeepClone(),["training_steps"]=_actualSteps.DeepClone(),
             ["consumed_steps"]=new JArray(),["inference_batches_consumed"]=new JArray(),["state_checkpoint_retained"]=false,
+            ["hash_observer"]=new JObject { ["cpu_payload_clone"]=false,["source_version_unchanged"]=true,
+                ["gpu_readback"]="existing canonical tensor host storage; no separate observer payload buffer" },
         };
         SaveReceipt();
     }
@@ -223,7 +234,9 @@ internal sealed class HifiBenchmarkFixture
                 int[] canonicalShape = role == "mel" ? new[] { 1, 80, 32 } : new[] { 1, 8192 };
                 if (!shape.SequenceEqual(role == "mel" ? canonicalShape : new[] { 8192 }))
                     throw new InvalidDataException("Actual raw reference crop geometry differs.");
-                if (!JToken.DeepEquals(Describe(value.ToArray(), canonicalShape), steps[index]["cropped_" + role]))
+                var actual = Describe(s_readSpan(value), canonicalShape);
+                GC.KeepAlive(value);
+                if (!JToken.DeepEquals(actual, steps[index]["cropped_" + role]))
                     throw new InvalidDataException("Actual raw reference input differs from the benchmark crop.");
             }
         }
@@ -289,10 +302,21 @@ internal sealed class HifiBenchmarkFixture
     private static JObject Describe(ReadOnlySpan<float> values, int[] shape) => new() {
         ["dtype"]="F32",["shape"]=new JArray(shape),["sha256"]=Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant(),
     };
-    private static void CheckDescriptor(string name, Tensor<float> value, JToken expected)
+    private static JObject CheckDescriptor(string name, Tensor<float> value, JToken expected)
     {
-        if (!JToken.DeepEquals(Describe(value.ToArray(), value.Shape.ToArray()), expected))
+        var actual = Describe(s_readSpan(value), value.Shape.ToArray());
+        GC.KeepAlive(value);
+        if (!JToken.DeepEquals(actual, expected))
             throw new InvalidDataException("Actual loaded shared input differs: " + name);
+        return actual;
+    }
+    private static JObject DescribeMelCrop(ReadOnlySpan<float> values, int start)
+    {
+        using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (int channel = 0; channel < 80; channel++)
+            digest.AppendData(MemoryMarshal.AsBytes(values.Slice(channel * 256 + start, 32)));
+        return new JObject { ["dtype"]="F32",["shape"]=new JArray(1, 80, 32),
+            ["sha256"]=Convert.ToHexString(digest.GetHashAndReset()).ToLowerInvariant() };
     }
     private static string HashFile(string path) { using var stream=File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); }
 
