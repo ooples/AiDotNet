@@ -279,7 +279,13 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             }
             else UpdateHalfTapeRegion(slot, binding.Gradient, 0, slot.Shape);
             var master = Tensor<float>.FromMemory(slot.Master.AsMemory(), slot.Shape);
-            Engine.TensorCopy(master.Cast<T>(), binding.Parameter);
+            var published = master.Cast<T>();
+            if (binding.Parameter.IsContiguous)
+                Engine.TensorCopy(published, binding.Parameter);
+            else
+                // TensorCopy requires contiguous output. The bulk logical writer preserves the
+                // parameter view's strides and updates its storage version for GPU cache coherence.
+                binding.Parameter.CopyFromArray(published.ToArray());
             binding.Parameter.Cast<float>().CopyLogicalTo(slot.Published);
             _halfTapeSlots[binding.Parameter] = slot;
         }

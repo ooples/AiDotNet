@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
