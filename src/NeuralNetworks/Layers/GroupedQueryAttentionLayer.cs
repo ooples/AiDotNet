@@ -570,7 +570,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
                 _lastAttentionWeights = cacheBwd ? attentionWeights : null;
                 context = ctx;
             }
-            else if (!cacheBwd && _attnLogitSoftcap <= 0.0)
+            else if (!cacheBwd && _attnLogitSoftcap <= 0.0
+                && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             {
                 _lastAttentionWeights = null;
                 context = Engine.FlashAttention(

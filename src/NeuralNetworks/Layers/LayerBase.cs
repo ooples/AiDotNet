@@ -3465,6 +3465,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         LastAttemptedWeightShape = shape;
         LastAttemptedWeightOwner = GetType().Name;
 
+        // Persistent weights must own contiguous storage outside any step/inference TensorArena so
+        // WeightRegistry streaming never encounters arena slab views (IsView == true).
+        using var _ = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (UseStreamingAllocator) return WeightRegistry.AllocateStreaming<T>(shape);
         return nonStreamingAllocator?.Invoke() ?? new Tensor<T>(shape);
     }
@@ -4685,8 +4688,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             pair => pair.Key,
             pair => pair.Value.Shape.ToArray(),
             StringComparer.Ordinal);
-        manifest.Bind(inputShapes, variant)
-            .Validate(inputs);
+        inputs = manifest.Bind(inputShapes, variant)
+            .ValidateForGraph(inputs);
 
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTracedPorts(inputs);
@@ -4820,7 +4823,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous
             || ports[0].ShapeConstraint.IsConstrained;
         if (needsContractValidation)
-            BindInputContract(input.Shape.ToArray()).Validate(input);
+            input = BindInputContract(input.Shape.ToArray()).ValidateForGraph(input);
 
         // Shape-only model traversal must stop at leaves. Composite layers still execute their
         // real topology so every child receives the exact runtime shape, but executing a leaf can

@@ -1229,6 +1229,15 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         effectiveOptimizer.Deserialize(payload);
+        if (WorldSize > 1
+            && effectiveOptimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> fusedRestoredOpt
+            && fusedRestoredOpt.PeekPendingFusedOptimizerState() is not null)
+        {
+            var canonicalParams = uniqueParams.Length > 0
+                ? uniqueParams
+                : GetOrDeduplicateParameters(trainableParameters, out _);
+            fusedRestoredOpt.MaterializePendingFusedOptimizerStateToEager(canonicalParams);
+        }
 
         if (!IsShardedStrategy ||
             uniqueParams.Length == 0 ||

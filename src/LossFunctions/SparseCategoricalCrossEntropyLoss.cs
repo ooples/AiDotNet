@@ -161,38 +161,11 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 
         // Validate every class index at once: (int)rawIdx truncates, the value must be within 1e-6 of
         // that integer, and the integer must lie in [0, numClasses). NaN is never a valid index.
+        _lastValidatedClasses = numClasses;
+        ValidateSparseTargetIndices(target, sampleCount, numClasses);
+
         var flatTarget = Engine.Reshape(target, new[] { sampleCount });
         var truncated = Engine.TensorTrunc(flatTarget);
-        // Outside the int range the old (int) cast could not represent the value: not an integer index.
-        var notInteger = Engine.TensorMax(
-            Engine.TensorGreaterThan(
-                Engine.TensorAbs(Engine.TensorSubtract(flatTarget, truncated)), NumOps.FromDouble(1e-6)),
-            Engine.TensorGreaterThan(Engine.TensorAbs(flatTarget), NumOps.FromDouble(int.MaxValue)));
-        var outOfRange = Engine.TensorMax(
-            Engine.TensorMax(
-                Engine.TensorLessThan(truncated, NumOps.Zero),
-                Engine.TensorGreaterThan(truncated, NumOps.FromDouble(numClasses - 1))),
-            Engine.TensorNotEquals(flatTarget, flatTarget));
-        var invalid = Engine.TensorMax(notInteger, outOfRange);
-        if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
-        {
-            // First offending position, reported exactly as the per-element check did (nonzero lists
-            // positions in ascending order on every engine).
-            int i = Engine.TensorNonzero(invalid).GetFlat(0);
-            T rawIdx = flatTarget.GetFlat(i);
-            if (NumOps.GreaterThan(notInteger.GetFlat(i), NumOps.Zero))
-                throw new ArgumentException(
-                    $"Target at position {i} is {rawIdx}, expected an integer class index.",
-                    nameof(target));
-
-            // NaN is reported as the out-of-range index the old (int) cast produced.
-            T truncatedIdx = truncated.GetFlat(i);
-            int classIdx = NumOps.Equals(truncatedIdx, truncatedIdx) ? NumOps.ToInt32(truncatedIdx) : int.MinValue;
-            throw new ArgumentException(
-                $"Target index {classIdx} at position {i} is out of bounds. " +
-                $"Expected a value in [0, {numClasses}).",
-                nameof(target));
-        }
 
         // One one-hot row per sample: compare each class index against 0..numClasses-1.
         var rowShape = new[] { sampleCount, numClasses };
@@ -222,5 +195,60 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var sum = Engine.ReduceSum(selectedLogP, null, keepDims: false);
         return Engine.TensorNegate(
             Engine.TensorDivideScalar(sum, NumOps.FromDouble(sampleCount)));
+    }
+
+    private int _lastValidatedClasses = -1;
+
+    internal override void ValidateIndexTargetOutsidePlan(Tensor<T> target)
+    {
+        if (_lastValidatedClasses <= 0 || target is null || target.Length == 0)
+            return;
+        ValidateSparseTargetIndices(target, target.Length, _lastValidatedClasses);
+    }
+
+    private void ValidateSparseTargetIndices(Tensor<T> target, int sampleCount, int numClasses)
+    {
+        void ValidateCore()
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var flatTarget = Engine.Reshape(target, new[] { sampleCount });
+            var truncated = Engine.TensorTrunc(flatTarget);
+            // Outside the int range the old (int) cast could not represent the value: not an integer index.
+            var notInteger = Engine.TensorMax(
+                Engine.TensorGreaterThan(
+                    Engine.TensorAbs(Engine.TensorSubtract(flatTarget, truncated)), NumOps.FromDouble(1e-6)),
+                Engine.TensorGreaterThan(Engine.TensorAbs(flatTarget), NumOps.FromDouble(int.MaxValue)));
+            var outOfRange = Engine.TensorMax(
+                Engine.TensorMax(
+                    Engine.TensorLessThan(truncated, NumOps.Zero),
+                    Engine.TensorGreaterThan(truncated, NumOps.FromDouble(numClasses - 1))),
+                Engine.TensorNotEquals(flatTarget, flatTarget));
+            var invalid = Engine.TensorMax(notInteger, outOfRange);
+            if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
+            {
+                int i = Engine.TensorNonzero(invalid).GetFlat(0);
+                T rawIdx = flatTarget.GetFlat(i);
+                if (NumOps.GreaterThan(notInteger.GetFlat(i), NumOps.Zero))
+                    throw new ArgumentException(
+                        $"Target at position {i} is {rawIdx}, expected an integer class index.",
+                        nameof(target));
+
+                T truncatedIdx = truncated.GetFlat(i);
+                int classIdx = NumOps.Equals(truncatedIdx, truncatedIdx) ? NumOps.ToInt32(truncatedIdx) : int.MinValue;
+                throw new ArgumentException(
+                    $"Target index {classIdx} at position {i} is out of bounds. " +
+                    $"Expected a value in [0, {numClasses}).",
+                    nameof(target));
+            }
+        }
+
+        if (target.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                ValidateCore();
+            return;
+        }
+
+        ValidateCore();
     }
 }

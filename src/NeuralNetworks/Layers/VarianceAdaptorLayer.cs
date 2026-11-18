@@ -338,8 +338,23 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>torch.bucketize(values, boundaries) with right=False: the index of the first boundary >= value.</summary>
     private Tensor<T> Bucketize(Tensor<T> values, double[] boundaries)
     {
-        var edges = new Tensor<double>(boundaries, new[] { boundaries.Length }).Cast<T>();
-        return Engine.TensorSearchSorted(edges, Engine.Reshape(values, new[] { values.Length }), false).Cast<T>();
+        int n = values.Length;
+        int b = boundaries.Length;
+        if (b == 0 || n == 0)
+            return new Tensor<T>(new[] { n });
+
+        Tensor<T> edgeMat;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            var edges = new Tensor<double>(boundaries, new[] { 1, b }).Cast<T>();
+            edgeMat = Engine.TensorTile(edges, new[] { n, 1 });
+        }
+
+        var valCol = values.Rank == 2 && values.Shape[0] == n && values.Shape[1] == 1
+            ? values
+            : Engine.Reshape(values, new[] { n, 1 });
+        var valMat = Engine.TensorTile(valCol, new[] { 1, b });
+        return Engine.ReduceSum(Engine.TensorGreaterThan(valMat, edgeMat), new[] { 1 }, keepDims: false);
     }
 
     private static double[] LogSpacedBoundaries(double min, double max, int bins)

@@ -56,16 +56,15 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
 
     private long _dropPathCounter;
 
-    private sealed class DynamicKnnReplayState
-    {
-        public int[,,]? WinnerNodeIndices { get; set; }
-    }
+    private static long _nextInstanceId;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, int[,,]> LastNeighborsByInstance = new();
+    private readonly long _instanceId = System.Threading.Interlocked.Increment(ref _nextInstanceId);
 
     /// <summary>
     /// Gets the most recently constructed dynamic neighbor graph as [batch,node,neighbor].
     /// This is diagnostic state and is intentionally excluded from serialization.
     /// </summary>
-    internal int[,,]? LastNeighborIndices { get; private set; }
+    internal int[,,]? LastNeighborIndices => LastNeighborsByInstance.TryGetValue(_instanceId, out var indices) ? indices : null;
 
     /// <summary>Gets the graph neighborhood size.</summary>
     public int K => _k;
@@ -202,7 +201,7 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
     {
         if (nodeCount == 1)
         {
-            LastNeighborIndices = new int[batch, 1, 1];
+            LastNeighborsByInstance[_instanceId] = new int[batch, 1, 1];
             return Engine.TensorMultiplyScalar(nodes, NumOps.Zero);
         }
 
@@ -216,7 +215,10 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         {
             var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
             var capturedNodes = nodes;
-            var replayState = new DynamicKnnReplayState();
+            int k = _k;
+            int dilation = _dilation;
+            long instanceId = _instanceId;
+            var winnerState = new int[1][];
             return (scope ?? throw new InvalidOperationException("scope is null where it is required.")).RecordUnary(
                 AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
                 "GraFPrintMaxRelative",
@@ -226,34 +228,37 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
                 {
                     using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
                     var replayed = ComputeMaxRelativeEager(
-                        engine, capturedNodes, batch, nodeCount, channels, replayState);
+                        engine, capturedNodes, batch, nodeCount, channels, k, dilation, instanceId, winnerState);
                     AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(
                         engine, replayed, output);
                 },
                 BackwardMaxRelative,
-                [replayState]);
+                [winnerState]);
         }
 
         return ComputeMaxRelativeEager(
-            Engine, nodes, batch, nodeCount, channels, replayState: null);
+            Engine, nodes, batch, nodeCount, channels, _k, _dilation, _instanceId, winnerState: null);
     }
 
-    private Tensor<T> ComputeMaxRelativeEager(
+    private static Tensor<T> ComputeMaxRelativeEager(
         AiDotNet.Tensors.Engines.IEngine engine,
         Tensor<T> nodes,
         int batch,
         int nodeCount,
         int channels,
-        DynamicKnnReplayState? replayState)
+        int k,
+        int dilation,
+        long instanceId,
+        int[][]? winnerState)
     {
         // The official DenseDilatedKnnGraph L2-normalizes every node before measuring
         // Euclidean distance and leaves the diagonal in the candidate set. Consequently,
         // the node itself is normally the first of k neighbors; excluding it changes both
         // the max-relative aggregation and the meaning of k.
-        int effectiveK = Math.Min(_k, nodeCount);
-        int candidateCount = Math.Min(nodeCount, checked(effectiveK * _dilation));
+        int effectiveK = Math.Min(k, nodeCount);
+        int candidateCount = Math.Min(nodeCount, checked(effectiveK * dilation));
         var neighborIndicesByBatch = new int[batch, nodeCount, effectiveK];
-        var winnerNodeIndices = replayState is null
+        var winnerNodeIndices = winnerState is null
             ? null
             : new int[batch, nodeCount, channels];
         var batchResults = new List<Tensor<T>>(batch);
@@ -264,14 +269,14 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
             // Neighbor selection is discrete and detached in the reference implementation.
             // Build a value-only normalized copy so graph selection cannot accidentally add
             // a gradient path while the gathered node values below remain tape-connected.
-            var normalizedSample = NormalizeNodesForKnn(sample, nodeCount, channels);
+            var normalizedSample = NormalizeNodesForKnn(engine, sample, nodeCount, channels);
             var distances = engine.PairwiseDistanceSquared(normalizedSample, normalizedSample);
 
             var (_, nearest) = engine.TopK(
                 distances, candidateCount, axis: 1, largest: false);
             // Neighbor k of each node is candidate column min(k * dilation, candidateCount - 1).
             var candidateColumns = Enumerable.Range(0, effectiveK)
-                .Select(neighbor => Math.Min(neighbor * _dilation, candidateCount - 1)).ToArray();
+                .Select(neighbor => Math.Min(neighbor * dilation, candidateCount - 1)).ToArray();
             var selfIndices = Enumerable.Range(0, nodeCount * effectiveK).Select(flat => flat / effectiveK).ToArray();
             var neighborIndices = engine.TensorGather(
                 nearest, new Tensor<int>(candidateColumns, [effectiveK]), axis: 1).ToVector().ToArray();
@@ -323,16 +328,34 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         var combined = batchResults.Count == 1
             ? batchResults[0]
             : engine.TensorConcatenate(batchResults.ToArray(), axis: 0);
-        LastNeighborIndices = neighborIndicesByBatch;
-        if (replayState is not null)
+        LastNeighborsByInstance[instanceId] = neighborIndicesByBatch;
+        if (LastNeighborsByInstance.Count > 128)
         {
-            replayState.WinnerNodeIndices = winnerNodeIndices;
+            foreach (long oldId in LastNeighborsByInstance.Keys)
+            {
+                if (oldId < instanceId - 128) LastNeighborsByInstance.TryRemove(oldId, out _);
+            }
+        }
+        if (winnerState is not null && winnerNodeIndices is not null)
+        {
+            // d(x[winner] - x[node]) routes +gradient to the winner and -gradient to the node itself.
+            // Flat target of element (b, node, c) is (b, winner, c).
+            int total = batch * nodeCount * channels;
+            int sliceSize = nodeCount * channels;
+            var winnerTargets = new int[total];
+            Buffer.BlockCopy(winnerNodeIndices, 0, winnerTargets, 0, total * sizeof(int));
+            for (int flat = 0; flat < total; flat++)
+            {
+                int winner = winnerTargets[flat];
+                winnerTargets[flat] = (flat - (flat % sliceSize)) + (winner * channels) + (flat % channels);
+            }
+            winnerState[0] = winnerTargets;
         }
 
         return engine.Reshape(combined, [batch, nodeCount, channels]);
     }
 
-    private void BackwardMaxRelative(
+    private static void BackwardMaxRelative(
         Tensor<T> gradOutput,
         Tensor<T>[] inputs,
         Tensor<T> output,
@@ -341,24 +364,12 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         Dictionary<Tensor<T>, Tensor<T>> gradAccumulator)
     {
         _ = output;
-        var replayState = (DynamicKnnReplayState)savedState[0];
-        var winnerNodeIndices = replayState.WinnerNodeIndices
+        var winnerState = (int[][])savedState[0];
+        var winnerTargets = winnerState[0]
             ?? throw new InvalidOperationException(
                 "GraFPrint compiled backward ran before its dynamic k-NN forward state was refreshed.");
         var input = inputs[0];
-        int batch = input.Shape[0];
-        int nodeCount = input.Shape[1];
-        int channels = input.Shape[2];
-        int total = batch * nodeCount * channels;
-
-        // d(x[winner] - x[node]) routes +gradient to the winner and -gradient to the node itself.
-        // Flat target of element (b, node, c) is (b, winner, c).
-        int sliceSize = nodeCount * channels;
-        var winnerTargets = new int[total];
-        Buffer.BlockCopy(winnerNodeIndices, 0, winnerTargets, 0, total * sizeof(int));
-        winnerTargets = winnerTargets
-            .Select((winner, flat) => (flat - (flat % sliceSize)) + (winner * channels) + (flat % channels))
-            .ToArray();
+        int total = input.Length;
 
         Tensor<T> gradInput;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
@@ -373,21 +384,22 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
             gradAccumulator, input, gradInput, engine);
     }
 
-    private Tensor<T> NormalizeNodesForKnn(Tensor<T> sample, int nodeCount, int channels)
+    private static Tensor<T> NormalizeNodesForKnn(
+        AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> sample, int nodeCount, int channels)
     {
         if (nodeCount == 0 || channels == 0) return new Tensor<T>([nodeCount, channels]);
 
         // Row-wise L2 normalisation, value-only (off the tape); the denominator is the norm when it
         // exceeds epsilon (NaN does not), else epsilon.
-        T epsilon = NumOps.FromDouble(1e-12);
+        T epsilon = MathHelper.GetNumericOperations<T>().FromDouble(1e-12);
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var rows = Engine.Reshape(sample, [nodeCount, channels]);
-            var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: true));
+            var rows = engine.Reshape(sample, [nodeCount, channels]);
+            var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: true));
             var epsilons = new Tensor<T>([nodeCount, 1]);
             epsilons.Fill(epsilon);
-            var denominator = Engine.TensorWhere(Engine.TensorGreaterThan(norm, epsilon), norm, epsilons);
-            return Engine.TensorDivide(rows, denominator);
+            var denominator = engine.TensorWhere(engine.TensorGreaterThan(norm, epsilon), norm, epsilons);
+            return engine.TensorDivide(rows, denominator);
         }
     }
 
@@ -546,7 +558,7 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
     public override void ResetState()
     {
         foreach (var layer in GetSubLayers()) layer.ResetState();
-        LastNeighborIndices = null;
+        LastNeighborsByInstance.TryRemove(_instanceId, out _);
         _toNodeIndices = null;
         _toSpatialIndices = null;
         _cachedPermutationShape = null;

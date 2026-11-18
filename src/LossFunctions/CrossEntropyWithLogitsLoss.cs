@@ -385,9 +385,23 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             return NumOps.MaxValue; // no slices: never preferred over a scored axis
 
         // Mean over every slice along the axis of |Σ_axis target - 1|.
-        var axisSums = Engine.ReduceSum(target, new[] { axis }, keepDims: false);
-        var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
-        return Engine.TensorMean(deviation);
+        // Suspend GraphMode when scoring an untraced supervision target so TensorMean does not cross a host
+        // scalar boundary inside a training graph trace.
+        T ComputeAxisDeviationMean(Tensor<T> source)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var axisSums = Engine.ReduceSum(source, new[] { axis }, keepDims: false);
+            var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
+            return Engine.TensorMean(deviation);
+        }
+
+        if (target.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                return ComputeAxisDeviationMean(target);
+        }
+
+        return ComputeAxisDeviationMean(target);
     }
 
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)

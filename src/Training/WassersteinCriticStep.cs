@@ -128,6 +128,7 @@ internal static class WassersteinCriticStep<T>
         }
 
         var trainableLayers = criticLayers.OfType<ITrainableLayer<T>>().ToList();
+        var extraParameters = criticLayers.Count == trainableLayers.Count ? null : parameters;
         return FusedTrainingStep<T>.Step(
             owner,
             trainableLayers,
@@ -137,7 +138,7 @@ internal static class WassersteinCriticStep<T>
             Loss,
             optimizer,
             maxGradNorm: maxGradNorm,
-            extraTensors: parameters);
+            extraTensors: extraParameters);
     }
 
     /// <summary>

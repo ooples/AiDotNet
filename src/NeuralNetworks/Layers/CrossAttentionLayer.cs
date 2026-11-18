@@ -503,14 +503,16 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         // row instead of the [B, heads, queryLen, contextLen] score matrix. Nothing in this
         // layer reads those scores — the field below was written on every forward and only ever
         // cleared — so materializing them cost cross-attention memory for no consumer.
-        var attended = Engine.FlashAttention(
-            Q,
-            K,
-            V,
-            scale: 1.0 / Math.Sqrt(_headDim),
-            isCausal: false,
-            out _,
-            attentionBias: null);
+        var attended = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? Engine.ScaledDotProductAttention(Q, K, V, mask: null, scale: 1.0 / Math.Sqrt(_headDim), out _)
+            : Engine.FlashAttention(
+                Q,
+                K,
+                V,
+                scale: 1.0 / Math.Sqrt(_headDim),
+                isCausal: false,
+                out _,
+                attentionBias: null);
         LastAttentionKernelPath = AttentionKernelPath.FusedFlashAttention;
 
         // Reshape back: [B, numHeads, queryLen, headDim] -> [B, queryLen, queryDim]

@@ -15149,7 +15149,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // O(1). InvalidateParameterCountCache resets _skipParameterBufferVersion
         // to -1 (and clears _parameterBuffer) so a layer-structure change
         // re-tests the threshold from scratch.
-        if (_distributedCoordinator is not null || (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion))
+        if (_distributedCoordinator is not null || IsWeightStreamingActive || (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion))
         {
             paramBuffer = null;
         }
