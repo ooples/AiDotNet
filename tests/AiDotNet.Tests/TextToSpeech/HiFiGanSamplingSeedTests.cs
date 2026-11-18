@@ -54,7 +54,7 @@ public sealed class HiFiGanSamplingSeedTests
     public void ExplicitDefaultDrawsRetainUniformBoundsAndUnitSpectralVectors()
     {
         var layer = new NormedConv1DLayer<double>(3, 4, 5, 1, 1, 1, 2, false,
-            ConvolutionNormalization.Spectral, initialization: new Random(77));
+            ConvolutionNormalization.Spectral, outputPadding: 0, useBias: true, initialization: new Random(77));
         double bound = 1 / Math.Sqrt(15);
         Assert.All(Tensor(layer, "_direction"), value => Assert.InRange(value, -bound, bound));
         Assert.All(Tensor(layer, "_bias"), value => Assert.InRange(value, -bound, bound));
