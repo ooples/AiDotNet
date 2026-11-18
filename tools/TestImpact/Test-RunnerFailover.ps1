@@ -582,7 +582,11 @@ try {
             -SourceResult success -RequiresValidation true -RequiresTests true -SelectResult success `
             -BuildResult success -BuildCompatResult success -TestsResult failure `
             -RegressionAnalysisResult success -VerdictEnforced false -AggregateAnalysisResult success -SizeCheckResult success | Out-Null
-        if ($LASTEXITCODE -eq 0) { throw 'Diagnostic output bypassed the failed logical shard gate.' }
+        $gateExitCode = $LASTEXITCODE
+        # GitHub's pwsh wrapper propagates LASTEXITCODE. This intentional negative child
+        # must not make the successful fixture process report a failure to its caller.
+        $global:LASTEXITCODE = 0
+        if ($gateExitCode -eq 0) { throw 'Diagnostic output bypassed the failed logical shard gate.' }
     }
     Assert-Case 'diagnostic writer persists missing proof and original failure without certification' {
         $directory = Join-Path $scratch 'diagnostic-writer'
