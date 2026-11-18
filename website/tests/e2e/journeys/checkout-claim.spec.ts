@@ -37,7 +37,12 @@ test('a verified customer claims a completed legacy checkout and replay keeps on
       await page.locator('#claim-checkout-reference').fill(checkout.sessionId);
       await Promise.all([
         page.waitForEvent('framenavigated',{predicate:frame=>frame===page.mainFrame()&&new URL(frame.url()).pathname==='/account/licenses/'}),
-        page.waitForResponse(response=>/\/functions\/v1\/billing-portal(?:-preview)?$/.test(new URL(response.url()).pathname)&&response.request().postDataJSON()?.action==='claim_checkout').then(async response=>expect(response.status(),await response.text()).toBe(200)),
+        page.waitForResponse(response=>/\/functions\/v1\/billing-portal(?:-preview)?$/.test(new URL(response.url()).pathname)&&response.request().postDataJSON()?.action==='claim_checkout').then(async response=>{
+          const status=response.status();
+          // Successful fulfillment navigates immediately and can discard the body.
+          const diagnostic=status===200?'':await response.text().catch(()=>'(body unavailable)');
+          expect(status,diagnostic).toBe(200);
+        }),
         page.locator('#claim-checkout-btn').click(),
       ]);
       await page.waitForLoadState('load');

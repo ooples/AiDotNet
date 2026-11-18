@@ -22,6 +22,7 @@ async function installBackend(page: Page, options: {
   rescheduleAppliedFailure?: boolean; ordinaryCancelConflict?: boolean;
   licenses?: Array<Record<string,unknown>>;
   admin?: boolean;
+  claimSuccess?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: options.admin ? 'admin' : 'user',
@@ -53,7 +54,7 @@ async function installBackend(page: Page, options: {
       const body = route.request().postDataJSON();
       calls.push(body);
       if (body.action === 'checkout_reference') return reply({reference:'22222222-2222-4222-8222-222222222222'});
-      if (body.action === 'claim_checkout') return reply({message:'Checkout belongs to another account'},403);
+      if (body.action === 'claim_checkout') return options.claimSuccess ? reply({claimed:true}) : reply({message:'Checkout belongs to another account'},403);
       if (body.action === 'summary') {
         if (rescheduleAttempts) {
           await options.summaryAfterAction?.();
@@ -267,6 +268,23 @@ for (const validOlder of [true,false]) {
     await expect(page.locator('[data-license-status]').first()).toHaveAttribute('data-usable','false');
   });
 }
+
+test('successful claim clears the old provisioning flag and immediately renders its key',async({page})=>{
+  const calls=await installBackend(page,{claimSuccess:true,licenses:[{
+    id:'claimed-key',license_key:'AIDN-CLAIMED-FIXTURE-KEY',tier:'professional',status:'active',max_activations:2,
+    organization_name:null,issued_at:'2026-01-01',expires_at:null,
+  }]});
+  await page.goto('/account/licenses/?new=true&session_id=cs_test_claim');
+  await expect(page.locator('#new-license-banner')).toBeVisible();
+  await page.getByText('Paid before signing in? Claim your checkout',{exact:true}).click();
+  await page.locator('#claim-checkout-reference').fill('cs_test_claim');
+  await page.locator('#claim-checkout-btn').click();
+  await expect(page).toHaveURL(/\/account\/licenses\/$/);
+  await expect(page.locator('#new-license-banner')).toBeHidden();
+  await expect(page.locator('#setup-section')).toBeVisible();
+  await expect(page.locator('#env-var-code')).toHaveText('AIDOTNET_LICENSE_KEY=AIDN-CLAIMED-FIXTURE-KEY');
+  expect(calls.filter(c=>c.action==='claim_checkout')).toHaveLength(1);
+});
 
 test('explicit Checkout claim validates the reference and surfaces ownership errors',async({page})=>{
   const calls=await installBackend(page);

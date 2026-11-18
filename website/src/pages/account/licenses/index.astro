@@ -131,7 +131,12 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       try {
         const { data, error } = await claimCheckout(reference);
         if (error || !data?.claimed) { message.textContent = error ?? 'Checkout could not be claimed. Please try again.'; return; }
-        window.location.reload();
+        // Fulfillment is complete. Do not restart the post-Checkout count-growth
+        // poll against a key that already exists after this explicit claim.
+        const destination = new URL(window.location.href);
+        destination.searchParams.delete('new');
+        destination.searchParams.delete('session_id');
+        window.location.replace(destination.href);
       } finally { button.disabled = false; }
     });
 
