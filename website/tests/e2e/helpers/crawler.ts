@@ -161,11 +161,10 @@ const ENUMERATE = (path: string) => {
     || (el as HTMLInputElement).value || el.getAttribute('name') || '') as string).replace(/\s+/g, ' ').trim().slice(0, 60);
   const visible = (el: Element) => {
     const r = el.getBoundingClientRect();
-    // Fully transparent or click-through controls are hidden in practice: Pagefind's Clear button,
-    // while the search box is empty, carries pagefind-ui__suppressed (opacity 0, pointer-events none).
+    // Pagefind's empty-search Clear button is transparent. Keep visible click-through
+    // controls in coverage so the reachability check can report them as broken.
     return r.width > 0 && r.height > 0
-      && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true, opacityProperty: true }) !== false
-      && getComputedStyle(el).pointerEvents !== 'none';
+      && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true, opacityProperty: true }) !== false;
   };
   const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
   const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]')

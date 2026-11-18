@@ -83,12 +83,8 @@ jobs:
           fi
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - name: Verify or synchronize the existing function mail credential
-        if: ${{ inputs.deploy_functions }}
-        run: node scripts/sync-function-mail-key.mjs
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      # Function credentials are managed separately. Deploying code preserves the
+      # installed key; the hosted license-email journey verifies actual sending.
       - name: Deploy only the reviewed billing functions
         if: ${{ inputs.deploy_functions }}
         run: |

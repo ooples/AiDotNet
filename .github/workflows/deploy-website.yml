@@ -59,14 +59,10 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # The license emails are sent by the edge functions with their own RESEND_API_KEY function
-      # secret, which nothing kept in step with the repo secret Auth SMTP uses: after a key rotation
-      # Resend answered 401 to every license email. Push the one repo secret to both.
-      - name: Sync edge function secrets
-        run: node scripts/sync-function-mail-key.mjs
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      # Preserve separately managed function credentials during source deployment.
+      # The post-deployment license-email journey detects invalid installed keys.
+      # scripts/sync-function-mail-key.mjs is available for explicit key rotation
+      # with a token that has edge_functions_secrets_read/write permissions.
 
   configure-auth-email:
     name: Configure Auth Email

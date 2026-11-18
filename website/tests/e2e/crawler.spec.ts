@@ -45,6 +45,8 @@ test.describe('crawler regression checks', () => {
         : req.url === '/covered-rows/'
           ? '<div style="position:relative"><div style="position:absolute;inset:0;z-index:2;background:white"></div>'
             + '<button>Covered row action</button>'.repeat(12) + '</div>'
+        : req.url === '/pointer-disabled/'
+          ? '<button id="unclickable" style="pointer-events:none" onclick="alert(\'Unreachable\')">Visible action</button>'
         : req.url === '/nested-cover/'
           ? '<button id="theme" onclick="document.body.classList.toggle(\'theme\')">Theme</button>'
             + '<button id="menu" onclick="document.getElementById(\'cover\').hidden=false">Menu</button>'
@@ -104,6 +106,13 @@ test.describe('crawler regression checks', () => {
       expect.objectContaining({ control: expect.stringContaining('Covered row action'), problem: expect.stringContaining('not exercised') }),
     ]));
     expect(coveredRowLoads).toBe(2); // Initial visit and one attempt to restore the covered control.
+  });
+
+  test('a visible pointer-disabled control fails coverage', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/pointer-disabled/`] });
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ control: expect.stringContaining('#unclickable'), problem: expect.stringContaining('not exercised') }),
+    ]));
   });
 
   test('a control blocked in a nested state is retried from its reachable parent state', async ({ page, request }) => {
