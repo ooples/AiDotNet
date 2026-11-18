@@ -482,18 +482,11 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
             var generated = new List<int>();
             var cache = new LlamaCache<T>();
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
+            using var sampling = new OuteTTSSamplingSession<T>();
             int eos = EosToken;
             while (ids.Count < o.MaxLength)
             {
-                var scores = Engine.Reshape(logits, new[] { logits.Length });
-                int next;
-                if (o.Temperature > 0)
-                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, o.RepetitionRange, o.Temperature, o.TopK, o.TopP, o.MinP), random);
-                else
-                {
-                    var processed = OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, o.RepetitionRange, 1.0, 0, 1.0, 0);
-                    next = OuteTTSSampler<T>.Greedy(processed);
-                }
+                int next = sampling.Select(logits, ids, o, random);
                 ids.Add(next);
                 generated.Add(next);
                 if (next == eos) break;
