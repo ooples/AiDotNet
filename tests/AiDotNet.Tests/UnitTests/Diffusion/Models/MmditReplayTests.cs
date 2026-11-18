@@ -444,6 +444,6 @@ public sealed class MmditReplayTests : IDisposable
         for (int i = 0; i < expected.Length; i++) Near(expected[i], actual[i], tolerance);
     }
     private static void Near(double expected, double actual, double tolerance) =>
-        Assert.True(double.IsFinite(actual) && Math.Abs(expected - actual) <= tolerance,
+        Assert.True(!double.IsNaN(actual) && !double.IsInfinity(actual) && Math.Abs(expected - actual) <= tolerance,
             $"Expected {expected:R}, got {actual:R}; tolerance {tolerance:R}.");
 }
