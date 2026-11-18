@@ -55,7 +55,7 @@ def compare_reference(snapshot, manifest):
         "cudnn_allow_tf32": manifest["tf32"], "deterministic_algorithms": manifest["deterministic_algorithms"],
         "deterministic_warn_only": manifest["deterministic_warn_only"]}
     mismatches = {name: {"expected": value, "observed": snapshot.get(name)} for name, value in expected.items()
-                  if snapshot.get(name) != value}
+                  if snapshot.get(name) != value or (isinstance(value, bool) and type(snapshot.get(name)) is not bool)}
     return {"status": "match" if not mismatches else "mismatch", "mismatches": mismatches,
             "scope": "Only precision/determinism fields actually present in the frozen reference manifest; no bitwise determinism claim."}
 
@@ -192,6 +192,7 @@ def main():
     def finish():
         try:
             state["flags_at_exit"] = policy_snapshot(torch)
+            state["environment_at_exit"] = {name: os.environ.get(name) for name in OVERRIDE_ENVIRONMENT}
             state["native"] = loaded_native_files()
             state["atexit_complete"] = True
         except Exception as error:
@@ -217,6 +218,7 @@ def main():
         raise
     finally:
         state["flags_after_benchmark"] = policy_snapshot(torch)
+        state["environment_after_benchmark"] = {name: os.environ.get(name) for name in OVERRIDE_ENVIRONMENT}
         state["policy_match_after"] = compare_reference(state["flags_after_benchmark"], reference_policy) if reference_policy and "deterministic_warn_only" in reference_policy else None
 
 

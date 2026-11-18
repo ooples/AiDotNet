@@ -23,8 +23,9 @@ import threading
 import time
 
 import psutil
-from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases
+from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, raw_file
 from python_process import bootstrap_argv, resolve_python_process
+from torch_policy import compare_reference, sha as streaming_sha
 
 
 
@@ -244,7 +245,84 @@ def reference_recipe_gate(run: dict) -> dict:
             return {"status": "unverified", "reason": "Reference manifest exporter hash does not match the per-reference exporter artifact."}
     except (OSError, ValueError, TypeError):
         return {"status": "unverified", "reason": "Missing or invalid reference manifest for recipe validation."}
+    if run.get("side") == "pytorch" and run.get("mode") == "score":
+        return reference_policy_gate(run)
     return {"status": "pass"}
+
+
+def reference_policy_gate(run: dict) -> dict:
+    """Bind actual scored Torch precision to the same reference used for numerical checks."""
+    try:
+        if run.get("side") != "pytorch" or run.get("mode") != "score" or run.get("return_code") != 0:
+            raise ValueError("Formal Torch policy evidence requires a successful scored process.")
+        manifest_path = Path(run["artifact_paths"]["hifigan_reference_manifest"])
+        manifest = read_json(manifest_path)
+        if streaming_sha(manifest_path) != run["artifacts"]["hifigan_reference_manifest"]:
+            raise ValueError("Reference manifest changed.")
+        if manifest.get("model") != run["model"] or manifest.get("device") != run["device"]:
+            raise ValueError("Reference precision policy belongs to another model/device.")
+        policy = read_json(raw_file(run, "torch_policy"))
+        if not isinstance(policy, dict):
+            raise ValueError("Torch policy receipt is not an object.")
+        if (policy.get("schema") != "torch-policy-native-receipt-v1" or policy.get("mode") != "strict-reference"
+                or policy.get("pid") != run["pid"] or isinstance(policy.get("pid"), bool)
+                or policy.get("atexit_complete") is not True or policy.get("observation_error")
+                or type(policy.get("benchmark_exit_code")) is not int or policy["benchmark_exit_code"] != 0):
+            raise ValueError("Torch policy receipt lacks strict mode, real PID, successful benchmark or complete shutdown observation.")
+        for field, artifact in (("benchmark_sha256", "pytorch_benchmark"), ("wrapper_sha256", "torch_policy_wrapper"),
+                                ("reference_manifest_sha256", "hifigan_reference_manifest")):
+            if not run["artifacts"].get(artifact) or policy.get(field) != run["artifacts"][artifact]:
+                raise ValueError("Torch policy source/reference binding differs: " + field)
+        resolved = dict(manifest)
+        attestation = None
+        if policy.get("reference_environment") is not None:
+            artifact = "reference_environment"
+            path = Path(run["artifact_paths"][artifact])
+            actual_hash = streaming_sha(path)
+            if (actual_hash != run["artifacts"][artifact] or policy["reference_environment"].get("sha256") != actual_hash
+                    or Path(policy["reference_environment"].get("path", "")).resolve() != path.resolve()):
+                raise ValueError("Reference startup policy artifact differs.")
+            attestation = read_json(path)
+            if attestation.get("reference_manifest_sha256") != run["artifacts"]["hifigan_reference_manifest"]:
+                raise ValueError("Reference startup policy belongs to another manifest.")
+            evidence = attestation.get("evidence", [])
+            if not evidence or any(streaming_sha(item["path"]) != item.get("sha256") for item in evidence):
+                raise ValueError("Reference startup policy evidence changed or is missing.")
+            for key, value in attestation.get("policy", {}).items():
+                if key != "deterministic_warn_only" or not isinstance(value, bool) or (key in resolved and resolved[key] != value):
+                    raise ValueError("Legacy attestation changes a recorded policy field or has an unsupported field.")
+                resolved[key] = value
+        if not isinstance(resolved.get("deterministic_warn_only"), bool):
+            raise ValueError("Legacy reference warn-only choice lacks a bound source attestation.")
+        if run["device"] == "cuda" and (attestation is None or "CUBLAS_WORKSPACE_CONFIG" not in attestation.get("environment", {})):
+            raise ValueError("CUDA reference workspace environment is not explicitly bound.")
+        observations = {}
+        for name in ("applied_flags_before_benchmark", "flags_after_benchmark", "flags_at_exit"):
+            snapshot = policy.get(name, {})
+            if not isinstance(snapshot, dict):
+                raise ValueError("Torch policy observation is missing or malformed: " + name)
+            observations[name] = compare_reference(snapshot, resolved)
+            if (type(snapshot.get("cuda_initialized_before_observation")) is not bool
+                    or type(snapshot.get("cuda_initialized_after_observation")) is not bool
+                    or snapshot["cuda_initialized_before_observation"] != snapshot["cuda_initialized_after_observation"]):
+                raise ValueError("Observation changed CUDA initialization state.")
+        if any(row["status"] != "match" for row in observations.values()):
+            return {"status": "fail", "reason": "Actual scored Torch policy differs from the numerical reference.", "observations": observations}
+        expected_env = policy.get("effective_environment")
+        if not isinstance(expected_env, dict) or any(policy.get(name) != expected_env for name in ("environment_after_benchmark", "environment_at_exit")):
+            raise ValueError("Precision override environment changed during the benchmark.")
+        if attestation is not None and any(expected_env.get(key) != value for key, value in attestation.get("environment", {}).items()):
+            raise ValueError("Effective precision environment differs from the reference startup policy.")
+        if policy.get("native", {}).get("status") != "observed_loaded_images":
+            raise ValueError("Loaded native-image observation is unavailable.")
+        native_files = policy["native"].get("files")
+        if not isinstance(native_files, list) or not native_files or any(
+                not isinstance(item, dict) or not isinstance(item.get("path"), str) or not re.fullmatch("[a-f0-9]{64}", item.get("sha256", ""))
+                or type(item.get("bytes")) is not int or item["bytes"] <= 0 for item in native_files):
+            raise ValueError("Native image paths/binary hashes are missing or malformed.")
+        return {"status": "pass", "observations": observations, "scope": "Explicit reference precision policy; native image presence is not vendor execution proof."}
+    except (KeyError, ValueError, TypeError, OSError, json.JSONDecodeError) as error:
+        return {"status": "unverified", "reason": str(error)}
 
 
 def provenance(config: dict) -> dict:
@@ -315,7 +393,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     run_dir.mkdir(parents=True, exist_ok=False)
     command = config["commands"][side]
     protocol = config["protocol" if mode == "score" else "diagnostic_protocol"]
-    bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"))
+    bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"), run_directory=str(run_dir))
     bindings["inference_batches"] = ",".join(map(str, protocol["inference_batch_sizes"]))
     argv = [str(arg).format_map(bindings) for arg in command["argv"]]
     original_argv = argv.copy()
@@ -397,7 +475,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
             return_code = -1
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
-    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json"}
+    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json", "torch_policy": "torch-policy.json"}
     metadata["diagnostic_files"] = {key: {"name": name, "sha256": hashlib.sha256((run_dir / name).read_bytes()).hexdigest()}
                                     for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
@@ -621,6 +699,12 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
                       and len(set(identities)) == len(identities) else "unverified",
             "receipts": cache_checks,
             "reason": "Every score needs a fresh process and source-bound persistent-cache inventory.",
+        }
+        policy_checks = [reference_recipe_gate(run) for run in scored if run["side"] == "pytorch"]
+        outcomes["reference_precision_policy"] = {
+            "status": "pass" if policy_checks and all(row["status"] == "pass" for row in policy_checks) else
+                      "fail" if any(row["status"] == "fail" for row in policy_checks) else "unverified",
+            "receipts": policy_checks,
         }
         diagnostics = [run for run in runs if (run["model"], run["device"], run["mode"]) == (model, device, "diagnostic")]
         allocation_rows = {side: [] for side in sides}
