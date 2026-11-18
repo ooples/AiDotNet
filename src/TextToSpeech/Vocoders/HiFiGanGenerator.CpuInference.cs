@@ -27,6 +27,13 @@ internal sealed partial class HiFiGanGenerator<T>
         internal int Time { get; } = time;
     }
 
+    private sealed class CpuConvolutionLayerComparer : IEqualityComparer<NormedConv1DLayer<T>>
+    {
+        internal static readonly CpuConvolutionLayerComparer Instance = new();
+        public bool Equals(NormedConv1DLayer<T>? x, NormedConv1DLayer<T>? y) => ReferenceEquals(x, y);
+        public int GetHashCode(NormedConv1DLayer<T> value) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value);
+    }
+
     private bool TryForwardPrivateCpu(Tensor<T> features, Tensor<T>? condition, out Tensor<T> output)
     {
         output = null!;
@@ -66,7 +73,7 @@ internal sealed partial class HiFiGanGenerator<T>
             var cpu = _engine.Cast<CpuEngine>();
             var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();
             views = activeViews;
-            var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(ReferenceEqualityComparer.Instance);
+            var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(CpuConvolutionLayerComparer.Instance);
             var numOps = MathHelper.GetNumericOperations<T>();
             T slope = numOps.FromDouble(Slope), finalSlope = numOps.FromDouble(0.01);
             PrivateCpuActivation View(int slot, int channels, int length)
