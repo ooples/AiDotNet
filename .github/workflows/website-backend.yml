@@ -132,3 +132,19 @@ jobs:
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      - name: Record exact deployed function revisions
+        if: ${{ inputs.deploy_functions }}
+        run: |
+          supabase functions list --project-ref yfkqwpgjahoamlgckjib --output json > "$RUNNER_TEMP/reviewed-functions.json"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const suffix=process.env.FUNCTION_TARGET==='production'?'':'-preview';
+          const expected=['billing-portal','stripe-webhook','register-community-license','delete-account'].map(name=>name+suffix);
+          const functions=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/reviewed-functions.json','utf8'));
+          const selected=functions.filter(f=>expected.includes(f.slug));
+          if(selected.length!==4||selected.some(f=>f.status!=='ACTIVE'||f.verify_jwt!==false)) throw Error('Reviewed function deployment metadata is incomplete');
+          console.log(JSON.stringify(selected.map(({slug,version,status,updated_at,verify_jwt})=>({slug,version,status,updated_at,verify_jwt})),null,2));
+          JS
+        env:
+          FUNCTION_TARGET: ${{ inputs.target || 'preview' }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
