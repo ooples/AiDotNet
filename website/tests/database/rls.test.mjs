@@ -44,7 +44,9 @@ before(async () => {
   created = true;
   let ready = false;
   for (let i = 0; i < 80; i++) {
-    const check = spawnSync('docker', ['exec', container, 'pg_isready', '-U', 'postgres'], { encoding: 'utf8' });
+    // The image starts a socket-only initialization server, then restarts it.
+    // TCP readiness distinguishes the final server from that temporary process.
+    const check = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'], { encoding: 'utf8' });
     if (check.status === 0) { ready = true; break; }
     await setTimeout(250);
   }
