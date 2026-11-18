@@ -3,6 +3,11 @@
   "description": "Explicit baseline shard renames, splits, or removals. Replacement keys must upload successfully before an old key is excused.",
   "changes": [
     {
+      "baselineKey": "Other_Recovery_Concurrency",
+      "currentKeys": [],
+      "reason": "The CPU filter excluded both GPU-tagged classes and executed zero cases. Recovery and concurrency now run as Required GPU recovery and concurrency on the capability-verified CUDA lane, required by Validation Gate before any validation certificate can be published. The replacement asserts exact discovery/execution identities, numerical results, actual device launches, and no fallback; no CPU coverage is removed."
+    },
+    {
       "baselineKey": "Conformance_VisionLanguage_offset_170",
       "currentKeys": [],
       "reason": "Two changes shrank the VisionLanguage conformance set from 173 to 166 models: #2136 moved EmuEdit, MGIE and SmartEdit onto LatentDiffusionModelBase (diffusion models do not implement IShapeContract; the diffusion test bases check them instead), and #2269 removed four duplicate VisionLanguage document models (Donut, LayoutLMv3, Nougat and Pix2Struct under src/VisionLanguage/Document; the document implementations elsewhere remain). Offset 165 now ends it and the offset 170 window selects none."

@@ -241,10 +241,6 @@ shard:
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.PromptEngineering'
-  - name: Other - Recovery/Concurrency
-    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-    framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
   - name: Other - Playground
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
