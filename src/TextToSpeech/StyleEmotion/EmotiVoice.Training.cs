@@ -218,7 +218,7 @@ public partial class EmotiVoice<T>
         var wideIm = TensorCopyHelper.CastLogical<T, double>(im);
         var power = Engine.TensorAdd(Engine.TensorSquare(wideRe), Engine.TensorSquare(wideIm));
         var sum = Engine.ReduceSum(power, new[] { 1 }, false);
-        var norm = Engine.TensorSqrt(Engine.TensorMax(sum, 1e-10));
+        var norm = Engine.TensorSqrt(Engine.TensorClampMin(sum, 1e-10));
         return Engine.Reshape(norm.Cast<T>(), new[] { frames });
     }
 
@@ -265,20 +265,22 @@ public partial class EmotiVoice<T>
         var x = Encode(p.Phonemes, p.Speaker, p.Style, p.Content, training, random);
         int n = p.Phonemes.Length, frames = p.Mel.Shape[0];
         var logP = AlignmentNetwork.Forward(x, p.Mel);
-        var path = EmotiVoiceAlignment<T>.Viterbi(logP);
-        var durations = EmotiVoiceAlignment<T>.Durations(path, n);
+        var alignmentMatrix = EmotiVoiceAlignment<T>.ViterbiAlignmentMatrix(logP);
+        var durationValues = Engine.ReduceSum(alignmentMatrix, new[] { 0 }, keepDims: false);
+        int[] durations = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? Array.Empty<int>()
+            : durationValues.Cast<int>().ToArray();
         // Each phoneme's mean pitch and energy over its frames, accumulated as Σ v_f / d in frame order.
-        int covered = durations.Sum();
-        var owner = new int[covered];
-        for (int i = 0, f = 0; i < n; i++)
-            for (int k = 0; k < durations[i]; k++) owner[f++] = i;
-        var ownerIndex = new Tensor<int>(owner, new[] { covered });
-        var frameDuration = Engine.TensorIndexSelect(new Tensor<int>(durations, new[] { n }), ownerIndex, 0).Cast<T>();
-        Tensor<T> PhonemeMean(Tensor<T> values) => Engine.TensorIndexPut(new Tensor<T>(new[] { n }), new[] { ownerIndex },
-            Engine.TensorDivide(Engine.TensorSlice(Engine.Reshape(values, new[] { values.Length }), new[] { 0 }, new[] { covered }), frameDuration), true);
+        var hasFrames = Engine.TensorGreaterThan(durationValues, NumOps.Zero);
+        var safeDurations = Engine.TensorWhere(hasFrames, durationValues, Engine.TensorOnesLike(durationValues));
+        Tensor<T> PhonemeMean(Tensor<T> values)
+        {
+            var frameRow = Engine.Reshape(Engine.TensorSlice(Engine.Reshape(values, new[] { values.Length }), new[] { 0 }, new[] { frames }), new[] { 1, frames });
+            var summed = Engine.Reshape(Engine.TensorMatMul(frameRow, alignmentMatrix), new[] { n });
+            return Engine.TensorWhere(hasFrames, Engine.TensorDivide(summed, safeDurations), Engine.TensorZerosLike(durationValues));
+        }
         var pitchTargets = PhonemeMean(p.Pitch);
         var energyTargets = PhonemeMean(p.Energy);
-        var durationValues = new Tensor<int>(durations, new[] { n }).Cast<T>();
         var pitchOut = PitchPredictor.Forward(x, training, random);
         var energyOut = EnergyPredictor.Forward(x, training, random);
         var durationOut = DurationPredictor.Forward(x, training, random);
@@ -303,7 +305,7 @@ public partial class EmotiVoice<T>
         var pitch = L1(pitchOut, pitchTargets);
         var energy = L1(energyOut, energyTargets);
         var forwardSum = AlignmentNetwork.ForwardSumLoss(logP);
-        var binarization = AlignmentNetwork.BinarizationLoss(logP, path);
+        var binarization = AlignmentNetwork.BinarizationLoss(logP, alignmentMatrix);
         (pass.Mel, pass.Duration, pass.Pitch, pass.Energy, pass.ForwardSum, pass.Binarization) = (mel, duration, pitch, energy, forwardSum, binarization);
         var total = Engine.TensorAdd(Engine.TensorAdd(Scaled(mel, o.MelLossWeight), duration), Engine.TensorAdd(pitch, energy));
         total = Engine.TensorAdd(total, Engine.TensorAdd(Scaled(forwardSum, o.ForwardSumWeight), Scaled(binarization, o.BinarizationWeight)));
@@ -380,7 +382,7 @@ public partial class EmotiVoice<T>
         var im = Engine.TensorMatMul(framed, _lossSin!);
         var magnitude = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorAdd(Square(re), Square(im)), NumOps.FromDouble(1e-6)));
         var mel = Engine.TensorMatMul(_lossMel!, Engine.TensorTranspose(magnitude));
-        return Engine.TensorLog(Engine.TensorMax(mel, NumOps.FromDouble(1e-5)));
+        return Engine.TensorLog(Engine.TensorClampMin(mel, NumOps.FromDouble(1e-5)));
     }
 
     /// <summary>HiFi-GAN's discriminator loss: Σ mean (1 − D(y))² + mean D(ŷ)² over the period and scale discriminators.</summary>

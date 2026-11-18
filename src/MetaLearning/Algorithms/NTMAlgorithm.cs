@@ -1857,6 +1857,13 @@ internal static class NTMControllerMath<T>
             offset += tensor.Length;
         }
     }
+
+    internal static Tensor<T> CloneNonPooled(Tensor<T> source)
+    {
+        var clone = new Tensor<T>(source._shape);
+        source.Data.Span.CopyTo(clone.AsWritableSpan());
+        return clone;
+    }
 }
 
 /// <summary>
@@ -1962,12 +1969,14 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMCont
         _weightsHidden = InitializeTensor(new int[] { 4 * _hiddenSize, _hiddenSize }, hiddenScale);
 
         // Forget gate bias (the second quarter) starts at 1.0 for better gradient flow, the rest at zero.
-        _biases = Engine.TensorConcatenate(new[]
+        // Allocate directly on the heap rather than via Engine.TensorConcatenate so an active TensorArena
+        // cannot pool and later recycle/reshape this long-lived parameter tensor across episodes.
+        _biases = new Tensor<T>(new int[] { 4 * _hiddenSize });
+        var biasSpan = _biases.AsWritableSpan();
+        for (int i = _hiddenSize; i < 2 * _hiddenSize; i++)
         {
-            new Tensor<T>(new int[] { _hiddenSize }),
-            Tensor<T>.CreateDefault(new int[] { _hiddenSize }, NumOps.One),
-            new Tensor<T>(new int[] { 2 * _hiddenSize }),
-        }, 0);
+            biasSpan[i] = NumOps.One;
+        }
 
         // Initialize projection weights
         double projScale = Math.Sqrt(2.0 / _hiddenSize);
@@ -2175,6 +2184,29 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMCont
 
         _inputSize = width;
         _inputSizeResolved = true;
+    }
+
+    /// <summary>
+    /// Creates an independent deep copy of this controller, preserving its resolved input width,
+    /// learned parameters, and recurrent state.
+    /// </summary>
+    public LSTMNTMController<T, TInput, TOutput> Clone()
+    {
+        var copy = new LSTMNTMController<T, TInput, TOutput>(_options);
+        if (_inputSizeResolved)
+        {
+            ((INTMControllerLayout)copy).ResolveInputWidth(_inputSize);
+        }
+        else if (copy._weightsInput.Shape[1] != _weightsInput.Shape[1])
+        {
+            copy._weightsInput = new Tensor<T>(_weightsInput._shape);
+            copy._inputSize = _inputSize;
+        }
+
+        copy.SetParameters(GetParameters());
+        copy._hiddenState = NTMControllerMath<T>.CloneNonPooled(_hiddenState);
+        copy._cellState = NTMControllerMath<T>.CloneNonPooled(_cellState);
+        return copy;
     }
 
     private sealed class LstmState
@@ -2483,6 +2515,28 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>, INTMContr
 
         _inputSize = width;
         _inputSizeResolved = true;
+    }
+
+    /// <summary>
+    /// Creates an independent deep copy of this controller, preserving its resolved input width,
+    /// learned parameters, and cached hidden state.
+    /// </summary>
+    public MLPNTMController<T, TInput, TOutput> Clone()
+    {
+        var copy = new MLPNTMController<T, TInput, TOutput>(_options);
+        if (_inputSizeResolved)
+        {
+            ((INTMControllerLayout)copy).ResolveInputWidth(_inputSize);
+        }
+        else if (copy._layer1Weights.Shape[1] != _layer1Weights.Shape[1])
+        {
+            copy._layer1Weights = new Tensor<T>(_layer1Weights._shape);
+            copy._inputSize = _inputSize;
+        }
+
+        copy.SetParameters(GetParameters());
+        copy._lastHiddenState = NTMControllerMath<T>.CloneNonPooled(_lastHiddenState);
+        return copy;
     }
 }
 

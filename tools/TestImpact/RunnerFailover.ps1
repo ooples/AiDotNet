@@ -144,11 +144,13 @@ function Invoke-FailoverApi {
         $uri = "https://api.github.com/$Path${separator}per_page=50&page=$page"
         $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri $uri
         if (-not $Paginate) { return $response }
-        $property = @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
-        $batch = if ($property) { @($response.$property) } else { @($response) }
+        $property = if ($null -ne $response) {
+            @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
+        } else { $null }
+        [object[]]$batch = if ($property) { @($response.$property) } elseif ($null -eq $response) { @() } else { @($response) }
         $items += $batch; $page++
     } while ($batch.Count -eq 50)
-    return $items
+    return ,@($items)
 }
 
 function Assert-FailoverSourceArtifact {

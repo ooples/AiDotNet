@@ -3199,7 +3199,25 @@ jobs:
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
           $measuredLedgerShards = 0
+          $ledgerHasHoles = $false
+          $ledgerHoleReason = ''
           if ($ledger) {
+            try {
+              $ledgerDoc = Get-Content -LiteralPath $ledger.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+              if ($ledgerDoc.PSObject.Properties['missingExpectedShards']) {
+                [object[]]$holes = @($ledgerDoc.missingExpectedShards | Where-Object { $_ })
+                if ($holes.Count -gt 0) {
+                  $ledgerHasHoles = $true
+                  $ledgerHoleReason = "incomplete baseline ledger ($($holes.Count) missing shard(s): $($holes -join ', '))"
+                  Write-Warning "Downloaded baseline ledger '$($env:BASE_SHA)' is incomplete ($($holes.Count) dispatched shard(s) uploaded no artifact) and will not be used for regression enforcement."
+                }
+              }
+            }
+            catch {
+              $ledgerHasHoles = $true
+              $ledgerHoleReason = "unreadable baseline ledger JSON ($($_.Exception.Message))"
+              Write-Warning "Downloaded baseline ledger JSON could not be parsed: $($_.Exception.Message)"
+            }
             $ledgerShardInventory = Join-Path $ledger.DirectoryName 'shards.csv'
             try {
               $measuredLedgerShards = @(
@@ -3217,7 +3235,7 @@ jobs:
           $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
-            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $measuredLedgerShards -gt 0) -or
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $measuredLedgerShards -gt 0 -and -not $ledgerHasHoles) -or
             ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
             ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
           if ($baselineReady) {
@@ -3234,7 +3252,8 @@ jobs:
               $arguments.BaselineResultsPath = 'baseline-test-results'
             }
           } elseif ($env:COMPARE -eq 'true') {
-            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)', TRX download '$($env:TRX_DOWNLOAD_OUTCOME)', promoted TRX download '$($env:PROMOTED_TRX_DOWNLOAD_OUTCOME)')."
+            $holeNote = if ($ledgerHoleReason) { ", reason '$ledgerHoleReason'" } else { '' }
+            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)'$holeNote, TRX download '$($env:TRX_DOWNLOAD_OUTCOME)', promoted TRX download '$($env:PROMOTED_TRX_DOWNLOAD_OUTCOME)')."
             Write-Warning $message
             "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -3243,6 +3262,17 @@ jobs:
           "verdict_enforced=$($verdictEnforced.ToString().ToLowerInvariant())" |
             Add-Content -LiteralPath $env:GITHUB_OUTPUT
           ./.github/scripts/test-regression-analysis.ps1 @arguments
+          $uploadPrefix = '${{ steps.provenance.outputs.regression_artifact_prefix }}'
+          try {
+            $emittedLedger = Get-Content -LiteralPath 'test-regression-analysis/ledger.json' -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($emittedLedger.PSObject.Properties['baselinePublishable'] -and -not [bool]$emittedLedger.baselinePublishable) {
+              $uploadPrefix = 'test-outcome-diagnostics'
+            }
+          }
+          catch {
+            $uploadPrefix = 'test-outcome-diagnostics'
+          }
+          "upload_artifact_prefix=$uploadPrefix" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
       - name: Upload final TRX ledger and comparison report
         # Missing/invalid selection output cannot prove which shards were dispatched. Do not
@@ -3250,7 +3280,7 @@ jobs:
         if: always() && steps.analyze.outputs.inventory_valid == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
-          name: ${{ steps.provenance.outputs.regression_artifact_prefix }}-${{ github.sha }}
+          name: ${{ steps.analyze.outputs.upload_artifact_prefix || steps.provenance.outputs.regression_artifact_prefix }}-${{ github.sha }}
           path: test-regression-analysis/
           if-no-files-found: error
           retention-days: 90

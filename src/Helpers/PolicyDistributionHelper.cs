@@ -134,7 +134,7 @@ public static class PolicyDistributionHelper<T>
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (logProbs is null) throw new ArgumentNullException(nameof(logProbs));
 
-        var finiteMask = engine.TensorIsFinite(logProbs);
+        var finiteMask = TensorFiniteness.FiniteMask(engine, logProbs);
         var zeros = engine.TensorZerosLike(logProbs);
         var safeLogProbs = engine.TensorWhere(finiteMask, logProbs, zeros);
         var safeProbs = engine.TensorWhere(finiteMask, engine.TensorExp(safeLogProbs), zeros);
@@ -298,6 +298,59 @@ public static class PolicyDistributionHelper<T>
         // log(1) is 0, so an unscaled policy is unaffected and no float comparison is needed.
         return engine.TensorAddScalar(corrected, NumOps.FromDouble(-actionSize * Math.Log(scale)));
     }
+    /// <summary>
+    /// Computes per-sample action log-probabilities and distribution entropies for either a continuous
+    /// diagonal-Gaussian policy (<c>[batchSize, 2 * actionSize]</c> containing means followed by log-stds)
+    /// or a discrete categorical policy (<c>[batchSize, numActions]</c> logits).
+    /// </summary>
+    internal static (Tensor<T> LogProbs, Tensor<T> Entropy) ComputePolicyLogProbAndEntropy(
+        IEngine engine,
+        Tensor<T> policyOutput,
+        bool isContinuous,
+        int batchSize,
+        int actionSize,
+        Tensor<T>? continuousActions,
+        int[] discreteActionIndices)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (policyOutput is null) throw new ArgumentNullException(nameof(policyOutput));
+
+        if (isContinuous)
+        {
+            var means = engine.TensorSlice(policyOutput, [0, 0], [batchSize, actionSize]);
+            var logStds = engine.TensorSlice(policyOutput, [0, actionSize], [batchSize, actionSize]);
+            var actions = continuousActions ?? throw new InvalidOperationException("Continuous actions tensor is required for continuous policies.");
+            return (
+                ComputeGaussianLogProb(engine, means, logStds, actions),
+                ComputeGaussianEntropy(engine, logStds));
+        }
+
+        return (
+            ComputeDiscreteLogProb(engine, policyOutput, discreteActionIndices),
+            ComputeDiscreteEntropy(engine, policyOutput));
+    }
+
+    /// <summary>
+    /// Computes the negated entropy-regularized policy objective <c>-mean(surrogateObjective) - entropyCoefficient * mean(entropy)</c>
+    /// shared by advantage actor-critic (A2C, A3C) and proximal policy optimization (PPO).
+    /// </summary>
+    internal static Tensor<T> ComputeEntropyRegularizedPolicyLoss(
+        IEngine engine,
+        Tensor<T> surrogateObjective,
+        Tensor<T> entropy,
+        T entropyCoefficient)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (surrogateObjective is null) throw new ArgumentNullException(nameof(surrogateObjective));
+        if (entropy is null) throw new ArgumentNullException(nameof(entropy));
+
+        var objectiveAxes = Enumerable.Range(0, surrogateObjective.Shape.Length).ToArray();
+        var entropyAxes = Enumerable.Range(0, entropy.Shape.Length).ToArray();
+        var meanObjective = engine.ReduceMean(surrogateObjective, objectiveAxes, keepDims: false);
+        var meanEntropy = engine.ReduceMean(entropy, entropyAxes, keepDims: false);
+        return engine.TensorNegate(engine.TensorAdd(meanObjective, engine.TensorMultiplyScalar(meanEntropy, entropyCoefficient)));
+    }
+
     /// <summary>
     /// Rejects a scale that cannot describe a valid action range.
     /// </summary>

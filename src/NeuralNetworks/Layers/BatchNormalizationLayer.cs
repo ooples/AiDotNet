@@ -958,7 +958,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 var stdDev = Engine.TensorSqrt(Engine.TensorAddScalar(batchVariance, _epsilon));
                 var affineScale = Engine.TensorDivide(_gamma, stdDev);
                 var affineShift = Engine.TensorSubtract(_beta, Engine.TensorMultiply(affineScale, batchMean));
-                output = ApplyInferenceAnyRank(input, affineScale, affineShift);
+                output = Engine.TensorAdd(
+                    Engine.TensorMultiply(input, Engine.Reshape(affineScale, keepShape)),
+                    Engine.Reshape(affineShift, keepShape));
             }
             else
             {

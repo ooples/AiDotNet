@@ -119,6 +119,20 @@ public static class CompiledStepRandom<T>
     }
 
     /// <summary>
+    /// Registers an already-allocated per-step random tensor (such as a <see cref="NeuralNetworks.Layers.DropoutLayer{T}"/>
+    /// mask) with the active plan recording so every compiled replay refills it in place, including when the same layer
+    /// instance is invoked multiple times within one forward pass.
+    /// </summary>
+    internal static void RecordCustom(Tensor<T> tensor, Action<Tensor<T>> fill)
+    {
+        if (t_recording is null)
+            return;
+        Guard.NotNull(tensor);
+        Guard.NotNull(fill);
+        t_recording.Add(RecordedDraw.Create(tensor, fill));
+    }
+
+    /// <summary>
     /// An inverted-dropout mask of <paramref name="shape"/>, redrawn on every compiled replay: each entry is 0 with
     /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>, one <see cref="Random.NextDouble"/> per
     /// entry in row-major order, as an eager host loop draws it.

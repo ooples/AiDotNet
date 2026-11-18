@@ -153,40 +153,11 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.AddRange(layers);
     }
 
-    // SPIRAL reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
-    }
-
-    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
-    {
-        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
-    }
-
-    private double[] Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new double[count];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
-        return samples;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return Ctc(input, training);
-        int rows = input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = Ctc(Row(input, r, rows, samples), training);
-        return Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (_, wave) => Ctc(wave, training));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
@@ -219,7 +190,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
-            var features = network.Features(Samples(audio, r * samples, samples));
+            var features = network.Features(ExtractHostAudioSamples(audio, r * samples, samples));
             var teacherOutput = TeacherOutput(features, training, random);
             var student = network.Predictor(network.Project(network.Encode(network.ToTensor(Perturb(features, random)), training, random)), training);
             var loss = network.ContrastiveLoss(student, teacherOutput, _options.Negatives, _options.Temperature, random);
@@ -367,8 +338,8 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             for (int r = 0; r < rows; r++)
             {
-                var wave = Row(audio, r, rows, samples);
-                var features = network.Features(Samples(wave, 0, wave.Length));
+                var wave = SliceBatchAudioRow(audio, r, rows, samples);
+                var features = network.Features(ExtractHostAudioSamples(wave));
                 var teacherOut = TeacherOutput(features, training: true, _random);
                 perturbedInputs[r] = network.ToTensor(Perturb(features, _random));
                 teacherCandidates[r] = network.SampleTeacherCandidates(teacherOut, _options.Negatives, _random);

@@ -219,7 +219,7 @@ internal static class ActionMasking
         // A legal slot keeps its probability only when it is finite and strictly positive;
         // NaN, infinite, zero and negative entries contribute zero mass. Selections (not
         // multiplications) keep a NaN or infinity from leaking into the result.
-        var finite = engine.TensorWhere(engine.TensorIsFinite(probs), probs, zeros);
+        var finite = engine.TensorWhere(AiDotNet.Helpers.TensorFiniteness.FiniteMask(engine, probs), probs, zeros);
         var positive = engine.TensorWhere(engine.TensorGreaterThan(finite, ops.Zero), finite, zeros);
         var safe = engine.TensorWhere(mask, positive, zeros);
         T total = engine.TensorSum(safe);

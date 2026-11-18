@@ -2153,10 +2153,19 @@ internal static class OptionSensitivityFixtureSetup
             tamSize.VitEmbeddingDimension = null;
             tamSize.VitHeadCount = null;
         }
-        if (options is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avMask && option == "AudioMaskProbability")
-            // The probe's 12 audio frames hold three starts for 10-frame spans, and at least two spans are drawn, so every
-            // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
-            avMask.AudioMaskLength = 2;
+        if (options is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avMask)
+        {
+            if (option == "AudioMaskProbability")
+            {
+                // The probe's 12 audio frames hold three starts for 10-frame spans, and at least two spans are drawn, so every
+                // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
+                avMask.AudioMaskLength = 2;
+            }
+            if (option == "AudioDropout")
+            {
+                avMask.ModalityDropout = 1.0;
+            }
+        }
         if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
             // The fixture's first cleaning pass leaves a mean |residue| between 8/255 and 16/255 (measured: thresholds
             // up to 8 run all three passes, from 16 one). From 11 the doubled and halved perturbations fall on
@@ -2489,6 +2498,15 @@ internal static class OptionSensitivityFixtureSetup
             spiral.PretrainingSteps = 4; // The third student step observes the teacher's changing EMA schedule.
             spiral.TeacherMomentumStart = 0.5;
             spiral.MaxTeacherPaddingUnits = 1; // The tiny fixture caps larger values to the same padding limit.
+            if (option == "TimeMaskLength")
+            {
+                spiral.TimeMaskProbability = 0.5;
+                spiral.TimeMaskLength = 2;
+            }
+        }
+        if (options is AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions voxtOpt && option == "MaxGradientNorm")
+        {
+            voxtOpt.MaxGradientNorm = 1e-8;
         }
         if (options is AiDotNet.TextToSpeech.Latest.KaniTTSOptions kani)
         {

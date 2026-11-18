@@ -180,34 +180,13 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         Layers.AddRange(layers);
     }
 
-    // The 16 kHz waveform's samples, truncated to the longest recording transcribed.
-    private double[] Samples(Tensor<T> audio)
-    {
-        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var samples = new double[length];
-        var span = audio.Data.Span;
-        for (int i = 0; i < length; i++) samples[i] = NumOps.ToDouble(span[i]);
-        return samples;
-    }
-
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
+    private double[] Samples(Tensor<T> audio) =>
+        ExtractHostAudioSamples(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds));
 
     // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> FirstLogits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(Samples(Row(input, r, rows)), training), _options.SystemPrompt, _options.Instruction));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> FirstLogits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) =>
+            net.FirstLogits(net.Prompt(net.Speech(Samples(wave), training), _options.SystemPrompt, _options.Instruction)));
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -215,50 +194,21 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
 
-    // The labels a training target names: ids [length], or one distribution per token [length, outputs], read as its
-    // most likely tokens; the excluded id (the end token, or the CTC blank) is never a label.
-    private int[] Labels(Tensor<T> target, int outputs, int excluded)
-    {
-        var span = target.Data.Span;
-        if (target.Rank >= 2 && target.Shape[^1] == outputs)
-        {
-            var tokens = new int[target.Length / outputs];
-            for (int r = 0; r < tokens.Length; r++)
-            {
-                int best = -1;
-                for (int v = 0; v < outputs; v++)
-                    if (v != excluded && (best < 0 || NumOps.GreaterThan(span[r * outputs + v], span[r * outputs + best]))) best = v;
-                tokens[r] = best;
-            }
-            return tokens;
-        }
-        var ids = new int[target.Length];
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= outputs || (int)value == excluded)
-                throw new ArgumentException($"Label {value} is outside [0, {outputs}) or is the reserved id {excluded}.", nameof(target));
-            ids[i] = (int)value;
-        }
-        return ids;
-    }
+    private int[] Labels(Tensor<T> target, int outputs, int excluded) =>
+        ParseVocabularyTargetTokens(target, outputs, excluded);
 
     private Tensor<T> BatchLoss(GraniteSpeechNetwork<T> network, Tensor<T> input, Tensor<T> target, bool training)
     {
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
+        return AverageWaveformBatchLoss(input, (r, wave) =>
         {
-            var samples = Samples(Row(input, r, rows));
-            var labelsOf = Row(target, r, rows);
-            Tensor<T> loss = _options.TrainingStage == GraniteSpeechTrainingStage.EncoderCtc
+            var samples = Samples(wave);
+            var labelsOf = SliceBatchTargetRow(target, r, rows);
+            return _options.TrainingStage == GraniteSpeechTrainingStage.EncoderCtc
                 ? network.CtcLoss(network.Features(samples), Labels(labelsOf, _options.CtcVocabSize, GraniteSpeechNetwork<T>.Blank), training)
                 : network.Loss(network.Prompt(network.Speech(samples, training), _options.SystemPrompt, _options.Instruction),
                     Labels(labelsOf, _options.VocabSize, network.EndToken));
-            loss = Engine.Reshape(loss, new[] { 1 });
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        });
     }
 
     /// <inheritdoc />
@@ -275,8 +225,8 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         bool isCtc = _options.TrainingStage == GraniteSpeechTrainingStage.EncoderCtc;
         for (int r = 0; r < rows; r++)
         {
-            rowFeatures[r] = network.Features(Samples(Row(input, r, rows)));
-            var labelsOf = Row(target, r, rows);
+            rowFeatures[r] = network.Features(Samples(SliceBatchAudioRow(input, r, rows)));
+            var labelsOf = SliceBatchTargetRow(target, r, rows);
             rowLabels[r] = isCtc
                 ? Labels(labelsOf, _options.CtcVocabSize, GraniteSpeechNetwork<T>.Blank)
                 : Labels(labelsOf, _options.VocabSize, network.EndToken);

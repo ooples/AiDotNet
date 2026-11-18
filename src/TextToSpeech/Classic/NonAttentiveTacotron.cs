@@ -316,7 +316,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
             groups.Add(group);
             previous = teacher is not null
                 ? Engine.TensorSlice(teacher, new[] { s * r + r - 1, 0 }, new[] { 1, o.MelChannels })
-                : new Tensor<T>(new[] { 1, o.MelChannels }, Engine.TensorSlice(group, new[] { r - 1, 0 }, new[] { 1, o.MelChannels }).ToVector());
+                : DetachTensor(Engine.TensorSlice(group, new[] { r - 1, 0 }, new[] { 1, o.MelChannels }));
         }
         return groups.Count == 1 ? groups[0] : Engine.TensorConcatenate(groups.ToArray(), 0);
     }

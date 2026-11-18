@@ -700,8 +700,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         // with SetSlice would detach the output from the recurrence and stop
         // gradients reaching the conv-gate weights.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
-        var hiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
-        var cellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
+        var hiddenState = new Tensor<T>([batchSize, height, width, _filters]);
+        var cellState = new Tensor<T>([batchSize, height, width, _filters]);
 
         var packedInput = Engine.TensorConcatenate(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 3);
         var packedHidden = Engine.TensorConcatenate(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 3);

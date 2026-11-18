@@ -351,73 +351,28 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         return parameters.Where(p => bias.Contains(p) == trainBias).ToList();
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        return rawAudio.Length <= length
-            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
-            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
-    }
-
-    private Tensor<T> Row(Tensor<T> waveform, int r, int rows, int samples)
-    {
-        if (rows == 1) return waveform.Rank == 1 ? waveform : Engine.Reshape(waveform, new[] { samples });
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(waveform, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds =>
+        _network is not null ? _options.MaxAudioLengthSeconds : null;
 
     // The backbone decoder's logits [1, vocabulary] for the first acoustic token of a waveform [S] (at least one token is
     // integrated), or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null || _encoder is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-        {
-            var encoded = _encoder.Encode(Row(input, r, rows, samples));
-            var acoustic = _network.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
-            var logits = _network.Decode(encoded, acoustic);
-            outputs[r] = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
-        }
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input) =>
+        _encoder is { } encoder && _network is { } network
+            ? ForwardNativeWaveformBatch(input, network, (net, wave) =>
+            {
+                var encoded = encoder.Encode(wave);
+                var acoustic = net.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
+                var logits = net.Decode(encoded, acoustic);
+                return Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
+            })
+            : ForwardNativeWaveformBatch<ParaformerNetwork<T>>(input, null, static (_, w) => w);
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input);
 
-    // The labels a training target names: label ids [length], or one distribution per position [n, vocabulary] read as a
-    // CTC alignment (the most likely symbol per row, repeats merged, blanks removed).
-    private int[] Labels(Tensor<T> target)
-    {
-        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
-            return ConformerAsrNetwork<T>.GreedyCtc(Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize })).ToArray();
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
-            labels[i] = (int)value;
-        }
-        return labels;
-    }
-
-    private int[][] RowLabels(Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], perRow = target.Length / rows;
-        var labels = new int[rows][];
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            labels[r] = Labels(row);
-        }
-        return labels;
-    }
+    private int[][] RowLabels(Tensor<T> input, Tensor<T> target) =>
+        ParseBatchTargetRows(input, target, row => ParseCtcOrTokenTargetLabels(row, _options.VocabSize, ConformerAsrNetwork<T>.GreedyCtc));
 
     /// <summary>
     /// Samples a batch's hotwords as the paper does (section 3.1): with probability r_b the batch samples, and each
@@ -504,7 +459,6 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         var encoder = _encoder ?? throw new InvalidOperationException("No native network.");
         var network = _network ?? throw new InvalidOperationException("No native network.");
         var stage = _options.TrainingStage;
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         Tensor<T>? hotwords = null;
         bool[][] positions = Array.Empty<bool[]>();
         var bias = stage == SeACoTrainingStage.Backbone ? null : _bias;
@@ -514,35 +468,30 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
             positions = sampled.Positions;
             hotwords = bias.Hotwords(sampled.Hotwords.Select(h => network.TargetEmbeddings(h)).ToList());
         }
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
+        return AverageWaveformBatchLoss(input, (r, wave) =>
         {
-            Tensor<T> loss;
             if (bias is not null && hotwords is not null && stage == SeACoTrainingStage.Bias)
             {
                 Tensor<T> acoustic, hidden;
                 using (new Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    var encoded = encoder.Encode(Row(input, r, rows, samples));
+                    var encoded = encoder.Encode(wave);
                     acoustic = Engine.StopGradient(network.TrainingAcousticEmbeddings(encoded, network.Targets(labels[r]).Length));
                     hidden = Engine.StopGradient(network.Hidden(encoded, acoustic));
                 }
-                loss = Engine.Reshape(BiasLoss(bias, hotwords, acoustic, hidden, labels[r], positions[r]), new[] { 1 });
+                return Engine.Reshape(BiasLoss(bias, hotwords, acoustic, hidden, labels[r], positions[r]), new[] { 1 });
             }
-            else
+
+            var encodedBackbone = encoder.Encode(wave);
+            var loss = network.Loss(encodedBackbone, labels[r], _random, null, sample);
+            if (bias is not null && hotwords is not null)
             {
-                var encoded = encoder.Encode(Row(input, r, rows, samples));
-                loss = network.Loss(encoded, labels[r], _random, null, sample);
-                if (bias is not null && hotwords is not null)
-                {
-                    var acoustic = network.TrainingAcousticEmbeddings(encoded, network.Targets(labels[r]).Length);
-                    var hidden = network.Hidden(encoded, acoustic);
-                    loss = Engine.TensorAdd(loss, Engine.Reshape(BiasLoss(bias, hotwords, acoustic, hidden, labels[r], positions[r]), new[] { 1 }));
-                }
+                var acoustic = network.TrainingAcousticEmbeddings(encodedBackbone, network.Targets(labels[r]).Length);
+                var hidden = network.Hidden(encodedBackbone, acoustic);
+                loss = Engine.TensorAdd(loss, Engine.Reshape(BiasLoss(bias, hotwords, acoustic, hidden, labels[r], positions[r]), new[] { 1 }));
             }
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            return loss;
+        });
     }
 
     /// <inheritdoc />

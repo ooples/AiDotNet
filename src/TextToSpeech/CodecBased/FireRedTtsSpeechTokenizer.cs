@@ -177,37 +177,65 @@ internal sealed class FireRedTtsProductQuantizer<T>
     /// commitment loss <c>‖E − sg(Z)‖²</c> averaged over the codebooks. With <paramref name="update"/> the codebooks then
     /// take one EMA step (dead codes replaced first).
     /// </summary>
+    private int[,] _lastQuantizedTokens = new int[0, 0];
+    private Random? _activeRandom;
+
     public (int[,] Tokens, Tensor<T> Quantized, Tensor<T> PreQuantized, Tensor<T> Commitment) Forward(Tensor<T> encoded, bool update, Random random)
     {
         var c = Configuration;
         var projected = Project(encoded);
         int n = projected.Shape[0];
-        var tokens = GroupTokens(projected);
-        var codewords = Lookup(tokens);
+        _activeRandom = random;
+        var codewords = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+            "FireRedVqCodewords",
+            this,
+            stateTag: update ? 1 : 0,
+            new[] { projected },
+            projected._shape,
+            static (self, tag, inputs, dst) => self.ExecuteQuantize(tag == 1, inputs[0], dst));
+        var tokens = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[n, c.Groups] : _lastQuantizedTokens;
         var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), StopGradient(projected)));
         if (update && c.Ordered && c.Groups > 1)
         {
-            double rate = random.NextDouble();
             int width = PerGroup * c.CodebookDim;
-            var keep = new Tensor<T>(new[] { 1, c.Codebooks * c.CodebookDim });
-            for (int g = 0; g < c.Groups; g++)
-                if ((double)g / c.Groups <= rate)
-                    for (int i = 0; i < width; i++) keep[0, g * width + i] = NumOps.One;
+            var keep = AiDotNet.Training.CompiledStepRandom<T>.Draw(
+                new[] { 1, c.Codebooks * c.CodebookDim },
+                m =>
+                {
+                    var span = m.AsWritableSpan();
+                    span.Clear();
+                    double rate = random.NextDouble();
+                    for (int g = 0; g < c.Groups; g++)
+                    {
+                        if ((double)g / c.Groups <= rate)
+                        {
+                            for (int i = 0; i < width; i++) span[g * width + i] = NumOps.One;
+                        }
+                    }
+                });
             straight = _engine.TensorMultiply(straight, _engine.TensorTile(keep, new[] { n, 1 }));
         }
         // F.mse_loss(quantize.detach(), x) per codebook, averaged over them: the same as one mean over every chunk.
         var difference = _engine.TensorSubtract(projected, StopGradient(codewords));
         var commitment = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null),
             NumOps.FromDouble(c.CommitmentWeight / ((double)n * c.Codebooks * c.CodebookDim)));
-        if (update) Update(projected, tokens, random);
         return (tokens, ProjectOut.Forward(straight), ProjectOut.Forward(projected), commitment);
     }
 
-    private Tensor<T> StopGradient(Tensor<T> x)
+    private void ExecuteQuantize(bool update, Tensor<T> currentProjected, Tensor<T> dst)
     {
-        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return x.Clone();
+        var stepTokens = GroupTokens(currentProjected);
+        _lastQuantizedTokens = stepTokens;
+        var stepCodewords = Lookup(stepTokens);
+        if (update && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+        {
+            var rng = _activeRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+            Update(currentProjected, stepTokens, rng);
+        }
+        stepCodewords.AsSpan().CopyTo(dst.AsWritableSpan());
     }
+
+    private Tensor<T> StopGradient(Tensor<T> x) => _engine.StopGradient(x);
 
     // EuclideanCodebook.forward's update: expire_codes_ (codes below the threshold replaced by batch samples), then the EMA
     // of cluster sizes and sums, and the codebook as their Laplace-smoothed ratio.

@@ -171,7 +171,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
 
     private Tensor<T> LogDurations(Tensor<T> hidden)
     {
-        var detached = new Tensor<T>(hidden._shape, hidden.ToVector());
+        var detached = DetachTensor(hidden);
         return Engine.Reshape(_durationPredictor!.Forward(detached), new[] { hidden.Shape[0] });
     }
 

@@ -2512,8 +2512,8 @@ public static class CompiledTapeTrainingStep<T>
         if (!visited.Add(layer))
             return;
 
-        if (layer is NeuralNetworks.Layers.DropoutLayer<T> dropout)
-            dropout.RefreshCompiledTrainingMask();
+        // DropoutLayer registers every traced mask tensor directly with CompiledStepRandom<T> so multi-call
+        // recurrent/prenet dropout layers and closure-objective plans refresh all masks once per replay via RedrawFor.
         if (layer is UncertaintyQuantification.Layers.BayesianDenseLayer<T> bayesianDense)
             bayesianDense.RefreshCompiledTrainingSample();
 

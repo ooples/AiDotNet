@@ -109,17 +109,47 @@ internal sealed class W2vBertNetwork<T>
 
     /// <summary>The network on log-mel features <c>[B, frames, bins]</c>; masked steps of the encoded features are
     /// replaced by N(0, 1) vectors before the contrastive module (§3.2).</summary>
-    public Output Forward(Tensor<T> mel, bool[,]? mask, bool training, Random random)
+    public Output Forward(
+        Tensor<T> mel,
+        bool[,]? mask,
+        bool training,
+        Random random,
+        Tensor<T>? dynamicMaskFlat = null,
+        Tensor<T>? fixedMaskNoise = null)
     {
         var features = Encode(mel);
         int batch = features.Shape[0], length = features.Shape[1], d = _o.ModelDim;
         var input = features;
-        if (mask is not null)
+        if (dynamicMaskFlat is not null)
+        {
+            var drop = _engine.TensorTile(_engine.Reshape(dynamicMaskFlat, new[] { batch, length, 1 }), new[] { 1, 1, d });
+            var keep = _engine.ScalarMinusTensor(NumOps.One, drop);
+            var stdNormal = fixedMaskNoise ?? AiDotNet.Training.CompiledStepRandom<T>.StandardNormal(new[] { batch, length, d }, random);
+            input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), _engine.TensorMultiply(stdNormal, drop));
+        }
+        else if (mask is not null)
         {
             if (mask.GetLength(0) != batch || mask.GetLength(1) != length)
                 throw new ArgumentException($"The mask must be [{batch}, {length}].", nameof(mask));
             int total = batch * length * d;
-            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            if (fixedMaskNoise is not null)
+            {
+                Tensor<T> keep;
+                using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                {
+                    var keepArr = new double[total];
+                    for (int b = 0; b < batch; b++)
+                        for (int t = 0; t < length; t++)
+                            if (!mask[b, t])
+                            {
+                                int rowOffset = (b * length + t) * d;
+                                for (int i = 0; i < d; i++) keepArr[rowOffset + i] = 1.0;
+                            }
+                    keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                }
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), fixedMaskNoise);
+            }
+            else if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             {
                 Tensor<T> keep;
                 Tensor<T> drop;
@@ -192,13 +222,23 @@ internal sealed class W2vBertNetwork<T>
 
     /// <summary>The masked-prediction loss (§3.2): the cross-entropy of each masked step's assigned codebook entry,
     /// summed over the masked steps.</summary>
-    public Tensor<T> MaskedPredictionLoss(Output output, int[,] targets, Tensor<T>? codeOneHot = null)
+    public Tensor<T> MaskedPredictionLoss(
+        Output output,
+        int[,] targets,
+        Tensor<T>? codeOneHot = null,
+        Tensor<T>? dynamicMaskFlat = null)
     {
-        var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
         var logProbabilities = _engine.TensorLogSoftmax(output.Logits, axis: -1);
         Tensor<T> weights;
-        if (codeOneHot is not null)
+        if (dynamicMaskFlat is not null && codeOneHot is not null)
         {
+            int batch = output.Logits.Shape[0], length = output.Logits.Shape[1], vocab = output.Logits.Shape[2];
+            var maskScale = _engine.TensorMultiplyScalar(_engine.Reshape(dynamicMaskFlat, new[] { batch, length, 1 }), NumOps.FromDouble(-1.0));
+            weights = _engine.TensorMultiply(codeOneHot, _engine.TensorTile(maskScale, new[] { 1, 1, vocab }));
+        }
+        else if (codeOneHot is not null)
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
             int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
             Tensor<T> maskScale;
             using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
@@ -213,6 +253,7 @@ internal sealed class W2vBertNetwork<T>
         }
         else
         {
+            var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
             int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
             var weightsArr = new double[batch * length * vocab];
             for (int b = 0; b < batch; b++)

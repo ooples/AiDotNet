@@ -329,7 +329,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    private Tensor<T> Detached(Tensor<T> x) => DetachTensor(x);
 
     // discriminator_loss: Σ mean((1 − D(real))²) + mean(D(fake)²).
     private Tensor<T> DiscriminatorLoss(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)

@@ -746,7 +746,7 @@ internal sealed class MiaVsrNetwork<T>
             // The [B, 2, H, W] corner of the flow, non-finite components replaced by zero
             var region = _engine.TensorNarrow(_engine.TensorNarrow(_engine.TensorNarrow(
                 _engine.TensorNarrow(flow, 0, 0, g.Batch), 1, 0, 2), 2, 0, g.Height), 3, 0, g.Width);
-            var finite = _engine.TensorWhere(_engine.TensorIsFinite(region), region, _engine.TensorZerosLike(region));
+            var finite = _engine.TensorWhere(AiDotNet.Helpers.TensorFiniteness.FiniteMask(_engine, region), region, _engine.TensorZerosLike(region));
             var dx = TensorCopyHelper.CastLogical<T, double>(_engine.TensorNarrow(finite, 1, 0, 1)).ToArray();
             var dy = TensorCopyHelper.CastLogical<T, double>(_engine.TensorNarrow(finite, 1, 1, 1)).ToArray();
             return (dx, dy);

@@ -202,11 +202,12 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithCustomLoss(image, _ =>
+            TrainWithCustomObjective(image, target, (stepImage, stepTarget) =>
             {
-                var (logits, auxiliary) = network.Forward(image, training: true, _trainingRandom, withAuxiliary: true);
-                return Engine.TensorAdd(PixelCrossEntropy(Engine, Crop(logits, height, width), target),
-                    Engine.TensorMultiplyScalar(PixelCrossEntropy(Engine, Crop(auxiliary!, height, width), target),
+                var (logits, auxiliary) = network.Forward(stepImage, training: true, _trainingRandom, withAuxiliary: true);
+                var auxTensor = auxiliary ?? throw new InvalidOperationException("VisionMamba training forward must emit auxiliary logits.");
+                return Engine.TensorAdd(PixelCrossEntropy(Engine, Crop(logits, height, width), stepTarget),
+                    Engine.TensorMultiplyScalar(PixelCrossEntropy(Engine, Crop(auxTensor, height, width), stepTarget),
                         NumOps.FromDouble(network.Configuration.AuxiliaryWeight)));
             }, Optimizer);
         }

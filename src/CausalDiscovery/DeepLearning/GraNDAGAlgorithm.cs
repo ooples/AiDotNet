@@ -100,8 +100,12 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             w1Columns[j] = Engine.TensorConcatenate(inputs.ToArray(), 0);
             w2Rows[j] = Engine.TensorSliceAxis(draws, 0, d - 1);
         }
-        var W1 = Engine.TensorStack(w1Columns, 1);
-        var W2 = Engine.TensorStack(w2Rows, 0);
+        var w1Stacked = Engine.TensorStack(w1Columns, 1);
+        var w2Stacked = Engine.TensorStack(w2Rows, 0);
+        var W1 = new Tensor<T>(w1Stacked._shape);
+        w1Stacked.AsSpan().CopyTo(W1.AsWritableSpan());
+        var W2 = new Tensor<T>(w2Stacked._shape);
+        w2Stacked.AsSpan().CopyTo(W2.AsWritableSpan());
 
         T lr = NumOps.FromDouble(LearningRate);
         double alphaD = 0.0;
@@ -139,12 +143,14 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         var weightMask = Engine.TensorBroadcastTo(offDiagonal.Reshape(new[] { d, d, 1 }), w1Shape);
         var zerosW1 = new Tensor<T>(w1Shape);
         int warmStartEpochs = MaxEpochs / 3;
+        using var stepArena = Tensors.Helpers.TensorArena.Create();
 
         for (int outer = 0; outer < MaxEpochs; outer++)
         {
             bool acyclicityActive = outer >= warmStartEpochs;
             for (int inner = 0; inner < 20; inner++)
             {
+                stepArena.Reset();
                 // Batched forward / backward over all n samples and all d variables:
                 // H_j = sigmoid(X * W1[j]), pred_j = H_j * W2[j], and the Gaussian-NLL residual
                 // (pred_j - x_j)/n backpropagated to gW1[j] = X^T * dH_j and gW2[j] = H_j^T * resid_j.
@@ -207,12 +213,16 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 // the per-step weight change to 10*lr so a transiently large
                 // acyclicity force cannot launch the unbounded MLP weights into
                 // the exp-overflow regime.
-                W1 = Engine.TensorSubtract(W1, Engine.TensorMultiplyScalar(Engine.TensorClamp(gW1, clipLo, clipHi), lr));
-                W2 = Engine.TensorSubtract(W2, Engine.TensorMultiplyScalar(Engine.TensorClamp(gW2, clipLo, clipHi), lr));
+                var nextW1 = Engine.TensorSubtract(W1, Engine.TensorMultiplyScalar(Engine.TensorClamp(gW1, clipLo, clipHi), lr));
+                var nextW2 = Engine.TensorSubtract(W2, Engine.TensorMultiplyScalar(Engine.TensorClamp(gW2, clipLo, clipHi), lr));
 
-                // Zero diagonal
-                W1 = Engine.TensorWhere(weightMask, W1, zerosW1);
+                // Zero diagonal and copy back into persistent non-pooled weights before recycling stepArena.
+                nextW1 = Engine.TensorWhere(weightMask, nextW1, zerosW1);
+                nextW1.AsSpan().CopyTo(W1.AsWritableSpan());
+                nextW2.AsSpan().CopyTo(W2.AsWritableSpan());
             }
+
+            stepArena.Reset();
 
             // Outer: update augmented Lagrangian per the NOTEARS dual schedule
             // GraN-DAG adopts (Lachapelle et al. 2020 §3.2 / Zheng et al. 2018):

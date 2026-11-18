@@ -20,7 +20,7 @@ $source = Invoke-FailoverApi "repos/$Repository/actions/artifacts/$SourceArtifac
 Assert-FailoverSourceArtifact $source $SourceArtifactId $SourceArtifactDigest $TestedSha $RunId
 $jobs = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/attempts/$RunAttempt/jobs" -Paginate)
 $artifacts = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/artifacts" -Paginate)
-$runners = if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
+[object[]]$runners = if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
     @(Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken)
 } else { @() }
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null

@@ -16997,11 +16997,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> data,
         Func<Tensor<T>, Tensor<T>> objective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null,
+        bool sessionPerOptimizer = false)
     {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (objective is null) throw new ArgumentNullException(nameof(objective));
-        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider);
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider, sessionPerOptimizer: sessionPerOptimizer);
     }
 
     public T TrainWithCustomLoss(
@@ -17023,6 +17024,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>> computeLoss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
         SetTrainingMode(true);
         try
         {

@@ -662,15 +662,22 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         var ops = MathHelper.GetNumericOperations<T>();
         int length = values.Length;
         var flat = engine.Reshape(values, new[] { length });
-        // Source positions in double (index arithmetic), as the reference computes them in float.
-        var source = engine.TensorMax(engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorAddScalar(
-            engine.TensorArange<double>(0, size, 1), 0.5), (double)length / size), -0.5), 0.0);
-        var low = engine.TensorMin(engine.TensorFloor(source).Cast<int>(), length - 1);
-        var high = engine.TensorMin(engine.TensorAddScalar(low, 1), length - 1);
-        var weight = engine.TensorSubtract(source, low.Cast<double>()).Cast<T>();
+        Tensor<int> low;
+        Tensor<int> high;
+        Tensor<T> weight;
+        Tensor<T> keep;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            // Source positions in double (index arithmetic), as the reference computes them in float.
+            var source = engine.TensorMax(engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorAddScalar(
+                engine.TensorArange<double>(0, size, 1), 0.5), (double)length / size), -0.5), 0.0);
+            low = engine.TensorMin(engine.TensorFloor(source).Cast<int>(), length - 1);
+            high = engine.TensorMin(engine.TensorAddScalar(low, 1), length - 1);
+            weight = engine.TensorSubtract(source, low.Cast<double>()).Cast<T>();
+            keep = engine.TensorAddScalar(engine.TensorNegate(weight), ops.One);
+        }
         var a = engine.TensorIndexSelect(flat, low, 0);
         var b = engine.TensorIndexSelect(flat, high, 0);
-        var keep = engine.TensorAddScalar(engine.TensorNegate(weight), ops.One);
         return engine.TensorAdd(engine.TensorMultiply(keep, a), engine.TensorMultiply(weight, b));
     }
 

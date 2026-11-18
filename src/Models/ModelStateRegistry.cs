@@ -15,6 +15,11 @@ using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.Models;
 
+internal interface IValidatableModelState
+{
+    void ValidateModelState();
+}
+
 /// <summary>
 /// Attaches declared state to a payload whose format this code does not know.
 /// </summary>
@@ -1040,9 +1045,11 @@ public sealed class ModelStateRegistry<T>
         string json = reader.ReadString();
         try
         {
-            return JsonConvert.DeserializeObject<TState>(json, ObjectStateSettings)
+            var restored = JsonConvert.DeserializeObject<TState>(json, ObjectStateSettings)
                 ?? throw new InvalidOperationException(
                     $"State '{name}' deserialized to null for '{typeof(TState).FullName}'.");
+            (restored as IValidatableModelState)?.ValidateModelState();
+            return restored;
         }
         catch (JsonException exception)
         {

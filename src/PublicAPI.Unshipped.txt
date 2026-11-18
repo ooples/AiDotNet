@@ -3,7 +3,8 @@ virtual AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.Repor
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateAccepted() -> void
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateRejected() -> void
 override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
-override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.Deserialize(byte[]! data) -> void
+AiDotNet.Audio.Features.AudioFeatureExtractorBase<T>.ExtractSpectrogramBatch<TSpec>(AiDotNet.Tensors.LinearAlgebra.Tensor<TSpec>! spectrogram, System.Func<int, AiDotNet.Tensors.LinearAlgebra.Tensor<TSpec>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! extract2D) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.DetachTensor(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RequiresRetainedGeneration.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RequiresRetainedGeneration.get -> bool
 *REMOVED*override AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
@@ -2121,7 +2122,6 @@ override AiDotNet.Audio.Generation.EnCodec<T>.EncodeLatent(AiDotNet.Tensors.Line
 override AiDotNet.Audio.Generation.EnCodec<T>.DecodeLatent(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! latent) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.Generation.EnCodec<T>.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int quantizers) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.Generation.EnCodec<T>.SampleTrainingBandwidth(System.Random! random) -> (int Quantizers, int Bandwidth)
-override AiDotNet.Audio.SpeechRecognition.Conformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.SpeechRecognition.Conformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.SpeechRecognition.Conformer<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.Audio.Generation.EnCodec<T>.GeneratorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -3938,7 +3938,6 @@ AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions.MaskTimeProbability.set -> 
 AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions.MaskTimeProbability.get -> double
 AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions.FreezeFeatureEncoder.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Streaming.TDTDecoder<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.ProprietaryAPI.SpeechmaticsASROptions.FeedForwardMultiplier.get -> int
 AiDotNet.SpeechRecognition.ProprietaryAPI.SpeechmaticsASROptions.FeedForwardMultiplier.set -> void
 AiDotNet.SpeechRecognition.ProprietaryAPI.SpeechmaticsASROptions.ConvKernel.get -> int
@@ -4043,10 +4042,8 @@ override AiDotNet.TextToSpeech.Classic.SpeedySpeech<T>.TryApplyLearningRule(AiDo
 override AiDotNet.TextToSpeech.Classic.SpeedySpeech<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.SpeechRecognition.WhisperFamily.DistilWhisper<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
-override AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read, System.Func<string!, bool>! has) -> void
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.Transcribe(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, string? language = null, bool? includeTimestamps = null) -> AiDotNet.Interfaces.TranscriptionResult<T>!
-override AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions.Language.get -> AiDotNet.TextToSpeech.EndToEnd.MeloLanguage
 AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions.Language.set -> void
 AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions.WindowSize.set -> void
@@ -4118,7 +4115,6 @@ override AiDotNet.SpeechRecognition.Specialized.WhisperCPP<T>.PreprocessAudio(Ai
 AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read, System.Func<string!, bool>! has) -> void
 override AiDotNet.SpeechRecognition.Specialized.WhisperCPP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Classic.SpeedySpeech<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
-override AiDotNet.SpeechRecognition.ProprietaryAPI.SpeechmaticsASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.DistilWhisper<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.TranscribeAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, string? language = null, bool? includeTimestamps = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<AiDotNet.Interfaces.TranscriptionResult<T>!>!
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.DetectLanguage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> string!
@@ -4131,7 +4127,6 @@ override AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.ForwardForTraining(AiDo
 override AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
 override AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
 override AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.WhisperCPP<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions.NumLayersPerStack.set -> void
@@ -4190,7 +4185,6 @@ AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions.TimeMasks.get -
 AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions.TimeMasks.set -> void
 AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions.TimeMaskRatio.get -> double
 AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions.TimeMaskRatio.set -> void
-override AiDotNet.SpeechRecognition.NeMo.ParakeetTDT<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.Language.get -> AiDotNet.TextToSpeech.EndToEnd.MeloLanguage
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.PostprocessOutput(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -4267,7 +4261,6 @@ AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions.MaxGradientNorm.set -> void
 AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions.Vocabulary.set -> void
 AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions.Vocabulary.get -> string![]?
 override AiDotNet.SpeechRecognition.ProprietaryAPI.SpeechmaticsASR<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Streaming.StreamingZipformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SupportsParameterMutation.get -> bool
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
@@ -4331,7 +4324,6 @@ AiDotNet.SpeechRecognition.Foundation.UniSpeechOptions.MaskTimeProbability.set -
 AiDotNet.SpeechRecognition.Foundation.UniSpeechOptions.FreezeFeatureEncoder.get -> bool
 AiDotNet.SpeechRecognition.Foundation.UniSpeechOptions.FreezeFeatureEncoder.set -> void
 override AiDotNet.SpeechRecognition.Robust.SpeechBrain<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTC<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Multilingual.USMOptions.CodebookSize.get -> int
 AiDotNet.SpeechRecognition.Multilingual.USMOptions.CodebookSize.set -> void
 AiDotNet.SpeechRecognition.Multilingual.USMOptions.NumCodebooks.get -> int
@@ -4375,10 +4367,8 @@ AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASROptions.TimeMaskRatio.set -> 
 AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASROptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASROptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASR<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.Foundation.UniSpeech<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Foundation.UniSpeech<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Classic.SpeedySpeech<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
-override AiDotNet.SpeechRecognition.Robust.SpeechBrain<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.ThrowIfCannotTrain() -> void
@@ -4406,7 +4396,6 @@ AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.SemanticCodecDim.get -> int
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.SemanticCodecDim.set -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.SemanticCodecIntermediate.get -> int
 override AiDotNet.SpeechRecognition.Foundation.UniSpeech<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
-override AiDotNet.SpeechRecognition.Multilingual.USM<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTC<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.Robust.SpeechBrain<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Robust.SpeechBrain<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -4676,9 +4665,6 @@ AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions.TimeMaskRatio.get -> doub
 AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions.TimeMaskRatio.set -> void
 AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions.Vocabulary.set -> void
-override AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Streaming.StreamingConformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.AlibabaASR.SenseVoice<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.OutputFeatureWidth.get -> int
 AiDotNet.SpeechRecognition.Robust.RobustConformerOptions.FeedForwardDim.set -> void
 AiDotNet.SpeechRecognition.Robust.RobustConformerOptions.FeedForwardDim.get -> int
@@ -4705,7 +4691,6 @@ AiDotNet.SpeechRecognition.Robust.RobustConformerOptions.MaskTimeProbability.set
 override AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.SpeechRecognition.Streaming.StreamingConformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.NeMo.ParakeetRNNT<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Robust.RobustConformer<T>.OutputFeatureWidth.get -> int
 AiDotNet.SpeechRecognition.Multilingual.OWSMOptions.FeedForwardMultiplier.get -> int
 AiDotNet.SpeechRecognition.Multilingual.OWSMOptions.FeedForwardMultiplier.set -> void
@@ -4742,7 +4727,6 @@ override AiDotNet.SpeechRecognition.AlibabaASR.SenseVoice<T>.ForwardForTraining(
 override AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.SpeechRecognition.Streaming.StreamingConformer<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.NeMo.ParakeetRNNT<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Robust.RobustConformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.Classic.ProDiff<T>.CurrentPhase.get -> AiDotNet.TextToSpeech.Classic.ProDiffTrainingPhase
 AiDotNet.TextToSpeech.Classic.ProDiff<T>.BeginDistillation() -> void
 AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.LoadSpeechTokenizer(string! hubertCheckpoint, string! kmeansModel) -> void
@@ -4752,8 +4736,6 @@ AiDotNet.SpeechRecognition.Robust.RobustConformer<T>.ContinualPretrain(AiDotNet.
 override AiDotNet.SpeechRecognition.ProprietaryAPI.SarvamASR<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.FitSpeechUnits(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings, int iterations = 20) -> void
 AiDotNet.TextToSpeech.Classic.ProDiff<T>.BeginDistillation(AiDotNet.TextToSpeech.Classic.ProDiff<T>! teacher) -> void
-override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Multilingual.OWSM<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.SupportedLanguages.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.SupportsStreaming.get -> bool
@@ -4782,7 +4764,6 @@ AiDotNet.SpeechRecognition.NeMo.ParakeetCTCOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.NeMo.ParakeetCTCOptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.ResolveLazyLayerShapes() -> void
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.LoadReleasedWeights(string! directory) -> void
-override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Robust.RobustConformer<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.Transcribe(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, string? language = null, bool? includeTimestamps = null) -> AiDotNet.Interfaces.TranscriptionResult<T>!
@@ -4800,7 +4781,6 @@ override AiDotNet.SpeechRecognition.Multilingual.OWSM<T>.TryApplyLearningRule(Ai
 override AiDotNet.SpeechRecognition.LLMIntegrated.SeedASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.NeMo.ParakeetCTC<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.SeedASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.ProprietaryAPI.RevAIOptions.FeedForwardMultiplier.get -> int
 AiDotNet.SpeechRecognition.ProprietaryAPI.RevAIOptions.FeedForwardMultiplier.set -> void
@@ -4900,7 +4880,6 @@ AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions.Vocabulary.set -> 
 override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
-override AiDotNet.SpeechRecognition.ProprietaryAPI.RevAI<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.ThrowIfCannotTrain() -> void
@@ -4946,12 +4925,10 @@ override AiDotNet.TextToSpeech.Classic.ProDiff<T>.SupportsParameterMutation.get 
 override AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 override AiDotNet.SpeechRecognition.ProprietaryAPI.RevAI<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Collections.Generic.IReadOnlyList<int>! labels) -> (int[]! LabelFrames, double Confidence)
 override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
 override AiDotNet.SpeechRecognition.ProprietaryAPI.RevAI<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumEncoderLayers.get -> int
 override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumEncoderLayers.set -> void
@@ -5081,12 +5058,10 @@ AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions.TailThreshold.set -> vo
 AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions.Vocabulary.set -> void
 AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions.Vocabulary.get -> string![]?
 override AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GroqWhisper<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GroqWhisper<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Multilingual.MMS<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
-override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GroqWhisper<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.Multilingual.MMS<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -5181,12 +5156,10 @@ AiDotNet.SpeechRecognition.Multilingual.Chirp3Options.MaskLength.get -> int
 AiDotNet.SpeechRecognition.Multilingual.Chirp3Options.MaskNoiseStd.get -> double
 AiDotNet.SpeechRecognition.Multilingual.Chirp3Options.MaskLength.set -> void
 AiDotNet.SpeechRecognition.Multilingual.Chirp3Options.MaskNoiseStd.set -> void
-override AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>.OutputFeatureWidth.get -> int
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
 AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
-override AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
 AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
@@ -5235,7 +5208,6 @@ override AiDotNet.TextToSpeech.Classic.PortaSpeech<T>.SelectTrainableParametersF
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GladiaASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GladiaASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.GladiaASR<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
 AiDotNet.SpeechRecognition.ProprietaryAPI.DeepgramNova2Options.FeedForwardMultiplier.get -> int
@@ -5253,7 +5225,6 @@ AiDotNet.SpeechRecognition.ProprietaryAPI.DeepgramNova2Options.Vocabulary.set ->
 AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
 override AiDotNet.SpeechRecognition.ProprietaryAPI.DeepgramNova2<T>.OutputFeatureWidth.get -> int
 override AiDotNet.TextToSpeech.Classic.PortaSpeech<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
-override AiDotNet.SpeechRecognition.ProprietaryAPI.DeepgramNova2<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.DeepgramNova2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Classic.PortaSpeech<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
@@ -5290,12 +5261,10 @@ AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTTOptions.TimeMaskRatio.se
 AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTTOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTTOptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTT<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.Multilingual.Chirp<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.Chirp<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Classic.PortaSpeech<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 AiDotNet.SpeechRecognition.Multilingual.Chirp<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
 AiDotNet.SpeechRecognition.Multilingual.Chirp<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
-override AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTT<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NonAttentiveTacotronOptions(AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions! other) -> void
 AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NonAttentiveTacotronOptions() -> void
 AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.EmbeddingDim.get -> int
@@ -5378,7 +5347,6 @@ AiDotNet.SpeechRecognition.ProprietaryAPI.AWSTranscribeOptions.Vocabulary.set ->
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AWSTranscribe<T>.OutputFeatureWidth.get -> int
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>.MaskGCT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions? options) -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>.MaskGCT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
-override AiDotNet.SpeechRecognition.ProprietaryAPI.AWSTranscribe<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AWSTranscribe<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -5424,7 +5392,6 @@ AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2Options.Vocabulary
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2<T>.OutputFeatureWidth.get -> int
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>.LoadReferenceWeights(string! directory, string! semanticModelPath, string! statisticsPath) -> void
-override AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
@@ -12003,13 +11970,8 @@ AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.TimeMasks.get -> 
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.TimeMasks.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.TimeMaskRatio.get -> double
 AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions.TimeMaskRatio.set -> void
-override AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.ConformerFamily.EBranchformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTC<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.ConformerFamily.Branchformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ConformerFamily.EBranchformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTC<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.ConformerFamily.Branchformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -12230,7 +12192,6 @@ override AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASR<T>.TryApplyLearningRul
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.OutputFeatureWidth.get -> int
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.PostprocessOutput(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions.FeedForwardDim.get -> int
 AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions.FeedForwardDim.set -> void
 AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions.PositionalConvGroups.get -> int
@@ -12295,14 +12256,12 @@ AiDotNet.SpeechRecognition.Foundation.BESTRQOptions.MaskNoiseStd.get -> double
 AiDotNet.SpeechRecognition.Foundation.BESTRQOptions.MaskNoiseStd.set -> void
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeech<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
 override AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLM<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.NeMo.NemotronSpeechOptions.FeedForwardMultiplier.get -> int
@@ -12368,7 +12327,6 @@ AiDotNet.SpeechRecognition.NeMo.NeMoMultitaskOptions.TimeMaskRatio.get -> double
 AiDotNet.SpeechRecognition.NeMo.NeMoMultitaskOptions.TimeMaskRatio.set -> void
 AiDotNet.SpeechRecognition.NeMo.NeMoMultitaskOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.NeMo.NeMoMultitaskOptions.Vocabulary.set -> void
-override AiDotNet.SpeechRecognition.Foundation.Data2VecASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Foundation.Data2VecASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.NeMo.NeMoMultitask<T>.OutputFeatureWidth.get -> int
 AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
@@ -12408,7 +12366,6 @@ AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions.Instruction.set -> void
 AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions.Vocabulary.get -> string![]?
 AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.Streaming.MoonshineBase<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.Foundation.BESTRQ<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FeedForwardMultiplier.get -> int
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.FeedForwardMultiplier.set -> void
 AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions.RopeTheta.get -> double
@@ -12469,7 +12426,6 @@ override AiDotNet.SpeechRecognition.Streaming.EmformerRNNT<T>.OutputFeatureWidth
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 AiDotNet.SpeechRecognition.Foundation.BESTRQ<T>.PretrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random? random = null) -> T
-override AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.OutputFeatureWidth.get -> int
 AiDotNet.SpeechRecognition.Foundation.BESTRQ<T>.Pretrain(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> T
 AiDotNet.SpeechRecognition.Streaming.FastEmitOptions.FeedForwardMultiplier.get -> int
@@ -12496,7 +12452,6 @@ AiDotNet.SpeechRecognition.Streaming.FastEmitOptions.TimeMaskRatio.set -> void
 AiDotNet.SpeechRecognition.Streaming.FastEmitOptions.TimeMaskRatio.get -> double
 AiDotNet.SpeechRecognition.Streaming.FastEmitOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.Streaming.FastEmitOptions.Vocabulary.set -> void
-override AiDotNet.SpeechRecognition.NeMo.NeMoMultitask<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.TimeReductionInputDim.get -> int
 AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.TimeReductionStride.get -> int
 AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.TimeReductionInputDim.set -> void
@@ -12526,13 +12481,9 @@ AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.TimeMaskRatio.set -> vo
 AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.Vocabulary.get -> string![]!
 AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.Streaming.Moonshine<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.NeMo.CanaryFlash<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Streaming.FastEmit<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 override AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
-override AiDotNet.SpeechRecognition.Streaming.MoonshineBase<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions.EncoderFeedForwardDim.set -> void
 AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions.EncoderFeedForwardDim.get -> int
 AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions.DownsampleChannels.get -> int
@@ -12607,7 +12558,6 @@ override AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>.PreprocessAudio(AiDotNet.
 override AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.NeMo.NeMoMultitask<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>.OutputFeatureWidth.get -> int
-override AiDotNet.SpeechRecognition.Streaming.EmformerRNNT<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.LfrM.get -> int
 AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.LfrM.set -> void
 AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.LfrN.get -> int
@@ -12720,19 +12670,16 @@ AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.Vocabulary.set -> void
 override AiDotNet.SpeechRecognition.Streaming.EmformerRNNT<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>.FirstPassTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> int[]!
-override AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLarge<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLarge<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -12796,7 +12743,6 @@ override AiDotNet.SpeechRecognition.Robust.NoiseRobustASR<T>.PreprocessAudio(AiD
 override AiDotNet.SpeechRecognition.Robust.NoiseRobustASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.MedicalASR<T>.OutputFeatureWidth.get -> int
 override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.SpeechRecognition.Robust.ESPnetASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Specialized.MedicalASR<T>.CurrentSamplingProbability.get -> double
 AiDotNet.SpeechRecognition.Specialized.MedicalASROptions.ScheduledSamplingProbability.get -> double
 AiDotNet.SpeechRecognition.Specialized.MedicalASROptions.ScheduledSamplingProbability.set -> void
@@ -12822,8 +12768,6 @@ AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions.AttentionConvFilt
 AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions.AttentionConvFilters.set -> void
 AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions.EncoderProjection.set -> void
 AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions.EncoderProjection.get -> int
-override AiDotNet.SpeechRecognition.Robust.AVHuBERT<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.SpeechRecognition.Specialized.MedicalASR<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<T>.OutputFeatureWidth.get -> int
 override AiDotNet.SpeechRecognition.Robust.ESPnetASR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions.Vocabulary.set -> void
@@ -24865,9 +24809,11 @@ static AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.ContentOnly(A
 AiDotNet.MetaLearning.Algorithms.INTMController<T>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
 AiDotNet.MetaLearning.Algorithms.INTMController<T>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
 AiDotNet.MetaLearning.Algorithms.INTMController<T>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.Clone() -> AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>!
 AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
 AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
 AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.Clone() -> AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>!
 AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
 AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
 AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!

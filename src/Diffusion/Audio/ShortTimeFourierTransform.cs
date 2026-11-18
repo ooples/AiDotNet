@@ -501,34 +501,8 @@ public partial class ShortTimeFourierTransform<T>
     /// </remarks>
     public Tensor<T> Magnitude(Tensor<T> signal)
     {
-        // Try GPU-accelerated path first
-        if (_windowTensor != null && Engine.SupportsGpu)
-        {
-            try
-            {
-                Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out var magnitude, out _);
-
-                // Only take the accelerated result if it agrees with this transform's declared bin
-                // count. That path may round the transform size up to a power of two — for Whisper's
-                // 25ms window at 16kHz, nFft 400 becomes 512 and the magnitude comes back with 257
-                // bins instead of 201. NumFrequencyBins (nFft/2+1) is the contract every caller sizes
-                // against, the mel filterbank above all, so a mismatch fails with "Power spectrogram
-                // has 257 frequency bins but filterbank expects 201". Fall through to the exact CPU
-                // transform when they disagree rather than returning a differently-binned spectrum.
-                if (magnitude.Shape.Length > 0 && magnitude.Shape[^1] == NumFrequencyBins)
-                {
-                    return magnitude;
-                }
-            }
-            catch
-            {
-                // Fall back to CPU implementation on any error
-            }
-        }
-
-        // CPU fallback
-        var complex = Forward(signal);
-        return ComputeMagnitude(complex);
+        ComputeMagnitudeAndPhase(signal, out var magnitude, out _, out _);
+        return magnitude;
     }
 
     /// <summary>
@@ -572,9 +546,14 @@ public partial class ShortTimeFourierTransform<T>
         {
             try
             {
-                Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out magnitude, out phase);
-                power = Engine.TensorSquare(magnitude);
-                return;
+                Engine.STFT(signal, _nFft, _hopLength, _windowTensor, _center, out var gpuMagnitude, out var gpuPhase);
+                if (gpuMagnitude.Shape.Length > 0 && gpuMagnitude.Shape[^1] == NumFrequencyBins)
+                {
+                    magnitude = gpuMagnitude;
+                    phase = gpuPhase;
+                    power = Engine.TensorSquare(gpuMagnitude);
+                    return;
+                }
             }
             catch
             {
@@ -683,8 +662,9 @@ public partial class ShortTimeFourierTransform<T>
         var real = Engine.TensorMatMul(windowed, dftReal);
         var imag = Engine.TensorMatMul(windowed, dftImag);
 
-        power = Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag));
-        magnitude = Engine.TensorSqrt(power);
+        var rawPower = Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag));
+        magnitude = Engine.TensorSqrt(rawPower);
+        power = Engine.TensorSquare(magnitude);
         phase = Engine.TensorAtan2(imag, real);
     }
 

@@ -115,11 +115,23 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         public long Age { get; set; }
     }
 
-    private sealed class HalfTapeCheckpoint
+    private sealed class HalfTapeCheckpoint : AiDotNet.Models.IValidatableModelState
     {
         public int Version { get; set; }
         public int ParameterCount { get; set; }
         public Dictionary<int, HalfTapeSlot> Slots { get; set; } = new();
+
+        public void ValidateModelState()
+        {
+            if (Version != 1 || ParameterCount < 0 || Slots is null)
+                throw new InvalidOperationException("Invalid Half Adam tape checkpoint header.");
+            foreach (var entry in Slots)
+            {
+                if (entry.Key < 0 || entry.Key >= ParameterCount || entry.Value is null)
+                    throw new InvalidOperationException("Invalid Half Adam tape checkpoint parameter index.");
+                ValidateHalfTapeSlot(entry.Value);
+            }
+        }
     }
 
     [Buffer]
@@ -139,17 +151,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
         set
         {
-            if (value is not null)
-            {
-                if (value.Version != 1 || value.ParameterCount < 0 || value.Slots is null)
-                    throw new InvalidOperationException("Invalid Half Adam tape checkpoint header.");
-                foreach (var entry in value.Slots)
-                {
-                    if (entry.Key < 0 || entry.Key >= value.ParameterCount || entry.Value is null)
-                        throw new InvalidOperationException("Invalid Half Adam tape checkpoint parameter index.");
-                    ValidateHalfTapeSlot(entry.Value);
-                }
-            }
+            value?.ValidateModelState();
             ResetHalfTapeState();
             if (value is null) return;
             _halfTapeVersion = value.Version;
@@ -162,21 +164,17 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     // FP32 slots losslessly when T is Half, so the existing export capability gate must refuse it.
     internal override bool SupportsShardedTapeStateConsolidation => typeof(T) != typeof(Half);
 
-    public override void Deserialize(byte[] data)
+    private protected override StagedRestore StageDeserialize(byte[] data)
     {
-        if (typeof(T) != typeof(Half)) { base.Deserialize(data); return; }
-        if (data is null) throw new ArgumentNullException(nameof(data));
+        var staged = base.StageDeserialize(data);
+        if (typeof(T) != typeof(Half)) return staged;
         // Missing promoted state in an old payload must not reuse state from the target instance.
-        // The existing atomic restore takes a rollback snapshot before this fallible commit.
-        RunAtomicRestore(data, payload =>
+        // HalfTapeCheckpoint validates at stage time via IValidatableModelState, so commit stays snapshot-free.
+        return new StagedRestore(staged.Options, () =>
         {
-            var staged = StageDeserialize(payload);
-            return new StagedRestore(staged.Options, () =>
-            {
-                ResetHalfTapeState();
-                staged.Commit();
-            }, hasFallibleCommit: true);
-        });
+            ResetHalfTapeState();
+            staged.Commit();
+        }, staged.HasFallibleCommit);
     }
 
     private void ResetHalfTapeState()

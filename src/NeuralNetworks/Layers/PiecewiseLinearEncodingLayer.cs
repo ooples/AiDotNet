@@ -124,7 +124,7 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
         var nonFiniteValue = new Tensor<T>(byFeature._shape);
         nonFiniteValue.Fill(NumOps.One);
         var nonFinite = Engine.TensorNonzero(
-            Engine.TensorWhere(Engine.TensorIsFinite(byFeature), finiteValue, nonFiniteValue)); // [count, 2]
+            Engine.TensorWhere(AiDotNet.Helpers.TensorFiniteness.FiniteMask(Engine, byFeature), finiteValue, nonFiniteValue)); // [count, 2]
         if (nonFinite.Shape[0] > 0)
         {
             var first = nonFinite.Contiguous().AsSpan();

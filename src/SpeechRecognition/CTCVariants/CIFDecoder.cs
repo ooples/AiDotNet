@@ -148,94 +148,28 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         Layers.AddRange(layers);
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
-    }
-
-    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
-    {
-        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // The decoder's logits [1, labels] for the first integrated embedding of a waveform [S] (the whole weight integrated
     // when it is under one), or [batch, 1, labels] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
+    private Tensor<T> Logits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) =>
         {
-            var encoded = _network.Encode(_network.FeatureTensor(Row(input, r, rows, samples)));
-            var logits = _network.Decode(ParaformerNetwork<T>.Integrate(Engine, encoded, _network.Alphas(encoded), 1));
-            outputs[r] = logits;
-        }
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+            var encoded = net.Encode(net.FeatureTensor(wave));
+            return net.Decode(ParaformerNetwork<T>.Integrate(Engine, encoded, net.Alphas(encoded), 1));
+        });
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input);
 
-    // The labels a training target names: label ids [length], or one distribution per position [n, labels] read as a CTC
-    // alignment (the most likely label per row, repeats merged, blanks removed).
-    private int[] Labels(Tensor<T> target)
-    {
-        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
-            return ConformerAsrNetwork<T>.GreedyCtc(Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize })).ToArray();
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
-            labels[i] = (int)value;
-        }
-        return labels;
-    }
-
-    private int[][] RowLabels(Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], perRow = target.Length / rows;
-        var labels = new int[rows][];
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            labels[r] = Labels(row);
-        }
-        return labels;
-    }
-
-    // Equation 1's loss [1], averaged over the batch.
-    private Tensor<T> BatchLoss(CifAsrNetwork<T> network, Tensor<T> input, int[][] labels)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = network.Loss(network.Encode(network.FeatureTensor(Row(input, r, rows, samples))), labels[r]);
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-    }
+    private int[] Labels(Tensor<T> target) => ParseCtcOrTokenTargetLabels(target, _options.VocabSize, ConformerAsrNetwork<T>.GreedyCtc);
 
     /// <inheritdoc />
     /// <remarks>The paper's loss (<see cref="CifAsrNetwork{T}.Loss"/>), averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        var labels = RowLabels(input, target);
-        TrainWithCustomObjective(input, target, (stepInput, _) => BatchLoss(network, stepInput, labels), _optimizer);
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(input, target, _network, _optimizer, (_, row) => Labels(row),
+            (net, wave, rowLabels) => net.Loss(net.Encode(net.FeatureTensor(wave)), rowLabels));
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
@@ -243,12 +177,9 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, RowLabels(input, target))[0];
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(input, target, _network, (_, row) => Labels(row),
+            (net, wave, rowLabels) => net.Loss(net.Encode(net.FeatureTensor(wave)), rowLabels));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

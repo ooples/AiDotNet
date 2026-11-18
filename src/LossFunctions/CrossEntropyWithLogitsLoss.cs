@@ -429,6 +429,13 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         var oneHotLast = Engine.TensorEquals(
             Engine.TensorBroadcastTo(roundedIndices, lastAxisShape),
             Engine.TensorBroadcastTo(classIds, lastAxisShape));
-        return Engine.TensorMoveDim(oneHotLast, indicesShape.Length, classAxis).Contiguous();
+        int rank = lastAxisShape.Length;
+        if (classAxis == rank - 1)
+            return oneHotLast.Contiguous();
+        var perm = new int[rank];
+        int src = 0;
+        for (int dst = 0; dst < rank; dst++)
+            perm[dst] = dst == classAxis ? rank - 1 : src++;
+        return Engine.TensorPermute(oneHotLast, perm).Contiguous();
     }
 }

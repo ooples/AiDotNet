@@ -153,19 +153,10 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         Layers.AddRange(layers);
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return rawAudio;
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds =>
+        _network is not null ? _options.MaxAudioLengthSeconds : null;
 
-    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
-    {
-        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
-    }
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => base.PreprocessAudio(rawAudio);
 
     private CodeSwitchingAsrNetwork<T> RequireNetwork() =>
         _network ?? throw new NotSupportedException("This operation runs on the native paper network.");
@@ -277,31 +268,9 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         => throw new NotSupportedException("CodeSwitchingASR does not support streaming.");
 
     // CTC logits [frames, V] for a waveform [S], or [batch, frames, V] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-        {
-            var wave = Row(input, r, rows, samples);
-            if (samples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
-            outputs[r] = _network.CtcLogits(_network.Encode(_network.FeatureTensor(wave), training, training ? _random : null));
-        }
-        return input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
-
-    private Tensor<T>[] Rows(Tensor<T> input)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var flat = Engine.Reshape(input, new[] { rows, samples });
-        var result = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            result[r] = PreprocessAudio(Engine.Reshape(Engine.TensorSlice(flat, new[] { r, 0 }, new[] { 1, samples }), new[] { samples }));
-        return result;
-    }
+    private Tensor<T> Logits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (network, wave) =>
+            network.CtcLogits(network.Encode(network.FeatureTensor(PreprocessAudio(wave)), training, training ? _random : null)));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
@@ -317,67 +286,22 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
             var frames = Engine.Reshape(target, new[] { target.Length / width, width });
             return Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc(frames).Where(t => t < boundary).ToArray();
         }
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= boundary) throw new ArgumentException($"Token {value} is the blank, the boundary or outside the inventory.", nameof(target));
-            labels[i] = (int)value;
-        }
-        return labels;
-    }
 
-    // One (waveform, transcript) pair per row; a target whose last axis is the vocabulary keeps it in each row.
-    private (Tensor<T> Waveform, int[] Labels)[] Batch(Tensor<T> input, Tensor<T> target, int boundary)
-    {
-        var rows = Rows(input);
-        int perRow = target.Length / rows.Length, width = target.Rank >= 2 ? target.Shape[^1] : 0;
-        bool distributions = width == boundary || width == boundary + 1;
-        var batch = new (Tensor<T>, int[])[rows.Length];
-        for (int r = 0; r < rows.Length; r++)
-        {
-            var row = rows.Length == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows.Length, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                distributions ? new[] { perRow / width, width } : new[] { perRow });
-            batch[r] = (rows[r], Labels(row, boundary));
-        }
-        return batch;
+        return ParseCtcOrTokenTargetLabels(target, boundary, Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc);
     }
 
     /// <inheritdoc />
     /// <remarks>Equation 2: L = λ1 L_att + (1 − λ1) L_ctc + λ2 L_lid on one tape over the shared encoder, each loss
     /// summed over the utterance's tokens and averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
-        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
-        int width = target.Rank >= 2 ? target.Shape[^1] : 0;
-        bool distributions = width == network.Boundary || width == network.Boundary + 1;
-        var allLabels = new int[rows][];
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                distributions ? new[] { perRow / width, width } : new[] { perRow });
-            allLabels[r] = Labels(row, network.Boundary);
-        }
-
-        TrainWithCustomObjective(input, target, (stepInput, _) =>
-        {
-            int stepRows = stepInput.Rank == 1 ? 1 : stepInput.Shape[0], stepSamples = stepInput.Length / stepRows;
-            Tensor<T>? total = null;
-            for (int r = 0; r < stepRows; r++)
-            {
-                var wave = Row(stepInput, r, stepRows, stepSamples);
-                if (stepSamples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
-                var loss = network.Loss(network.FeatureTensor(wave), allLabels[r], training: true, _random).Total;
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
-            }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / stepRows));
-        }, _optimizer);
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(
+            input,
+            target,
+            _network,
+            _optimizer,
+            (network, row) => Labels(row, network.Boundary),
+            (network, wave, rowLabels) => network.Loss(network.FeatureTensor(PreprocessAudio(wave)), rowLabels, training: true, _random).Total,
+            isDistributionWidth: w => _network is { } net && (w == net.Boundary || w == net.Boundary + 1));
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
@@ -385,26 +309,14 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes, without dropout, averaged over the batch.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = RequireNetwork();
-        using var _ = new NoGradScope<T>();
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
-        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
-        int width = target.Rank >= 2 ? target.Shape[^1] : 0;
-        bool distributions = width == network.Boundary || width == network.Boundary + 1;
-        double total = 0;
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                distributions ? new[] { perRow / width, width } : new[] { perRow });
-            var labels = Labels(row, network.Boundary);
-            var wave = Row(input, r, rows, samples);
-            if (samples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
-            total += NumOps.ToDouble(network.Loss(network.FeatureTensor(wave), labels).Total[0]);
-        }
-        return NumOps.FromDouble(total / rows);
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(
+            input,
+            target,
+            _network,
+            (network, row) => Labels(row, network.Boundary),
+            (network, wave, rowLabels) => network.Loss(network.FeatureTensor(PreprocessAudio(wave)), rowLabels).Total,
+            isDistributionWidth: w => _network is { } net && (w == net.Boundary || w == net.Boundary + 1));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

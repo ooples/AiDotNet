@@ -243,7 +243,7 @@ internal sealed class FACodecModel<T>
         var power = _engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)), 1e-9);
         var magnitude = _engine.TensorSqrt(power).Cast<T>();                                                          // [frames, bins]
         var mel = _engine.TensorMatMul(AiDotNet.Audio.Features.EngineStft<T>.Table(basis), _engine.TensorTranspose(magnitude)); // [mels', frames]
-        var log = _engine.TensorLog(_engine.TensorMax(mel, NumOps.FromDouble(1e-5)));
+        var log = _engine.TensorLog(_engine.TensorClampMin(mel, NumOps.FromDouble(1e-5)));
         return _engine.Reshape(log, new[] { 1, prosodyMels, frames });
     }
 

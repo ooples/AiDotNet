@@ -83,9 +83,19 @@ public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
         // Features are computed from fresh values as before (not part of the autodiff graph).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        // Compute STFT - returns Tensor<Complex<T>> with shape [numFrames, numFreqs]
+        // Compute STFT - returns Tensor<Complex<T>> with shape [numFrames, numFreqs] or [batch, numFrames, numFreqs]
         var stftResult = _stft.Forward(audio);
+        return ExtractSpectrogramBatch(stftResult, (b, slice) =>
+        {
+            var audioRow = stftResult.Rank > 2 && audio.Rank >= 2 && b < audio.Shape[0]
+                ? Engine.Reshape(Engine.TensorSlice(audio, [b, 0], [1, audio.Shape[1]]), [audio.Shape[1]])
+                : audio;
+            return Extract2D(slice, audioRow);
+        });
+    }
 
+    private Tensor<T> Extract2D(Tensor<Complex<T>> stftResult, Tensor<T> audio)
+    {
         int numFrames = stftResult.Shape[0];
         int numFreqs = stftResult.Shape[1];
 

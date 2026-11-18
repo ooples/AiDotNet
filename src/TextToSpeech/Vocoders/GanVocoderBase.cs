@@ -453,8 +453,8 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>The mean of every element, as a scalar tensor.</summary>
     protected Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    /// <summary>A copy of <paramref name="x"/> that carries no gradient.</summary>
-    protected static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    /// <summary>A view of <paramref name="x"/> that carries no gradient.</summary>
+    protected static Tensor<T> Detached(Tensor<T> x) => AiDotNetEngine.Current.StopGradient(x);
 
     /// <summary>The sum of <paramref name="terms"/>.</summary>
     protected Tensor<T> Sum(IEnumerable<Tensor<T>> terms)

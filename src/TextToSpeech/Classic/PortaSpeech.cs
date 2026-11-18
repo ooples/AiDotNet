@@ -282,7 +282,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// gradient scaled by <see cref="PortaSpeechOptions.DurationPredictorGradientScale"/>.</summary>
     private Tensor<T> PredictWordDurations(Tensor<T> phonemes, int[] words)
     {
-        var detached = new Tensor<T>(phonemes._shape, phonemes.ToVector());
+        var detached = DetachTensor(phonemes);
         var input = Engine.TensorAdd(detached, Engine.TensorMultiplyScalar(Engine.TensorSubtract(phonemes, detached),
             NumOps.FromDouble(_options.DurationPredictorGradientScale)));
         var perPhoneme = Engine.Softplus(Engine.Reshape(_durationPredictor!.Forward(input), new[] { phonemes.Shape[0], 1 }));
@@ -538,7 +538,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
                     var (latent, _) = _generator!.Encode(melChannelsFirst, _generator.SqueezeCondition(lingustic), noise);
                     var coarse = _generator.Decode(latent, lingustic);
                     var joined = Engine.TensorConcatenate(new[] { coarse, lingustic }, 1);
-                    condition = new Tensor<T>(joined._shape, joined.ToVector());
+                    condition = DetachTensor(joined);
                 }
                 return _postNet!.NegativeLogLikelihood(melChannelsFirst, condition);
             }
@@ -552,7 +552,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             var (z, kl) = _generator!.Encode(melChannelsFirst, _generator.SqueezeCondition(linguistic), noise);
             var reconstruction = _generator.Decode(z, linguistic);
             var l1 = Engine.ReduceMean(Engine.TensorAbs(Engine.TensorSubtract(reconstruction, melChannelsFirst)), new[] { 0, 1, 2 }, keepDims: false);
-            var klTerm = klActive ? kl : new Tensor<T>(kl._shape, kl.ToVector());
+            var klTerm = klActive ? kl : DetachTensor(kl);
             return Engine.TensorAdd(Engine.TensorAdd(durationLoss, l1), klTerm);
         }
 

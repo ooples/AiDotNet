@@ -529,12 +529,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         // all-ones and cancels any input scaling, collapsing the model's output (failing
         // DifferentInputs / ScaledInput). The sibling ASR models that pass these invariants
         // (UniSpeech, RobustConformer) likewise treat the given tensor as the prepared feature stream.
-        int targetLength = SampleRate * _maxAudioLengthSeconds;
-        int length = Math.Min(rawAudio.Length, targetLength);
-
-        var waveform = new Tensor<T>([length]);
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return TruncateAudioWaveform(rawAudio, _maxAudioLengthSeconds);
     }
 
     /// <summary>

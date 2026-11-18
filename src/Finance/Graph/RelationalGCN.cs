@@ -826,7 +826,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         {
             var prediction = Forecast(currentInput, null);
             predictions.Add(prediction);
-            currentInput = ShiftInputWindow(currentInput, prediction);
+            if (i + 1 < steps)
+            {
+                currentInput = ShiftInputWindow(currentInput, prediction);
+            }
         }
 
         return ConcatenatePredictions(predictions);
@@ -1226,16 +1229,26 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        if (_numFeatures != 1)
+        var history = Engine.Reshape(NodeFeatures(input).Contiguous(), new[] { _numNodes, _sequenceLength, _numFeatures });
+        var predictedFeature = Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon, 1 });
+        Tensor<T> appended;
+        if (_numFeatures == 1)
         {
-            throw new NotSupportedException(
-                $"Autoregressive RelationalGCN forecasting feeds forecasts back as inputs, which needs future values of every input feature; it is only defined for NumFeatures = 1 (got {_numFeatures}).");
+            appended = predictedFeature;
+        }
+        else
+        {
+            var lastAuxiliary = Engine.TensorSlice(
+                history,
+                new[] { 0, _sequenceLength - 1, 1 },
+                new[] { _numNodes, 1, _numFeatures - 1 });
+            var tiledAuxiliary = Engine.TensorTile(lastAuxiliary, new[] { 1, _forecastHorizon, 1 });
+            appended = Engine.Concat(new[] { predictedFeature, tiledAuxiliary }, 2);
         }
 
-        var history = NodeFeatures(input);
-        var predicted = Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon });
-        var extended = Engine.Concat(new[] { history, predicted }, 1);
-        var window = Engine.TensorNarrow(extended, 1, _forecastHorizon, _sequenceLength);
+        var extended = Engine.Concat(new[] { history, appended }, 1);
+        int keepStart = Math.Max(0, extended.Shape[1] - _sequenceLength);
+        var window = Engine.TensorNarrow(extended, 1, keepStart, _sequenceLength);
         return Engine.Reshape(window.Contiguous(), input._shape);
     }
 

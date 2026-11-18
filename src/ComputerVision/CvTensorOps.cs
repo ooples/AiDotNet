@@ -539,13 +539,149 @@ internal static class CvTensorOps<T>
         Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio, bool aligned)
     {
         if (samplingRatio <= 0) throw new ArgumentOutOfRangeException(nameof(samplingRatio));
-        if (batchIndices.Length == 0) return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
-        // The engine takes the scale as a float, and 1/stride is not exact in float: a double model's region features
-        // read 7e-7 off torchvision's. A double model scales the boxes here, in its own precision, and passes exactly 1.
-        // A float model keeps the kernel's float product, which is the reference's own arithmetic.
-        bool scaleHere = typeof(T) != typeof(float);
-        return Engine.RoIAlign(features, RoIRows(boxes, batchIndices, scaleHere ? spatialScale : 1.0), outputSize,
-            outputSize, scaleHere ? 1f : (float)spatialScale, samplingRatio, aligned);
+        int rois = batchIndices.Length;
+        int channels = features.Shape[1];
+        if (rois == 0) return new Tensor<T>(new[] { 0, channels, outputSize, outputSize });
+
+        int batch = features.Shape[0];
+        int height = features.Shape[2];
+        int width = features.Shape[3];
+        int totalBins = rois * outputSize * outputSize;
+        int samplesPerBin = samplingRatio * samplingRatio;
+        int tapsPerBin = 4 * samplesPerBin;
+        var tapIndices = new int[totalBins * tapsPerBin];
+        var tapWeightsDouble = new double[totalBins * tapsPerBin];
+        bool useFloatCoords = typeof(T) == typeof(float);
+        double invSamples = 1.0 / samplesPerBin;
+
+        for (int r = 0; r < rois; r++)
+        {
+            int imgIndex = batchIndices[r];
+            if (imgIndex < 0 || imgIndex >= batch)
+                throw new ArgumentOutOfRangeException(nameof(batchIndices), $"RoI batch index {imgIndex} is outside [0, {batch}).");
+            int imgOffset = imgIndex * height * width;
+
+            double roiStartW, roiStartH, roiEndW, roiEndH, binSizeH, binSizeW;
+            if (useFloatCoords)
+            {
+                float fScale = (float)spatialScale;
+                float fOffset = aligned ? 0.5f : 0.0f;
+                float fx1 = ((float)boxes[4 * r] * fScale) - fOffset;
+                float fy1 = ((float)boxes[(4 * r) + 1] * fScale) - fOffset;
+                float fx2 = ((float)boxes[(4 * r) + 2] * fScale) - fOffset;
+                float fy2 = ((float)boxes[(4 * r) + 3] * fScale) - fOffset;
+                float fRoiW = aligned ? fx2 - fx1 : Math.Max(fx2 - fx1, 1.0f);
+                float fRoiH = aligned ? fy2 - fy1 : Math.Max(fy2 - fy1, 1.0f);
+                roiStartW = fx1;
+                roiStartH = fy1;
+                roiEndW = fx2;
+                roiEndH = fy2;
+                binSizeW = fRoiW / outputSize;
+                binSizeH = fRoiH / outputSize;
+            }
+            else
+            {
+                double dOffset = aligned ? 0.5 : 0.0;
+                roiStartW = (boxes[4 * r] * spatialScale) - dOffset;
+                roiStartH = (boxes[(4 * r) + 1] * spatialScale) - dOffset;
+                roiEndW = (boxes[(4 * r) + 2] * spatialScale) - dOffset;
+                roiEndH = (boxes[(4 * r) + 3] * spatialScale) - dOffset;
+                double roiW = aligned ? roiEndW - roiStartW : Math.Max(roiEndW - roiStartW, 1.0);
+                double roiH = aligned ? roiEndH - roiStartH : Math.Max(roiEndH - roiStartH, 1.0);
+                binSizeW = roiW / outputSize;
+                binSizeH = roiH / outputSize;
+            }
+
+            for (int ph = 0; ph < outputSize; ph++)
+            {
+                for (int pw = 0; pw < outputSize; pw++)
+                {
+                    int binWrite = (((r * outputSize) + ph) * outputSize + pw) * tapsPerBin;
+                    for (int iy = 0; iy < samplingRatio; iy++)
+                    {
+                        double y = useFloatCoords
+                            ? (float)roiStartH + (ph * (float)binSizeH) + ((iy + 0.5f) * (float)binSizeH / samplingRatio)
+                            : roiStartH + (ph * binSizeH) + ((iy + 0.5) * binSizeH / samplingRatio);
+                        for (int ix = 0; ix < samplingRatio; ix++)
+                        {
+                            double x = useFloatCoords
+                                ? (float)roiStartW + (pw * (float)binSizeW) + ((ix + 0.5f) * (float)binSizeW / samplingRatio)
+                                : roiStartW + (pw * binSizeW) + ((ix + 0.5) * binSizeW / samplingRatio);
+
+                            int tapBase = binWrite + (((iy * samplingRatio) + ix) * 4);
+                            if (height <= 0 || width <= 0 || y < -1.0 || y > height || x < -1.0 || x > width)
+                            {
+                                continue;
+                            }
+
+                            if (y <= 0.0) y = 0.0;
+                            if (x <= 0.0) x = 0.0;
+
+                            int yLow = (int)Math.Floor(y);
+                            int xLow = (int)Math.Floor(x);
+                            int yHigh;
+                            if (yLow >= height - 1)
+                            {
+                                yHigh = yLow = height - 1;
+                                y = yLow;
+                            }
+                            else
+                            {
+                                yHigh = yLow + 1;
+                            }
+
+                            int xHigh;
+                            if (xLow >= width - 1)
+                            {
+                                xHigh = xLow = width - 1;
+                                x = xLow;
+                            }
+                            else
+                            {
+                                xHigh = xLow + 1;
+                            }
+
+                            double ly = useFloatCoords ? (float)y - yLow : y - yLow;
+                            double lx = useFloatCoords ? (float)x - xLow : x - xLow;
+                            double hy = useFloatCoords ? 1.0f - (float)ly : 1.0 - ly;
+                            double hx = useFloatCoords ? 1.0f - (float)lx : 1.0 - lx;
+
+                            tapIndices[tapBase] = imgOffset + (yLow * width) + xLow;
+                            tapIndices[tapBase + 1] = imgOffset + (yLow * width) + xHigh;
+                            tapIndices[tapBase + 2] = imgOffset + (yHigh * width) + xLow;
+                            tapIndices[tapBase + 3] = imgOffset + (yHigh * width) + xHigh;
+
+                            tapWeightsDouble[tapBase] = (hy * hx) * invSamples;
+                            tapWeightsDouble[tapBase + 1] = (hy * lx) * invSamples;
+                            tapWeightsDouble[tapBase + 2] = (ly * hx) * invSamples;
+                            tapWeightsDouble[tapBase + 3] = (ly * lx) * invSamples;
+                        }
+                    }
+                }
+            }
+        }
+
+        Tensor<int> indexTensor;
+        Tensor<T> weightTensor;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            indexTensor = new Tensor<int>(new[] { tapIndices.Length }, new Vector<int>(tapIndices));
+            weightTensor = new Tensor<double>(new[] { 1, totalBins, tapsPerBin }, new Vector<double>(tapWeightsDouble)).Cast<T>();
+        }
+
+        var flatFeatures = Engine.Reshape(
+            Engine.TensorPermute(features, new[] { 1, 0, 2, 3 }),
+            new[] { channels, batch * height * width });
+        var gathered = Engine.Reshape(
+            Engine.TensorGather(flatFeatures, indexTensor, axis: 1),
+            new[] { channels, totalBins, tapsPerBin });
+        var weighted = Engine.TensorMultiply(
+            gathered,
+            Engine.TensorBroadcastTo(weightTensor, new[] { channels, totalBins, tapsPerBin }));
+        var pooled = Engine.ReduceSum(weighted, new[] { 2 }, keepDims: false);
+        return Engine.TensorPermute(
+            Engine.Reshape(pooled, new[] { channels, rois, outputSize, outputSize }),
+            new[] { 1, 0, 2, 3 });
     }
 
     // The engine's RoI rows: (batch index, x1, y1, x2, y2) per RoI, the box coordinates multiplied by boxScale.
