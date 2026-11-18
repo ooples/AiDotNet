@@ -179,6 +179,8 @@ internal sealed class HiFiGanGenerator<T>
     private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
     {
         using var forward = TensorScope.Begin();
+        T leakySlope = MathHelper.GetNumericOperations<T>().FromDouble(Slope);
+
         long snapshot = gpu.ActivationCacheTimestampSnapshot();
         var released = new HashSet<object>(AiDotNet.Tensors.Engines.Autodiff.ReferenceEqualityComparer<object>.Instance);
 
@@ -249,8 +251,7 @@ internal sealed class HiFiGanGenerator<T>
                         Tensor<T> t;
                         if (_resblockType1)
                         {
-                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual,
-                                MathHelper.GetNumericOperations<T>().FromDouble(Slope));
+                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual, leakySlope);
                             t = second[n].Forward(activatedFirst);
                         }
                         else t = first[n].Forward(activatedResidual);
