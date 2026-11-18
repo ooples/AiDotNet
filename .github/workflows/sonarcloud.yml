@@ -51,12 +51,12 @@ jobs:
             'tests/AiDotNet.Tests/ModuleInitializer.cs',
             'tests/AiDotNet.Tests/Helpers/LicenseTestSupport.cs',
             'tests/AiDotNet.Tests/Fixtures/EngineCurrentGlobalStateCollection.cs')
-          git diff --exit-code 225153dbcf51fa4a0328fdaa733bf3f4955027ff HEAD -- @sources tools/TestImpact/Assert-RequiredGpuResults.ps1 tools/TestImpact/Test-RequiredGpuResults.ps1 tools/TestImpact/Assert-CiGate.ps1
+          git diff --exit-code e9904771e13f33398610b507bbb23e2e1b3dce7e HEAD -- @sources tools/TestImpact/Assert-RequiredGpuResults.ps1 tools/TestImpact/Test-RequiredGpuResults.ps1 tools/TestImpact/Assert-CiGate.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Qualification source differs from the reviewed batch.' }
           git diff --exit-code a826446bc36bdf0d28919bef291c99ace6f4e958 HEAD -- @($sources | Select-Object -Skip 3)
           if ($LASTEXITCODE -ne 0) { throw 'Original test bootstrap was modified.' }
           $records = @($sources | ForEach-Object { @{ path=$_; sha256=(Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant() } })
-          [ordered]@{ qualificationCommit='${{ github.sha }}'; reviewedSourceCommit='225153dbcf51fa4a0328fdaa733bf3f4955027ff'
+          [ordered]@{ qualificationCommit='${{ github.sha }}'; reviewedSourceCommit='e9904771e13f33398610b507bbb23e2e1b3dce7e'
             producerRepository=$run.repository.full_name; producerHead=$run.head_sha; producerRunId=[string]$run.id; producerRunAttempt=[string]$run.run_attempt
             producerArtifactId=[string]$artifact.id; producerArtifactName=$artifact.name; producerArtifactDigest=$artifact.digest; sources=$records } |
             ConvertTo-Json -Depth 6 | Set-Content qualification-provenance.json
@@ -74,7 +74,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           # The fixture inspects the shipping workflow's obligation expressions, not this temporary workflow.
           New-Item -ItemType Directory -Path reviewed-policy -Force | Out-Null
-          git archive --format=tar -o reviewed-policy.tar 225153dbcf51fa4a0328fdaa733bf3f4955027ff `
+          git archive --format=tar -o reviewed-policy.tar e9904771e13f33398610b507bbb23e2e1b3dce7e `
             tools/TestImpact/Assert-CiGate.ps1 tools/TestImpact/Assert-RequiredGpuResults.ps1 tools/TestImpact/Test-RequiredGpuResults.ps1 `
             tests/AiDotNet.Tests/Recovery/GpuRecoveryTests.cs tests/AiDotNet.Tests/Concurrency/ThreadSafetyTests.cs .github/workflows/sonarcloud.yml
           if ($LASTEXITCODE -ne 0) { throw 'Cannot extract reviewed shipping policy for fixtures.' }
@@ -174,7 +174,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $p=Get-Content qualification-provenance.json -Raw | ConvertFrom-Json
-          if ($p.qualificationCommit -cne '${{ github.sha }}' -or $p.reviewedSourceCommit -cne '225153dbcf51fa4a0328fdaa733bf3f4955027ff' -or
+          if ($p.qualificationCommit -cne '${{ github.sha }}' -or $p.reviewedSourceCommit -cne 'e9904771e13f33398610b507bbb23e2e1b3dce7e' -or
               $p.producerRepository -cne 'ooples/AiDotNet' -or $p.producerHead -cne 'a826446bc36bdf0d28919bef291c99ace6f4e958' -or
               $p.producerRunId -cne '44232296552' -or $p.producerRunAttempt -cne '1' -or $p.producerArtifactId -cne '14397017210' -or
               $p.producerArtifactName -cne 'build-output-5b0c9f47bf892f4fad716903cddae14b412244c7' -or
