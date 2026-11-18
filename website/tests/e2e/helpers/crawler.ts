@@ -220,7 +220,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const exercised = new Set<string>();
   const keys = new Set<string>();
   const disabledSeen = new Map<string, string>();   // key -> page
-  const enabledSeen = new Set<string>();
+  const enabledSeen = new Map<string, string>();
   const internalLinks = new Map<string, string>();  // url -> first page seen
   const externalLinks = new Map<string, string>();
   const maxDepth = o.maxDepth ?? 3;
@@ -575,7 +575,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       keys.add(c.key);
       if (c.disabled) { if (c.visible && !enabledSeen.has(c.key)) disabledSeen.set(c.key, pg); return false; }
       if (!c.visible) return false;
-      enabledSeen.add(c.key);
+      if (!enabledSeen.has(c.key)) enabledSeen.set(c.key, pg);
       disabledSeen.delete(c.key);
       if (doneOnPage.has(c.key) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
       if (o.dedicated.some(([re]) => re.test(c.key))) return false;
@@ -583,7 +583,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     });
     if (!todo.length) return;
     for (const c of todo) {
-      if (exercised.has(c.key)) continue;
+      // Repeated table rows can share a key. An unreachable row must not trigger
+      // hundreds of identical reload/replay attempts from the same sibling list.
+      if (exercised.has(c.key) || doneOnPage.has(c.key)) continue;
       doneOnPage.add(c.key);
       // Return to the state this control was found in: fresh page plus the clicks that revealed it.
       // A sibling's click may have opened a modal over this control: start again from a fresh page.
@@ -603,7 +605,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
         const revealed = await page.evaluate(ENUMERATE, pg);
         for (const control of revealed.controls) {
           keys.add(control.key);
-          if (control.visible && !control.disabled) enabledSeen.add(control.key);
+          if (control.visible && !control.disabled && !enabledSeen.has(control.key)) enabledSeen.set(control.key, pg);
         }
       }
       if (o.persona && !(await hasSession(page).catch(() => false))) await ensureSession();
@@ -681,9 +683,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   });
 
   // ---- coverage contract ----
-  for (const key of enabledSeen) {
+  for (const [key, pg] of enabledSeen) {
     if (!exercised.has(key) && !o.skipKeys?.has(key) && !o.dedicated.some(([re]) => re.test(key))) {
-      add('(coverage)', key, 'visible enabled control was not exercised (unreachable state or exploration depth limit)');
+      add(pg, key, `visible enabled control was not exercised (unreachable state or exploration depth limit; viewport ${page.viewportSize()?.width ?? 'unknown'}px)`);
     }
   }
   for (const [key, pg] of disabledSeen) {

@@ -60,17 +60,22 @@ test.describe('Phone admin license dialog', () => {
   test('the issuance form scrolls and its Cancel button accepts a real phone tap', async ({ page }) => {
     await page.goto('/admin/licenses/');
     await expect(page.locator('#licenses-loading')).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
     await page.getByRole('button', { name: 'Issue License', exact: true }).click();
     const modal = page.locator('#issue-modal');
     await expect(modal).toBeVisible();
     await page.locator('#issue-product').selectOption('aidotnet');
+    const sendEmail = page.locator('#issue-send-email');
+    await sendEmail.scrollIntoViewIfNeeded();
+    await sendEmail.tap();
+    await expect(sendEmail).not.toBeChecked();
     await page.locator('#issue-email').fill('delivered+e2e-phone-cancel@resend.dev');
     await page.locator('#issue-customer-name').fill('E2E phone dialog cancellation');
     await page.locator('#issue-notes').fill('The Cancel action must be reachable without zooming or horizontal panning.');
     const cancel = page.locator('#cancel-issue-btn');
     await cancel.scrollIntoViewIfNeeded();
     await expect(cancel).toBeInViewport();
-    await cancel.click();
+    await cancel.tap();
     await expect(modal).toBeHidden();
   });
 });

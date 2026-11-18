@@ -47,12 +47,12 @@ const productsJson = JSON.stringify(PRODUCTS);
 
 <AdminLayout title="License Management - AiDotNet Admin" description="Manage BSL license keys, view activations, and administer license tiers." activeTab="licenses">
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage BSL license keys, view activations, and administer tiers</p>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-4">
         <div class="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span><span id="active-count" class="font-semibold text-green-500">--</span> active</span>
           <span><span id="suspended-count" class="font-semibold text-yellow-500">--</span> suspended</span>

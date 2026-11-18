@@ -21,7 +21,8 @@ async function stripe<T>(request: APIRequestContext, method: 'GET' | 'POST' | 'D
   const url = method === 'GET' && body ? `${API}${path}?${body}` : `${API}${path}`;
   const res = await request.fetch(url, {
     method,
-    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/x-www-form-urlencoded' },
+    // Match the version used by billing-portal: subscription period fields moved in Basil.
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/x-www-form-urlencoded', 'Stripe-Version': '2023-10-16' },
     data: method === 'GET' ? undefined : body,
   });
   const json = await res.json();
