@@ -167,7 +167,7 @@ internal sealed class FunAsrNanoNetwork<T>
     /// so its loss never reaches the encoder.</summary>
     public Tensor<T> CtcLogProbabilities(Tensor<T> encoded)
     {
-        var detached = new Tensor<T>(encoded.Shape.ToArray(), encoded.ToVector());
+        var detached = _engine.StopGradient(encoded);
         return _engine.TensorLogSoftmax(CtcOutput.Forward(CtcDecoder.Forward(detached)), axis: -1);
     }
 

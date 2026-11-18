@@ -169,9 +169,9 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private Tensor<T> Waveform(Tensor<T> audio)
     {
         int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        audio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return audio.Length <= length
+            ? Engine.Reshape(audio, new[] { audio.Length })
+            : Engine.TensorSlice(Engine.Reshape(audio, new[] { audio.Length }), new[] { 0 }, new[] { length });
     }
 
     private Tensor<T> Row(Tensor<T> input, int row, int rows)
@@ -229,25 +229,35 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     // The stage's loss [1] of one utterance: the CTC loss for the CTC stage, the LLM's cross-entropy otherwise.
     // Joint training reads the target as LLM tokens; the CTC decoder trains in its own stage, on its own vocabulary.
-    private Tensor<T> UtteranceLoss(FunAsrNanoNetwork<T> network, Tensor<T> audio, Tensor<T> target)
+    private Tensor<T> UtteranceLoss(FunAsrNanoNetwork<T> network, Tensor<T> audio, int[] targetTokens)
     {
         var encoded = network.Encode(Waveform(audio));
         if (_options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder)
-            return network.CtcLoss(encoded, Tokens(target, _options.CtcVocabSize, network.Blank));
-        var loss = network.LlmLoss(network.Prompt(encoded, Instruction(null)), Tokens(target, _options.VocabSize, network.EndToken));
+            return network.CtcLoss(encoded, targetTokens);
+        var loss = network.LlmLoss(network.Prompt(encoded, Instruction(null)), targetTokens);
         return Engine.Reshape(loss, new[] { 1 });
     }
 
-    private Tensor<T> BatchLoss(FunAsrNanoNetwork<T> network, Tensor<T> input, Tensor<T> target)
+    private Tensor<T> BatchLoss(FunAsrNanoNetwork<T> network, Tensor<T> input, int[][] targetTokens)
     {
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
         Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
-            var loss = UtteranceLoss(network, Row(input, r, rows), Row(target, r, rows));
+            var loss = UtteranceLoss(network, Row(input, r, rows), targetTokens[r]);
             total = total is null ? loss : Engine.TensorAdd(total, loss);
         }
         return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    private int[][] ExtractTargetTokens(FunAsrNanoNetwork<T> network, Tensor<T> target, int rows)
+    {
+        var targetTokens = new int[rows][];
+        int vocab = _options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder ? _options.CtcVocabSize : _options.VocabSize;
+        int reserved = _options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder ? network.Blank : network.EndToken;
+        for (int r = 0; r < rows; r++)
+            targetTokens[r] = Tokens(Row(target, r, rows), vocab, reserved);
+        return targetTokens;
     }
 
     /// <inheritdoc />
@@ -256,8 +266,13 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         var network = _network;
         if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var targetTokens = ExtractTargetTokens(network, target, rows);
         network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target)); }
+        try
+        {
+            TrainWithCustomObjective(input, target, (stepInput, _) => BatchLoss(network, stepInput, targetTokens));
+        }
         finally { network.Llm.Training = false; }
         return true;
     }
@@ -294,7 +309,9 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target)[0];
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var targetTokens = ExtractTargetTokens(network, target, rows);
+        return BatchLoss(network, input, targetTokens)[0];
     }
 
     /// <inheritdoc />

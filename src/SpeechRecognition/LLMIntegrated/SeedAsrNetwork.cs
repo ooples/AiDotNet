@@ -70,6 +70,16 @@ internal sealed class SeedAsrNetwork<T> : ILayerAliasOwner<T>
         return Converter.Forward(_engine.Reshape(kept, new[] { frames / SpliceFrames, EncoderWidth * SpliceFrames }));
     }
 
+    /// <summary>The speech representation given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
+        int frames = encoded.Shape[0] / SpliceFrames * SpliceFrames;
+        if (frames == 0) throw new ArgumentException($"The recording is shorter than {SpliceFrames} encoder frames.", nameof(waveform));
+        var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });
+        return Converter.Forward(_engine.Reshape(kept, new[] { frames / SpliceFrames, EncoderWidth * SpliceFrames }));
+    }
+
     /// <summary>The prompt embeddings: the context's tokens (§3.4's context SFT; none for plain recognition), then the
     /// speech representation.</summary>
     public Tensor<T> Prompt(Tensor<T> speech, IReadOnlyList<int> context)

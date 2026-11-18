@@ -94,7 +94,7 @@ public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         else
         {
             using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-            var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
+            var encoded = _network.Encode(_network.FeatureTensor(waveform), training: false);
             tokens = _network.GreedyAttention(encoded, _options.MaxTextLength);
         }
         return new TranscriptionResult<T>
@@ -138,13 +138,20 @@ public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     }
 
     // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
+    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private double[] Samples(Tensor<T> waveform, int offset, int count)
@@ -162,7 +169,7 @@ public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.FeatureTensor(Row(input, r, rows, samples)), training));
         return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
 
@@ -210,12 +217,13 @@ public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             labels[r] = Labels(row);
         }
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var loss = network.CtcTrainingLoss(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
+                var wave = Row(stepInput, r, rows, samples);
+                var loss = network.CtcTrainingLoss(network.SpecAugment(network.FeatureTensor(wave), _random), labels[r], training: true);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
@@ -240,7 +248,7 @@ public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         {
             var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            var features = network.Features(Samples(input, r * samples, samples));
+            var features = network.FeatureTensor(Row(input, r, rows, samples));
             total += NumOps.ToDouble(network.CtcTrainingLoss(features, Labels(row), training: false)[0]);
         }
         return NumOps.FromDouble(total / rows);
