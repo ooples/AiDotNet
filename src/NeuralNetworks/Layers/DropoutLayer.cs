@@ -341,9 +341,9 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException(
                 $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
 
-        refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
-        _dropoutMask.IncrementVersion();
-        Engine.InvalidatePersistentTensor(_dropoutMask);
+        // An engine copy: on a GPU engine the fresh mask stays on the device (a host span copy downloaded it, then the
+        // invalidation uploaded it again), and the copy itself makes the destination's device value current.
+        Engine.TensorCopy(refreshedMask, _dropoutMask);
     }
 
     /// <summary>

@@ -145,12 +145,7 @@ internal sealed class AutoformerNetwork<T>
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
         // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
-        {
-            var span = m.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        });
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate);
         return _engine.TensorMultiply(x, mask);
     }
 
