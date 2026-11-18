@@ -26662,3 +26662,8 @@ override AiDotNet.Diffusion.ThreeD.Magic3DModel<T>.ImageTo3D(AiDotNet.Tensors.Li
 override AiDotNet.Diffusion.ThreeD.Instant3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.PointEModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.SupportsFusedCompiledTraining.get -> bool
+AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.ParameterCount.get -> long
+AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+override AiDotNet.Diffusion.StyleTransfer.TLoRAModel<T>.TrainingParameterRoot.get -> object!

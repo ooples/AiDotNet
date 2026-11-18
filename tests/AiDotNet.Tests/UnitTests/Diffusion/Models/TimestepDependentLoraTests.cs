@@ -1,8 +1,16 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using AiDotNet.Diffusion.StyleTransfer;
 using AiDotNet.LinearAlgebra;
 using Xunit;
+using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Models.Parameters;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 
@@ -27,8 +35,12 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// specifically replaces in order to train a non-zero S.
 /// </para>
 /// </remarks>
-public class TimestepDependentLoraTests
+[Collection("EngineCurrentGlobalState")]
+public class TimestepDependentLoraTests : IDisposable
 {
+    private readonly IEngine _previousEngine = AiDotNetEngine.Current;
+    public TimestepDependentLoraTests() => AiDotNetEngine.Current = new CpuEngine();
+    public void Dispose() => AiDotNetEngine.Current = _previousEngine;
     private const int Rank = 8;
     private const int Width = 16;
     private const int Horizon = 1000;
@@ -279,5 +291,179 @@ public class TimestepDependentLoraTests
         {
             for (int c = 0; c < Width; c++) Assert.Equal(a[r, c], b[r, c], 12);
         }
+    }
+
+    private static double[] ReferenceDelta(double[][] state, int rank, int input, int output, int effective)
+    {
+        var result = new double[input * output];
+        for (int i = 0; i < input; i++)
+            for (int o = 0; o < output; o++)
+                for (int r = 0; r < effective; r++)
+                    result[i * output + o] += state[1][o * rank + r] * state[2][r] * state[0][r * input + i]
+                        - state[4][o * rank + r] * state[5][r] * state[3][r * input + i];
+        return result;
+    }
+
+    private static double ReferenceLoss(double[][] state, int effective, double[] weights)
+        => ReferenceDelta(state, 2, 3, 4, effective).Zip(weights, (value, weight) => value * weight).Sum();
+
+    private static void AssertClose(double[] expected, double[] actual, double tolerance = 1e-10)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - actual[i]) <= tolerance, $"index {i}: expected {expected[i]:R}, got {actual[i]:R}");
+    }
+
+    private static void CheckFactorGradients(double[][] state, int effective, double[] weights, double[][] gradients)
+    {
+        for (int factor = 0; factor < 3; factor++)
+            for (int i = 0; i < state[factor].Length; i++)
+            {
+                const double epsilon = 1e-6;
+                double value = state[factor][i];
+                state[factor][i] = value + epsilon;
+                double plus = ReferenceLoss(state, effective, weights);
+                state[factor][i] = value - epsilon;
+                double minus = ReferenceLoss(state, effective, weights);
+                state[factor][i] = value;
+                Assert.True(Math.Abs(gradients[factor][i] - (plus - minus) / (2 * epsilon)) < 1e-7,
+                    $"factor {factor}, index {i}: gradient {gradients[factor][i]:R}");
+            }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(Horizon)]
+    public void Warm_inference_cache_does_not_disconnect_eager_A_B_S_gradients(int timestep)
+    {
+        var engine = AiDotNetEngine.Current;
+        var adapter = new TimestepDependentLora<double>(2, 3, 4, Horizon, new Random(17));
+        var chunks = adapter.GetParameterStateChunks().ToArray();
+        Assert.Equal(new[] { "A", "B", "S", "A_init", "B_init", "S_init" }, chunks.Select(chunk => chunk.StableId));
+        Assert.All(chunks.Take(3), chunk => Assert.Equal(ParameterSlotRole.Trainable, chunk.Role));
+        Assert.All(chunks.Skip(3), chunk => Assert.Equal(ParameterSlotRole.Frozen, chunk.Role));
+        var warm = adapter.EffectiveDeltaTransposed(timestep);
+        Assert.Same(warm, adapter.EffectiveDeltaTransposed(timestep));
+        double[] weights = Enumerable.Range(0, 12).Select(i => Math.Cos(i * 0.7)).ToArray();
+        var weightTensor = new Tensor<double>(weights, new[] { 3, 4 });
+        using var tape = new GradientTape<double>();
+        var delta = adapter.EffectiveDeltaTransposed(timestep);
+        Assert.NotSame(warm, delta);
+        var loss = engine.ReduceSum(engine.TensorMultiply(delta, weightTensor), null, false);
+        var gradients = tape.ComputeGradients(loss, chunks.Select(chunk => chunk.Tensor).ToArray());
+        Assert.All(chunks.Take(3), chunk => Assert.True(gradients.ContainsKey(chunk.Tensor)));
+        Assert.All(chunks.Skip(3), chunk => Assert.False(gradients.ContainsKey(chunk.Tensor)));
+        var state = chunks.Select(chunk => chunk.Tensor.ToArray()).ToArray();
+        AssertClose(ReferenceDelta(state, 2, 3, 4, adapter.EffectiveRank(timestep)), delta.ToArray());
+        CheckFactorGradients(state, adapter.EffectiveRank(timestep), weights,
+            chunks.Take(3).Select(chunk => gradients[chunk.Tensor].ToArray()).ToArray());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(Horizon)]
+    public void Compiled_steps_and_probes_use_live_factors_without_caching_trace_outputs(int timestep)
+    {
+        var engine = AiDotNetEngine.Current;
+        var adapter = new TimestepDependentLora<double>(2, 3, 4, Horizon, new Random(17));
+        var chunks = adapter.GetParameterStateChunks().ToArray();
+        var parameters = chunks.Take(3).Select(chunk => chunk.Tensor).ToArray();
+        var initial = chunks.Skip(3).Select(chunk => chunk.Tensor.ToArray()).ToArray();
+        double[] weights = Enumerable.Range(0, 12).Select(i => Math.Cos(i * 0.7)).ToArray();
+        var weightTensor = new Tensor<double>(weights, new[] { 3, 4 });
+        adapter.EffectiveDeltaTransposed(timestep).ToArray();
+        Tensor<double> Objective() => engine.ReduceSum(engine.TensorMultiply(adapter.EffectiveDeltaTransposed(timestep), weightTensor), null, false);
+        using var recording = ClosureObjectiveGuard<double>.BeginRecording();
+        CompiledTrainingPlan<double> plan;
+        using (var scope = GraphMode.EnableTraining(parameters))
+        {
+            plan = scope.CompileTraining(parameters, Objective());
+            Assert.Null(scope.HostReadOp);
+        }
+        using (plan)
+        {
+            var guard = ClosureObjectiveGuard<double>.TakeRecorded(out var reason);
+            if (guard is null) throw new InvalidOperationException(reason);
+            guard.AttachTo(plan);
+            plan.ConfigureOptimizer(OptimizerType.AdamW, learningRate: 0.01, weightDecay: 0);
+            for (int step = 0; step < 3; step++)
+            {
+                var state = chunks.Select(chunk => chunk.Tensor.ToArray()).ToArray();
+                Assert.Equal(ClosureGuardResult.Matched, guard.TryRebind(Objective, parameters, out _));
+                Assert.Equal(ReferenceLoss(state, adapter.EffectiveRank(timestep), weights), plan.Step().ToArray()[0], 10);
+                CheckFactorGradients(state, adapter.EffectiveRank(timestep), weights, plan.Gradients.Select(gradient => gradient.ToArray()).ToArray());
+                Assert.Equal(new long[] { step + 1, step + 1, step + 1 }, plan.ParameterAcceptedUpdates);
+                for (int i = 0; i < 3; i++) Assert.Equal(initial[i], chunks[i + 3].Tensor.ToArray());
+                var current = chunks.Select(chunk => chunk.Tensor.ToArray()).ToArray();
+                AssertClose(ReferenceDelta(current, 2, 3, 4, adapter.EffectiveRank(timestep)), adapter.EffectiveDeltaTransposed(timestep).ToArray());
+            }
+        }
+        var stateBeforeRefusal = adapter.GetParameters().ToArray();
+        Assert.Throws<ArgumentException>(() => adapter.SetParameters(new Vector<double>(stateBeforeRefusal.Length - 1)));
+        Assert.Equal(stateBeforeRefusal, adapter.GetParameters().ToArray());
+        var copied = new TimestepDependentLora<double>(2, 3, 4, Horizon, new Random(91));
+        copied.CopyStateFrom(adapter);
+        Assert.Equal(stateBeforeRefusal, copied.GetParameters().ToArray());
+        AssertClose(adapter.EffectiveDeltaTransposed(timestep).ToArray(), copied.EffectiveDeltaTransposed(timestep).ToArray());
+    }
+
+    private static TLoRAModel<float> SmallModel(int seed = 42)
+        => new(predictor: new UNetNoisePredictor<float>(architecture: null, inputChannels: 4, outputChannels: 4,
+                baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
+                attentionResolutions: new[] { 1 }, contextDim: 64, seed: seed),
+            vae: new StandardVAE<float>(inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: seed), seed: seed, adapterRank: 2);
+
+    [Fact]
+    public void Model_steps_train_all_adapter_factors_and_preserve_frozen_state_across_clone_and_restore()
+    {
+        var model = SmallModel();
+        _ = model.ParameterCount; // Latch the lazy registry before any warmup; adapters must already be present.
+        var input = new Tensor<float>(Enumerable.Range(0, 256).Select(i => (float)Math.Sin(i * 0.1)).ToArray(), new[] { 1, 4, 8, 8 });
+        var target = new Tensor<float>(Enumerable.Range(0, 256).Select(i => (float)Math.Cos(i * 0.2)).ToArray(), new[] { 1, 4, 8, 8 });
+        model.PredictNoise(input, 0).ToArray(); // Warm every lazy base weight before taking the frozen snapshot.
+        var baseWeights = model.NoisePredictor.GetParameters().ToArray();
+        var vaeWeights = model.VAE.GetParameters().ToArray();
+        var chunks = model.Adapters.Select(adapter => adapter.Adapter.GetParameterStateChunks().ToArray()).ToArray();
+        Assert.NotEmpty(chunks);
+        // Exercise the actual protected collector used by DiffusionModelBase.Train, rather than
+        // treating the helper's declared role as proof that the model optimizer enrolls it.
+        var collector = typeof(DiffusionModelBase<float>).GetMethod("CollectTrainableParameters", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The diffusion training collector was not found.");
+        var enrolled = Assert.IsType<Tensor<float>[]>(collector.Invoke(model, null));
+        var expectedParameters = chunks.SelectMany(row => row.Take(3)).Select(chunk => chunk.Tensor).ToArray();
+        Assert.Equal(expectedParameters.Length, enrolled.Length);
+        foreach (var parameter in expectedParameters)
+            Assert.Single(enrolled.Where(candidate => ReferenceEquals(candidate, parameter)));
+        foreach (var frozen in chunks.SelectMany(row => row.Skip(3)))
+            Assert.DoesNotContain(enrolled, candidate => ReferenceEquals(candidate, frozen.Tensor));
+        var allState = model.GetParameterStateChunks().ToArray();
+        foreach (var chunk in chunks.SelectMany(row => row))
+            Assert.Single(allState.Where(candidate => ReferenceEquals(candidate.SourceTensor, chunk.Tensor)));
+        Assert.Equal((long)baseWeights.Length + vaeWeights.Length + chunks.Sum(row => row.Sum(chunk => (long)chunk.Tensor.Length)), model.ParameterCount);
+        var before = chunks.Select(row => row.Select(chunk => chunk.Tensor.ToArray()).ToArray()).ToArray();
+        for (int step = 0; step < 3; step++) model.Train(input, target);
+        for (int adapter = 0; adapter < chunks.Length; adapter++)
+        {
+            for (int factor = 0; factor < 3; factor++)
+                Assert.False(before[adapter][factor].SequenceEqual(chunks[adapter][factor].Tensor.ToArray()), $"adapter {adapter}, factor {factor} did not train");
+            for (int factor = 3; factor < 6; factor++) Assert.Equal(before[adapter][factor], chunks[adapter][factor].Tensor.ToArray());
+        }
+        Assert.Equal(baseWeights, model.NoisePredictor.GetParameters().ToArray());
+        Assert.Equal(vaeWeights, model.VAE.GetParameters().ToArray());
+        Assert.Equal(model.ParameterCount, model.GetParameters().Length);
+        var expected = model.PredictNoise(input, 0).ToArray();
+        Assert.All(expected, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+        var clone = Assert.IsType<TLoRAModel<float>>(model.Clone());
+        Assert.Equal(model.GetParameters().ToArray(), clone.GetParameters().ToArray());
+        Assert.Equal(expected, clone.PredictNoise(input, 0).ToArray());
+        var restored = SmallModel(91);
+        restored.Deserialize(model.Serialize());
+        Assert.Equal(model.GetParameters().ToArray(), restored.GetParameters().ToArray());
+        Assert.Equal(expected, restored.PredictNoise(input, 0).ToArray());
+        // Restoring a clone must not replace or mutate the original model's canonical state.
+        var sourceState = model.GetParameters().ToArray();
+        clone.Adapters[0].Adapter.SingularValues[0] += 0.5f;
+        Assert.Equal(sourceState, model.GetParameters().ToArray());
     }
 }
