@@ -1361,7 +1361,16 @@
       ],
       "scope": "ONLY remove11 exact legacy-insensitive allowance keys provedSensitive incurrenta826 rawprimaryTRX: AudioGenModel::Channels; LSPIAgent::ConvergenceThreshold/MaxIterations; Ferret::ImageMean/ImageStd/MaxSequenceLength/VocabSize; Shikra::same4. Sevenothercurrentstale-sensitivekeys alreadyretired inheldb73. No model/harness assertion changes, new exemptions, skip/size/precision changes, otherownerfiles. Rootfull11keydiff review before onefocusedtest-onlycompile+entire82caseaffectedoptioncohort; deriveactualcounts and keep40existingdeclaredbaseline skips separate, notpassed.",
       "status": "CLAIMED BEFORE EDITS underexistinguser-approved allfailingcategories/fixedratchet scope. Readonly61summary snapshot cutoff2026-11-18T05:07:20.150Z matchedall18 exactprimaryTRXid/name/message/outcome. SameunderlyingSensitive assertionsretained; no productionbuild or PRpush.",
-      "evidence": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b/active-baseline-reconciliation-20261118T050720Z.json"
+      "evidence": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b/active-baseline-reconciliation-20261118T050720Z.json",
+      "direct_compile_dependency_repair": {
+        "status": "CLAIMED before edits; root design review accepted, needed because held HiFT typed-data recorder intentionally removed RecordedDraw.Tensor",
+        "files": [
+          "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/TabRRetrievalTests.cs",
+          "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/NeuralNetworkSweepAdversarialTests.cs"
+        ],
+        "scope": "Only the two dropout draw-shape tests that fail CS1061. Keep BeginRecording and its recorded count; add existing CaptureDraws scope to inspect its already supported type-erased tensor data, assert captured count equals recorded count, assert Tensor<double> type, and preserve every original shape/order/prediction-zero-draw assertion. No production API, legacy accessor, new metadata, reflection, exclusions or weakened assertions. Reuse current production DLL; one grouped test-only recompile plus affected original classes and 82 option cohort."
+      },
+      "verification_blocker": "The first actual main test-only build exposed these two test consumers of the changed internal recorder. No baseline source diagnostics. Required direct repair remains within the held typed-RNG batch; do not claim the baseline category verified until recompilation and actual TRXs pass."
     },
     {
       "owner": "Codex/artifact_feed shared MMDiT replay category",
@@ -2057,7 +2066,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:24:01.736625+00:00",
+  "updated_utc": "2026-11-18T05:28:11.099469+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
