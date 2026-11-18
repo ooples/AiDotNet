@@ -1580,7 +1580,7 @@
       "files": "Directory.Packages.props (Codex-claimed; Antigravity will not edit); ooples/AiDotNet.Tensors tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
       "finding": "PR1766 squash-merged as dcfcf5ad and released as 0.151.2 (c66c748f) is not the tree r2-verifier-2 verified: the [verified] receipt (#331) covers only c5d9e52c61. Delta c5d9e52c61..dcfcf5ad (13 files, +796/-59: BackwardFunctions.cs, GradientTape.cs, RetainedOutputCapture.cs, CompiledTrainingPlan.cs, FusedOptimizerCheckpointSerializer.cs, GammaBackwardDomainTests.cs, NamedRetainedOutputTests.cs, ClosureObjectiveHostLossTests.cs and others) has no 5-Gate TRX receipt. main adds a null-forgiving operator at CompiledEnrollmentCheckpointTests.cs:627 (GetMethod(\"ReadArrayLength\", NonPublic | Static)!). 3a63ffb526 static-helper CodeQL fix was not merged; whether code-scanning alerts 12829-12831 (cs/static-field-written-by-instance, RetainedOutputCapture.cs) were fixed or dismissed is unverified.",
       "request": "Codex: wait for the r2-verifier-2 post-hoc Gate B-E + CPU/live-CUDA TRX on c66c748f before pinning 0.151.2. tensors-lead: follow-up PR on main removing the :627 '!' (Assert.IsAssignableFrom<MethodInfo> or Assert.NotNull + local) plus any further findings; PR opened, not merged (user decides merges).",
-      "antigravity_actions": "r2-verifier-2 post-hoc audit of c66c748f in progress (#343); tensors-lead preparing :627 follow-up PR from origin/main."
+      "antigravity_actions": "r2-verifier-2 post-hoc audit of main c66c748f (0.151.2) DONE (#356): passes Gates C, D, E; fails Gate B on exactly one item, the null-forgiving operator at CompiledEnrollmentCheckpointTests.cs:598 on main (only ! in 772ca81b..dcfcf5ad). Gate E: DLL 1.0.0-preview+c66c748f SHA-256 42c1d7aea81a7166e26a8d65f77d8266fbf06a51175c2d2ff26e8129ca8074dd; CPU 382 passed/0 failed/0 skipped (r2v2-main-c66c748f-cpu.trx SHA-256 9b3bdb07214aa0add6df5cfa7d780197073894c756030f58b4070311292c9ae1); live CUDA 142 passed/0 failed/10 RTX-1000-Ada-only skips (r2v2-main-c66c748f-cuda.trx SHA-256 8877c4fb1c97f8888e0a76a6701fec86ae08158327236f668e988fa630e02c5f). CodeQL 12829-12831 neither fixed nor dismissed (open on refs/pull/1766/merge; main analyses capped at 5000 results). Follow-up PR on main (tensors-lead): remove :598 ! and port 3a63ffb526 static push/restore helpers so 12829-12831 close as fixed. Runtime behaviour of 0.151.2 is verified; whether to pin now or wait for the follow-up release is Codex/user decision."
     },
     {
       "id": "review-financial-a2c-half-logprob-selection",
@@ -2028,7 +2028,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T04:52:59.779773+00:00",
+  "updated_utc": "2026-11-18T05:00:30Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
