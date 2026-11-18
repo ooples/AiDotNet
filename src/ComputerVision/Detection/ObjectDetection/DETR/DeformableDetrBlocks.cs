@@ -448,8 +448,9 @@ internal static class DetrHeads<T>
     {
         var engine = AiDotNetEngine.Current;
         var eps = NumOps.FromDouble(1e-5);
-        var numerator = engine.TensorMax(x, eps);
-        var denominator = engine.TensorMax(engine.TensorAddScalar(engine.TensorNegate(x), NumOps.One), eps);
+        var numerator = engine.TensorAddScalar(engine.ReLU(engine.TensorSubtractScalar(x, eps)), eps);
+        var oneMinusX = engine.TensorAddScalar(engine.TensorNegate(x), NumOps.One);
+        var denominator = engine.TensorAddScalar(engine.ReLU(engine.TensorSubtractScalar(oneMinusX, eps)), eps);
         return engine.TensorSubtract(engine.TensorLog(numerator), engine.TensorLog(denominator));
     }
 

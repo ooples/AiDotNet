@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1712.00726",
     Year = 2018,
     Authors = "Zhaowei Cai, Nuno Vasconcelos")]
-public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
+public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>, IHostProposalVisionModel
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 

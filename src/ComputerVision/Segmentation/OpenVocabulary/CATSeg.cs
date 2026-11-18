@@ -132,6 +132,10 @@ public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
             {
                 InitialLearningRate = _options.LearningRate,
                 WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = _options.MaxGradientNorm > 0,
                 MaxGradientNorm = _options.MaxGradientNorm
             });
 
