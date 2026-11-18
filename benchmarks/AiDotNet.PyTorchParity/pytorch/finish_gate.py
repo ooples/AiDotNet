@@ -23,7 +23,7 @@ import threading
 import time
 
 import psutil
-from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage
+from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases
 
 
 
@@ -506,6 +506,36 @@ def correctness_gate(run: dict) -> dict:
     return {"status": "pass", "receipt_sha256": binding["sha256"], "checks": len(checks)}
 
 
+def cold_completion_seconds(run: dict) -> float:
+    """Include process startup, construction and preparation through the first completed epoch.
+
+    The existing epoch timer remains separate: a constructor can execute a forward
+    before that timer starts. Raw phase hashes/PIDs bind this end-to-end measurement
+    to the same fresh process instead of inferring startup from a sampler's first tick.
+    """
+    created = number(run.get("process_create_time"))
+    if created is None or created <= 0:
+        raise ValueError("Cold completion lacks a finite positive process creation timestamp.")
+    pid = run.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise ValueError("Cold completion lacks the launched process PID.")
+    epochs = run.get("protocol", {}).get("epochs")
+    if not isinstance(epochs, int) or isinstance(epochs, bool) or epochs < 1:
+        raise ValueError("Cold completion requires at least one real training epoch.")
+    phases = checked_phases(run)
+    if any(not isinstance(event.get("unix_ms"), int) or isinstance(event["unix_ms"], bool)
+           or event["unix_ms"] <= 0 for event in phases):
+        raise ValueError("Cold completion phase timestamps are missing or invalid.")
+    launch_ms = created * 1000
+    if launch_ms > phases[0]["unix_ms"]:
+        raise ValueError("Cold completion phases predate process creation.")
+    endpoint = next(event for event in phases if event["phase"] == "training-epoch-0-complete")
+    elapsed = (endpoint["unix_ms"] - launch_ms) / 1000
+    if not math.isfinite(elapsed) or elapsed <= 0:
+        raise ValueError("Cold completion interval is not positive and finite.")
+    return elapsed
+
+
 def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     path = Path(run["path"])
     if run["return_code"] != 0 or not (path / "report.json").exists():
@@ -531,7 +561,12 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     training = model.get("training") or {}
     epochs = training.get("epoch_seconds", [])
     values = {"first_epoch_seconds": number(epochs[0]) if epochs else None,
-              "steady_epoch_seconds": number(training.get("steady_state_epoch_seconds_median"))}
+              "steady_epoch_seconds": number(training.get("steady_state_epoch_seconds_median")),
+              "launch_to_first_epoch_end_seconds": None}
+    try:
+        values["launch_to_first_epoch_end_seconds"] = cold_completion_seconds(run)
+    except (KeyError, ValueError, TypeError, OSError, json.JSONDecodeError) as error:
+        errors.append("cold completion: " + str(error))
     if number(training.get("first_loss")) is None or number(training.get("last_loss")) is None:
         errors.append("missing/nonfinite training loss evidence")
     for batch in run["protocol"]["inference_batch_sizes"]:
@@ -558,7 +593,7 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         sides = {side: [next((run for run in scored if run["pair"] == pair and run["side"] == side), None)
                         for pair in pairs] for side in ("aidotnet", "pytorch")}
         rows = {side: [metrics(run) if run else ({}, ["missing pair member"]) for run in sides[side]] for side in sides}
-        names = sorted(set().union(*(row[0].keys() for side in rows.values() for row in side)))
+        names = sorted({"launch_to_first_epoch_end_seconds"} | set().union(*(row[0].keys() for side in rows.values() for row in side)))
         outcomes = {name: paired_gate([row[0].get(name) for row in rows["aidotnet"]],
                                       [row[0].get(name) for row in rows["pytorch"]], maximum) for name in names}
         cache_checks = [cache_coverage(run) for run in scored]
