@@ -101,17 +101,13 @@ internal sealed partial class HiFiGanGenerator<T>
             }
             using var finalActivation = Activate(x, 1, 0.01);
             if (!_post.TryPrivateCpuOutputTime(finalActivation.Shape[2], out int finalTime)) throw new InvalidOperationException("Private CPU post geometry changed.");
-            Tensor<T> final4;
-            using (TensorArena.Suspend())
-            using (TensorScope.Suspend())
-                final4 = new Tensor<T>(new[] { batch, _post.OutputChannels, 1, finalTime });
-            try
-            {
-                _post.ForwardPrivateCpuInto(finalActivation, final4, null, false, MathHelper.GetNumericOperations<T>().Zero);
-                if (_tanhOutput) cpu.TanhInto(final4, final4);
-                output = _engine.Reshape(final4, new[] { batch, _post.OutputChannels, finalTime });
-            }
-            finally { final4.Dispose(); }
+            // Predict owns the durable public copy. Match ordinary eager outputs by renting
+            // this final result from its caller arena, retaining the arena's escape/quarantine
+            // rules for direct generator callers instead of adding a second fresh waveform.
+            var final4 = TensorAllocator.RentUninitialized<T>(new[] { batch, _post.OutputChannels, 1, finalTime });
+            _post.ForwardPrivateCpuInto(finalActivation, final4, null, false, MathHelper.GetNumericOperations<T>().Zero);
+            if (_tanhOutput) cpu.TanhInto(final4, final4);
+            output = _engine.Reshape(final4, new[] { batch, _post.OutputChannels, finalTime });
             return true;
         }
         finally { Volatile.Write(ref _privateCpuBusy, 0); }
