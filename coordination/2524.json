@@ -1381,6 +1381,24 @@
       "scope": "Repair the complete shared MMDiT tensor/replay path, including patch embedding, modulation/gates, and unpatchification, only after a bounded design and root review. Preserve mathematical layout, all trainable gradients, conditioning, parameter ownership, and existing assertions. No eager fallback, scalar exemptions, detached parameter snapshots, or other model files. Native FusedLinear recording is functioning in the measured representative.",
       "status": "CLAIMED before implementation. One exact SenseFlow training case reproduced on held b73 core a0186... and published Tensors 0.151.2. A storage-free probe proved the first reader at projected.AsSpan().CopyTo in PatchifyAndEmbed, MMDiTNoisePredictor.cs lines588-592. Root also found related manual span/modulation/gate/unpatchification paths, so the design must address the shared category, not just one copy. Independent patch-layout, numeric/gradient, replay/rebind and affected consumer cohort qualification required. Native artifact/CUDA validation remains the agent priority.",
       "evidence": "Z:/codex-builds/flashattention-replay/diffusion-reader-evidence/47372.first-chance.jsonl"
+    },
+    {
+      "owner": "Codex/artifact_feed native captured gradient publication",
+      "repository": "ooples/AiDotNet.Tensors",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/Compilation/CompiledTrainingPlan.cs (only StepLocked post-StepCore publication block)",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CapturedGradientPublicationTests.cs"
+      ],
+      "scope": "Re-arm existing resident ResultGradients after a completed captured step, using existing BindResidentBuffer metadata path. No downloads, optimizer/kernel/capture redesign, tolerance change, parameter-state change or other compiler regions. Add an independent non-FlashAttention captured-gradient regression with analytic gradients read every step, repeated reads, current outputs/loss/weight state, real graph replay, and retirement/lifetime controls. Preserve all existing 319 CPU/all-five-framework and 28 CUDA identity obligations; exact new identity counts come from actual discovery.",
+      "status": "CLAIMED before semantic edits. CUDA44243812834 failed only new FA whole-step gradient assertion,27 passed0 skipped. Independent offline arithmetic matches expected q-gradient at step4 and actual prior step3 to about4e-10. Source confirms StepGpuResidentBody re-arms gradient HostSync callbacks during warmup/capture, while subsequent graph replays execute no host bookkeeping; StepLocked currently publishes retained outputs but not ResultGradients. Root reviewed the exact source block. Diagnostic-only f59 producer44245400328 remains queued, with unchanged gates. Root requires complete diff review before the next semantic build."
+    },
+    {
+      "owner": "Codex/pinn_review TLoRA whole-model test fixture correction",
+      "files": [
+        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/TimestepDependentLoraTests.cs (only full-model fixture and its direct controls)"
+      ],
+      "scope": "Correct the added whole-model fixture using measured mathematical preconditions: explicit latent samples and a deterministic nonzero frozen readout as a proxy for a pre-existing denoiser. Preserve all active-factor, inactive-factor, frozen initialization/base/VAE, ownership, count, clone and restore assertions. Use separate actual TLoRAModel instances for conditioned canonical StepWithCustomLoss and public unconditional Train. No production API, subclass changing model identity, sampler/optimizer workaround or weakening to any-factor changes. Root design review required before edits.",
+      "status": "CLAIMED before test edits. Root probe on exact d99 core and GitHub native artifact ddf3 proves zero default output and zero adapter gradients because UNet outputConv is deliberately zero initialized; nonzero readout activates self-attention factors, while unused cross-attention factors remain unchanged without conditioning. Original13 model tests pass. Agent proposal reviewed in principle; root final clarifications precede implementation."
     }
   ],
   "codex_assignments": {
@@ -2066,7 +2084,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:28:11.099469+00:00",
+  "updated_utc": "2026-11-18T05:59:37.828107+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2354,8 +2372,8 @@
     },
     "held_product_branch": {
       "branch": "codex/2524-category-rollout",
-      "head": "b73f85723c",
-      "status": "PUBLISHED reviewed collaboration WIP; PRbranchremainsa826andactiveCIuninterrupted. Exacta826diagnosticsmergedlocally7056first, no source/package changes inthatmerge. GP78/78unique0fail0skip; Adam37/37; codecHiFT38/38. TLoRAmodelwholecohortstillnativeFA-blocked and originalSpark146contains7remainingTensorMaxprobe failures, so thisbranchisNOTPRready. RequiredGPUshipping225153separatebranch untilactualCUDAqualification."
+      "head": "5ba4dedf19",
+      "status": "Published reviewed category source. GP78/78 passes; codec/HiFT38/38; Adam37/37; option cohort82 has42pass40unchangedskips0fail, all11 prior stale failures pass; both complete recorder test classes49/49 pass. Source main test-only build succeeded with verified prebuilt core and genuine portable metadata. Original TLoRA model13/13 passes on GitHub native artifact; added full-model fixture remains under correction. PRa826 and its entire active CI remain untouched."
     },
     "active_pr_runs": {
       "main": 44232296552,
