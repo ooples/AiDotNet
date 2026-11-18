@@ -1269,7 +1269,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::AutocorrelationCorrection", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::EarlyStoppingMinDelta", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::EarlyStoppingPatience", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::EndLearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::IncludeTrend", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::LagOrder", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::MaxPredictionAbsValue", OptionSensitivityOutcome.Insensitive },
