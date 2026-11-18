@@ -597,7 +597,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       }
       const result = await act(pg, c);
       if (result === 'same' && depth < maxDepth) {
-        await explore(pg, [...path, c.selector], depth + 1, doneOnPage);
+        // A blocked control in this child state can still be reachable from
+        // the parent. Only successful actions are deduplicated across states.
+        await explore(pg, [...path, c.selector], depth + 1, new Set(doneOnPage));
       } else if (result === 'same') {
         // Reaching the exploration limit must not silently count newly
         // revealed controls as covered. Report them unless another path

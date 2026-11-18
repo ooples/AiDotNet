@@ -8,9 +8,11 @@ import { crawl } from './helpers/crawler';
 test.describe('crawler regression checks', () => {
   let server: Server;
   let origin: string;
+  let coveredRowLoads = 0;
 
   test.beforeAll(async () => {
     server = createServer((req, res) => {
+      if (req.url === '/covered-rows/') coveredRowLoads++;
       res.setHeader('Content-Type', 'text/html');
       const body = req.url === '/broken/'
         ? '<button id="noop">Do nothing</button><button id="request-only" onclick="fetch(\'/ping/\')">Send request without a result</button><a href="/missing/">Missing page</a>'
@@ -18,6 +20,14 @@ test.describe('crawler regression checks', () => {
           ? '<button id="reveal" onclick="document.getElementById(\'deep\').hidden=false">Reveal</button><button hidden id="deep" onclick="alert(\'Hello\')">Deep control</button>'
         : req.url === '/error/'
           ? '<script>console.error("Failed to fetch: fixture failure")</script><h1>Error fixture</h1>'
+        : req.url === '/covered-rows/'
+          ? '<div style="position:relative"><div style="position:absolute;inset:0;z-index:2;background:white"></div>'
+            + '<button>Covered row action</button>'.repeat(12) + '</div>'
+        : req.url === '/nested-cover/'
+          ? '<button id="theme" onclick="document.body.classList.toggle(\'theme\')">Theme</button>'
+            + '<button id="menu" onclick="document.getElementById(\'cover\').hidden=false">Menu</button>'
+            + '<button id="copy" onclick="alert(\'Copied\')">Copy</button>'
+            + '<div id="cover" hidden style="position:fixed;inset:0;z-index:2;background:white"></div>'
           : '<h1>Fixture</h1><button id="dialog" onclick="alert(\'Hello\')">Open dialog</button>';
       res.statusCode = req.url === '/missing/' ? 404 : 200;
       res.end(`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`);
@@ -48,6 +58,20 @@ test.describe('crawler regression checks', () => {
       expect.objectContaining({ control: expect.stringContaining('#request-only'), problem: expect.stringContaining('did nothing visible') }),
       expect.objectContaining({ control: 'link /missing/', problem: 'target answered HTTP 404' }),
     ]));
+  });
+
+  test('duplicate unreachable rows fail coverage without repeatedly reloading the page', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/covered-rows/`] });
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ control: expect.stringContaining('Covered row action'), problem: expect.stringContaining('not exercised') }),
+    ]));
+    expect(coveredRowLoads).toBe(2); // Initial visit and one attempt to restore the covered control.
+  });
+
+  test('a control blocked in a nested state is retried from its reachable parent state', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/nested-cover/`] });
+    expect(report.findings).toEqual([]);
+    expect(report.exercised).toContain('/nested-cover/ #copy');
   });
 
   test('two passes do not retain handlers or mutate the first report', async ({ page, request }) => {
