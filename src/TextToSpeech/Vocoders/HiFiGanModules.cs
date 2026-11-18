@@ -73,18 +73,18 @@ internal sealed class HiFiGanGenerator<T>
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
         _pre = Add(plainEnds
-            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, defaultInitialization)
+            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, 0, true, defaultInitialization)
             : Conv(inChannels, initialChannels, 7, 1, 1, 3, defaultInitialization));
-        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None, defaultInitialization));
+        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None, 0, true, defaultInitialization));
         int channels = initialChannels;
         for (int i = 0; i < upsampleRates.Length; i++)
         {
             int next = initialChannels >> (i + 1);
             _ups.Add(Add(new NormedConv1DLayer<T>(channels, next, upsampleKernels[i], upsampleRates[i], 1, 1,
-                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight, defaultInitialization)));
+                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight, 0, true, defaultInitialization)));
             if (conditionInEachUpsamplingLayer)
                 _stageConditions.Add(Add(new NormedConv1DLayer<T>(conditionChannels, next, 1, 1, 1, 1, 0, false,
-                    ConvolutionNormalization.None, defaultInitialization)));
+                    ConvolutionNormalization.None, 0, true, defaultInitialization)));
             channels = next;
             var stage = new List<(List<NormedConv1DLayer<T>>, List<NormedConv1DLayer<T>>)>();
             for (int j = 0; j < resblockKernels.Length; j++)
@@ -100,7 +100,7 @@ internal sealed class HiFiGanGenerator<T>
             _blocks.Add(stage);
         }
         _post = Add(plainEnds
-            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, defaultInitialization, useBias: plainOutputBias)
+            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, 0, plainOutputBias, defaultInitialization)
             : Conv(channels, outputChannels, 7, 1, 1, 3, defaultInitialization));
         if (initialization is not null)
         {
@@ -162,7 +162,7 @@ internal sealed class HiFiGanGenerator<T>
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
     private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding, Random? initialization = null)
-        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight, initialization);
+        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight, 0, true, initialization);
 
     private TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
     {
@@ -410,7 +410,7 @@ internal sealed class HiFiGanDiscriminators<T>
         int W(int c) => Math.Max(1, c / Math.Max(1, widthDivisor));
         NormedConv1DLayer<T> Build(int input, int output, int kernel, int stride, int dilation, int groups, int padding,
             bool transposed, ConvolutionNormalization normalization) =>
-            new(input, output, kernel, stride, dilation, groups, padding, transposed, normalization, initialization);
+            new(input, output, kernel, stride, dilation, groups, padding, transposed, normalization, 0, true, initialization);
         var widths = periodChannels ?? new[] { 32, 128, 512, 1024, 1024 };
         if (widths.Length != 5) throw new ArgumentException("A period discriminator has five convolutions.", nameof(periodChannels));
         foreach (int p in periods)
