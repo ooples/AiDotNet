@@ -104,6 +104,7 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
 
     private readonly int _latentChannels;
     private readonly int _adapterRank;
+    [ParameterAlias(nameof(_predictor))]
     private readonly IReadOnlyList<TLoRAAttentionAdapter<T>> _adapters;
 
     private UNetNoisePredictor<T> _predictor;
@@ -254,6 +255,7 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Gets the injected adapters, one per wrapped attention block.
     /// </summary>
+    [ParameterAlias(nameof(_predictor))]
     public IReadOnlyList<TLoRAAttentionAdapter<T>> Adapters => _adapters;
 
     [MemberNotNull(nameof(_predictor), nameof(_vae))]

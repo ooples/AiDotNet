@@ -434,12 +434,15 @@ public class TimestepDependentLoraTests : IDisposable
         var expectedParameters = chunks.SelectMany(row => row.Take(3)).Select(chunk => chunk.Tensor).ToArray();
         Assert.Equal(expectedParameters.Length, enrolled.Length);
         foreach (var parameter in expectedParameters)
-            Assert.Single(enrolled.Where(candidate => ReferenceEquals(candidate, parameter)));
+            Assert.Single(enrolled, candidate => ReferenceEquals(candidate, parameter));
         foreach (var frozen in chunks.SelectMany(row => row.Skip(3)))
             Assert.DoesNotContain(enrolled, candidate => ReferenceEquals(candidate, frozen.Tensor));
         var allState = model.GetParameterStateChunks().ToArray();
+        var ownedState = new System.Collections.Generic.HashSet<Tensor<float>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<float>>.Instance);
+        foreach (var chunk in allState.Where(chunk => chunk.Role != ParameterSlotRole.Alias))
+            Assert.True(ownedState.Add(chunk.SourceTensor), $"Duplicate checkpoint owner for {chunk.StableId}");
         foreach (var chunk in chunks.SelectMany(row => row))
-            Assert.Single(allState.Where(candidate => ReferenceEquals(candidate.SourceTensor, chunk.Tensor)));
+            Assert.Single(allState, candidate => ReferenceEquals(candidate.SourceTensor, chunk.Tensor));
         Assert.Equal((long)baseWeights.Length + vaeWeights.Length + chunks.Sum(row => row.Sum(chunk => (long)chunk.Tensor.Length)), model.ParameterCount);
         var before = chunks.Select(row => row.Select(chunk => chunk.Tensor.ToArray()).ToArray()).ToArray();
         for (int step = 0; step < 3; step++) model.Train(input, target);
