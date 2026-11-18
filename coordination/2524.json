@@ -1443,6 +1443,15 @@
       ],
       "scope": "Fix sole confirmed7064 build-gate blocker: new MmditReplayTests six methods are unrouted. Assign the entire class to existing diffusion core shard. Preserve all checks/categories/assertions/shards; no catchall or inventory exemption. Run actual TypeImpact inventory engine on fresh main test assembly before/after; existing compilation is successful.",
       "status": "COMPLETE commit2599a7c01d949cb8ab654f9db4e5e70009d82235 pushed to PR and collaboration branches after all7064workflows terminal. Actual TypeImpact engine on freshffd3b594 testDLL reproduced sole MMDiT gap before edit; after exact Unit03a route all5244main testclasses have coverage,0unassigned,20unchanged deliberately excluded classes. No production/test assertions/gates changed. New fullCI44298973036 active."
+    },
+    {
+      "owner": "Codex/root MMDiT net471 test-helper repair",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/MmditReplayTests.cs (only Near finiteness predicate)"
+      ],
+      "scope": "Repair sole observed2599compatbuild compileerror CS0117 double.IsFinite unavailable onnet471. Use equivalent IsNaN/IsInfinity predicate with unchanged numeric tolerance/assertions. Run full existing CI compatibility build beforepush, noframework/check removal.",
+      "status": "CLAIMED before edit. Mainnet10Build andinventory passed; compat134790100725 failed then workflowauto-cancelled. All2599workflows are terminal. Root previously validatednet10only; localcompatvalidation now required."
     }
   ],
   "codex_assignments": {
@@ -2135,7 +2144,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T11:58:42.171937+00:00",
+  "updated_utc": "2026-11-18T13:08:07.221602+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
