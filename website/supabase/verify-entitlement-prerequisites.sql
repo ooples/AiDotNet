@@ -7,13 +7,14 @@ begin
       and i.indnkeyatts = 2
       and pg_get_indexdef(i.indexrelid,1,true) = 'stripe_subscription_id'
       and pg_get_indexdef(i.indexrelid,2,true) = 'product'
-      and position('stripe_subscription_id IS NOT NULL' in pg_get_expr(i.indpred,i.indrelid)) > 0
+      and pg_get_expr(i.indpred,i.indrelid) = '(stripe_subscription_id IS NOT NULL)'
   ) or not exists (
     select 1 from pg_index i where i.indexrelid = to_regclass('public.idx_license_keys_checkout_product')
+      and i.indrelid = 'public.license_keys'::regclass
       and i.indisunique and i.indisvalid and i.indisready and i.indnkeyatts = 2
       and pg_get_indexdef(i.indexrelid,1,true) = 'stripe_checkout_session_id'
       and pg_get_indexdef(i.indexrelid,2,true) = 'product'
-      and position('stripe_checkout_session_id IS NOT NULL' in pg_get_expr(i.indpred,i.indrelid)) > 0
+      and pg_get_expr(i.indpred,i.indrelid) = '(stripe_checkout_session_id IS NOT NULL)'
   ) or to_regclass('public.idx_license_keys_one_active_per_user_product_tier') is not null
     or to_regprocedure('public.sync_aidotnet_billing_profile(text,text,text,uuid)') is null
     or to_regprocedure('public.issue_aidotnet_community_license(uuid,text)') is null then

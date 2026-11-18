@@ -174,6 +174,7 @@ test('deployment prerequisite checks reject missing or nonunique entitlement ind
   sql(guard);
   assert.throws(() => sql('begin; drop index public.idx_license_keys_subscription_product;\n'+guard), /Run the reviewed migrations/);
   assert.throws(() => sql('begin; drop index public.idx_license_keys_subscription_product; create index idx_license_keys_subscription_product on public.license_keys(stripe_subscription_id,product) where stripe_subscription_id is not null;\n'+guard), /Run the reviewed migrations/);
+  assert.throws(() => sql("begin; drop index public.idx_license_keys_subscription_product; create unique index idx_license_keys_subscription_product on public.license_keys(stripe_subscription_id,product) where stripe_subscription_id is not null and tier='professional';\n"+guard), /Run the reviewed migrations/);
   assert.throws(() => sql('begin; drop index public.idx_license_keys_checkout_product;\n'+guard), /Run the reviewed migrations/);
   assert.throws(() => sql('begin; drop function public.issue_aidotnet_community_license(uuid,text);\n'+guard), /Run the reviewed migrations/);
   sql(guard); // Failed transactions rolled back; function-only redeployment stays available.
