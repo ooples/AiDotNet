@@ -3,10 +3,10 @@
   "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
   "branch": "codex/2524-ci-coordination",
   "pr_branch": "perf/elementwise-sweep-combined-v1",
-  "current_pr_head": "f37fe8b47daac7307bdf407b680497e6939460df",
+  "current_pr_head": "e39b0fdf734004baba4b522dfab3391eb22284c6",
   "rules": [
     "No PR yet; no merge or force push.",
-    "Root is the single integration writer. ACTIVE full PR cycle 44315586532 at f37fe8b47daac7307bdf407b680497e6939460df. Do not push or cancel the PR branch until the entire cycle is terminal. Prepare bounded reviewed fixes on collaboration branches meanwhile. No force push or public validation release. The preceding compatibility qualification 44312668246 passed the exact fix with zero errors.",
+    "Per explicit user directive (2026-11-18T08:08-05:00): Directory.Packages.props MUST remain pinned to published AiDotNet.Tensors 0.151.2 on nuget.org (NEVER re-pin temporary -coordination packages!). ACTIVE full PR cycle 44319441296 at e39b0fdf734004baba4b522dfab3391eb22284c6 (includes f37fe8b47d + 734c800de4 159-file verified category fixes + 0.151.2 replay/Half/RetainedOutputCapture/FinancialA2CAgent repairs). Do not push or cancel the PR branch until the entire cycle is terminal.",
     "Claim a bounded file/task scope before editing; use separate worktrees and contributor branches.",
     "Do not weaken assertions, replay guards, lint rules or shard checks; no scalar-kernel exemptions or legacy adapters.",
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
@@ -1466,7 +1466,7 @@
         "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/MmditReplayTests.cs (if not yet pushed by Codex before integration)"
       ],
       "scope": "User explicitly directed immediate push to PR #2524 pinned to published AiDotNet.Tensors 0.151.2 (NOT temporary -coordination package) with all shared/category fixes after full adversarial review + net10.0/net471 builds + 0.151.2 test verification. Hold conflicting 0.151.3-coordination pushes to perf/elementwise-sweep-combined-v1.",
-      "status": "CLAIMED IN PROGRESS"
+      "status": "COMPLETE: Pushed e39b0fdf734004baba4b522dfab3391eb22284c6 to perf/elementwise-sweep-combined-v1 (fast-forward over f37fe8b47d). Pinned published AiDotNet.Tensors 0.151.2, merged 734c800de4 (159 files), added NanToNumHelper across 28 callers, recorded GraphMode paths for FlashAttentionLayer/MMDiT/ALiBi/PointTransformerV3/NaturalSpeech2, fixed TryDeclaredGraphBreak tape lifetime, and removed FinancialA2CAgent Half epsilon override. Verified 0 errors across net10.0+net471 for both AiDotNet and AiDotNetTests, 5-Gate static audit clean (0 !, 0 opt-outs, 0 ScalarKernel, 34 deletions + 4 reductions in ElementWiseBaseline.txt), and 283/283 passed (0 failed) in pr2524-01512-adversarial-gate.trx (sha256: c2beef726c7759981c6b40e38e5749f84c1f8dfb189ebbb5e22dab74d551c887)."
     }
   ],
   "codex_assignments": {
@@ -2142,7 +2142,7 @@
       "commit": "1a9ec438c6",
       "id": "post1766-half-adam-model-epsilon-workaround",
       "request": "Owner remove Half-specific epsilonoverride once Codex provides shared Half tape FP32master/moment repair under existing optimizer claim. Preserve all stable logprob/numeric/refusal tests; add no tolerance/gate weakening. Codex does not overlap FinancialA2CAgent edits.",
-      "status": "ROOT REVIEW BLOCKER; preserve stable logprob and trainer repairs"
+      "status": "RESOLVED in e39b0fdf734004baba4b522dfab3391eb22284c6 (removed CreateNetworkOptimizerOrDefault Half Epsilon=1e-5 override; FinancialA2CAgent + A2cMaskedUpdateTests + AdamHalfStateTests verified green on 0.151.2)"
     },
     {
       "id": "owner49-batch6-publication-and-checkpoint-handoff",
@@ -2657,15 +2657,12 @@
       "status": "SUCCESS all5TFMs/335CPU and exact-artifact CUDA29. Semanticd64a4e54 locally21/21native+1/1unchangedconsumer passed; root reviewed complete source/tests/additive workflow diffs. Producerartifact14410119047 and CUDA44267644510 independently verified; native335net10SHA40fdb7fe7558d8723acd12916fe50bf5667945d99c8d346bed0d3d3da346214e. No public release; qualified consumer pin integrated7064f23427."
     },
     "active_cycle": {
-      "head": "f37fe8b47daac7307bdf407b680497e6939460df",
-      "mainRun": 44315586532,
-      "ttsRun": 44315586594,
-      "foundationsRun": 44315586448,
-      "status": "ACTIVE; full CI remains required. No claim of global readiness.",
-      "monitorPid": 46908,
-      "collectorPid": 28932,
-      "evidenceDirectory": "C:/Users/cheat/source/artifacts/codex2524/head-f37fe8b47d",
-      "rawDirectory": "Z:/codex-ci-artifacts/aidotnet2524/pr-f37fe8b47d"
+      "head": "e39b0fdf734004baba4b522dfab3391eb22284c6",
+      "tensorsPackage": "0.151.2 (published nuget.org — user explicitly rejected temporary -coordination pin)",
+      "mainRun": 44319441296,
+      "ttsRun": 44319441048,
+      "foundationsRun": 44319441439,
+      "status": "ACTIVE; full CI running on published AiDotNet.Tensors 0.151.2 + all 196 integrated shared/category fix files."
     },
     "antigravity_verified_category_fixes": {
       "branch": "origin/antigravity/2524-verified-category-fixes",
