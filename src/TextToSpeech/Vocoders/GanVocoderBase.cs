@@ -120,7 +120,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
 
     /// <summary>Generates an owned, detached waveform consumed only by the discriminator training step.</summary>
     /// <remarks>The caller suppresses gradient recording; training-mode state updates retain their usual behavior.</remarks>
-    protected virtual Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+    private protected virtual Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
     {
         var generated = Flat(Generate(mel));
         return new Tensor<T>(generated._shape, generated.ToVector());

@@ -107,7 +107,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
 
     /// <inheritdoc />
-    protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+    private protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
         => GetType() == typeof(HiFiGAN<T>)
             ? Flat(_generator!.ForwardDetachedForDiscriminator(mel))
             : base.GenerateDetachedForDiscriminator(mel);
