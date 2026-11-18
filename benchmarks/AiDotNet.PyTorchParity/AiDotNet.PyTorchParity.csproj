@@ -31,6 +31,9 @@
 
   <ItemGroup>
     <Compile Remove="native/**/*.cs" />
+    <!-- The matched reference/benchmark recipes travel with the immutable consumer runtime. -->
+    <Content Include="pytorch/benchmark.py;pytorch/benchmark_telemetry.py;pytorch/hifigan_fixture.py;pytorch/export_hifigan_workload.py;pytorch/export_hifigan_reference.py;pytorch/export_reference.py"
+             CopyToOutputDirectory="PreserveNewest" />
     <!-- Bias the GC toward releasing committed memory back to the OS (0-9; higher
          = more aggressive). Set via runtimeconfig so it applies to the published
          DLL path too, not just launchSettings. -->

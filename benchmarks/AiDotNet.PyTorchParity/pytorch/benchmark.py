@@ -1743,6 +1743,8 @@ class HifiGanV1(nn.Module):
         self.discriminators = HifiDiscriminators()
         self.loss_mel = HifiMel(HIFI_RATE / 2)
         self._optimizers: tuple[torch.optim.Optimizer, torch.optim.Optimizer] | None = None
+        self._benchmark_fixture = None
+
 
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         return self.generator(mel)
@@ -1765,7 +1767,9 @@ class HifiGanV1(nn.Module):
                                 torch.optim.AdamW(self.discriminators.parameters(), **settings))
         generator_optimizer, discriminator_optimizer = self._optimizers
         frames = HIFI_SEGMENT // HIFI_HOP
-        start = random.randint(0, mel.shape[2] - frames)
+        start = (self._benchmark_fixture.next_crop(0, mel.shape[2] - frames, mel, audio)
+                 if self._benchmark_fixture is not None else random.randint(0, mel.shape[2] - frames))
+
         mel = mel[:, :, start:start + frames]
         real = audio[:, start * HIFI_HOP:(start + frames) * HIFI_HOP].unsqueeze(1)
 
@@ -1932,9 +1936,11 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     # Batches are generated BEFORE the timed epochs (the AiDotNet twin does the same) so epoch
     # time is pure training, not each framework's very different synthetic-data RNG cost.
     pool: list[tuple[torch.Tensor, torch.Tensor]] = []
-    for _ in range(batches):
+    fixture = getattr(model, "_benchmark_fixture", None)
+    for index in range(batches):
         start_data = time.perf_counter()
-        pool.append(synthetic_batch(batch_size, shape, device, model))
+        pool.append(fixture.pool[index] if fixture is not None else synthetic_batch(batch_size, shape, device, model))
+
         synchronize(device)
         data_seconds.append(time.perf_counter() - start_data)
 
@@ -2027,7 +2033,9 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
         mark_phase(model_name, f"inference-b{batch_size}-prepare")
-        x, _ = synthetic_batch(batch_size, shape, device, model)
+        fixture = getattr(model, "_benchmark_fixture", None)
+        x = fixture.inference(batch_size) if fixture is not None else synthetic_batch(batch_size, shape, device, model)[0]
+
         mark_phase(model_name, f"inference-b{batch_size}-warmup")
         warmup_times: list[float] = []
         # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
@@ -2095,6 +2103,13 @@ def parse_inference_batches(text: str) -> list[int]:
 
 
 def run(args: argparse.Namespace) -> dict[str, object]:
+    fixture_path = getattr(args, "hifigan_fixture", None)
+    required = getattr(args, "require_matched_workload", False)
+    if required and fixture_path is None:
+        raise ValueError("Matched mode requires an explicit shared HiFi workload fixture.")
+    if fixture_path is not None and [name.strip() for name in args.models.split(",")] != ["hifigan-v1"]:
+        raise ValueError("The shared fixture must be used with the single full HiFi row.")
+
     seed = args.seed
     random.seed(seed)
     torch.manual_seed(seed)
@@ -2115,6 +2130,16 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         mark_phase(name, "construction")
         model, shape = make_model(name)
         model.to(device)
+        fixture = None
+        if getattr(args, "hifigan_fixture", None) is not None:
+            from hifigan_fixture import HifiBenchmarkFixture
+            receipt = getattr(args, "hifigan_workload_receipt", None) or (str(args.output) + ".workload.json")
+            fixture = HifiBenchmarkFixture(str(args.hifigan_fixture), epochs=args.epochs, batches=args.train_batches,
+                                          batch_size=args.batch_size, seed=args.seed,
+                                          inference_batches=inference_batches, receipt=str(receipt), device=device)
+            fixture.import_state(model)
+            model._benchmark_fixture = fixture
+
         # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
         # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
         parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
@@ -2129,6 +2154,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             elif hasattr(model, "training_loss"):
                 model.training_loss = torch.compile(model.training_loss)
             model = torch.compile(model)
+        if fixture is not None:
+            model.eval()
+            with torch.no_grad():
+                model(fixture.input_values["inference/1/mel"])
+            model.train()
+            fixture.emit_preflight(model)
+
         mark_phase(name, "construction-complete")
         mark_phase(name, "training-prepare")
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown, name)
@@ -2136,6 +2168,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
                                         inference_batches, args.warmup_min_ms, name)
+        if fixture is not None:
+            fixture.complete()
+
         mark_phase(name, "complete")
         model_results.append(ModelResult(name, str(device), parameters, training, inference, MODEL_NOTES.get(name, "")))
 
@@ -2176,6 +2211,10 @@ def main() -> None:
     parser.add_argument("--compile", action="store_true",
                         help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
+    parser.add_argument("--hifigan-fixture", type=Path)
+    parser.add_argument("--hifigan-workload-receipt", type=Path)
+    parser.add_argument("--require-matched-workload", action="store_true")
+
     args = parser.parse_args()
 
     allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")

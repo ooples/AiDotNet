@@ -70,7 +70,9 @@ internal static class HifiGanReferenceVerifier
             : throw new InvalidDataException($"{type.Name}.{name} is not a non-null {typeof(T).Name}.");
     }
 
-    private static Binding[] Bindings(Model model)
+    private static Binding[] Bindings(Model model) => Bindings(model.GeneratorLayers, model.DiscriminatorLayers);
+
+    private static Binding[] Bindings(IEnumerable<LayerBase<float>> generator, IEnumerable<LayerBase<float>> discriminator)
     {
         var result = new List<Binding>();
         void Add(IEnumerable<LayerBase<float>> layers, string group)
@@ -85,8 +87,8 @@ internal static class HifiGanReferenceVerifier
             int expected = group == "generator" ? 78 : 54;
             if (index != expected) throw new InvalidDataException($"{group} has {index} layers; full V1 requires {expected}.");
         }
-        Add(model.GeneratorLayers, "generator");
-        Add(model.DiscriminatorLayers, "discriminator");
+        Add(generator, "generator");
+        Add(discriminator, "discriminator");
         return result.ToArray();
     }
 
@@ -117,6 +119,22 @@ internal static class HifiGanReferenceVerifier
             }
         if (!expectedKeys.SetEquals(source.Names)) throw new InvalidDataException("The reference state has missing or extra fields.");
     }
+    // The benchmark consumes the same active404-field mapping as numerical verification.
+    private static Binding[] BenchmarkBindings(HiFiGAN<float> model)
+        => Bindings(Field<HiFiGanGenerator<float>>(model, typeof(HiFiGAN<float>), "_generator").Layers,
+            Field<HiFiGanDiscriminators<float>>(model, typeof(HiFiGAN<float>), "_discriminators").Layers);
+
+    internal static IEnumerable<(string Name, Tensor<float> Value)> SharedBenchmarkState(HiFiGAN<float> model)
+        => BenchmarkBindings(model).SelectMany(binding => Fields(binding)
+            .Select(field => (binding.Key + "/" + field.Role, field.Tensor)));
+
+    internal static void ImportSharedBenchmarkState(HiFiGAN<float> model, string path)
+    {
+        using var source = TorchCheckpointFile.Open(path, strictAxes: true);
+        Import(BenchmarkBindings(model), source);
+    }
+
+
 
     private static Tensor<float> Read(TorchCheckpointFile source, string name)
     {
@@ -224,7 +242,7 @@ internal static class HifiGanReferenceVerifier
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
-    internal static int Run(string directory, string output)
+    internal static int Run(string directory, string output, string? workloadDirectory = null)
     {
         var checks = new List<Check>();
         var errors = new List<string>();
@@ -254,6 +272,8 @@ internal static class HifiGanReferenceVerifier
                     throw new InvalidDataException($"Reference hash differs: {file.Name}");
             }
             using var reference = TorchCheckpointFile.Open(Path.Combine(directory, "reference.safetensors"), strictAxes: true);
+            HifiBenchmarkFixture.ValidateMatchedReference(workloadDirectory, directory, manifest, reference);
+
             using var initial = TorchCheckpointFile.Open(Path.Combine(directory, "initial.safetensors"), strictAxes: true);
             using var referenceGradients = TorchCheckpointFile.Open(Path.Combine(directory, "isolated-gradients.safetensors"), strictAxes: true);
             using var model = new Model((int?)manifest["seed"] ?? throw new InvalidDataException("Missing seed."));

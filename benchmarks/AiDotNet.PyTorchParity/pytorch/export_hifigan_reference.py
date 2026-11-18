@@ -133,7 +133,7 @@ def write_warning_receipt(out: Path, device: torch.device, warnings_seen, comple
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def export(out: Path, device: torch.device, seed: int, compile_model: bool):
+def export(out: Path, device: torch.device, seed: int, compile_model: bool, workload_root: Path | None = None):
     warnings_seen = []
     completed = False
     with warnings.catch_warnings():
@@ -144,13 +144,13 @@ def export(out: Path, device: torch.device, seed: int, compile_model: bool):
             previous_showwarning(message, category, filename, lineno, file, line)
         warnings.showwarning = observe
         try:
-            _export(out, device, seed, compile_model, warnings_seen)
+            _export(out, device, seed, compile_model, warnings_seen, workload_root)
             completed = True
         finally:
             write_warning_receipt(out, device, warnings_seen, completed)
 
 
-def _export(out: Path, device: torch.device, seed: int, compile_model: bool, warnings_seen):
+def _export(out: Path, device: torch.device, seed: int, compile_model: bool, warnings_seen, workload_root: Path | None = None):
     torch.manual_seed(seed)
     torch.set_num_threads(8)
     # CUDA reflection-pad backward has no deterministic implementation. Keep deterministic
@@ -159,6 +159,14 @@ def _export(out: Path, device: torch.device, seed: int, compile_model: bool, war
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     model = HifiGanV1().to(device)
+    workload = None
+    imported404 = None
+    if workload_root is not None:
+        from hifigan_fixture import HifiBenchmarkFixture
+        workload = HifiBenchmarkFixture(str(workload_root), epochs=3, batches=3, batch_size=1, seed=seed,
+                                        inference_batches=[1, 8, 16], receipt=str(out / "unused-benchmark-consumption.json"), device=device)
+        imported404 = workload.import_state(model)
+
     if sum(parameter.numel() for parameter in model.parameters()) != 84_660_721:
         raise RuntimeError("The reference must preserve all84,660,721 full-V1 learned parameters.")
     if compile_model:
@@ -169,7 +177,15 @@ def _export(out: Path, device: torch.device, seed: int, compile_model: bool, war
     initial = {key: value.detach().clone() for key, value in model.state_dict().items()}
     write_safetensors(out / "initial.safetensors", state(model))
     reference: dict[str, torch.Tensor] = {}
-    batches = [batch(step, device) for step in range(3)]
+    if workload is None:
+        batches = [batch(step, device) for step in range(3)]
+    else:
+        batches = []
+        for record in workload.steps[:3]:
+            source_mel, source_audio = workload.pool[record["pool_index"]]
+            start = record["crop_start"]
+            batches.append((source_mel[:, :, start:start + 32].contiguous(),
+                            source_audio[:, start * HIFI_HOP:(start + 32) * HIFI_HOP].contiguous()))
     for step, (mel, audio) in enumerate(batches):
         reference[f"mel/{step}"] = mel
         reference[f"audio/{step}"] = audio.reshape(-1)
@@ -178,10 +194,13 @@ def _export(out: Path, device: torch.device, seed: int, compile_model: bool, war
     model.eval()
     with torch.no_grad():
         reference["generator/output0"] = model.generator(mel).clone()
-        inference_mel, _ = batch(19, device, frames=256)
+        inference_mel = batch(19, device, frames=256)[0] if workload is None else None
         for count in (1, 8, 16):
-            inputs = inference_mel.expand(count, -1, -1).contiguous()
-            inputs = inputs + torch.arange(count, device=device).reshape(-1, 1, 1) * .001
+            if workload is None:
+                inputs = inference_mel.expand(count, -1, -1).contiguous()
+                inputs = inputs + torch.arange(count, device=device).reshape(-1, 1, 1) * .001
+            else:
+                inputs = workload.input_values[f"inference/{count}/mel"]
             reference[f"inference/mel/{count}"] = inputs
             reference[f"inference/output/{count}"] = model.generator(inputs).clone()
     model.train()
@@ -242,6 +261,20 @@ def _export(out: Path, device: torch.device, seed: int, compile_model: bool, war
         "scopes": ["generator_eval_output_b1_b8_b16_at256_frames", "isolated_D_loss_and_all_gradients",
                    "isolated_G_loss_components_and_all_gradients", "three_actual_train_updates_and_spectral_state"],
     }
+
+    manifest["recipe_artifacts_sha256"] = {
+        name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+        for name in ("benchmark.py", "benchmark_telemetry.py", "export_reference.py", "export_hifigan_reference.py", "hifigan_fixture.py", "export_hifigan_workload.py")}
+    if workload is not None:
+        manifest["workload_manifest_sha256"] = workload.manifest_sha256
+        manifest["benchmark_crops_before_fixed32_reference_input"] = workload.actual_steps[:3]
+        manifest["workload_initial_state_sha256"] = workload.manifest["state_sha256"]
+        (out / "reference-workload-inputs.json").write_text(json.dumps({
+            "schema": "hifigan-matched-reference-inputs-v1", "fixture_manifest_sha256": workload.manifest_sha256,
+            "actual_imported404": imported404, "first_three_training_steps": workload.actual_steps[:3],
+            "actual_inputs": workload.actual_inputs, "benchmark_consumption_claim": False,
+        }, indent=2) + "\n", encoding="utf-8")
+
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"exported": str(out), "device": str(device), "parameters": manifest["trainable_parameters"]}))
 
@@ -252,11 +285,14 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--eager", action="store_true", help="Diagnostic reference only; the completion verifier requires torch.compile.")
+    parser.add_argument("--workload-fixture", type=Path)
+
     args = parser.parse_args()
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA correctness reference requested but CUDA is unavailable.")
     args.out.mkdir(parents=True, exist_ok=True)
-    export(args.out, torch.device(args.device), args.seed, compile_model=not args.eager)
+    export(args.out, torch.device(args.device), args.seed, compile_model=not args.eager,
+           workload_root=args.workload_fixture)
 
 
 if __name__ == "__main__":
