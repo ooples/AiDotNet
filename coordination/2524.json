@@ -1353,6 +1353,15 @@
       ],
       "scope": "USEREXPLICITAPPROVAL interactive Include requiredGPUcoverage. Existing CPUentry selects0cases; 2GPUonlyclasses have7obsoleteunimplementedhealthAPI placeholders andsilent-success constructor/unavailable paths. Replace with supportedcurrentAPI contracts, actualCUDA capability+realnumericlaunches/no fallback eachcase, completeexpectedTRXinventory/no skip/nonempty/sha+DLL provenance ononlineRTX3080Windowsrunner. Move166remainingCPUproofs+newGPUrequiredproofdistinct, preservetotalcoverage andmakefailuresvisible. No new productGPUhealthfeatures, no benchmarkmatrix, no scalar/gateassertweakening. DedicatedjobconsumesSAMEbuild artifact/version, no build/restore. Claimpreservesmonitoringcurrenta826cycle, no PRpushmidcycle.",
       "status": "CLAIMEDbeforeedits; rootdesignACK required thenfullrootdiffreview+positive/negativefixtures+actualGPU GitHubvalidation. 1-2hbounded initialbatch."
+    },
+    {
+      "owner": "Codex/pinn_review category stale-sensitive option baselines",
+      "files": [
+        "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
+      ],
+      "scope": "ONLY remove11 exact legacy-insensitive allowance keys provedSensitive incurrenta826 rawprimaryTRX: AudioGenModel::Channels; LSPIAgent::ConvergenceThreshold/MaxIterations; Ferret::ImageMean/ImageStd/MaxSequenceLength/VocabSize; Shikra::same4. Sevenothercurrentstale-sensitivekeys alreadyretired inheldb73. No model/harness assertion changes, new exemptions, skip/size/precision changes, otherownerfiles. Rootfull11keydiff review before onefocusedtest-onlycompile+entire82caseaffectedoptioncohort; deriveactualcounts and keep40existingdeclaredbaseline skips separate, notpassed.",
+      "status": "CLAIMED BEFORE EDITS underexistinguser-approved allfailingcategories/fixedratchet scope. Readonly61summary snapshot cutoff2026-11-18T05:07:20.150Z matchedall18 exactprimaryTRXid/name/message/outcome. SameunderlyingSensitive assertionsretained; no productionbuild or PRpush.",
+      "evidence": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b/active-baseline-reconciliation-20261118T050720Z.json"
     }
   ],
   "codex_assignments": {
@@ -2038,7 +2047,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:08:34.194482+00:00",
+  "updated_utc": "2026-11-18T05:12:30.604545+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
