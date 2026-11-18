@@ -92,6 +92,7 @@ $newCpuGroups = @(
     @{ Prefix = 'enrollmentCheckpoint'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledEnrollmentCheckpointTests' }
     @{ Prefix = 'normalizationSearch'; Class = ''; Trx = 'TestResults/normalization-search-signature.trx' }
     @{ Prefix = 'flashAttention'; Class = ''; Trx = 'TestResults/flashattention-signature.trx' }
+    @{ Prefix = 'nanToNum'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NanToNumReplayTests'; Trx = 'TestResults/nantonum-signature.trx' }
 )
 $newExpectedTotal = 0
 $newManifestTotal = 0
@@ -159,7 +160,7 @@ $newNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal
 foreach ($result in $newResults) {
     Assert-Feed ($result.GetAttribute('outcome') -ceq 'Passed' -and $newNames.Add($result.GetAttribute('testName'))) 'Mandatory CPU union TRX cases must be distinct and passed.'
 }
-$unionExpectedTotal = $newExpectedTotal - [int]$pin.normalizationSearchTestCount - [int]$pin.flashAttentionTestCount
+$unionExpectedTotal = $newExpectedTotal - [int]$pin.normalizationSearchTestCount - [int]$pin.flashAttentionTestCount - [int]$pin.nanToNumTestCount
 Assert-Feed ($newResults.Count -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('total') -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('executed') -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('passed') -eq $unionExpectedTotal) 'Mandatory CPU union TRX count did not match.'
 foreach ($counter in $newCounters.Attributes) {
     if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero mandatory CPU union TRX outcome: $($counter.Name)" }

@@ -17,6 +17,7 @@ try {
     $fixtureAdditionalGroups = @(
         @{ Prefix = 'normalizationSearch'; Class = 'Fixture.NormalizationSearch'; Trx = 'TestResults/normalization-search-signature.trx' }
         @{ Prefix = 'flashAttention'; Class = 'Fixture.FlashAttention'; Trx = 'TestResults/flashattention-signature.trx' }
+        @{ Prefix = 'nanToNum'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NanToNumReplayTests'; Trx = 'TestResults/nantonum-signature.trx' }
     )
     $allFixtureGroups = @($fixtureCpuGroups) + @($fixtureAdditionalGroups)
     $fixtureCpuCases = @{}
@@ -27,7 +28,7 @@ try {
         $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCount') -NotePropertyValue 2 -Force
         $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCasesSha256') -NotePropertyValue $digest -Force
     }
-    $pin.mandatoryCpuTestCount = $pin.testCount + $pin.retainedOutputTestCount + 12
+    $pin.mandatoryCpuTestCount = $pin.testCount + $pin.retainedOutputTestCount + 14
     $props = "<Project><ItemGroup><PackageVersion Include=`"AiDotNet.Tensors`" Version=`"$version`" /></ItemGroup></Project>"
     Set-Content "$root/Directory.Packages.props" $props
     Add-Type -AssemblyName System.IO.Compression.ZipFile
