@@ -418,7 +418,7 @@ internal sealed class HiFiGanGenerator<T>
                 else if (scratch is null) sum = _engine.TensorAdd(sum, h);
                 else _engine.TensorAddInPlace(sum, h);
             }
-            var average = ops.FromDouble(1.0 / _blocks[i].Count);
+            var average = _residualAverageScale;
             if (scaleOwnedAccumulator && ownsStageSum && sum is not null)
             {
                 // The next stage consumes x through its activation/upsampler before copying

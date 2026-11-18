@@ -5883,7 +5883,6 @@
 1	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.EnergyPrior.Std<T>(double[], AiDotNet.TextToSpeech.Vocoders.PriorGradOptions, int)
 3	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, System.Random)
 1	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiFiGanDiscriminators<T>.AveragePool(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-1	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiFiGanGenerator<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?)
 1	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiftGenerator<T>.Decode(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiftGenerator<T>.Harmonics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double[], double[*,*])
 3	ADNELEM002|AiDotNet.TextToSpeech.Vocoders.HiftGenerator<T>.HarmonicsByFrames(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double[], double[*,*])
