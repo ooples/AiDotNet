@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+
       - name: Install Supabase CLI
         uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v1
         with:
@@ -59,11 +63,7 @@ jobs:
       # secret, which nothing kept in step with the repo secret Auth SMTP uses: after a key rotation
       # Resend answered 401 to every license email. Push the one repo secret to both.
       - name: Sync edge function secrets
-        run: |
-          : "${RESEND_API_KEY:?Missing RESEND_API_KEY secret}"
-          printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/fn.env"
-          supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/fn.env"
-          rm -f "$RUNNER_TEMP/fn.env"
+        run: node scripts/sync-function-mail-key.mjs
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -97,6 +97,7 @@ jobs:
 
   build-and-deploy:
     name: Build & Deploy Website
+    needs: migrate-database
     runs-on: ubuntu-latest
     defaults:
       run:

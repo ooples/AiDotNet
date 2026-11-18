@@ -15,7 +15,7 @@ const subscription = {
 };
 
 async function installBackend(page: Page, options: {
-  tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean;
+  tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean; rescheduleFailure?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: 'user',
@@ -29,6 +29,7 @@ async function installBackend(page: Page, options: {
     }));
   }, { user, jwt });
   const calls: Array<Record<string, unknown>> = [];
+  let currentSub = options.sub ?? null;
   await page.route('https://preview-test.supabase.co/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const reply = (body: unknown, status = 200) => route.fulfill({ status, json: body });
@@ -42,7 +43,12 @@ async function installBackend(page: Page, options: {
       const body = route.request().postDataJSON();
       calls.push(body);
       if (body.action === 'summary') {
-        return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: options.sub ?? null });
+        return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub });
+      }
+      if (body.action === 'cancel_before_renewal') {
+        if (options.rescheduleFailure) return reply({ message: 'Cancellation could not be changed' }, 502);
+        currentSub = { ...currentSub, cancel_at: currentSub!.current_period_end };
+        return reply({ subscription: currentSub });
       }
       return reply({ message: 'Portal temporarily unavailable' }, 502);
     }
@@ -60,6 +66,7 @@ for (const state of [
   { name: 'scheduled cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at_period_end: true }, label: 'Pro', price: '$58/month (2 seats)' },
   { name: 'date-based cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end }, label: 'Pro', price: '$58/month (2 seats)' },
   { name: 'custom-date cancellation', tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end - 86400 }, label: 'Pro', price: '$58/month (2 seats)' },
+  { name: 'cancellation after another renewal', tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 }, label: 'Pro', price: '$58/month (2 seats)' },
   { name: 'past due', tier: 'pro', customer: true, sub: { ...subscription, status: 'past_due' }, label: 'Pro', price: '$58/month (2 seats)' },
 ]) {
   test(`billing displays ${state.name} and the correct available actions`, async ({ page }) => {
@@ -71,7 +78,7 @@ for (const state of [
     await expect(page.locator('#billing-price')).toHaveText(state.price);
     await expect(page.locator('#portal-section')).toBeVisible({ visible: state.customer });
     await expect(page.locator('#billing-no-account')).toBeVisible({ visible: !state.customer && state.tier !== 'free' });
-    await expect(page.locator('#billing-cancel')).toBeVisible({ visible: !!state.sub && !state.sub.cancel_at_period_end && !state.sub.cancel_at });
+    await expect(page.locator('#billing-cancel')).toBeVisible({ visible: !!state.sub && ((!state.sub.cancel_at_period_end && !state.sub.cancel_at) || !!state.sub.cancel_at && state.sub.cancel_at > state.sub.current_period_end) });
     if (state.sub?.cancel_at_period_end || state.sub?.cancel_at) {
       await expect(page.locator('#billing-badge')).toHaveText(state.sub.cancel_at && state.sub.cancel_at !== state.sub.current_period_end ? 'Cancellation scheduled' : 'Cancels at period end');
       await expect(page.locator('#billing-renewal')).toHaveText(/^Your access ends on /);
@@ -79,6 +86,34 @@ for (const state of [
     if (state.sub?.status === 'past_due') await expect(page.locator('#billing-badge')).toHaveText('past due');
   });
 }
+
+test('a later cancellation can be moved before renewal only after explicit confirmation', async ({ page }) => {
+  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 } });
+  let accept = false;
+  page.on('dialog', d => accept ? d.accept() : d.dismiss());
+  await page.goto('/account/billing/');
+  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  await cancel.click();
+  expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(0);
+  await expect(cancel).toBeEnabled();
+  accept = true;
+  await cancel.click();
+  await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+  await expect(page.locator('#billing-cancel')).toBeHidden();
+  expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
+});
+
+test('a failed cancellation change preserves the existing end and permits retry', async ({ page }) => {
+  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 }, rescheduleFailure: true });
+  page.on('dialog', d => d.accept());
+  await page.goto('/account/billing/');
+  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  await cancel.click();
+  await expect(page.locator('#billing-error')).toHaveText('Cancellation could not be changed');
+  await expect(cancel).toBeEnabled();
+  await cancel.click();
+  await expect.poll(() => calls.filter(c => c.action === 'cancel_before_renewal').length).toBe(2);
+});
 
 for (const failure of ['profile', 'summary'] as const) {
   test(`pricing blocks a second paid checkout when ${failure} cannot be loaded`, async ({ page }) => {
@@ -109,7 +144,7 @@ test('a failed portal request surfaces its error and allows retry', async ({ pag
   ]);
 });
 
-for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '//attacker.example/phish']) {
+for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '//attacker.example/phish', '/a/..//attacker.example/phish']) {
   test(`signed-in login rejects an external redirect ${JSON.stringify(redirect)}`, async ({ page, baseURL }) => {
     await installBackend(page);
     await page.route('**/account/', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<h1>Account</h1>' }));

@@ -25,7 +25,7 @@ function sql(query) {
 const migration = (name) => readFileSync(new URL(`../../supabase/migrations/${name}`, import.meta.url), 'utf8');
 const asUser = (statement, id = user, role = 'authenticated') => sql(`begin;
   set local role ${role};
-  select set_config('request.jwt.claim.sub', '${id}', true);
+  select set_config('request.jwt.claim.sub', '${role === 'anon' ? '' : id}', true);
   select set_config('request.jwt.claim.role', '${role}', true);
   ${statement}
   rollback;`);
@@ -53,6 +53,7 @@ before(async () => {
     create schema auth;
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     create function auth.role() returns text language sql stable as $$ select nullif(current_setting('request.jwt.claim.role', true), '') $$;
+    create function auth.email() returns text language sql stable as $$ select 'user@example.test'::text $$;
     create table auth.users(id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
     grant usage on schema auth, public to anon, authenticated, service_role;`);
   sql(migration('20260306000000_initial_schema.sql'));
@@ -68,9 +69,15 @@ before(async () => {
     create policy admin_update_all_profiles on public.profiles for update
       using (auth.uid()=id or public.is_admin());
     create policy "Users can update own API keys" on public.user_api_keys for update using (auth.uid()=user_id);
+    create policy legacy_public_usage_insert on public.api_usage for insert to public with check (true);
+    create policy existing_auth_requirement on public.profiles as restrictive for update to authenticated
+      using (current_setting('request.jwt.claim.aal',true) is distinct from 'aal1');
   `);
   // Prove that the observed deployed-policy combination actually permits escalation.
   assert.match(asUser(`update public.profiles set role='admin' where id='${user}'; select role from public.profiles where id='${user}';`), /admin/);
+  for (const role of ['anon', 'authenticated']) {
+    assert.match(asUser(`insert into public.api_usage(user_id,endpoint) values ('${user}','/legacy-forged'); select 'inserted';`, user, role), /inserted/);
+  }
   const fix = migration('20261117000000_close_legacy_policy_bypasses.sql');
   sql(fix);
   sql(fix); // Safe to reapply in local migration rehearsal.
@@ -100,8 +107,25 @@ test('users cannot insert a privileged profile', () => {
       exception when insufficient_privilege then null; end;
     end $$; rollback;`);
 });
+
+test('customer profile repair derives identity and audit fields from trusted state', () => {
+  assert.match(sql(`begin; delete from public.profiles where id='${user}'; set local role authenticated;
+    select set_config('request.jwt.claim.sub','${user}',true);
+    insert into public.profiles(id,email,created_at) values ('${user}','victim@example.test','2000-01-01');
+    select email || ':' || (created_at = now())::text from public.profiles where id='${user}'; rollback;`), /user@example.test:true/);
+});
+
+test('owners cannot reactivate a revoked API key', () => {
+  expectDenied(`update public.user_api_keys set is_active=false where id='${key}'; update public.user_api_keys set is_active=true where id='${key}'`);
+});
 test('owners cannot update or see another customer profile', () => {
   assert.match(asUser(`with changed as (update public.profiles set full_name='Forbidden' where id='${other}' returning id) select count(*) from changed;`), /\n0$/);
+});
+
+test('hardening preserves existing restrictive authentication policies', () => {
+  assert.equal(sql("select count(*) from pg_policies where policyname='existing_auth_requirement' and permissive='RESTRICTIVE'"), '1');
+  assert.match(asUser(`select set_config('request.jwt.claim.aal','aal1',true);
+    with changed as (update public.profiles set full_name='Blocked' where id='${user}' returning id) select count(*) from changed;`), /\n0$/);
 });
 test('admins can edit roles and plans', () => {
   assert.match(asUser(`update public.profiles set role='admin', subscription_tier='pro' where id='${other}'; select subscription_tier from public.profiles where id='${other}';`, admin), /\npro$/);
@@ -122,4 +146,16 @@ test('service role can record usage', () => {
 test('an accidentally reintroduced permissive policy does not bypass field guards', () => {
   sql(`create policy regression_owner_policy on public.profiles for update using (auth.uid()=id);`);
   expectDenied(`update public.profiles set role='admin' where id='${user}'`);
+});
+
+test('release DDL and its exact migration history entry commit or roll back together', () => {
+  sql('create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key, name text, statements text[]);');
+  const source = migration('20261117000000_close_legacy_policy_bypasses.sql');
+  const args = ['exec', '-i', container, 'psql', '-X', '-U', 'postgres', '--single-transaction', '-v', 'ON_ERROR_STOP=1',
+    '--set=migration_version=20261117000000', `--set=migration_source=${source}`, '-f', '-'];
+  const history = "insert into supabase_migrations.schema_migrations(version,name,statements) values (:'migration_version','close_legacy_policy_bypasses',array[:'migration_source']);";
+  docker(args, source + '\n' + history);
+  assert.equal(sql('select version from supabase_migrations.schema_migrations'), '20261117000000');
+  assert.throws(() => docker(args, 'create table public.failed_release_marker(id int);\n' + history), /duplicate key/);
+  assert.equal(sql("select to_regclass('public.failed_release_marker') is null"), 't');
 });

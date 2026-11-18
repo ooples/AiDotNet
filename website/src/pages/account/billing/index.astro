@@ -121,7 +121,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
   </div>
 
   <script>
-    import { loadBillingState, openPortal, formatMoney, formatDate, cancellationDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
+    import { loadBillingState, openPortal, cancelBeforeRenewal, formatMoney, formatDate, cancellationDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
 
     const FEATURES: Record<PlanTier, string[]> = {
       free: ['Training and inference (always free)', 'All 8,100+ public classes', 'GPU acceleration (any vendor)', 'Model save/load with a free Community license key'],
@@ -132,6 +132,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
     const $ = (id: string) => document.getElementById(id);
     const root = $('billing-root')!;
+    let laterCancellation: { scheduled: number; renewal: number } | null = null;
 
     function showError(message: string) {
       const el = $('billing-error')!;
@@ -145,6 +146,15 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       const el = $(id) as HTMLButtonElement | null;
       el?.addEventListener('click', async () => {
         $('billing-error')!.classList.add('hidden');
+        if (id === 'billing-cancel' && laterCancellation) {
+          if (!window.confirm(`Your subscription is scheduled to end on ${formatDate(laterCancellation.scheduled)}. End it on ${formatDate(laterCancellation.renewal)} instead, before another renewal?`)) return;
+          el.disabled = true;
+          const err = await cancelBeforeRenewal();
+          el.disabled = false;
+          if (err) showError(err);
+          else await loadBilling();
+          return;
+        }
         el.disabled = true;
         const err = await openPortal(req, '/account/billing/');
         if (err) { el.disabled = false; showError(err); }
@@ -178,6 +188,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       $('billing-plan')!.textContent = TIER_LABEL[tier];
       const status = sub?.status ?? state.status;
       const cancellationAt = cancellationDate(sub);
+      laterCancellation = sub && cancellationAt != null && cancellationAt > sub.current_period_end
+        ? { scheduled: cancellationAt, renewal: sub.current_period_end } : null;
       if (cancellationAt) badge(cancellationAt === sub?.current_period_end ? 'Cancels at period end' : 'Cancellation scheduled', 'warn');
       else if (status === 'active') badge('Active', 'ok');
       else if (status === 'trialing') badge('Trial', 'ok');
@@ -211,7 +223,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
       if (state.hasBillingAccount) {
         $('portal-section')!.classList.remove('hidden');
-        if (sub && !cancellationAt) $('billing-cancel')!.classList.remove('hidden');
+        $('billing-cancel')!.classList.toggle('hidden', !sub || (!!cancellationAt && !laterCancellation));
+        $('billing-cancel')!.textContent = laterCancellation ? 'End before the next renewal' : 'Cancel subscription';
       } else if (paid) {
         $('billing-no-account')!.classList.remove('hidden');
       }

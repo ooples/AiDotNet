@@ -135,7 +135,7 @@ serve(async (req: Request) => {
   let body: { action?: unknown; tier?: unknown; interval?: unknown; return_path?: unknown };
   try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
   const action = body.action;
-  if (action !== "summary" && action !== "manage" && action !== "change_plan" && action !== "cancel") {
+  if (action !== "summary" && action !== "manage" && action !== "change_plan" && action !== "cancel" && action !== "cancel_before_renewal") {
     return json({ error: "invalid_action" }, 400);
   }
   const returnPath = typeof body.return_path === "string" && /^\/(account|pricing)\/[\w\-/]*$/.test(body.return_path)
@@ -161,6 +161,17 @@ serve(async (req: Request) => {
       return json({ billing_account: true, ...summarize(await liveSubscription(s, customer)) });
     }
 
+    if (action === "cancel_before_renewal") {
+      const sub = await liveSubscription(s, customer);
+      if (!sub || sub.cancel_at == null || sub.cancel_at <= sub.current_period_end) {
+        return json({ error: "no_later_cancellation", message: "There is no later cancellation to move. Refresh your billing details." }, 409);
+      }
+      // The customer explicitly confirmed this in-app. Do not depend on the
+      // portal accepting a second cancellation for an already scheduled end.
+      const updated = await s.subscriptions.update(sub.id, { cancel_at: sub.current_period_end, proration_behavior: "none" });
+      return json({ ...summarize(updated) });
+    }
+
     const prices = await planPrices(s);
     const configuration = await portalConfiguration(s, prices);
     const params: Stripe.BillingPortal.SessionCreateParams = { customer, return_url: returnUrl, configuration };
@@ -172,7 +183,8 @@ serve(async (req: Request) => {
       }
       if (action === "cancel") {
         if (sub.cancel_at_period_end || sub.cancel_at != null) {
-          return json({ error: "already_cancelling", message: "Your subscription is already set to end at the close of this billing period." }, 409);
+          const endsAt = sub.cancel_at ?? sub.current_period_end;
+          return json({ error: "already_cancelling", cancel_at: endsAt, message: `Your subscription is already set to end on ${new Date(endsAt * 1000).toISOString().slice(0, 10)}. Refresh your billing details to manage this cancellation.` }, 409);
         }
         params.flow_data = {
           type: "subscription_cancel",

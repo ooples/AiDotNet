@@ -154,7 +154,8 @@ const ENUMERATE = (path: string) => {
       parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(cur) + 1})` : tag);
       cur = parent;
     }
-    return parts.join(' > ');
+    // A body child such as "button" must not match an earlier nested button.
+    return `${parts[0]?.startsWith('#') ? '' : 'body > '}${parts.join(' > ')}`;
   };
   const name = (el: Element) => ((el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title')
     || (el as HTMLInputElement).value || el.getAttribute('name') || '') as string).replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -234,7 +235,6 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const events = ['dialog', 'pageerror', 'console', 'requestfailed', 'request', 'response'] as const;
   const emitter = page as unknown as EventEmitter;
   const existingListeners = new Map(events.map((event) => [event, new Set(emitter.listeners(event))]));
-  const delayedFindings = new Set<ReturnType<typeof setTimeout>>();
   let intercept: ((route: Route) => Promise<void>) | undefined;
   try {
 
@@ -316,25 +316,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (/Failed to load resource: net::ERR_(ABORTED|BLOCKED)|favicon|stubbed by crawler/.test(t)) return;
     // Failed responses are reported once, with their URL, by the response handler below.
     if (/Failed to load resource: the server responded with a status of/.test(t)) return;
-    const where = { page: current.page, control: current.control || '(page load)' };
-    if (!/Failed to fetch/.test(t)) { add(where.page, where.control, `console error: ${t.slice(0, 200)}`); return; }
-    // A fetch the crawler's own navigation cut off (net::ERR_ABORTED) is not the site's failure;
-    // anything else is reported with the request that failed. requestfailed can trail the log line.
-    const at = Date.now();
-    const timer = setTimeout(() => {
-      delayedFindings.delete(timer);
-      const near = failedRequests.filter((f) => Math.abs(f.at - at) < 3_000);
-      if (near.length && near.every((f) => /ERR_ABORTED/.test(f.error))) return;
-      const which = near.map((f) => `${f.method} ${f.url} (${f.error})`).join('; ') || 'no failed request seen';
-      add(where.page, where.control, `console error: ${t.slice(0, 120)} [${which.slice(0, 200)}]`);
-    }, 1_000);
-    delayedFindings.add(timer);
-  });
-  const failedRequests: Array<{ at: number; method: string; url: string; error: string }> = [];
-  page.on('requestfailed', (r) => {
-    const u = new URL(r.url());
-    failedRequests.push({ at: Date.now(), method: r.method(), url: `${u.host}${u.pathname}`, error: r.failure()?.errorText ?? '?' });
-    if (failedRequests.length > 50) failedRequests.shift();
+    // Console messages do not identify the failed request. An unrelated navigation
+    // abort cannot safely explain this error, so retain it synchronously.
+    add(current.page, current.control || '(page load)', `console error: ${t.slice(0, 200)}`);
   });
 
   const signedIn = !!o.persona;
@@ -533,10 +517,15 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (s.url !== before.url || (!noisy.mut && s.mut !== before.mut) || s.clip !== before.clip || pending.length || dialogs.length > dialogsBefore) break;
     }
     await Promise.race([
-      Promise.all(pending.map((r) => r.response().catch(() => null))),
+      Promise.all(pending.map(async (r) => {
+        const response = await r.response().catch(() => null);
+        await response?.finished().catch(() => null);
+      })),
       page.waitForTimeout(10_000),
     ]);
     await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
+    // The response body can complete before the fetch handler renders its result.
+    await page.waitForTimeout(100);
     const opened = (await popup) ?? null;
     const dl = (await download) ?? null;
     if (opened) await opened.close().catch(() => {});
@@ -580,25 +569,29 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (!c.visible) return false;
       if (!enabledSeen.has(c.key)) enabledSeen.set(c.key, pg);
       disabledSeen.delete(c.key);
-      if (doneOnPage.has(c.key) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
+      if (doneOnPage.has(c.selector) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
       if (o.dedicated.some(([re]) => re.test(c.key))) return false;
       return true;
     });
     if (!todo.length) return;
+    const restoredKeys = new Set<string>();
     for (const c of todo) {
       // Repeated table rows can share a key. An unreachable row must not trigger
       // hundreds of identical reload/replay attempts from the same sibling list.
-      if (exercised.has(c.key) || doneOnPage.has(c.key)) continue;
-      doneOnPage.add(c.key);
+      if (exercised.has(c.key) || doneOnPage.has(c.selector)) continue;
+      doneOnPage.add(c.selector);
       // Return to the state this control was found in: fresh page plus the clicks that revealed it.
       // A sibling's click may have opened a modal over this control: start again from a fresh page.
       if (new URL(page.url()).pathname !== pg || !(await reachable(c.selector))) {
+        if (restoredKeys.has(c.key)) continue;
+        restoredKeys.add(c.key);
         if (!(await load(pg))) return;
         for (const step of path) await page.locator(step).first().click({ timeout: 5_000 }).catch(() => {});
         await page.waitForTimeout(300);
         if (!(await reachable(c.selector))) continue;
       }
       const result = await act(pg, c);
+      restoredKeys.clear();
       if (result === 'same' && depth < maxDepth) {
         // A blocked control in this child state can still be reachable from
         // the parent. Only successful actions are deduplicated across states.
@@ -700,11 +693,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (!opts?.optional && ![...keys].some((k) => re.test(k))) add('(dedicated list)', String(re), `matches no control on any page (stale entry for: ${why})`);
   }
 
-  // Deferred console errors must be included in the result before it is read.
-  if (delayedFindings.size) await page.waitForTimeout(1_100);
   return { findings, pages: visited, httpPages: fetched, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
   } finally {
-    for (const timer of delayedFindings) clearTimeout(timer);
     for (const event of events) {
       for (const listener of emitter.listeners(event)) {
         if (!existingListeners.get(event)!.has(listener)) emitter.removeListener(event, listener);

@@ -71,6 +71,13 @@ export async function changeSubscriptionPrice(request: APIRequestContext, id: st
   });
 }
 
+/** Fixture setup only: exercise a scheduled cancellation beyond the next renewal. */
+export async function scheduleLaterTrialCancellation(request: APIRequestContext, id: string): Promise<void> {
+  const sub = await getSubscription(request, id);
+  if (sub.status !== 'trialing') throw new Error('This fixture must remain a card-free trial');
+  await stripe(request, 'POST', `/subscriptions/${id}`, { cancel_at: sub.current_period_end + 86400, proration_behavior: 'none' });
+}
+
 export async function deleteCustomer(request: APIRequestContext, id: string): Promise<void> {
   try { await stripe(request, 'DELETE', `/customers/${id}`); } catch (e) {
     if (!String(e).includes('No such customer')) throw e;

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { journeySkipReason, restInsert, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, signIn, type Persona } from '../helpers/personas';
-import { changeSubscriptionPrice, getSubscription, planPrice } from '../helpers/stripe';
+import { changeSubscriptionPrice, getSubscription, planPrice, scheduleLaterTrialCancellation } from '../helpers/stripe';
 
 // What a signed-in customer can do with their plan, asserted by outcome, against the real backend
 // and real Stripe objects (a trial subscription, so nothing is ever charged):
@@ -192,6 +192,30 @@ test.describe('Pro bought online', () => {
     await expect(page.locator('[data-plan-status="enterprise"]')).toHaveText('Ends at the close of this billing period');
     await expect(card(page, 'community')).toHaveText('Downgrade scheduled');
     await expect(card(page, 'community')).toBeDisabled();
+  });
+
+  test('a later scheduled cancellation can be moved before renewal to unblock deletion', async ({ page, request }) => {
+    await scheduleLaterTrialCancellation(request, p.stripe!.subscriptionId);
+    await signIn(page, p);
+    await page.goto('/account/settings/');
+    await page.locator('#delete-account-btn').click();
+    await page.locator('#delete-confirm-input').fill('DELETE');
+    await page.locator('#delete-confirm-btn').click();
+    await expect(page.locator('#delete-account-error')).toHaveText(/Cancel your subscription on the Billing page first/);
+    await page.locator('#delete-cancel-btn').click();
+    await billingLoaded(page);
+    const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+    let accept = false;
+    page.on('dialog', d => accept ? d.accept() : d.dismiss());
+    const previous = (await getSubscription(request, p.stripe!.subscriptionId)).cancel_at;
+    await cancel.click();
+    expect((await getSubscription(request, p.stripe!.subscriptionId)).cancel_at).toBe(previous);
+    accept = true;
+    await cancel.click();
+    await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+    const sub = await getSubscription(request, p.stripe!.subscriptionId);
+    expect(sub.cancel_at_period_end || sub.cancel_at === sub.current_period_end).toBe(true);
+    await expect(page.locator('#billing-cancel')).toBeHidden();
   });
 
   test('deleting the account revokes its licenses into the CRL and ends sign-in', async ({ page, request }) => {

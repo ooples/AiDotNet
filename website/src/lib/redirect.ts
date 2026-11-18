@@ -4,7 +4,7 @@ export function safeRedirect(raw: string | null, fallback: string, origin = wind
   if (!raw || !raw.startsWith('/') || raw.startsWith('//') || /[\\\u0000-\u0020\u007f]/.test(raw)) return fallback;
   try {
     const destination = new URL(raw, origin);
-    if (destination.origin !== origin) return fallback;
+    if (destination.origin !== origin || destination.pathname.startsWith('//')) return fallback;
     return `${destination.pathname}${destination.search}${destination.hash}`;
   } catch {
     return fallback;

@@ -222,7 +222,7 @@ test.describe('/auth/callback success paths', () => {
   });
 });
 
-for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '/\t/attacker.example/phish', '//attacker.example/phish']) {
+for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '/\t/attacker.example/phish', '//attacker.example/phish', '/a/..//attacker.example/phish']) {
   for (const eventDriven of [false, true]) {
     test(`callback rejects ${JSON.stringify(redirect)} with ${eventDriven ? 'auth event' : 'existing session'}`, async ({ page, baseURL }) => {
       await installAuthStub(page, { getSession: eventDriven ? 'empty' : 'success', emitSignedIn: eventDriven });

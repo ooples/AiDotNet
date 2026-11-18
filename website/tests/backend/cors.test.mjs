@@ -87,6 +87,37 @@ test('billing portal rejects a duplicate cancellation scheduled through cancel_a
   assert.equal((await response.json()).error, 'already_cancelling');
 });
 
+for (const scheduled of [150, 200, 250, null]) {
+  test(`moving a later cancellation before renewal: existing end ${scheduled}`, async () => {
+    const updates = [];
+    const subscription = { id: 'owned-subscription', status: 'trialing', created: 1, current_period_end: 200, cancel_at_period_end: false, cancel_at: scheduled,
+      items: { data: [{ quantity: 1, price: { metadata: { tier: 'pro' }, recurring: { interval: 'month' }, currency: 'usd', unit_amount: 2900 } }] } };
+    class Stripe {
+      static createFetchHttpClient() { return {}; }
+      subscriptions = {
+        async *list(params) { assert.equal(params.customer, 'owned-customer'); yield subscription; },
+        async update(id, params) { assert.equal(id, 'owned-subscription'); updates.push(params); return { ...subscription, cancel_at: params.cancel_at }; },
+      };
+    }
+    const handler = loadHandler('billing-portal', {
+      Stripe,
+      env: { SUPABASE_URL: 'https://fixture.invalid', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service', STRIPE_SECRET_KEY: 'stripe' },
+      createClient: () => ({
+        auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
+        from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { stripe_customer_id: 'owned-customer' } }) }) }) }),
+      }),
+    });
+    const response = await handler(new Request('https://fixture.invalid', {
+      method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel_before_renewal', subscription_id: 'untrusted-other-subscription' }),
+    }));
+    assert.equal(response.status, scheduled === 250 ? 200 : 409);
+    if (scheduled === 250) {
+      assert.deepEqual(updates.map(p => ({ ...p })), [{ cancel_at: 200, proration_behavior: 'none' }]);
+      assert.equal((await response.json()).subscription.cancel_at, 200);
+    } else assert.equal(updates.length, 0);
+  });
+}
+
 for (const scenario of [
   { name: 'refuses an ongoing subscription', subscriptions: [{ status: 'trialing' }], status: 409, calls: [] },
   { name: 'allows legacy cancellation at period end', subscriptions: [{ status: 'active', cancel_at_period_end: true }], status: 200, calls: ['revoke', 'delete'] },

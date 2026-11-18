@@ -13,6 +13,12 @@ test.describe('crawler regression checks', () => {
 
   test.beforeAll(async () => {
     server = createServer((req, res) => {
+      if (req.url === '/slow-body/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.flushHeaders();
+        setTimeout(() => res.end('{"message":"Updated"}'), 3500);
+        return;
+      }
       if (req.url === '/slow-auth.css') {
         res.setHeader('Content-Type', 'text/css');
         setTimeout(() => res.end('#desktop-menu { display: none }'), 1500);
@@ -44,6 +50,12 @@ test.describe('crawler regression checks', () => {
             + '<button id="menu" onclick="document.getElementById(\'cover\').hidden=false">Menu</button>'
             + '<button id="copy" onclick="alert(\'Copied\')">Copy</button>'
             + '<div id="cover" hidden style="position:fixed;inset:0;z-index:2;background:white"></div>'
+        : req.url === '/row-representatives/'
+          ? '<div style="position:relative"><button onclick="alert(\'First\')">Row action</button><div style="position:absolute;inset:0;background:white"></div></div><button onclick="alert(\'Second\')">Row action</button>'
+        : req.url === '/async-control/'
+          ? '<button id="update" onclick="fetch(\'/slow-body/\').then(r=>r.json()).then(j=>document.getElementById(\'result\').textContent=j.message)">Update</button><span id="result"></span>'
+        : req.url === '/unrelated-abort/'
+          ? '<script>fetch(\'/aborted/\').catch(()=>{}); setTimeout(()=>console.error(\'Failed to fetch: genuine unrelated failure\'),200)</script><h1>Abort fixture</h1>'
           : '<h1>Fixture</h1><button id="dialog" onclick="alert(\'Hello\')">Open dialog</button>';
       res.statusCode = req.url === '/missing/' ? 404 : 200;
       res.end(`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`);
@@ -98,6 +110,26 @@ test.describe('crawler regression checks', () => {
     const report = await crawl({ ...options(), page, request, seeds: [`${origin}/nested-cover/`] });
     expect(report.findings).toEqual([]);
     expect(report.exercised).toContain('/nested-cover/ #copy');
+  });
+
+  test('an unreachable row does not suppress another reachable representative', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/row-representatives/`] });
+    expect(report.findings).toEqual([]);
+    expect(report.exercised).toContain('/row-representatives/ button::Row action');
+  });
+
+  test('waits for a streamed response body and the visible control result', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/async-control/`] });
+    expect(report.findings).toEqual([]);
+    await expect(page.locator('#result')).toHaveText('Updated');
+  });
+
+  test('an unrelated aborted request cannot hide a genuine fetch console error', async ({ page, request }) => {
+    await page.route('**/aborted/', route => route.abort('aborted'));
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/unrelated-abort/`] });
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ problem: expect.stringContaining('genuine unrelated failure') }),
+    ]));
   });
 
   test('two passes do not retain handlers or mutate the first report', async ({ page, request }) => {

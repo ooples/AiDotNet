@@ -6,6 +6,7 @@ on:
       - fix/e2e-findings-1
     paths:
       - website/**
+      - '!website/verification-review.json'
       - .github/workflows/website-preview.yml
       - .github/workflows/website-e2e.yml
 permissions:
@@ -95,4 +96,6 @@ jobs:
     with:
       preview: true
       part: all
+      preview_pipeline: true
+      configure_preview_auth: true
     secrets: inherit

@@ -5,7 +5,7 @@ do $$
 declare p record;
 begin
   for p in select tablename, policyname from pg_policies
-    where schemaname = 'public'
+    where schemaname = 'public' and permissive = 'PERMISSIVE'
       and ((tablename in ('profiles', 'user_api_keys') and cmd = 'UPDATE')
         or (tablename = 'profiles' and cmd = 'INSERT')
         or (tablename = 'api_usage' and cmd = 'INSERT'))
@@ -25,6 +25,18 @@ begin
      or auth.role() = 'service_role' or public.is_admin() then
     return new;
   end if;
+  if tg_op = 'INSERT' then
+    if new.id is distinct from auth.uid() or new.role is distinct from 'user'
+       or new.subscription_tier is distinct from 'free'
+       or new.subscription_status is distinct from 'active'
+       or new.stripe_customer_id is not null then
+      raise exception 'New customer profiles must use their own free account' using errcode = '42501';
+    end if;
+    -- Profile repair cannot forge an email used for Checkout reconciliation or an audit date.
+    new.email := auth.email();
+    new.created_at := now();
+    return new;
+  end if;
   if row(new.id, new.role, new.subscription_tier, new.subscription_status,
          new.stripe_customer_id, new.email, new.created_at)
      is distinct from
@@ -37,7 +49,7 @@ begin
 end $$;
 revoke all on function public.guard_profile_protected_fields() from public, anon, authenticated;
 drop trigger if exists guard_profile_protected_fields on public.profiles;
-create trigger guard_profile_protected_fields before update on public.profiles
+create trigger guard_profile_protected_fields before insert or update on public.profiles
 for each row execute function public.guard_profile_protected_fields();
 
 create policy profiles_update_own on public.profiles for update to authenticated
@@ -59,6 +71,9 @@ begin
      or auth.role() = 'service_role' or public.is_admin() then
     return new;
   end if;
+  if not old.is_active and new.is_active then
+    raise exception 'Revoked API keys cannot be reactivated by their owner' using errcode = '42501';
+  end if;
   if row(new.id, new.user_id, new.key_hash, new.key_prefix, new.scopes, new.created_at, new.last_used_at)
      is distinct from
      row(old.id, old.user_id, old.key_hash, old.key_prefix, old.scopes, old.created_at, old.last_used_at) then
@@ -78,3 +93,5 @@ create policy api_keys_update_admin on public.user_api_keys for update to authen
 using (public.is_admin()) with check (public.is_admin());
 create policy api_usage_insert_service on public.api_usage for insert to service_role
 with check (true);
+revoke insert on public.api_usage from public, anon, authenticated;
+grant insert on public.api_usage to service_role;

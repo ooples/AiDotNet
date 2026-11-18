@@ -14,6 +14,12 @@ on:
       part:
         type: string
         default: all
+      preview_pipeline:
+        type: boolean
+        default: false
+      configure_preview_auth:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       preview:
@@ -37,6 +43,12 @@ on:
 permissions:
   contents: read
 
+# The preview build already owns the alias lock while calling this workflow.
+# Manual preview runs take the same lock so a push cannot replace their assets.
+concurrency:
+  group: ${{ inputs.preview && !inputs.preview_pipeline && 'website-preview-verification' || format('website-e2e-run-{0}', github.run_id) }}
+  cancel-in-progress: false
+
 jobs:
   preview-auth:
     if: ${{ inputs.preview && (inputs.configure_preview_auth || inputs.part == 'auth-config') }}
@@ -54,7 +66,8 @@ jobs:
         run: node website/scripts/configure-preview-auth.mjs
 
   e2e:
-    if: ${{ inputs.part != 'auth-config' }}
+    needs: preview-auth
+    if: ${{ !cancelled() && inputs.part != 'auth-config' && (needs.preview-auth.result == 'success' || needs.preview-auth.result == 'skipped') }}
     name: Playwright (${{ matrix.part }})
     environment: ${{ inputs.preview && 'Preview' || 'Production' }}
     runs-on: ubuntu-latest
@@ -172,6 +185,7 @@ jobs:
           PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
           PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
           SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           CI: '1'

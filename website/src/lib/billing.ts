@@ -94,6 +94,13 @@ export async function openPortal(req: PortalAction, returnPath = window.location
   return undefined;
 }
 
+/** Called only after confirmation to shorten a later scheduled cancellation. */
+export async function cancelBeforeRenewal(): Promise<string | undefined> {
+  const { data, error } = await invoke<{ subscription?: SubscriptionSummary }>({ action: 'cancel_before_renewal' });
+  if (error) return error;
+  return data?.subscription ? undefined : 'Stripe did not confirm the cancellation. Refresh your billing details.';
+}
+
 export function formatMoney(amount: number | null, currency: string | null): string {
   if (amount == null) return '';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase(), minimumFractionDigits: amount % 100 ? 2 : 0 }).format(amount / 100);

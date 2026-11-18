@@ -6,7 +6,7 @@ const endpoint = 'https://api.supabase.com/v1/projects/yfkqwpgjahoamlgckjib/conf
 const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 async function config(method = 'GET', body) {
   const response = await fetch(endpoint, { method, headers, body: body && JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) throw new Error(`Preview Auth configuration: HTTP ${response.status} ${await response.text()}`);
+  if (!response.ok) throw new Error(`Preview Auth configuration: HTTP ${response.status}`);
   return response.json();
 }
 const current = await config();
