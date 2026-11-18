@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1506.01497",
     Year = 2015,
     Authors = "Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun")]
-public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
+public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>, IHostProposalVisionModel
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 

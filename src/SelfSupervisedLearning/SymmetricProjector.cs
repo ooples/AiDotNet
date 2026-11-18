@@ -328,19 +328,35 @@ public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Paramete
         int batch = input.Shape[0], dim = input.Shape[1];
         if (_isTraining)
         {
-            var output = Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out var mean, out var variance);
+            Tensor<T> output;
+            Tensor<T> mean;
+            Tensor<T> variance;
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && batch > 1)
+            {
+                mean = Engine.ReduceMean(input, new[] { 0 }, keepDims: false);
+                var centered = Engine.TensorSubtract(input, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, dim }), new[] { batch, dim }));
+                variance = Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false);
+                var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(BatchNormEpsilon)));
+                var normalized = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(Engine.Reshape(std, new[] { 1, dim }), new[] { batch, dim }));
+                output = Engine.TensorAdd(
+                    Engine.TensorMultiply(normalized, Engine.TensorBroadcastTo(Engine.Reshape(gamma, new[] { 1, dim }), new[] { batch, dim })),
+                    Engine.TensorBroadcastTo(Engine.Reshape(beta, new[] { 1, dim }), new[] { batch, dim }));
+            }
+            else
+            {
+                output = Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out mean, out variance);
+            }
+
             double unbias = batch > 1 ? batch / (batch - 1.0) : 1.0;
-            // Running statistics are detached state, as master's element writes were
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var keep = NumOps.FromDouble(1 - BatchNormMomentum);
-            Engine.TensorAdd(
-                    Engine.TensorMultiplyScalar(runningMean, keep),
-                    Engine.TensorMultiplyScalar(mean, NumOps.FromDouble(BatchNormMomentum)))
-                .AsSpan().CopyTo(runningMean.AsWritableSpan());
-            Engine.TensorAdd(
-                    Engine.TensorMultiplyScalar(runningVar, keep),
-                    Engine.TensorMultiplyScalar(variance, NumOps.FromDouble(BatchNormMomentum * unbias)))
-                .AsSpan().CopyTo(runningVar.AsWritableSpan());
+            if (!AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var keep = NumOps.FromDouble(1 - BatchNormMomentum);
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(
+                    Engine, runningMean, mean, keep, NumOps.FromDouble(BatchNormMomentum));
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(
+                    Engine, runningVar, variance, keep, NumOps.FromDouble(BatchNormMomentum * unbias));
+            }
             return output;
         }
 

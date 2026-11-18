@@ -114,31 +114,43 @@ internal sealed class GroundingDinoLoss<T>
         double boxCount, string suffix, IDictionary<string, double>? terms)
     {
         int b = logits.Shape[0], queries = logits.Shape[1], width = logits.Shape[2];
-        var logitData = logits.ToArray().Select(NumOps.ToDouble).ToArray();
-        var boxData = boxes.ToArray().Select(NumOps.ToDouble).ToArray();
-        var assignments = new int[b][];
-        for (int i = 0; i < b; i++) assignments[i] = Match(logitData, boxData, i, queries, width, maps[i], targets[i]);
 
-        // Contrastive focal loss over the scored tokens of every query; a matched query's target is its phrase's tokens.
+        // Valid scored token positions depend only on the prompt's token mask; their targets and the matched query rows
+        // depend on each step's live Hungarian assignment and are recomputed per replay via CompiledStepHostValue<T>,
+        // with the step's phrase maps and gold boxes carried in an external-leaf supervision tensor soClosureObjectiveGuard
+        // refreshes both image and prompt/box supervision on every replay.
         var indices = new List<int>();
-        var target = new List<double>();
         for (int i = 0; i < b; i++)
-        {
-            var phraseOf = new int[queries];
-            for (int q = 0; q < queries; q++) phraseOf[q] = -1;
-            for (int t = 0; t < assignments[i].Length; t++) phraseOf[assignments[i][t]] = targets[i].Phrases[t];
             for (int q = 0; q < queries; q++)
                 for (int j = 0; j < width; j++)
-                {
-                    if (!valid[i, j]) continue;
-                    indices.Add((i * queries + q) * width + j);
-                    target.Add(phraseOf[q] >= 0 ? maps[i][phraseOf[q]][j] : 0);
-                }
-        }
-        var scored = CvSelect(_engine.Reshape(logits, new[] { b * queries * width }), indices.ToArray());
+                    if (valid[i, j])
+                        indices.Add((i * queries + q) * width + j);
+
         int n = indices.Count;
-        var y = new Tensor<T>(target.Select(v => NumOps.FromDouble(v)).ToArray(), new[] { n });
-        var notY = new Tensor<T>(target.Select(v => NumOps.FromDouble(1 - v)).ToArray(), new[] { n });
+        int totalBoxes = 0;
+        var gold = new List<double>();
+        for (int i = 0; i < b; i++)
+        {
+            totalBoxes += targets[i].Boxes.Length;
+            for (int t = 0; t < targets[i].Boxes.Length; t++)
+                gold.AddRange(targets[i].Boxes[t]);
+        }
+
+        double focalAlpha = FocalAlpha;
+        double focalGamma = FocalGamma;
+        double boxCost = BoxCost;
+        double classCost = ClassCost;
+        double giouCost = GIoUCost;
+        var packedSupervision = PackSupervision(b, width, maps, valid, targets);
+        var y = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "GroundingDinoClassTarget" + suffix,
+            new[] { logits, boxes, packedSupervision },
+            new[] { n },
+            (inputs, dst) => FillMatchedClassTargets(inputs[0], inputs[1], inputs[2], b, queries, width,
+                focalAlpha, focalGamma, boxCost, classCost, giouCost, dst));
+
+        var scored = CvSelect(_engine.Reshape(logits, new[] { b * queries * width }), indices.ToArray());
+        var notY = _engine.TensorAddScalar(_engine.TensorNegate(y), NumOps.One);
         // Binary cross-entropy with logits: log p = -softplus(-x), log(1 - p) = -softplus(x).
         var crossEntropy = _engine.TensorAdd(_engine.TensorMultiply(y, _engine.Softplus(_engine.TensorNegate(scored))),
             _engine.TensorMultiply(notY, _engine.Softplus(scored)));
@@ -146,21 +158,15 @@ internal sealed class GroundingDinoLoss<T>
         // 1 - p_t = p (1 - y) + (1 - p) y.
         var oneMinusPt = _engine.TensorAdd(_engine.TensorMultiply(probability, notY),
             _engine.TensorMultiply(_engine.TensorAddScalar(_engine.TensorNegate(probability), NumOps.One), y));
-        var alpha = new Tensor<T>(target.Select(v => NumOps.FromDouble(FocalAlpha * v + (1 - FocalAlpha) * (1 - v))).ToArray(), new[] { n });
+        var alpha = _engine.TensorAddScalar(
+            _engine.TensorMultiplyScalar(y, NumOps.FromDouble((2.0 * FocalAlpha) - 1.0)),
+            NumOps.FromDouble(1.0 - FocalAlpha));
         var focal = _engine.TensorMultiply(alpha, _engine.TensorMultiply(crossEntropy, _engine.TensorPower(oneMinusPt, NumOps.FromDouble(FocalGamma))));
         var classLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(focal, null), NumOps.FromDouble(1.0 / boxCount));
 
         // L1 and GIoU on the matched boxes.
-        var rows = new List<int>();
-        var gold = new List<T>();
-        for (int i = 0; i < b; i++)
-            for (int t = 0; t < assignments[i].Length; t++)
-            {
-                rows.Add(i * queries + assignments[i][t]);
-                gold.AddRange(targets[i].Boxes[t].Select(v => NumOps.FromDouble(v)));
-            }
         Tensor<T> boxLoss, giouLoss;
-        if (rows.Count == 0)
+        if (totalBoxes == 0)
         {
             var zero = _engine.TensorMultiplyScalar(_engine.ReduceSum(boxes, null), NumOps.Zero);
             boxLoss = zero;
@@ -168,8 +174,14 @@ internal sealed class GroundingDinoLoss<T>
         }
         else
         {
-            var matched = CvSelect(_engine.Reshape(boxes, new[] { b * queries, 4 }), rows.ToArray());
-            var actual = new Tensor<T>(gold.ToArray(), new[] { rows.Count, 4 });
+            var matchedQueries = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+                "GroundingDinoMatchedQueries" + suffix,
+                new[] { logits, boxes, packedSupervision },
+                new[] { totalBoxes },
+                (inputs, dst) => FillMatchedQueryIndices(inputs[0], inputs[1], inputs[2], b, queries, width,
+                    focalAlpha, focalGamma, boxCost, classCost, giouCost, dst));
+            var matched = _engine.TensorEmbeddingLookupFromFloatIndices(_engine.Reshape(boxes, new[] { b * queries, 4 }), matchedQueries);
+            var actual = new Tensor<double>(gold.ToArray(), new[] { totalBoxes, 4 }).Cast<T>();
             boxLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(matched, actual)), null),
                 NumOps.FromDouble(1.0 / boxCount));
             giouLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(OneMinusGeneralizedIoU(Corners(matched), Corners(actual)), null),
@@ -186,56 +198,112 @@ internal sealed class GroundingDinoLoss<T>
                 _engine.TensorMultiplyScalar(giouLoss, NumOps.FromDouble(GIoUWeight))));
     }
 
-    /// <summary>The query matched to each of one image's boxes: the minimum total of the class cost (the focal positive
-    /// minus negative cost, averaged over the phrase's tokens), the L1 distance and the negative GIoU.</summary>
-    private int[] Match(double[] logits, double[] boxes, int image, int queries, int width, List<double[]> maps, GroundingTarget target)
+    private static Tensor<T> PackSupervision(int b, int width, List<double[]>[] maps, bool[,] valid, IReadOnlyList<GroundingTarget> targets)
     {
-        int count = target.Boxes.Length;
-        if (count == 0) return Array.Empty<int>();
-        if (count > queries) throw new ArgumentException($"Image {image} has {count} boxes for {queries} queries.");
-        var cost = new Matrix<double>(queries, count);
-        for (int q = 0; q < queries; q++)
+        var values = new List<double> { b, width };
+        for (int i = 0; i < b; i++)
         {
-            int row = image * queries + q;
-            var box = new double[4];
-            for (int k = 0; k < 4; k++) box[k] = boxes[row * 4 + k];
-            for (int t = 0; t < count; t++)
-            {
-                var map = maps[target.Phrases[t]];
-                double tokens = map.Sum();
-                double classCost = 0;
+            for (int j = 0; j < width; j++)
+                values.Add(valid[i, j] ? 1.0 : 0.0);
+            values.Add(maps[i].Count);
+            for (int m = 0; m < maps[i].Count; m++)
                 for (int j = 0; j < width; j++)
-                {
-                    if (map[j] == 0) continue;
-                    double p = 1 / (1 + Math.Exp(-logits[row * width + j]));
-                    double negative = (1 - FocalAlpha) * Math.Pow(p, FocalGamma) * -Math.Log(1 - p + 1e-8);
-                    double positive = FocalAlpha * Math.Pow(1 - p, FocalGamma) * -Math.Log(p + 1e-8);
-                    classCost += (positive - negative) * map[j] / tokens;
-                }
-                var gold = target.Boxes[t];
-                double l1 = 0;
-                for (int k = 0; k < 4; k++) l1 += Math.Abs(box[k] - gold[k]);
-                double c = BoxCost * l1 + ClassCost * classCost - GIoUCost * GeneralizedIoU(box, gold);
-                cost[q, t] = double.IsNaN(c) || double.IsInfinity(c) ? double.MaxValue : c;
+                    values.Add(maps[i][m][j]);
+            int boxCount = targets[i].Boxes.Length;
+            values.Add(boxCount);
+            for (int t = 0; t < boxCount; t++)
+            {
+                values.Add(targets[i].Phrases[t]);
+                for (int k = 0; k < 4; k++)
+                    values.Add(targets[i].Boxes[t][k]);
             }
         }
-        var assignment = new LinearAssignmentSolver<double>().Solve(cost);
-        var queryOf = new int[count];
-        for (int q = 0; q < queries; q++)
-            if (assignment[q] >= 0) queryOf[assignment[q]] = q;
-        return queryOf;
+        return new Tensor<double>(values.ToArray(), new[] { values.Count }).Cast<T>();
+    }
+
+    private static void UnpackSupervision(Tensor<T> packed, out bool[,] valid, out List<double[]>[] maps, out GroundingTarget[] targets)
+    {
+        var span = packed.Contiguous().Cast<double>().ToArray();
+        int cursor = 0;
+        int b = (int)Math.Round(span[cursor++]);
+        int width = (int)Math.Round(span[cursor++]);
+        valid = new bool[b, width];
+        maps = new List<double[]>[b];
+        targets = new GroundingTarget[b];
+        for (int i = 0; i < b; i++)
+        {
+            for (int j = 0; j < width; j++)
+                valid[i, j] = span[cursor++] > 0.5;
+            int mapCount = (int)Math.Round(span[cursor++]);
+            maps[i] = new List<double[]>(mapCount);
+            for (int m = 0; m < mapCount; m++)
+            {
+                var row = new double[width];
+                for (int j = 0; j < width; j++)
+                    row[j] = span[cursor++];
+                maps[i].Add(row);
+            }
+            int boxCount = (int)Math.Round(span[cursor++]);
+            var phrases = new int[boxCount];
+            var boxes = new double[boxCount][];
+            for (int t = 0; t < boxCount; t++)
+            {
+                phrases[t] = (int)Math.Round(span[cursor++]);
+                boxes[t] = new double[4];
+                for (int k = 0; k < 4; k++)
+                    boxes[t][k] = span[cursor++];
+            }
+            targets[i] = new GroundingTarget(boxes, phrases);
+        }
+    }
+
+    private static void FillMatchedClassTargets(Tensor<T> logits, Tensor<T> boxes, Tensor<T> packedSupervision, int b, int queries, int width,
+        double focalAlpha, double focalGamma, double boxCost, double classCost, double giouCost, Tensor<T> destination)
+    {
+        var logitData = logits.Contiguous().Cast<double>().ToArray();
+        var boxData = boxes.Contiguous().Cast<double>().ToArray();
+        UnpackSupervision(packedSupervision, out var valid, out var maps, out var targets);
+        var values = new double[destination.Length];
+        int cursor = 0;
+        for (int i = 0; i < b; i++)
+        {
+        var assignment = GroundingDinoHostMatcher.Match(logitData, boxData, i, queries, width, maps[i], targets[i],
+                focalAlpha, focalGamma, boxCost, classCost, giouCost);
+            var phraseOf = new int[queries];
+            for (int q = 0; q < queries; q++) phraseOf[q] = -1;
+            for (int t = 0; t < assignment.Length; t++) phraseOf[assignment[t]] = targets[i].Phrases[t];
+            for (int q = 0; q < queries; q++)
+                for (int j = 0; j < width; j++)
+                {
+                    if (!valid[i, j]) continue;
+                    values[cursor++] = phraseOf[q] >= 0 ? maps[i][phraseOf[q]][j] : 0.0;
+                }
+        }
+        var typed = new Tensor<double>(values, destination.Shape.ToArray()).Cast<T>();
+        typed.AsSpan().CopyTo(destination.AsWritableSpan());
+    }
+
+    private static void FillMatchedQueryIndices(Tensor<T> logits, Tensor<T> boxes, Tensor<T> packedSupervision, int b, int queries, int width,
+        double focalAlpha, double focalGamma, double boxCost, double classCost, double giouCost, Tensor<T> destination)
+    {
+        var logitData = logits.Contiguous().Cast<double>().ToArray();
+        var boxData = boxes.Contiguous().Cast<double>().ToArray();
+        UnpackSupervision(packedSupervision, out _, out var maps, out var targets);
+        var values = new double[destination.Length];
+        int cursor = 0;
+        for (int i = 0; i < b; i++)
+        {
+        var assignment = GroundingDinoHostMatcher.Match(logitData, boxData, i, queries, width, maps[i], targets[i],
+                focalAlpha, focalGamma, boxCost, classCost, giouCost);
+            for (int t = 0; t < assignment.Length; t++)
+                values[cursor++] = (i * queries) + assignment[t];
+        }
+        var typed = new Tensor<double>(values, destination.Shape.ToArray()).Cast<T>();
+        typed.AsSpan().CopyTo(destination.AsWritableSpan());
     }
 
     /// <summary>Generalized IoU (Rezatofighi et al. 2019) of two (cx, cy, w, h) boxes.</summary>
-    internal static double GeneralizedIoU(double[] a, double[] b)
-    {
-        double ax1 = a[0] - a[2] / 2, ay1 = a[1] - a[3] / 2, ax2 = a[0] + a[2] / 2, ay2 = a[1] + a[3] / 2;
-        double bx1 = b[0] - b[2] / 2, by1 = b[1] - b[3] / 2, bx2 = b[0] + b[2] / 2, by2 = b[1] + b[3] / 2;
-        double inter = Math.Max(0, Math.Min(ax2, bx2) - Math.Max(ax1, bx1)) * Math.Max(0, Math.Min(ay2, by2) - Math.Max(ay1, by1));
-        double union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter;
-        double hull = (Math.Max(ax2, bx2) - Math.Min(ax1, bx1)) * (Math.Max(ay2, by2) - Math.Min(ay1, by1));
-        return inter / union - (hull - union) / hull;
-    }
+    internal static double GeneralizedIoU(double[] a, double[] b) => GroundingDinoHostMatcher.GeneralizedIoU(a, b);
 
     /// <summary>1 − GIoU of corner boxes <c>[N, 4]</c>, on the tape, as the reference computes it (no epsilon; the
     /// engine's GIoU loss adds 1e-7 to the union and the hull).</summary>
@@ -266,4 +334,58 @@ internal sealed class GroundingDinoLoss<T>
     }
 
     private static Tensor<T> CvSelect(Tensor<T> source, int[] rows) => AiDotNet.ComputerVision.CvTensorOps<T>.Select(source, rows, 0);
+}
+
+internal static class GroundingDinoHostMatcher
+{
+    public static int[] Match(double[] logits, double[] boxes, int image, int queries, int width, List<double[]> maps, GroundingTarget target,
+        double focalAlpha, double focalGamma, double boxCost, double classCostWeight, double giouCost)
+    {
+        int count = target.Boxes.Length;
+        if (count == 0) return Array.Empty<int>();
+        if (count > queries) throw new ArgumentException($"Image {image} has {count} boxes for {queries} queries.");
+        var cost = new Matrix<double>(queries, count);
+        var costSpan = cost.AsWritableSpan();
+        for (int q = 0; q < queries; q++)
+        {
+            int row = image * queries + q;
+            var box = new double[4];
+            for (int k = 0; k < 4; k++) box[k] = boxes[row * 4 + k];
+            for (int t = 0; t < count; t++)
+            {
+                var map = maps[target.Phrases[t]];
+                double tokens = map.Sum();
+                double classCost = 0;
+                for (int j = 0; j < width; j++)
+                {
+                    if (map[j] == 0) continue;
+                    double p = 1 / (1 + Math.Exp(-logits[row * width + j]));
+                    double negative = (1 - focalAlpha) * Math.Pow(p, focalGamma) * -Math.Log(1 - p + 1e-8);
+                    double positive = focalAlpha * Math.Pow(1 - p, focalGamma) * -Math.Log(p + 1e-8);
+                    classCost += (positive - negative) * map[j] / tokens;
+                }
+                var gold = target.Boxes[t];
+                double l1 = 0;
+                for (int k = 0; k < 4; k++) l1 += Math.Abs(box[k] - gold[k]);
+                double c = boxCost * l1 + classCostWeight * classCost - giouCost * GeneralizedIoU(box, gold);
+                costSpan[(q * count) + t] = double.IsNaN(c) || double.IsInfinity(c) ? double.MaxValue : c;
+            }
+        }
+        var assignment = new LinearAssignmentSolver<double>().Solve(cost);
+        var assignSpan = assignment.AsSpan();
+        var queryOf = new int[count];
+        for (int q = 0; q < queries; q++)
+            if (assignSpan[q] >= 0) queryOf[assignSpan[q]] = q;
+        return queryOf;
+    }
+
+    public static double GeneralizedIoU(double[] a, double[] b)
+    {
+        double ax1 = a[0] - a[2] / 2, ay1 = a[1] - a[3] / 2, ax2 = a[0] + a[2] / 2, ay2 = a[1] + a[3] / 2;
+        double bx1 = b[0] - b[2] / 2, by1 = b[1] - b[3] / 2, bx2 = b[0] + b[2] / 2, by2 = b[1] + b[3] / 2;
+        double inter = Math.Max(0, Math.Min(ax2, bx2) - Math.Max(ax1, bx1)) * Math.Max(0, Math.Min(ay2, by2) - Math.Max(ay1, by1));
+        double union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter;
+        double hull = (Math.Max(ax2, bx2) - Math.Min(ax1, bx1)) * (Math.Max(ay2, by2) - Math.Min(ay1, by1));
+        return inter / union - (hull - union) / hull;
+    }
 }

@@ -169,9 +169,15 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private Tensor<T> Samples(Tensor<T> waveform, int offset, int count)
@@ -191,7 +197,7 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
         {
-            var encoded = _encoder.Encode(Samples(input, r * samples, samples));
+            var encoded = _encoder.Encode(Row(input, r, rows, samples));
             var acoustic = _network.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
             var logits = _network.Decode(encoded, acoustic);
             outputs[r] = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
@@ -242,12 +248,13 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         if (encoder is null || network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var loss = network.Loss(encoder.Encode(Samples(input, r * samples, samples)), labels[r], _random, null);
+                var wave = Row(stepInput, r, rows, samples);
+                var loss = network.Loss(encoder.Encode(wave), labels[r], _random, null);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
@@ -271,7 +278,7 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         var labels = RowLabels(input, target);
         double total = 0;
         for (int r = 0; r < rows; r++)
-            total += NumOps.ToDouble(network.Loss(encoder.Encode(Samples(input, r * samples, samples)), labels[r], _random, null, sample: false)[0]);
+            total += NumOps.ToDouble(network.Loss(encoder.Encode(Row(input, r, rows, samples)), labels[r], _random, null, sample: false)[0]);
         return NumOps.FromDouble(total / rows);
     }
 

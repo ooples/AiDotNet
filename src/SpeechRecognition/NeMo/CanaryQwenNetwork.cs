@@ -72,6 +72,10 @@ internal sealed class CanaryQwenNetwork<T> : ILayerAliasOwner<T>
     public Tensor<T> Speech(IReadOnlyList<double> waveform, bool training)
         => Projection.Forward(Encoder.Encode(Encoder.Features(waveform), training));
 
+    /// <summary>The projection's output given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+        => Projection.Forward(Encoder.Encode(Encoder.FeatureTensor(waveform), training));
+
     /// <summary>
     /// The prompt embeddings <c>[L, LLM width]</c> in NeMo's <c>qwen</c> prompt format: <c>&lt;|im_start|&gt;user\n</c>,
     /// the instruction, the speech in place of the audio locator, <c>&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n</c>.

@@ -189,9 +189,15 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         if (_encoder is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private Tensor<T> Samples(Tensor<T> waveform, int offset, int count)
@@ -231,7 +237,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (_encoder is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = TranscriptLogits(Samples(input, r * samples, samples), LanguageQuery(_options.Language));
+        for (int r = 0; r < rows; r++) outputs[r] = TranscriptLogits(Row(input, r, rows, samples), LanguageQuery(_options.Language));
         return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
 
@@ -318,12 +324,13 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (_encoder is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var loss = Loss(Samples(input, r * samples, samples), labels[r]);
+                var wave = Row(stepInput, r, rows, samples);
+                var loss = Loss(wave, labels[r]);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
@@ -344,7 +351,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
         double total = 0;
-        for (int r = 0; r < rows; r++) total += NumOps.ToDouble(Engine.Reshape(Loss(Samples(input, r * samples, samples), labels[r]), new[] { 1 })[0]);
+        for (int r = 0; r < rows; r++) total += NumOps.ToDouble(Engine.Reshape(Loss(Row(input, r, rows, samples), labels[r]), new[] { 1 })[0]);
         return NumOps.FromDouble(total / rows);
     }
 

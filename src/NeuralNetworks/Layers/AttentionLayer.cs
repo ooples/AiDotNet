@@ -501,14 +501,16 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 // #2312: nothing reads the [B, 1, S, S] weights here (no manual backward, no auxiliary
                 // loss), so the fused tape-aware kernel computes the same softmax attention without
                 // materializing them.
-                output4D = Engine.FlashAttention(
-                    Q4D,
-                    K4D,
-                    V4D,
-                    scale: 1.0 / Math.Sqrt(_attentionSize),
-                    isCausal: false,
-                    out _,
-                    attentionBias: null);
+                output4D = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                    ? Engine.ScaledDotProductAttention(Q4D, K4D, V4D, mask: null, scale: 1.0 / Math.Sqrt(_attentionSize), out _)
+                    : Engine.FlashAttention(
+                        Q4D,
+                        K4D,
+                        V4D,
+                        scale: 1.0 / Math.Sqrt(_attentionSize),
+                        isCausal: false,
+                        out _,
+                        attentionBias: null);
                 _lastAttentionWeights = null;
                 LastAttentionKernelPath = AttentionKernelPath.FusedFlashAttention;
             }

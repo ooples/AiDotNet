@@ -749,8 +749,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
-            .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
+        if (sharedInputSize > 0)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+                    .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
+            }
+        }
 
         if (actualInputSize > sharedInputSize)
         {

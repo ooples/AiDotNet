@@ -192,7 +192,7 @@ internal sealed class Wav2Vec2Network<T>
         if (featureGradientScale != 1.0 && !freezeFeatureEncoder)
         {
             // GradMultiply: the value unchanged, the gradient scaled.
-            var constant = new Tensor<T>(h._shape, new Vector<T>(h.ToArray()));
+            var constant = _engine.StopGradient(h);
             h = _engine.TensorAdd(_engine.TensorMultiplyScalar(h, NumOps.FromDouble(featureGradientScale)),
                 _engine.TensorMultiplyScalar(constant, NumOps.FromDouble(1.0 - featureGradientScale)));
         }

@@ -924,13 +924,51 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // recalibration pass into an ordinary inference pass over stale statistics.
         if ((IsTrainingMode || OverwriteRunningStatistics) && valuesPerFeature > 1)
         {
-            // Training: Use Engine.BatchNorm to compute batch stats and normalize
-            // This is fully GPU accelerated
-            var output = Engine.BatchNorm(input, _gamma, _beta, NumOps.ToDouble(_epsilon), out var batchMean, out var batchVariance);
+            Tensor<T> output;
+            Tensor<T> batchMean;
+            Tensor<T> batchVariance;
+            bool canUseDirectRecordedFloat4D = typeof(T) == typeof(float) && input.Rank == 4
+                && input.IsContiguous && _gamma.IsContiguous && _beta.IsContiguous
+                && _gamma.Length == input._shape[1] && _beta.Length == input._shape[1];
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                && !canUseDirectRecordedFloat4D
+                && input.Rank >= 2
+                && input.Shape[1] == _runningMean.Length)
+            {
+                var reduceAxes = new int[input.Rank - 1];
+                int write = 0;
+                for (int axis = 0; axis < input.Rank; axis++)
+                {
+                    if (axis != 1)
+                        reduceAxes[write++] = axis;
+                }
+
+                batchMean = Engine.ReduceMean(input, reduceAxes, keepDims: false);
+                var keepShape = new int[input.Rank];
+                var tileMultiples = new int[input.Rank];
+                for (int axis = 0; axis < input.Rank; axis++)
+                {
+                    keepShape[axis] = axis == 1 ? _runningMean.Length : 1;
+                    tileMultiples[axis] = axis == 1 ? 1 : input.Shape[axis];
+                }
+                var centered = Engine.TensorSubtract(
+                    input,
+                    Engine.TensorTile(Engine.Reshape(batchMean, keepShape), tileMultiples));
+                batchVariance = Engine.ReduceMean(Engine.TensorMultiply(centered, centered), reduceAxes, keepDims: false);
+                var stdDev = Engine.TensorSqrt(Engine.TensorAddScalar(batchVariance, _epsilon));
+                var affineScale = Engine.TensorDivide(_gamma, stdDev);
+                var affineShift = Engine.TensorSubtract(_beta, Engine.TensorMultiply(affineScale, batchMean));
+                output = ApplyInferenceAnyRank(input, affineScale, affineShift);
+            }
+            else
+            {
+                // Training: Use Engine.BatchNorm to compute batch stats and normalize
+                // This is fully GPU accelerated
+                output = Engine.BatchNorm(input, _gamma, _beta, NumOps.ToDouble(_epsilon), out batchMean, out batchVariance);
+            }
 
             _lastMean = batchMean;
             _lastVariance = batchVariance;
-
             // Ensure batch statistics match running statistics shape
             // Engine.BatchNorm may return different shapes based on input configuration
             if (batchMean.Length != _runningMean.Length)

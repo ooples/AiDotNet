@@ -1089,11 +1089,13 @@ public class MetaLearningCoverageIntegrationTests
         var internalWeights = new Vector<double>(options.MemorySize);
         internalWeights[0] = 1.0;
         (internalMemory ?? throw new InvalidOperationException("internalMemory is null where it is required.")).Write(internalWeights, erase, add);
-        var regularized = InvokePrivate<double>(
+        var baseLossTensor = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        var regularizedTensor = InvokePrivate<Tensor<double>>(
             algorithm,
             typeof(NTMAlgorithm<double, Matrix<double>, Tensor<double>>),
-            "AddMemoryRegularization",
-            1.0);
+            "AddMemoryRegularizationTerms",
+            baseLossTensor);
+        double regularized = regularizedTensor[0];
 
         // One score row per query example, [rows, classes].
         Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);

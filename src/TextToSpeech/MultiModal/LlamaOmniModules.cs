@@ -157,7 +157,7 @@ internal sealed class LlamaOmniSpeechDecoder<T>
             int frames = logProbabilities.Shape[0];
             var nll = _engine.TensorCTCLoss(_engine.Reshape(logProbabilities, new[] { frames, 1, Configuration.Units + 1 }),
                 new Tensor<int>(new[] { units.Length }, new Vector<int>(units)), new[] { frames }, new[] { units.Length }, Blank);
-            if (double.IsInfinity(NumOps.ToDouble(nll[0]))) nll = _engine.TensorMultiplyScalar(logProbabilities, NumOps.Zero);
+            if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && double.IsInfinity(NumOps.ToDouble(nll[0]))) nll = _engine.TensorMultiplyScalar(logProbabilities, NumOps.Zero);
             var sum = _engine.ReduceSum(nll, null, false);
             total = total is null ? sum : _engine.TensorAdd(total, sum);
             targets += units.Length;

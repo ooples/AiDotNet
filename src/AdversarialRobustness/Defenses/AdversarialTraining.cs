@@ -531,8 +531,11 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         int imgH = side * side == n ? side : rectH;
         int imgW = side * side == n ? side : rectW;
 
-        // JPEG operates on normalized [0, 1] pixel intensities; clip out-of-range perturbations before and after DCT quantization.
-        var flat = Engine.TensorClamp(input.AsTensor(), NumOps.Zero, NumOps.One);
+        // Track the observed input range so the reconstruction can be
+        // clamped back to whatever the caller fed in.
+        var flat = input.AsTensor();
+        T minValue = Engine.TensorMinValue(flat);
+        T maxValue = Engine.TensorMaxValue(flat);
 
         // JPEG's quantization table is defined for 8-bit samples level-shifted by 128
         // (ISO/IEC 10918-1, A.3.1). Quantizing [0, 1] intensities against it directly
@@ -570,7 +573,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             new[] { blocksH * 8, blocksW * 8 });
         var cropped = Engine.TensorSlice(reassembled, new[] { 0, 0 }, new[] { imgH, imgW });
         var pixels = Engine.TensorDivideScalar(Engine.TensorAddScalar(cropped, levelShift), pixelScale);
-        return Engine.TensorClamp(Engine.Reshape(pixels, new[] { n }), NumOps.Zero, NumOps.One).ToVector();
+        return Engine.TensorClamp(Engine.Reshape(pixels, new[] { n }), minValue, maxValue).ToVector();
     }
 
     /// <summary>min(i, limit - 1) for i in [0, count): the edge-replicating gather indices.</summary>
@@ -670,8 +673,9 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return input;
         }
 
-        var clampedInput = Engine.TensorClamp(input.AsTensor(), NumOps.Zero, NumOps.One);
-        var x = Engine.Reshape(clampedInput, new[] { n, 1 });
+        T minValue = Engine.TensorMinValue(input.AsTensor());
+        T maxValue = Engine.TensorMaxValue(input.AsTensor());
+        var x = Engine.Reshape(input.AsTensor(), new[] { n, 1 });
         var reconstruction = new Tensor<T>(new[] { n, 1 });
 
         // The orthonormal DCT-II in row chunks so the n x n matrix is never materialized at once.
@@ -681,7 +685,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             reconstruction = Engine.TensorAdd(reconstruction, QuantizedChunk(x, n, first, Math.Min(chunk, n - first)));
         }
 
-        return Engine.TensorClamp(Engine.Reshape(reconstruction, new[] { n }), NumOps.Zero, NumOps.One).ToVector();
+        return Engine.TensorClamp(Engine.Reshape(reconstruction, new[] { n }), minValue, maxValue).ToVector();
     }
 
     /// <summary>

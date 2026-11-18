@@ -6,6 +6,14 @@ using AiDotNet.Tensors.Engines.Autodiff;
 namespace AiDotNet.ComputerVision;
 
 /// <summary>
+/// Marks two-stage region-proposal detectors whose forward and multi-stage losses run host-side NMS and
+/// variable-cardinality RoI sampling per step and therefore step directly on the shared eager tape.
+/// </summary>
+internal interface IHostProposalVisionModel
+{
+}
+
+/// <summary>
 /// Tape-based training for the computer-vision models that are built on
 /// <c>ModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c> rather than <c>NeuralNetworkBase</c> -
 /// the object detectors, text detectors and OCR recognizers.
@@ -69,7 +77,9 @@ internal static class TensorModelTrainer<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var objective = loss ?? MeanSquaredError;
-        return optimizer is not null && TryFusedStep(model, input, target, forward, objective, optimizer, out T fusedLoss)
+        return model is not IHostProposalVisionModel
+            && optimizer is not null
+            && TryFusedStep(model, input, target, forward, objective, optimizer, out T fusedLoss)
             ? fusedLoss
             : StepWithTargets(model, input, target, learningRate, forward, objective, optimizer);
     }
@@ -143,14 +153,22 @@ internal static class TensorModelTrainer<T>
     {
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
         Tensor<T> Objective() => loss(forward(input), target);
+        bool eagerHostProposals = model is IHostProposalVisionModel;
 
-        // When compilation is off, TapeTrainingStepper skips closure warmup and goes straight to the eager tape.
-        // Run the single InferenceMode warmup first so lazy layers own their weights before reading the registry.
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+        // When compilation is off (or the detector runs variable-cardinality host-side RPN NMS / RoI sampling),
+        // run the single InferenceMode warmup first so lazy layers own their weights before reading the registry.
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation || eagerHostProposals)
         {
             EnsureWarm(model, forward, input);
             var eagerParameters = RequireTrainableTensors(model);
-            return ExecuteObjectiveStep(model, () => eagerParameters, Objective, learningRate, optimizer, checkShapes);
+            return ExecuteObjectiveStep(
+                model,
+                () => eagerParameters,
+                Objective,
+                learningRate,
+                optimizer,
+                checkShapes,
+                allowCompiledClosure: !eagerHostProposals);
         }
 
         // When compilation is enabled, TapeTrainingStepper's closure path runs its own throwaway warmup invocation
@@ -213,20 +231,42 @@ internal static class TensorModelTrainer<T>
         Func<Tensor<T>> objective,
         T learningRate,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes,
+        bool allowCompiledClosure = true)
     {
-        return optimizer is null
-            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+        if (optimizer is null)
+        {
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
                 parameters,
                 objective,
                 learningRate,
                 checkShapes,
-                owner: model)
-            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                owner: allowCompiledClosure ? model : null);
+        }
+
+        if (allowCompiledClosure)
+        {
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
                 parameters,
                 objective,
                 optimizer,
                 checkShapes);
+        }
+
+        var placeholder = new Tensor<T>(new[] { 1 });
+        return AiDotNet.Training.TapeTrainingStepper<T>.EagerStep(
+            new AiDotNet.Training.FusedTrainingStepRequest<T>
+            {
+                Layers = Array.Empty<ITrainableLayer<T>>(),
+                Input = placeholder,
+                Target = placeholder,
+                Forward = _ => objective(),
+                ComputeLoss = static (loss, _) => loss,
+                Optimizer = optimizer,
+                ExtraParameters = parameters(),
+                OnGradients = checkShapes,
+            },
+            model);
     }
 
     private static Tensor<T>[] RequireTrainableTensors(ModelBase<T, Tensor<T>, Tensor<T>> model)

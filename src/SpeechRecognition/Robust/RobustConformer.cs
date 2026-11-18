@@ -182,12 +182,24 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         if (noisy.Length != clean.Length) throw new ArgumentException("The clean references must match the noisy waveforms.", nameof(clean));
         var x = Rows(noisy);
         var y = Engine.Reshape(clean, x.Shape.ToArray());
-        TrainWithCustomLoss(x, _ =>
+        var net = network.Stack.Network;
+        var c = network.Pretraining.Configuration;
+        var stepMask = c.MaskProbability > 0
+            ? net.DrawMask(x.Shape[0], net.Frames(x.Shape[1]), c.MaskProbability, _random)
+            : new bool[x.Shape[0], net.Frames(x.Shape[1])];
+        var stepNegatives = network.Pretraining.SampleNegatives(stepMask, _random);
+        using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
+        TrainWithCustomObjective(x, y, (stepX, stepY) =>
         {
-            var (total, reconstruction) = network.ContinualPretrainingLoss(x, y, training: true, _random);
-            LastReconstructionLoss = NumOps.ToDouble(reconstruction[0]);
+            var (total, reconstruction) = network.ContinualPretrainingLoss(stepX, stepY, training: true, _random, stepMask, stepNegatives);
+            if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                    "robust-conformer-reconstruction",
+                    Engine.TensorAddScalar(Engine.StopGradient(reconstruction), NumOps.Zero));
             return total;
         }, _optimizer);
+        outputs.Complete();
+        LastReconstructionLoss = NumOps.ToDouble(outputs.Get("robust-conformer-reconstruction")[0]);
         network.Pretraining.AfterUpdate();
     }
 
@@ -240,16 +252,25 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
         if (_network is null) return false;
-        var batch = Batch(input, target);
-        TrainWithCustomLoss(input, _ =>
+        var x = Rows(input);
+        int rows = x.Shape[0], samples = x.Shape[1], perRow = target.Length / rows;
+        var rowLabels = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            rowLabels[r] = Labels(row);
+        }
+        TrainWithCustomObjective(x, target, (stepX, _) =>
         {
             Tensor<T>? total = null;
-            foreach (var (waveform, labels) in batch)
+            for (int r = 0; r < rows; r++)
             {
-                var loss = CtcLoss(Logits(waveform, training: true), labels);
+                var waveform = Engine.Reshape(Engine.TensorSlice(stepX, new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
+                var loss = CtcLoss(Logits(waveform, training: true), rowLabels[r]);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
         }, _optimizer);
         return true;
     }

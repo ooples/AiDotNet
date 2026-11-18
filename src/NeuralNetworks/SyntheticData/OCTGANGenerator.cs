@@ -604,27 +604,32 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         var engine = Engine;
         var discriminatorLayers = DiscriminatorLayers();
-        int penaltyState = _random.Next();
-        Tensor<T> Critic(Tensor<T> x) => DiscriminatorForward(x, training: true);
-        LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
-            () =>
+        var discParameters = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(discriminatorLayers).ToList();
+        discParameters.Add(_timePoints);
+        var discPlaceholder = new Tensor<T>(new[] { 1 });
+        LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerStep(
+            new AiDotNet.Training.FusedTrainingStepRequest<T>
             {
-                var parameters = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(discriminatorLayers).ToList();
-                parameters.Add(_timePoints);
-                return parameters;
+                Layers = Array.Empty<ITrainableLayer<T>>(),
+                Input = discPlaceholder,
+                Target = discPlaceholder,
+                Forward = _ =>
+                {
+                    var realScores = DiscriminatorForward(realInput, training: true);
+                    var fakeScores = DiscriminatorForward(fakeInput, training: true);
+                    var wasserstein = engine.TensorSubtract(
+                        engine.ReduceMean(fakeScores, new[] { 0, 1 }, keepDims: false),
+                        engine.ReduceMean(realScores, new[] { 0, 1 }, keepDims: false));
+                    var penalty = AiDotNet.Training.WassersteinCriticStep<T>.GradientPenalty(
+                        engine, realInput, fakeInput, x => DiscriminatorForward(x, training: true), _random);
+                    return engine.TensorAdd(wasserstein, engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+                },
+                ComputeLoss = static (loss, _) => loss,
+                Optimizer = _discriminatorOptimizer,
+                ExtraParameters = discParameters,
+                ModelGradientClip = _options.MaxGradNorm,
             },
-            () =>
-            {
-                var wasserstein = engine.TensorSubtract(
-                    engine.ReduceMean(Critic(fakeInput), new[] { 0, 1 }, keepDims: false),
-                    engine.ReduceMean(Critic(realInput), new[] { 0, 1 }, keepDims: false));
-                // One draw of the interpolation weights per step, replayed if the objective is re-evaluated.
-                var penalty = AiDotNet.Training.WassersteinCriticStep<T>.GradientPenalty(
-                    engine, realInput, fakeInput, Critic, RandomHelper.CreateSeededRandom(penaltyState));
-                return engine.TensorAdd(wasserstein, engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
-            },
-            _discriminatorOptimizer);
-
+            this);
         const double margin = 1e-5;
         for (int i = 0; i < _timePoints.Length; i++)
         {
@@ -642,34 +647,38 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // One draw of the Gumbel noise per step, replayed if the optimizer re-evaluates the objective.
         var noiseState = _random.Next();
         var generatorLayers = GeneratorLayers();
-        LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
-            () => AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(generatorLayers),
-            () =>
+        var genPlaceholder = new Tensor<T>(new[] { 1 });
+        LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerStep(
+            new AiDotNet.Training.FusedTrainingStepRequest<T>
             {
-                var saved = _random;
-                _random = RandomHelper.CreateSeededRandom(noiseState);
-                try
+                Layers = Array.Empty<ITrainableLayer<T>>(),
+                Input = genPlaceholder,
+                Target = genPlaceholder,
+                Forward = _ =>
                 {
-                    var head = GeneratorHead(input);
-                    var fake = ApplyOutputActivations(head, gumbel: true);
-                    // L_G scores the rows with the critic as a function of each row: its ODE batch norms read their
-                    // running statistics here. With batch statistics over the fake batch alone, D(x) depended on the
-                    // batch x sat in, and the adversarial term pulled the generator off its condition - 59-87% of the
-                    // rows carried the requested category after 40 epochs, falling further with training, against
-                    // 97-100% with the critic's running statistics (and 99-100% under L_matching alone).
-                    var scores = DiscriminatorForward(WithCondition(fake, cond), training: true, batchStatistics: false);
-                    var loss = Engine.TensorNegate(Engine.ReduceMean(scores, new[] { 0, 1 }, keepDims: false));
-                    if (_condWidth > 0 && _catOutputBlocks.Count > 0)
-                        loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(head, cond, mask));
-                    return loss;
-                }
-                finally
-                {
-                    _random = saved;
-                }
+                    var saved = _random;
+                    _random = RandomHelper.CreateSeededRandom(noiseState);
+                    try
+                    {
+                        var head = GeneratorHead(input);
+                        var fake = ApplyOutputActivations(head, gumbel: true);
+                        var scores = DiscriminatorForward(WithCondition(fake, cond), training: true, batchStatistics: false);
+                        var loss = Engine.TensorNegate(Engine.ReduceMean(scores, new[] { 0, 1 }, keepDims: false));
+                        if (_condWidth > 0 && _catOutputBlocks.Count > 0)
+                            loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(head, cond, mask));
+                        return loss;
+                    }
+                    finally
+                    {
+                        _random = saved;
+                    }
+                },
+                ComputeLoss = static (loss, _) => loss,
+                Optimizer = _generatorOptimizer,
+                ExtraParameters = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(generatorLayers),
+                ModelGradientClip = _options.MaxGradNorm,
             },
-            _generatorOptimizer,
-            modelGradientClip: _options.MaxGradNorm);
+            this);
     }
 
     /// <summary>

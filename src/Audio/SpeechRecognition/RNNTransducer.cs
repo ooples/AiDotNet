@@ -284,7 +284,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         if (network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
         var labels = RowLabels(target, rows, input.Rank > 1);
-        TrainWithCustomLoss(input, _ => MeanTransducerLoss(network, input, labels, training: true), _optimizer);
+        TrainWithCustomObjective(input, target, (stepInput, _) => MeanTransducerLoss(network, stepInput, labels, training: true), _optimizer);
         return true;
     }
 

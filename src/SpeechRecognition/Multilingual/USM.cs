@@ -136,9 +136,15 @@ public partial class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return input.Rank == 1 ? input : Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private double[] Samples(Tensor<T> waveform, int offset, int count)
@@ -154,11 +160,11 @@ public partial class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return _network.CtcLogits(_network.Encode(_network.Features(Samples(input, 0, input.Length)), training));
+        if (input.Rank == 1) return _network.CtcLogits(_network.Encode(_network.FeatureTensor(input), training));
         int rows = input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
-            outputs[r] = _network.CtcLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+            outputs[r] = _network.CtcLogits(_network.Encode(_network.FeatureTensor(Row(input, r, rows, samples)), training));
         return Engine.TensorStack(outputs, 0);
     }
 
@@ -200,10 +206,16 @@ public partial class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public T Pretrain(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        if (_network is null) throw new NotSupportedException("Pre-training runs on the native USM network.");
+        var network = _network ?? throw new NotSupportedException("Pre-training runs on the native USM network.");
         // A caller's optimizer serves both phases; the paper states no pre-training optimizer.
         _pretrainingOptimizer ??= _suppliedOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
+        if (rows == 0) throw new ArgumentException("No audio.", nameof(audio));
+        var raw = new double[rows][];
+        for (int r = 0; r < rows; r++) raw[r] = Samples(audio, r * samples, samples);
+        var prepared = network.PreparePretrainingBatch(raw, _random);
+        return TrainWithCustomObjective(prepared[0].MaskedFeatures, prepared[0].Scale,
+            (_, _) => network.PretrainingLossFromPrepared(prepared, training: true), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />
