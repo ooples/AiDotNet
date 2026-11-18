@@ -53,6 +53,8 @@ test.describe('crawler regression checks', () => {
         : req.url === '/covered-rows/'
           ? '<div style="position:relative"><div style="position:absolute;inset:0;z-index:2;background:white"></div>'
             + '<button>Covered row action</button>'.repeat(12) + '</div>'
+        : req.url === '/form-email/'
+          ? '<form onsubmit="event.preventDefault();alert(\'Saved\')"><input type="email" value="keep@example.test"><input type="email" required><button>Save</button></form>'
         : req.url === '/pointer-disabled/'
           ? '<button id="unclickable" style="pointer-events:none" onclick="alert(\'Unreachable\')">Visible action</button>'
         : req.url === '/nested-cover/'
@@ -129,6 +131,14 @@ test.describe('crawler regression checks', () => {
       expect.objectContaining({ control: expect.stringContaining('Covered row action'), problem: expect.stringContaining('not exercised') }),
     ]));
     expect(coveredRowLoads).toBe(2); // Initial visit and one attempt to restore the covered control.
+  });
+
+  test('cleanup tracking contains only newly minted form emails', async ({ page, request }) => {
+    const generatedEmails = new Set<string>();
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/form-email/`], generatedEmails });
+    expect(report.findings).toEqual([]);
+    expect([...generatedEmails]).toEqual([expect.stringMatching(/^delivered\+e2e-user-crawl-.*@resend\.dev$/)]);
+    expect(generatedEmails.has('keep@example.test')).toBe(false);
   });
 
   test('a visible pointer-disabled control fails coverage', async ({ page, request }) => {

@@ -50,6 +50,8 @@ export interface CrawlOptions {
   maxDepth?: number;
   /** Browser visits per templated family; the rest are link-checked over HTTP. */
   browserPagesPerFamily?: number;
+  /** Emails minted by form exploration, so its caller can clean up signup fixtures. */
+  generatedEmails?: Set<string>;
 }
 
 export interface CrawlReport {
@@ -471,6 +473,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       const v = f.type === 'email' ? email : f.type === 'password' ? password : f.type === 'number' ? '1'
         : f.type === 'url' ? 'https://example.com' : f.type === 'date' ? '2030-01-01' : /name/i.test(f.name) ? 'E2E Crawler' : 'e2e crawler';
       await loc.fill(v).catch(() => {});
+      if (f.type === 'email' && await loc.inputValue().catch(() => '') === email) o.generatedEmails?.add(email);
     }
   }
 

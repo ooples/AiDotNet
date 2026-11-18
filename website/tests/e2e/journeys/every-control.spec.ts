@@ -1,5 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
-import { journeySkipReason } from '../helpers/backend';
+import { deleteUser, journeySkipReason, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona, type PersonaKind } from '../helpers/personas';
 import { crawl, formatFindings, staticRoutes, type CrawlOptions } from '../helpers/crawler';
 
@@ -94,6 +94,10 @@ test.describe.configure({ mode: 'parallel' });
 
 for (const run of RUNS) {
   test(`every link and control works for: ${run.kind}`, async ({ page, request, browser, baseURL }) => {
+    if (run.kind === 'anon' && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+      if (process.env.CI) throw new Error('Anonymous signup exploration requires Supabase cleanup credentials');
+      test.skip(true, 'Set Supabase URL and service key to clean up anonymous signup fixtures');
+    }
     if (run.kind !== 'anon') {
       const skip = journeySkipReason();
       test.skip(!!skip, skip);
@@ -101,11 +105,13 @@ for (const run of RUNS) {
     test.setTimeout(45 * 60_000);
     const origin = new URL(baseURL!).origin;
     let persona: Persona | null = null;
+    const generatedEmails = new Set<string>();
     try {
       if (run.kind !== 'anon') persona = await createPersona(request, run.kind);
       const desktop = await crawl({
         page, request, origin, persona, seeds: run.seeds, inScope: run.inScope,
         dedicated: run.dedicated, stubWrites: run.stubWrites, expectedStatus: run.expectedStatus,
+        generatedEmails,
       });
       // Exercise shared controls again on phone layouts: a successful desktop click does not
       // establish that overlays, wrapping, and touch-sized navigation work on a narrow screen.
@@ -118,6 +124,7 @@ for (const run of RUNS) {
           page: await mobileContext.newPage(), request: mobileContext.request, origin, persona,
           seeds: desktop.pages, inScope: () => false,
           dedicated: run.dedicated, stubWrites: run.stubWrites, expectedStatus: run.expectedStatus,
+          generatedEmails,
         });
       } finally { await mobileContext.close(); }
       const findings = [...desktop.findings, ...mobile.findings.filter((f) => f.page !== '(dedicated list)')];
@@ -134,7 +141,22 @@ for (const run of RUNS) {
       expect(desktop.exercised.length, 'controls exercised').toBeGreaterThanOrEqual(run.minControls ?? run.minPages);
       expect(findings, `Broken for ${run.kind}:\n${formatFindings(findings)}`).toEqual([]);
     } finally {
-      await disposePersona(request, persona ?? undefined);
+      try {
+        if (run.kind === 'anon') {
+          // Only exact, randomly minted addresses from this run are eligible.
+          // Empty results cover login/recovery forms that did not create a user.
+          const cleanup = await Promise.allSettled([...generatedEmails].map(async email => {
+            const rows = await restSelect<Array<{ id: string; email: string }>>(request,
+              `profiles?select=id,email&email=eq.${encodeURIComponent(email)}`);
+            for (const row of rows) {
+              if (row.email !== email) throw new Error('Signup fixture ownership mismatch');
+              await deleteUser(request, row.id);
+            }
+          }));
+          const failed = cleanup.find(result => result.status === 'rejected');
+          if (failed?.status === 'rejected') throw failed.reason;
+        }
+      } finally { await disposePersona(request, persona ?? undefined); }
     }
   });
 }
