@@ -208,21 +208,16 @@ test.describe('Pro bought online', () => {
     expect((await getSubscription(request, p.stripe!.subscriptionId)).cancel_at).toBe(previous);
     accept = true;
     await openStripe(page, () => cancel.click());
-    // Stripe owns both confirmations. An already scheduled cancellation may
-    // first require resuming before cancellation at the current period end.
-    const resume = page.getByRole('button', { name: /^(renew|resume).*(subscription|plan)$/i });
-    await expect(resume).toBeVisible({ timeout: 15_000 });
-    await resume.click();
-    const confirmResume = page.getByRole('button', { name: /^(confirm|renew|resume)/i });
-    if (await confirmResume.count()) await confirmResume.first().click();
+    // The current provider UI offers cancellation as a link, even when a
+    // later date is scheduled. Stripe owns the final confirmation and write.
+    await page.getByRole('link', { name: /^cancel (subscription|plan)$/i }).click();
+    await page.getByRole('button', { name: /^cancel (subscription|plan)$/i }).click();
     await expect.poll(async () => {
       const current=await getSubscription(request,p.stripe!.subscriptionId);
-      return !current.cancel_at_period_end && current.cancel_at===null;
+      return current.cancel_at_period_end || current.cancel_at===current.current_period_end;
     },{timeout:30_000}).toBe(true);
-    await billingLoaded(page);
-    await openStripe(page, () => page.locator('#billing-cancel').click());
-    await page.getByRole('button', { name: /^cancel (subscription|plan)$/i }).click();
-    await page.waitForURL(url => url.href.startsWith(`${baseURL}/account/billing/`), { timeout: 60_000 });
+    await page.getByRole('link', {name:/^return to aidotnet$/i}).click();
+    await page.waitForURL(url => url.href.startsWith(`${baseURL}/account/billing/`), { timeout: 30_000 });
     await billingLoaded(page);
     await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
     const sub = await getSubscription(request, p.stripe!.subscriptionId);
