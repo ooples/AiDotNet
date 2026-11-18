@@ -1,20 +1,22 @@
 {
   "reviewed_on": "2026-11-18",
   "baseline_commit": "53c7c2c00f1424a9461526cac34813c31d25e6a5",
-  "reviewed_application_source": "6925ce6885c2fda5d783aacb2de5fb8492e50862",
-  "reviewed_workflow_source": "b0beea9875c5f34ea8b5935cc21f413f72278bf9",
+  "reviewed_application_source": "d0544fe299c1f71fffde808534218e9f5a8f98aa",
+  "reviewed_workflow_source": "a858fba080d56bce0028b3e6058c88fa60ee2330",
   "scope": "Existing preview frontend and shared Supabase project yfkqwpgjahoamlgckjib. Production frontend and canonical billing function cutover remain subject to PR review and merge.",
   "verification_results": {
     "preview_browser": {
-      "passed": 487,
+      "passed": 490,
       "failed": 0,
       "flaky": 0,
-      "skipped": 7,
-      "total": 494,
+      "skipped": 8,
+      "total": 498,
       "global_errors": 0,
-      "duration_ms": 229730,
-      "report": "playwright-report/preview/index.html",
-      "scope": "Full local fixture suite on the existing generated build, including a real touch-event swipe to the phone dialog action. One added desktop skip is the phone-only swipe check."
+      "duration_ms": 311406,
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44375305406",
+      "source": "a858fba080d56bce0028b3e6058c88fa60ee2330",
+      "report": "playwright-report/verification-a858fba08/preview/index.html",
+      "scope": "Website CI fixture suite on desktop Chromium and Pixel 5 emulation; generated wiki intentionally omitted from fixture CI and included in hosted preview."
     },
     "backend_handler_contracts": {
       "passed": 108,
@@ -41,44 +43,134 @@
       "conclusion": "success"
     },
     "current_hosted_browser_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44351279659",
-      "application_source": "bcff59e9d2002455a122ce32b5c2933187674dd9",
-      "status": "in_progress",
-      "verified": false
-    },
-    "previous_complete_hosted_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44312748945",
-      "application_source": "1a6e20c02134295027d9c5c57c9f67191876a7fe",
-      "suite": {
-        "passed": 447,
-        "skipped": 6,
-        "failed": 0,
-        "flaky": 0,
-        "did_not_run": 0
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44375296883",
+      "application_source": "d0544fe299c1f71fffde808534218e9f5a8f98aa",
+      "harness_source": "a858fba080d56bce0028b3e6058c88fa60ee2330",
+      "preview_build_run": "44364275044",
+      "preview_build_deploy_job": "135014032841",
+      "preview_url": "https://test.aidotnet.dev",
+      "status": "completed",
+      "conclusion": "success",
+      "verified": true,
+      "marker_verified_by_all_parts": true,
+      "built_routes": 12222,
+      "parts": {
+        "suite": {
+          "passed": 449,
+          "skipped": 6,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 455,
+          "duration_ms": 680752,
+          "report": "playwright-report/verification-a858fba08/suite/deployed/index.html"
+        },
+        "anon": {
+          "passed": 2,
+          "skipped": 0,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 2,
+          "duration_ms": 593105,
+          "report": "playwright-report/verification-a858fba08/anon/deployed/index.html"
+        },
+        "free": {
+          "passed": 2,
+          "skipped": 0,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 2,
+          "duration_ms": 361425,
+          "report": "playwright-report/verification-a858fba08/free/deployed/index.html"
+        },
+        "pro-stripe": {
+          "passed": 2,
+          "skipped": 0,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 2,
+          "duration_ms": 389991,
+          "report": "playwright-report/verification-a858fba08/pro-stripe/deployed/index.html"
+        },
+        "pro-granted": {
+          "passed": 2,
+          "skipped": 0,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 2,
+          "duration_ms": 337003,
+          "report": "playwright-report/verification-a858fba08/pro-granted/deployed/index.html"
+        },
+        "admin": {
+          "passed": 2,
+          "skipped": 0,
+          "failed": 0,
+          "flaky": 0,
+          "did_not_run": 0,
+          "global_errors": 0,
+          "total": 2,
+          "duration_ms": 565333,
+          "report": "playwright-report/verification-a858fba08/admin/deployed/index.html"
+        }
       },
-      "persona_crawls": {
-        "parts": [
-          "anon",
-          "free",
-          "pro-stripe",
-          "pro-granted",
-          "admin"
-        ],
-        "passed_per_part": 2,
+      "coverage": {
+        "scope": "Per-role union of desktop/phone crawl coverage; generated pages outside browser sampling checked over HTTP.",
+        "anon": {
+          "browser_pages": 58,
+          "http_additional_pages": 12152,
+          "controls": 87,
+          "links": 12275
+        },
+        "free": {
+          "browser_pages": 8,
+          "controls": 62,
+          "links": 31
+        },
+        "pro-stripe": {
+          "browser_pages": 8,
+          "controls": 65,
+          "links": 34
+        },
+        "pro-granted": {
+          "browser_pages": 8,
+          "controls": 60,
+          "links": 30
+        },
+        "admin": {
+          "browser_pages": 11,
+          "controls": 94,
+          "links": 28
+        }
+      }
+    },
+    "crawler_regression": {
+      "passed": 42,
+      "failed": 0,
+      "scope": "21 checks on desktop and phone. CSS smooth-scroll reproduction revealed 2/8 controls before the fix and all 8 after explicit instant scrolling; coverage thresholds retained."
+    },
+    "superseded_preview_attempt": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44364275044",
+      "application_source": "d0544fe299c1f71fffde808534218e9f5a8f98aa",
+      "conclusion": "failure",
+      "suite": {
+        "passed": 449,
+        "skipped": 6,
         "failed": 0
       },
-      "scope": "Historical baseline only; does not validate the current ownership changes."
-    },
-    "superseded_partial_hosted_run": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44326375695",
-      "application_source": "4d943aa103010d59dae64200b1b080339d965b4a",
-      "status": "cancelled",
-      "passed_parts": [
-        "admin",
-        "pro-stripe"
+      "failures": [
+        "Anonymous phone coverage: smooth-scrolling interrupted the crawler reveal sweep; fixed in harness a858fba08 without lowering minimum coverage.",
+        "Admin crawl: a net::ERR_CONNECTION_CLOSED console error. Original diagnostics lacked the failed endpoint; strict detection retained and safe request/source diagnostics added for the complete rerun."
       ],
-      "complete_matrix": false,
-      "reason": "Stopped after the fresh review exposed additional issues."
+      "recheck": "All six jobs passed on the complete rerun against the same application build, with stricter request diagnostics and corrected reveal scrolling. The earlier transport error is not assigned a root cause from incomplete historical diagnostics."
     }
   },
   "shared_backend_deployment": {
@@ -149,16 +241,17 @@
     "production_ownership_cutover_verified": false
   },
   "release_checks": [
-    "Build and deploy the current preview, verify its SHA/run marker through test.aidotnet.dev, and complete all six hosted suite/persona jobs.",
-    "Verify real card-free Checkout claim, Stripe portal cancellation, license email, cleanup and minimum desktop/phone crawl coverage against that deployment.",
-    "Canonical production ownership handlers must be released with their matching frontend after review. They are not active merely because the preview variants pass.",
-    "Live card entry and settled charged-payment paths are not exercised; payment fulfillment contracts include signed-event injection and actual card-free Stripe trials. No claim of every possible user/payment state being exhaustively proven is made."
+    "Canonical production ownership handlers must be released with their matching frontend after review; this preview verification does not cut over production.",
+    "Payment verification uses disposable card-free Stripe trials and signed-event injection, without settled charges or live card entry.",
+    "OAuth checks provider handoff; email API acceptance and generated links do not prove mailbox receipt.",
+    "Generated document families are sampled in browsers and comprehensively checked over HTTP. Desktop Chromium and Pixel 5 emulation do not exhaust every browser or external-provider state."
   ],
-  "reviewed_harness_source": "bcff59e9d2002455a122ce32b5c2933187674dd9",
+  "reviewed_harness_source": "a858fba080d56bce0028b3e6058c88fa60ee2330",
   "review_threads": {
+    "total": 86,
     "unresolved": 0,
     "observed_on": "2026-11-18",
-    "scope": "Current reported inline threads; deployment/browser verification remains tracked separately."
+    "scope": "Inline review threads; ready-for-review status is separate from deployment approval."
   }
 }
 
