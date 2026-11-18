@@ -340,8 +340,15 @@ internal sealed class HiFiGanGenerator<T>
         var accumulatorOwner = accumulatorLength > 0 ? TensorArena.Current : null;
         bool scaleOwnedAccumulator = accumulatorOwner is not null && _engine.GetType() == typeof(CpuEngine);
         Tensor<T>? accumulator = null;
+        // The upsampler's activation/output temporaries die once the stage result
+        // has been copied into the independent caller-owned prefix. Reuse their
+        // slots across stages instead of retaining every stage in the caller arena.
+        using var stageScratch = scaleOwnedAccumulator
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+                ? TensorArena.CreateDetached() : null;
         for (int i = 0; i < _ups.Count; i++)
         {
+            using var stageActive = stageScratch?.Activate();
             x = _ups[i].Forward(LeakyRelu(x, Slope));
             if (condition is not null && _stageConditions.Count > 0)
                 x = _engine.TensorAdd(x, _engine.TensorTile(_stageConditions[i].Forward(condition), new[] { 1, 1, x.Shape[2] }));
@@ -394,6 +401,9 @@ internal sealed class HiFiGanGenerator<T>
                 // separate result, so no caller-visible output aliases this private workspace.
                 _engine.TensorMultiplyScalarInPlace(sum, average);
                 x = sum;
+                // Only this owned-prefix path proves that no stage workspace
+                // remains an input to the next iteration. Fallbacks keep it live.
+                stageScratch?.Reset();
             }
             else x = _engine.TensorMultiplyScalar(sum!, average);
         }

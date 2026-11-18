@@ -170,6 +170,40 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
         finally { AiDotNetEngine.Current = previousEngine; }
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(8)]
+    public void UpsamplingWorkspaceStaysOutsideCallerLifetime(int batch)
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            // Halving channels while doubling time keeps all four stage payloads
+            // equal. Retaining each upsampler's temporaries in the caller would
+            // accumulate slots despite their disjoint stage lifetimes.
+            var generator = Create<float>(new[] { 2, 2, 2, 2 }, new[] { 4, 4, 4, 4 });
+            var input = new Tensor<float>(Enumerable.Range(0, batch * 4 * 64)
+                .Select(index => .15f * (float)Math.Sin(index * .11)).ToArray(), new[] { batch, 4, 64 });
+            var original = input.ToArray();
+            float[] expected;
+            using (new NoGradScope<float>()) expected = generator.Forward(input).ToArray();
+
+            using var arena = TensorArena.Create();
+            using var noGrad = new NoGradScope<float>();
+            var output = generator.Forward(input);
+            AssertBitwise(expected, output.ToArray());
+            Assert.Equal(original, input.ToArray());
+            // The caller owns pre/post-convolution values and one shared stage
+            // boundary, rather than three new full-size upsampling values per
+            // stage. Allow nine largest-stage payloads for those public lifetimes.
+            long largestStageBytes = (long)batch * 16 * 64 * sizeof(float);
+            Assert.True(arena.PeakBackingBytes <= 9 * largestStageBytes,
+                $"Caller retained {arena.PeakBackingBytes} bytes for a {largestStageBytes}-byte stage.");
+        }
+        finally { AiDotNetEngine.Current = previousEngine; }
+    }
+
     private static HiFiGanGenerator<T> Create<T>(int[] rates, int[] kernels, int branches = 3, bool condition = false)
     {
         var generator = new HiFiGanGenerator<T>(AiDotNetEngine.Current, 4, 16, rates, kernels,
