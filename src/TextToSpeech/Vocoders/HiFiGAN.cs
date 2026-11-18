@@ -107,6 +107,12 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
 
     /// <inheritdoc />
+    protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+        => GetType() == typeof(HiFiGAN<T>)
+            ? Flat(_generator!.ForwardDetachedForDiscriminator(mel))
+            : base.GenerateDetachedForDiscriminator(mel);
+
+    /// <inheritdoc />
     /// <remarks>The reference <c>mel_spectrogram</c>: reflect padding, Hann window, Slaney mel up to
     /// <see cref="HiFiGANOptions.MelMaxFrequency"/>, <c>log(max(x, 1e-5))</c>.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)

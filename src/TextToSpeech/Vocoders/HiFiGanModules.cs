@@ -306,6 +306,30 @@ internal sealed class HiFiGanGenerator<T>
 
 
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
+        => ForwardCore(features, condition, allowDetachedTrainingRecycle: false);
+
+    // This call is confined to GanVocoderBase's detached discriminator generation. The
+    // generator's convolution-only layers retain no manual activation caches; its
+    // training mode and normalization behavior remain unchanged.
+    internal Tensor<T> ForwardDetachedForDiscriminator(Tensor<T> features)
+    {
+        bool recycle = InferenceArenaSettings.Enabled && InferenceArenaSettings.RecycleLayerScratch
+            && CanRecycleDetachedTraining;
+        using var arena = recycle ? TensorArena.CreateDetached() : null;
+        using var active = arena?.Activate();
+        var output = ForwardCore(features, null, allowDetachedTrainingRecycle: recycle);
+        // The discriminator owns only the waveform. No arena-backed intermediate
+        // escapes this call, including when there was no caller arena at entry.
+        return NoGradScope<T>.IsSuppressed ? new Tensor<T>(output.ToArray(), output.Shape.ToArray()) : output;
+    }
+
+    private bool CanRecycleDetachedTraining => NoGradScope<T>.IsSuppressed
+        && ReferenceEquals(_engine, _engine.Unwrap()) && _engine.Unwrap().GetType() == typeof(CpuEngine)
+        && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
+        && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+        && _layers.All(layer => layer.GetType() == typeof(NormedConv1DLayer<T>));
+
+    private Tensor<T> ForwardCore(Tensor<T> features, Tensor<T>? condition, bool allowDetachedTrainingRecycle)
     {
         if (s_gpuLifetimeDiagnostics && _engine.TryGet<DirectGpuTensorEngine>(out var diagnosticGpu))
             TraceGpuInferenceEligibility(features, diagnosticGpu);
@@ -322,8 +346,9 @@ internal sealed class HiFiGanGenerator<T>
         // The native forward bypasses the generic layer walk's scratch recycling. Keep each branch's residual
         // boundary, not every convolution's normalization and activation temporaries. A private arena never
         // resets caller-owned input/condition tensors. GPU boundaries stay resident on their existing path.
+        bool detachedTraining = allowDetachedTrainingRecycle && CanRecycleDetachedTraining;
         bool recycle = InferenceArenaSettings.RecycleLayerScratch && TensorArena.Current is not null
-            && !_pre.InTrainingMode && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
+            && (!_pre.InTrainingMode || detachedTraining) && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
             && !_engine.Is<DirectGpuTensorEngine>();
         using var scratch = recycle ? TensorArena.CreateDetached() : null;
         var ops = MathHelper.GetNumericOperations<T>();
