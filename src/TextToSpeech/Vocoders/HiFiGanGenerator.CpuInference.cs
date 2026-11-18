@@ -19,6 +19,14 @@ internal sealed partial class HiFiGanGenerator<T>
     private long _privateCpuCalls;
     internal long PrivateCpuInferenceCalls => Interlocked.Read(ref _privateCpuCalls);
 
+    private readonly struct PrivateCpuActivation(Tensor<T> logical, Tensor<T> nchw, int channels, int time)
+    {
+        internal Tensor<T> Logical { get; } = logical;
+        internal Tensor<T> Nchw { get; } = nchw;
+        internal int Channels { get; } = channels;
+        internal int Time { get; } = time;
+    }
+
     private bool TryForwardPrivateCpu(Tensor<T> features, Tensor<T>? condition, out Tensor<T> output)
     {
         output = null!;
@@ -47,6 +55,7 @@ internal sealed partial class HiFiGanGenerator<T>
         maximum = Math.Max(maximum, sampleOutputCount);
         if (sampleOutputCount <= 0 || sampleOutputCount * fullBatch > int.MaxValue) return false;
         if (maximum <= 0 || maximum > int.MaxValue || Interlocked.CompareExchange(ref _privateCpuBusy, 1, 0) != 0) return false;
+        Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>? views = null;
         try
         {
             var buffers = _privateCpuBuffers ??= new float[5][];
@@ -55,24 +64,50 @@ internal sealed partial class HiFiGanGenerator<T>
                     buffers[i] = CpuStorageAllocationDiagnostics.NewNumericArray<float>((int)maximum, "workspace.hifi_cpu_private_activation");
             Interlocked.Increment(ref _privateCpuCalls);
             var cpu = _engine.Cast<CpuEngine>();
-            Tensor<T> View(int slot, int channels, int length, bool nchw)
+            var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();
+            views = activeViews;
+            var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(ReferenceEqualityComparer.Instance);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            T slope = numOps.FromDouble(Slope), finalSlope = numOps.FromDouble(0.01);
+            PrivateCpuActivation View(int slot, int channels, int length)
             {
+                var key = (slot, channels, length);
+                if (activeViews.TryGetValue(key, out var cached)) return cached;
                 int count = checked(batch * channels * length);
-                return Tensor<T>.FromMemory(((T[])(object)buffers[slot]).AsMemory(0, count),
-                    nchw ? new[] { batch, channels, 1, length } : new[] { batch, channels, length });
+                var memory = ((T[])(object)buffers[slot]).AsMemory(0, count);
+                // Separate borrowed storages keep the paired views from introducing a
+                // copy-on-write storage alias. Both remain inside this exclusive call.
+                var logical = Tensor<T>.FromMemory(memory, new[] { batch, channels, length });
+                Tensor<T>? nchw = null;
+                try
+                {
+                    nchw = Tensor<T>.FromMemory(memory, new[] { batch, channels, 1, length });
+                    var value = new PrivateCpuActivation(logical, nchw, channels, length);
+                    activeViews.Add(key, value);
+                    return value;
+                }
+                catch { logical.Dispose(); nchw?.Dispose(); throw; }
             }
-            Tensor<T> Conv(NormedConv1DLayer<T> layer, Tensor<T> input, int slot, Tensor<T>? residual = null, bool activate = false)
+            PrivateCpuActivation Conv(NormedConv1DLayer<T> layer, PrivateCpuActivation input, int slot,
+                PrivateCpuActivation? residual = null, bool activate = false, bool post = false)
             {
-                if (!layer.TryPrivateCpuOutputTime(input.Shape[2], out int length)) throw new InvalidOperationException("Private CPU output geometry changed.");
-                using var target = View(slot, layer.OutputChannels, length, true);
-                layer.ForwardPrivateCpuInto(input, target, residual, activate,
-                    MathHelper.GetNumericOperations<T>().FromDouble(Slope));
-                return _engine.Reshape(target, new[] { batch, layer.OutputChannels, length });
+                if (!layer.TryPrivateCpuOutputTime(input.Time, out int length)) throw new InvalidOperationException("Private CPU output geometry changed.");
+                var target = View(slot, layer.OutputChannels, length);
+                var residualTensor = residual?.Logical;
+                T alpha = post ? numOps.Zero : slope;
+                if (!bindings.TryGetValue(layer, out var binding)
+                    || !binding.Matches(input.Logical, input.Nchw, target.Nchw, residualTensor, activate, alpha))
+                {
+                    binding = layer.BindPrivateCpuInference(input.Logical, input.Nchw, target.Nchw, residualTensor, activate, alpha);
+                    bindings[layer] = binding;
+                }
+                binding.Execute();
+                return target;
             }
-            Tensor<T> Activate(Tensor<T> input, int slot, double slope)
+            PrivateCpuActivation Activate(PrivateCpuActivation input, int slot, T alpha)
             {
-                var target = View(slot, input.Shape[1], input.Shape[2], false);
-                cpu.LeakyReLUInto(target, input, MathHelper.GetNumericOperations<T>().FromDouble(slope));
+                var target = View(slot, input.Channels, input.Time);
+                cpu.LeakyReLUInto(target.Logical, input.Logical, alpha);
                 return target;
             }
             // Predict performs the single durable public copy. Keep this complete result
@@ -85,13 +120,13 @@ internal sealed partial class HiFiGanGenerator<T>
             for (int example = 0; example < fullBatch; example++)
             {
                 source.Slice(example * inputCount, inputCount).CopyTo(((T[])(object)buffers[4]).AsSpan(0, inputCount));
-                using var sample = View(4, features.Shape[1], features.Shape[2], false);
+                var sample = View(4, features.Shape[1], features.Shape[2]);
                 var x = Conv(_pre, sample, 0);
                 for (int stage = 0; stage < _ups.Count; stage++)
                 {
-                    using var activatedInput = Activate(x, 1, Slope);
+                    var activatedInput = Activate(x, 1, slope);
                     x = Conv(_ups[stage], activatedInput, 0);
-                    Tensor<T>? sum = null;
+                    PrivateCpuActivation? sum = null;
                     foreach (var (first, second) in _blocks[stage])
                     {
                         var h = x;
@@ -99,34 +134,37 @@ internal sealed partial class HiFiGanGenerator<T>
                         for (int pair = 0; pair < first.Count; pair++)
                         {
                             int nextSlot = residualSlot == 1 ? 2 : 1;
-                            using var activatedResidual = Activate(h, nextSlot, Slope);
-                            using var middle = Conv(first[pair], activatedResidual, 3, activate: true);
+                            var activatedResidual = Activate(h, nextSlot, slope);
+                            var middle = Conv(first[pair], activatedResidual, 3, activate: true);
                             h = Conv(second[pair], middle, nextSlot, h);
                             residualSlot = nextSlot;
                         }
                         if (sum is null)
                         {
-                            sum = View(4, h.Shape[1], h.Shape[2], false);
-                            h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
+                            sum = View(4, h.Channels, h.Time);
+                            h.Logical.AsSpanUnmarked().CopyTo(sum.Value.Logical.AsWritableSpanUnmarked());
                         }
-                        else cpu.TensorAddInPlace(sum, h);
+                        else cpu.TensorAddInPlace(sum.Value.Logical, h.Logical);
                     }
                     if (sum is null) throw new InvalidOperationException("Private CPU residual stage is empty.");
-                    cpu.TensorMultiplyScalarInPlace(sum, _residualAverageScale);
-                    x = sum;
+                    cpu.TensorMultiplyScalarInPlace(sum.Value.Logical, _residualAverageScale);
+                    x = sum.Value;
                 }
-                using var finalActivation = Activate(x, 1, 0.01);
-                if (!_post.TryPrivateCpuOutputTime(finalActivation.Shape[2], out int finalTime)) throw new InvalidOperationException("Private CPU post geometry changed.");
+                var finalActivation = Activate(x, 1, finalSlope);
                 // Slot0's stage input is dead after finalActivation; it can hold this example's
                 // waveform without another backing array or a view into a public output buffer.
-                using var final4 = View(0, _post.OutputChannels, finalTime, true);
-                _post.ForwardPrivateCpuInto(finalActivation, final4, null, false, MathHelper.GetNumericOperations<T>().Zero);
-                if (_tanhOutput) cpu.TanhInto(final4, final4);
-                final4.AsSpanUnmarked().CopyTo(destination.Slice(checked(example * (int)sampleOutputCount), (int)sampleOutputCount));
+                var final = Conv(_post, finalActivation, 0, post: true);
+                if (_tanhOutput) cpu.TanhInto(final.Nchw, final.Nchw);
+                final.Logical.AsSpanUnmarked().CopyTo(destination.Slice(checked(example * (int)sampleOutputCount), (int)sampleOutputCount));
             }
             output = complete;
             return true;
         }
-        finally { Volatile.Write(ref _privateCpuBusy, 0); }
+        finally
+        {
+            if (views is not null)
+                foreach (var value in views.Values) { value.Logical.Dispose(); value.Nchw.Dispose(); }
+            Volatile.Write(ref _privateCpuBusy, 0);
+        }
     }
 }
