@@ -106,6 +106,150 @@ public sealed class StudentTPosteriorNumericsTests
         });
 
     [Theory]
+    [InlineData(10, 4.0, 1.0, 100.0)]
+    [InlineData(11, 3.0, 2.0, 50.0)]
+    public void CorrelatedOutlierPosterior_HasProperCavitiesAndIndependentMomentMatches(
+        int count, double nu, double sigma, double outlier)
+        => OnCpu(() =>
+        {
+            using var model = new StudentTGaussianProcess<double>(new GaussianKernel<double>(sigma), nu: nu);
+            var x = new Matrix<double>(count, 1);
+            var y = new Vector<double>(count);
+            for (int i = 0; i < count; i++) { x[i, 0] = i; y[i] = i; }
+            y[5] = outlier;
+            model.Fit(x, y);
+
+            // Inspect the fitted Gaussian, not another run of the update
+            // algorithm. Every marginal must match an independently integrated
+            // likelihood times its leave-one-out Gaussian cavity.
+            var fields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var type = typeof(StudentTGaussianProcess<double>);
+            var mean = (Vector<double>)type.GetField("_posteriorMean", fields)!.GetValue(model)!;
+            var covariance = (Matrix<double>)type.GetField("_posteriorCov", fields)!.GetValue(model)!;
+            var tau = (Vector<double>)type.GetField("_sitePrecisions", fields)!.GetValue(model)!;
+            var eta = (Vector<double>)type.GetField("_siteNaturalMeans", fields)!.GetValue(model)!;
+            for (int i = 0; i < count; i++)
+            {
+                Assert.True(!double.IsNaN(mean[i]) && !double.IsInfinity(mean[i]) && covariance[i, i] > 0);
+                double cavityPrecision = 1 / covariance[i, i] - tau[i];
+                Assert.True(!double.IsNaN(cavityPrecision) && !double.IsInfinity(cavityPrecision) && cavityPrecision > 0);
+                double cavityMean = (mean[i] / covariance[i, i] - eta[i]) / cavityPrecision;
+                var expected = GaussianProcessPosteriorContract.IntegrateSingleObservation(
+                    y[i] - cavityMean, 1 / cavityPrecision, nu, 0.1);
+                GaussianProcessPosteriorContract.AssertClose(cavityMean + expected.Mean, mean[i],
+                    2e-5, $"site {i}: independently integrated posterior mean");
+                GaussianProcessPosteriorContract.AssertClose(expected.Variance, covariance[i, i],
+                    2e-5, $"site {i}: independently integrated posterior variance");
+            }
+        });
+
+    [Theory]
+    [InlineData(10, false, 0.0)]
+    [InlineData(11, false, 100.0)]
+    [InlineData(30, false, 0.0)]
+    [InlineData(10, true, 10.0)]
+    public void AcceptedRankOneUpdates_AgreeWithIndependentDensePosterior(int count, bool clustered, double shift)
+        => OnCpu(() => VerifyAcceptedUpdates<double>(count, clustered, shift, 2e-8));
+
+    [Theory]
+    [InlineData(10, false, 0.0)]
+    [InlineData(11, false, 10.0)]
+    [InlineData(30, false, 0.0)]
+    [InlineData(10, true, 0.0)]
+    public void FloatAcceptedRankOneUpdates_UseRoundedSiteChanges(int count, bool clustered, double shift)
+        => OnCpu(() => VerifyAcceptedUpdates<float>(count, clustered, shift, 2e-5));
+
+    private static void VerifyAcceptedUpdates<T>(int count, bool clustered, double shift, double tolerance)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        using var model = new StudentTGaussianProcess<T>(new GaussianKernel<T>());
+        var x = new Matrix<T>(count, 1);
+        var y = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            x[i, 0] = ops.FromDouble(clustered ? i * 1e-4 : i);
+            y[i] = ops.FromDouble(shift + 0.1 * i);
+        }
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = typeof(StudentTGaussianProcess<T>);
+        // Initialize precisely the declared prior, without relying on Fit or
+        // its stopping rule to set up the update under test.
+        type.GetField("_X", flags)!.SetValue(model, x);
+        type.GetField("_y", flags)!.SetValue(model, y);
+        var kernel = new GaussianKernel<T>();
+        var prior = new Matrix<T>(count, count);
+        var densePrior = new double[count, count];
+        for (int i = 0; i < count; i++)
+            for (int j = 0; j < count; j++)
+            {
+                prior[i, j] = kernel.Calculate(x.GetRow(i), x.GetRow(j));
+                densePrior[i, j] = ops.ToDouble(i == j
+                    ? ops.Add(prior[i, j], ops.FromDouble(1e-6)) : prior[i, j]);
+            }
+        type.GetField("_K", flags)!.SetValue(model, prior);
+        type.GetField("_sitePrecisions", flags)!.SetValue(model, new Vector<T>(count));
+        type.GetField("_siteNaturalMeans", flags)!.SetValue(model, new Vector<T>(count));
+        type.GetField("_weights", flags)!.SetValue(model, new Vector<T>(count));
+        type.GetMethod("UpdatePosterior", flags)!.Invoke(model, null);
+        var priorPrecision = DenseInverse(densePrior);
+        var update = type.GetMethod("UpdateAcceptedSite", flags)!;
+        for (int site = 0; site < count; site++)
+        {
+            update.Invoke(model, new object[] { site });
+            var tau = (Vector<T>)type.GetField("_sitePrecisions", flags)!.GetValue(model)!;
+            var eta = (Vector<T>)type.GetField("_siteNaturalMeans", flags)!.GetValue(model)!;
+            var mean = (Vector<T>)type.GetField("_posteriorMean", flags)!.GetValue(model)!;
+            var covariance = (Matrix<T>)type.GetField("_posteriorCov", flags)!.GetValue(model)!;
+            var precision = (double[,])priorPrecision.Clone();
+            for (int i = 0; i < count; i++) precision[i, i] += ops.ToDouble(tau[i]);
+            var expectedCovariance = DenseInverse(precision);
+            for (int i = 0; i < count; i++)
+            {
+                double expectedMean = 0;
+                for (int j = 0; j < count; j++)
+                {
+                    expectedMean += expectedCovariance[i, j] * ops.ToDouble(eta[j]);
+                    GaussianProcessPosteriorContract.AssertClose(expectedCovariance[i, j], ops.ToDouble(covariance[i, j]),
+                        tolerance, $"site {site}: dense covariance {i},{j}");
+                }
+                GaussianProcessPosteriorContract.AssertClose(expectedMean, ops.ToDouble(mean[i]),
+                    tolerance, $"site {site}: dense posterior mean {i}");
+            }
+        }
+    }
+
+    private static double[,] DenseInverse(double[,] matrix)
+    {
+        int n = matrix.GetLength(0);
+        var work = new double[n, 2 * n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) { work[i, j] = matrix[i, j]; work[i, n + j] = i == j ? 1 : 0; }
+        // Independent Gauss-Jordan elimination with partial pivoting, rather
+        // than production Cholesky or its rank-one recurrence.
+        for (int column = 0; column < n; column++)
+        {
+            int pivot = column;
+            for (int row = column + 1; row < n; row++)
+                if (Math.Abs(work[row, column]) > Math.Abs(work[pivot, column])) pivot = row;
+            Assert.True(Math.Abs(work[pivot, column]) > 0);
+            for (int j = 0; j < 2 * n; j++)
+                (work[column, j], work[pivot, j]) = (work[pivot, j], work[column, j]);
+            double diagonal = work[column, column];
+            for (int j = 0; j < 2 * n; j++) work[column, j] /= diagonal;
+            for (int row = 0; row < n; row++)
+            {
+                if (row == column) continue;
+                double factor = work[row, column];
+                for (int j = 0; j < 2 * n; j++) work[row, j] -= factor * work[column, j];
+            }
+        }
+        var inverse = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) inverse[i, j] = work[i, n + j];
+        return inverse;
+    }
+
+    [Theory]
     [InlineData(0.5)]
     [InlineData(1)]
     [InlineData(2)]
