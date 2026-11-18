@@ -27,6 +27,49 @@ public sealed class HiFiGanResidentMelTests
         finally { AiDotNetEngine.Current = previous; }
     }
 
+    [Fact]
+    public void Cpu_float_fft_magnitude_and_waveform_vjp_match_independent_dft()
+    {
+        var cpu = new CpuEngine();
+        var previous = AiDotNetEngine.Current; AiDotNetEngine.Current = cpu;
+        try
+        {
+            using var input = new Tensor<float>(Input().ToArray().Select(value => (float)value).ToArray(), new[] { Length });
+            var expected = Oracle(input.ToArray().Select(value => (double)value).ToArray(), stagedFloatWindow: true);
+            var mel = new DifferentiableMel<float>(cpu, 4000, N, Hop, Window, 4, 0, 2000, true);
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            Assert.Null(mel.GetType().GetField("_cos", flags)!.GetValue(mel));
+            Assert.Null(mel.GetType().GetField("_sin", flags)!.GetValue(mel));
+            Assert.NotNull(mel.GetType().GetField("_fftWindow", flags)!.GetValue(mel));
+            using var tape = new GradientTape<float>();
+            var magnitude = mel.Magnitude(input, Epsilon);
+            using var upstream = new Tensor<float>(expected.Upstream.Select(value => (float)value).ToArray(), magnitude.Shape.ToArray());
+            var gradient = tape.ComputeGradients(cpu.ReduceSum(cpu.TensorMultiply(magnitude, upstream)), new[] { input })[input];
+            Close(expected.Magnitude, magnitude.ToArray().Select(value => (double)value).ToArray(), 3e-6);
+            Close(expected.Gradient, gradient.ToArray().Select(value => (double)value).ToArray(), 3e-6);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    [Fact]
+    public void Cpu_float_training_records_fft_semantic_without_dense_dft_tables()
+    {
+        var cpu = new CpuEngine();
+        var previous = AiDotNetEngine.Current; AiDotNetEngine.Current = cpu;
+        try
+        {
+            var mel = new DifferentiableMel<float>(cpu, 4000, N, Hop, Window, 4, 0, 2000, true);
+            using var input = new Tensor<float>(Input().ToArray().Select(value => (float)value).ToArray(), new[] { Length });
+            using var graph = GraphMode.EnableTraining(new[] { input });
+            var magnitude = mel.Magnitude(input, Epsilon);
+            var node = typeof(TensorBase<float>).GetField("LazySource", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(magnitude);
+            Assert.NotNull(node);
+            Assert.Equal("TensorRfftMagnitude", node!.GetType().GetProperty("OpName")!.GetValue(node));
+            Assert.Equal(new[] { Length / Hop, N / 2 + 1 }, magnitude.Shape.ToArray());
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     [SkippableFact]
     public void Cuda_windowed_magnitude_and_waveform_vjp_match_independent_dft()
     {

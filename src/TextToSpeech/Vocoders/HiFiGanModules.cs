@@ -698,7 +698,7 @@ internal sealed class DifferentiableMel<T>
         _fft = fftSize;
         _hop = hopSize;
         int bins = fftSize / 2 + 1;
-        if (typeof(T) == typeof(float) && engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())
+        if (typeof(T) == typeof(float) && (engine.Is<CpuEngine>() || (engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())))
         {
             // Separate FP32 windowing is part of the real-FFT recipe. Folding a
             // double-precision window into DFT tables changes quiet-band VJPs.
@@ -706,7 +706,7 @@ internal sealed class DifferentiableMel<T>
         }
         else
         {
-            // Retain the established CPU/default and generic-type DFT recipe.
+            // Generic numeric types and other engines retain the folded-window DFT.
             var window = new double[fftSize];
             int offset = (fftSize - windowSize) / 2;
             for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
