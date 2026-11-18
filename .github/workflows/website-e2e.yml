@@ -43,7 +43,7 @@ on:
       part:
         description: 'Preview checks to run'
         type: choice
-        options: [suite, all, journeys, billing, anon, free, pro-stripe, pro-granted, admin, auth-config]
+        options: [suite, all, journeys, billing, checkout, anon, free, pro-stripe, pro-granted, admin, auth-config]
         default: suite
       repair_email:
         description: 'Verify the existing repository mail key and synchronize the function mail secret'
@@ -74,7 +74,7 @@ jobs:
           PART: ${{ inputs.part }}
         run: |
           case "$PART" in
-            suite|all|journeys|billing|anon|free|pro-stripe|pro-granted|admin|auth-config) ;;
+            suite|all|journeys|billing|checkout|anon|free|pro-stripe|pro-granted|admin|auth-config) ;;
             *) echo '::error::Unsupported verification part'; exit 1 ;;
           esac
           if [ "$INVALID_MAIL_REPAIR" = true ]; then
@@ -207,6 +207,8 @@ jobs:
             npx playwright test --config "$config" --project=journeys --grep-invert "every link and control works for" --retries=0
           elif [ "$PART" = billing ]; then
             npx playwright test --config "$config" --project=journeys tests/e2e/journeys/account-billing.spec.ts --retries=0
+          elif [ "$PART" = checkout ]; then
+            npx playwright test --config "$config" --project=journeys tests/e2e/journeys/checkout-claim.spec.ts --retries=0
           else
             npx playwright test --config "$config" --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
           fi

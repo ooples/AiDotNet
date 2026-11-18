@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { journeySkipReason, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, signIn, type Persona } from '../helpers/personas';
 import { createTrialCheckout, deleteCustomer } from '../helpers/stripe';
@@ -15,7 +15,18 @@ test('a verified customer claims a completed legacy checkout and replay keeps on
     await signIn(page,persona);
     await page.goto(checkout.url);
     // No card or other payment method is supplied; the trial cancels if one is still missing.
-    await page.getByRole('button',{name:/^(start.*trial|subscribe)$/i}).click();
+    // Hosted Checkout renders the contact/confirmation form in a Stripe iframe.
+    // Locate the actual accessible action there, without bypassing provider UI.
+    let startTrial:Locator|undefined;
+    await expect.poll(async()=>{
+      for(const frame of page.frames()) {
+        if(!/^https:\/\/(?:[a-z0-9-]+\.)*stripe\.com\//i.test(frame.url())) continue;
+        const button=frame.getByRole('button',{name:/^(start.*trial|subscribe)$/i});
+        if(await button.count()===1&&await button.isVisible()) {startTrial=button;return true;}
+      }
+      return false;
+    },{timeout:30_000,message:'Stripe exposes the real trial confirmation action'}).toBe(true);
+    await startTrial!.click();
     await page.waitForURL(url=>url.origin===new URL(baseURL!).origin&&url.pathname==='/account/licenses/',{timeout:60_000});
     const bindings=()=>restSelect<Array<{user_id:string}>>(request,`billing_checkout_bindings?select=user_id&session_id=eq.${checkout.sessionId}`);
     expect(await bindings(),'legacy checkout has not yet established verified ownership').toEqual([]);
