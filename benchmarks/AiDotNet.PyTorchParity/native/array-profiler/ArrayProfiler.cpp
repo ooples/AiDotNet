@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <mutex>
 #include <new>
+#include "NumericArrayCounters.h"
 
 // {5B735E8D-5547-4DB5-B407-E9AF3E2A9D15}
 static const CLSID ProfilerClsid = {0x5b735e8d, 0x5547, 0x4db5, {0xb4, 0x07, 0xe9, 0xaf, 0x3e, 0x2a, 0x9d, 0x15}};
@@ -21,6 +22,16 @@ extern "C" __declspec(dllexport) void __cdecl ArrayProfilerSnapshot(unsigned lon
     for (unsigned int i = 0; i < length; ++i) output[i] = Counters[i];
 }
 
+extern "C" __declspec(dllexport) void __cdecl ArrayProfilerSnapshotV2(unsigned long long* output, unsigned int length)
+{
+    if (output == nullptr || length != NumericArrays::Length) return;
+    std::lock_guard<std::mutex> guard(CounterMutex);
+    for (unsigned int i = 0; i < 7; ++i) output[i] = Counters[i];
+    for (unsigned int i = 7; i < length; ++i) output[i] = NumericArrays::Counters[i];
+    output[NumericArrays::AbiVersion] = NumericArrays::Version;
+    output[NumericArrays::SnapshotLength] = NumericArrays::Length;
+}
+
 static void WriteFinalReceipt()
 {
     wchar_t path[32768];
@@ -28,15 +39,18 @@ static void WriteFinalReceipt()
     if (length == 0 || length >= 32768) return;
     FILE* file = nullptr;
     if (_wfopen_s(&file, path, L"wb") != 0 || file == nullptr) return;
-    unsigned long long values[7];
-    ArrayProfilerSnapshot(values, 7);
+    unsigned long long values[NumericArrays::Length];
+    ArrayProfilerSnapshotV2(values, NumericArrays::Length);
     std::fprintf(file,
         "{\"schema\":\"clr-array-profiler-v1\",\"pid\":%lu,\"shutdown_complete\":true,"
         "\"event_mask\":%lu,\"snapshot\":[%llu,%llu,%llu,%llu,%llu,%llu,%llu],"
         "\"scope\":\"all_managed_arrays_including_headers_unknown_classes_conservatively_included\","
-        "\"sampling\":false,\"unmanaged_coverage\":false}\n",
+        "\"sampling\":false,\"unmanaged_coverage\":false,\"numeric_abi\":2,\"numeric_snapshot\":[",
         GetCurrentProcessId(), static_cast<unsigned long>(AllocationFlags),
         values[0], values[1], values[2], values[3], values[4], values[5], values[6]);
+    for (unsigned i = 0; i < NumericArrays::Length; ++i)
+        std::fprintf(file, i == 0 ? "%llu" : ",%llu", values[i]);
+    std::fprintf(file, "],\"numeric_scope\":\"fresh_primitive_array_payload_and_object_size_by_dtype_rank_unsupported_and_unknown_conservatively_separate\"}\n");
     std::fclose(file);
 }
 
@@ -80,19 +94,21 @@ public:
     }
     HRESULT STDMETHODCALLTYPE ObjectAllocated(ObjectID objectId, ClassID classId) override
     {
-        CorElementType elementType;
-        ClassID elementClass;
-        ULONG rank;
+        CorElementType elementType = ELEMENT_TYPE_END;
+        ClassID elementClass = 0;
+        ULONG rank = 0;
         const HRESULT classification = info->IsArrayClass(classId, &elementType, &elementClass, &rank);
         // S_FALSE is a proven non-array. A not-yet-loaded class must not cause array undercounting:
         // include its full object size conservatively, and expose this separate count in every receipt.
         SIZE_T size = 0;
         const HRESULT sized = classification == S_FALSE ? S_OK : info->GetObjectSize2(objectId, &size);
+        const auto numeric = NumericArrays::Observe(info, objectId, classification, elementType, rank, sized, size);
         std::lock_guard<std::mutex> guard(CounterMutex);
         ++Counters[0];
         if (FAILED(sized)) ++Counters[5];
         else if (classification == S_OK) { ++Counters[1]; Counters[2] += size; }
         else if (classification != S_FALSE) { ++Counters[3]; Counters[4] += size; }
+        NumericArrays::Record(numeric, sized, size);
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Shutdown() override { WriteFinalReceipt(); return S_OK; }

@@ -40,6 +40,8 @@ $taskReceipt = [ordered]@{
     schema = 'clr-array-profiler-build-v1'; runtime_headers_commit = $taskCommit
     source_sha256 = (Get-FileHash -LiteralPath $taskSource -Algorithm SHA256).Hash.ToLowerInvariant()
     stubs_sha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'CallbackStubs.inc') -Algorithm SHA256).Hash.ToLowerInvariant()
+    numeric_counters_sha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'NumericArrayCounters.h') -Algorithm SHA256).Hash.ToLowerInvariant()
+    legacy_snapshot_slots = 7; numeric_abi = 2; numeric_snapshot_slots = 1370
     dll_sha256 = (Get-FileHash -LiteralPath $taskDll -Algorithm SHA256).Hash.ToLowerInvariant()
     compiler_path = $taskCompiler
     compiler_file_version = (Get-Item -LiteralPath $taskCompiler).VersionInfo.FileVersion
