@@ -445,13 +445,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            int inPer = _in / _groups, outPer = _out / _groups;
-            var parts = new Tensor<T>[_groups];
-            for (int g = 0; g < _groups; g++)
-                parts[g] = Engine.Conv2D(Engine.TensorSlice(x4, new[] { 0, g * inPer, 0, 0 }, new[] { batch, inPer, 1, time }),
-                    Engine.TensorSlice(kernel, new[] { g * outPer, 0, 0, 0 }, new[] { outPer, inPer, 1, _kernel }),
-                    new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation });
-            y = Engine.TensorConcatenate(parts, 1);
+            y = GroupedConvolution.Forward(Engine, x4, kernel,
+                new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation }, _groups);
         }
         int outTime = y.Shape[3];
         if (leakyAfterBias && _useBias && ((DirectGpuTensorEngine)Engine).TryChannelBiasLeakyInference(y, _bias, alpha, out var activated))
