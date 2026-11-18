@@ -2038,7 +2038,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:00:28.614090+00:00",
+  "updated_utc": "2026-11-18T05:08:34.194482+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2325,9 +2325,9 @@
       "total": 1667
     },
     "held_product_branch": {
-      "branch": "codex/2524-post1766-ci",
-      "head": "d99ee71312",
-      "status": "Local held consumer source; notPR-pushed. Normal analyzer-enabled corebuildpassed. Qualifiedcohorts Adam37/37 across35CPU+2GPU; codec/HiFT38/38 nofail/noskip onactualcorea0186b3... +published1512. TLoRAhelper20passes, model2nativeFA-blocked; newnativeproducer44240267128 active. StudentT75/76 (all31numerics pass,twooutliersfixed,actualbuilder21rowEPboundary stillopen); propernonlogconcaveEPdesignscreenunderway. DoNOTclaimcategory/fullCIcomplete."
+      "branch": "codex/2524-category-rollout",
+      "head": "b73f85723c",
+      "status": "PUBLISHED reviewed collaboration WIP; PRbranchremainsa826andactiveCIuninterrupted. Exacta826diagnosticsmergedlocally7056first, no source/package changes inthatmerge. GP78/78unique0fail0skip; Adam37/37; codecHiFT38/38. TLoRAmodelwholecohortstillnativeFA-blocked and originalSpark146contains7remainingTensorMaxprobe failures, so thisbranchisNOTPRready. RequiredGPUshipping225153separatebranch untilactualCUDAqualification."
     },
     "active_pr_runs": {
       "main": 44232296552,
@@ -2336,7 +2336,7 @@
     },
     "next_verified_cohorts": {
       "Adam": "37actualoriginalcasespassed across35CPU+2GPU; source2b476heldnotonPR",
-      "GP": "66current1512cases63pass3fail; standardsequentialEPscreen3datasetsconverges; rank1O(n3)draftrootreview",
+      "GP": "COMPLETEfocusedcategory78/78uniqueTRXnames+IDs0fail0skip. Currentmodel-family16+numerics33; unchangedInference29. Sameverifiedproductiond99corea0186... andpublished1512Tensors7ff6... bothactualhosthashJSONL. Sharedbuilderfixedpriorfixture+exact21initial/refitexplicitrefusals accepted; NOnewsolver/tolerancechange. Root3filefinalreview; commitb73 cherryfrome17. Test-onlybuild6.23s0errors, no productionrebuild.",
       "TLoRA": "20helperunitpasses; countduplicateownershiprootcausefound,aliasfixheld;2originalmodelfailuresnowtracednativeFA; newwholemodelcheckpoint/factorupdateunprovenuntilnativefix",
       "Codec_HiFT": "38passed0failed0skipped: SparkTTSPaper18,HiftReplay9,HiftReference5,CompiledStepRandomData6. Originalsource+signedlicensebootstrap, reusedcurrentproductioncorea0186b3... andpublished1512Tensors7ff6...; no productionrebuild. Evidence C:/Users/cheat/source/artifacts/codex2524/codec-hift-1512-results.json."
     },
@@ -2452,6 +2452,20 @@
       "focused": "38pass0fail0skip",
       "originalWholeSparkTTS": "146total130pass7fail9skip; NOTcategorycomplete. All7generatedoptions nowreach TensorMax(no matching trace-time shape) hostread after priorTensorAdd/codec boundary fixed. No further sourceclaim; Claude/existingSparkownerpleaseinvestigate preserving guards and numericassertions.",
       "evidence": "Z:/codex-ci-artifacts/aidotnet2524/held1512-codec-hift-focused/original-spark-results/original-spark-all.trx"
+    },
+    "required_gpu_qualification": {
+      "shippingBranch": "codex/2524-required-gpu",
+      "shippingHead": "225153dbcf51fa4a0328fdaa733bf3f4955027ff",
+      "isolatedBranch": "codex/2524-required-gpu-qualification",
+      "isolatedHead": "b78336f32413ae7e078836d5032517a5a064aab2",
+      "run": 44241062832,
+      "status": "Queued hostedcsc-onlycompile; actual12CUDAfactsnotyetexecuted.47positive/negativeproofgatefixturespassed. Rootreviewedshipping9files+isolatedworkflow. No PRpush/cancel/certificate."
+    },
+    "native_flashattention_validation": {
+      "branch": "codex/2524-native-replay-1512",
+      "head": "8bf33a65a02d6b0566bae5fe81dd5e3f37a5f070",
+      "producer": 44240267128,
+      "status": "IN_PROGRESS; rootreviewedsource+2workflows, localnormalbuildand41CPUcasespassed. Preserveprior278CPU+24exactartifactcases/all5TFMs, add41CPU+4GPU. GPU4discovery-onlyuntilproducerartifactandCUDAqualification. GitHubartifactONLY, no publicrelease."
     }
   }
 }
