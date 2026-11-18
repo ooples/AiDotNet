@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page, Request, Response, Route } from '@playwright/test';
+import type { APIRequestContext, ElementHandle, Page, Request, Response, Route } from '@playwright/test';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -141,7 +141,9 @@ const REACHABLE = (selector: string) => {
   return !!hit && (hit === el || el.contains(hit));
 };
 
-const ENUMERATE = (path: string) => {
+const ENUMERATE = (input: string | { path: string; target: Element }) => {
+  const path = typeof input === 'string' ? input : input.path;
+  const target = typeof input === 'string' ? null : input.target;
   const CONTROL = 'button, [role=button], [role=tab], [role=switch], [role=menuitem], [role=checkbox], input[type=submit], input[type=button], input[type=checkbox], input[type=radio], select, summary, a[href^="#"], a[href=""], a:not([href]), a[href^="javascript:"], [onclick]';
   const LAYOUT = 'header, nav, footer, #account-sidebar, aside, [data-layout]';
   const cssPath = (el: Element): string => {
@@ -194,6 +196,7 @@ const ENUMERATE = (path: string) => {
       return {
         key: `${scope} ${el.id ? `#${el.id}` : generic}`,
         selector: cssPath(el),
+        isTarget: el === target,
         label: label || cssPath(el),
         tag: el.tagName.toLowerCase(),
         type: (el.getAttribute('type') || '').toLowerCase(),
@@ -454,17 +457,18 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     }).catch(() => null);
   }
 
-  async function fillForm(selector: string) {
-    const formHandle = await page.locator(selector).evaluateHandle((el) => (el as HTMLButtonElement).form);
-    const fields = await formHandle.evaluate((f) => f ? Array.from((f as HTMLFormElement).elements).map((e, i) => {
+  async function fillForm(button: ElementHandle<HTMLElement | SVGElement>) {
+    const formHandle = await button.evaluateHandle((el) => (el as HTMLButtonElement).form);
+    const formToken = randomUUID();
+    const fields = await formHandle.evaluate((f, token) => f ? Array.from((f as HTMLFormElement).elements).map((e, i) => {
       const el = e as HTMLInputElement;
-      el.setAttribute('data-crawl-field', String(i));
+      el.setAttribute('data-crawl-field', `${token}-${i}`);
       return { i, tag: el.tagName.toLowerCase(), type: (el.type || '').toLowerCase(), value: el.value, required: el.required, name: `${el.name} ${el.id}` };
-    }) : []);
+    }) : [], formToken);
     const password = randomPassword();
     const email = testUserEmail('crawl');
     for (const f of fields) {
-      const loc = page.locator(`[data-crawl-field="${f.i}"]`);
+      const loc = page.locator(`[data-crawl-field="${formToken}-${f.i}"]`);
       if (!(await loc.isVisible().catch(() => false))) continue;
       if (f.tag === 'select') { await loc.selectOption({ index: 1 }).catch(() => {}); continue; }
       if (f.type === 'checkbox') { if (f.required) await loc.check().catch(() => {}); continue; }
@@ -479,16 +483,28 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   // Clicks one control and reports what it did. Returns 'nav' when the page changed.
   async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
+    const loc = await page.locator(c.selector).first().elementHandle();
+    const verified = loc && (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
+    if (!loc || !verified || verified.key !== c.key) {
+      add(pg, c.key, 'control identity changed before the action; coverage was not credited');
+      return 'same';
+    }
+    // Pin the actual node: positional selectors must not silently click its sibling.
     current = { page: pg, control: c.key };
-    exercised.add(c.key);
-    console.log(`[crawl ${tag}]   click ${c.key}`);
-    const loc = page.locator(c.selector).first();
-    if (c.inForm) await fillForm(c.selector);
+    if (c.inForm) await fillForm(loc);
+    await loc.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => {});
     // Two idle snapshots: a signal that moves on its own (animation, clock) cannot count as an effect.
     const idle = await snapshot();
     await page.waitForTimeout(300);
     const before = await snapshot();
     if (!before || !idle) return 'nav';
+    const finalIdentity = (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
+    if (!finalIdentity || finalIdentity.key !== c.key) {
+      add(pg, c.key, 'control identity changed before the action; coverage was not credited');
+      return 'same';
+    }
+    exercised.add(c.key);
+    console.log(`[crawl ${tag}]   click ${c.key}`);
     const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount, state: before.stateHash !== idle.stateHash };
     pending.length = 0;
     responses.length = 0;
@@ -496,7 +512,6 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const popup = page.context().waitForEvent('page', { timeout: 2_500 }).catch(() => null);
     const download = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
     try {
-      await loc.scrollIntoViewIfNeeded({ timeout: 3_000 });
       if (c.tag === 'select') {
         // Clicking a native select changes nothing; choosing another option fires input and change.
         const next = await loc.evaluate((el) => {
@@ -582,6 +597,12 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (!todo.length) return;
     const restoredKeys = new Set<string>();
     for (const c of todo) {
+      const resolve = async () => {
+        const controls = (await page.evaluate(ENUMERATE, pg)).controls;
+        return controls.find(control => control.key === c.key && control.selector === c.selector)
+          ?? controls.find(control => control.key === c.key && control.visible && !control.disabled);
+      };
+      let candidate = await resolve();
       // Repeated table rows can share a key. An unreachable row must not trigger
       // hundreds of identical reload/replay attempts from the same sibling list.
       const attempt = JSON.stringify([c.selector, c.key]);
@@ -589,20 +610,21 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       doneOnPage.add(attempt);
       // Return to the state this control was found in: fresh page plus the clicks that revealed it.
       // A sibling's click may have opened a modal over this control: start again from a fresh page.
-      if (new URL(page.url()).pathname !== pg || !(await reachable(c.selector))) {
+      if (new URL(page.url()).pathname !== pg || !candidate || !(await reachable(candidate.selector))) {
         if (restoredKeys.has(c.key)) continue;
         restoredKeys.add(c.key);
         if (!(await load(pg))) return;
         for (const step of path) await page.locator(step).first().click({ timeout: 5_000 }).catch(() => {});
         await page.waitForTimeout(300);
-        if (!(await reachable(c.selector))) continue;
+        candidate = await resolve();
+        if (!candidate || !(await reachable(candidate.selector))) continue;
       }
-      const result = await act(pg, c);
+      const result = await act(pg, candidate);
       restoredKeys.clear();
       if (result === 'same' && depth < maxDepth) {
         // A blocked control in this child state can still be reachable from
         // the parent. Only successful actions are deduplicated across states.
-        await explore(pg, [...path, c.selector], depth + 1, new Set(doneOnPage));
+        await explore(pg, [...path, candidate.selector], depth + 1, new Set());
       } else if (result === 'same') {
         // Reaching the exploration limit must not silently count newly
         // revealed controls as covered. Report them unless another path

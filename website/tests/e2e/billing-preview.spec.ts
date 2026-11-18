@@ -17,6 +17,7 @@ const subscription = {
 
 async function installBackend(page: Page, options: {
   tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean; rescheduleFailure?: boolean; rescheduleConflict?: boolean;
+  summaryAfterAction?: () => Promise<void>; summaryFailureAfterAction?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: 'user',
@@ -31,6 +32,7 @@ async function installBackend(page: Page, options: {
   }, { user, jwt });
   const calls: Array<Record<string, unknown>> = [];
   let currentSub = options.sub ?? null;
+  let rescheduleAttempts = 0;
   await page.route('https://preview-test.supabase.co/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const reply = (body: unknown, status = 200) => route.fulfill({ status, json: body });
@@ -44,9 +46,14 @@ async function installBackend(page: Page, options: {
       const body = route.request().postDataJSON();
       calls.push(body);
       if (body.action === 'summary') {
+        if (rescheduleAttempts) {
+          await options.summaryAfterAction?.();
+          if (options.summaryFailureAfterAction) return reply({ message: 'Refresh unavailable' }, 502);
+        }
         return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub });
       }
       if (body.action === 'cancel_before_renewal') {
+        rescheduleAttempts++;
         if (options.rescheduleConflict && body.expected_renewal === subscription.current_period_end) {
           currentSub = { ...currentSub, current_period_end: subscription.current_period_end + 86400 };
           return reply({ message: 'Your renewal date changed. Confirm again.' }, 409);
@@ -93,14 +100,45 @@ for (const state of [
 }
 
 test('a stale renewal confirmation refreshes the date before a second confirmation', async ({ page }) => {
-  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 172800 }, rescheduleConflict: true });
-  page.on('dialog', d => d.accept());
+  let release!: () => void, started!: () => void;
+  const refreshStarted = new Promise<void>(resolve => { started = resolve; });
+  const refreshGate = new Promise<void>(resolve => { release = resolve; });
+  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 172800 }, rescheduleConflict: true,
+    summaryAfterAction: async () => { started(); await refreshGate; },
+  });
+  const confirmations: string[] = [];
+  page.on('dialog', async d => { confirmations.push(d.message()); await d.accept(); });
   await page.goto('/account/billing/');
-  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  await cancel.click();
+  try {
+    await refreshStarted;
+    await expect(cancel).toBeDisabled();
+  } finally { release(); }
   await expect(page.locator('#billing-error')).toHaveText('Your renewal date changed. Confirm again.');
-  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  await expect(cancel).toBeEnabled();
+  await cancel.click();
   await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
   expect(calls.filter(c => c.action === 'cancel_before_renewal').map(c => c.expected_renewal)).toEqual([subscription.current_period_end, subscription.current_period_end + 86400]);
+  const dates = await page.evaluate(seconds => seconds.map(s => new Date(s * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })), [subscription.current_period_end, subscription.current_period_end + 86400, subscription.current_period_end + 172800]);
+  expect(confirmations[0]).toContain(`scheduled to end on ${dates[2]}`);
+  expect(confirmations[1]).toContain(`scheduled to end on ${dates[2]}`);
+  expect(confirmations[0]).toContain(`End it on ${dates[0]} instead`);
+  expect(confirmations[1]).toContain(`End it on ${dates[1]} instead`);
+  expect(calls.filter(c => c.action === 'cancel_before_renewal').every(c => c.expected_cancel_at === subscription.current_period_end + 172800)).toBe(true);
+});
+
+test('a failed refresh disables further stale cancellation confirmations', async ({ page }) => {
+  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 172800 }, rescheduleConflict: true, summaryFailureAfterAction: true });
+  let dialogs = 0;
+  page.on('dialog', async d => { dialogs++; await d.accept(); });
+  await page.goto('/account/billing/');
+  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  await expect(page.locator('#billing-error')).toContainText('Reload the page');
+  await expect(page.locator('#billing-cancel')).toBeDisabled();
+  await page.locator('#billing-cancel').evaluate(button => (button as HTMLButtonElement).click());
+  expect(dialogs).toBe(1);
+  expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
 });
 
 test('a later cancellation can be moved before renewal only after explicit confirmation', async ({ page }) => {
@@ -117,7 +155,7 @@ test('a later cancellation can be moved before renewal only after explicit confi
   await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
   await expect(page.locator('#billing-cancel')).toBeHidden();
   expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
-  expect(calls.find(c => c.action === 'cancel_before_renewal')).toMatchObject({ expected_subscription_id: subscription.id, expected_renewal: subscription.current_period_end });
+  expect(calls.find(c => c.action === 'cancel_before_renewal')).toMatchObject({ expected_subscription_id: subscription.id, expected_renewal: subscription.current_period_end, expected_cancel_at: subscription.current_period_end + 86400 });
 });
 
 test('a failed cancellation change preserves the existing end and permits retry', async ({ page }) => {

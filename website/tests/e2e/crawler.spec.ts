@@ -53,6 +53,10 @@ test.describe('crawler regression checks', () => {
         : req.url === '/covered-rows/'
           ? '<div style="position:relative"><div style="position:absolute;inset:0;z-index:2;background:white"></div>'
             + '<button>Covered row action</button>'.repeat(12) + '</div>'
+        : req.url === '/uncover-first/'
+          ? '<div style="position:relative"><button id="copy" onclick="alert(\'Copied\')">Copy</button><div id="cover" style="position:absolute;inset:0;background:white"></div></div><button id="uncover" onclick="document.getElementById(\'cover\').remove()">Uncover</button>'
+        : req.url === '/shifting/'
+          ? '<button onclick="this.remove()">A</button><button>B</button><button onclick="alert(\'C\')">C</button>'
         : req.url === '/edit-save/'
           ? '<button onclick="if(this.textContent===\'Edit\')this.textContent=\'Save\';else alert(\'Saved\')">Edit</button>'
         : req.url === '/form-email/'
@@ -182,6 +186,19 @@ test.describe('crawler regression checks', () => {
     const report = await crawl({ ...options(), page, request, seeds: [`${origin}/edit-save/`] });
     expect(report.findings).toEqual([]);
     expect(report.exercised).toEqual(expect.arrayContaining(['/edit-save/ button::Edit', '/edit-save/ button::Save']));
+  });
+
+  test('a blocked earlier control is retried after a later action uncovers it', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/uncover-first/`] });
+    expect(report.findings).toEqual([]);
+    expect(report.exercised).toContain('/uncover-first/ #copy');
+  });
+
+  test('removing a preceding sibling cannot credit its replacement selector as another control', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/shifting/`], maxDepth: 0 });
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ control: '/shifting/ button::B', problem: expect.stringContaining('did nothing visible') }),
+    ]));
   });
 
   test('two passes do not retain handlers or mutate the first report', async ({ page, request }) => {

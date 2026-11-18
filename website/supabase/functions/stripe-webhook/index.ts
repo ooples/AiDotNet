@@ -176,183 +176,76 @@ async function resolveUserIdFromSession(
 }
 
 /**
- * Handles checkout.session.completed — provisions the customer's license.
+ * Derives the profile mirror without discarding other active grants.
  */
-async function handleCheckoutCompleted(
-  client: SupabaseClient,
-  session: Stripe.Checkout.Session,
-) {
-  // Checkout can complete while a bank payment is still processing. Stripe
-  // sends async_payment_succeeded later; only then may we grant access.
-  if (session.payment_status === "unpaid") {
-    console.log(`Checkout ${session.id} is unpaid; awaiting payment confirmation.`);
-    return;
-  }
+async function syncBillingProfile(client: SupabaseClient, customer: string | null, tier: string, status: string, userId?: string) {
+  const { error } = await client.rpc("sync_aidotnet_billing_profile", {
+    p_customer_id: customer, p_fallback_tier: tier, p_fallback_status: status,
+    ...(userId ? { p_user_id: userId } : {}),
+  });
+  if (error) throw error;
+}
+
+function subscriptionTier(subscription: Stripe.Subscription): CanonicalTier {
+  const tiers = subscription.items.data.map(item => resolveTier(item.price.metadata?.tier));
+  const tier = tiers.find(t => t?.licenseTier === "enterprise") ?? tiers.find(t => t !== null);
+  if (!tier) throw new Error("Subscription has no recognized plan tier");
+  return tier;
+}
+
+async function handleCheckoutCompleted(client: SupabaseClient, session: Stripe.Checkout.Session) {
+  if (session.payment_status === "unpaid") return;
   if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
-    throw new Error(`Checkout ${session.id} has an unknown payment status`);
+    throw new Error("Unknown Checkout payment status");
   }
   const userId = await resolveUserIdFromSession(client, session);
-  if (!userId) {
-    // The payment succeeded but we can't find a user. Log loudly — the
-    // admin can reconcile manually via the admin licenses page using the
-    // stripe_customer_id that's attached to every future event from this
-    // customer.
-    console.error(
-      `checkout.session.completed: unable to resolve user for session ${session.id}. `
-      + `client_reference_id=${session.client_reference_id} `
-      + `customer_email=${session.customer_details?.email}`,
-    );
-    throw new Error("cannot_resolve_user");
+  if (!userId) throw new Error("cannot_resolve_user");
+  let canonical = resolveTier(session.metadata?.tier);
+  if (!canonical) throw new Error("Checkout has no recognized plan tier");
+  const customer = typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+  const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
+  const identity = subscriptionId ? "stripe_subscription_id" : "stripe_checkout_session_id";
+  const { data: existing, error: lookupError } = await client.from("license_keys")
+    .select("id,status").eq(identity, subscriptionId ?? session.id).eq("product", WEBHOOK_PRODUCT).limit(1).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing?.status === "revoked") return;
+
+  // Preserve profile repair even when the entitlement already exists. Linkage
+  // is separate from access: only reconciliation may promote a subscription.
+  if (customer) {
+    const { error } = await client.from("profiles").update({ stripe_customer_id: customer }).eq("id", userId);
+    if (error) throw error;
   }
-
-  // Resolve the raw Stripe metadata tier into the canonical pair of
-  // values for the two different tier columns. Accepts both 'pro' (UI
-  // vocabulary, what data-tier on pricing.astro emits) and 'professional'
-  // (legacy webhook-side vocabulary, what the public.license_tier enum
-  // requires) as synonyms so a partially-migrated Stripe dashboard config
-  // doesn't drop the license.
-  const rawTier = session.metadata?.tier;
-  let canonical = resolveTier(rawTier);
-  if (!canonical) {
-    throw new Error(`checkout.session.completed: invalid or missing tier '${rawTier}' in session metadata`);
-  }
-
-  const stripeCustomerId = typeof session.customer === "string"
-    ? session.customer
-    : session.customer?.id ?? null;
-
-  const subscriptionId = typeof session.subscription === "string"
-    ? session.subscription
-    : session.subscription?.id ?? null;
-  let issuanceStatus: "active" | "suspended" = "active";
-  let subscriptionLicenseExists = false;
-
-  // Events can arrive after cancellation or a plan change. The signed snapshot
-  // proves payment, but the current subscription decides whether access is valid.
-  if (subscriptionId) {
-    const current = await getStripe().subscriptions.retrieve(subscriptionId);
-    if (current.status === "canceled" || current.status === "incomplete_expired") {
-      await handleSubscriptionDeleted(client, current);
-      return;
-    }
-    if (current.status !== "active" && current.status !== "trialing") {
-      await handleSubscriptionUpdated(client, current);
-      // Persist a disabled entitlement now. Later invoice/subscription events
-      // can activate it even after Checkout's finite retry window has ended.
-      issuanceStatus = "suspended";
-    }
-    const tiers = current.items.data.map(item => resolveTier(item.price.metadata?.tier));
-    canonical = tiers.find(tier => tier?.licenseTier === "enterprise") ?? tiers.find(tier => tier !== null) ?? null;
-    if (!canonical) throw new Error("Current subscription has no recognized plan tier");
-    const { data: revoked, error: revokedError } = await client.from("license_keys")
-      .select("id").eq("stripe_subscription_id", subscriptionId).eq("product", WEBHOOK_PRODUCT)
-      .eq("status", "revoked").limit(1).maybeSingle();
-    if (revokedError) throw revokedError;
-    if (revoked) return; // A replay cannot issue a replacement for an administrator-revoked key.
-    const { data: subscriptionLicense, error: subscriptionLicenseError } = await client.from("license_keys")
-      .select("id").eq("stripe_subscription_id", subscriptionId).eq("product", WEBHOOK_PRODUCT)
-      .neq("status", "revoked").limit(1).maybeSingle();
-    if (subscriptionLicenseError) throw subscriptionLicenseError;
-    if (subscriptionLicense) {
-      // Reconcile the existing entitlement across tier changes rather than
-      // searching only the new tier and issuing a second key for this sub.
-      await handleSubscriptionUpdated(client, current);
-      subscriptionLicenseExists = true;
-    }
-  }
-
-  // Update profile with customer/sub info + subscription tier so the
-  // billing page renders the right UI on next load. A failure must be retried;
-  // otherwise a paid customer can remain Free in the UI with no billing link.
-  const profileUpdate: Record<string, string> = {
-    subscription_tier: canonical.profileTier,
-    subscription_status: issuanceStatus,
-  };
-  if (stripeCustomerId) profileUpdate.stripe_customer_id = stripeCustomerId;
-  const { error: profileError } = await client.from("profiles").update(profileUpdate).eq("id", userId);
-  if (profileError) {
-    throw profileError;
-  }
-  // A retry must also repair a missing/stale customer link by user ID, even
-  // when subscription reconciliation's customer-based profile lookup found no row.
-  if (subscriptionLicenseExists) return;
-
-  // At-most-one-active-per-(user, product, tier) is enforced in the DB by
-  // idx_license_keys_one_active_per_user_product_tier (migration
-  // 20260419000000). If the user already holds an active license at this
-  // tier (e.g., Stripe retried the event), skip issuance and return.
-  const { data: existing, error: existingError } = await client
-    .from("license_keys")
-    .select("id, license_key")
-    .eq("user_id", userId)
-    .eq("product", WEBHOOK_PRODUCT)
-    .eq("tier", canonical.licenseTier)
-    .eq("status", "active")
-    .maybeSingle();
-
-  if (existingError) throw existingError;
-
   if (existing) {
-    console.log(`User ${userId} already holds an active ${canonical.licenseTier} license (${existing.id}). Stripe event was likely retried — no-op.`);
+    if (subscriptionId) await reconcileSubscription(client, subscriptionId);
+    else await syncBillingProfile(client, customer, "free", "expired", userId);
     return;
   }
 
-  // Generate a fresh AIDN-PROD-{KEY_SEGMENT}-{32hex} key. Format must
-  // satisfy LicenseValidator.IsServerValidatedKeyFormat in the AiDotNet
-  // client library: ≥4 dash-delimited segments, segment[0]=="AIDN", last
-  // segment is ≥8 hex chars. Empirically verified that
-  // `AIDN-PROD-PRO-{32hex}` and `AIDN-PROD-ENTERPRISE-{32hex}` both
-  // validate end-to-end through the online validate-license edge
-  // function path.
-  //
-  // Previous format (`aidn.{id}.{sig}`) was rejected by the client
-  // library because the dotted form requires HMAC-SHA256 signing against
-  // a build key the webhook does not have access to. See ooples/AiDotNet#1262.
-  const keyHex = crypto.randomUUID().replace(/-/g, "");
-  const licenseKey = `${WEBHOOK_PREFIX}-${canonical.keySegment}-${keyHex}`;
-
-  const { error: insertError } = await client
-    .from("license_keys")
-    .insert({
-      user_id: userId,
-      license_key: licenseKey,
-      product: WEBHOOK_PRODUCT,
-      tier: canonical.licenseTier,
-      status: issuanceStatus,
-      max_activations: canonical.maxActivations,
-      stripe_subscription_id: subscriptionId,
-      stripe_customer_id: stripeCustomerId,
-      notes: `Issued by Stripe Checkout (session ${session.id})`,
-    });
-
-  if (insertError) {
-    console.error("Failed to insert license:", insertError);
-    throw insertError;
-  }
-
-  console.log(`Issued ${canonical.licenseTier} license ${licenseKey.substring(0, 12)}... for user ${userId}`);
-
-  // Best-effort key delivery email. The license row above is the source
-  // of truth — failure here is logged but never thrown so a flaky email
-  // transport doesn't block license issuance (Stripe would retry the
-  // event and we'd then hit the duplicate-active short-circuit above).
-  // Recipient address is taken from session.customer_details.email,
-  // which Stripe collects as part of every checkout.
-  const recipient = session.customer_details?.email;
-  if (recipient) {
-    await sendLicenseKeyEmail({
-      to: recipient,
-      licenseKey,
-      tier: canonical.licenseTier,
-      product: WEBHOOK_PRODUCT,
-      isExisting: false,
-    });
+  // Persist before asking Stripe about mutable state. An invoice/deletion that
+  // ran before this insert cannot be the last chance to reconcile the key.
+  // Every subscription starts disabled, including a currently active one.
+  const licenseKey = `${WEBHOOK_PREFIX}-${canonical.keySegment}-${crypto.randomUUID().replace(/-/g, "")}`;
+  const { error: insertError } = await client.from("license_keys").insert({
+    user_id: userId, license_key: licenseKey, product: WEBHOOK_PRODUCT,
+    tier: canonical.licenseTier, status: subscriptionId ? "suspended" : "active",
+    max_activations: canonical.maxActivations, stripe_subscription_id: subscriptionId,
+    stripe_checkout_session_id: session.id, stripe_customer_id: customer,
+    notes: `Issued by Stripe Checkout (session ${session.id})`,
+  });
+  if (insertError) throw insertError; // Unique conflicts retry against the existing durable row.
+  if (subscriptionId) {
+    const current = await reconcileSubscription(client, subscriptionId);
+    if (current.status === "canceled" || current.status === "incomplete_expired") return;
+    canonical = subscriptionTier(current);
   } else {
-    console.warn(
-      `License ${licenseKey.substring(0, 12)}... issued for user ${userId} but `
-      + `no recipient email on the Stripe session (session.customer_details.email empty). `
-      + `User must retrieve the key from /account/licenses.`,
-    );
+    await syncBillingProfile(client, customer, "free", "expired", userId);
+  }
+  if (session.customer_details?.email) {
+    await sendLicenseKeyEmail({
+      to: session.customer_details.email, licenseKey, tier: canonical.licenseTier,
+      product: WEBHOOK_PRODUCT, isExisting: false,
+    });
   }
 }
 
@@ -380,12 +273,20 @@ async function handleInvoicePaid(
 
 /** Reconcile a fresh Stripe snapshot rather than replaying an older event's state. */
 async function reconcileSubscription(client: SupabaseClient, subscriptionId: string) {
-  const current = await getStripe().subscriptions.retrieve(subscriptionId);
-  if (current.status === "canceled" || current.status === "incomplete_expired") {
-    await handleSubscriptionDeleted(client, current);
-  } else {
-    await handleSubscriptionUpdated(client, current);
+  const fingerprint = (sub: Stripe.Subscription) => JSON.stringify({
+    status: sub.status, customer: typeof sub.customer === "string" ? sub.customer : sub.customer?.id,
+    tiers: sub.items?.data.map(item => item.price.metadata?.tier).sort(),
+  });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await getStripe().subscriptions.retrieve(subscriptionId);
+    if (current.status === "canceled" || current.status === "incomplete_expired") await handleSubscriptionDeleted(client, current);
+    else await handleSubscriptionUpdated(client, current);
+    // Verify after the writes, not just before them. A concurrent activation or
+    // deletion must not leave the last completed delivery applying an old state.
+    const verified = await getStripe().subscriptions.retrieve(subscriptionId);
+    if (fingerprint(current) === fingerprint(verified)) return verified;
   }
+  throw new Error("Subscription changed repeatedly during reconciliation; retry required");
 }
 
 /**
@@ -469,7 +370,9 @@ async function handleSubscriptionUpdated(
     .from("license_keys")
     .update(updateData)
     .eq("stripe_subscription_id", subscriptionId)
-    .neq("status", "revoked");
+    .eq("product", WEBHOOK_PRODUCT)
+    .neq("status", "revoked")
+    .neq("status", "expired");
 
   if (error) {
     console.error("subscription.updated license update failed:", error);
@@ -483,18 +386,7 @@ async function handleSubscriptionUpdated(
     : subscription.customer?.id;
 
   if (stripeCustomerId) {
-    const profileUpdate: Record<string, string> = { subscription_status: licenseStatus };
-    // Use the profile-canonical tier name (`pro`/`enterprise`), not the
-    // license_keys enum name — billing/account UI checks `=== 'pro'`.
-    if (winner) profileUpdate.subscription_tier = winner.profileTier;
-    const { error: profileError } = await client
-      .from("profiles")
-      .update(profileUpdate)
-      .eq("stripe_customer_id", stripeCustomerId);
-    if (profileError) {
-      // The license update is idempotent; retrying also repairs its profile mirror.
-      throw profileError;
-    }
+    await syncBillingProfile(client, stripeCustomerId, winner?.profileTier ?? "free", licenseStatus);
   }
 }
 
@@ -512,6 +404,7 @@ async function handleSubscriptionDeleted(
     .from("license_keys")
     .update({ status: "expired" })
     .eq("stripe_subscription_id", subscriptionId)
+    .eq("product", WEBHOOK_PRODUCT)
     .neq("status", "revoked");
 
   if (error) {
@@ -524,13 +417,7 @@ async function handleSubscriptionDeleted(
     : subscription.customer?.id;
 
   if (stripeCustomerId) {
-    const { error: profileError } = await client
-      .from("profiles")
-      .update({ subscription_tier: "free", subscription_status: "expired" })
-      .eq("stripe_customer_id", stripeCustomerId);
-    if (profileError) {
-      throw profileError;
-    }
+    await syncBillingProfile(client, stripeCustomerId, "free", "expired");
   }
 
   console.log(`Expired licenses for subscription ${subscriptionId}`);

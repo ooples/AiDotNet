@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout } from 'node:timers/promises';
@@ -83,8 +84,10 @@ before(async () => {
   const fix = migration('20261117000000_close_legacy_policy_bypasses.sql');
   sql(fix);
   sql(fix); // Safe to reapply in local migration rehearsal.
-  sql(`create table public.license_keys(id uuid default gen_random_uuid(), stripe_subscription_id text, product text, tier text, status text);`);
+  sql(`create table public.license_keys(id uuid default gen_random_uuid(), user_id uuid, stripe_subscription_id text, product text, tier text, status text, notes text, license_key text, max_activations int);
+    create unique index idx_license_keys_one_active_per_user_product_tier on public.license_keys(user_id,product,tier) where status='active';`);
   sql(migration('20261118000000_unique_subscription_entitlement.sql'));
+  sql(migration('20261118010000_independent_subscription_entitlements.sql'));
 });
 
 after(() => { if (created) docker(['stop', container]); });
@@ -99,7 +102,81 @@ test('subscription identity rejects a second tier or suspended placeholder, whil
       exception when unique_violation then null; end;
     end $$;
     insert into public.license_keys(stripe_subscription_id,product,tier,status) values (null,'aidotnet','professional','active'),(null,'aidotnet','professional','active');
-    select count(*) from public.license_keys; rollback;`), '3');
+    insert into public.license_keys(stripe_subscription_id,product,tier,status) values ('sub_review','harmonic_engine','professional','active');
+    select count(*) from public.license_keys; rollback;`), '4');
+});
+
+test('independent paid subscriptions recover alongside existing manual grants at the same tier', () => {
+  assert.equal(sql(`begin;
+    insert into public.license_keys(user_id,stripe_subscription_id,product,tier,status) values
+      ('${user}','sub_a','aidotnet','professional','active'),
+      ('${user}','sub_b','aidotnet','professional','suspended'),
+      ('${user}',null,'aidotnet','professional','active'),
+      ('${user}',null,'aidotnet','professional','active');
+    update public.license_keys set status='active' where stripe_subscription_id='sub_b';
+    select count(*) from public.license_keys where status='active'; rollback;`), '4');
+});
+
+test('profile mirroring retains access from other subscriptions and manual grants', () => {
+  const output = sql(`begin;
+    update public.profiles set stripe_customer_id='cus_review' where id='${user}';
+    insert into public.license_keys(user_id,stripe_subscription_id,product,tier,status) values
+      ('${user}','sub_a','aidotnet','professional','expired'),
+      ('${user}','sub_b','aidotnet','professional','active'),
+      ('${user}',null,'aidotnet','enterprise','suspended');
+    select public.sync_aidotnet_billing_profile('cus_review','free','expired');
+    select subscription_tier||':'||subscription_status from public.profiles where id='${user}';
+    update public.license_keys set status='expired' where stripe_subscription_id='sub_b';
+    update public.license_keys set status='active' where tier='enterprise';
+    select public.sync_aidotnet_billing_profile('cus_review','free','expired');
+    select subscription_tier||':'||subscription_status from public.profiles where id='${user}';
+    update public.license_keys set status='expired' where tier='enterprise';
+    select public.sync_aidotnet_billing_profile('cus_review','free','expired');
+    select subscription_tier||':'||subscription_status from public.profiles where id='${user}'; rollback;`);
+  assert.deepEqual(output.split('\n').filter(Boolean), ['pro:active','enterprise:active','free:expired']);
+});
+
+for (const role of ['anon','authenticated']) test(`${role} cannot call the privileged profile mirror`, () => {
+  expectDenied("perform public.sync_aidotnet_billing_profile('cus_review','enterprise','active')", user, role);
+  expectDenied(`perform public.issue_aidotnet_community_license('${user}','AIDN-PROD-COMMUNITY-${'a'.repeat(32)}')`, user, role);
+});
+
+test('Community self-service reuses existing grants and creates only one key', () => {
+  assert.equal(sql(`begin;
+    select public.issue_aidotnet_community_license('${user}','AIDN-PROD-COMMUNITY-${'a'.repeat(32)}')->>'is_existing';
+    select public.issue_aidotnet_community_license('${user}','AIDN-PROD-COMMUNITY-${'b'.repeat(32)}')->>'is_existing';
+    select count(*) from public.license_keys where user_id='${user}' and tier='community'; rollback;`), 'false\ntrue\n1');
+});
+
+test('concurrent Community requests serialize and return the same persisted key', async () => {
+  const run = promisify(execFile);
+  const issue = async (hex) => (await run('docker', ['exec', container, 'psql', '-X', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atq', '-c',
+    `begin; select public.issue_aidotnet_community_license('${other}','AIDN-PROD-COMMUNITY-${hex.repeat(32)}')->>'license_key'; select pg_sleep(0.2); commit;`], { timeout: 30_000 })).stdout.trim();
+  try {
+    const results = await Promise.all([issue('a'), issue('b')]);
+    assert.equal(results[0], results[1]);
+    assert.equal(sql(`select count(*) from public.license_keys where user_id='${other}' and tier='community';`), '1');
+  } finally { sql(`delete from public.license_keys where user_id='${other}' and tier='community';`); }
+});
+
+test('Checkout receipt uniqueness permits independent products but rejects duplicate receipts', () => {
+  assert.equal(sql(`begin;
+    insert into public.license_keys(stripe_checkout_session_id,product) values ('cs_review','aidotnet'),('cs_review','harmonic_engine');
+    do $$ begin begin
+      insert into public.license_keys(stripe_checkout_session_id,product) values ('cs_review','aidotnet');
+      raise exception 'duplicate receipt was allowed';
+    exception when unique_violation then null; end; end $$;
+    select count(*) from public.license_keys; rollback;`), '2');
+});
+
+test('deployment prerequisite checks reject missing or nonunique entitlement indexes', () => {
+  const guard = readFileSync(new URL('../../supabase/verify-entitlement-prerequisites.sql', import.meta.url), 'utf8');
+  sql(guard);
+  assert.throws(() => sql('begin; drop index public.idx_license_keys_subscription_product;\n'+guard), /Run the reviewed migrations/);
+  assert.throws(() => sql('begin; drop index public.idx_license_keys_subscription_product; create index idx_license_keys_subscription_product on public.license_keys(stripe_subscription_id,product) where stripe_subscription_id is not null;\n'+guard), /Run the reviewed migrations/);
+  assert.throws(() => sql('begin; drop index public.idx_license_keys_checkout_product;\n'+guard), /Run the reviewed migrations/);
+  assert.throws(() => sql('begin; drop function public.issue_aidotnet_community_license(uuid,text);\n'+guard), /Run the reviewed migrations/);
+  sql(guard); // Failed transactions rolled back; function-only redeployment stays available.
 });
 
 test('owners can save names and revoke one of multiple API keys', () => {

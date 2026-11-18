@@ -149,10 +149,16 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
         if (id === 'billing-cancel' && laterCancellation) {
           if (!window.confirm(`Your subscription is scheduled to end on ${formatDate(laterCancellation.scheduled)}. End it on ${formatDate(laterCancellation.renewal)} instead, before another renewal?`)) return;
           el.disabled = true;
-          const err = await cancelBeforeRenewal(laterCancellation.subscriptionId, laterCancellation.renewal);
-          el.disabled = false;
-          await loadBilling();
-          if (err) showError(err);
+          let refreshed = false;
+          try {
+            const err = await cancelBeforeRenewal(laterCancellation.subscriptionId, laterCancellation.renewal, laterCancellation.scheduled);
+            refreshed = await loadBilling();
+            if (!refreshed) showError('Could not refresh your billing details. Reload the page before confirming another cancellation.');
+            else if (err) showError(err);
+          } catch {
+            laterCancellation = null;
+            showError('Could not refresh your billing details. Reload the page before confirming another cancellation.');
+          } finally { el.disabled = !refreshed; }
           return;
         }
         el.disabled = true;
@@ -173,8 +179,9 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
     }
 
     async function loadBilling() {
+      laterCancellation = null;
       const state = await loadBillingState();
-      if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return; }
+      if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return false; }
       // What follows is then only the profile's view; say so rather than show it as the whole truth.
       if (state.error) showError(state.error);
 
@@ -230,6 +237,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       }
 
       root.setAttribute('data-billing-loaded', 'true');
+      return !state.error;
     }
 
     wirePortal('manage-subscription-btn', { action: 'manage' });

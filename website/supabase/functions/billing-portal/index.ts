@@ -133,7 +133,7 @@ serve(async (req: Request) => {
   const { data: { user }, error: authError } = await createClient(url, anon).auth.getUser(jwt);
   if (authError || !user) return json({ error: "unauthorized", message: "Invalid or expired session." }, 401);
 
-  let body: { action?: unknown; tier?: unknown; interval?: unknown; return_path?: unknown; expected_subscription_id?: unknown; expected_renewal?: unknown };
+  let body: { action?: unknown; tier?: unknown; interval?: unknown; return_path?: unknown; expected_subscription_id?: unknown; expected_renewal?: unknown; expected_cancel_at?: unknown };
   try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
   const action = body.action;
   if (action !== "summary" && action !== "manage" && action !== "change_plan" && action !== "cancel" && action !== "cancel_before_renewal") {
@@ -164,8 +164,8 @@ serve(async (req: Request) => {
 
     if (action === "cancel_before_renewal") {
       const sub = await liveSubscription(s, customer);
-      if (!sub || body.expected_subscription_id !== sub.id || body.expected_renewal !== sub.current_period_end) {
-        return json({ error: "billing_state_changed", message: "Your subscription or renewal date changed. Review the refreshed billing details and confirm again." }, 409);
+      if (!sub || body.expected_subscription_id !== sub.id || body.expected_renewal !== sub.current_period_end || body.expected_cancel_at !== sub.cancel_at) {
+        return json({ error: "billing_state_changed", message: "Your subscription, renewal, or scheduled cancellation changed. Review the refreshed billing details and confirm again." }, 409);
       }
       if (!sub || sub.cancel_at == null || sub.cancel_at <= sub.current_period_end) {
         return json({ error: "no_later_cancellation", message: "There is no later cancellation to move. Refresh your billing details." }, 409);

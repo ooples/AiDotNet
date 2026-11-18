@@ -8,6 +8,8 @@ on:
       - .github/workflows/website-backend.yml
       - website/supabase/migrations/20261117000000_close_legacy_policy_bypasses.sql
       - website/supabase/migrations/20261118000000_unique_subscription_entitlement.sql
+      - website/supabase/migrations/20261118010000_independent_subscription_entitlements.sql
+      - website/supabase/verify-entitlement-prerequisites.sql
       - website/tests/database/rls.test.mjs
   workflow_dispatch:
     inputs:
@@ -16,7 +18,7 @@ on:
         type: boolean
         default: false
       deploy_functions:
-        description: Deploy only billing-portal and stripe-webhook
+        description: Deploy billing-portal, stripe-webhook, and register-community-license
         type: boolean
         default: false
       configure_stripe:
@@ -66,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           database_url=$(cat supabase/.temp/pooler-url)
-          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement; do
+          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement 20261118010000_independent_subscription_entitlements; do
           version=${filename%%_*}
           migration=supabase/migrations/${filename}.sql
           migration_name=${filename#*_}
@@ -89,11 +91,17 @@ jobs:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       # Function credentials are managed separately. Deploying code preserves the
       # installed key; the hosted license-email journey verifies actual sending.
-      - name: Deploy only the reviewed billing functions
+      - name: Require valid entitlement prerequisites before any function deployment
+        if: ${{ inputs.deploy_functions }}
+        run: psql "$(cat supabase/.temp/pooler-url)" -X -v ON_ERROR_STOP=1 -f supabase/verify-entitlement-prerequisites.sql
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Deploy only the reviewed billing and Community functions
         if: ${{ inputs.deploy_functions }}
         run: |
           supabase functions deploy billing-portal --project-ref yfkqwpgjahoamlgckjib
           supabase functions deploy stripe-webhook --project-ref yfkqwpgjahoamlgckjib
+          supabase functions deploy register-community-license --project-ref yfkqwpgjahoamlgckjib
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Verify the existing Stripe webhook event subscription

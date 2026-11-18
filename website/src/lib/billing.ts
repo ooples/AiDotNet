@@ -96,8 +96,8 @@ export async function openPortal(req: PortalAction, returnPath = window.location
 }
 
 /** Called only after confirmation to shorten a later scheduled cancellation. */
-export async function cancelBeforeRenewal(subscriptionId: string, renewal: number): Promise<string | undefined> {
-  const { data, error } = await invoke<{ subscription?: SubscriptionSummary }>({ action: 'cancel_before_renewal', expected_subscription_id: subscriptionId, expected_renewal: renewal });
+export async function cancelBeforeRenewal(subscriptionId: string, renewal: number, scheduled: number): Promise<string | undefined> {
+  const { data, error } = await invoke<{ subscription?: SubscriptionSummary }>({ action: 'cancel_before_renewal', expected_subscription_id: subscriptionId, expected_renewal: renewal, expected_cancel_at: scheduled });
   if (error) return error;
   return data?.subscription ? undefined : 'Stripe did not confirm the cancellation. Refresh your billing details.';
 }

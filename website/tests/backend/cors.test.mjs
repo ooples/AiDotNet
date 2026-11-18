@@ -88,14 +88,20 @@ test('billing portal rejects a duplicate cancellation scheduled through cancel_a
 });
 
 for (const scenario of [
-  { scheduled: 150 }, { scheduled: 200 }, { scheduled: 250 }, { scheduled: null },
-  { scheduled: 250, expectedId: 'other-subscription' },
-  { scheduled: 250, expectedRenewal: 199 },
-  { scheduled: 250, expectedId: null },
-  { scheduled: 250, expectedRenewal: null },
+  { scheduled: 150, expectedError: 'no_later_cancellation' },
+  { scheduled: 200, expectedError: 'no_later_cancellation' },
+  { scheduled: 250, expectedError: undefined },
+  { scheduled: null, expectedError: 'no_later_cancellation' },
+  { scheduled: 250, expectedId: 'other-subscription', expectedError: 'billing_state_changed' },
+  { scheduled: 250, expectedRenewal: 199, expectedError: 'billing_state_changed' },
+  { scheduled: 250, expectedId: null, expectedError: 'billing_state_changed' },
+  { scheduled: 250, expectedRenewal: null, expectedError: 'billing_state_changed' },
+  { scheduled: 250, expectedCancelAt: 260, expectedError: 'billing_state_changed' },
+  { scheduled: 250, expectedCancelAt: undefined, expectedError: 'billing_state_changed' },
 ]) {
   const { scheduled } = scenario;
-  test(`moving a later cancellation before renewal: existing end ${scheduled}`, async () => {
+  const mismatch = ['expectedId','expectedRenewal','expectedCancelAt'].filter(key => key in scenario).map(key => `${key}=${scenario[key]}`).join(', ');
+  test(`moving cancellation with end ${scheduled}: ${mismatch || 'matching snapshot'}`, async () => {
     const updates = [];
     const subscription = { id: 'owned-subscription', status: 'trialing', created: 1, current_period_end: 200, cancel_at_period_end: false, cancel_at: scheduled,
       items: { data: [{ quantity: 1, price: { metadata: { tier: 'pro' }, recurring: { interval: 'month' }, currency: 'usd', unit_amount: 2900 } }] } };
@@ -115,14 +121,17 @@ for (const scenario of [
       }),
     });
     const response = await handler(new Request('https://fixture.invalid', {
-      method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel_before_renewal', expected_subscription_id: 'expectedId' in scenario ? scenario.expectedId : 'owned-subscription', expected_renewal: 'expectedRenewal' in scenario ? scenario.expectedRenewal : 200 }),
+      method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel_before_renewal', expected_subscription_id: 'expectedId' in scenario ? scenario.expectedId : 'owned-subscription', expected_renewal: 'expectedRenewal' in scenario ? scenario.expectedRenewal : 200, expected_cancel_at: 'expectedCancelAt' in scenario ? scenario.expectedCancelAt : scheduled }),
     }));
-    const matches = !('expectedId' in scenario) && !('expectedRenewal' in scenario);
-    assert.equal(response.status, scheduled === 250 && matches ? 200 : 409);
-    if (scheduled === 250 && matches) {
+    const body = await response.json();
+    assert.equal(response.status, scenario.expectedError ? 409 : 200);
+    if (!scenario.expectedError) {
       assert.deepEqual(updates.map(p => ({ ...p })), [{ cancel_at: 200, proration_behavior: 'none' }]);
-      assert.equal((await response.json()).subscription.cancel_at, 200);
-    } else assert.equal(updates.length, 0);
+      assert.equal(body.subscription.cancel_at, 200);
+    } else {
+      assert.equal(body.error, scenario.expectedError);
+      assert.equal(updates.length, 0);
+    }
   });
 }
 
@@ -167,6 +176,33 @@ for (const scenario of [
     assert.deepEqual(calls, scenario.calls);
   });
 }
+
+for (const existing of [false, true]) test(`Community issuance uses the serialized RPC (existing=${existing})`, async () => {
+  let issuance;
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: 'community-user' } } }) },
+    from: () => {
+      const query = { select: () => query, eq: () => query, limit: () => query, maybeSingle: async () => ({ data: null, error: null }) };
+      return query;
+    },
+    rpc: async (name, args) => {
+      assert.equal(name, 'issue_aidotnet_community_license');
+      issuance = args;
+      return { data: { id: 'community-license', license_key: existing ? 'existing-key' : args.p_license_key, is_existing: existing }, error: null };
+    },
+  };
+  const handler = loadHandler('register-community-license', {
+    env: { SUPABASE_URL: 'https://fixture.invalid', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service' },
+    createClient: () => client,
+  });
+  const response = await handler(new Request('https://fixture.invalid', { method: 'POST', headers: { Authorization: 'Bearer user-token', Origin: 'https://test.aidotnet.dev' } }));
+  assert.equal(response.status, existing ? 200 : 201);
+  const body = await response.json();
+  assert.equal(body.is_existing, existing);
+  assert.equal(body.license_key, existing ? 'existing-key' : issuance.p_license_key);
+  assert.equal(issuance.p_user_id, 'community-user');
+  assert.match(issuance.p_license_key, /^AIDN-PROD-COMMUNITY-[0-9a-f]{32}$/);
+});
 
 for (const name of ['billing-portal', 'delete-account', 'register-community-license', 'issue-license', 'admin-resend-license-email', 'validate-license']) {
   test(`${name}: production and preview preflight and error responses have correct CORS`, async () => {
