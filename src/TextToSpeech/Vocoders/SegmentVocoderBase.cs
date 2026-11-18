@@ -160,15 +160,8 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     /// <summary>The mean of every element, as a scalar tensor.</summary>
     protected Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    /// <summary>The log-softmax over the class axis of logits <c>[1, classes, T]</c>, with the per-step maximum held
-    /// constant for stability.</summary>
-    protected Tensor<T> LogSoftmaxOverClasses(Tensor<T> logits)
-    {
-        var max = Engine.StopGradient(Engine.ReduceMax(logits, new[] { 1 }, keepDims: true));
-        var shifted = Engine.TensorSubtract(logits, Engine.TensorTile(max, new[] { 1, logits.Shape[1], 1 }));
-        var logSum = Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(shifted), new[] { 1 }, keepDims: true));
-        return Engine.TensorSubtract(shifted, Engine.TensorTile(logSum, new[] { 1, logits.Shape[1], 1 }));
-    }
+    /// <summary>The log-softmax over the class axis of logits <c>[1, classes, T]</c>.</summary>
+    protected Tensor<T> LogSoftmaxOverClasses(Tensor<T> logits) => Engine.TensorLogSoftmax(logits, axis: 1);
 
     /// <summary>The mean cross-entropy of logits <c>[1, classes, T]</c> against class indices.</summary>
     protected Tensor<T> ClassCrossEntropy(Tensor<T> logits, int[] targets)

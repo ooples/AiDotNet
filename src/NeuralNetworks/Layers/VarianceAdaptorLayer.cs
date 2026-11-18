@@ -339,7 +339,8 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> Bucketize(Tensor<T> values, double[] boundaries)
     {
         var edges = new Tensor<double>(boundaries, new[] { boundaries.Length }).Cast<T>();
-        return Engine.TensorSearchSorted(edges, Engine.Reshape(values, new[] { values.Length }), false).Cast<T>();
+        var flat = values.Rank == 1 ? values : Engine.Reshape(values, new[] { values.Length });
+        return Engine.TensorSearchSorted(edges, flat, false).Cast<T>();
     }
 
     private static double[] LogSpacedBoundaries(double min, double max, int bins)

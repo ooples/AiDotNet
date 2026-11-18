@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Vocoders;
 using Newtonsoft.Json.Linq;
@@ -293,5 +295,61 @@ public class FireRedTtsModuleTests
         Close(f["flow_mel"]!, mel, "flow mel", 1e-7);
         var audio = model.Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(mel), new[] { 1, 100, mel.Shape[0] }));
         Close(f["audio"]!, audio, "audio", 1e-6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CodecAndQuantizer_UseStepOwnedRetainedOutputs_WithZeroStaticDictionariesAndCleanThrowDispose()
+    {
+        await Task.Yield();
+        foreach (var type in new[] { typeof(FireRedTTS<double>), typeof(FireRedTtsProductQuantizer<double>) })
+        {
+            var staticDictionaries = type
+                .GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                .Where(f => f.FieldType.Name.Contains("Dictionary", StringComparison.Ordinal))
+                .ToArray();
+            Assert.Empty(staticDictionaries);
+        }
+
+        var options = FireRedTtsFixture.Options();
+        options.Stage = FireRedTtsStage.MelCodec;
+        options.DiscriminatorWindows = new[] { 8, 16 };
+        options.DiscriminatorHidden = 8;
+        using var model = new FireRedTTS<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1), options);
+
+        var recording = new Tensor<double>(new[] { 12000 });
+        for (int i = 0; i < recording.Length; i++) recording[i] = 0.25 * Math.Sin(2 * Math.PI * 330 * i / 24000.0);
+        var sample = new TtsTrainingSample<double>
+        {
+            Tokens = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, 2.0 })),
+            Audio = recording,
+        };
+
+        double acceptedLoss = model.Train(sample);
+        Assert.False(double.IsNaN(acceptedLoss) || double.IsInfinity(acceptedLoss));
+        var bookAfterAccepted = model.MelCodec.Quantizer.Codebooks[0].ToArray();
+
+        // Force a failed/non-finite step after quantizer forward: neither codebook EMA nor discriminator may advance.
+        var projParams = model.MelCodec.Quantizer.ProjectOut.GetParameters();
+        var saved = projParams.ToArray();
+        var corrupted = projParams.ToArray();
+        corrupted[0] = double.NaN;
+        model.MelCodec.Quantizer.ProjectOut.SetParameters(new Vector<double>(corrupted));
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => { _ = model.Train(sample); });
+        }
+        finally
+        {
+            model.MelCodec.Quantizer.ProjectOut.SetParameters(new Vector<double>(saved));
+        }
+
+        Assert.Equal(bookAfterAccepted, model.MelCodec.Quantizer.Codebooks[0].ToArray());
+
+        // Subsequent valid step succeeds cleanly, and Dispose rejects further training.
+        double resumedLoss = model.Train(sample);
+        Assert.False(double.IsNaN(resumedLoss) || double.IsInfinity(resumedLoss));
+        model.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => { _ = model.Train(sample); });
     }
 }

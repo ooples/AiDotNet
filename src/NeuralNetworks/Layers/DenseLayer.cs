@@ -1574,8 +1574,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
         // The overlapping rows, copied in row-major order into the heap tensor.
-        Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
-            .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
+        if (sharedInputSize > 0)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+                    .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
+            }
+        }
 
         if (actualInputSize > sharedInputSize)
         {

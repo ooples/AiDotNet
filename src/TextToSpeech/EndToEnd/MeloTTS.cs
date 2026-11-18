@@ -315,9 +315,9 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     // SynthesizerTrn.forward with the step's draws fixed by its seed, so the discriminators' detached view and the
     // generator's differentiable one are the same forward (MeloTTS runs it once).
-    private MeloTrainingOutputs<T> Forward(TrainingUtterance u, int seed, long step, bool training) =>
+    private MeloTrainingOutputs<T> Forward(TrainingUtterance u, int seed, long step, bool training, int? sliceStart = null) =>
         _synthesizer!.Forward(u.Input.Text.Symbols, u.Input.Text.Tones, u.Input.Text.Languages, u.Input.Bert, u.Input.JaBert, u.Spectrogram,
-            u.Speaker, MasNoiseScale(step), training, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+            u.Speaker, MasNoiseScale(step), training, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed), sliceStart: sliceStart);
 
     private Tensor<T> Segment(TrainingUtterance u, MeloTrainingOutputs<T> o)
     {
@@ -329,7 +329,8 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> x) => Engine.StopGradient(x);
 
     // discriminator_loss: Σ mean((1 − D(real))²) + mean(D(fake)²).
     private Tensor<T> DiscriminatorLoss(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)
@@ -399,17 +400,18 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
                 _discriminators.Forward(generated).Select(s => s.Score).ToList()), "discriminator", sample);
 
         int generatorDurationSeed = _trainingRandom.Next();
+        int stepSliceStart = detachedView.SliceStart;
         T loss = TrainLayers(_generatorLayers, () => GeneratorLoss(u, seed, step, adversarial: true,
-            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(generatorDurationSeed)), "generator", sample);
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(generatorDurationSeed), stepSliceStart), "generator", sample);
         _trainingSteps++;
         return loss;
     }
 
     // loss_gen_all: mel L1 × c_mel + KL × c_kl + Σ duration loss, plus the adversarial, feature-matching and duration
     // adversarial terms when adversarial.
-    private Tensor<T> GeneratorLoss(TrainingUtterance u, int seed, long step, bool adversarial, Random durationRandom)
+    private Tensor<T> GeneratorLoss(TrainingUtterance u, int seed, long step, bool adversarial, Random durationRandom, int? sliceStart = null)
     {
-        var o = Forward(u, seed, step, training: true);
+        var o = Forward(u, seed, step, training: true, sliceStart: sliceStart);
         var audio = Flat(o.Waveform);
         var generatedMel = _spectrogram!.Forward(audio);
         int segmentFrames = Math.Min(u.Frames, _synthesizer!.Configuration.SegmentFrames);
@@ -473,7 +475,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             using var _ = new NoGradScope<T>();
             // The non-adversarial part: the adversarial terms are measured against discriminators trained at the same time.
-            return GeneratorLoss(u, random.Next(), _trainingSteps, adversarial: false, random)[0];
+            return GeneratorLoss(u, random.Next(), _trainingSteps, adversarial: false, random, 0)[0];
         }
         finally
         {

@@ -383,7 +383,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
             using (new NoGradScope<T>())
             {
                 var g = Flat(Generate(mel));
-                generated = new Tensor<T>(g._shape, g.ToVector());
+                generated = Engine.StopGradient(g);
             }
         }
         TrainLayers(_discriminatorLayers, mel, segment, () => DiscriminatorLoss(segment, generated), "discriminator");
@@ -454,7 +454,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     protected Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
     /// <summary>A copy of <paramref name="x"/> that carries no gradient.</summary>
-    protected static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    protected static Tensor<T> Detached(Tensor<T> x) => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.StopGradient(x);
 
     /// <summary>The sum of <paramref name="terms"/>.</summary>
     protected Tensor<T> Sum(IEnumerable<Tensor<T>> terms)

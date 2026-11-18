@@ -304,6 +304,8 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     private int[] ToIds(Tensor<T> tensor, string name)
     {
         var ids = RoundedIds(tensor);
+        if (ids.Length > _options.MaxTextLength)
+            ids = ids.Take(Math.Max(1, _options.MaxTextLength)).ToArray();
         for (int i = 0; i < ids.Length; i++)
         {
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
@@ -492,6 +494,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         if (_disposed)
             return;
         _disposed = true;
+        R1Owners.TryRemove(_r1Id, out _);
         base.Dispose(disposing);
     }
 }

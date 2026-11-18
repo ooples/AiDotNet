@@ -922,7 +922,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // Recalibration (OverwriteRunningStatistics) takes the batch-statistics branch whatever the layer's mode, so
         // a caller that forces evaluation mode mid-forward (several PredictCore overrides do) cannot silently turn a
         // recalibration pass into an ordinary inference pass over stale statistics.
-        if ((IsTrainingMode || OverwriteRunningStatistics) && valuesPerFeature > 1)
+        bool inGraphMode = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
+        if ((IsTrainingMode || OverwriteRunningStatistics) && valuesPerFeature > 1 && !inGraphMode)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated

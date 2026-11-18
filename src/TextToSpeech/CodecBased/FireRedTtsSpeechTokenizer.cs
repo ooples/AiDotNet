@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
@@ -40,6 +41,8 @@ internal sealed class FireRedTtsProductQuantizer<T>
     private readonly IEngine _engine;
     private readonly double[][] _clusterSize;
     private readonly double[][] _embedAverage;
+    [KeepsActivation("Replays the quantizer codebook lookup tokens during graph tracing without reading lazy encodings on the host.")]
+    private int[,]? _lastTokens;
 
     public FireRedTtsProductQuantizer(IEngine engine, List<LayerBase<T>> layers, FireRedTtsQuantizerConfiguration configuration, Random random)
     {
@@ -182,9 +185,20 @@ internal sealed class FireRedTtsProductQuantizer<T>
         var c = Configuration;
         var projected = Project(encoded);
         int n = projected.Shape[0];
-        var tokens = GroupTokens(projected);
+
+        int[,] tokens;
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            tokens = GroupTokens(projected);
+            _lastTokens = tokens;
+        }
+        else
+        {
+            tokens = (_lastTokens != null && _lastTokens.GetLength(0) == n) ? _lastTokens : new int[n, c.Groups];
+        }
+
         var codewords = Lookup(tokens);
-        var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), StopGradient(projected)));
+        var straight = _engine.TensorAdd(projected, StopGradient(_engine.TensorSubtract(codewords, projected)));
         if (update && c.Ordered && c.Groups > 1)
         {
             double rate = random.NextDouble();
@@ -199,15 +213,16 @@ internal sealed class FireRedTtsProductQuantizer<T>
         var difference = _engine.TensorSubtract(projected, StopGradient(codewords));
         var commitment = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null),
             NumOps.FromDouble(c.CommitmentWeight / ((double)n * c.Codebooks * c.CodebookDim)));
-        if (update) Update(projected, tokens, random);
+
+        if (update && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsProbe)
+        {
+            Update(projected, tokens, random);
+        }
+
         return (tokens, ProjectOut.Forward(straight), ProjectOut.Forward(projected), commitment);
     }
 
-    private Tensor<T> StopGradient(Tensor<T> x)
-    {
-        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return x.Clone();
-    }
+    private Tensor<T> StopGradient(Tensor<T> x) => _engine.StopGradient(x);
 
     // EuclideanCodebook.forward's update: expire_codes_ (codes below the threshold replaced by batch samples), then the EMA
     // of cluster sizes and sums, and the codebook as their Laplace-smoothed ratio.

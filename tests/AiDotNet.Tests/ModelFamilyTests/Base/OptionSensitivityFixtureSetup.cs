@@ -408,7 +408,7 @@ internal static class OptionSensitivityFixtureSetup
             // feeds ready-made patches. The ResNet's global average pooling takes any patch length.
             return OptionSensitivityHarness.Fingerprint(events.GetEventProbabilities(LongWaveform<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel && option == "WindowLength")
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel && option is "WindowLength" or "SampleRate" or "FftSize" or "HopSize")
             // The analysis window acts in the model's mel front end (torchaudio MelSpectrogram), which the probe's
             // ready-made mel targets bypass.
             return OptionSensitivityHarness.Fingerprint(styleMel.ComputeMel(Waveform<T>(16000))
@@ -1204,6 +1204,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> && option == "MaxTextLength")
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return new Tensor<T>(new[] { 1024 }, new Vector<T>(Enumerable.Range(0, 1024).Select(i => ops.FromDouble(i % 10)).ToArray()));
+        }
         if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
         {
             // Predict consumes SentencePiece IDs. Numeric ramp inputs can decode to repeated

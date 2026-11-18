@@ -403,6 +403,9 @@ internal sealed class MegaTts2CodeDecoder<T>
         Embedding = new TiedEmbeddingLayer<T>(vocabulary, width);
         layers.Add(Embedding);
         Projection = MegaTts3Ops.Linear(layers, width);
+        // Sized here, from the widths they read: a layer sized on its first forward would allocate its weights inside a
+        // compiled training trace.
+        Projection.ResolveShapesOnly(new[] { 1, linguistic });
         for (int i = 0; i < layerCount; i++)
         {
             var n1 = new LayerNormalizationLayer<T>(width, 1e-5);
@@ -413,11 +416,16 @@ internal sealed class MegaTts2CodeDecoder<T>
             layers.Add(inProjection);
             layers.Add(outProjection);
             layers.Add(n2);
-            Layers.Add(new Layer(n1, inProjection, outProjection, n2, MegaTts3Ops.Linear(layers, 4 * width), MegaTts3Ops.Linear(layers, width)));
+            var ffn1 = MegaTts3Ops.Linear(layers, 4 * width);
+            ffn1.ResolveShapesOnly(new[] { 1, width });
+            var ffn2 = MegaTts3Ops.Linear(layers, width);
+            ffn2.ResolveShapesOnly(new[] { 1, 4 * width });
+            Layers.Add(new Layer(n1, inProjection, outProjection, n2, ffn1, ffn2));
         }
         FinalNorm = new LayerNormalizationLayer<T>(width, 1e-5);
         layers.Add(FinalNorm);
         Output = MegaTts3Ops.Linear(layers, outputs);
+        Output.ResolveShapesOnly(new[] { 1, width });
     }
 
     public int Vocabulary { get; }

@@ -185,8 +185,16 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
 
     private bool HasPaperLayers => _attention is not null;
 
-    private Tensor<T> Tokens(Tensor<T> characters)
-        => characters.Rank == 2 && characters.Shape[0] == 1 ? Engine.Reshape(characters, new[] { characters.Shape[1] }) : characters;
+    // Embeds [characters] or [1, characters] to [characters, embedding]. The lookup reads the token ids themselves, so
+    // a [1, S] input is embedded as given and the embeddings, not the ids, are flattened: a compiled plan's index
+    // validation then reads its own input rather than a traced reshape of it.
+    private Tensor<T> Embed(Tensor<T> characters)
+    {
+        var embedded = Require(_embedding).Forward(characters);
+        return embedded.Rank == 3 && embedded.Shape[0] == 1
+            ? Engine.Reshape(embedded, new[] { embedded.Shape[1], embedded.Shape[2] })
+            : embedded;
+    }
 
     // [1, frames, mel] -> [frames, mel].
     private Tensor<T> MelRows(Tensor<T> mel)
@@ -195,7 +203,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     /// <summary>The encoder (§2.2): <c>[characters, encoder width]</c>.</summary>
     private Tensor<T> Encode(Tensor<T> characters)
     {
-        var x = Require(_embedding).Forward(Tokens(characters));
+        var x = Embed(characters);
         x = Require(_encoderConvolutions).Forward(x);
         return Require(_encoderLstm).Forward(x);
     }
@@ -321,7 +329,8 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         int first = step * r, available = Math.Max(0, Math.Min(r, target.Shape[0] - first));
         if (available == 0) return new Tensor<T>(new[] { 1, mel * r });
         var rows = Engine.Reshape(Engine.TensorSlice(target, new[] { first, 0 }, new[] { available, mel }), new[] { 1, available * mel });
-        if (available == r) return rows.Clone();
+        // The traced rows themselves: a host Clone would read the step's target while a compiled plan traces it.
+        if (available == r) return rows;
         return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, (r - available) * mel }) }, 1);
     }
 
@@ -431,6 +440,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
             throw new NotSupportedException("The paper objective needs the paper's layers; this model was built from caller-supplied layers.");
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
+        _regularizationRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         try
         {
             using var _ = new NoGradScope<T>();

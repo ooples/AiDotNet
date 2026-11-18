@@ -220,18 +220,21 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_options.TrainingComponent == SeedTTSTrainingComponent.SpeechTokenizer || _options.TrainingComponent == SeedTTSTrainingComponent.AcousticVocoder)
         {
             EnsureCodecGan();
+            var audio = sample.Audio ?? throw new ArgumentException("Seed-TTS codec training requires Audio.", nameof(sample));
+            var codecGan = _codecGan ?? throw new InvalidOperationException("Seed-TTS codec GAN is not initialized.");
+            var discriminatorOptimizer = _discriminatorOptimizer ?? throw new InvalidOperationException("Seed-TTS discriminator optimizer is not initialized.");
             _discriminatorTurn = true;
             try
             {
                 // The generator's waveform is the discriminator step's data: computed before its objective, so the codec
                 // GAN's detach copies a value of this step rather than reading the traced generator on the host.
                 Tensor<T> generated;
-                using (new NoGradScope<T>()) generated = Snapshot(CodecTrainingWaveform(sample.Audio!));
+                using (new NoGradScope<T>()) generated = Snapshot(CodecTrainingWaveform(audio));
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    var real = Engine.TensorNarrow(Engine.Reshape(sample.Audio!, new[] { sample.Audio!.Length }), 0, 0, generated.Length);
-                    return _codecGan!.DiscriminatorLoss(real, generated);
-                }, _discriminatorOptimizer!);
+                    var real = Engine.TensorNarrow(Engine.Reshape(audio, new[] { audio.Length }), 0, 0, generated.Length);
+                    return codecGan.DiscriminatorLoss(real, generated);
+                }, discriminatorOptimizer);
             }
             finally { _discriminatorTurn = false; }
         }

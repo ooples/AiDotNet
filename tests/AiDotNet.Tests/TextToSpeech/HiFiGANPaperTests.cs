@@ -124,4 +124,37 @@ public class HiFiGANPaperTests
         }
         Assert.Equal(1.0, sigma, 3);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task SpectralNormalization_TracesWithoutHostReadsAndSkipsProbeBufferUpdates()
+    {
+        await Task.Yield();
+        var conv1d = new NormedConv1DLayer<double>(2, 3, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Spectral);
+        var conv2d = new NormedConv2DLayer<double>(2, 3, 3, 3, 1, 1, 1, 1, 1, ConvolutionNormalization.Spectral);
+        conv1d.SetTrainingMode(true);
+        conv2d.SetTrainingMode(true);
+
+        conv1d.SetTrainingMode(false);
+        conv2d.SetTrainingMode(false);
+        var eval1Before = conv1d.Kernel().ToVector().ToArray();
+        var eval2Before = conv2d.Kernel().ToVector().ToArray();
+
+        // Probe trace in training mode must record cleanly with zero host reads and leave stored u/v buffers untouched.
+        conv1d.SetTrainingMode(true);
+        conv2d.SetTrainingMode(true);
+        using (var probe = AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe())
+        {
+            var x1 = new Tensor<double>(new[] { 1, 2, 6 });
+            var x2 = new Tensor<double>(new[] { 1, 2, 4, 4 });
+            var y1 = conv1d.Forward(x1);
+            var y2 = conv2d.Forward(x2);
+            Assert.Equal(new[] { 1, 3, 6 }, y1.Shape.ToArray());
+            Assert.Equal(new[] { 1, 3, 4, 4 }, y2.Shape.ToArray());
+        }
+
+        conv1d.SetTrainingMode(false);
+        conv2d.SetTrainingMode(false);
+        Assert.Equal(eval1Before, conv1d.Kernel().ToVector().ToArray());
+        Assert.Equal(eval2Before, conv2d.Kernel().ToVector().ToArray());
+    }
 }

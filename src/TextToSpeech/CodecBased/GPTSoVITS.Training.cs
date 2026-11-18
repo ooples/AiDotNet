@@ -169,8 +169,10 @@ public partial class GPTSoVITS<T>
             case GptSoVitsStage.FlowMatching:
             {
                 int seed = random.Next();
-                return TrainLayers(FlowTrainedLayers(), () => FlowLoss(r, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed), training: true),
-                    "cfm", sample);
+                // The frozen quantizer's codes are the step's data: its codebook search runs on the host.
+                var quantized = FlowSynthesizer.FrozenQuantized(r.Ssl);
+                return TrainLayers(FlowTrainedLayers(), () => FlowLoss(r, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed), training: true,
+                    quantized), "cfm", sample);
             }
             default:
                 return GanStep(r, sample, random);
@@ -183,8 +185,8 @@ public partial class GPTSoVITS<T>
         return TextToSemantic.Loss(new[] { example }, _options.UseDpo, training, random);
     }
 
-    private Tensor<T> FlowLoss(Recording r, Random random, bool training) =>
-        FlowSynthesizer.Loss(r.Ssl, r.Spectrogram, r.Mel, r.Phones, freezeQuantizer: true, random, training);
+    private Tensor<T> FlowLoss(Recording r, Random random, bool training, Tensor<T>? frozenQuantized = null) =>
+        FlowSynthesizer.Loss(r.Ssl, r.Spectrogram, r.Mel, r.Phones, freezeQuantizer: true, random, training, frozenQuantized: frozenQuantized);
 
     /// <summary>The flow-matching stage's trainable layers: with LoRA (s2_train_v3_lora.py) the adapters plus the style
     /// encoder, bridge and wns1; without (s2_train_v3.py) everything but the frozen SSL projection and text encoder.</summary>
@@ -219,7 +221,7 @@ public partial class GPTSoVITS<T>
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    private static Tensor<T> Detached(Tensor<T> x) => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.StopGradient(x);
 
     // discriminator_loss: Σ mean((1 − D(real))²) + mean(D(fake)²).
     private Tensor<T> DiscriminatorLoss(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)

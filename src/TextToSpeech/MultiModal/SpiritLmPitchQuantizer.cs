@@ -196,17 +196,26 @@ internal sealed class SpiritLmPitchQuantizer<T>
         var c = Configuration;
         var z = Encode(x);
         int width = z.Shape[1], frames = z.Shape[2];
-        if (!CodebookInitialized) InitializeCodebook(z, random);
-        var codes = Nearest(z);
+        Tensor<T> zEager;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            zEager = Encode(x);
+        }
+        if (!CodebookInitialized) InitializeCodebook(zEager, random);
+        var codes = Nearest(zEager);
         var quantized = new Tensor<T>(new[] { 1, width, frames });
         for (int f = 0; f < frames; f++)
             for (int i = 0; i < width; i++) quantized[0, i, f] = NumOps.FromDouble(Codebook[codes[f], i]);
-        UpdateCodebook(z, codes, random);
+        if (!AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsProbe)
+        {
+            UpdateCodebook(zEager, codes, random);
+        }
         var difference = _engine.TensorSubtract(quantized, z);
         var commit = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
             NumOps.FromDouble(1.0 / difference.Length));
         // z + sg(e − z): the decoder's input carries e forward and the gradient to z.
-        var straight = _engine.TensorAdd(z, new Tensor<T>(difference.Shape.ToArray(), difference.ToVector()));
+        var straight = _engine.TensorAdd(z, _engine.StopGradient(difference));
         var reconstruction = Decode(straight);
         int length = Math.Min(reconstruction.Shape[2], x.Shape[2]);
         var weights = new Tensor<T>(new[] { 1, 2, length });

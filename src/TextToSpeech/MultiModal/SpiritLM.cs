@@ -129,7 +129,7 @@ public partial class SpiritLM<T> : TtsModelBase<T>
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(_options.ModelPath!, _options.OnnxOptions);
+        OnnxModel = new OnnxModel<T>(_options.ModelPath ?? modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
@@ -347,10 +347,10 @@ public partial class SpiritLM<T> : TtsModelBase<T>
             if (count < minChunk) continue;
             var chunk = new ArraySegment<double>(audio, start, count);
             hubert.AddRange(UnitExtractor.Units(chunk, deduplicate: false));
-            if (IsExpressive)
+            if (pitch is not null && style is not null)
             {
-                pitch!.AddRange(PitchTokensOf(chunk));
-                style!.AddRange(StyleTokensOf(chunk));
+                pitch.AddRange(PitchTokensOf(chunk));
+                style.AddRange(StyleTokensOf(chunk));
             }
         }
         return (hubert.ToArray(), pitch?.ToArray(), style?.ToArray());

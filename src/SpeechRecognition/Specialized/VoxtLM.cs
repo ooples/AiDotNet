@@ -292,7 +292,25 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         var network = _network;
         if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true));
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var prompts = new int[rows][];
+        var transcripts = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            prompts[r] = network.AsrPrompt(Recording(input, r, rows));
+            transcripts[r] = Transcript(network, TargetRow(target, r, rows));
+        }
+
+        TrainWithCustomLoss(input, _ =>
+        {
+            Tensor<T>? total = null;
+            for (int r = 0; r < rows; r++)
+            {
+                var loss = network.AsrLoss(prompts[r], transcripts[r], training: true, _random);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        });
         return true;
     }
 

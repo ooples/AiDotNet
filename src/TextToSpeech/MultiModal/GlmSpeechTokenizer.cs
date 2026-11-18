@@ -49,22 +49,61 @@ internal sealed class GlmSpeechTokenizer<T>
 
     internal sealed class Attention
     {
-        public DenseLayer<T> Query = null!, Value = null!, Output = null!;
-        public BiasFreeLinearLayer<T> Key = null!;
+        public Attention(DenseLayer<T> query, BiasFreeLinearLayer<T> key, DenseLayer<T> value, DenseLayer<T> output)
+        {
+            Query = query;
+            Key = key;
+            Value = value;
+            Output = output;
+        }
+
+        public DenseLayer<T> Query;
+        public BiasFreeLinearLayer<T> Key;
+        public DenseLayer<T> Value;
+        public DenseLayer<T> Output;
     }
 
     internal sealed class EncoderLayer
     {
-        public LayerNormalizationLayer<T> AttentionNorm = null!, FinalNorm = null!;
-        public Attention SelfAttention = null!;
-        public DenseLayer<T> Fc1 = null!, Fc2 = null!;
+        public EncoderLayer(LayerNormalizationLayer<T> attentionNorm, Attention selfAttention,
+            LayerNormalizationLayer<T> finalNorm, DenseLayer<T> fc1, DenseLayer<T> fc2)
+        {
+            AttentionNorm = attentionNorm;
+            SelfAttention = selfAttention;
+            FinalNorm = finalNorm;
+            Fc1 = fc1;
+            Fc2 = fc2;
+        }
+
+        public LayerNormalizationLayer<T> AttentionNorm;
+        public Attention SelfAttention;
+        public LayerNormalizationLayer<T> FinalNorm;
+        public DenseLayer<T> Fc1;
+        public DenseLayer<T> Fc2;
     }
 
     internal sealed class DecoderLayer
     {
-        public LayerNormalizationLayer<T> SelfNorm = null!, CrossNorm = null!, FinalNorm = null!;
-        public Attention SelfAttention = null!, CrossAttention = null!;
-        public DenseLayer<T> Fc1 = null!, Fc2 = null!;
+        public DecoderLayer(LayerNormalizationLayer<T> selfNorm, Attention selfAttention,
+            LayerNormalizationLayer<T> crossNorm, Attention crossAttention,
+            LayerNormalizationLayer<T> finalNorm, DenseLayer<T> fc1, DenseLayer<T> fc2)
+        {
+            SelfNorm = selfNorm;
+            SelfAttention = selfAttention;
+            CrossNorm = crossNorm;
+            CrossAttention = crossAttention;
+            FinalNorm = finalNorm;
+            Fc1 = fc1;
+            Fc2 = fc2;
+        }
+
+        public LayerNormalizationLayer<T> SelfNorm;
+        public Attention SelfAttention;
+        public LayerNormalizationLayer<T> CrossNorm;
+        public Attention CrossAttention;
+        public LayerNormalizationLayer<T> FinalNorm;
+        public DenseLayer<T> Fc1;
+        public DenseLayer<T> Fc2;
     }
 
     public GlmSpeechTokenizer(IEngine engine, List<LayerBase<T>> layers, GlmSpeechTokenizerConfiguration configuration, Random random,
@@ -86,12 +125,10 @@ internal sealed class GlmSpeechTokenizer<T>
         Positions2 = IndexTtsOps.Values(layers, Sinusoids(c.MaxSourcePositions, d).Take(pooled * d).ToArray());
         int count = withTrainingStack ? c.EncoderLayers : c.QuantizePosition;
         for (int i = 0; i < count; i++)
-            EncoderLayers.Add(new EncoderLayer
-            {
-                AttentionNorm = IndexTtsOps.LayerNorm(layers, d), SelfAttention = NewAttention(layers, random),
-                FinalNorm = IndexTtsOps.LayerNorm(layers, d), Fc1 = IndexTtsOps.Linear(engine, layers, random, d, c.FeedForward),
-                Fc2 = IndexTtsOps.Linear(engine, layers, random, c.FeedForward, d),
-            });
+            EncoderLayers.Add(new EncoderLayer(
+                IndexTtsOps.LayerNorm(layers, d), NewAttention(layers, random),
+                IndexTtsOps.LayerNorm(layers, d), IndexTtsOps.Linear(engine, layers, random, d, c.FeedForward),
+                IndexTtsOps.Linear(engine, layers, random, c.FeedForward, d)));
         // The release initializes the codebook from k-means of the hidden states (quantize_load_codebook); without one,
         // nn.Embedding's N(0, 1).
         Codebook = IndexTtsOps.Values(layers, IndexTtsOps.Normal(random, c.CodebookSize * d, 1.0));
@@ -104,13 +141,11 @@ internal sealed class GlmSpeechTokenizer<T>
         TokenEmbedding.Reinitialize(() => 0.02 * IndexTtsOps.Gaussian(random));
         DecoderPositions = IndexTtsOps.Values(layers, IndexTtsOps.Normal(random, c.MaxTargetPositions * d, 0.02));
         for (int i = 0; i < c.DecoderLayers; i++)
-            DecoderLayers.Add(new DecoderLayer
-            {
-                SelfNorm = IndexTtsOps.LayerNorm(layers, d), SelfAttention = NewAttention(layers, random),
-                CrossNorm = IndexTtsOps.LayerNorm(layers, d), CrossAttention = NewAttention(layers, random),
-                FinalNorm = IndexTtsOps.LayerNorm(layers, d), Fc1 = IndexTtsOps.Linear(engine, layers, random, d, c.FeedForward),
-                Fc2 = IndexTtsOps.Linear(engine, layers, random, c.FeedForward, d),
-            });
+            DecoderLayers.Add(new DecoderLayer(
+                IndexTtsOps.LayerNorm(layers, d), NewAttention(layers, random),
+                IndexTtsOps.LayerNorm(layers, d), NewAttention(layers, random),
+                IndexTtsOps.LayerNorm(layers, d), IndexTtsOps.Linear(engine, layers, random, d, c.FeedForward),
+                IndexTtsOps.Linear(engine, layers, random, c.FeedForward, d)));
         DecoderNorm = IndexTtsOps.LayerNorm(layers, d);
     }
 
@@ -255,13 +290,11 @@ internal sealed class GlmSpeechTokenizer<T>
         return tokens.ToArray();
     }
 
-    private Attention NewAttention(List<LayerBase<T>> layers, Random random) => new()
-    {
-        Query = IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim),
-        Key = IndexTtsOps.BiasFree(layers, random, _c.Dim, _c.Dim),
-        Value = IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim),
-        Output = IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim),
-    };
+    private Attention NewAttention(List<LayerBase<T>> layers, Random random) => new(
+        IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim),
+        IndexTtsOps.BiasFree(layers, random, _c.Dim, _c.Dim),
+        IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim),
+        IndexTtsOps.Linear(_engine, layers, random, _c.Dim, _c.Dim));
 
     public GlmSpeechTokenizerConfiguration Configuration => _c;
     public NormedConv1DLayer<T> Conv1 { get; }
@@ -337,12 +370,18 @@ internal sealed class GlmSpeechTokenizer<T>
     internal sealed record EncoderOutput(Tensor<T> Hidden, int[] Codes, bool[] Valid, Tensor<T> PreQuantized, Tensor<T> Quantized,
         Tensor<T>? CodesOneHot = null);
 
-    // The codes and pre-quantized states of the latest training forward that ran with values, by tokenizer: written by
-    // the node of TrainingStatistics when a compiled plan runs it, and taken once by UpdateCodebook. The node captures
-    // only this tokenizer's key, which a compiled plan can compare between steps; it could not compare the tokenizer.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (int[] Codes, T[] Hidden)> TrainingStatisticsByKey = new();
-    private static long _nextStatisticsKey;
-    private readonly long _statisticsKey = System.Threading.Interlocked.Increment(ref _nextStatisticsKey);
+    /// <summary>Computes the downsampled and pooled encoder frame validity mask corresponding to <paramref name="validFrames"/>.</summary>
+    internal bool[] PooledValidMask(int featureFrames, bool[] validFrames)
+    {
+        int length = featureFrames / 2;
+        var valid = Enumerable.Range(0, length).Select(t => validFrames[t * 2]).ToArray();
+        if (EncoderLayers.Count >= _c.PoolingPosition)
+        {
+            int pooled = (length + _c.PoolingKernel - 1) / _c.PoolingKernel;
+            valid = Enumerable.Range(0, pooled).Select(t => valid[t * _c.PoolingKernel]).ToArray();
+        }
+        return valid;
+    }
 
     /// <summary>
     /// The encoder on log-mel features <c>[mels, frames]</c> whose valid frames are <paramref name="validFrames"/> (a
@@ -456,25 +495,6 @@ internal sealed class GlmSpeechTokenizer<T>
         return codes;
     }
 
-    /// <summary>
-    /// A zero <c>[1]</c> tensor whose node records the codes and pre-quantized states of <paramref name="output"/> for
-    /// <see cref="UpdateCodebook"/> each time the training step runs with values. Add it (times zero) to the objective:
-    /// a compiled plan runs the objective's forward without handing its values back, so the EMA update reads them here.
-    /// </summary>
-    internal Tensor<T> TrainingStatistics(EncoderOutput output)
-    {
-        if (output.CodesOneHot is null)
-            throw new InvalidOperationException("The encoder pass did not reach the quantizer.");
-        return RecordTrainingStatistics(new[] { output.PreQuantized, output.CodesOneHot }, _statisticsKey);
-    }
-
-    private static Tensor<T> RecordTrainingStatistics(Tensor<T>[] inputs, long key)
-        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("GlmCodebookStatistics", inputs, new[] { 1 }, (values, zero) =>
-        {
-            TrainingStatisticsByKey[key] = (CodesOf(values[1]), values[0].ToArray());
-            zero.AsWritableSpan().Clear();
-        });
-
     // ---------------------------------------------------------------- training
 
     /// <summary><c>mse_loss_with_mask</c>: the per-frame mean squared error over the valid frames' mean.</summary>
@@ -505,22 +525,12 @@ internal sealed class GlmSpeechTokenizer<T>
     {
         var c = _c;
         int k = c.CodebookSize, d = c.Dim;
-        int[] outputCodes;
-        T[] hidden;
-        if (output.Codes.Length > 0 || output.CodesOneHot is null)
-        {
-            outputCodes = output.Codes;
-            hidden = output.PreQuantized.ToArray();
-        }
-        else
-        {
-            // A compiled step: the codes and states its plan recorded when it ran.
-            if (!TrainingStatisticsByKey.TryRemove(_statisticsKey, out var recorded))
-                throw new InvalidOperationException(
-                    "The training step recorded no codebook statistics; add TrainingStatistics to its objective.");
-            (outputCodes, hidden) = recorded;
-        }
-        TrainingStatisticsByKey.TryRemove(_statisticsKey, out _);
+        int[] outputCodes = output.Codes.Length > 0
+            ? output.Codes
+            : output.CodesOneHot is not null
+                ? CodesOf(output.CodesOneHot)
+                : throw new InvalidOperationException("The encoder pass did not produce quantized codes.");
+        T[] hidden = output.PreQuantized.ToArray();
         var counts = new double[k];
         var sums = new double[k * d];
         for (int r = 0; r < outputCodes.Length; r++)
@@ -566,10 +576,12 @@ internal sealed class GlmSpeechTokenizer<T>
     public Tensor<T> DecoderLogits(IReadOnlyList<int> ids, Tensor<T> encoder, bool[] encoderValid, bool training = false, Random? random = null)
     {
         var embedding = TokenEmbedding ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
+        var decoderPositions = DecoderPositions ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
+        var decoderNorm = DecoderNorm ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
         int length = ids.Count, d = _c.Dim;
         if (length > _c.MaxTargetPositions) throw new ArgumentException($"At most {_c.MaxTargetPositions} decoder tokens.", nameof(ids));
         var x = _engine.TensorAdd(embedding.Forward(IndexTtsOps.Ids<T>(ids)),
-            _engine.TensorNarrow(_engine.Reshape(IndexTtsOps.Value(DecoderPositions!), new[] { _c.MaxTargetPositions, d }), 0, 0, length));
+            _engine.TensorNarrow(_engine.Reshape(IndexTtsOps.Value(decoderPositions), new[] { _c.MaxTargetPositions, d }), 0, 0, length));
         x = Drop(x, training, random);
         var causal = new Tensor<T>(new[] { length, length });
         var blocked = NumOps.FromDouble(double.NegativeInfinity);
@@ -590,7 +602,7 @@ internal sealed class GlmSpeechTokenizer<T>
             var h = Gelu(layer.Fc1.Forward(layer.FinalNorm.Forward(x)));
             x = _engine.TensorAdd(x, Drop(layer.Fc2.Forward(h), training, random));
         }
-        return embedding.Logits(DecoderNorm!.Forward(x));
+        return embedding.Logits(decoderNorm.Forward(x));
     }
 
     /// <summary>The ASR cross-entropy (the mean over the label positions) of decoder input ids and their labels.</summary>
@@ -662,8 +674,10 @@ internal sealed class GlmSpeechTokenizer<T>
         var c = _c;
         int d = c.Dim;
         var embedding = TokenEmbedding ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
+        var decoderPositions = DecoderPositions ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
+        var decoderNorm = DecoderNorm ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
         embedding.LoadTable(source, prefix + "embed_tokens.weight");
-        TorchParameters.Linear(DecoderPositions!, 1, c.MaxTargetPositions * d, source, prefix + "embed_positions.weight", new[] { c.MaxTargetPositions, d });
+        TorchParameters.Linear(decoderPositions, 1, c.MaxTargetPositions * d, source, prefix + "embed_positions.weight", new[] { c.MaxTargetPositions, d });
         for (int i = 0; i < DecoderLayers.Count; i++)
         {
             var l = DecoderLayers[i];
@@ -676,6 +690,6 @@ internal sealed class GlmSpeechTokenizer<T>
             IndexTtsOps.LoadLinear(_engine, source, l.Fc1, p + "fc1", d, c.FeedForward);
             IndexTtsOps.LoadLinear(_engine, source, l.Fc2, p + "fc2", c.FeedForward, d);
         }
-        IndexTtsOps.LoadNorm(_engine, source, DecoderNorm!, prefix + "layer_norm", d);
+        IndexTtsOps.LoadNorm(_engine, source, decoderNorm, prefix + "layer_norm", d);
     }
 }

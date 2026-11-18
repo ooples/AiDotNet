@@ -89,18 +89,31 @@ public class EnCodecPaperTests
     private static Tensor<double> TensorOf(JToken values, int[] shape)
         => new(shape, new Vector<double>(values.Select(v => (double)v).ToArray()));
 
+    private static JToken RequireToken(JToken? parent, string property)
+    {
+        Assert.NotNull(parent);
+        var token = parent[property];
+        Assert.NotNull(token);
+        return token;
+    }
+
     [Theory(Timeout = 300000)]
     [InlineData(0)]
     [InlineData(1)]
     public async Task OfficialLayout_LoadsAndReproducesTheReferenceModel(int index)
     {
         await Task.Yield();
-        var fixture = Reference()["fixtures"]![index]!;
-        int channels = (int)fixture["config"]!["audio_channels"]!;
-        bool causal = (bool)fixture["config"]!["use_causal_conv"]!;
+        var fixtures = RequireToken(Reference(), "fixtures");
+        var fixture = fixtures[index];
+        Assert.NotNull(fixture);
+        var config = RequireToken(fixture, "config");
+        int channels = (int)RequireToken(config, "audio_channels");
+        bool causal = (bool)RequireToken(config, "use_causal_conv");
         using var model = new EnCodec<double>(Architecture(), TinyOptions(channels, causal));
         string path = Path.Combine(Path.GetTempPath(), $"encodec_reference_{index}_{Guid.NewGuid():N}.safetensors");
-        File.WriteAllBytes(path, Convert.FromBase64String((string)fixture["safetensors_base64"]!));
+        string? b64 = (string?)RequireToken(fixture, "safetensors_base64");
+        Assert.NotNull(b64);
+        File.WriteAllBytes(path, Convert.FromBase64String(b64));
         try
         {
             model.LoadPretrainedWeights(path);
@@ -110,23 +123,23 @@ public class EnCodecPaperTests
             File.Delete(path);
         }
 
-        var audio = TensorOf(fixture["audio"]!, fixture["audio_shape"]!.Select(v => (int)v).ToArray());
+        var audio = TensorOf(RequireToken(fixture, "audio"), RequireToken(fixture, "audio_shape").Select(v => (int)v).ToArray());
         var latent = model.EncodeEmbeddings(audio);
-        var expectedLatent = fixture["latent"]!.Select(v => (double)v).ToArray();
+        var expectedLatent = RequireToken(fixture, "latent").Select(v => (double)v).ToArray();
         Assert.Equal(expectedLatent.Length, latent.Length);
         for (int i = 0; i < latent.Length; i++)
             Assert.True(Math.Abs(latent[i] - expectedLatent[i]) < 1e-4 * (1 + Math.Abs(expectedLatent[i])),
                 $"latent[{i}] = {latent[i]}, reference {expectedLatent[i]}");
 
         var codes = model.Encode(audio);
-        var expectedCodes = fixture["codes"]!.Select(row => row.Select(v => (int)v).ToArray()).ToArray();
+        var expectedCodes = RequireToken(fixture, "codes").Select(row => row.Select(v => (int)v).ToArray()).ToArray();
         Assert.Equal(expectedCodes.Length, codes.GetLength(0));
         for (int q = 0; q < expectedCodes.Length; q++)
             for (int t = 0; t < expectedCodes[q].Length; t++)
                 Assert.Equal(expectedCodes[q][t], codes[q, t]);
 
         var decoded = model.Decode(codes);
-        var expectedDecoded = fixture["decoded"]!.Select(v => (double)v).ToArray();
+        var expectedDecoded = RequireToken(fixture, "decoded").Select(v => (double)v).ToArray();
         Assert.Equal(expectedDecoded.Length, decoded.Length);
         for (int i = 0; i < decoded.Length; i++)
             Assert.True(Math.Abs(decoded[i] - expectedDecoded[i]) < 1e-4 * (1 + Math.Abs(expectedDecoded[i])),
@@ -208,7 +221,8 @@ public class EnCodecPaperTests
         Assert.True(model.CustomFusedStepCount >= steps, $"fused steps {model.CustomFusedStepCount}");
         Assert.Equal(0, model.CustomEagerStepCount);
         Assert.Equal(0, model.CustomOutsidePlanStepCount);
-        var balancer = model.Balancer!;
+        var balancer = model.Balancer;
+        Assert.NotNull(balancer);
         Assert.Equal(steps, balancer.Steps);
         Assert.All(balancer.AveragedNorms.Values, norm => Assert.True(norm > 0 && !double.IsInfinity(norm), $"norm {norm}"));
     }
@@ -276,8 +290,251 @@ public class EnCodecPaperTests
         var x = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new[] { 1.0, 2, 3, 4, 5, 6 }));
         sum.Forward(x);
         mean.Forward(x);
-        Assert.Equal(91.0, sum.CommitmentLoss![0], 9);
-        Assert.Equal(91.0 / 6.0, mean.CommitmentLoss![0], 9);
+        var sumLoss = sum.CommitmentLoss;
+        var meanLoss = mean.CommitmentLoss;
+        Assert.NotNull(sumLoss);
+        Assert.NotNull(meanLoss);
+        Assert.Equal(91.0, sumLoss[0], 9);
+        Assert.Equal(91.0 / 6.0, meanLoss[0], 9);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TracedBalancer_IsolatesTwoFactoriesAndSignsStateAndReplaysHostState()
+    {
+        await Task.Yield();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var balancer = new LossBalancer<double>(engine, new Dictionary<string, double> { ["a"] = 1.0, ["b"] = 1.0 });
+        var parameter = new Tensor<double>(new[] { 2.0 }, new[] { 1 });
+        var target = new Tensor<double>(new[] { 0.5 }, new[] { 1 });
+        int factoryACalls = 0, factoryBCalls = 0;
+
+        using (var probeA = AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe())
+        {
+            var outNode = engine.TensorMultiplyScalar(parameter, 1.0);
+            var (surrogateA, _) = balancer.TracedSurrogate(outNode, new[] { target }, ctx =>
+            {
+                factoryACalls++;
+                return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                {
+                    ["a"] = y => engine.TensorAbs(engine.TensorSubtract(y, ctx[0])),
+                    ["b"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(y), 2.0),
+                };
+            }, stateKey: "slot-A");
+
+            var nodeA = Assert.Single(probeA.Nodes.Where(n => n.OpName == "EnCodecLossBalancer")
+                .Cast<AiDotNet.Tensors.Engines.Compilation.ISignableLazyNode>());
+            Assert.True(nodeA.ReplaysHostStateFlag);
+            Assert.NotNull(nodeA.SavedStateObjects);
+            Assert.NotNull(surrogateA);
+
+            using var probeB = AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe();
+            var outNodeB = engine.TensorMultiplyScalar(parameter, 1.0);
+            var (surrogateB, _) = balancer.TracedSurrogate(outNodeB, new[] { target }, ctx =>
+            {
+                factoryBCalls++;
+                return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                {
+                    ["a"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(engine.TensorSubtract(y, ctx[0])), 5.0),
+                    ["b"] = y => engine.TensorAbs(y),
+                };
+            }, stateKey: "slot-B");
+
+            var nodeB = Assert.Single(probeB.Nodes.Where(n => n.OpName == "EnCodecLossBalancer")
+                .Cast<AiDotNet.Tensors.Engines.Compilation.ISignableLazyNode>());
+            Assert.True(nodeB.ReplaysHostStateFlag);
+            Assert.NotNull(nodeB.SavedStateObjects);
+            Assert.NotNull(surrogateB);
+            Assert.NotEqual(nodeA.SavedStateObjects, nodeB.SavedStateObjects);
+        }
+
+        // Probe must never invoke either factory or advance balancer Steps/EMA.
+        Assert.Equal(0, factoryACalls);
+        Assert.Equal(0, factoryBCalls);
+        Assert.Equal(0, balancer.Steps);
+
+        // Two TracedSurrogate calls on the SAME balancer within one compiled plan must bind distinct slots and never clobber.
+        var optimizer = new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 0.01,
+                EnableGradientClipping = false,
+            });
+        var stepper = AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(optimizer);
+        try
+        {
+            Tensor<double> DualObjective()
+            {
+                var pred = engine.TensorMultiplyScalar(parameter, 1.0);
+                var (sA, _) = balancer.TracedSurrogate(pred, new[] { target }, ctx =>
+                {
+                    factoryACalls++;
+                    return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                    {
+                        ["a"] = y => engine.TensorAbs(engine.TensorSubtract(y, ctx[0])),
+                        ["b"] = y => engine.TensorAbs(y),
+                    };
+                }, stateKey: "first");
+                var (sB, _) = balancer.TracedSurrogate(pred, new[] { target }, ctx =>
+                {
+                    factoryBCalls++;
+                    return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                    {
+                        ["a"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(engine.TensorAdd(y, ctx[0])), 3.0),
+                        ["b"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(y), 4.0),
+                    };
+                }, stateKey: "second");
+                return engine.TensorAdd(sA, sB);
+            }
+
+            for (int step = 0; step < 3; step++)
+            {
+                stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<double>
+                {
+                    Layers = Array.Empty<AiDotNet.Interfaces.ITrainableLayer<double>>(),
+                    Input = target,
+                    Target = target,
+                    Forward = static x => x,
+                    ComputeLoss = (_, _) => DualObjective(),
+                    ClosureObjective = DualObjective,
+                    Optimizer = optimizer,
+                    ExtraParameters = new[] { parameter },
+                });
+            }
+
+            Assert.Equal(3, factoryACalls);
+            Assert.Equal(3, factoryBCalls);
+            Assert.Equal(6, balancer.Steps);
+        }
+        finally
+        {
+            stepper.Session.Reset(stickyDisable: false);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TracedBalancer_ProbeDoesNotMutateEmaOrOverwriteCompiledSlot()
+    {
+        await Task.Yield();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var balancer = new LossBalancer<double>(engine, new Dictionary<string, double> { ["1"] = 1.0 });
+        var parameter = new Tensor<double>(new[] { 3.0 }, new[] { 1 });
+        var target = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+        int activeCalls = 0, probeCalls = 0;
+
+        var optimizer = new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 0.01,
+                EnableGradientClipping = false,
+            });
+        var stepper = AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(optimizer);
+        try
+        {
+            Tensor<double> ActiveObjective()
+            {
+                var pred = engine.TensorMultiplyScalar(parameter, 1.0);
+                var (surrogate, _) = balancer.TracedSurrogate(pred, new[] { target }, ctx =>
+                {
+                    activeCalls++;
+                    return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                    {
+                        ["1"] = y => engine.TensorAbs(engine.TensorSubtract(y, ctx[0])),
+                    };
+                });
+                return surrogate;
+            }
+
+            AiDotNet.Training.FusedTrainingStepRequest<double> Request() => new()
+            {
+                Layers = Array.Empty<AiDotNet.Interfaces.ITrainableLayer<double>>(),
+                Input = target,
+                Target = target,
+                Forward = static x => x,
+                ComputeLoss = (_, _) => ActiveObjective(),
+                ClosureObjective = ActiveObjective,
+                Optimizer = optimizer,
+                ExtraParameters = new[] { parameter },
+            };
+
+            stepper.Step(Request());
+            Assert.Equal(1, balancer.Steps);
+            Assert.Equal(1, activeCalls);
+            double normAfterFirst = balancer.AveragedNorms["1"];
+
+            // Unaccepted probe with a completely different factory must leave Steps, EMA, and ActiveObjective's slot untouched.
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableProbe())
+            {
+                var pred = engine.TensorMultiplyScalar(parameter, 1.0);
+                _ = balancer.TracedSurrogate(pred, new[] { target }, _ =>
+                {
+                    probeCalls++;
+                    return new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+                    {
+                        ["1"] = y => engine.TensorMultiplyScalar(y, 999.0),
+                    };
+                }, stateKey: "discarded-probe");
+            }
+
+            Assert.Equal(0, probeCalls);
+            Assert.Equal(1, balancer.Steps);
+            Assert.Equal(normAfterFirst, balancer.AveragedNorms["1"], 12);
+
+            stepper.Step(Request());
+            Assert.Equal(0, probeCalls);
+            Assert.Equal(2, activeCalls);
+            Assert.Equal(2, balancer.Steps);
+        }
+        finally
+        {
+            stepper.Session.Reset(stickyDisable: false);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Balancer_ThrowOrNonFiniteLossLeavesEmaAndStepsUntouched()
+    {
+        await Task.Yield();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var balancer = new LossBalancer<double>(engine, new Dictionary<string, double> { ["1"] = 1.0, ["2"] = 1.0 });
+        var x = new Tensor<double>(new[] { 2.0 }, new[] { 1 });
+
+        using (var tape = new GradientTape<double>())
+        {
+            var s = balancer.Surrogate(x, new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+            {
+                ["1"] = y => engine.TensorAbs(y),
+                ["2"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(y), 4.0),
+            });
+            _ = tape.ComputeGradients(s, new[] { x });
+        }
+
+        Assert.Equal(1, balancer.Steps);
+        double norm1 = balancer.AveragedNorms["1"];
+        double norm2 = balancer.AveragedNorms["2"];
+        double lastWeighted = balancer.LastWeightedLoss;
+
+        // Inner loss throw must not partially mutate EMA or increment Steps.
+        Assert.Throws<InvalidOperationException>(() => balancer.Surrogate(x, new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+        {
+            ["1"] = y => engine.TensorMultiplyScalar(engine.TensorAbs(y), 50.0),
+            ["2"] = _ => throw new InvalidOperationException("inner loss failure"),
+        }));
+        Assert.Equal(1, balancer.Steps);
+        Assert.Equal(norm1, balancer.AveragedNorms["1"], 12);
+        Assert.Equal(norm2, balancer.AveragedNorms["2"], 12);
+        Assert.Equal(lastWeighted, balancer.LastWeightedLoss, 12);
+
+        // Non-finite loss/gradient step must be skipped cleanly without poisoning EMA or incrementing Steps.
+        var zero = new Tensor<double>(new[] { 0.0 }, new[] { 1 });
+        _ = balancer.Surrogate(zero, new Dictionary<string, Func<Tensor<double>, Tensor<double>>>
+        {
+            ["1"] = y => engine.TensorSqrt(y), // gradient at 0 is +Infinity
+            ["2"] = y => engine.TensorAbs(y),
+        });
+        Assert.Equal(1, balancer.Steps);
+        Assert.Equal(norm1, balancer.AveragedNorms["1"], 12);
+        Assert.Equal(norm2, balancer.AveragedNorms["2"], 12);
+        Assert.Equal(lastWeighted, balancer.LastWeightedLoss, 12);
     }
 
     [Fact(Timeout = 600000)]

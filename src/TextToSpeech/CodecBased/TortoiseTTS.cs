@@ -141,7 +141,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
         RequirePipeline();
-        var reference = RequireVoice().ReferenceAudio!;
+        var reference = RequireVoice().ReferenceAudio
+            ?? throw new InvalidOperationException("TorToiSe synthesis requires a voice with ReferenceAudio.");
         using var _ = new NoGradScope<T>();
         return SynthesizeIds(TextIds(text), reference);
     }
@@ -155,9 +156,10 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(audio);
         RequirePipeline();
+        var tokenizer = _tokenizer ?? throw new InvalidOperationException("Speech tokenizer is not initialized.");
         using var _ = new NoGradScope<T>();
         var mel = AutoregressiveMel(Resample(audio, sampleRate, _options.TokenizerSampleRate));
-        return TortoiseOps<T>.Ids(_tokenizer!.Encode(mel));
+        return TortoiseOps<T>.Ids(tokenizer.Encode(mel));
     }
 
     /// <summary>Decodes VQ-VAE codes through its mel decoder and the released UnivNet vocoder.</summary>
@@ -166,8 +168,9 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(tokens);
         RequirePipeline();
+        var tokenizer = _tokenizer ?? throw new InvalidOperationException("Speech tokenizer is not initialized.");
         using var _ = new NoGradScope<T>();
-        var mel80 = _tokenizer!.Decode(TortoiseOps<T>.IdsOf(tokens));
+        var mel80 = tokenizer.Decode(TortoiseOps<T>.IdsOf(tokens));
         return UnivNetVocoder.Generate(ToVocoderMel(mel80), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
     }
 
@@ -175,8 +178,9 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public double ScoreCandidate(Tensor<T> textTokens, Tensor<T> speechTokens)
     {
         RequirePipeline();
+        var clvp = _clvp ?? throw new InvalidOperationException("CLVP is not initialized.");
         using var _ = new NoGradScope<T>();
-        return _clvp!.Score(TextIds(textTokens), TortoiseOps<T>.IdsOf(speechTokens));
+        return clvp.Score(TextIds(textTokens), TortoiseOps<T>.IdsOf(speechTokens));
     }
 
     /// <summary>Trains CLVP with the released symmetric in-batch contrastive objective.</summary>
@@ -252,7 +256,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (_options.TrainingComponent != TortoiseTrainingComponent.UnivNet || _univNet is null) return parameters;
         EnsureVocoderTraining();
-        var layers = _vocoderDiscriminatorTurn ? _vocoderTraining!.Layers : _univNet.Layers;
+        var vocoderTraining = _vocoderTraining ?? throw new InvalidOperationException("Vocoder training is not initialized.");
+        var layers = _vocoderDiscriminatorTurn ? vocoderTraining.Layers : _univNet.Layers;
         var selected = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(layers.Cast<ILayer<T>>().ToList()),
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         return parameters.Where(selected.Contains).ToList();
@@ -261,6 +266,9 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private T TrainVocoder(TtsTrainingSample<T> sample)
     {
         EnsureVocoderTraining();
+        var vocoderTraining = _vocoderTraining ?? throw new InvalidOperationException("Vocoder training is not initialized.");
+        var generatorOptimizer = _optimizer ?? throw new NotSupportedException("Native optimizer is unavailable.");
+        var discriminatorOptimizer = _vocoderDiscriminatorOptimizer ?? throw new InvalidOperationException("Vocoder discriminator optimizer is not initialized.");
         var audio = sample.Audio ?? throw new ArgumentException("UnivNet training requires the recording.", nameof(sample));
         Tensor<T> mel;
         using (new NoGradScope<T>()) mel = DiffusionMel(audio);
@@ -275,21 +283,21 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
                 var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(noiseSeed));
                 if (adversarial && AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
                     AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput("tortoise-generation", Engine.StopGradient(generated));
-                return _vocoderTraining!.Generator(audio, generated, adversarial);
-            }, _optimizer!);
+                return vocoderTraining.Generator(audio, generated, adversarial);
+            }, generatorOptimizer);
             if (outputs is not null)
             {
                 outputs.Complete();
                 savedGeneration = outputs.Get("tortoise-generation");
             }
         }
-        if (adversarial)
+        if (adversarial && savedGeneration is { } retained)
         {
             _vocoderDiscriminatorTurn = true;
             try
             {
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-                    (_, _) => _vocoderTraining!.Discriminator(audio, savedGeneration!), _vocoderDiscriminatorOptimizer!);
+                    (_, _) => vocoderTraining.Discriminator(audio, retained), discriminatorOptimizer);
             }
             finally { _vocoderDiscriminatorTurn = false; }
         }
@@ -304,7 +312,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (HasPaperPipeline)
         {
-            var reference = RequireVoice().ReferenceAudio!;
+            var reference = RequireVoice().ReferenceAudio
+                ?? throw new InvalidOperationException("TorToiSe prediction requires a voice with ReferenceAudio.");
             using var _ = new NoGradScope<T>();
             return SynthesizeIds(TextIds(input), reference);
         }
@@ -338,31 +347,36 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> SynthesizeIds(int[] text, Tensor<T> referenceAt24Khz)
     {
+        var autoregressive = _autoregressive ?? throw new InvalidOperationException("Autoregressive prior is not initialized.");
+        var clvp = _clvp ?? throw new InvalidOperationException("CLVP is not initialized.");
+        var diffusion = _diffusion ?? throw new InvalidOperationException("Diffusion decoder is not initialized.");
+        var univNet = _univNet ?? throw new InvalidOperationException("UnivNet vocoder is not initialized.");
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         var reference22 = Resample(referenceAt24Khz, _options.SampleRate, _options.TokenizerSampleRate);
         var arReference = PrefixOrPad(reference22, _options.ConditioningSamples);
-        var condition = _autoregressive!.Conditioning(AutoregressiveMel(arReference), false, random);
+        var condition = autoregressive.Conditioning(AutoregressiveMel(arReference), false, random);
         int count = Math.Max(1, _options.NumAutoregressiveSamples);
         int[]? best = null;
         double bestScore = double.NegativeInfinity;
         for (int i = 0; i < count; i++)
         {
-            var candidate = TortoiseCandidateTail.Prepare(_autoregressive.Generate(text, condition, random),
+            var candidate = TortoiseCandidateTail.Prepare(autoregressive.Generate(text, condition, random),
                 Math.Min(_options.MaxCodecFrames, _options.MaximumAutoregressiveTokens),
                 _options.SpeechStopToken, _options.CodebookSize);
-            double score = _clvp!.Score(text, candidate);
+            double score = clvp.Score(text, candidate);
             if (best is null || score > bestScore)
             {
                 best = candidate;
                 bestScore = score;
             }
         }
-        var latents = _autoregressive.Latents(text, best!, condition);
-        int latentLength = TortoiseCandidateTail.LatentLength(best!, _options.CodebookSize);
+        var selectedBest = best ?? throw new InvalidOperationException("No autoregressive candidate was generated.");
+        var latents = autoregressive.Latents(text, selectedBest, condition);
+        int latentLength = TortoiseCandidateTail.LatentLength(selectedBest, _options.CodebookSize);
         latents = Engine.TensorSlice(latents, new[] { 0, 0 }, new[] { Math.Max(1, latentLength), _options.LLMDim });
         var diffusionReference = PrefixOrPad(referenceAt24Khz, _options.DiffusionConditioningSamples);
-        var mel = _diffusion!.Sample(latents, DiffusionMel(diffusionReference), random);
-        return _univNet!.Generate(mel, random);
+        var mel = diffusion.Sample(latents, DiffusionMel(diffusionReference), random);
+        return univNet.Generate(mel, random);
     }
 
     private int[] SpeechIds(TtsTrainingSample<T> sample)
@@ -375,11 +389,12 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> Conditioning(TtsTrainingSample<T> sample)
     {
+        var autoregressive = _autoregressive ?? throw new InvalidOperationException("Autoregressive prior is not initialized.");
         var audio = sample.Audio ?? throw new ArgumentException("TorToiSe training requires Audio.", nameof(sample));
         var reference = sample.SpeakerReference ?? audio;
         using var _ = new NoGradScope<T>();
         var reference22 = Resample(reference, _options.SampleRate, _options.TokenizerSampleRate);
-        return _autoregressive!.Conditioning(AutoregressiveMel(PrefixOrPad(reference22, _options.ConditioningSamples)), false,
+        return autoregressive.Conditioning(AutoregressiveMel(PrefixOrPad(reference22, _options.ConditioningSamples)), false,
             AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
     }
 
@@ -389,42 +404,49 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_options.TrainingComponent == TortoiseTrainingComponent.UnivNet)
         {
             EnsureVocoderTraining();
+            var vocoderTraining = _vocoderTraining ?? throw new InvalidOperationException("Vocoder training is not initialized.");
             var generated = UnivNetVocoder.Generate(DiffusionMel(audio), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
-            return _vocoderTraining!.Generator(audio, generated, _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps);
+            return vocoderTraining.Generator(audio, generated, _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps);
         }
         int[] text = TextIds(sample.Tokens);
         var reference = sample.SpeakerReference ?? audio;
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17);
 
         if (_options.TrainingComponent == TortoiseTrainingComponent.Clvp)
-            return _clvp!.ContrastiveLoss(text, speechIds ?? SpeechIds(sample), random);
+        {
+            var clvp = _clvp ?? throw new InvalidOperationException("CLVP is not initialized.");
+            return clvp.ContrastiveLoss(text, speechIds ?? SpeechIds(sample), random);
+        }
 
         var mel22 = AutoregressiveMel(Resample(audio, _options.SampleRate, _options.TokenizerSampleRate));
         if (_options.TrainingComponent == TortoiseTrainingComponent.SpeechTokenizer)
         {
-            var reconstruction = _tokenizer!.Reconstruct(mel22);
+            var tokenizer = _tokenizer ?? throw new InvalidOperationException("Speech tokenizer is not initialized.");
+            var reconstruction = tokenizer.Reconstruct(mel22);
             int frames = Math.Min(mel22.Shape[0], reconstruction.Shape[0]);
             var target = Engine.TensorSlice(mel22, new[] { 0, 0 }, new[] { frames, mel22.Shape[1] });
             var predicted = Engine.TensorSlice(reconstruction, new[] { 0, 0 }, new[] { frames, reconstruction.Shape[1] });
             var loss = TortoiseOps<T>.Mse(Engine, predicted, target);
-            if (_tokenizer.Quantizer.CommitmentLoss is not null)
-                loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(_tokenizer.Quantizer.CommitmentLoss,
+            if (tokenizer.Quantizer.CommitmentLoss is not null)
+                loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(tokenizer.Quantizer.CommitmentLoss,
                     TortoiseOps<T>.NumOps.FromDouble(_options.TokenizerCommitmentWeight)));
             return loss;
         }
 
+        var autoregressive = _autoregressive ?? throw new InvalidOperationException("Autoregressive prior is not initialized.");
         condition ??= Conditioning(sample);
         int[] speech = speechIds ?? SpeechIds(sample);
         if (_options.TrainingComponent == TortoiseTrainingComponent.Autoregressive)
-            return _autoregressive!.Loss(text, speech, condition, true, random);
+            return autoregressive.Loss(text, speech, condition, true, random);
 
         if (_options.TrainingComponent == TortoiseTrainingComponent.Diffusion)
         {
+            var diffusion = _diffusion ?? throw new InvalidOperationException("Diffusion decoder is not initialized.");
             Tensor<T> latents;
-            using (new NoGradScope<T>()) latents = _autoregressive!.Latents(text, speech, condition);
+            using (new NoGradScope<T>()) latents = autoregressive.Latents(text, speech, condition);
             var target = DiffusionMel(audio);
             var speaker = DiffusionMel(PrefixOrPad(reference, _options.DiffusionConditioningSamples));
-            return _diffusion!.TrainingLoss(target, latents, speaker, random);
+            return diffusion.TrainingLoss(target, latents, speaker, random);
         }
 
         throw new InvalidOperationException("Unknown TorToiSe training component.");
@@ -507,7 +529,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.LLMDim;
-        if (!string.IsNullOrWhiteSpace(_options.TextTokenizerPath)) LoadTextTokenizer(_options.TextTokenizerPath!);
+        if (_options.TextTokenizerPath is { Length: > 0 } tokenizerPath && !string.IsNullOrWhiteSpace(tokenizerPath))
+            LoadTextTokenizer(tokenizerPath);
     }
 
     private static void ValidateOptions(TortoiseTTSOptions options)
@@ -520,6 +543,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentException("The autoregressive width must be divisible by its attention heads.");
         if (options.ClvpDim <= 0 || options.ClvpHeads <= 0 || options.ClvpDim % options.ClvpHeads != 0)
             throw new ArgumentException("The CLVP width must be divisible by its attention heads.");
+        if (options.ClvpTextLength <= 0 || options.ClvpSpeechLength <= 0)
+            throw new ArgumentException("CLVP maximum text and speech sequence lengths must be positive.");
         if (options.DiffusionDim <= 0 || options.DiffusionHeads <= 0 || options.DiffusionDim % options.DiffusionHeads != 0)
             throw new ArgumentException("The diffusion width must be divisible by its attention heads.");
         if (options.TokenizerCompression != 4)

@@ -96,7 +96,9 @@ public partial class FireRedTTS<T>
         var mel = FlowMel(audio, _options.SampleRate);
         int frames = mel.Shape[0] - mel.Shape[0] % MelCodec.Downsampling;
         if (frames < MelCodec.Downsampling) throw new ArgumentException("The recording is shorter than one codec frame.", nameof(sample));
-        return (Engine.TensorNarrow(mel, 0, 0, frames), SpeakerOf(SpeakerRecording(sample)));
+        var narrowed = Engine.TensorNarrow(mel, 0, 0, frames);
+        var eagerMel = new Tensor<T>(narrowed.Shape.ToArray(), narrowed.ToVector());
+        return (eagerMel, SpeakerOf(SpeakerRecording(sample)));
     }
 
     // The codec's generator loss: L1 mel reconstruction, the commitment loss and, with window starts, the LSGAN loss of

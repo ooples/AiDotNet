@@ -13,6 +13,7 @@ public partial class DiTToTTS<T>
     private bool _codecDiscriminatorTurn;
     private bool IsCodecStage => CurrentStage is DiTToTrainingStage.MelVaePretraining or DiTToTrainingStage.MelVaeSemanticFinetuning;
     internal DiTToCodecTrainer<T>? CodecTrainer => _codecTrainer;
+    internal int CodecGeneratorForwardCount { get; private set; }
 
     private void EnsureCodecTraining()
     {
@@ -40,26 +41,29 @@ public partial class DiTToTTS<T>
     public void LoadCodecSemanticDecoder(string checkpoint)
     {
         ThrowIfDisposed(); RequirePaperModel(); EnsureCodecTraining();
-        if (_codecTrainer!.SemanticDecoder is null)
+        var codecTrainer = _codecTrainer ?? throw new InvalidOperationException("DiTTo codec trainer is not initialized.");
+        if (codecTrainer.SemanticDecoder is null)
         {
-            _codecTrainer.InitializeSemanticDecoder(_options.LatentDim,
+            codecTrainer.InitializeSemanticDecoder(_options.LatentDim,
                 AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 111));
-            Layers.AddRange(_codecTrainer.ProjectionLayers); Layers.AddRange(_codecTrainer.DecoderLayers);
-            Freeze(_codecTrainer.DecoderLayers);
+            Layers.AddRange(codecTrainer.ProjectionLayers); Layers.AddRange(codecTrainer.DecoderLayers);
+            Freeze(codecTrainer.DecoderLayers);
         }
         EnsureLayerRandomSeedsWired();
+        var semanticDecoder = codecTrainer.SemanticDecoder ?? throw new InvalidOperationException("DiTTo semantic decoder is not initialized.");
         using (var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(checkpoint, strictAxes: true))
-            _codecTrainer.SemanticDecoder!.LoadHuggingFaceWeights(file);
-        _codecTrainer.DecoderWeightsLoaded = true;
+            semanticDecoder.LoadHuggingFaceWeights(file);
+        codecTrainer.DecoderWeightsLoaded = true;
     }
 
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!IsCodecStage) return parameters;
         EnsureCodecTraining();
-        IEnumerable<LayerBase<T>> selectedLayers = _codecDiscriminatorTurn ? _codecTrainer!.Critics.Layers : _codecLayers;
+        var codecTrainer = _codecTrainer ?? throw new InvalidOperationException("DiTTo codec trainer is not initialized.");
+        IEnumerable<LayerBase<T>> selectedLayers = _codecDiscriminatorTurn ? codecTrainer.Critics.Layers : _codecLayers;
         if (!_codecDiscriminatorTurn && CurrentStage == DiTToTrainingStage.MelVaeSemanticFinetuning)
-            selectedLayers = selectedLayers.Concat(_codecTrainer!.ProjectionLayers);
+            selectedLayers = selectedLayers.Concat(codecTrainer.ProjectionLayers);
         var selected = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(selectedLayers.Cast<ILayer<T>>().ToList()),
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         return parameters.Where(selected.Contains).ToList();
@@ -68,7 +72,7 @@ public partial class DiTToTTS<T>
     private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Random random)
     {
         var (target, starts) = CodecStep(sample, random);
-        return CodecObjective(sample, target, starts);
+        return CodecObjective(sample, target, starts, retainGeneration: false);
     }
 
     // The step's mel and its critics' crop starts: drawn once, on the host, before any objective runs, so a compiled
@@ -86,23 +90,27 @@ public partial class DiTToTTS<T>
         return (target, starts);
     }
 
-    // The Mel-VAE's reconstruction of target through the straight-through quantizer.
-    private (Tensor<T> Generated, Tensor<T> Commitment, Tensor<T> Variational) CodecReconstruction(Tensor<T> target)
+    private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Tensor<T> target, int[] starts, bool retainGeneration)
     {
-        var quantized = MelVae!.Quantizer.TrainingForward(MelVae.Encode(target));
-        return (MelVae.Decode(quantized.Quantized, quantize: false), quantized.CommitmentLoss, quantized.VariationalLoss);
-    }
-
-    private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Tensor<T> target, int[] starts)
-    {
-        var latents = MelVae!.Encode(target);
-        var quantized = MelVae.Quantizer.TrainingForward(latents);
-        var generated = MelVae.Decode(quantized.Quantized, quantize: false);
-        var loss = _codecTrainer!.Generator(target, generated, quantized.CommitmentLoss, quantized.VariationalLoss, starts);
+        var melVae = MelVae ?? throw new InvalidOperationException("DiTTo Mel-VAE is not initialized.");
+        var codecTrainer = _codecTrainer ?? throw new InvalidOperationException("DiTTo codec trainer is not initialized.");
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsProbe && !Training.CompiledStepRandom<T>.InNonStepForward)
+        {
+            CodecGeneratorForwardCount++;
+        }
+        var latents = melVae.Encode(target);
+        var quantized = melVae.Quantizer.TrainingForward(latents);
+        var generated = melVae.Decode(quantized.Quantized, quantize: false);
+        if (retainGeneration && GradientRecording.IsRecording<T>())
+        {
+            GradientRecording.RetainOutput("ditto-codec-generation", Engine.StopGradient(generated));
+        }
+        var loss = codecTrainer.Generator(target, generated, quantized.CommitmentLoss, quantized.VariationalLoss, starts);
         if (CurrentStage == DiTToTrainingStage.MelVaeSemanticFinetuning)
         {
-            if (string.IsNullOrWhiteSpace(sample.Text)) throw new ArgumentException("Semantic codec finetuning requires the transcript.", nameof(sample));
-            loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(_codecTrainer.SemanticLoss(latents, sample.Text!),
+            string? text = sample.Text;
+            if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Semantic codec finetuning requires the transcript.", nameof(sample));
+            loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(codecTrainer.SemanticLoss(latents, text),
                 Ops.FromDouble(_options.CodecTraining.SemanticWeight)));
         }
         return loss;
@@ -111,22 +119,44 @@ public partial class DiTToTTS<T>
     private T TrainCodec(TtsTrainingSample<T> sample)
     {
         var (target, starts) = CodecStep(sample, _trainingRandom);
-        // The critics' update scores the reconstruction the generator update starts from. It is computed here,
-        // without gradients, before that update: a compiled plan does not run the objective with real values, so the
-        // objective cannot hand its own reconstruction out. The Mel-VAE forward is deterministic, so this is the
-        // value the generator objective computes.
-        Tensor<T> generation;
-        using (new NoGradScope<T>())
-            generation = CodecReconstruction(target).Generated.Clone();
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-            (_, _) => CodecObjective(sample, target, starts), _codecGeneratorOptimizer!);
-        _codecDiscriminatorTurn = true;
+        var codecTrainer = _codecTrainer ?? throw new InvalidOperationException("DiTTo codec trainer is not initialized.");
+        var generatorOptimizer = _codecGeneratorOptimizer ?? throw new InvalidOperationException("DiTTo codec generator optimizer is not initialized.");
+        var discriminatorOptimizer = _codecDiscriminatorOptimizer ?? throw new InvalidOperationException("DiTTo codec discriminator optimizer is not initialized.");
+        Tensor<T>? generation = null;
+        T loss;
+        using (var outputs = RetainedOutputCapture<T>.Begin())
+        {
+            loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
+                (_, _) => CodecObjective(sample, target, starts, retainGeneration: true), generatorOptimizer);
+            if (TryCompleteRetainedOutputs(outputs))
+            {
+                generation = outputs.Get("ditto-codec-generation");
+            }
+        }
+
+        if (generation is not null)
+        {
+            _codecDiscriminatorTurn = true;
+            try
+            {
+                TrainWithCustomObjective(sample.Tokens, sample.Tokens,
+                    (_, _) => codecTrainer.Discriminator(target, generation, starts), discriminatorOptimizer);
+            }
+            finally { _codecDiscriminatorTurn = false; }
+        }
+        return loss;
+    }
+
+    private static bool TryCompleteRetainedOutputs(RetainedOutputCapture<T> outputs)
+    {
         try
         {
-            TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-                (_, _) => _codecTrainer!.Discriminator(target, generation, starts), _codecDiscriminatorOptimizer!);
+            outputs.Complete();
+            return true;
         }
-        finally { _codecDiscriminatorTurn = false; }
-        return loss;
+        catch (InvalidOperationException ex) when (ex.Message == "No successful training step published retained outputs.")
+        {
+            return false;
+        }
     }
 }

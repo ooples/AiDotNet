@@ -271,7 +271,9 @@ public partial class SpiritLM<T>
         TrainWithCustomObjective(real, real, (_, _) =>
         {
             Tensor<T> generated;
-            using (new NoGradScope<T>()) generated = Generate().Waveform;
+            using (new NoGradScope<T>())
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                generated = Generate().Waveform;
             var onReal = discriminators.Forward(real);
             var onFake = discriminators.Forward(generated);
             Tensor<T>? total = null;
@@ -290,7 +292,9 @@ public partial class SpiritLM<T>
             var (generated, durationLoss) = Generate();
             var onFake = discriminators.Forward(generated);
             List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal;
-            using (new NoGradScope<T>()) onReal = discriminators.Forward(real);
+            using (new NoGradScope<T>())
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                onReal = discriminators.Forward(real);
             Tensor<T>? total = null;
             void Add(Tensor<T> term) => total = total is null ? term : Engine.TensorAdd(total, term);
             for (int k = 0; k < onFake.Count; k++)
@@ -301,7 +305,9 @@ public partial class SpiritLM<T>
                     Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(onReal[k].Features[l], onFake[k].Features[l]))), Ops.FromDouble(2.0)));
             }
             Tensor<T> realMel;
-            using (new NoGradScope<T>()) realMel = mel.Forward(real);
+            using (new NoGradScope<T>())
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                realMel = mel.Forward(real);
             Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(mel.Forward(generated), realMel))), Ops.FromDouble(45.0)));
             if (durationLoss is not null) Add(durationLoss);
             return total!;

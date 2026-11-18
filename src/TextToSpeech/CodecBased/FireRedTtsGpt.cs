@@ -187,7 +187,7 @@ internal sealed class FireRedTtsGpt<T>
         var batch = _engine.TensorTile(_engine.Reshape(first, new[] { 1, promptLength + 1, d }), new[] { n, 1, 1 });
         var cache = new IndexTtsGpt2Cache<T>();
         var hidden = Gpt.Forward(batch, cache);                                                           // [n, P + 1, d]
-        var last = _engine.Reshape(_engine.TensorNarrow(hidden, 1, promptLength, 1), new[] { n, d });
+        var last = _engine.TensorSliceAxis(hidden, 1, promptLength);
 
         var sequences = Enumerable.Range(0, n).Select(_ => new List<int>()).ToList();
         var finished = new bool[n];

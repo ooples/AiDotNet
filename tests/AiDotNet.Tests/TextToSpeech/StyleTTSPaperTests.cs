@@ -156,11 +156,13 @@ public class StyleTTSPaperTests
             for (int j = 0; j < expected[0].Length; j++) Assert.Equal(expected[i][j], (int)path[i, j]);
     }
 
-    private static StyleTTS<double> Small(StyleTtsTrainingStage stage, int tmaStart) => new(Architecture(), new StyleTTSOptions
+    private static StyleTTS<double> Small(StyleTtsTrainingStage stage, int tmaStart, int? seed = null, double r1Weight = 1.0) => new(
+        seed is null ? Architecture() : new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1) { RandomSeed = seed }, new StyleTTSOptions
     {
         HiddenDim = 16, StyleDim = 8, TextLayers = 2, StyleEncoderDim = 4, MaxConvDim = 16, ResidualDim = 8, AlignerHidden = 16,
         AlignerTokenEmbedding = 8, AlignerConvLayers = 1, PitchExtractorChannels = new[] { 4, 8, 8, 8 }, PitchExtractorLstm = 8,
-        TmaStartStep = tmaStart,
+        TmaStartStep = tmaStart, R1Weight = r1Weight,
     }) { CurrentStage = stage };
 
     private static TtsTrainingSample<double> Utterance()
@@ -215,6 +217,55 @@ public class StyleTTSPaperTests
         model.Train(sample);
         Assert.True(Changed(aligner, model.AlignerLayers), "The aligner did not train once its objectives started.");
         Assert.False(Changed(predictor, model.PredictorLayers), "The predictors trained in the reconstruction stage.");
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task ReconstructionStage_CompiledSteps_MatchTheEagerTape_WithTheR1Penalty()
+    {
+        await Task.Yield();
+        // The R1 penalty differentiates the discriminator's input on a nested tape; in a compiled plan it is one node
+        // that recomputes its value and its weight gradient from each replay's input. Three compiled steps (the later
+        // ones replays) must move the discriminator and the generator as the eager tape does.
+        var sample = Utterance();
+        List<double[]> Run(bool compiled, double r1Weight = 1.0)
+        {
+            var original = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            try
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                    new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = compiled });
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+                // A seeded architecture, so both runs start from the same weights.
+                using var model = Small(StyleTtsTrainingStage.Reconstruction, tmaStart: 100, seed: 11, r1Weight: r1Weight);
+                for (int i = 0; i < 3; i++) model.Train(sample);
+                return Snapshot(model.DiscriminatorLayers.Concat(model.DecoderLayers));
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(original);
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            }
+        }
+        static double MaxDifference(List<double[]> a, List<double[]> b)
+        {
+            Assert.Equal(a.Count, b.Count);
+            double max = 0;
+            for (int i = 0; i < a.Count; i++)
+            {
+                Assert.Equal(a[i].Length, b[i].Length);
+                for (int j = 0; j < a[i].Length; j++) max = Math.Max(max, Math.Abs(a[i][j] - b[i][j]));
+            }
+            return max;
+        }
+        var eager = Run(compiled: false);
+        var fused = Run(compiled: true);
+        var withoutR1 = Run(compiled: false, r1Weight: 0);
+        // The compiled run sums in a different order than the eager tape (~2e-8 apart after three steps); the penalty moves
+        // the weights by ~3e-4. A plan that dropped, mis-scaled or re-iterated the penalty's spectral norms (a second
+        // power iteration in its backward put the run 2e-4 away) lands a large fraction of that effect away.
+        double effect = MaxDifference(eager, withoutR1), divergence = MaxDifference(eager, fused);
+        Assert.True(effect > 1e-4, $"The R1 penalty barely moved the weights ({effect:E3}); the comparison would be vacuous.");
+        Assert.True(divergence < 1e-3 * effect, $"Compiled training diverged from the eager tape by {divergence:E3} (R1 effect {effect:E3}).");
     }
 
     [Fact(Timeout = 300000)]

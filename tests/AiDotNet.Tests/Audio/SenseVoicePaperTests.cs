@@ -91,5 +91,7 @@ public class SenseVoicePaperTests
         double after = objective.EvaluateTrainingObjective(audio, target);
         Assert.True(after < 0.5 * before, $"loss {before} -> {after}");
         Assert.Equal(new[] { 9, 10, 11, 12 }, model.RichTokenIds(audio));
+        Assert.True(model.CustomFusedStepCount > 0, "Expected SenseVoice training steps to replay on the fused compiled path.");
+        Assert.Equal(0, model.CustomOutsidePlanStepCount);
     }
 }

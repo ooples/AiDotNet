@@ -160,7 +160,9 @@ public class SpiritLmTaskTests
         Assert.NotNull(text[0].Text);
         var spoken = model.Generate(new[] { SpiritLmContent<double>.FromText("hello there") }, SpiritLmModality.Speech);
         Assert.Single(spoken);
-        Assert.All(spoken[0].Audio!.ToArray(), v => Assert.False(double.IsNaN(v)));
+        var spokenAudio = spoken[0].Audio;
+        Assert.NotNull(spokenAudio);
+        Assert.All(spokenAudio.ToArray(), v => Assert.False(double.IsNaN(v)));
         var any = model.Generate(new[] { speech }, SpiritLmModality.Arbitrary);
         Assert.All(any, c => Assert.True(c.IsSpeech || c.Text is not null));
         var synthesized = model.Synthesize("hello there");
@@ -200,7 +202,7 @@ public class SpiritLmTaskTests
         model.FitStyleCentroids(recordings.Concat(new[] { SpiritLmFixture.Tones<double>(2.0, 200, 520) }));
         var (_, _, styles) = model.SpeechUnits(recordings[0]);
         Assert.NotNull(styles);
-        Assert.Equal(2, styles!.Length);
+        Assert.Equal(2, styles.Length);
         Assert.All(styles, s => Assert.InRange(s, 0, 3));
         // The fitted centroids are model state: a clone tokenizes alike.
         var clone = (SpiritLM<double>)model.Clone();
@@ -240,5 +242,47 @@ public class SpiritLmTaskTests
         Assert.Throws<ArgumentException>(() => model.Speak("[Hu1][Hu2]"));
         var text = model.Generate(new[] { SpiritLmContent<double>.FromSpeech(audio) }, SpiritLmModality.Text);
         Assert.NotNull(text[0].Text);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PitchQuantizer_HasZeroStaticDictionaries_AndFailedStepOrDisposeCleansUpWithoutMutatingCodebook()
+    {
+        await Task.Yield();
+        var staticDictionaries = typeof(SpiritLmPitchQuantizer<double>)
+            .GetFields(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            .Where(f => f.FieldType.Name.Contains("Dictionary", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Empty(staticDictionaries);
+
+        var model = SpiritLmFixture.Tts<double>(SpiritLmFixture.Options(expressive: true));
+        var speech = SpiritLmFixture.Tones<double>(1.0);
+        double accepted = Convert.ToDouble(model.TrainPitchQuantizer(speech));
+        Assert.False(double.IsNaN(accepted) || double.IsInfinity(accepted));
+
+        var snapshotAfterAccepted = (double[,])model.PitchQuantizer.Codebook.Clone();
+
+        // Corrupt the pitch decoder weight so the forward produces NaN after retaining VQ latents/codes.
+        var decoderOut = model.PitchQuantizer.DecoderOut;
+        var saved = decoderOut.GetParameters().ToArray();
+        var bad = decoderOut.GetParameters().ToArray();
+        bad[0] = double.NaN;
+        decoderOut.SetParameters(new Vector<double>(bad));
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => model.TrainPitchQuantizer(speech));
+        }
+        finally
+        {
+            decoderOut.SetParameters(new Vector<double>(saved));
+        }
+
+        // Failed step must NOT mutate the pitch VQ codebook, and subsequent step + Dispose must behave cleanly.
+        Assert.Equal(snapshotAfterAccepted.Cast<double>().ToArray(), model.PitchQuantizer.Codebook.Cast<double>().ToArray());
+
+        double resumed = Convert.ToDouble(model.TrainPitchQuantizer(speech));
+        Assert.False(double.IsNaN(resumed) || double.IsInfinity(resumed));
+
+        model.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => model.TrainPitchQuantizer(speech));
     }
 }
