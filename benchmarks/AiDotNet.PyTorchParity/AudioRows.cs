@@ -1,6 +1,7 @@
 using AiDotNet.Audio.Classification;
 using AiDotNet.Audio.SpeechRecognition;
 using AiDotNet.Enums;
+using AiDotNet.PyTorchParity;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
