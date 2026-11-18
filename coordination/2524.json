@@ -3,10 +3,10 @@
   "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
   "branch": "codex/2524-ci-coordination",
   "pr_branch": "perf/elementwise-sweep-combined-v1",
-  "current_pr_head": "6346b725623e4fa383faabc4f96c1dcbfb145139",
+  "current_pr_head": "a826446bc36bdf0d28919bef291c99ace6f4e958",
   "rules": [
     "No PR yet; no merge or force push.",
-    "Run44188787979 at6346b725 is fully terminal. User requested Codex root take over category recovery and consume published Tensors0.151.2. Root coordinates next verified PR batch; no independent contributor PR pushes or force pushes. After that push, wait for the entire AiDotNet cycle before next source push. No public validation NuGet release.",
+    "ACTIVE newPR2524fullCI ata826446bc36bdf0d28919bef291c99ace6f4e958. UserapprovedDependency+CIDiagnosticsfirst; pushedstableTensors0.151.2+failedprimary/paperreporting+alternateauthonly. No productcategoryfixes included. DO NOTcancelorpushPRsourceagainuntilENTIREcycleterminal; continueexclusiveverifiedcategoryworkonbranches. Rootsingleintegrationwriter; no forcepush/publicvalidationrelease.",
     "Claim a bounded file/task scope before editing; use separate worktrees and contributor branches.",
     "Do not weaken assertions, replay guards, lint rules or shard checks; no scalar-kernel exemptions or legacy adapters.",
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
@@ -1172,7 +1172,7 @@
     {
       "owner": "Antigravity Lead + r2-fixer-1 + tts-lead (run 44188787979 failing shard repairs)",
       "repository": "ooples/AiDotNet",
-      "status": "ACTIVE — final consolidated build & TRX verification running against Tensors 0.151.2 on NVMe before publishing contributor branch origin/antigravity/2524-verified-batch6 for Codex root category integration (no direct PR branch push per coordinator rule; Claude-claimed TTS files excluded for zero overlap)",
+      "status": "ACTIVE \u2014 final consolidated build & TRX verification running against Tensors 0.151.2 on NVMe before publishing contributor branch origin/antigravity/2524-verified-batch6 for Codex root category integration (no direct PR branch push per coordinator rule; Claude-claimed TTS files excluded for zero overlap)",
       "shared_boundary_coverage": [
         "InputContract.ValidateForGraph + LayerBase.Forward: defers IntegerIndices/BooleanMask/AdditiveMask/Custom value-domain host reads into a signable ValidateInputContract replay node under GraphMode (unblocks DecisionTransformer 25 cases, MedicalASR, CodeSwitchingASR, etc.)",
         "MultiHeadAttentionLayer + GroupedQueryAttentionLayer + CrossAttentionLayer + AttentionLayer + RTDETRHybridEncoder + SerializedPatchAttention: routes GraphMode training traces away from CpuEngine.FlashAttention (which lacks a GraphMode training recorder) to explicit/SDPA recorded primitives",
@@ -1984,7 +1984,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T03:05:49.975915+00:00",
+  "updated_utc": "2026-11-18T03:43:26.172724+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2206,7 +2206,7 @@
       "oomCases": 58
     },
     "strategy": "One owner per root-cause family, all matching cases in a bounded category cohort; shared/base fixes where valid; preserve existing active exact contributor claims. Root reviews full diffs and integrates independently complete batches. Do not count skipped/missing cases as fixes.",
-    "first_batch": "Published Tensors0.151.2 central pin + matching preflight; CI failure diagnostics/alternate authorization/zero-filter routing after focused fixture verification. Existing Adam/codec/HiFT batches remain separate until runtime-verified. Ask user batching preference via interactive question; preparation continues.",
+    "first_batch": "PUSHED a826446bc3. Packagepreflight44226797913SUCCESS,40feedfixturespassed;159/160failoverproofcasesfinal160passed+rootActionswrapperexit0, actualprimary/paperdiagnosticpublicCLIfixturesandregressionassertionspassed,256workflowconditionsand98pwshASTchecks. Hardgatesunchanged. FullnewCIawaitingrunIDs; no globalreadinessclaim.",
     "agents": [
       {
         "owner": "Codex/pinn_review",
@@ -2269,6 +2269,11 @@
       "options": 26,
       "other_contracts_and_intermittent": 6,
       "total": 1667
+    },
+    "held_product_branch": {
+      "branch": "codex/2524-post1766-ci",
+      "head": "acf3c0c4a0",
+      "status": "NotonPR: rootreviewedAdam37originaltests36pass1stridedbefore2b476correction; TLoRAcanonical4filebatchacf3 integrated; exclusiveartifact_feednewcorebuild+originalcohortsverificationrunning. DoNOTpublishasverifieduntilactualTRXs."
     }
   }
 }
