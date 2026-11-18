@@ -1416,10 +1416,12 @@
       "repository": "ooples/AiDotNet.Tensors",
       "files": [
         "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs (ONLY TensorNanToNum method)",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NanToNumReplayTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NanToNumReplayTests.cs",
+        ".github/workflows/coordination-package.yml (only additive NanToNum16 provenance)",
+        ".github/workflows/gpu-cuda-selfhosted.yml (only same CPU cohort acceptance)"
       ],
       "scope": "Current a826 Unassigned01 artifact14407309260 original HalfLayoutCoordinates test fails typed Half to IConvertible in TensorNanToNum. Repair this direct dtype/default finite-endpoint contract with independent value/view/backward/replay tests; check original downstream Round/Clamp pipeline. No PNorm/SVD/GroupNorm/other owner45 hunks, no blanket scan or guard weakening.",
-      "status": "CLAIMED before edits. Agent prepares full proposed diff for root review before implementation/build. Existing qualified d1aff artifact remains unchanged; next artifact cycle separate."
+      "status": "COMPLETE local semanticd64a4e54, normalbuild0errors, 21native+1originalconsumer passed. Root-reviewed additive workflow8a56 pushed to existing native validation branch; producer44265999057 active,335CPU/all5TFMs+CUDA29 obligations."
     },
     {
       "owner": "Codex/artifact_feed qualified temporary consumer feed",
@@ -1431,7 +1433,7 @@
         ".github/scripts/Test-TensorsValidationFeed.ps1"
       ],
       "scope": "Pin qualified d1aff artifact and validate all319CPU identities including normalization20 and FlashAttention41. Preserve prior union112, framework/hash/trust/token/fork guards and default stable-version behavior. Existing full matrix bootstrap wiring unchanged.",
-      "status": "COMPLETE local3c7b2c0c5f20a5b353f6743604db5e1db6389284; root-reviewed initial complete diff;66fixtures and actual producer artifact validation passed, no production rebuild. Root final integration pending; no PR push during active a826 cycle."
+      "status": "COMPLETE firstpin3c7b2c0c integrated893161b279 and published on category-rollout;66fixtures+actual319CPUartifact validation passed. Draft335cohort extension remains isolated and unqualified pending exact new producer/CUDA artifact."
     }
   ],
   "codex_assignments": {
@@ -2124,7 +2126,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T08:00:00Z",
+  "updated_utc": "2026-11-18T08:26:43.286467+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2330,7 +2332,16 @@
       "owner-tortoise-clvp-text-length-option: Claude-owned option finding; coordinate with existing completed-overlap reconciliation",
       "Pending native BatchNorm/GroupNorm/LayerNorm proposals require exact separate claims and review, not silent heterogeneous-package inclusion"
     ],
-    "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness."
+    "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness.",
+    "published_reviewed_branch": {
+      "branch": "codex/2524-category-rollout",
+      "head": "893161b279474abb22679be345872c1a27b1ef2d",
+      "status": "Published qualified319CPU/29CUDA temporary artifact pin and one-line Chronos allowance retirement. Not globally green/PR-ready."
+    },
+    "pending_consumer_batch": {
+      "head": "11ab426b2094568dbd8f448bfd156899df722b2d",
+      "status": "Oute sampling scratch lifetime fix root reviewed, normal net10 analyzer build passed; original complete Oute cohort executing under unchanged11189MiB Workstation/serial cap. No result inferred yet."
+    }
   },
   "category_execution_plan": {
     "coordinator": "Codex root; user-directed takeover/category strategy",
@@ -2565,6 +2576,52 @@
       "firstReader": "TensorMultiply -> Tensor.ToVector/FlattenHelper -> ShortTimeFourierTransform.ForwardSingle lines267-268 -> Magnitude/Power -> MelSpectrogram.Forward -> ConformerAsrNetwork.Features -> Conformer.Logits/ForwardForTraining. This is before the encoder or SpecAugment.",
       "source": "src/Diffusion/Audio/ShortTimeFourierTransform.cs: engine.TensorMultiply(samples,broadcastWindow).ToVector() before host FFT",
       "requirements": "Preserve correct frontend model/input contracts, numerical spectrum/window semantics, replay of fresh samples and any existing differentiable consumers. Do not hide the failure through eager fallback, unconditional gradient stops, scalar exemptions, skipped tests or weakened checks. Review the complete shared category rather than editing each ASR model."
+    },
+    "current_cycle_final": {
+      "sourceHead": "a826446bc36bdf0d28919bef291c99ace6f4e958",
+      "run": 44232296552,
+      "status": "COMPLETE FAILURE; original cycle preserved until all jobs terminal.",
+      "workflowJobs": {
+        "total": 207,
+        "success": 117,
+        "failure": 82,
+        "skipped": 8
+      },
+      "testShards": {
+        "total": 187,
+        "standard": 167,
+        "paper": 20
+      },
+      "standardPrimary": {
+        "total": 94365,
+        "passed": 92056,
+        "failed": 1089,
+        "notExecuted": 1220
+      },
+      "paperPrimary": {
+        "total": 19136,
+        "passed": 11411,
+        "failed": 546,
+        "notExecuted": 7179
+      },
+      "invalidCoverage": [
+        "Missing TTS Paper Tests primary after runner shutdown",
+        "Old Recovery/Concurrency CPU shard selected zero cases"
+      ],
+      "oomCases": 53,
+      "testTimeouts": 1,
+      "retryOutcomesSeparate": {
+        "standardPassed": 208,
+        "standardFailed": 580
+      },
+      "regressionAnalysis": "Ran and uploaded diagnostic ledger14408747073; comparison correctly refused because exact master53c7 baseline run44008701642 is missing8 dispatched shard artifacts. Aggregate diagnostic report14409251194 succeeded; no certified verdict/baseline.",
+      "evidenceDirectory": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b",
+      "mixedTtsShutdown": "Read-only exact API/log investigation:21 xUnit FAIL records precede shutdown. Infra-only admission correctly refuses generic cancellation; no permissive fallback or source redesign."
+    },
+    "native_nantonum_validation": {
+      "head": "8a56ffa5ba707b57e54d38c91587e5d39c817d8e",
+      "producer": 44265999057,
+      "status": "IN_PROGRESS all5TFMs/335CPU then exact-artifact CUDA29. Semanticd64a4e54 locally21/21native+1/1unchangedconsumer passed; root reviewed complete source/tests/additive workflow diffs. No public release and no335consumerpin before qualification."
     }
   }
 }
