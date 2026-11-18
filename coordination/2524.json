@@ -2028,7 +2028,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T04:46:54.340065+00:00",
+  "updated_utc": "2026-11-18T04:52:59.779773+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2316,8 +2316,8 @@
     },
     "held_product_branch": {
       "branch": "codex/2524-post1766-ci",
-      "head": "acf3c0c4a0",
-      "status": "NotonPR: rootreviewedAdam37originaltests36pass1stridedbefore2b476correction; TLoRAcanonical4filebatchacf3 integrated; exclusiveartifact_feednewcorebuild+originalcohortsverificationrunning. DoNOTpublishasverifieduntilactualTRXs."
+      "head": "d99ee71312",
+      "status": "Local held consumer source; notPR-pushed. Normal analyzer-enabled corebuildpassed. Qualifiedcohorts Adam37/37 across35CPU+2GPU; codec/HiFT38/38 nofail/noskip onactualcorea0186b3... +published1512. TLoRAhelper20passes, model2nativeFA-blocked; newnativeproducer44240267128 active. StudentT75/76 (all31numerics pass,twooutliersfixed,actualbuilder21rowEPboundary stillopen); propernonlogconcaveEPdesignscreenunderway. DoNOTclaimcategory/fullCIcomplete."
     },
     "active_pr_runs": {
       "main": 44232296552,
@@ -2327,8 +2327,113 @@
     "next_verified_cohorts": {
       "Adam": "37actualoriginalcasespassed across35CPU+2GPU; source2b476heldnotonPR",
       "GP": "66current1512cases63pass3fail; standardsequentialEPscreen3datasetsconverges; rank1O(n3)draftrootreview",
-      "TLoRA": "20helperunitpasses; countduplicateownershiprootcausefound,aliasfixheld;2originalmodelfailuresnowtracednativeFA; newwholemodelcheckpoint/factorupdateunprovenuntilnativefix"
+      "TLoRA": "20helperunitpasses; countduplicateownershiprootcausefound,aliasfixheld;2originalmodelfailuresnowtracednativeFA; newwholemodelcheckpoint/factorupdateunprovenuntilnativefix",
+      "Codec_HiFT": "38passed0failed0skipped: SparkTTSPaper18,HiftReplay9,HiftReference5,CompiledStepRandomData6. Originalsource+signedlicensebootstrap, reusedcurrentproductioncorea0186b3... andpublished1512Tensors7ff6...; no productionrebuild. Evidence C:/Users/cheat/source/artifacts/codex2524/codec-hift-1512-results.json."
     },
-    "gpu_coverage_decision": "Userapproved explicit requiredGPU job ononlineRTX3080 withcurrentvalidnumericcontracts, replaceobsoleteplaceholders, removeemptyCPUentry withapprovedinventorychange. cuda_capture owns exactfiles andcontinuesactivecyclebackgroundmonitor."
+    "gpu_coverage_decision": "Userapproved explicit requiredGPU job ononlineRTX3080 withcurrentvalidnumericcontracts, replaceobsoleteplaceholders, removeemptyCPUentry withapprovedinventorychange. cuda_capture owns exactfiles andcontinuesactivecyclebackgroundmonitor.",
+    "partial_a826_observations": {
+      "is_final": false,
+      "head": "a826446bc36bdf0d28919bef291c99ace6f4e958",
+      "run": 44232296552,
+      "policy": "Currentcycleongoing; primaryfailuresretained, retriesnotcountedasnewcases, noPRpush/cancel. TheseobservationsaddNOsourceclaim; existingownerspleasecheckmatchingwholecohorts. NotExecuted!=pass.",
+      "artifacts": [
+        {
+          "artifact": 14398028422,
+          "shard": "shard-attempt-primary-5b0c9f47bf892f4fad716903cddae14b412244c7-Unit_10_Regularization_RL_RAG2-1",
+          "primary": {
+            "outcomes": {
+              "Failed": 28,
+              "NotExecuted": 9,
+              "Passed": 2060
+            },
+            "failedClasses": {
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DreamerPaperTests": 13,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DecisionTransformerPaperTests": 7,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.ModelBasedAndMultiAgentTrainingTests": 1,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.RLAgentOptionsHonoredTests": 4,
+              "AiDotNet.Tests.ReinforcementLearning.DecisionTransformerPaperTests": 2,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DreamerActorGradientPathTests": 1
+            }
+          },
+          "retry": {
+            "outcomes": {
+              "Failed": 28
+            },
+            "failedClasses": {
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DecisionTransformerPaperTests": 7,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DreamerPaperTests": 13,
+              "AiDotNet.Tests.ReinforcementLearning.DecisionTransformerPaperTests": 2,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.RLAgentOptionsHonoredTests": 4,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.ModelBasedAndMultiAgentTrainingTests": 1,
+              "AiDotNet.Tests.UnitTests.ReinforcementLearning.DreamerActorGradientPathTests": 1
+            }
+          },
+          "evidence": "C:\\Users\\cheat\\source\\artifacts\\codex2524\\head-a826446b\\artifact-14398028422-summary.json"
+        },
+        {
+          "artifact": 14399276002,
+          "shard": "shard-attempt-primary-5b0c9f47bf892f4fad716903cddae14b412244c7-Unit_13_Remaining_(ActiveLearning_Agents_CL_Physics_etc.)-1",
+          "primary": {
+            "outcomes": {
+              "Failed": 22,
+              "NotExecuted": 3,
+              "Passed": 7113
+            },
+            "failedClasses": {
+              "AiDotNet.Tests.UnitTests.VisionLanguage.MgieEditTrainingTests": 3,
+              "AiDotNet.Tests.UnitTests.ComputerVision.DetrSemanticTrainingModelTests": 8,
+              "AiDotNet.Tests.UnitTests.Training.FusedTrainingSessionStreamedWeightTests": 2,
+              "AiDotNet.Tests.UnitTests.SpeechRecognition.CodeSwitchingASRMechanismTests": 2,
+              "AiDotNet.Tests.UnitTests.Finance.A2cMaskedUpdateTests": 2,
+              "AiDotNet.Tests.UnitTests.SpeechRecognition.MedicalASRMechanismTests": 1,
+              "AiDotNet.Tests.UnitTests.VisionLanguage.GotOcr2BehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.VisionLanguage.Florence2BehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.Document.UdopBehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.Audio.GraFPrintPaperFidelityTests": 1
+            }
+          },
+          "retry": {
+            "outcomes": {
+              "Failed": 22,
+              "Passed": 2
+            },
+            "failedClasses": {
+              "AiDotNet.Tests.UnitTests.ComputerVision.DetrSemanticTrainingModelTests": 8,
+              "AiDotNet.Tests.UnitTests.VisionLanguage.Florence2BehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.Document.UdopBehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.Finance.A2cMaskedUpdateTests": 2,
+              "AiDotNet.Tests.UnitTests.Training.FusedTrainingSessionStreamedWeightTests": 2,
+              "AiDotNet.Tests.UnitTests.VisionLanguage.GotOcr2BehaviourTests": 1,
+              "AiDotNet.Tests.UnitTests.VisionLanguage.MgieEditTrainingTests": 3,
+              "AiDotNet.Tests.UnitTests.SpeechRecognition.CodeSwitchingASRMechanismTests": 2,
+              "AiDotNet.Tests.UnitTests.Audio.GraFPrintPaperFidelityTests": 1,
+              "AiDotNet.Tests.UnitTests.SpeechRecognition.MedicalASRMechanismTests": 1
+            }
+          },
+          "evidence": "C:\\Users\\cheat\\source\\artifacts\\codex2524\\head-a826446b\\artifact-14399276002-summary.json"
+        },
+        {
+          "artifact": 14399325726,
+          "shard": "paper-fidelity-results-pr-2",
+          "primary": {
+            "outcomes": {
+              "NotExecuted": 358,
+              "Passed": 488,
+              "Failed": 20
+            },
+            "failedClasses": {
+              "AiDotNet.Tests.ModelFamilyTests.Generated.FireRedASRLLMTests": 3,
+              "AiDotNet.Tests.ModelFamilyTests.Generated.OCTGANGeneratorTests": 13,
+              "AiDotNet.Tests.ModelFamilyTests.Generated.ShikraTests": 4
+            }
+          },
+          "retry": {
+            "outcomes": {},
+            "failedClasses": {}
+          },
+          "evidence": "C:\\Users\\cheat\\source\\artifacts\\codex2524\\head-a826446b\\artifact-14399325726-summary.json"
+        }
+      ]
+    }
   }
 }
