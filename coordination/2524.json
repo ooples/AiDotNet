@@ -1452,6 +1452,21 @@
       ],
       "scope": "Repair sole observed2599compatbuild compileerror CS0117 double.IsFinite unavailable onnet471. Use equivalent IsNaN/IsInfinity predicate with unchanged numeric tolerance/assertions. Run full existing CI compatibility build beforepush, noframework/check removal.",
       "status": "CLAIMED before edit. Mainnet10Build andinventory passed; compat134790100725 failed then workflowauto-cancelled. All2599workflows are terminal. Root previously validatednet10only; localcompatvalidation now required."
+    },
+    {
+      "owner": "Antigravity Lead (explicit user directive 2026-11-18T08:08-05:00)",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "Directory.Packages.props (pin published AiDotNet.Tensors 0.151.2 from nuget.org — user explicitly rejected temporary 0.151.3-coordination feed)",
+        "merge antigravity/2524-verified-category-fixes (734c800de4, 159 files)",
+        "src/Finance/Trading/Agents/FinancialA2CAgent.cs (remove Half AdamEpsilon 1e-5 override now that 9018365cd9 preserves FP32 Half tape state)",
+        "src/Training/CompiledTapeTrainingStep.cs (keep tape alive until PublishEager in TryDeclaredGraphBreak)",
+        "src/NeuralNetworks/Layers/FlashAttentionLayer.cs (GraphMode replay path on published 0.151.2)",
+        "src/NeuralNetworks/Layers/LayoutEmbeddingLayer.cs + PATEGANGenerator.cs + CopulaSynthGenerator.cs (Half-safe NanToNum on published 0.151.2)",
+        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/MmditReplayTests.cs (if not yet pushed by Codex before integration)"
+      ],
+      "scope": "User explicitly directed immediate push to PR #2524 pinned to published AiDotNet.Tensors 0.151.2 (NOT temporary -coordination package) with all shared/category fixes after full adversarial review + net10.0/net471 builds + 0.151.2 test verification. Hold conflicting 0.151.3-coordination pushes to perf/elementwise-sweep-combined-v1.",
+      "status": "CLAIMED IN PROGRESS"
     }
   ],
   "codex_assignments": {
