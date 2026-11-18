@@ -1362,6 +1362,16 @@
       "scope": "ONLY remove11 exact legacy-insensitive allowance keys provedSensitive incurrenta826 rawprimaryTRX: AudioGenModel::Channels; LSPIAgent::ConvergenceThreshold/MaxIterations; Ferret::ImageMean/ImageStd/MaxSequenceLength/VocabSize; Shikra::same4. Sevenothercurrentstale-sensitivekeys alreadyretired inheldb73. No model/harness assertion changes, new exemptions, skip/size/precision changes, otherownerfiles. Rootfull11keydiff review before onefocusedtest-onlycompile+entire82caseaffectedoptioncohort; deriveactualcounts and keep40existingdeclaredbaseline skips separate, notpassed.",
       "status": "CLAIMED BEFORE EDITS underexistinguser-approved allfailingcategories/fixedratchet scope. Readonly61summary snapshot cutoff2026-11-18T05:07:20.150Z matchedall18 exactprimaryTRXid/name/message/outcome. SameunderlyingSensitive assertionsretained; no productionbuild or PRpush.",
       "evidence": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b/active-baseline-reconciliation-20261118T050720Z.json"
+    },
+    {
+      "owner": "Codex/artifact_feed shared MMDiT replay category",
+      "files": [
+        "src/Diffusion/NoisePredictors/MMDiTNoisePredictor.cs",
+        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/MmditReplayTests.cs"
+      ],
+      "scope": "Repair the complete shared MMDiT tensor/replay path, including patch embedding, modulation/gates, and unpatchification, only after a bounded design and root review. Preserve mathematical layout, all trainable gradients, conditioning, parameter ownership, and existing assertions. No eager fallback, scalar exemptions, detached parameter snapshots, or other model files. Native FusedLinear recording is functioning in the measured representative.",
+      "status": "CLAIMED before implementation. One exact SenseFlow training case reproduced on held b73 core a0186... and published Tensors 0.151.2. A storage-free probe proved the first reader at projected.AsSpan().CopyTo in PatchifyAndEmbed, MMDiTNoisePredictor.cs lines588-592. Root also found related manual span/modulation/gate/unpatchification paths, so the design must address the shared category, not just one copy. Independent patch-layout, numeric/gradient, replay/rebind and affected consumer cohort qualification required. Native artifact/CUDA validation remains the agent priority.",
+      "evidence": "Z:/codex-builds/flashattention-replay/diffusion-reader-evidence/47372.first-chance.jsonl"
     }
   ],
   "codex_assignments": {
@@ -2047,7 +2057,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:12:30.604545+00:00",
+  "updated_utc": "2026-11-18T05:24:01.736625+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
