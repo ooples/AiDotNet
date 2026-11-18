@@ -40,12 +40,14 @@ public sealed class HiFiGanPrivateCpuBindingTests
                     var parameters = layer.GetParameters(); parameters[0] += .07f;
                     layer.SetParameters(parameters);
                 }
+                Array.Fill(result, 777f);
+                binding.Execute();
+                // Run the binding first so the reference cannot refresh a weight cache for it.
+                var actual = output4.ToArray();
                 using var expected = layer.Forward(input3);
                 cpu.TensorAddInPlace(expected, residual);
                 cpu.LeakyReLUInto(expected, expected, .1f);
-                Array.Fill(result, 777f);
-                binding.Execute();
-                Assert.Equal(expected.ToArray(), output4.ToArray());
+                Assert.Equal(expected.ToArray(), actual);
                 Assert.True(binding.Matches(input3, input4, output4, residual, true, .1f));
             }
         }
