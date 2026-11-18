@@ -418,7 +418,45 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         return ForwardCore(input, true, alpha);
     }
 
-    private Tensor<T> ForwardCore(Tensor<T> input, bool leakyAfterBias, T alpha)
+    /// <summary>Inference convolution followed by bias/residual addition and an optional separately owned activated carry.</summary>
+    internal Tensor<T> ForwardResidualInference(Tensor<T> input, Tensor<T> residual, T alpha,
+        bool writeActivation, out Tensor<T>? activated)
+    {
+        if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_RESIDUAL") == "0"
+            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsTrainingMode || IsInferringShapes
+            || Engine.Unwrap().GetType() != typeof(DirectGpuTensorEngine) || !ReferenceEquals(Engine, Engine.Unwrap())
+            || GradientTape<T>.Current is not null || GraphMode.IsActive
+            || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+            || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null)
+        {
+            var ordinary = Engine.TensorAdd(Forward(input), residual);
+            activated = writeActivation ? Engine.LeakyReLU(ordinary, alpha) : null;
+            return ordinary;
+        }
+        var ports = InputPorts;
+        if (ports.Count != 1 || ports[0].Source != TensorPortSource.External
+            || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous || ports[0].ShapeConstraint.IsConstrained)
+            BindInputContract(input.Shape.ToArray()).Validate(input);
+        var y = ForwardConvolution(input);
+        int batch = y.Shape[0], outTime = y.Shape[3];
+        if (_useBias && residual.Rank == 3 && residual.Shape[0] == batch
+            && residual.Shape[1] == _out && residual.Shape[2] == outTime)
+        {
+            var residual4 = Engine.Reshape(residual, new[] { batch, _out, 1, outTime });
+            if (((DirectGpuTensorEngine)Engine).TryChannelBiasResidualInference(y, _bias, residual4, alpha,
+                writeActivation, out var sum4, out var activated4))
+            {
+                activated = activated4 is not null ? Engine.Reshape(activated4, new[] { batch, _out, outTime }) : null;
+                return Engine.Reshape(sum4, new[] { batch, _out, outTime });
+            }
+        }
+        var biased = _useBias ? Engine.TensorChannelBiasAdd(y, _bias) : y;
+        var sum = Engine.TensorAdd(Engine.Reshape(biased, new[] { batch, _out, outTime }), residual);
+        activated = writeActivation ? Engine.LeakyReLU(sum, alpha) : null;
+        return sum;
+    }
+
+    private Tensor<T> ForwardConvolution(Tensor<T> input)
     {
         if (input.Rank != 3 || input.Shape[1] != _in)
             throw new ArgumentException($"Expected [batch, {_in}, time], got [{string.Join(", ", input.Shape)}].", nameof(input));
@@ -448,7 +486,13 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             y = GroupedConvolution.Forward(Engine, x4, kernel,
                 new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation }, _groups);
         }
-        int outTime = y.Shape[3];
+        return y;
+    }
+
+    private Tensor<T> ForwardCore(Tensor<T> input, bool leakyAfterBias, T alpha)
+    {
+        var y = ForwardConvolution(input);
+        int batch = y.Shape[0], outTime = y.Shape[3];
         if (leakyAfterBias && _useBias && ((DirectGpuTensorEngine)Engine).TryChannelBiasLeakyInference(y, _bias, alpha, out var activated))
             return Engine.Reshape(activated, new[] { batch, _out, outTime });
         // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.

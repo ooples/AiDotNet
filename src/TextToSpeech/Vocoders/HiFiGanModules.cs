@@ -242,22 +242,26 @@ internal sealed class HiFiGanGenerator<T>
             foreach (var (first, second) in _blocks[i])
             {
                 var h = stageInput;
+                Tensor<T>? nextActivatedResidual = null;
                 for (int n = 0; n < first.Count; n++)
                 {
                     var residual = h;
+                    var carriedActivation = nextActivatedResidual;
+                    nextActivatedResidual = null;
                     using (var pair = TensorScope.Begin())
                     {
-                        var activatedResidual = LeakyRelu(residual, Slope);
-                        Tensor<T> t;
+                        var activatedResidual = carriedActivation ?? LeakyRelu(residual, Slope);
                         if (_resblockType1)
                         {
                             var activatedFirst = first[n].ForwardLeakyInference(activatedResidual, leakySlope);
-                            t = second[n].Forward(activatedFirst);
+                            h = second[n].ForwardResidualInference(activatedFirst, residual, leakySlope,
+                                n + 1 < first.Count, out nextActivatedResidual);
                         }
-                        else t = first[n].Forward(activatedResidual);
-                        h = _engine.TensorAdd(t, residual);
+                        else h = _engine.TensorAdd(first[n].Forward(activatedResidual), residual);
                         pair.Keep(h);
+                        if (nextActivatedResidual is not null) pair.Keep(nextActivatedResidual);
                     }
+                    ReleaseConsumed(carriedActivation, h, stageInput, sum);
                     ReleaseConsumed(residual, h, stageInput, sum);
                 }
                 if (sum is null) sum = h;
