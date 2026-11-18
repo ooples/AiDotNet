@@ -6,15 +6,15 @@
   "scope": "Existing preview frontend and shared Supabase project yfkqwpgjahoamlgckjib. Production frontend and canonical billing function cutover remain subject to PR review and merge.",
   "verification_results": {
     "preview_browser": {
-      "passed": 486,
+      "passed": 487,
       "failed": 0,
       "flaky": 0,
-      "skipped": 6,
-      "total": 492,
+      "skipped": 7,
+      "total": 494,
       "global_errors": 0,
-      "duration_ms": 237260,
+      "duration_ms": 229730,
       "report": "playwright-report/preview/index.html",
-      "scope": "Local full fixture build, generated API documentation and Pagefind; no real customer backend or payment settlement."
+      "scope": "Full local fixture suite on the existing generated build, including a real touch-event swipe to the phone dialog action. One added desktop skip is the phone-only swipe check."
     },
     "backend_handler_contracts": {
       "passed": 108,
@@ -22,9 +22,9 @@
       "scope": "Actual handler bodies with external boundary doubles; deployment configuration, credential redaction and real verification-wrapper child runs."
     },
     "postgres_policy_tests": {
-      "passed": 39,
+      "passed": 40,
       "failed": 0,
-      "scope": "Disposable PostgreSQL 17, migrations through 20261118020000; RLS, current Auth email repair, audit fields, immutable Checkout/customer ownership and exact RPC contracts."
+      "scope": "Disposable PostgreSQL 17, migrations through 20261118020000; RLS, current Auth email repair, audit fields, immutable Checkout/customer ownership and exact RPC contracts. Includes refusal to replay historical index DDL against unknown legacy databases."
     },
     "frontend_type_check": {
       "errors": 0,
@@ -35,12 +35,15 @@
     "current_hosted_backend": {
       "run": "https://github.com/ooples/AiDotNet/actions/runs/44348867247",
       "source": "b0beea9875c5f34ea8b5935cc21f413f72278bf9",
-      "status": "queued",
-      "verified": false,
-      "target": "preview function variants and shared database migration 20261118020000"
+      "status": "completed",
+      "verified": true,
+      "target": "preview function variants and shared database migration 20261118020000",
+      "conclusion": "success"
     },
     "current_hosted_browser_matrix": {
-      "status": "not started; awaiting preview backend release",
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44351279659",
+      "application_source": "bcff59e9d2002455a122ce32b5c2933187674dd9",
+      "status": "in_progress",
       "verified": false
     },
     "previous_complete_hosted_matrix": {
@@ -80,14 +83,56 @@
   },
   "shared_backend_deployment": {
     "project_id": "yfkqwpgjahoamlgckjib",
-    "verified_source": "4d943aa103010d59dae64200b1b080339d965b4a",
-    "run": "https://github.com/ooples/AiDotNet/actions/runs/44325895046",
+    "verified_source": "b0beea9875c5f34ea8b5935cc21f413f72278bf9",
+    "run": "https://github.com/ooples/AiDotNet/actions/runs/44348867247",
     "applied_migrations": [
       "20261117000000_close_legacy_policy_bypasses",
       "20261118000000_unique_subscription_entitlement",
-      "20261118010000_independent_subscription_entitlements"
+      "20261118010000_independent_subscription_entitlements",
+      "20261118020000_secure_checkout_ownership"
     ],
     "functions": [
+      {
+        "slug": "billing-portal-preview",
+        "version": 1,
+        "status": "ACTIVE",
+        "verify_jwt": false
+      },
+      {
+        "slug": "stripe-webhook-preview",
+        "version": 1,
+        "status": "ACTIVE",
+        "verify_jwt": false
+      },
+      {
+        "slug": "register-community-license-preview",
+        "version": 1,
+        "status": "ACTIVE",
+        "verify_jwt": false
+      },
+      {
+        "slug": "delete-account-preview",
+        "version": 1,
+        "status": "ACTIVE",
+        "verify_jwt": false
+      }
+    ],
+    "rpc_contracts": [
+      "public.sync_aidotnet_billing_profile(text,text,text,uuid)",
+      "public.issue_aidotnet_community_license(uuid,text)",
+      "public.bind_aidotnet_checkout(uuid,text,text)"
+    ],
+    "shared_backend_code_and_rls_verified": true,
+    "verification_scope": "Only the named preview variants, four recorded migrations and RPC argument/permission/index prerequisites checked in the release. This flag does not assert the current hosted browser matrix passed or canonical production billing ownership code was cut over.",
+    "rollout_aggregates": {
+      "observed_at": "2026-11-18T16:47:05Z",
+      "license_rows": 98,
+      "license_bytes": 237568,
+      "duplicate_checkout_receipts": 0,
+      "duplicate_legacy_checkout_notes": 0,
+      "conflicting_customer_owners": 0
+    },
+    "canonical_functions_unchanged_by_this_release": [
       {
         "slug": "billing-portal",
         "version": 14
@@ -101,29 +146,19 @@
         "version": 19
       }
     ],
-    "rpc_contracts": [
-      "public.sync_aidotnet_billing_profile(text,text,text,uuid)",
-      "public.issue_aidotnet_community_license(uuid,text)"
-    ],
-    "shared_backend_code_and_rls_verified": true,
-    "verification_scope": "Only the listed previously deployed revisions and migrations. Current source changes and migration 20261118020000 are not covered by this flag.",
-    "current_changes_verified": false,
-    "pending_migration": "20261118020000_secure_checkout_ownership",
-    "pending_functions": [
-      "billing-portal-preview",
-      "stripe-webhook-preview",
-      "register-community-license-preview",
-      "delete-account-preview"
-    ],
-    "pending_rpc": "public.bind_aidotnet_checkout(uuid,text,text)"
+    "production_ownership_cutover_verified": false
   },
   "release_checks": [
-    "Finish backend run 44348867247 and record exact deployed preview function revisions and migration history.",
     "Build and deploy the current preview, verify its SHA/run marker through test.aidotnet.dev, and complete all six hosted suite/persona jobs.",
     "Verify real card-free Checkout claim, Stripe portal cancellation, license email, cleanup and minimum desktop/phone crawl coverage against that deployment.",
-    "Record aggregate table-size and legacy receipt duplicate evidence for the already-applied fixed-project migration; preserve historical customer keys.",
     "Canonical production ownership handlers must be released with their matching frontend after review. They are not active merely because the preview variants pass.",
     "Live card entry and settled charged-payment paths are not exercised; payment fulfillment contracts include signed-event injection and actual card-free Stripe trials. No claim of every possible user/payment state being exhaustively proven is made."
-  ]
+  ],
+  "reviewed_harness_source": "bcff59e9d2002455a122ce32b5c2933187674dd9",
+  "review_threads": {
+    "unresolved": 0,
+    "observed_on": "2026-11-18",
+    "scope": "Current reported inline threads; deployment/browser verification remains tracked separately."
+  }
 }
 
