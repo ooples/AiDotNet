@@ -14,7 +14,8 @@ const code = ts.transpileModule(source, {
 
 function fixture({ insertError, profileError, existingLicense = false, revokedLicense = false, stripeError = false, currentStatus = 'active', currentTier = 'pro' } = {}) {
   let handler;
-  let issued = existingLicense;
+  const licenses = existingLicense ? [{ id: 'license-id', license_key: 'existing-key', user_id: 'user-id', product: 'aidotnet', tier: 'professional', status: 'active', stripe_subscription_id: 'sub_fixture' }] : [];
+  let status = currentStatus, tier = currentTier;
   const writes = [], emails = [];
   const client = {
     from(table) {
@@ -22,16 +23,21 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
       const query = {
         select() { return query; },
         eq(key, value) { filters[key] = value; return query; },
-        neq() { return query; },
+        neq(key, value) { filters[`!${key}`] = value; return query; },
         limit() { return query; },
-        update(data) { writes.push({ table, operation: 'update', data }); return query; },
+        update(data) { writes.push({ table, operation: 'update', data }); query.change = data; return query; },
         insert(data) {
           writes.push({ table, operation: 'insert', data });
-          if (!insertError) issued = true;
+          if (!insertError) licenses.push({ id: 'license-id', ...data });
           return Promise.resolve({ error: insertError ?? null });
         },
-        maybeSingle() { return Promise.resolve({ data: (filters.status === 'revoked' ? revokedLicense : issued) ? { id: 'license-id', license_key: 'existing-key' } : null, error: null }); },
-        then(resolve, reject) { return Promise.resolve({ error: table === 'profiles' ? profileError ?? null : null }).then(resolve, reject); },
+        maybeSingle() { return Promise.resolve({ data: filters.status === 'revoked' ? (revokedLicense ? { id: 'revoked-id' } : null) : licenses.find(row => Object.entries(filters).every(([k,v]) => k.startsWith('!') ? row[k.slice(1)] !== v : row[k] === v)) ?? null, error: null }); },
+        then(resolve, reject) {
+          if (table === 'license_keys' && query.change) for (const row of licenses) {
+            if (Object.entries(filters).every(([k,v]) => k.startsWith('!') ? row[k.slice(1)] !== v : row[k] === v)) Object.assign(row, query.change);
+          }
+          return Promise.resolve({ error: table === 'profiles' ? profileError ?? null : null }).then(resolve, reject);
+        },
       };
       return query;
     },
@@ -40,7 +46,7 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
     static createFetchHttpClient() { return {}; }
     subscriptions = { retrieve: async () => {
       if (stripeError) throw new Error('Stripe unavailable');
-      return { id: 'sub_fixture', customer: 'cus_fixture', status: currentStatus, items: { data: [{ price: { metadata: { tier: currentTier } } }] } };
+      return { id: 'sub_fixture', customer: 'cus_fixture', status, items: { data: [{ price: { metadata: { tier } } }] } };
     } };
     webhooks = { constructEventAsync: async (body, signature) => {
       if (signature !== 'fixture-signature') throw new Error('invalid signature');
@@ -68,7 +74,8 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
     metadata: { tier: 'pro' }, payment_status: 'paid', customer_details: { email: 'preview@example.test' },
   };
   return {
-    writes, emails,
+    writes, emails, licenses,
+    setSubscription(nextStatus, nextTier = tier) { status = nextStatus; tier = nextTier; },
     async send(type = 'checkout.session.completed', overrides = {}, signature = 'fixture-signature') {
       return handler(new Request('http://fixture.invalid/webhook', {
         method: 'POST', headers: signature ? { 'stripe-signature': signature } : {},
@@ -157,11 +164,29 @@ test('no-payment-required checkout can provision a legitimate trial', async () =
   assert.equal(f.writes.filter((w) => w.operation === 'insert').length, 1);
 });
 
-test('a paid event remains retryable while the current subscription is ineligible', async () => {
-  const f = fixture({ currentStatus: 'past_due' });
-  assert.equal((await f.send('checkout.session.async_payment_succeeded')).status, 500);
-  assert.equal(f.writes.filter(w => w.operation === 'insert').length, 0);
-  assert.equal(f.writes.some(w => w.data.status === 'active'), false);
+for (const recovery of ['invoice.paid', 'customer.subscription.updated']) {
+  test(`a deferred paid entitlement recovers through ${recovery} without another Checkout event`, async () => {
+    const f = fixture({ currentStatus: 'past_due' });
+    assert.equal((await f.send('checkout.session.async_payment_succeeded')).status, 200);
+    assert.equal(f.licenses.length, 1);
+    assert.equal(f.licenses[0].status, 'suspended');
+    f.setSubscription('active');
+    assert.equal((await f.send(recovery, { id: 'sub_fixture' })).status, 200);
+    assert.equal(f.licenses.length, 1);
+    assert.equal(f.licenses[0].status, 'active');
+  });
+}
+
+test('Checkout replay after a tier change reconciles the one subscription license', async () => {
+  const f = fixture();
+  assert.equal((await f.send()).status, 200);
+  f.setSubscription('active', 'enterprise');
+  assert.equal((await f.send()).status, 200);
+  assert.equal(f.licenses.length, 1);
+  assert.equal(f.licenses[0].tier, 'enterprise');
+  assert.equal((await f.send('customer.subscription.updated', { id: 'sub_fixture' })).status, 200);
+  assert.equal(f.licenses.length, 1);
+  assert.equal(f.licenses[0].tier, 'enterprise');
 });
 
 test('a late checkout uses the current plan rather than stale Checkout tier metadata', async () => {

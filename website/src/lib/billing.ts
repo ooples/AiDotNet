@@ -7,6 +7,7 @@ export type PaidTier = 'pro' | 'enterprise';
 export type PlanTier = 'free' | PaidTier;
 
 export interface SubscriptionSummary {
+  id: string;
   status: string;
   tier: PaidTier | null;
   interval: 'month' | 'year' | null;
@@ -95,8 +96,8 @@ export async function openPortal(req: PortalAction, returnPath = window.location
 }
 
 /** Called only after confirmation to shorten a later scheduled cancellation. */
-export async function cancelBeforeRenewal(): Promise<string | undefined> {
-  const { data, error } = await invoke<{ subscription?: SubscriptionSummary }>({ action: 'cancel_before_renewal' });
+export async function cancelBeforeRenewal(subscriptionId: string, renewal: number): Promise<string | undefined> {
+  const { data, error } = await invoke<{ subscription?: SubscriptionSummary }>({ action: 'cancel_before_renewal', expected_subscription_id: subscriptionId, expected_renewal: renewal });
   if (error) return error;
   return data?.subscription ? undefined : 'Stripe did not confirm the cancellation. Refresh your billing details.';
 }

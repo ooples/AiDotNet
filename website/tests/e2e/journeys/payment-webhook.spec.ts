@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { journeySkipReason, postSignedStripeEvent, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona } from '../helpers/personas';
-import { deleteCustomer } from '../helpers/stripe';
+import { changeSubscriptionPrice, deleteCustomer, planPrice } from '../helpers/stripe';
 
 // Real deployed handler, database and current Stripe subscription. Events are
 // signed injections against a disposable card-free trial, never a settled payment.
@@ -27,8 +27,8 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
       });
       expect(response.status(), `${type}: ${await response.text()}`).toBe(200);
     };
-    const licenses = () => restSelect<Array<{ id: string; status: string; stripe_subscription_id: string }>>(
-      request, `license_keys?select=id,status,stripe_subscription_id&user_id=eq.${persona!.id}`);
+    const licenses = () => restSelect<Array<{ id: string; tier: string; status: string; stripe_subscription_id: string }>>(
+      request, `license_keys?select=id,tier,status,stripe_subscription_id&user_id=eq.${persona!.id}`);
 
     await deliver('checkout.session.completed', 'unpaid');
     expect(await licenses(), 'unpaid Checkout cannot issue a license').toEqual([]);
@@ -39,12 +39,18 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
     await deliver('checkout.session.async_payment_succeeded', 'paid');
     expect(await licenses(), 'replayed success does not create another key').toEqual(issued);
 
+    const enterprise = await planPrice(request, 'enterprise');
+    await changeSubscriptionPrice(request, subscriptionId, enterprise.id);
+    await deliver('checkout.session.async_payment_succeeded', 'paid');
+    const upgraded = await licenses();
+    expect(upgraded).toEqual([{ ...issued[0], tier: 'enterprise' }]);
+
     // Deleting this owned trial customer cancels its subscription without a charge.
     await deleteCustomer(request, customerId);
     persona.stripe = undefined; // Already removed; finally still deletes the Auth user.
     await deliver('checkout.session.async_payment_succeeded', 'paid');
     expect(await licenses(), 'current cancellation wins over the old paid snapshot').toEqual([
-      { ...issued[0], status: 'expired' },
+      { ...upgraded[0], status: 'expired' },
     ]);
   } finally {
     await disposePersona(request, persona);

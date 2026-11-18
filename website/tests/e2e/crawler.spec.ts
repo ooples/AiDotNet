@@ -53,6 +53,8 @@ test.describe('crawler regression checks', () => {
         : req.url === '/covered-rows/'
           ? '<div style="position:relative"><div style="position:absolute;inset:0;z-index:2;background:white"></div>'
             + '<button>Covered row action</button>'.repeat(12) + '</div>'
+        : req.url === '/edit-save/'
+          ? '<button onclick="if(this.textContent===\'Edit\')this.textContent=\'Save\';else alert(\'Saved\')">Edit</button>'
         : req.url === '/form-email/'
           ? '<form onsubmit="event.preventDefault();alert(\'Saved\')"><input type="email" value="keep@example.test"><input type="email" required><button>Save</button></form>'
         : req.url === '/pointer-disabled/'
@@ -167,11 +169,19 @@ test.describe('crawler regression checks', () => {
   });
 
   test('an unrelated aborted request cannot hide a genuine fetch console error', async ({ page, request }) => {
-    await page.route('**/aborted/', route => route.abort('aborted'));
+    let aborted = 0;
+    await page.route('**/aborted/', async route => { aborted++; await route.abort('aborted'); });
     const report = await crawl({ ...options(), page, request, seeds: [`${origin}/unrelated-abort/`] });
+    expect(aborted, 'the unrelated abort must actually occur').toBeGreaterThan(0);
     expect(report.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ problem: expect.stringContaining('genuine unrelated failure') }),
     ]));
+  });
+
+  test('a control can change its key at the same selector and remain reachable', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/edit-save/`] });
+    expect(report.findings).toEqual([]);
+    expect(report.exercised).toEqual(expect.arrayContaining(['/edit-save/ button::Edit', '/edit-save/ button::Save']));
   });
 
   test('two passes do not retain handlers or mutate the first report', async ({ page, request }) => {

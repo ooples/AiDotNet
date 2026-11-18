@@ -132,7 +132,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
     const $ = (id: string) => document.getElementById(id);
     const root = $('billing-root')!;
-    let laterCancellation: { scheduled: number; renewal: number } | null = null;
+    let laterCancellation: { subscriptionId: string; scheduled: number; renewal: number } | null = null;
 
     function showError(message: string) {
       const el = $('billing-error')!;
@@ -149,10 +149,10 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
         if (id === 'billing-cancel' && laterCancellation) {
           if (!window.confirm(`Your subscription is scheduled to end on ${formatDate(laterCancellation.scheduled)}. End it on ${formatDate(laterCancellation.renewal)} instead, before another renewal?`)) return;
           el.disabled = true;
-          const err = await cancelBeforeRenewal();
+          const err = await cancelBeforeRenewal(laterCancellation.subscriptionId, laterCancellation.renewal);
           el.disabled = false;
+          await loadBilling();
           if (err) showError(err);
-          else await loadBilling();
           return;
         }
         el.disabled = true;
@@ -189,7 +189,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       const status = sub?.status ?? state.status;
       const cancellationAt = cancellationDate(sub);
       laterCancellation = sub && cancellationAt != null && cancellationAt > sub.current_period_end
-        ? { scheduled: cancellationAt, renewal: sub.current_period_end } : null;
+        ? { subscriptionId: sub.id, scheduled: cancellationAt, renewal: sub.current_period_end } : null;
       if (cancellationAt) badge(cancellationAt === sub?.current_period_end ? 'Cancels at period end' : 'Cancellation scheduled', 'warn');
       else if (status === 'active') badge('Active', 'ok');
       else if (status === 'trialing') badge('Trial', 'ok');

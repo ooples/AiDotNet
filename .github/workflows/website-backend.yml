@@ -7,11 +7,12 @@ on:
     paths:
       - .github/workflows/website-backend.yml
       - website/supabase/migrations/20261117000000_close_legacy_policy_bypasses.sql
+      - website/supabase/migrations/20261118000000_unique_subscription_entitlement.sql
       - website/tests/database/rls.test.mjs
   workflow_dispatch:
     inputs:
       apply_rls:
-        description: Apply the reviewed website RLS migration
+        description: Apply the reviewed website migrations
         type: boolean
         default: false
       deploy_functions:
@@ -60,27 +61,30 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      - name: Apply only the reviewed RLS migration and record its exact version
+      - name: Apply only the reviewed migrations and record their exact versions
         if: ${{ inputs.apply_rls }}
         run: |
           set -euo pipefail
           database_url=$(cat supabase/.temp/pooler-url)
-          version=20261117000000
-          migration=supabase/migrations/${version}_close_legacy_policy_bypasses.sql
+          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement; do
+          version=${filename%%_*}
+          migration=supabase/migrations/${filename}.sql
+          migration_name=${filename#*_}
           recorded=$(psql "$database_url" -X -At -v ON_ERROR_STOP=1 -c "select count(*) from supabase_migrations.schema_migrations where version='$version'")
           if [ "$recorded" = 0 ]; then
             # DDL and migration history succeed together. Other pending migrations are not applied.
             psql "$database_url" -X --single-transaction -v ON_ERROR_STOP=1 \
-              --set=migration_source="$(cat "$migration")" --set=migration_version="$version" \
+              --set=migration_source="$(cat "$migration")" --set=migration_version="$version" --set=migration_name="$migration_name" \
               -f "$migration" -f - <<'SQL'
           insert into supabase_migrations.schema_migrations(version,name,statements)
-          values (:'migration_version','close_legacy_policy_bypasses',array[:'migration_source']);
+          values (:'migration_version',:'migration_name',array[:'migration_source']);
           SQL
           elif [ "$recorded" = 1 ]; then
             echo 'Reviewed RLS migration is already recorded.'
           else
             echo '::error::Unexpected migration history'; exit 1
           fi
+          done
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       # Function credentials are managed separately. Deploying code preserves the

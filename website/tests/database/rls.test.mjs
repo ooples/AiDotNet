@@ -83,9 +83,24 @@ before(async () => {
   const fix = migration('20261117000000_close_legacy_policy_bypasses.sql');
   sql(fix);
   sql(fix); // Safe to reapply in local migration rehearsal.
+  sql(`create table public.license_keys(id uuid default gen_random_uuid(), stripe_subscription_id text, product text, tier text, status text);`);
+  sql(migration('20261118000000_unique_subscription_entitlement.sql'));
 });
 
 after(() => { if (created) docker(['stop', container]); });
+
+test('subscription identity rejects a second tier or suspended placeholder, while independent grants remain possible', () => {
+  assert.equal(sql(`begin;
+    insert into public.license_keys(stripe_subscription_id,product,tier,status) values ('sub_review','aidotnet','professional','suspended');
+    do $$ begin
+      begin
+        insert into public.license_keys(stripe_subscription_id,product,tier,status) values ('sub_review','aidotnet','enterprise','active');
+        raise exception 'duplicate subscription was allowed';
+      exception when unique_violation then null; end;
+    end $$;
+    insert into public.license_keys(stripe_subscription_id,product,tier,status) values (null,'aidotnet','professional','active'),(null,'aidotnet','professional','active');
+    select count(*) from public.license_keys; rollback;`), '3');
+});
 
 test('owners can save names and revoke one of multiple API keys', () => {
   assert.match(asUser(`update public.profiles set full_name='Saved' where id='${user}'; select full_name from public.profiles where id='${user}';`), /Saved/);

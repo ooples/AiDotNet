@@ -87,7 +87,14 @@ test('billing portal rejects a duplicate cancellation scheduled through cancel_a
   assert.equal((await response.json()).error, 'already_cancelling');
 });
 
-for (const scheduled of [150, 200, 250, null]) {
+for (const scenario of [
+  { scheduled: 150 }, { scheduled: 200 }, { scheduled: 250 }, { scheduled: null },
+  { scheduled: 250, expectedId: 'other-subscription' },
+  { scheduled: 250, expectedRenewal: 199 },
+  { scheduled: 250, expectedId: null },
+  { scheduled: 250, expectedRenewal: null },
+]) {
+  const { scheduled } = scenario;
   test(`moving a later cancellation before renewal: existing end ${scheduled}`, async () => {
     const updates = [];
     const subscription = { id: 'owned-subscription', status: 'trialing', created: 1, current_period_end: 200, cancel_at_period_end: false, cancel_at: scheduled,
@@ -108,10 +115,11 @@ for (const scheduled of [150, 200, 250, null]) {
       }),
     });
     const response = await handler(new Request('https://fixture.invalid', {
-      method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel_before_renewal', subscription_id: 'untrusted-other-subscription' }),
+      method: 'POST', headers: { Authorization: 'Bearer session' }, body: JSON.stringify({ action: 'cancel_before_renewal', expected_subscription_id: 'expectedId' in scenario ? scenario.expectedId : 'owned-subscription', expected_renewal: 'expectedRenewal' in scenario ? scenario.expectedRenewal : 200 }),
     }));
-    assert.equal(response.status, scheduled === 250 ? 200 : 409);
-    if (scheduled === 250) {
+    const matches = !('expectedId' in scenario) && !('expectedRenewal' in scenario);
+    assert.equal(response.status, scheduled === 250 && matches ? 200 : 409);
+    if (scheduled === 250 && matches) {
       assert.deepEqual(updates.map(p => ({ ...p })), [{ cancel_at: 200, proration_behavior: 'none' }]);
       assert.equal((await response.json()).subscription.cancel_at, 200);
     } else assert.equal(updates.length, 0);

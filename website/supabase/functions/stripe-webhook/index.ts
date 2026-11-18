@@ -224,6 +224,7 @@ async function handleCheckoutCompleted(
   const subscriptionId = typeof session.subscription === "string"
     ? session.subscription
     : session.subscription?.id ?? null;
+  let issuanceStatus: "active" | "suspended" = "active";
 
   // Events can arrive after cancellation or a plan change. The signed snapshot
   // proves payment, but the current subscription decides whether access is valid.
@@ -235,9 +236,9 @@ async function handleCheckoutCompleted(
     }
     if (current.status !== "active" && current.status !== "trialing") {
       await handleSubscriptionUpdated(client, current);
-      // Keep this paid fulfillment event retryable until the subscription can
-      // grant access; acknowledging it would lose issuance if no key exists yet.
-      throw new Error("Subscription is not currently eligible for Checkout fulfillment");
+      // Persist a disabled entitlement now. Later invoice/subscription events
+      // can activate it even after Checkout's finite retry window has ended.
+      issuanceStatus = "suspended";
     }
     const tiers = current.items.data.map(item => resolveTier(item.price.metadata?.tier));
     canonical = tiers.find(tier => tier?.licenseTier === "enterprise") ?? tiers.find(tier => tier !== null) ?? null;
@@ -247,6 +248,16 @@ async function handleCheckoutCompleted(
       .eq("status", "revoked").limit(1).maybeSingle();
     if (revokedError) throw revokedError;
     if (revoked) return; // A replay cannot issue a replacement for an administrator-revoked key.
+    const { data: subscriptionLicense, error: subscriptionLicenseError } = await client.from("license_keys")
+      .select("id").eq("stripe_subscription_id", subscriptionId).eq("product", WEBHOOK_PRODUCT)
+      .neq("status", "revoked").limit(1).maybeSingle();
+    if (subscriptionLicenseError) throw subscriptionLicenseError;
+    if (subscriptionLicense) {
+      // Reconcile the existing entitlement across tier changes rather than
+      // searching only the new tier and issuing a second key for this sub.
+      await handleSubscriptionUpdated(client, current);
+      return;
+    }
   }
 
   // Update profile with customer/sub info + subscription tier so the
@@ -254,7 +265,7 @@ async function handleCheckoutCompleted(
   // otherwise a paid customer can remain Free in the UI with no billing link.
   const profileUpdate: Record<string, string> = {
     subscription_tier: canonical.profileTier,
-    subscription_status: "active",
+    subscription_status: issuanceStatus,
   };
   if (stripeCustomerId) profileUpdate.stripe_customer_id = stripeCustomerId;
   const { error: profileError } = await client.from("profiles").update(profileUpdate).eq("id", userId);
@@ -303,7 +314,7 @@ async function handleCheckoutCompleted(
       license_key: licenseKey,
       product: WEBHOOK_PRODUCT,
       tier: canonical.licenseTier,
-      status: "active",
+      status: issuanceStatus,
       max_activations: canonical.maxActivations,
       stripe_subscription_id: subscriptionId,
       stripe_customer_id: stripeCustomerId,

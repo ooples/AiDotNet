@@ -274,7 +274,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body });
     }
-    return route.continue();
+    return route.fallback();
   };
   await page.route('**/*', intercept);
   await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
@@ -575,7 +575,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (!c.visible) return false;
       if (!enabledSeen.has(c.key)) enabledSeen.set(c.key, pg);
       disabledSeen.delete(c.key);
-      if (doneOnPage.has(c.selector) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
+      if (doneOnPage.has(JSON.stringify([c.selector, c.key])) || exercised.has(c.key) || o.skipKeys?.has(c.key)) return false;
       if (o.dedicated.some(([re]) => re.test(c.key))) return false;
       return true;
     });
@@ -584,8 +584,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     for (const c of todo) {
       // Repeated table rows can share a key. An unreachable row must not trigger
       // hundreds of identical reload/replay attempts from the same sibling list.
-      if (exercised.has(c.key) || doneOnPage.has(c.selector)) continue;
-      doneOnPage.add(c.selector);
+      const attempt = JSON.stringify([c.selector, c.key]);
+      if (exercised.has(c.key) || doneOnPage.has(attempt)) continue;
+      doneOnPage.add(attempt);
       // Return to the state this control was found in: fresh page plus the clicks that revealed it.
       // A sibling's click may have opened a modal over this control: start again from a fresh page.
       if (new URL(page.url()).pathname !== pg || !(await reachable(c.selector))) {

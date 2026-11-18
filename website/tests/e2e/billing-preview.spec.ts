@@ -10,12 +10,13 @@ const user = {
   app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: { full_name: 'Preview Customer' },
 };
 const subscription = {
+  id: 'sub_preview',
   status: 'active', tier: 'pro', interval: 'month', unit_amount: 2900, currency: 'usd', quantity: 2,
   current_period_end: 1893456000, cancel_at_period_end: false, cancel_at: null as number | null, trial_end: null,
 };
 
 async function installBackend(page: Page, options: {
-  tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean; rescheduleFailure?: boolean;
+  tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean; rescheduleFailure?: boolean; rescheduleConflict?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: 'user',
@@ -46,6 +47,10 @@ async function installBackend(page: Page, options: {
         return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub });
       }
       if (body.action === 'cancel_before_renewal') {
+        if (options.rescheduleConflict && body.expected_renewal === subscription.current_period_end) {
+          currentSub = { ...currentSub, current_period_end: subscription.current_period_end + 86400 };
+          return reply({ message: 'Your renewal date changed. Confirm again.' }, 409);
+        }
         if (options.rescheduleFailure) return reply({ message: 'Cancellation could not be changed' }, 502);
         currentSub = { ...currentSub, cancel_at: currentSub!.current_period_end };
         return reply({ subscription: currentSub });
@@ -87,6 +92,17 @@ for (const state of [
   });
 }
 
+test('a stale renewal confirmation refreshes the date before a second confirmation', async ({ page }) => {
+  const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 172800 }, rescheduleConflict: true });
+  page.on('dialog', d => d.accept());
+  await page.goto('/account/billing/');
+  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  await expect(page.locator('#billing-error')).toHaveText('Your renewal date changed. Confirm again.');
+  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+  expect(calls.filter(c => c.action === 'cancel_before_renewal').map(c => c.expected_renewal)).toEqual([subscription.current_period_end, subscription.current_period_end + 86400]);
+});
+
 test('a later cancellation can be moved before renewal only after explicit confirmation', async ({ page }) => {
   const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 } });
   let accept = false;
@@ -101,6 +117,7 @@ test('a later cancellation can be moved before renewal only after explicit confi
   await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
   await expect(page.locator('#billing-cancel')).toBeHidden();
   expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
+  expect(calls.find(c => c.action === 'cancel_before_renewal')).toMatchObject({ expected_subscription_id: subscription.id, expected_renewal: subscription.current_period_end });
 });
 
 test('a failed cancellation change preserves the existing end and permits retry', async ({ page }) => {
