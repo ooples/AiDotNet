@@ -7457,6 +7457,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IDisposable? noGrad = differentiable ? null : new NoGradScope<T>();
         try
         {
+            // Reuse only dead, uncaptured training workspace when inference needs a different native allocation size.
+            // This memory boundary preserves the existing no-grad/version/capture semantics.
+            using var workspaceDemand = AiDotNet.Tensors.Engines.InferenceWorkspaceDemandScope.Enter(
+                !differentiable && !GraphCaptureCompatibility.IsActive ? Engine : null);
             var output = PredictInInferenceMode(input);
             RequireArchitectureAgreesWithOutput(output);
             // The default PredictCore records the first forward and retries weight-streaming detection; an override that
