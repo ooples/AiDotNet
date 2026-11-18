@@ -20416,7 +20416,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var _ = new NoGradScope<T>();
 
         // Comparer<double> places NaN below every number, so NaN takes the lowest key.
-        var keyed = engine.TensorNanToNum(
+        var keyed = AiDotNet.Helpers.NanToNumHelper.Apply(engine, 
             values.Reshape(new[] { n }), double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         var distinct = engine.TensorUnique(keyed, true);
         long distinctCount = distinct.Length;

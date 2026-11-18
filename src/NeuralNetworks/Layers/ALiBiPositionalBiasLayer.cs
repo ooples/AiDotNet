@@ -163,6 +163,8 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
         // True −Infinity for masked positions — see ComputeBias remarks
         // for the full rationale (softmax exactness vs MinValue, the
         // ProducesNonFiniteOutput annotation contract).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var suspendGraph = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
         T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         Tensor<T> bias;

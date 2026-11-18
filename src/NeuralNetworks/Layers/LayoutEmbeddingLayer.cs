@@ -405,7 +405,7 @@ public partial class LayoutEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Every step is exact in T (a coordinate is already a T), so no wider staging is needed;
         // infinities become T's finite extremes and then clamp to the table's edges.
-        var finite = Engine.TensorNanToNum(value, 0.0, null, null);
+        var finite = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, value, 0.0, null, null);
         return Engine.TensorClamp(Engine.TensorRound(finite), NumOps.Zero, NumOps.FromDouble(_maxPosition2D - 1));
     }
 

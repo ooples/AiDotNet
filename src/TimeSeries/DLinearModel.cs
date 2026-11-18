@@ -101,7 +101,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
             window = Engine.TensorConcatenate(new[] { window, new Tensor<double>(new[] { batch, l - take }) }, 1);
         }
 
-        return Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        return AiDotNet.Helpers.NanToNumHelper.Apply(Engine, window, 0.0, 0.0, 0.0);
     }
 
     /// <summary>The seasonal and trend maps in double, for fitting and forecasting.</summary>

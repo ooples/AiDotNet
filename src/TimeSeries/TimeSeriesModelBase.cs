@@ -911,7 +911,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         double threshold = maxAbsValue > 0
             ? maxAbsValue
             : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
-        var finite = Engine.TensorNanToNum(values, 0.0, threshold, -threshold);
+        var finite = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, values, 0.0, threshold, -threshold);
         return Engine.TensorClamp(finite, NumOps.FromDouble(-threshold), NumOps.FromDouble(threshold)).ToVector();
     }
 

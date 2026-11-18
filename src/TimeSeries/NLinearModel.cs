@@ -87,7 +87,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
             ? Engine.TensorSlice(raw, new[] { 0, start }, new[] { batch, take })
             : new Tensor<double>(new[] { batch, 0 });
         window = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(window, xMean), xStd);
-        window = Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        window = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, window, 0.0, 0.0, 0.0);
         if (take < _l)
         {
             window = Engine.TensorConcatenate(new[] { window, new Tensor<double>(new[] { batch, _l - take }) }, 1);
@@ -130,7 +130,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         // Half statistics, small moments, and Adam's 1e-8 epsilon never overflow or underflow to 0/0.
         var windows = NormalizedWindow(rows, xMean, xStd);
         var targetsNorm = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(targets, yMean), yStd);
-        targetsNorm = Engine.TensorNanToNum(targetsNorm, 0.0, 0.0, 0.0);
+        targetsNorm = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, targetsNorm, 0.0, 0.0, 0.0);
 
         if (_optimizer is not null)
         {

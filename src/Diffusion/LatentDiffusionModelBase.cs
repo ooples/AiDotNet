@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -838,7 +838,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     private void SanitizeFiniteInPlace(Tensor<T> tensor)
     {
         // NaN and +/-infinity become zero
-        var sanitized = Engine.TensorNanToNum(tensor, 0.0, 0.0, 0.0);
+        var sanitized = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, tensor, 0.0, 0.0, 0.0);
         sanitized.AsSpan().CopyTo(tensor.AsWritableSpan());
     }
 

@@ -171,7 +171,30 @@ internal sealed class PtBatchNorm<T> : PtNorm<T>
         int count = x.Shape[0];
         if (training && count > 1)
         {
-            var output = engine.BatchNorm(x, _ctx[_gamma], _ctx[_beta], Epsilon, out var mean, out var variance);
+            Tensor<T> output;
+            Tensor<T> mean;
+            Tensor<T> variance;
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                var inputShape = x.Shape.ToArray();
+                int ch = inputShape[1];
+                mean = engine.ReduceMean(x, new[] { 0 }, keepDims: false);
+                var centered = engine.TensorSubtract(
+                    x,
+                    engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, ch }), inputShape));
+                variance = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false);
+                var invStd = engine.TensorReciprocal(engine.TensorSqrt(engine.TensorAddScalar(variance, ops.FromDouble(Epsilon))));
+                var norm = engine.TensorMultiply(
+                    centered,
+                    engine.TensorBroadcastTo(engine.Reshape(invStd, new[] { 1, ch }), inputShape));
+                output = engine.TensorAdd(
+                    engine.TensorMultiply(norm, engine.TensorBroadcastTo(engine.Reshape(_ctx[_gamma], new[] { 1, ch }), inputShape)),
+                    engine.TensorBroadcastTo(engine.Reshape(_ctx[_beta], new[] { 1, ch }), inputShape));
+            }
+            else
+            {
+                output = engine.BatchNorm(x, _ctx[_gamma], _ctx[_beta], Epsilon, out mean, out variance);
+            }
             using (new NoGradScope<T>())
             {
                 // PyTorch: running = (1 - momentum) * running + momentum * batch, with the unbiased variance.

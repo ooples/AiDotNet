@@ -778,12 +778,12 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
             Dictionary<Tensor<T>, Tensor<T>> gradients;
-            var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(TrainingTapeOptions.Step);
-            using (tape)
-            {
-                loss = request.ClosureObjective!();
-                gradients = tape.ComputeGradients(loss, parameters);
-            }
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(TrainingTapeOptions.Step);
+            var closureObjective = request.ClosureObjective
+                ?? throw new InvalidOperationException("A declared graph break requires a closure objective.");
+            loss = closureObjective();
+            gradients = tape.ComputeGradients(loss, parameters);
+            using var postBackwardNoGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var parameter in parameters)
                 if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)

@@ -799,7 +799,7 @@ public class TabularDataTransformer<T> : IModelSerializer
         int width = block.Shape[1];
         int[] grid = { rows, width };
 
-        var cleaned = engine.TensorNanToNum(block, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(engine, block, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         var rowMax = engine.ReduceMax(cleaned, new[] { 1 }, true);
         var isMax = engine.TensorEquals(cleaned, Expand(rowMax, grid)).Cast<int>();
 

@@ -978,7 +978,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // valid exactly when clamping it to [0, 1] leaves it unchanged. One reduction finds any invalid entry and
             // an arg-min locates the first one for the message.
             var maskTensor = mask.AsTensor();
-            var finiteMask = Engine.TensorNanToNum(maskTensor, nan: -1.0, posinf: -1.0, neginf: -1.0);
+            var finiteMask = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, maskTensor, nan: -1.0, posinf: -1.0, neginf: -1.0);
             var valid = Engine.TensorEquals(Engine.TensorClamp(finiteMask, NumOps.Zero, NumOps.One), maskTensor);
             if (NumOps.Equals(Engine.TensorMinValue(valid), NumOps.Zero))
             {

@@ -471,7 +471,7 @@ public class NeuralArchitectureSearch<T>
 
         // Lowest loss = highest negated loss. NaN and infinite losses map to -inf so a finite loss always wins.
         var engine = AiDotNetEngine.Current;
-        var negated = engine.TensorNanToNum(engine.TensorNegate(losses.AsTensor()),
+        var negated = AiDotNet.Helpers.NanToNumHelper.Apply(engine, engine.TensorNegate(losses.AsTensor()),
             double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity);
         int best = NasSamplingHelper.ArgMaxRows(negated.Reshape(new[] { 1, candidates.Count }), out T[] bestNegated)[0];
         if (!ops.GreaterThan(bestNegated[0], ops.FromDouble(double.NegativeInfinity)))

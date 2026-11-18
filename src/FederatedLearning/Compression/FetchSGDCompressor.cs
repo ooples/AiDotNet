@@ -357,7 +357,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // (A NaN anywhere makes the total NaN, so the all-finite case pays one reduction and no copy.)
         if (ops.IsNaN(Engine.TensorSum(magnitudes)))
         {
-            magnitudes = Engine.TensorNanToNum(magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+            magnitudes = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
         }
 
         var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);

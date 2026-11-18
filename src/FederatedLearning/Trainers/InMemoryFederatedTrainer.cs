@@ -2072,7 +2072,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             k = Math.Min(k, n);
 
             // Keep the k largest |delta|; NaN ranks below every number, as in Array.Sort.
-            var magnitudes = Engine.TensorNanToNum(Engine.TensorAbs(delta.AsTensor()), -1.0, double.PositiveInfinity, double.NegativeInfinity);
+            var magnitudes = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, Engine.TensorAbs(delta.AsTensor()), -1.0, double.PositiveInfinity, double.NegativeInfinity);
             Engine.TensorTopK(magnitudes, k, 0, out var topIndices);
 
             uploadRatio = (double)k / n;

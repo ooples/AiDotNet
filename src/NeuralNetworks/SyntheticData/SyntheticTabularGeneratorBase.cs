@@ -321,7 +321,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <param name="tensor">The tensor to sanitize in-place.</param>
     protected static void SanitizeTensor(Tensor<T> tensor)
     {
-        AiDotNetEngine.Current.TensorNanToNumInPlace(tensor, 0.0, 0.0, 0.0);
+        AiDotNet.Helpers.NanToNumHelper.ApplyInPlace(AiDotNetEngine.Current, tensor, 0.0, 0.0, 0.0);
     }
 
     /// <summary>

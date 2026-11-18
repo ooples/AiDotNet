@@ -70,7 +70,7 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         // case pays one reduction and no copy.)
         if (NumOps.IsNaN(Engine.TensorSum(stacked)))
         {
-            stacked = Engine.TensorNanToNum(
+            stacked = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, 
                 stacked, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         }
 

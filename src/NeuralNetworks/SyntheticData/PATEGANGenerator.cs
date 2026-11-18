@@ -523,9 +523,9 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         ones.Fill(NumOps.One);
         var isNaN = engine.TensorWhere(engine.TensorIsFinite(x), zeros, engine.TensorWhere(engine.TensorIsInf(x), zeros, ones));
         var min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(
-            engine.TensorNanToNum(x, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)), new[] { 0 }, keepDims: false));
+            AiDotNet.Helpers.NanToNumHelper.Apply(engine, x, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)), new[] { 0 }, keepDims: false));
         var max = engine.ReduceMax(
-            engine.TensorNanToNum(x, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), new[] { 0 }, keepDims: false);
+            AiDotNet.Helpers.NanToNumHelper.Apply(engine, x, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), new[] { 0 }, keepDims: false);
         var anyNaN = engine.ReduceMax(isNaN, new[] { 0 }, keepDims: false);
         if (count > 0 && NumOps.GreaterThan(engine.TensorMaxValue(anyNaN), NumOps.Zero))
         {
@@ -540,7 +540,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         // A categorical column spans its categories and every index up to round(max); a non-finite maximum adds none.
         // At least one slot, so an all-negative index column still has a block to encode into.
-        var roundedMax = engine.TensorRound(engine.TensorNanToNum(max, -1.0, -1.0, -1.0)).Cast<int>().ToArray();
+        var roundedMax = engine.TensorRound(AiDotNet.Helpers.NanToNumHelper.Apply(engine, max, -1.0, -1.0, -1.0)).Cast<int>().ToArray();
         _columnWidth = new int[count];
         for (int c = 0; c < count; c++)
         {
@@ -583,7 +583,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var lastSlot = new int[count];
         for (int c = 0; c < count; c++) lastSlot[c] = _columnWidth[c] - 1;
         var upper = engine.TensorTile(new Tensor<int>(lastSlot, new[] { 1, count }).Cast<T>(), new[] { rows, 1 });
-        var index = engine.TensorMin(engine.TensorMax(engine.TensorRound(engine.TensorNanToNum(x, 0.0)), NumOps.Zero), upper);
+        var index = engine.TensorMin(engine.TensorMax(engine.TensorRound(AiDotNet.Helpers.NanToNumHelper.Apply(engine, x, 0.0)), NumOps.Zero), upper);
 
         var blocks = new List<Tensor<T>>(count);
         for (int c = 0; c < count; c++)

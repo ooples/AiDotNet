@@ -127,33 +127,12 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
 
         var lossFunction = TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>();
-        _actor = new NeuralNetwork<T>(actorArchitecture, optimizer: CreateNetworkOptimizerOrDefault(), lossFunction: lossFunction);
-        _critic = new NeuralNetwork<T>(criticArchitecture, optimizer: CreateNetworkOptimizerOrDefault(), lossFunction: lossFunction);
+        _actor = new NeuralNetwork<T>(actorArchitecture, optimizer: null, lossFunction: lossFunction);
+        _critic = new NeuralNetwork<T>(criticArchitecture, optimizer: null, lossFunction: lossFunction);
         // Registered for disposal. The replay buffer that used to be built here went with master's
         // move to a rollout held in _policyRuntime.Pending; the two networks still need owning.
         Networks.Add(_actor);
         Networks.Add(_critic);
-    }
-
-    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateNetworkOptimizerOrDefault()
-    {
-        // Preserve NeuralNetwork<T>'s exact default optimizer when 1e-8 is representable (float/double/decimal).
-        // In Half, (Half)1e-8 underflows to zero, turning zero-gradient Adam denominators (e.g. masked or
-        // saturated actions) into 0 / 0 = NaN; use 1e-5 (matching FinancialPPOAgentOptions.AdamEpsilon).
-        var numOps = MathHelper.GetNumericOperations<T>();
-        if (!numOps.Equals(numOps.FromDouble(1e-8), numOps.Zero))
-        {
-            return null;
-        }
-
-        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            null,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                UseAMSGrad = true,
-                InitialLearningRate = 5e-4,
-                Epsilon = 1e-5,
-            });
     }
 
     /// <summary>

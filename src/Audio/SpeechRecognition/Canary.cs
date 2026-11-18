@@ -175,7 +175,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // First language with the highest probability; NaN never wins.
         var languages = probs.Keys.ToArray();
         var scores = new Tensor<T>(probs.Values.ToArray(), [1, languages.Length]);
-        var cleaned = Engine.TensorNanToNum(scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         int best = Engine.TensorArgMax(cleaned, 1).ToArray()[0];
         return languages[best];
     }
@@ -288,7 +288,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (positions == 0) return Array.Empty<int>();
 
         var rows = engine.TensorSlice(logits.Reshape(new[] { logits.Length / vocabSize, vocabSize }), new[] { 0, 0 }, new[] { positions, vocabSize });
-        var cleaned = engine.TensorNanToNum(rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(engine, rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         return engine.TensorArgMax(cleaned, 1).ToArray().Where(id => id < tokenizerSize).ToArray();
     }
 
@@ -320,7 +320,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         }
 
         var rows = Engine.TensorSlice(output.Reshape(new[] { output.Length / vocabSize, vocabSize }), new[] { 0, 0 }, new[] { positions, vocabSize });
-        var probabilities = Engine.TensorSoftmax(Engine.TensorNanToNum(rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), 1);
+        var probabilities = Engine.TensorSoftmax(AiDotNet.Helpers.NanToNumHelper.Apply(Engine, rows, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), 1);
         var tokenConfidence = Engine.ReduceMax(probabilities, new[] { 1 }, false);
         var peaks = Engine.ScatterMax(tokenConfidence, new Tensor<int>(wordOfToken, [wordOfToken.Length]), out _, 0, words.Length);
         var confidences = Engine.TensorMin(Engine.TensorMax(peaks, NumOps.Zero), NumOps.One).ToArray();
