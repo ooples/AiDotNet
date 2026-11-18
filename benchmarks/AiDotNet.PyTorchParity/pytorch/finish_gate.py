@@ -24,6 +24,7 @@ import time
 
 import psutil
 from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases
+from python_process import bootstrap_argv, resolve_python_process
 
 
 
@@ -317,6 +318,14 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"))
     bindings["inference_batches"] = ",".join(map(str, protocol["inference_batch_sizes"]))
     argv = [str(arg).format_map(bindings) for arg in command["argv"]]
+    original_argv = argv.copy()
+    bootstrap_receipt = None
+    if side == "pytorch":
+        bootstrap_script = config["artifacts"].get("python_process_bootstrap")
+        if not bootstrap_script:
+            raise ValueError("PyTorch needs a hash-bound real-process bootstrap; a Windows venv launcher PID is not the framework PID.")
+        bootstrap_receipt = run_dir / "python-process.json"
+        argv = bootstrap_argv(argv, bootstrap_script, bootstrap_receipt)
     env = os.environ.copy()
     env.update({key: str(value).format_map(bindings) for key, value in command.get("env", {}).items()})
     cache_env, cache_state = cache_environment(run_dir, config["cache_policy"], side)
@@ -349,7 +358,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         receipt_file = Path(receipt_path).resolve()
         metadata["correctness_receipt"] = {"path": str(receipt_file),
             "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
-    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
+    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, original_argv=original_argv, protocol=protocol,
                     cache_state=cache_state, cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
                     environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) | set(profiler_keys) & set(env) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
@@ -363,8 +372,17 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         return {"path": str(run_dir), **metadata}
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
-        metadata.update(pid=process.pid, process_create_time=psutil.Process(process.pid).create_time())
-        sampler = Sampler(process.pid, config.get("gpu_id") if device == "cuda" else None)
+        try:
+            identity = resolve_python_process(process, bootstrap_receipt, expected_target=Path(original_argv[1]),
+                                              expected_bootstrap=Path(bootstrap_script)) if bootstrap_receipt else {
+                "pid": process.pid, "process_create_time": psutil.Process(process.pid).create_time(), "launcher_pid": process.pid}
+        except (ValueError, OSError, psutil.Error) as error:
+            metadata.update(return_code=-3, launcher_pid=process.pid, memory={}, phase_events=[],
+                            invalid_reason="Actual Python process identity could not be verified: " + str(error))
+            write_json(run_dir / "measurement.json", metadata)
+            return {"path": str(run_dir), **metadata}
+        metadata.update(identity)
+        sampler = Sampler(identity["pid"], config.get("gpu_id") if device == "cuda" else None)
         sampler.start()
         try:
             return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
