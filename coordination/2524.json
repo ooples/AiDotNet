@@ -1168,6 +1168,34 @@
       "file_scope_limits": {
         "src/PublicAPI.Unshipped.txt": "ONLY exact RS0016-required override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.Deserialize(byte[]! data) -> void entry. No other symbols or baseline changes."
       }
+    },
+    {
+      "owner": "Antigravity Lead + r2-fixer-1 + tts-lead (run 44188787979 failing shard repairs)",
+      "repository": "ooples/AiDotNet",
+      "status": "ACTIVE; fixing verified CI failures from run 44188787979 & TTS 44188787770 on isolated branches without touching Codex claims or pushing to PR mid-cycle",
+      "files": [
+        "tests/AiDotNet.Tests/TextToSpeech/DiffusionTextTokenContractTests.cs",
+        "src/Diffusion/Schedulers/FlowDPMSolverScheduler.cs",
+        "src/Diffusion/DiffusionModelBase.cs",
+        "src/NeuralNetworks/WGANGP.cs",
+        "src/NeuralNetworks/SyntheticData/OCTGANGenerator.cs",
+        "src/ReinforcementLearning/Agents/DecisionTransformerAgent.cs",
+        "src/ReinforcementLearning/Agents/REINFORCEAgent.cs",
+        "src/VisionLanguage/Grounding/*",
+        "src/Audio/Foundations/ConformerAsrNetwork.cs",
+        "src/Audio/Foundations/W2vBert.cs",
+        "src/Audio/Foundations/Wav2Vec2.cs",
+        "src/Audio/SpeechRecognition/Conformer.cs",
+        "src/SpeechRecognition/**",
+        "src/TextToSpeech/VarianceAdaptorTtsModelBase.cs",
+        "src/TextToSpeech/Classic/Tacotron.cs",
+        "src/TextToSpeech/Classic/NonAttentiveTacotron.cs",
+        "src/TextToSpeech/Classic/TransformerTTS.cs",
+        "src/TextToSpeech/FlowDiffusion/E3TTS.cs",
+        "src/TextToSpeech/EndToEnd/MeloTTS.cs",
+        "src/TextToSpeech/MultiModal/SpiritLM*.cs",
+        "src/TextToSpeech/CodecBased/SeedTTS.cs"
+      ]
     }
   ],
   "codex_assignments": {
@@ -1853,7 +1881,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-17T22:55:13.1920784Z",
+  "updated_utc": "2026-11-18T00:02:49.0463338Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
