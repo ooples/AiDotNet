@@ -1245,9 +1245,14 @@
       "files": [
         ".github/workflows/sonarcloud.yml",
         "tools/TestImpact/** (only required diagnostic/recovery fixtures/logic)",
-        ".github/test-shards.yml (only Recovery/Concurrency clause)"
+        ".github/test-shards.yml (only Recovery/Concurrency clause)",
+        "tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1",
+        "tools/TestImpact/Test-PrimaryAttemptDiagnostics.ps1",
+        ".github/scripts/test-regression-analysis.ps1 (only diagnostic provenance/uncertified baseline refusal)",
+        "tools/TestImpact/Write-RunnerDiagnosticContext.ps1",
+        "tools/TestImpact/ci-test-analysis.ps1 (only matching provenance metadata if necessary)"
       ],
-      "scope": "Failure diagnostics after terminal verifier failure without certifying untrusted evidence; alternate artifact authorization token wiring; exact empty-filter inventory. Preserve hard gates and model/package claims.",
+      "scope": "Failure diagnostics after terminal verifier failure without certifying untrusted evidence; alternate artifact authorization token wiring; exact empty-filter inventory. Preserve hard gates and model/package claims. Root review found success-only artifact downloader omitted failedprimaryTRX; necessary diagnostic-only canonical staging of exact current primaryattempt results, exclude retries/duplicates, explicit rejected/missing evidence, no uncertified baseline publication.",
       "status": "CLAIMED before edits; root full review and focused fixtures; no agent pushes."
     },
     {
@@ -1943,7 +1948,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T02:58:20.604700+00:00",
+  "updated_utc": "2026-11-18T03:04:23.079428+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
