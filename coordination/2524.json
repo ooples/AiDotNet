@@ -3,10 +3,10 @@
   "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
   "branch": "codex/2524-ci-coordination",
   "pr_branch": "perf/elementwise-sweep-combined-v1",
-  "current_pr_head": "7064f23427ba017012f68b371e059e797f12d93c",
+  "current_pr_head": "2599a7c01d949cb8ab654f9db4e5e70009d82235",
   "rules": [
     "No PR yet; no merge or force push.",
-    "ACTIVE newPR2524fullCI ata826446bc36bdf0d28919bef291c99ace6f4e958. UserapprovedDependency+CIDiagnosticsfirst; pushedstableTensors0.151.2+failedprimary/paperreporting+alternateauthonly. No productcategoryfixes included. DO NOTcancelorpushPRsourceagainuntilENTIREcycleterminal; continueexclusiveverifiedcategoryworkonbranches. Rootsingleintegrationwriter; no forcepush/publicvalidationrelease.",
+    "ACTIVE PR2524 fullCI44298973036 at2599a7c01d949cb8ab654f9db4e5e70009d82235. Do not push PR source or cancel this run until ENTIRE cycle is terminal. Continue exclusively claimed local/collaboration branch fixes; root single integration writer. No force push/public validation release. Previous7064 cycle fully terminal after build inventory failure; corrected actual inventory gate passed locally before2599push.",
     "Claim a bounded file/task scope before editing; use separate worktrees and contributor branches.",
     "Do not weaken assertions, replay guards, lint rules or shard checks; no scalar-kernel exemptions or legacy adapters.",
     "No public validation NuGet releases; future candidates must be GitHub artifacts."
@@ -1442,7 +1442,7 @@
         ".github/test-shards.yml (only Unit03a exact MmditReplayTests clause)"
       ],
       "scope": "Fix sole confirmed7064 build-gate blocker: new MmditReplayTests six methods are unrouted. Assign the entire class to existing diffusion core shard. Preserve all checks/categories/assertions/shards; no catchall or inventory exemption. Run actual TypeImpact inventory engine on fresh main test assembly before/after; existing compilation is successful.",
-      "status": "CLAIMED before edit. Source7064 main44271103746 automatically cancelled after Build134692766929 inventory failure. All nine associated workflows are terminal. Root missed this required pre-push gate; exact inventory validation is now required for this batch before push."
+      "status": "COMPLETE commit2599a7c01d949cb8ab654f9db4e5e70009d82235 pushed to PR and collaboration branches after all7064workflows terminal. Actual TypeImpact engine on freshffd3b594 testDLL reproduced sole MMDiT gap before edit; after exact Unit03a route all5244main testclasses have coverage,0unassigned,20unchanged deliberately excluded classes. No production/test assertions/gates changed. New fullCI44298973036 active."
     }
   ],
   "codex_assignments": {
@@ -2135,7 +2135,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T11:53:03.054790+00:00",
+  "updated_utc": "2026-11-18T11:58:42.171937+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2344,8 +2344,8 @@
     "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness.",
     "published_reviewed_branch": {
       "branch": "codex/2524-category-rollout",
-      "head": "7064f23427ba017012f68b371e059e797f12d93c",
-      "status": "Published qualified335CPU/29CUDA temporary artifact pin, Chronos allowance retirement and root-reviewed/normalbuild-passed Oute sampling lifetime patch. Focused Oute tests still pending. Not globally green/PR-ready; original PR remainsa826 until batch verified."
+      "head": "2599a7c01d949cb8ab654f9db4e5e70009d82235",
+      "status": "Published335CPU/29CUDA qualified artifact and reviewed consumer fixes, plus MMDiT inventory route. Oute focused9/9 passed on11ab/coreaaf with native062 before dependency-only335pin; clone119.68s leaves timing risk. Whole GitHub matrix remains required; not merge-ready."
     },
     "pending_consumer_batch": {
       "head": "11ab426b2094568dbd8f448bfd156899df722b2d",
@@ -2631,6 +2631,21 @@
       "head": "8a56ffa5ba707b57e54d38c91587e5d39c817d8e",
       "producer": 44265999057,
       "status": "SUCCESS all5TFMs/335CPU and exact-artifact CUDA29. Semanticd64a4e54 locally21/21native+1/1unchangedconsumer passed; root reviewed complete source/tests/additive workflow diffs. Producerartifact14410119047 and CUDA44267644510 independently verified; native335net10SHA40fdb7fe7558d8723acd12916fe50bf5667945d99c8d346bed0d3d3da346214e. No public release; qualified consumer pin integrated7064f23427."
+    },
+    "active_cycle": {
+      "head": "2599a7c01d949cb8ab654f9db4e5e70009d82235",
+      "mainRun": 44298973036,
+      "ttsRun": 44298973171,
+      "foundationsRun": 44298972868,
+      "status": "IN_PROGRESS; root direct work after subagent usage limits. Explicit head-bound monitor+collector PIDs53600/53468 running independently.",
+      "evidenceDirectory": "C:/Users/cheat/source/artifacts/codex2524/head-2599a7c01d",
+      "rawDirectory": "Z:/codex-ci-artifacts/aidotnet2524/pr-2599a7c01d",
+      "inventoryRepairEvidence": "Z:/codex-builds/7064-shard-inventory-fix",
+      "unresolved": [
+        "Existing19historical overlong commit headers remain with owner",
+        "Exact master baseline has8holes and expiredbuild; rebuild scheduling question pending",
+        "Product categories remain pending complete CI; no global green claim"
+      ]
     }
   }
 }
