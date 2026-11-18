@@ -20,7 +20,7 @@
         "tests/AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs"
       ],
       "scope": "User-prioritized two existing Seed/Spark TTS failures: replace private host-copy Detached with recorded instance engine StopGradient; actual tiny GAN strict replay/value/gradient-stop regressions. Existing helper only shared proposal; Claude branch unchanged, no exact active helper claim.",
-      "status": "ACTIVE under same exclusive claim: compare existing reviewed detach patch with latest8d3; instance Engine.StopGradient plus replay/value/gradient-stop regressions. Root reviews complete diff before one consolidated build. Do not overlap Antigravity1B.",
+      "status": "COMPLETE integrated on published fix branch: codec StopGradient preserves values and cuts intended gradients. Combined codec/HiFT38focused cases pass,0skip. Whole Spark original146cases130pass/7fail/9skip remains explicitly incomplete at later TensorMax boundary owned by Claude.",
       "branch": "codex/2524-codec-detach-reviewed"
     },
     {
@@ -34,7 +34,7 @@
         "src/ElementWiseBaseline.txt"
       ],
       "scope": "User-prioritized four Cosy/HiFT failures: raw excitation as explicit forward-only replay data; defer both phase/noise RNG and existing harmonic algorithms per step, preserve SineGen/SineGen2 numerics/F0 gradient stop and trainable Merge. No scalar-kernel exemption, cached snapshot, eager-training fallback or weakened tests. Necessary bounded shared internal typed-data draw hook and independent mixed-type ordering, dtype/shape mismatch, no-probe-draw, suppression and plan-refill regressions. Root reviews complete4file diff before build.",
-      "status": "ROOT REVIEWED localeb3bccd9ae fourfilebatch; independent old-kernel/analytic-gradient/typedRNG/probe tests unrun. Root integrates with published0.151.2 then one consolidated normalbuild/focusedchecks; baseline4exactobsoletekeys removed only.",
+      "status": "COMPLETE integrated on published fix branch: typed double random data replay, no probe RNG consumption, preserved values/gradients. Combined codec/HiFT38focused cases pass; broader TTS category remains open.",
       "file_scope_limits": {
         "src/Training/CompiledStepRandom.cs": "ONLY internal DrawData<TData> under same primary-T recorder/suppression/capture/replay. Keep public Draw behavior; typed refill/version/invalidation, capture dtype+shape checks. Preserve exact double phase/noise RNG for float/Half; no hidden Random capture or public/native API change.",
         "src/ElementWiseBaseline.txt": "ONLY remove4now-unused exact HiftGenerator.Harmonics/HarmonicsByFrames ADNELEM001/002 keys, old2/3counts. Public methods now wrappers; newpure-doublecores+bulkcasts introduce no scalar exemption/baseline increase. Other owners keys unchanged."
@@ -1156,7 +1156,7 @@
       }
     },
     {
-      "status": "ROOT REVIEWED grouped23cases+production; firstbuild exposed TensorShape/nullability/API inventory compile issues, grouped fixes pending. Actual1512nativeTensor.Cast already materializes and honorsviews, so newadapterusesremoved while keepingviewtests. Noepsilonchange/scalarexemption.",
+      "status": "COMPLETE integrated: FP32 Half master/moments, state continuity and strided publication, original epsilon unchanged.37original cases passed35CPU+2supportedlocalGPU; not a separate CUDA qualification claim.",
       "files": [
         "src/Optimizers/AdamOptimizer.cs",
         "tests/AiDotNet.Tests/UnitTests/Optimizers/AdamHalfStateTests.cs",
@@ -1298,7 +1298,7 @@
         "src/PublicAPI.Unshipped.txt (only exact new TLoRA interface members)"
       ],
       "scope": "Complete3TLoRAstridedexternalTensorMatMul failures: inference-only connected delta cache; never cache trace/tape/probe intermediates; preserve numericalformula, trainableA/B/S gradients, frozeninitialsubtraction and inferenceinvalidations. No guard/native/base changes. Rootreviewbeforefocusedverification; noPRpushagent. Necessary direct findings: old FromMatrix/GetSubVector copied A/B/S and collector did not enroll adapter factors. Add helper canonical trainableA/B/S and frozeninit chunks; owningmodel registers helpers and uses existingTrainingParameterRoot so LoRA keepsbasepredictor/VAEfrozen. Preserve singleownership/checkpoint/clone, no genericcollector edits. Wholemodel3acceptedsteps+finite-difference+frozenbase/init+persistencetests required; cache-onlypatch prohibited.",
-      "status": "CLAIMED before edits; currentmodelcohort3persistentfailures. Rootreviewedmechanism; implementation follows."
+      "status": "COMPLETE integrated canonical live factors/frozen initial state/inference cache and ownership.13original model cases+22helper cases passed with qualified native artifact; corrected full-model fixture42f8c637aa."
     },
     {
       "owner": "Codex/pinn_review category StudentT EP convergence",
@@ -1307,7 +1307,7 @@
         "tests/AiDotNet.Tests/UnitTests/GaussianProcesses/StudentTPosteriorNumericsTests.cs"
       ],
       "scope": "All3originalGPfailurespersiston1512(66cohort63pass3fail). DampedparallelEPapproachesimpropercavityboundary. Standardsequentialacceptedsiteupdateswithrank1Gaussianposteriorandonce/sweepcanonicalrefresh, unchangednu/scale/prior/quadrature/damping/convergencecriteria; independentdenseandmomentoracles. No native/SVD/baseGPpolicyedits.",
-      "status": "CLAIMEDbeforeproductionedit; rootreviewbeforeonebuild+all76cases; noPRpush.",
+      "status": "COMPLETE integrated sequential accepted EP/rank-one cavity repair, independent posterior oracles and declared-prior fixture.78unique cases passed,zero skips; difficult original split remains nonconvergence and prediction-refusal regression, no tolerance weakening.",
       "bounded_test_contract_amendment": {
         "status": "CLAIMED before dependent edits; existing user-approved shared fixed-prior GP test-contract scope, root design review before patch",
         "files": [
@@ -1360,7 +1360,7 @@
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs"
       ],
       "scope": "ONLY remove11 exact legacy-insensitive allowance keys provedSensitive incurrenta826 rawprimaryTRX: AudioGenModel::Channels; LSPIAgent::ConvergenceThreshold/MaxIterations; Ferret::ImageMean/ImageStd/MaxSequenceLength/VocabSize; Shikra::same4. Sevenothercurrentstale-sensitivekeys alreadyretired inheldb73. No model/harness assertion changes, new exemptions, skip/size/precision changes, otherownerfiles. Rootfull11keydiff review before onefocusedtest-onlycompile+entire82caseaffectedoptioncohort; deriveactualcounts and keep40existingdeclaredbaseline skips separate, notpassed.",
-      "status": "CLAIMED BEFORE EDITS underexistinguser-approved allfailingcategories/fixedratchet scope. Readonly61summary snapshot cutoff2026-11-18T05:07:20.150Z matchedall18 exactprimaryTRXid/name/message/outcome. SameunderlyingSensitive assertionsretained; no productionbuild or PRpush.",
+      "status": "COMPLETE prior23retirements plus final ChronosBolt EndLearningRate one-line retirementa527b395ed. All20paper/100rawTRX reconciliation preserves genuine Tortoise/UniAudio model defects. Chronos28cases 14pass/14unchangedskips/0fail, only prior stale failure becomes pass.",
       "evidence": "C:/Users/cheat/source/artifacts/codex2524/head-a826446b/active-baseline-reconciliation-20261118T050720Z.json",
       "direct_compile_dependency_repair": {
         "status": "CLAIMED before edits; root design review accepted, needed because held HiFT typed-data recorder intentionally removed RecordedDraw.Tensor",
@@ -1421,7 +1421,7 @@
         ".github/workflows/gpu-cuda-selfhosted.yml (only same CPU cohort acceptance)"
       ],
       "scope": "Current a826 Unassigned01 artifact14407309260 original HalfLayoutCoordinates test fails typed Half to IConvertible in TensorNanToNum. Repair this direct dtype/default finite-endpoint contract with independent value/view/backward/replay tests; check original downstream Round/Clamp pipeline. No PNorm/SVD/GroupNorm/other owner45 hunks, no blanket scan or guard weakening.",
-      "status": "COMPLETE local semanticd64a4e54, normalbuild0errors, 21native+1originalconsumer passed. Root-reviewed additive workflow8a56 pushed to existing native validation branch; producer44265999057 active,335CPU/all5TFMs+CUDA29 obligations."
+      "status": "COMPLETE local semanticd64a4e54, normalbuild0errors, 21native+1originalconsumer passed. Root-reviewed additive workflow8a56 pushed to existing native validation branch; producer44265999057 passed335CPU/all5TFMs; exact-artifact CUDA44267644510 passed29/29,0fail/skip; no public release."
     },
     {
       "owner": "Codex/artifact_feed qualified temporary consumer feed",
@@ -1433,7 +1433,7 @@
         ".github/scripts/Test-TensorsValidationFeed.ps1"
       ],
       "scope": "Pin qualified d1aff artifact and validate all319CPU identities including normalization20 and FlashAttention41. Preserve prior union112, framework/hash/trust/token/fork guards and default stable-version behavior. Existing full matrix bootstrap wiring unchanged.",
-      "status": "COMPLETE firstpin3c7b2c0c integrated893161b279 and published on category-rollout;66fixtures+actual319CPUartifact validation passed. Draft335cohort extension remains isolated and unqualified pending exact new producer/CUDA artifact."
+      "status": "COMPLETE qualified335pin d43171a3 integrated7064f23427 and published on category-rollout.77fixtures and actual335producer artifact validation passed; all prior319CPU/29CUDA identities preserved. No public release; PR head remainsa826 pending Oute checks."
     }
   ],
   "codex_assignments": {
@@ -2126,7 +2126,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T08:26:43.286467+00:00",
+  "updated_utc": "2026-11-18T08:47:38.531121+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2335,12 +2335,12 @@
     "ownership": "All existing owner scopes remain unchanged. Contributors fetch the shared baseline, post precise claims and verification/proposals, and avoid new overlaps. Root coordinates final integration and PR readiness.",
     "published_reviewed_branch": {
       "branch": "codex/2524-category-rollout",
-      "head": "893161b279474abb22679be345872c1a27b1ef2d",
-      "status": "Published qualified319CPU/29CUDA temporary artifact pin and one-line Chronos allowance retirement. Not globally green/PR-ready."
+      "head": "7064f23427ba017012f68b371e059e797f12d93c",
+      "status": "Published qualified335CPU/29CUDA temporary artifact pin, Chronos allowance retirement and root-reviewed/normalbuild-passed Oute sampling lifetime patch. Focused Oute tests still pending. Not globally green/PR-ready; original PR remainsa826 until batch verified."
     },
     "pending_consumer_batch": {
       "head": "11ab426b2094568dbd8f448bfd156899df722b2d",
-      "status": "Oute sampling scratch lifetime fix root reviewed, normal net10 analyzer build passed; original complete Oute cohort executing under unchanged11189MiB Workstation/serial cap. No result inferred yet."
+      "status": "Oute sampling fix root reviewed, normal net10 analyzer build passed. Overbroad whole-option selection canceled with no TRX and no unknown passes counted; one unchanged option consumed4m38. Focused9case set covers ALL3originalOOM/timeout findings plus6 numeric/lifetime/reference controls, unchanged11189MiB/profile/assertions. Logging-only restart fixed measured SMB discovery output bottleneck; same binary/filter. Full option coverage stays required on GitHub, no assertions or inventory weakened."
     }
   },
   "category_execution_plan": {
@@ -2621,7 +2621,7 @@
     "native_nantonum_validation": {
       "head": "8a56ffa5ba707b57e54d38c91587e5d39c817d8e",
       "producer": 44265999057,
-      "status": "IN_PROGRESS all5TFMs/335CPU then exact-artifact CUDA29. Semanticd64a4e54 locally21/21native+1/1unchangedconsumer passed; root reviewed complete source/tests/additive workflow diffs. No public release and no335consumerpin before qualification."
+      "status": "SUCCESS all5TFMs/335CPU and exact-artifact CUDA29. Semanticd64a4e54 locally21/21native+1/1unchangedconsumer passed; root reviewed complete source/tests/additive workflow diffs. Producerartifact14410119047 and CUDA44267644510 independently verified; native335net10SHA40fdb7fe7558d8723acd12916fe50bf5667945d99c8d346bed0d3d3da346214e. No public release; qualified consumer pin integrated7064f23427."
     }
   }
 }
