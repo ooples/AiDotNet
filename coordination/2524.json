@@ -2673,7 +2673,12 @@
         "r3-handoff-and-final2.trx": "sha256:612f613d7bfefa7611422c5f51260fcea48e9b25c0fcf4bb0fb9b3e072e7c519 (64 passed, 0 failed, 2 skipped)",
         "r3-a826-verified-clean.trx": "sha256:a7864837273d4f45934e612266c89d798e129889cc4cbbc1bcb0647d7be8c8fd (99 passed, 0 failed)",
         "r3-dimred-verified.trx": "sha256:a1c27f1770754c9698f8143e73e82ea9047363bc5ddaa3ae3741eae5233501c3 (35 passed, 0 failed)"
-      }
+      },
+      "cycle_2599a7c01d_terminal_observations": [
+        "All 9 workflows on 2599a7c01d are now terminal (run 44298973036 completed).",
+        "Build (compat frameworks + pack) job 134790100725 failed solely on Codex-owned tests/AiDotNet.Tests/UnitTests/Diffusion/Models/MmditReplayTests.cs(447,28): error CS0117 'double' does not contain a definition for 'IsFinite' under net471 (use !double.IsNaN(x) && !double.IsInfinity(x)).",
+        "TTS paper contracts run 44298973171 passed 1786/1788 (only 2 failures): (1) FastSpeech2PaperTests.TrainingOnARecording_ReducesThePaperObjective ('TensorSearchSorted' host read) is ALREADY fixed in Antigravity commit 0e988b10f6 above; (2) RetainedGenerationHandoffTests(hybrid: True) failed in Codex-owned src/Training/CompiledTapeTrainingStep.cs:781-786 because 'using (tape) { ... }' disposes 'tape' (clearing retained outputs and rewinding arena) BEFORE RetainedOutputCapture<T>.PublishEager(tape) runs at line 805 (change to 'using var tape = ...' so tape stays alive through line 805, matching EagerTapeStep)."
+      ]
     }
   }
 }
