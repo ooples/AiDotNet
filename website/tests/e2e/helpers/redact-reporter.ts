@@ -5,7 +5,8 @@ import { join } from 'node:path';
 export function redactText(text: string, values: string[]): string {
   for (const value of values) if (value.length > 3) text = text.split(value).join('[redacted]');
   return text.replace(/(authorization|apikey|cookie|x-vercel-protection-bypass)\s*:[^\r\n]*/gi, '$1: [redacted]')
-    .replace(/([?&#](?:access_token|refresh_token|token_hash|token|code)=)[^&\s"'<>]+/gi,'$1[redacted]')
+    .replace(/([?&#](?:access_token|refresh_token|token_hash|token|code|secret|client_secret)=)[^&\s"'<>]+/gi,'$1[redacted]')
+    .replace(/(https?:\/\/billing\.stripe\.com\/p\/session\/)[^/?#\s"'<>]+/gi,'$1[redacted]')
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[redacted token]')
     .replace(/\badn_[0-9a-f]{64}\b/gi,'[redacted API key]')
     .replace(/\bAIDN-[A-Z0-9-]+-[A-F0-9]{8,}\b/gi,'[redacted license key]')

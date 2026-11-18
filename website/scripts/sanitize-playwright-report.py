@@ -17,7 +17,8 @@ def redact(text):
     for value in values:
         text = text.replace(value, '[redacted]').replace(json.dumps(value)[1:-1], '[redacted]')
     text = re.sub(r'(?im)(authorization|apikey|cookie|x-vercel-protection-bypass)\s*:[^\r\n]*', r'\1: [redacted]', text)
-    text = re.sub(r'''(?i)([?&#](?:access_token|refresh_token|token_hash|token|code)=)[^&\s"'<>]+''', r'\1[redacted]', text)
+    text = re.sub(r'''(?i)([?&#](?:access_token|refresh_token|token_hash|token|code|secret|client_secret)=)[^&\s"'<>]+''', r'\1[redacted]', text)
+    text = re.sub(r'''(?i)(https?://billing\.stripe\.com/p/session/)[^/?#\s"'<>]+''', r'\1[redacted]', text)
     text = re.sub(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[redacted token]', text)
     text = re.sub(r'\badn_[0-9a-f]{64}\b', '[redacted API key]', text, flags=re.I)
     text = re.sub(r'\bAIDN-[A-Z0-9-]+-[A-F0-9]{8,}\b', '[redacted license key]', text, flags=re.I)
