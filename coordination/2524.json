@@ -1259,9 +1259,11 @@
       "owner": "Codex/artifact_feed category replay TLoRA",
       "files": [
         "src/Diffusion/StyleTransfer/TimestepDependentLora.cs",
-        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/TimestepDependentLoraTests.cs"
+        "tests/AiDotNet.Tests/UnitTests/Diffusion/Models/TimestepDependentLoraTests.cs",
+        "src/Diffusion/StyleTransfer/TLoRAModel.cs",
+        "src/PublicAPI.Unshipped.txt (only exact new TLoRA interface members)"
       ],
-      "scope": "Complete3TLoRAstridedexternalTensorMatMul failures: inference-only connected delta cache; never cache trace/tape/probe intermediates; preserve numericalformula, trainableA/B/S gradients, frozeninitialsubtraction and inferenceinvalidations. No guard/native/base changes. Rootreviewbeforefocusedverification; noPRpushagent.",
+      "scope": "Complete3TLoRAstridedexternalTensorMatMul failures: inference-only connected delta cache; never cache trace/tape/probe intermediates; preserve numericalformula, trainableA/B/S gradients, frozeninitialsubtraction and inferenceinvalidations. No guard/native/base changes. Rootreviewbeforefocusedverification; noPRpushagent. Necessary direct findings: old FromMatrix/GetSubVector copied A/B/S and collector did not enroll adapter factors. Add helper canonical trainableA/B/S and frozeninit chunks; owningmodel registers helpers and uses existingTrainingParameterRoot so LoRA keepsbasepredictor/VAEfrozen. Preserve singleownership/checkpoint/clone, no genericcollector edits. Wholemodel3acceptedsteps+finite-difference+frozenbase/init+persistencetests required; cache-onlypatch prohibited.",
       "status": "CLAIMED before edits; currentmodelcohort3persistentfailures. Rootreviewedmechanism; implementation follows."
     }
   ],
@@ -1948,7 +1950,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T03:04:23.079428+00:00",
+  "updated_utc": "2026-11-18T03:05:49.975915+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2214,7 +2216,7 @@
       },
       {
         "category": "Othercontracts",
-        "cases": "Lambda1,NTMreflection1,scheduleextension1,latentintermittent1,Chronostimeout1",
+        "cases": "Lambda1,NTMreflection1,scheduleextension1,latentintermittent1,Chronostimeout1,UTF8corruption1",
         "ownership": "Preserve existing active claims; classify rerunpasses asintermittent, no blankettimeoutraises."
       },
       {
@@ -2223,6 +2225,16 @@
         "ownership": "Coordinate existing lead's subject-onlyrewrite ownership; no forcepush byroot."
       }
     ],
-    "acceptance": "Every required shard produces trusted nonempty completed evidence; regression diagnostics always report terminal failures/incompletecoverage; no newPassed\u2192Failed unowned cases; allchecks green, assertions/guards unchanged."
+    "acceptance": "Every required shard produces trusted nonempty completed evidence; regression diagnostics always report terminal failures/incompletecoverage; no newPassed\u2192Failed unowned cases; allchecks green, assertions/guards unchanged.",
+    "cohort_totals": {
+      "replay": 1537,
+      "OOM": 58,
+      "shape": 18,
+      "numeric_and_typed_conversion": 15,
+      "training_and_continuity": 7,
+      "options": 26,
+      "other_contracts_and_intermittent": 6,
+      "total": 1667
+    }
   }
 }
