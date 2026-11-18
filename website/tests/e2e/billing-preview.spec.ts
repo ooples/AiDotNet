@@ -274,16 +274,24 @@ test('successful claim clears the old provisioning flag and immediately renders 
     id:'claimed-key',license_key:'AIDN-CLAIMED-FIXTURE-KEY',tier:'professional',status:'active',max_activations:2,
     organization_name:null,issued_at:'2026-01-01',expires_at:null,
   }]});
-  await page.goto('/account/licenses/?new=true&session_id=cs_test_claim');
+  await page.goto('/account/licenses/?new=true&session_id=cs_test_claim#setup-section');
   await expect(page.locator('#new-license-banner')).toBeVisible();
   await page.getByText('Paid before signing in? Claim your checkout',{exact:true}).click();
   await page.locator('#claim-checkout-reference').fill('cs_test_claim');
   await page.locator('#claim-checkout-btn').click();
-  await expect(page).toHaveURL(/\/account\/licenses\/$/);
+  await expect(page).toHaveURL(/\/account\/licenses\/#setup-section$/);
   await expect(page.locator('#new-license-banner')).toBeHidden();
   await expect(page.locator('#setup-section')).toBeVisible();
   await expect(page.locator('#env-var-code')).toHaveText('AIDOTNET_LICENSE_KEY=AIDN-CLAIMED-FIXTURE-KEY');
   expect(calls.filter(c=>c.action==='claim_checkout')).toHaveLength(1);
+  // A repeated claim at the identical URL/hash must still refresh the data.
+  await page.locator('#setup-section').evaluate(el=>{el.dataset.fixtureBeforeReload='true';});
+  await page.getByText('Paid before signing in? Claim your checkout',{exact:true}).click();
+  await page.locator('#claim-checkout-reference').fill('cs_test_claim');
+  await page.locator('#claim-checkout-btn').click();
+  await expect(page.locator('#setup-section')).not.toHaveAttribute('data-fixture-before-reload','true');
+  await expect(page.locator('#setup-section')).toBeVisible();
+  expect(calls.filter(c=>c.action==='claim_checkout')).toHaveLength(2);
 });
 
 test('explicit Checkout claim validates the reference and surfaces ownership errors',async({page})=>{

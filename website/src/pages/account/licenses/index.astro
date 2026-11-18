@@ -136,7 +136,8 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
         const destination = new URL(window.location.href);
         destination.searchParams.delete('new');
         destination.searchParams.delete('session_id');
-        window.location.replace(destination.href);
+        window.history.replaceState(window.history.state, '', destination.href);
+        window.location.reload();
       } finally { button.disabled = false; }
     });
 
