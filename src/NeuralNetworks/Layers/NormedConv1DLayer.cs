@@ -399,7 +399,26 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> ForwardTraced(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input) => ForwardCore(input, false, NumOps.Zero);
+
+    /// <summary>Explicit composition used only when a private inference convolution feeds LeakyReLU immediately.</summary>
+    internal Tensor<T> ForwardLeakyInference(Tensor<T> input, T alpha)
+    {
+        var ports = InputPorts;
+        if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY") == "0"
+            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsTrainingMode || IsInferringShapes
+            || Engine.Unwrap().GetType() != typeof(DirectGpuTensorEngine) || !ReferenceEquals(Engine, Engine.Unwrap())
+            || GradientTape<T>.Current is not null || GraphMode.IsActive
+            || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+            || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null)
+            return Engine.LeakyReLU(Forward(input), alpha);
+        if (ports.Count != 1 || ports[0].Source != TensorPortSource.External
+            || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous || ports[0].ShapeConstraint.IsConstrained)
+            BindInputContract(input.Shape.ToArray()).Validate(input);
+        return ForwardCore(input, true, alpha);
+    }
+
+    private Tensor<T> ForwardCore(Tensor<T> input, bool leakyAfterBias, T alpha)
     {
         if (input.Rank != 3 || input.Shape[1] != _in)
             throw new ArgumentException($"Expected [batch, {_in}, time], got [{string.Join(", ", input.Shape)}].", nameof(input));
@@ -435,9 +454,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             y = Engine.TensorConcatenate(parts, 1);
         }
         int outTime = y.Shape[3];
-        if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
+        if (leakyAfterBias && _useBias && ((DirectGpuTensorEngine)Engine).TryChannelBiasLeakyInference(y, _bias, alpha, out var activated))
+            return Engine.Reshape(activated, new[] { batch, _out, outTime });
         // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.
-        return Engine.Reshape(Engine.TensorChannelBiasAdd(y, _bias), new[] { batch, _out, outTime });
+        var biased = _useBias ? Engine.TensorChannelBiasAdd(y, _bias) : y;
+        var output = Engine.Reshape(biased, new[] { batch, _out, outTime });
+        return leakyAfterBias ? Engine.LeakyReLU(output, alpha) : output;
     }
 
     /// <summary>

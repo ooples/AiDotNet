@@ -245,8 +245,15 @@ internal sealed class HiFiGanGenerator<T>
                     var residual = h;
                     using (var pair = TensorScope.Begin())
                     {
-                        var t = first[n].Forward(LeakyRelu(residual, Slope));
-                        if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
+                        var activatedResidual = LeakyRelu(residual, Slope);
+                        Tensor<T> t;
+                        if (_resblockType1)
+                        {
+                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual,
+                                MathHelper.GetNumericOperations<T>().FromDouble(Slope));
+                            t = second[n].Forward(activatedFirst);
+                        }
+                        else t = first[n].Forward(activatedResidual);
                         h = _engine.TensorAdd(t, residual);
                         pair.Keep(h);
                     }
