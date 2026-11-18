@@ -414,14 +414,75 @@ public class TimestepDependentLoraTests : IDisposable
             vae: new StandardVAE<float>(inputChannels: 3, latentChannels: 4, baseChannels: 16,
                 channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: seed), seed: seed, adapterRank: 2);
 
+    private static void InitializePretrainedLikeReadout(TLoRAModel<float> model)
+    {
+        // The production U-Net deliberately zero-initializes its final projection.
+        // Freezing that head would make the loss Jacobian zero for every adapter.
+        // A deterministic nonzero readout represents an existing denoiser without
+        // replacing parameter objects or making the frozen backbone trainable.
+        var field = typeof(UNetNoisePredictor<float>).GetField("_outputConv", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The U-Net output projection was not found.");
+        var output = Assert.IsAssignableFrom<AiDotNet.Interfaces.ITrainableLayer<float>>(field.GetValue(model.NoisePredictor));
+        foreach (var parameter in output.GetTrainableParameters())
+        {
+            var values = parameter.AsWritableSpan();
+            for (int i = 0; i < values.Length; i++) values[i] = (float)(0.01 * Math.Sin(i + 0.5));
+            parameter.IncrementVersion();
+        }
+    }
+
+    private static (Tensor<float> Input, Tensor<float> Target) LatentTrainingPair()
+        => (new Tensor<float>(new[] { 1, 4, 8, 8 }, new Vector<float>(
+                Enumerable.Range(0, 256).Select(i => (float)Math.Sin(i * 0.1)).ToArray())),
+            new Tensor<float>(new[] { 1, 4, 8, 8 }, new Vector<float>(
+                Enumerable.Range(0, 256).Select(i => (float)Math.Cos(i * 0.2)).ToArray())));
+
+    [Fact]
+    public void Unconditional_model_steps_train_self_attention_and_leave_unused_cross_attention_unchanged()
+    {
+        using var model = SmallModel();
+        model.TrainingSampleSpace = AiDotNet.Enums.DiffusionTrainingSampleSpace.Latent;
+        _ = model.ParameterCount;
+        InitializePretrainedLikeReadout(model);
+        var (input, target) = LatentTrainingPair();
+        var warmup = model.PredictNoise(input, 0).ToArray();
+        Assert.All(warmup, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+        Assert.Contains(warmup, value => value != 0);
+        Assert.Equal(3, model.Adapters.Count(adapter => adapter.Inner is AiDotNet.Diffusion.Attention.DiffusionAttention<float>));
+        Assert.Equal(3, model.Adapters.Count(adapter => adapter.Inner is AiDotNet.Diffusion.Attention.DiffusionCrossAttention<float>));
+        var chunks = model.Adapters.Select(adapter => adapter.Adapter.GetParameterStateChunks().ToArray()).ToArray();
+        var before = chunks.Select(row => row.Select(chunk => chunk.Tensor.ToArray()).ToArray()).ToArray();
+        var baseWeights = model.NoisePredictor.GetParameters().ToArray();
+        var vaeWeights = model.VAE.GetParameters().ToArray();
+        for (int step = 0; step < 3; step++) model.Train(input, target);
+        for (int adapter = 0; adapter < chunks.Length; adapter++)
+        {
+            bool active = model.Adapters[adapter].Inner is AiDotNet.Diffusion.Attention.DiffusionAttention<float>;
+            for (int factor = 0; factor < 3; factor++)
+            {
+                bool unchanged = before[adapter][factor].SequenceEqual(chunks[adapter][factor].Tensor.ToArray());
+                Assert.True(unchanged == !active, $"adapter {adapter}, factor {factor}: active={active}, unchanged={unchanged}");
+            }
+            for (int factor = 3; factor < 6; factor++) Assert.Equal(before[adapter][factor], chunks[adapter][factor].Tensor.ToArray());
+        }
+        Assert.Equal(baseWeights, model.NoisePredictor.GetParameters().ToArray());
+        Assert.Equal(vaeWeights, model.VAE.GetParameters().ToArray());
+        Assert.All(model.PredictNoise(input, 0).ToArray(), value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+    }
+
     [Fact]
     public void Model_steps_train_all_adapter_factors_and_preserve_frozen_state_across_clone_and_restore()
     {
-        var model = SmallModel();
+        using var model = SmallModel();
+        model.TrainingSampleSpace = AiDotNet.Enums.DiffusionTrainingSampleSpace.Latent;
         _ = model.ParameterCount; // Latch the lazy registry before any warmup; adapters must already be present.
-        var input = new Tensor<float>(Enumerable.Range(0, 256).Select(i => (float)Math.Sin(i * 0.1)).ToArray(), new[] { 1, 4, 8, 8 });
-        var target = new Tensor<float>(Enumerable.Range(0, 256).Select(i => (float)Math.Cos(i * 0.2)).ToArray(), new[] { 1, 4, 8, 8 });
-        model.PredictNoise(input, 0).ToArray(); // Warm every lazy base weight before taking the frozen snapshot.
+        InitializePretrainedLikeReadout(model);
+        var (input, target) = LatentTrainingPair();
+        var warmup = model.PredictNoise(input, 0).ToArray(); // Publish timestep zero through the public model path.
+        Assert.All(warmup, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+        Assert.Contains(warmup, value => value != 0);
+        var context = new Tensor<float>(new[] { 1, 3, 64 }, new Vector<float>(
+            Enumerable.Range(0, 192).Select(i => (float)Math.Sin(0.3 + i * 0.07)).ToArray()));
         var baseWeights = model.NoisePredictor.GetParameters().ToArray();
         var vaeWeights = model.VAE.GetParameters().ToArray();
         var chunks = model.Adapters.Select(adapter => adapter.Adapter.GetParameterStateChunks().ToArray()).ToArray();
@@ -445,7 +506,22 @@ public class TimestepDependentLoraTests : IDisposable
             Assert.Single(allState, candidate => ReferenceEquals(candidate.SourceTensor, chunk.Tensor));
         Assert.Equal((long)baseWeights.Length + vaeWeights.Length + chunks.Sum(row => row.Sum(chunk => (long)chunk.Tensor.Length)), model.ParameterCount);
         var before = chunks.Select(row => row.Select(chunk => chunk.Tensor.ToArray()).ToArray()).ToArray();
-        for (int step = 0; step < 3; step++) model.Train(input, target);
+        // This is the existing custom full-model eager step, not public conditional
+        // Train or compiled coverage. A separate instance above tests public Train;
+        // optimizer state never crosses between its fused and custom-eager paths.
+        var stepMethod = typeof(DiffusionModelBase<float>).GetMethod("StepWithCustomLoss", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The custom diffusion training step was not found.");
+        var customStep = (Func<Func<Tensor<float>>, float>)stepMethod.CreateDelegate(typeof(Func<Func<Tensor<float>>, float>), model);
+        Tensor<float> ConditionalLoss()
+        {
+            var error = AiDotNetEngine.Current.TensorSubtract(model.NoisePredictor.PredictNoise(input, 0, context), target);
+            return AiDotNetEngine.Current.ReduceMean(AiDotNetEngine.Current.TensorSquare(error), new[] { 0, 1, 2, 3 }, false);
+        }
+        for (int step = 0; step < 3; step++)
+        {
+            float loss = customStep(ConditionalLoss);
+            Assert.True(!float.IsNaN(loss) && !float.IsInfinity(loss));
+        }
         for (int adapter = 0; adapter < chunks.Length; adapter++)
         {
             for (int factor = 0; factor < 3; factor++)
@@ -456,14 +532,18 @@ public class TimestepDependentLoraTests : IDisposable
         Assert.Equal(vaeWeights, model.VAE.GetParameters().ToArray());
         Assert.Equal(model.ParameterCount, model.GetParameters().Length);
         var expected = model.PredictNoise(input, 0).ToArray();
+        var expectedConditioned = model.NoisePredictor.PredictNoise(input, 0, context).ToArray();
         Assert.All(expected, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
-        var clone = Assert.IsType<TLoRAModel<float>>(model.Clone());
+        Assert.All(expectedConditioned, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+        using var clone = Assert.IsType<TLoRAModel<float>>(model.Clone());
         Assert.Equal(model.GetParameters().ToArray(), clone.GetParameters().ToArray());
         Assert.Equal(expected, clone.PredictNoise(input, 0).ToArray());
-        var restored = SmallModel(91);
+        Assert.Equal(expectedConditioned, clone.NoisePredictor.PredictNoise(input, 0, context).ToArray());
+        using var restored = SmallModel(91);
         restored.Deserialize(model.Serialize());
         Assert.Equal(model.GetParameters().ToArray(), restored.GetParameters().ToArray());
         Assert.Equal(expected, restored.PredictNoise(input, 0).ToArray());
+        Assert.Equal(expectedConditioned, restored.NoisePredictor.PredictNoise(input, 0, context).ToArray());
         // Restoring a clone must not replace or mutate the original model's canonical state.
         var sourceState = model.GetParameters().ToArray();
         clone.Adapters[0].Adapter.SingularValues[0] += 0.5f;
