@@ -118,6 +118,14 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>The generator: a mel spectrogram <c>[1, mel, frames]</c> to a waveform <c>[1, 1, frames · hop]</c>.</summary>
     protected abstract Tensor<T> Generate(Tensor<T> mel);
 
+    /// <summary>Generates an owned, detached waveform consumed only by the discriminator training step.</summary>
+    /// <remarks>The caller suppresses gradient recording; training-mode state updates retain their usual behavior.</remarks>
+    protected virtual Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+    {
+        var generated = Flat(Generate(mel));
+        return new Tensor<T>(generated._shape, generated.ToVector());
+    }
+
     /// <summary>The generator's input features of a waveform <c>[samples]</c>, <c>[1, mel, frames]</c>, as the model's
     /// reference computes them; no gradient.</summary>
     protected abstract Tensor<T> ComputeInputMel(Tensor<T> audio);
@@ -382,8 +390,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         {
             using (new NoGradScope<T>())
             {
-                var g = Flat(Generate(mel));
-                generated = new Tensor<T>(g._shape, g.ToVector());
+                generated = GenerateDetachedForDiscriminator(mel);
             }
         }
         TrainLayers(_discriminatorLayers, mel, segment, () => DiscriminatorLoss(segment, generated), "discriminator");
