@@ -63,7 +63,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual([], receipt["setters"])
         self.assertEqual("mismatch", receipt["policy_match_after"]["status"])
         self.assertTrue(receipt["atexit_complete"])
-        run.assert_called_once_with(str(self.benchmark), run_name="__main__")
+        run.assert_called_once_with(str(self.benchmark.resolve()), run_name="__main__")
 
     def test_strict_cuda_requires_real_reference_environment_instead_of_guessing(self):
         with self.assertRaisesRegex(ValueError, "startup-environment receipt"):
