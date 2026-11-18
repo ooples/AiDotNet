@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
     [string] $RequiresTests = 'true',
+    [string] $RequiresGpu = 'false',
+    [string] $GpuResult = 'skipped',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
@@ -114,6 +116,8 @@ $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
+$requiresGpuNow = ConvertTo-RequiredBoolean $RequiresGpu 'RequiresGpu'
+$gpu = ConvertTo-CiJobConclusion $GpuResult 'required-gpu-contracts'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 $requiresPaperFidelityNow = ConvertTo-RequiredBoolean $RequiresPaperFidelity 'RequiresPaperFidelity'
 
@@ -191,6 +195,9 @@ else {
     }
 }
 
+# Kept outside the reuse switch: neither FullReuse nor a diagnostic report can satisfy a GPU
+# requirement declared for this run. Certified exact-tree reuse declares no new execution obligation.
+if ($requiresGpuNow) { Add-RequiredSuccess $requirements 'required-gpu-contracts' $gpu }
 $failed = @($requirements | Where-Object Conclusion -ne ([CiJobConclusion]::Success))
 
 # A job that was cancelled or never ran is not a job that failed. Telling them apart is the point of

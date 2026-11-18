@@ -3987,6 +3987,84 @@ jobs:
 
   # Certify the expensive validation stage independently from Sonar. A hosted runner
   # disappearing during either quality job must not force the landed tree to repeat 100+ shards.
+  required-gpu-contracts:
+    name: Required GPU recovery and concurrency
+    runs-on: [self-hosted, Windows, X64, gpu, cuda, sm86]
+    timeout-minutes: 60
+    needs: [validation-source, select-shards, build]
+    permissions:
+      actions: read
+      contents: read
+    # Untrusted fork code must never execute on the persistent GPU runner.
+    if: "${{ !cancelled() && needs.build.result == 'success' && needs.validation-source.outputs.execute_validation == 'true' && needs.select-shards.outputs.requires_validation == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && github.event.pull_request.draft != true && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    env:
+      AIDOTNET_DIRECTGPU_BACKENDS: cuda
+    steps:
+      - name: Checkout tested tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Receive identical tested build
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/TestImpact/Receive-RequiredArtifact.ps1 `
+            -Repository '${{ github.repository }}' `
+            -ArtifactId '${{ needs.build.outputs.artifact_id }}' `
+            -ExpectedDigest '${{ needs.build.outputs.artifact_digest }}' `
+            -Destination '.' -RunId '${{ github.run_id }}' -JobIndex 0
+      - name: Bind runtime assemblies and record device capability
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & nvidia-smi --query-gpu=name,uuid,driver_version,compute_cap --format=csv
+          if ($LASTEXITCODE -ne 0) { throw 'Required NVIDIA runtime inventory failed.' }
+          $directory = 'tests/AiDotNet.Tests/bin/Release/net10.0'
+          $assemblies = @('AiDotNet.dll','AiDotNet.Tensors.dll','AiDotNetTests.dll') | ForEach-Object {
+            $path = Join-Path $directory $_
+            [ordered]@{ name = $_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              identity = [Reflection.AssemblyName]::GetAssemblyName((Resolve-Path -LiteralPath $path).Path).FullName }
+          }
+          New-Item -ItemType Directory -Path required-gpu-results -Force | Out-Null
+          [ordered]@{ sha = '${{ github.sha }}'; runId = '${{ github.run_id }}'; runAttempt = '${{ github.run_attempt }}'
+            artifactId = '${{ needs.build.outputs.artifact_id }}'; artifactDigest = '${{ needs.build.outputs.artifact_digest }}'
+            assemblies = @($assemblies) } | ConvertTo-Json -Depth 5 | Set-Content required-gpu-results/binding.json
+      - name: Execute required GPU contracts without rebuilding
+        id: gpu-tests
+        shell: pwsh
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        run: |
+          dotnet vstest tests/AiDotNet.Tests/bin/Release/net10.0/AiDotNetTests.dll `
+            '--TestCaseFilter:GpuContract=Required' `
+            '--logger:trx;LogFileName=required-gpu.trx' '--ResultsDirectory:required-gpu-results'
+          if ($LASTEXITCODE -ne 0) { throw 'Required GPU tests failed.' }
+      - name: Verify every required case actually executed on CUDA
+        if: always()
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Assert-RequiredGpuResults.ps1 `
+            -Trx required-gpu-results/required-gpu.trx -BindingFile required-gpu-results/binding.json `
+            -ExpectedSha '${{ github.sha }}' -ExpectedRunId '${{ github.run_id }}' `
+            -ExpectedRunAttempt '${{ github.run_attempt }}' `
+            -ExpectedArtifactId '${{ needs.build.outputs.artifact_id }}' `
+            -ExpectedArtifactDigest '${{ needs.build.outputs.artifact_digest }}' `
+            -AssemblyDirectory tests/AiDotNet.Tests/bin/Release/net10.0
+      - name: Upload required GPU evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: required-gpu-contracts-${{ github.sha }}
+          path: required-gpu-results/
+          if-no-files-found: error
+          retention-days: 30
+
+
   validation-gate:
     name: Validation Gate
     runs-on: ubuntu-latest
@@ -4005,6 +4083,8 @@ jobs:
       - size-check
       - paper-fidelity-plan
       - paper-fidelity
+      - required-gpu-contracts
+
     steps:
       - name: Checkout gate policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -4026,6 +4106,8 @@ jobs:
             -VerdictEnforced '${{ needs.test-regression-analysis.outputs.verdict_enforced || 'false' }}' `
             -AggregateAnalysisResult '${{ needs.ci-test-analysis.result }}' `
             -SizeCheckResult '${{ needs.size-check.result }}' `
+            -RequiresGpu '${{ needs.select-shards.outputs.requires_validation == 'true' }}' `
+            -GpuResult '${{ needs.required-gpu-contracts.result }}' `
             -RequiresPaperFidelity '${{ github.event_name == 'pull_request' }}' `
             -PaperFidelityPlanResult '${{ needs.paper-fidelity-plan.result }}' `
             -PaperFidelityMode '${{ needs.paper-fidelity-plan.outputs.mode }}' `
@@ -4169,6 +4251,8 @@ jobs:
       - paper-fidelity
       - promote-ci-test-analysis
       - sonarcloud
+      - required-gpu-contracts
+
 
     steps:
       - name: Checkout gate policy
@@ -4182,6 +4266,8 @@ jobs:
             -ReuseScope '${{ needs.validation-source.outputs.reuse_scope }}' `
             -SourceResult '${{ needs.validation-source.result }}' `
             -RequiresValidation '${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}' `
+            -RequiresGpu '${{ needs.validation-source.outputs.execute_validation == 'true' && needs.select-shards.outputs.requires_validation == 'true' }}' `
+            -GpuResult '${{ needs.required-gpu-contracts.result }}' `
             -ValidationGateResult '${{ needs.validation-gate.result }}' `
             -PromotionResult '${{ needs.promote-ci-test-analysis.result }}' `
             -SonarResult '${{ needs.sonarcloud.result }}' `
