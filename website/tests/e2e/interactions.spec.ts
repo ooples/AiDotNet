@@ -97,9 +97,11 @@ for (const [path, ids, destination] of [
     for (const id of ids) {
       const provider = id.split('-')[0];
       let authorize: URL | undefined;
+      let providerCheck: Promise<void> | undefined;
       // Stop at Supabase's authorize endpoint: following it would leave for GitHub/Google.
-      await page.route('**/auth/v1/authorize**', async (route) => {
+      await page.route('**/auth/v1/authorize**', (route) => {
         authorize = new URL(route.request().url());
+        providerCheck = (async () => {
         if (authorize.hostname !== 'preview-test.supabase.co') {
           const response = await route.fetch({ maxRedirects: 0, timeout: 15_000 });
           expect(response.status(), `${provider} is enabled and starts a real provider authorization`).toBe(302);
@@ -109,10 +111,13 @@ for (const [path, ids, destination] of [
           await response.dispose();
         }
         await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>provider redirect (stubbed by test)</p>' });
+        })();
+        return providerCheck;
       });
       await page.goto(path);
       await page.locator(`#${id}`).click();
       await expect.poll(() => authorize?.href, { timeout: 15_000 }).toBeTruthy();
+      await providerCheck;
       expect(authorize!.searchParams.get('provider')).toBe(provider);
       const callback = new URL(authorize!.searchParams.get('redirect_to')!);
       expect(callback.origin).toBe(new URL(baseURL!).origin);

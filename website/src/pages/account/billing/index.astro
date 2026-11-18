@@ -79,6 +79,9 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       </div>
     </div>
 
+    <p id="later-cancellation-help" class="hidden text-sm text-slate-500">Stripe will show the current schedule. Resume the subscription there if needed, then cancel at the end of the billing period.</p>
+    <div id="other-billing-accounts" class="hidden flex flex-wrap gap-3"></div>
+
     <!-- FAQ -->
     <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
       <h2 class="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Frequently Asked</h2>
@@ -121,7 +124,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
   </div>
 
   <script>
-    import { loadBillingState, openPortal, cancelBeforeRenewal, formatMoney, formatDate, cancellationDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
+    import { loadBillingState, openPortal, cancelBeforeRenewal, formatMoney, formatDate, cancellationDate, TIER_LABEL, type PlanTier, type PortalAction, type SubscriptionSummary } from '../../../lib/billing';
 
     const FEATURES: Record<PlanTier, string[]> = {
       free: ['Training and inference (always free)', 'All 8,100+ public classes', 'GPU acceleration (any vendor)', 'Model save/load with a free Community license key'],
@@ -133,6 +136,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
     const $ = (id: string) => document.getElementById(id);
     const root = $('billing-root')!;
     let laterCancellation: { subscriptionId: string; scheduled: number; renewal: number } | null = null;
+    let lastSubscription: SubscriptionSummary | null = null;
 
     function showError(message: string) {
       const el = $('billing-error')!;
@@ -147,14 +151,17 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       el?.addEventListener('click', async () => {
         $('billing-error')!.classList.add('hidden');
         if (id === 'billing-cancel' && laterCancellation) {
-          if (!window.confirm(`Your subscription is scheduled to end on ${formatDate(laterCancellation.scheduled)}. End it on ${formatDate(laterCancellation.renewal)} instead, before another renewal?`)) return;
+          const approved = { ...laterCancellation };
+          if (!window.confirm(`Your subscription is scheduled to end on ${formatDate(approved.scheduled)}. End it on ${formatDate(approved.renewal)} instead, before another renewal? Review the current schedule and confirm in Stripe.`)) return;
           el.disabled = true;
           let refreshed = false;
           try {
             const err = await cancelBeforeRenewal(laterCancellation.subscriptionId, laterCancellation.renewal, laterCancellation.scheduled);
+            if (!err) return; // Stripe owns the final confirmation and mutation.
             refreshed = await loadBilling();
             if (!refreshed) showError('Could not refresh your billing details. Reload the page before confirming another cancellation.');
-            else if (err) showError(err);
+            else if (lastSubscription?.id === approved.subscriptionId && cancellationDate(lastSubscription) === approved.renewal) $('billing-error')!.classList.add('hidden');
+            else showError(err);
           } catch {
             laterCancellation = null;
             showError('Could not refresh your billing details. Reload the page before confirming another cancellation.');
@@ -163,7 +170,12 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
         }
         el.disabled = true;
         const err = await openPortal(req, '/account/billing/');
-        if (err) { el.disabled = false; showError(err); }
+        if (err && req.action === 'cancel') {
+          let refreshed = false;
+          try { refreshed = await loadBilling(); showError(refreshed ? err : 'Could not refresh your billing details. Reload the page before confirming another cancellation.'); }
+          catch { laterCancellation = null; showError('Could not refresh your billing details. Reload the page before confirming another cancellation.'); }
+          finally { el.disabled = !refreshed; }
+        } else if (err) { el.disabled = false; showError(err); }
       });
     }
 
@@ -180,12 +192,14 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
 
     async function loadBilling() {
       laterCancellation = null;
+      lastSubscription = null;
       const state = await loadBillingState();
       if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return false; }
       // What follows is then only the profile's view; say so rather than show it as the whole truth.
       if (state.error) showError(state.error);
 
       const sub = state.subscription;
+      lastSubscription = sub;
       // The live Stripe subscription wins over the profile mirror when they disagree.
       const tier: PlanTier = sub?.tier ?? state.tier;
       const paid = tier !== 'free';
@@ -197,6 +211,22 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       const cancellationAt = cancellationDate(sub);
       laterCancellation = sub && cancellationAt != null && cancellationAt > sub.current_period_end
         ? { subscriptionId: sub.id, scheduled: cancellationAt, renewal: sub.current_period_end } : null;
+      $('later-cancellation-help')!.classList.toggle('hidden', !laterCancellation);
+      const otherAccounts = $('other-billing-accounts')!;
+      otherAccounts.replaceChildren();
+      for (const [index, account] of (state.billingAccounts ?? []).filter(account => !account.selected).entries()) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'px-4 py-2 rounded-lg border text-sm';
+        button.textContent = `Manage additional billing account ${index + 1}`;
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          const err = await openPortal({ action: 'manage', customer_id: account.id }, '/account/billing/');
+          if (err) { button.disabled = false; showError(err); }
+        });
+        otherAccounts.append(button);
+      }
+      otherAccounts.classList.toggle('hidden', !otherAccounts.childElementCount);
       if (cancellationAt) badge(cancellationAt === sub?.current_period_end ? 'Cancels at period end' : 'Cancellation scheduled', 'warn');
       else if (status === 'active') badge('Active', 'ok');
       else if (status === 'trialing') badge('Trial', 'ok');
@@ -231,7 +261,7 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       if (state.hasBillingAccount) {
         $('portal-section')!.classList.remove('hidden');
         $('billing-cancel')!.classList.toggle('hidden', !sub || (!!cancellationAt && !laterCancellation));
-        $('billing-cancel')!.textContent = laterCancellation ? 'End before the next renewal' : 'Cancel subscription';
+        $('billing-cancel')!.textContent = laterCancellation ? 'Review cancellation in Stripe' : 'Cancel subscription';
       } else if (paid) {
         $('billing-no-account')!.classList.remove('hidden');
       }

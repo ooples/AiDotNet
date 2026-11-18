@@ -84,10 +84,11 @@ before(async () => {
   const fix = migration('20261117000000_close_legacy_policy_bypasses.sql');
   sql(fix);
   sql(fix); // Safe to reapply in local migration rehearsal.
-  sql(`create table public.license_keys(id uuid default gen_random_uuid(), user_id uuid, stripe_subscription_id text, product text, tier text, status text, notes text, license_key text, max_activations int);
+  sql(`create table public.license_keys(id uuid default gen_random_uuid(), user_id uuid, stripe_subscription_id text, stripe_customer_id text, product text, tier text, status text, notes text, license_key text, max_activations int, expires_at timestamptz);
     create unique index idx_license_keys_one_active_per_user_product_tier on public.license_keys(user_id,product,tier) where status='active';`);
   sql(migration('20261118000000_unique_subscription_entitlement.sql'));
   sql(migration('20261118010000_independent_subscription_entitlements.sql'));
+  sql(migration('20261118020000_secure_checkout_ownership.sql'));
 });
 
 after(() => { if (created) docker(['stop', container]); });
@@ -177,6 +178,13 @@ test('deployment prerequisite checks reject missing or nonunique entitlement ind
   assert.throws(() => sql("begin; drop index public.idx_license_keys_subscription_product; create unique index idx_license_keys_subscription_product on public.license_keys(stripe_subscription_id,product) where stripe_subscription_id is not null and tier='professional';\n"+guard), /Run the reviewed migrations/);
   assert.throws(() => sql('begin; drop index public.idx_license_keys_checkout_product;\n'+guard), /Run the reviewed migrations/);
   assert.throws(() => sql('begin; drop function public.issue_aidotnet_community_license(uuid,text);\n'+guard), /Run the reviewed migrations/);
+  for (const definition of ['p_customer_id text,p_fallback_tier text,p_fallback_status text,p_user_id uuid','wrong_customer text,p_fallback_tier text,p_fallback_status text,p_user_id uuid default null',"p_customer_id text,p_fallback_tier text,p_fallback_status text,p_user_id uuid default '11111111-1111-4111-8111-111111111111'"]) {
+    assert.throws(() => sql(`begin; drop function public.sync_aidotnet_billing_profile(text,text,text,uuid);
+      create function public.sync_aidotnet_billing_profile(${definition}) returns void language sql as $$select$$;
+      revoke all on function public.sync_aidotnet_billing_profile(text,text,text,uuid) from public,anon,authenticated;
+      grant execute on function public.sync_aidotnet_billing_profile(text,text,text,uuid) to service_role;
+      `+guard), /RPC argument contract/);
+  }
   sql(guard); // Failed transactions rolled back; function-only redeployment stays available.
 });
 
@@ -215,6 +223,47 @@ test('owners cannot reactivate a revoked API key', () => {
 });
 test('owners cannot update or see another customer profile', () => {
   assert.match(asUser(`with changed as (update public.profiles set full_name='Forbidden' where id='${other}' returning id) select count(*) from changed;`), /\n0$/);
+  assert.match(asUser(`select count(*) from public.profiles where id='${other}';`), /\n0$/);
+});
+
+test('profile repair uses current Auth email even when the token email is stale', () => {
+  assert.match(sql(`begin; update auth.users set email='current@example.test' where id='${user}';
+    delete from public.profiles where id='${user}';
+    set local role authenticated;
+    select set_config('request.jwt.claim.sub','${user}',true);
+    select set_config('request.jwt.claim.role','authenticated',true);
+    insert into public.profiles(id,email) values('${user}','forged@example.test');
+    select email from public.profiles where id='${user}'; rollback;`), /current@example.test$/);
+});
+
+test('owner key inserts cannot forge creation or usage history', () => {
+  const output = asUser(`insert into public.user_api_keys(user_id,key_name,key_hash,key_prefix,scopes,created_at,last_used_at)
+    values('${user}','Audit fixture','audit-hash','audit',array['read'],'2000-01-01','2000-01-02');
+    select (created_at >= now()-interval '1 second') and last_used_at is null from public.user_api_keys where key_hash='audit-hash';`);
+  assert.match(output,/\nt$/);
+});
+
+test('Checkout ownership is immutable across customers and accounts', () => {
+  assert.equal(sql(`begin;
+    select public.bind_aidotnet_checkout('${user}','cs_owned','cus_owned');
+    select public.bind_aidotnet_checkout('${user}','cs_owned','cus_owned');
+    do $$ begin begin
+      perform public.bind_aidotnet_checkout('${other}','cs_other','cus_owned');
+      raise exception 'foreign customer accepted';
+    exception when raise_exception then if sqlerrm='foreign customer accepted' then raise; end if; end; end $$;
+    select count(*) from public.billing_customers; rollback;`), '1');
+});
+
+test('a revoked Enterprise subscription cannot elevate an active Professional grant', () => {
+  assert.equal(sql(`begin; update public.profiles set stripe_customer_id='cus_review' where id='${user}';
+    insert into public.license_keys(user_id,product,tier,status) values('${user}','aidotnet','professional','active'),('${user}','aidotnet','enterprise','revoked');
+    select public.sync_aidotnet_billing_profile('cus_review','enterprise','active');
+    select subscription_tier from public.profiles where id='${user}'; rollback;`), 'pro');
+});
+
+for (const role of ['anon','authenticated']) test(`${role} cannot forge Checkout ownership or intents`, () => {
+  expectDenied(`perform public.bind_aidotnet_checkout('${user}','cs_fake','cus_fake')`,user,role);
+  expectDenied(`insert into public.billing_checkout_intents(user_id,tier,interval) values('${user}','enterprise','month')`,user,role);
 });
 
 test('hardening preserves existing restrictive authentication policies', () => {

@@ -87,6 +87,7 @@ test('a new customer signs up, buys Pro, manages their account and recovers thei
     await expect(page.locator('#welcome-msg')).toHaveText(`Welcome back, ${fullName}`, { timeout: 15_000 });
     await page.locator('#user-menu-btn').click();
     await expect(page.locator('#nav-user-name')).toHaveText(fullName);
+    await expect(page.locator('#user-dropdown')).toBeVisible();
     await expect(page.locator('#nav-user-email')).toHaveText(email);
   });
 
@@ -110,7 +111,10 @@ test('a new customer signs up, buys Pro, manages their account and recovers thei
     });
     await page.locator('.checkout-btn[data-tier="pro"]').first().click();
     await expect.poll(() => checkoutUrl?.href, { timeout: 15_000 }).toBeTruthy();
-    expect(checkoutUrl!.searchParams.get('client_reference_id')).toBe(userId);
+    const reference = checkoutUrl!.searchParams.get('client_reference_id');
+    expect(reference).toBeTruthy();
+    expect(reference).not.toBe(userId);
+    expect(await restSelect<Array<{user_id:string}>>(request,`billing_checkout_intents?select=user_id&id=eq.${reference}`)).toEqual([{user_id:userId}]);
     expect(checkoutUrl!.searchParams.get('prefilled_email')).toBe(email);
     await page.unroute(/^https:\/\/(buy|checkout)\.stripe\.com\//);
 
@@ -128,7 +132,8 @@ test('a new customer signs up, buys Pro, manages their account and recovers thei
           mode: 'subscription',
           status: 'complete',
           payment_status: 'paid',
-          client_reference_id: userId,
+          created:Math.floor(Date.now()/1000),
+          client_reference_id: reference,
           customer: null,
           subscription: null,
           customer_details: { email },

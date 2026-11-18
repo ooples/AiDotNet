@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { journeySkipReason, postSignedStripeEvent, restPatch, restSelect } from '../helpers/backend';
+import { journeySkipReason, postSignedStripeEvent, restPatch, restSelect, restInsert } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona } from '../helpers/personas';
 import { changeSubscriptionPrice, deleteCustomer, planPrice } from '../helpers/stripe';
 
@@ -12,11 +12,12 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
   test.setTimeout(120_000);
   let persona: Persona | undefined;
   try {
-    persona = await createPersona(request, 'pro-stripe');
+    persona = await createPersona(request, 'pro-stripe', { entitlement:false });
     const { customerId, subscriptionId } = persona.stripe!;
+    const intent = await restInsert<{id:string}>(request,'billing_checkout_intents',{user_id:persona.id,tier:'pro',interval:'month'});
     const session = {
       id: `cs_e2e_${randomUUID().replace(/-/g, '')}`, object: 'checkout.session',
-      mode: 'subscription', status: 'complete', client_reference_id: persona.id,
+      mode: 'subscription', status: 'complete', created:Math.floor(Date.now()/1000), client_reference_id: intent.id,
       customer: customerId, subscription: subscriptionId,
       customer_details: { email: persona.email }, metadata: { tier: 'pro' },
     };
@@ -38,7 +39,7 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
     expect(issued[0]).toMatchObject({ status: 'active', stripe_subscription_id: subscriptionId });
     await deliver('checkout.session.async_payment_succeeded', 'paid');
     expect(await licenses(), 'replayed success does not create another key').toEqual(issued);
-    await restPatch(request, `profiles?id=eq.${persona.id}`, { stripe_customer_id: null, subscription_tier: 'free' });
+    expect(await restPatch(request, `profiles?id=eq.${persona.id}`, { stripe_customer_id: null, subscription_tier: 'free' })).toBe(1);
     await deliver('checkout.session.async_payment_succeeded', 'paid');
     const profiles = await restSelect<Array<{ stripe_customer_id: string; subscription_tier: string }>>(
       request, `profiles?select=stripe_customer_id,subscription_tier&id=eq.${persona.id}`);
@@ -61,4 +62,25 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
   } finally {
     await disposePersona(request, persona);
   }
+});
+
+test('late paid Checkout creates exactly one expired entitlement when cancellation arrived before any key', async ({request})=>{
+  const skip=journeySkipReason(); test.skip(!!skip,skip);
+  test.setTimeout(120_000);
+  let persona:Persona|undefined;
+  try {
+    persona=await createPersona(request,'pro-stripe',{entitlement:false});
+    const {customerId,subscriptionId}=persona.stripe!;
+    const intent=await restInsert<{id:string}>(request,'billing_checkout_intents',{user_id:persona.id,tier:'pro',interval:'month'});
+    await deleteCustomer(request,customerId);
+    persona.stripe=undefined;
+    const licenses=()=>restSelect<Array<{status:string;stripe_subscription_id:string}>>(request,`license_keys?select=status,stripe_subscription_id&user_id=eq.${persona!.id}`);
+    expect(await licenses()).toEqual([]);
+    const response=await postSignedStripeEvent(request,{id:`evt_e2e_${randomUUID()}`,object:'event',type:'checkout.session.completed',data:{object:{
+      id:`cs_e2e_${randomUUID().replace(/-/g,'')}`,object:'checkout.session',created:Math.floor(Date.now()/1000),
+      client_reference_id:intent.id,customer:customerId,subscription:subscriptionId,payment_status:'paid',metadata:{tier:'pro'},customer_details:{email:persona.email},
+    }}});
+    expect(response.status(),await response.text()).toBe(200);
+    expect(await licenses()).toEqual([{status:'expired',stripe_subscription_id:subscriptionId}]);
+  } finally { await disposePersona(request,persona); }
 });

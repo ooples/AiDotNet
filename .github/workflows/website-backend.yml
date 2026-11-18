@@ -9,33 +9,40 @@ on:
       - website/supabase/migrations/20261117000000_close_legacy_policy_bypasses.sql
       - website/supabase/migrations/20261118000000_unique_subscription_entitlement.sql
       - website/supabase/migrations/20261118010000_independent_subscription_entitlements.sql
+      - website/supabase/migrations/20261118020000_secure_checkout_ownership.sql
       - website/supabase/verify-entitlement-prerequisites.sql
       - website/tests/database/rls.test.mjs
   workflow_dispatch:
     inputs:
+      target:
+        description: 'Preview variants or canonical production functions'
+        type: choice
+        options: [preview, production]
+        default: preview
       apply_rls:
         description: Apply the reviewed website migrations
         type: boolean
         default: false
       deploy_functions:
-        description: Deploy billing-portal, stripe-webhook, and register-community-license
+        description: Deploy reviewed billing, deletion, fulfillment and Community handlers
         type: boolean
         default: false
       configure_stripe:
-        description: Enable delayed-payment success on the existing Stripe endpoint
+        description: Verify delayed-payment success on the existing live Stripe endpoint
         type: boolean
         default: false
 
 permissions:
   contents: read
 concurrency:
-  group: website-preview-verification
+  group: ${{ github.event_name == 'push' && format('website-backend-check-{0}', github.ref) || 'website-preview-verification' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   backend:
     name: Verify and deploy the shared preview backend
-    environment: Preview
+    environment: ${{ inputs.target == 'production' && 'Production' || 'Preview' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -68,14 +75,14 @@ jobs:
         run: |
           set -euo pipefail
           database_url=$(cat supabase/.temp/pooler-url)
-          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement 20261118010000_independent_subscription_entitlements; do
+          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement 20261118010000_independent_subscription_entitlements 20261118020000_secure_checkout_ownership; do
           version=${filename%%_*}
           migration=supabase/migrations/${filename}.sql
           migration_name=${filename#*_}
           recorded=$(psql "$database_url" -X -At -v ON_ERROR_STOP=1 -c "select count(*) from supabase_migrations.schema_migrations where version='$version'")
           if [ "$recorded" = 0 ]; then
             # DDL and migration history succeed together. Other pending migrations are not applied.
-            psql "$database_url" -X --single-transaction -v ON_ERROR_STOP=1 \
+            PGOPTIONS='-c lock_timeout=2000 -c statement_timeout=5000' psql "$database_url" -X --single-transaction -v ON_ERROR_STOP=1 \
               --set=migration_source="$(cat "$migration")" --set=migration_version="$version" --set=migration_name="$migration_name" \
               -f "$migration" -f - <<'SQL'
           insert into supabase_migrations.schema_migrations(version,name,statements)
@@ -89,6 +96,18 @@ jobs:
           done
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Record aggregate rollout evidence without customer data
+        if: ${{ inputs.apply_rls || inputs.deploy_functions }}
+        run: |
+          psql "$(cat supabase/.temp/pooler-url)" -X -v ON_ERROR_STOP=1 <<'SQL'
+          select count(*) as license_rows,pg_total_relation_size('public.license_keys') as license_bytes from public.license_keys;
+          select count(*) as duplicate_checkout_receipts from (select stripe_checkout_session_id,product from public.license_keys where stripe_checkout_session_id is not null group by stripe_checkout_session_id,product having count(*)>1) duplicates;
+          select count(*) as duplicate_legacy_checkout_notes from (select notes,product from public.license_keys where notes ~ '^Issued by Stripe Checkout \(session ' group by notes,product having count(*)>1) duplicates;
+          select count(*) as conflicting_customer_owners from (select customer_id from (select stripe_customer_id customer_id,id user_id from public.profiles where stripe_customer_id is not null union all select stripe_customer_id,user_id from public.license_keys where stripe_customer_id is not null) legacy group by customer_id having count(distinct user_id)>1) conflicts;
+          select version,name from supabase_migrations.schema_migrations where version in ('20261117000000','20261118000000','20261118010000','20261118020000') order by version;
+          SQL
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       # Function credentials are managed separately. Deploying code preserves the
       # installed key; the hosted license-email journey verifies actual sending.
       - name: Require valid entitlement prerequisites before any function deployment
@@ -99,10 +118,13 @@ jobs:
       - name: Deploy only the reviewed billing and Community functions
         if: ${{ inputs.deploy_functions }}
         run: |
-          supabase functions deploy billing-portal --project-ref yfkqwpgjahoamlgckjib
-          supabase functions deploy stripe-webhook --project-ref yfkqwpgjahoamlgckjib
-          supabase functions deploy register-community-license --project-ref yfkqwpgjahoamlgckjib
+          suffix=-preview
+          if [ "$FUNCTION_TARGET" = production ]; then suffix=; fi
+          for name in billing-portal stripe-webhook register-community-license delete-account; do
+            supabase functions deploy "$name$suffix" --project-ref yfkqwpgjahoamlgckjib
+          done
         env:
+          FUNCTION_TARGET: ${{ inputs.target || 'preview' }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Verify the existing Stripe webhook event subscription
         if: ${{ inputs.configure_stripe }}

@@ -18,6 +18,8 @@ const subscription = {
 async function installBackend(page: Page, options: {
   tier?: string; customer?: boolean; sub?: Record<string, unknown> | null; profileFailure?: boolean; summaryFailure?: boolean; rescheduleFailure?: boolean; rescheduleConflict?: boolean;
   summaryAfterAction?: () => Promise<void>; summaryFailureAfterAction?: boolean;
+  rescheduleAppliedFailure?: boolean; ordinaryCancelConflict?: boolean;
+  licenses?: Array<Record<string,unknown>>;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: 'user',
@@ -33,10 +35,13 @@ async function installBackend(page: Page, options: {
   const calls: Array<Record<string, unknown>> = [];
   let currentSub = options.sub ?? null;
   let rescheduleAttempts = 0;
+  await page.route('https://billing.stripe.com/**', route => route.fulfill({status:200,contentType:'text/html',body:'<h1>Stripe cancellation review</h1>'}));
   await page.route('https://preview-test.supabase.co/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const reply = (body: unknown, status = 200) => route.fulfill({ status, json: body });
     if (path === '/auth/v1/user') return reply(user);
+    if (path === '/rest/v1/license_keys') return reply(options.licenses ?? []);
+    if (path === '/rest/v1/license_activations') return reply([]);
     if (path === '/rest/v1/profiles') {
       if (options.profileFailure) return reply({ message: 'profile unavailable' }, 503);
       const single = route.request().headers().accept?.includes('pgrst.object');
@@ -45,6 +50,8 @@ async function installBackend(page: Page, options: {
     if (path === '/functions/v1/billing-portal') {
       const body = route.request().postDataJSON();
       calls.push(body);
+      if (body.action === 'checkout_reference') return reply({reference:'22222222-2222-4222-8222-222222222222'});
+      if (body.action === 'claim_checkout') return reply({message:'Checkout belongs to another account'},403);
       if (body.action === 'summary') {
         if (rescheduleAttempts) {
           await options.summaryAfterAction?.();
@@ -54,13 +61,21 @@ async function installBackend(page: Page, options: {
       }
       if (body.action === 'cancel_before_renewal') {
         rescheduleAttempts++;
+        if (options.rescheduleAppliedFailure) {
+          currentSub={...currentSub,cancel_at:currentSub!.current_period_end};
+          return reply({message:'Action response unavailable'},502);
+        }
         if (options.rescheduleConflict && body.expected_renewal === subscription.current_period_end) {
           currentSub = { ...currentSub, current_period_end: subscription.current_period_end + 86400 };
           return reply({ message: 'Your renewal date changed. Confirm again.' }, 409);
         }
         if (options.rescheduleFailure) return reply({ message: 'Cancellation could not be changed' }, 502);
-        currentSub = { ...currentSub, cancel_at: currentSub!.current_period_end };
-        return reply({ subscription: currentSub });
+        return reply({url:'https://billing.stripe.com/review'});
+      }
+      if (body.action === 'cancel' && options.ordinaryCancelConflict) {
+        rescheduleAttempts++;
+        currentSub={...currentSub,cancel_at:subscription.current_period_end+172800};
+        return reply({error:'already_cancelling',message:'A cancellation was scheduled in another session.'},409);
       }
       return reply({ message: 'Portal temporarily unavailable' }, 502);
     }
@@ -109,7 +124,7 @@ test('a stale renewal confirmation refreshes the date before a second confirmati
   const confirmations: string[] = [];
   page.on('dialog', async d => { confirmations.push(d.message()); await d.accept(); });
   await page.goto('/account/billing/');
-  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  const cancel = page.getByRole('button', { name: 'Review cancellation in Stripe' });
   await cancel.click();
   try {
     await refreshStarted;
@@ -118,7 +133,7 @@ test('a stale renewal confirmation refreshes the date before a second confirmati
   await expect(page.locator('#billing-error')).toHaveText('Your renewal date changed. Confirm again.');
   await expect(cancel).toBeEnabled();
   await cancel.click();
-  await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+  await expect(page).toHaveURL('https://billing.stripe.com/review');
   expect(calls.filter(c => c.action === 'cancel_before_renewal').map(c => c.expected_renewal)).toEqual([subscription.current_period_end, subscription.current_period_end + 86400]);
   const dates = await page.evaluate(seconds => seconds.map(s => new Date(s * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })), [subscription.current_period_end, subscription.current_period_end + 86400, subscription.current_period_end + 172800]);
   expect(confirmations[0]).toContain(`scheduled to end on ${dates[2]}`);
@@ -128,12 +143,37 @@ test('a stale renewal confirmation refreshes the date before a second confirmati
   expect(calls.filter(c => c.action === 'cancel_before_renewal').every(c => c.expected_cancel_at === subscription.current_period_end + 172800)).toBe(true);
 });
 
+test('a lost cancellation response is successful when the refreshed subscription confirms it', async ({ page }) => {
+  const calls = await installBackend(page, {tier:'pro',customer:true,sub:{...subscription,cancel_at:subscription.current_period_end+172800},rescheduleAppliedFailure:true});
+  page.on('dialog', d => d.accept());
+  await page.goto('/account/billing/');
+  await page.getByRole('button',{name:'Review cancellation in Stripe'}).click();
+  await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
+  await expect(page.locator('#billing-error')).toBeHidden();
+  await expect(page.locator('#billing-cancel')).toBeHidden();
+  expect(calls.filter(c=>c.action==='cancel_before_renewal')).toHaveLength(1);
+});
+
+test('an ordinary cancellation conflict refreshes the scheduled action before enabling it', async ({ page }) => {
+  let release!:()=>void, started!:()=>void;
+  const gate=new Promise<void>(r=>release=r), refresh=new Promise<void>(r=>started=r);
+  const calls=await installBackend(page,{tier:'pro',customer:true,sub:subscription,ordinaryCancelConflict:true,summaryAfterAction:async()=>{started();await gate;}});
+  page.on('dialog',d=>d.accept());
+  await page.goto('/account/billing/');
+  await page.locator('#billing-cancel').click();
+  try { await refresh; await expect(page.locator('#billing-cancel')).toBeDisabled(); }
+  finally { release(); }
+  await expect(page.getByRole('button',{name:'Review cancellation in Stripe'})).toBeEnabled();
+  await expect(page.locator('#billing-badge')).toHaveText('Cancellation scheduled');
+  expect(calls.filter(c=>c.action==='cancel')).toHaveLength(1);
+});
+
 test('a failed refresh disables further stale cancellation confirmations', async ({ page }) => {
   const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 172800 }, rescheduleConflict: true, summaryFailureAfterAction: true });
   let dialogs = 0;
   page.on('dialog', async d => { dialogs++; await d.accept(); });
   await page.goto('/account/billing/');
-  await page.getByRole('button', { name: 'End before the next renewal' }).click();
+  await page.getByRole('button', { name: 'Review cancellation in Stripe' }).click();
   await expect(page.locator('#billing-error')).toContainText('Reload the page');
   await expect(page.locator('#billing-cancel')).toBeDisabled();
   await page.locator('#billing-cancel').evaluate(button => (button as HTMLButtonElement).click());
@@ -141,19 +181,18 @@ test('a failed refresh disables further stale cancellation confirmations', async
   expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
 });
 
-test('a later cancellation can be moved before renewal only after explicit confirmation', async ({ page }) => {
+test('a later cancellation opens Stripe review only after explicit confirmation', async ({ page }) => {
   const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 } });
   let accept = false;
   page.on('dialog', d => accept ? d.accept() : d.dismiss());
   await page.goto('/account/billing/');
-  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  const cancel = page.getByRole('button', { name: 'Review cancellation in Stripe' });
   await cancel.click();
   expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(0);
   await expect(cancel).toBeEnabled();
   accept = true;
   await cancel.click();
-  await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
-  await expect(page.locator('#billing-cancel')).toBeHidden();
+  await expect(page).toHaveURL('https://billing.stripe.com/review');
   expect(calls.filter(c => c.action === 'cancel_before_renewal')).toHaveLength(1);
   expect(calls.find(c => c.action === 'cancel_before_renewal')).toMatchObject({ expected_subscription_id: subscription.id, expected_renewal: subscription.current_period_end, expected_cancel_at: subscription.current_period_end + 86400 });
 });
@@ -162,7 +201,7 @@ test('a failed cancellation change preserves the existing end and permits retry'
   const calls = await installBackend(page, { tier: 'pro', customer: true, sub: { ...subscription, cancel_at: subscription.current_period_end + 86400 }, rescheduleFailure: true });
   page.on('dialog', d => d.accept());
   await page.goto('/account/billing/');
-  const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+  const cancel = page.getByRole('button', { name: 'Review cancellation in Stripe' });
   await cancel.click();
   await expect(page.locator('#billing-error')).toHaveText('Cancellation could not be changed');
   await expect(cancel).toBeEnabled();
@@ -197,6 +236,33 @@ test('a failed portal request surfaces its error and allows retry', async ({ pag
     { action: 'manage', return_path: '/account/billing/' },
     { action: 'manage', return_path: '/account/billing/' },
   ]);
+});
+
+for (const validOlder of [true,false]) {
+  test(`license setup ${validOlder ? 'uses an older valid key' : 'is hidden'} when the newest active key has expired`, async ({page}) => {
+    const license={id:'expired-key',license_key:'AIDN-EXPIRED-FIXTURE-KEY',tier:'professional',status:'active',max_activations:2,organization_name:null,issued_at:'2025-01-01',expires_at:'2025-02-01'};
+    await installBackend(page,{licenses:[license,...(validOlder?[{...license,id:'valid-key',license_key:'AIDN-VALID-FIXTURE-KEY',expires_at:null}]:[])]});
+    await page.goto('/account/licenses/');
+    await expect(page.locator('[data-license-status]')).toHaveCount(validOlder?2:1);
+    await expect(page.locator('#setup-section')).toBeVisible({visible:validOlder});
+    await expect(page.locator('#env-var-code')).toHaveText(validOlder?'AIDOTNET_LICENSE_KEY=AIDN-VALID-FIXTURE-KEY':'');
+    await expect(page.locator('[data-license-status]').first()).toHaveAttribute('data-usable','false');
+  });
+}
+
+test('explicit Checkout claim validates the reference and surfaces ownership errors',async({page})=>{
+  const calls=await installBackend(page);
+  await page.goto('/account/licenses/');
+  await page.getByText('Paid before signing in? Claim your checkout',{exact:true}).click();
+  await page.locator('#claim-checkout-reference').fill('not-a-checkout');
+  await page.locator('#claim-checkout-btn').click();
+  await expect(page.locator('#claim-checkout-message')).toContainText('beginning with cs_');
+  expect(calls.filter(c=>c.action==='claim_checkout')).toHaveLength(0);
+  await page.locator('#claim-checkout-reference').fill('https://checkout.stripe.com/c/pay/cs_test_claim');
+  await page.locator('#claim-checkout-btn').click();
+  await expect(page.locator('#claim-checkout-message')).toHaveText('Checkout belongs to another account');
+  await expect(page.locator('#claim-checkout-btn')).toBeEnabled();
+  expect(calls.filter(c=>c.action==='claim_checkout')).toEqual([{action:'claim_checkout',checkout_session_id:'cs_test_claim'}]);
 });
 
 for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '//attacker.example/phish', '/a/..//attacker.example/phish']) {

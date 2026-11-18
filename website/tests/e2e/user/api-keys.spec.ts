@@ -1,11 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 test.describe('Logged-in user — API keys', () => {
   test('full create → reveal → revoke round-trip', async ({ page, context, baseURL }) => {
     // The key name carries the test-run timestamp so repeated CI runs
     // don't collide on the same row, and so we can grep for this row
     // later to make assertions like "only our key was revoked".
-    const keyName = `playwright-e2e-${Date.now()}`;
+    const keyName = `playwright-e2e-${randomUUID()}`;
+    let insert: { url: string; headers: Record<string, string> } | undefined;
+    page.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/rest/v1/user_api_keys') {
+        insert = { url: request.url(), headers: request.headers() };
+      }
+    });
+    let primaryFailure: unknown;
+    try {
 
     await page.goto('/account/api-keys/');
     await expect(page.getByRole('heading', { name: 'API Keys', level: 1 })).toBeVisible();
@@ -84,6 +93,23 @@ test.describe('Logged-in user — API keys', () => {
     // forever and a second click would silently re-run the UPDATE.
     await expect(ourRow.getByText('Revoked', { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(ourRow.getByRole('button', { name: 'Revoke' })).toHaveCount(0);
+    } catch (error) { primaryFailure = error; throw error; }
+    finally {
+      if (insert) {
+        try {
+          const target = new URL(insert.url);
+          target.search = new URLSearchParams({ key_name: `eq.${keyName}` }).toString();
+          const response = await page.request.patch(target.href, {
+            headers: { authorization: insert.headers.authorization, apikey: insert.headers.apikey }, data: { is_active: false },
+          });
+          expect(response.ok(), 'revoke only this run-created key even after a UI failure').toBe(true);
+          await response.dispose();
+        } catch (cleanupError) {
+          if (primaryFailure) throw new AggregateError([primaryFailure, cleanupError], 'API key test and independent cleanup failed');
+          throw cleanupError;
+        }
+      }
+    }
   });
 
   test('create-modal Cancel button dismisses the modal without creating a key', async ({ page }) => {
@@ -94,7 +120,19 @@ test.describe('Logged-in user — API keys', () => {
 
     const rowCountBefore = await page.locator('#keys-body tr').count();
     const inserts: string[] = [];
-    page.on('request', (r) => { if (r.method() === 'POST' && r.url().includes('/rest/v1/user_api_keys')) inserts.push(r.url()); });
+    await page.route('**/rest/v1/user_api_keys*', async route => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      inserts.push(route.request().url());
+      await route.fulfill({ status: 409, json: { message: 'Unexpected insert blocked by Cancel test' } });
+    });
+    await page.locator('#create-key-form').evaluate(form => {
+      form.setAttribute('data-test-submits', '0');
+      form.addEventListener('submit', event => {
+        form.setAttribute('data-test-submits', String(Number(form.getAttribute('data-test-submits')) + 1));
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }, { capture: true });
+    });
 
     await page.getByRole('button', { name: /Create New Key/ }).click();
     await expect(page.locator('#create-modal')).toBeVisible();
@@ -108,5 +146,6 @@ test.describe('Logged-in user — API keys', () => {
     const rowCountAfter = await page.locator('#keys-body tr').count();
     expect(rowCountAfter).toBe(rowCountBefore);
     expect(inserts, 'Cancel must not submit an insert').toEqual([]);
+    await expect(page.locator('#create-key-form')).toHaveAttribute('data-test-submits', '0');
   });
 });

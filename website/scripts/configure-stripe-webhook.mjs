@@ -4,8 +4,9 @@ const PROJECT = 'https://yfkqwpgjahoamlgckjib.supabase.co';
 const REQUIRED_EVENT = 'checkout.session.async_payment_succeeded';
 
 /** Preserve other events and the signing secret on the one existing website endpoint. */
-export async function configureStripeWebhook({ key, projectUrl = PROJECT, fetcher = fetch }) {
+export async function configureStripeWebhook({ key, projectUrl = PROJECT, mode = 'live', fetcher = fetch }) {
   if (!key || projectUrl !== PROJECT) throw new Error('Expected the existing website project and a Stripe server key');
+  if (mode !== 'live' && mode !== 'sandbox') throw new Error('Explicit live or sandbox mode is required');
   const target = `${PROJECT}/functions/v1/stripe-webhook`;
   async function request(path, options = {}) {
     const response = await fetcher(`https://api.stripe.com/v1${path}`, {
@@ -28,15 +29,11 @@ export async function configureStripeWebhook({ key, projectUrl = PROJECT, fetche
   const matches = endpoints.filter(e => e.status === 'enabled' && e.url.replace(/\/$/, '') === target);
   if (matches.length !== 1) throw new Error(`Expected one enabled website webhook endpoint; found ${matches.length}. No endpoint was created or removed.`);
   const endpoint = matches[0];
+  if (endpoint.livemode !== (mode === 'live')) throw new Error(`Expected a ${mode} Stripe endpoint`);
   if (!Array.isArray(endpoint.enabled_events)) throw new Error('Stripe did not return the subscribed events');
   if (endpoint.enabled_events.includes('*') || endpoint.enabled_events.includes(REQUIRED_EVENT)) return { changed: false };
-  const events = [...endpoint.enabled_events, REQUIRED_EVENT];
-  const body = new URLSearchParams(events.map((event, i) => [`enabled_events[${i}]`, event]));
-  await request(`/webhook_endpoints/${encodeURIComponent(endpoint.id)}`, { method: 'POST', body });
-  const verified = await request(`/webhook_endpoints/${encodeURIComponent(endpoint.id)}`);
-  if (verified.url.replace(/\/$/, '') !== target || verified.status !== 'enabled'
-      || !events.every(event => verified.enabled_events?.includes(event))) throw new Error('Stripe endpoint read-after-write verification failed');
-  return { changed: true };
+  // Stripe replaces the complete list and provides no conditional update.
+  throw new Error(`Add ${REQUIRED_EVENT} to ${endpoint.id} at https://dashboard.stripe.com/webhooks, preserving existing events, then rerun verification. No configuration was changed.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

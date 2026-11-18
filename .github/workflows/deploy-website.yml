@@ -14,8 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: website-deploy
-  cancel-in-progress: true
+  group: website-preview-verification
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   migrate-database:
@@ -55,7 +56,12 @@ jobs:
       # resend-license-email function was never deployed at all). Deploy every function on each run;
       # per-function verify_jwt comes from supabase/config.toml.
       - name: Deploy Supabase edge functions
-        run: supabase functions deploy --project-ref yfkqwpgjahoamlgckjib
+        run: |
+          for directory in supabase/functions/*; do
+            name=$(basename "$directory")
+            case "$name" in _shared|*-preview) continue ;; esac
+            supabase functions deploy "$name" --project-ref yfkqwpgjahoamlgckjib
+          done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 

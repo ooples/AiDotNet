@@ -58,6 +58,11 @@ test.describe('Phone admin license dialog', () => {
   test.use({ viewport: phone.viewport, userAgent: phone.userAgent, deviceScaleFactor: phone.deviceScaleFactor, isMobile: true, hasTouch: true });
 
   test('the issuance form scrolls and its Cancel button accepts a real phone tap', async ({ page }) => {
+    const unexpectedIssues: string[] = [];
+    await page.route('**/functions/v1/issue-license', async route => {
+      unexpectedIssues.push(route.request().method());
+      await route.fulfill({ status: 409, json: { error: 'phone_cancel_test_blocks_issuance' } });
+    });
     await page.goto('/admin/licenses/');
     await expect(page.locator('#licenses-loading')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(393);
@@ -73,9 +78,23 @@ test.describe('Phone admin license dialog', () => {
     await page.locator('#issue-customer-name').fill('E2E phone dialog cancellation');
     await page.locator('#issue-notes').fill('The Cancel action must be reachable without zooming or horizontal panning.');
     const cancel = page.locator('#cancel-issue-btn');
-    await cancel.scrollIntoViewIfNeeded();
-    await expect(cancel).toBeInViewport();
+    const panel = modal.locator(':scope > div');
+    await panel.evaluate(el => { el.scrollTop = 0; });
+    const session = await page.context().newCDPSession(page);
+    try {
+      for (let i = 0; i < 8; i++) {
+        try { await expect(cancel).toBeInViewport({ ratio: 1, timeout: 100 }); break; } catch { /* swipe to reach it */ }
+        const box = await panel.boundingBox();
+        if (!box) throw new Error('Issue dialog has no touch target');
+        await session.send('Input.synthesizeScrollGesture', {
+          x: box.x + box.width / 2, y: box.y + box.height - 25,
+          yDistance: -Math.min(300, box.height - 50), speed: 700, gestureSourceType: 'touch',
+        });
+      }
+      await expect(cancel).toBeInViewport({ ratio: 1 });
+    } finally { await session.detach(); }
     await cancel.tap();
     await expect(modal).toBeHidden();
+    expect(unexpectedIssues).toEqual([]);
   });
 });

@@ -12,22 +12,34 @@ const code = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
 }).outputText;
 
-function fixture({ insertError, profileError, existingLicense = false, revokedLicense = false, stripeError = false, currentStatus = 'active', currentTier = 'pro', otherLicenses = [] } = {}) {
+function fixture({ insertError, profileError, rpcError, withoutIntent = false, existingLicense = false, revokedLicense = false, stripeError = false, currentStatus = 'active', currentTier = 'pro', otherLicenses = [] } = {}) {
   let handler, beforeInsert, beforeLicenseUpdate;
   const defaults = { user_id: 'user-id', product: 'aidotnet', tier: 'professional', status: 'active', stripe_subscription_id: null, stripe_checkout_session_id: null };
   const licenses = otherLicenses.map((row, i) => ({ ...defaults, id: `other-${i}`, ...row }));
   if (existingLicense || revokedLicense) licenses.push({ ...defaults, id: 'license-id', license_key: 'existing-key', stripe_subscription_id: 'sub_fixture', status: revokedLicense ? 'revoked' : 'active' });
   const profiles = [{ id: 'user-id', email: 'preview@example.test', stripe_customer_id: 'cus_fixture', subscription_tier: 'free', subscription_status: 'active' }];
+  const intents = withoutIntent ? [] : [{ id: '11111111-1111-4111-8111-111111111111', user_id:'user-id', tier:'pro', created_at:'2020-01-01', expires_at:'2030-01-01' }];
+  const customers = [{ customer_id:'cus_fixture', user_id:'user-id' }];
+  const bindings = [];
+  let linkFailure = profileError, mirrorFailure = rpcError ?? profileError;
   let status = currentStatus, tier = currentTier, unavailable = stripeError;
   const writes = [], emails = [], retrievedIds = [];
   const client = {
     async rpc(name, args) {
+      if (name === 'bind_aidotnet_checkout') {
+        const owner = customers.find(row=>row.customer_id===args.p_customer_id);
+        const binding = bindings.find(row=>row.session_id===args.p_session_id);
+        if ((owner && owner.user_id !== args.p_user_id) || (binding && (binding.user_id !== args.p_user_id || binding.customer_id !== args.p_customer_id))) return {error:{message:'ownership conflict'}};
+        if (args.p_customer_id && !owner) customers.push({customer_id:args.p_customer_id,user_id:args.p_user_id});
+        if (!binding) bindings.push({session_id:args.p_session_id,user_id:args.p_user_id,customer_id:args.p_customer_id});
+        return {error:null};
+      }
       assert.equal(name, 'sync_aidotnet_billing_profile');
-      if (profileError) return { error: profileError };
-      for (const profile of profiles.filter(p => args.p_user_id ? p.id === args.p_user_id : p.stripe_customer_id === args.p_customer_id)) {
+      if (mirrorFailure) return { error: mirrorFailure };
+      for (const profile of profiles.filter(p => args.p_user_id ? p.id === args.p_user_id : (p.stripe_customer_id === args.p_customer_id || customers.some(c=>c.user_id===p.id&&c.customer_id===args.p_customer_id)))) {
         const active = licenses.filter(l => l.user_id === profile.id && l.product === 'aidotnet' && l.status === 'active');
-        const rank = Math.max(-1, ...active.map(l => ({ enterprise: 2, professional: 1, community: 0 }[l.tier] ?? 0)),
-          args.p_fallback_status === 'active' ? ({ enterprise: 2, pro: 1, free: 0 }[args.p_fallback_tier] ?? 0) : -1);
+        const rank = Math.max(-1, ...active.map(l => ({ enterprise: 2, professional: 1, community: 0 }[l.tier] ?? 0)));
+        if (!profile.stripe_customer_id && customers.some(c=>c.user_id===profile.id&&c.customer_id===args.p_customer_id)) profile.stripe_customer_id=args.p_customer_id;
         const data = { subscription_tier: rank === 2 ? 'enterprise' : rank === 1 ? 'pro' : 'free', subscription_status: rank >= 0 ? 'active' : args.p_fallback_status };
         Object.assign(profile, data); writes.push({ table: 'profiles', operation: 'update', data });
       }
@@ -35,7 +47,8 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
     },
     from(table) {
       const filters = [];
-      const rows = table === 'profiles' ? profiles : licenses;
+      const rows = ({profiles,license_keys:licenses,billing_customers:customers,billing_checkout_intents:intents,billing_checkout_bindings:bindings})[table];
+      assert.ok(rows, 'Unknown table '+table);
       const matches = row => filters.every(([op,k,v]) => op === 'neq' ? row[k] !== v : op === 'is' ? (row[k] ?? null) === v : row[k] === v);
       const query = {
         select() { return query; }, eq(k,v) { filters.push(['eq',k,v]); return query; },
@@ -50,11 +63,11 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
           licenses.push({ ...defaults, id: `license-${licenses.length}`, ...data });
           return { error: null };
         },
-        maybeSingle() { return Promise.resolve({ data: rows.find(matches) ?? null, error: table === 'profiles' ? profileError ?? null : null }); },
+        maybeSingle() { return Promise.resolve({ data: rows.find(matches) ?? null, error: table === 'profiles' ? linkFailure ?? null : null }); },
         async then(resolve, reject) {
           try {
             if (table === 'license_keys' && query.change && beforeLicenseUpdate) { const hook = beforeLicenseUpdate; beforeLicenseUpdate = null; await hook(); }
-            if (table === 'profiles' && profileError) return resolve({ data: null, error: profileError });
+            if (table === 'profiles' && linkFailure) return resolve({ data: null, error: linkFailure });
             if (query.change) for (const row of rows.filter(matches)) Object.assign(row, query.change);
             return resolve({ data: query.change ? null : rows.filter(matches), error: null });
           } catch (error) { return reject(error); }
@@ -83,13 +96,20 @@ function fixture({ insertError, profileError, existingLicense = false, revokedLi
       if (id.includes('deno.land')) return { serve: fn => { handler = fn; } };
       if (id.includes('supabase-js')) return { createClient: () => client };
       if (id.includes('stripe@')) return Stripe;
+      if (id.endsWith('/checkout-ownership.ts')) {
+        const exports = {};
+        const source = readFileSync(new URL('../../supabase/functions/_shared/checkout-ownership.ts', import.meta.url),'utf8');
+        runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,console},{filename:'checkout-ownership.ts'});
+        return exports;
+      }
       if (id.endsWith('/email.ts')) return { sendLicenseKeyEmail: async data => { emails.push(data); } };
       throw new Error(`Unexpected import: ${id}`);
     },
   });
-  const session = { id: 'cs_fixture', client_reference_id: 'user-id', customer: 'cus_fixture', subscription: 'sub_fixture', metadata: { tier: 'pro' }, payment_status: 'paid', customer_details: { email: 'preview@example.test' } };
+  const session = { id: 'cs_fixture', created: 1700000000, client_reference_id: '11111111-1111-4111-8111-111111111111', customer: 'cus_fixture', subscription: 'sub_fixture', metadata: { tier: 'pro' }, payment_status: 'paid', customer_details: { email: 'preview@example.test' } };
   return {
-    writes, emails, licenses, profiles, retrievedIds,
+    writes, emails, licenses, profiles, retrievedIds, customers, bindings,
+    setProfileError(value) { linkFailure=value; }, setMirrorError(value) { mirrorFailure=value; },
     setSubscription(nextStatus, nextTier = tier) { status = nextStatus; tier = nextTier; },
     setStripeError(value) { unavailable = value; },
     setBeforeInsert(hook) { beforeInsert = hook; }, setBeforeLicenseUpdate(hook) { beforeLicenseUpdate = hook; },
@@ -147,7 +167,7 @@ for (const event of ['checkout.session.completed', 'customer.subscription.update
   test(`a profile failure during ${event} is retried instead of acknowledging stale billing state`, async () => {
     const f = fixture({ profileError: { message: 'profile write unavailable' } });
     assert.equal((await f.send(event, { id: 'sub_fixture' })).status, 500);
-    assert.equal(f.writes.filter(w => w.operation === 'insert').length, 0);
+    assert.equal(f.licenses.length, event === 'checkout.session.completed' ? 1 : 0);
     assert.equal(f.emails.length, 0);
   });
 }
@@ -197,10 +217,62 @@ for (const recovery of ['invoice.paid', 'customer.subscription.updated']) {
 
 test('Checkout replay repairs the customer link even when a subscription license already exists', async () => {
   const f = fixture({ existingLicense: true });
+  f.profiles[0].stripe_customer_id = null;
   assert.equal((await f.send()).status, 200);
+  assert.equal(f.profiles[0].stripe_customer_id, 'cus_fixture');
   assert.ok(f.writes.some(w => w.table === 'profiles' && w.data.stripe_customer_id === 'cus_fixture'));
   assert.equal(f.licenses.length, 1);
   assert.equal(f.writes.filter(w => w.operation === 'insert').length, 0);
+});
+
+for (const reference of ['user-id','22222222-2222-4222-8222-222222222222',null]) test(`public Checkout fields cannot select an account: ${reference}`, async () => {
+  const f = fixture();
+  assert.equal((await f.send('checkout.session.completed',{client_reference_id:reference})).status,500);
+  assert.equal(f.licenses.length,0);
+  assert.equal(f.writes.length,0);
+});
+
+test('a customer already owned by another account cannot be rebound through Checkout', async () => {
+  const f = fixture();
+  f.customers[0].user_id='another-user';
+  assert.equal((await f.send()).status,500);
+  assert.equal(f.licenses.length,0);
+});
+
+test('an old Checkout cannot replace a newer preferred customer or remove its grant', async () => {
+  const f = fixture({currentStatus:'canceled',otherLicenses:[{stripe_subscription_id:'sub_new',stripe_customer_id:'cus_new'}]});
+  f.profiles[0].stripe_customer_id='cus_new';
+  f.customers.push({customer_id:'cus_new',user_id:'user-id'});
+  assert.equal((await f.send()).status,200);
+  assert.equal(f.profiles[0].stripe_customer_id,'cus_new');
+  assert.equal(f.profiles[0].subscription_tier,'pro');
+  assert.equal(f.customers.length,2);
+});
+
+test('a failed profile link repair leaves a durable key recoverable by invoice alone', async () => {
+  const f = fixture({profileError:{message:'link unavailable'}});
+  f.profiles[0].stripe_customer_id=null;
+  assert.equal((await f.send()).status,500);
+  const key=f.licenses[0].id;
+  assert.equal(f.licenses[0].status,'suspended');
+  f.setProfileError(null); f.setMirrorError(null);
+  assert.equal((await f.send('invoice.paid')).status,200);
+  assert.equal(f.licenses[0].id,key);
+  assert.equal(f.licenses[0].status,'active');
+  assert.equal(f.profiles[0].stripe_customer_id,'cus_fixture');
+  assert.equal(f.profiles[0].subscription_tier,'pro');
+});
+
+test('an RPC failure after a committed license change recovers the same key on replay', async () => {
+  const f=fixture({existingLicense:true,currentTier:'enterprise',rpcError:{message:'mirror unavailable'}});
+  assert.equal((await f.send('invoice.paid')).status,500);
+  assert.equal(f.licenses[0].tier,'enterprise');
+  assert.equal(f.profiles[0].subscription_tier,'free');
+  f.setMirrorError(null);
+  assert.equal((await f.send('invoice.paid')).status,200);
+  assert.equal(f.licenses.length,1);
+  assert.equal(f.licenses[0].id,'license-id');
+  assert.equal(f.profiles[0].subscription_tier,'enterprise');
 });
 
 test('Checkout replay after a tier change reconciles the one subscription license', async () => {

@@ -86,7 +86,10 @@ test.describe('Logged-in user — settings', () => {
     // The seeded account is shared by every run, so this never confirms: the real deletion (refused
     // while a subscription bills, then done) is account-billing.spec.ts on a throwaway customer.
     const deleteCalls: string[] = [];
-    page.on('request', (r) => { if (r.url().includes('/functions/v1/delete-account')) deleteCalls.push(r.method()); });
+    await page.route('**/functions/v1/delete-account*', async route => {
+      deleteCalls.push(route.request().method());
+      await route.fulfill({ status: 409, json: { error: 'blocked_shared_account_test' } });
+    });
     page.on('dialog', (d) => { throw new Error(`unexpected browser dialog: ${d.message()}`); });
     await page.goto('/account/settings/');
 
@@ -97,10 +100,12 @@ test.describe('Logged-in user — settings', () => {
     async function checkFocusWrap(enabledConfirm: boolean) {
       await page.locator('#delete-confirm-input').focus();
       for (const direction of ['Tab', 'Shift+Tab']) {
-        const stops = enabledConfirm ? 3 : 2;
-        for (let i = 0; i < stops; i++) {
+        const stops = direction === 'Tab'
+          ? enabledConfirm ? ['#delete-cancel-btn', '#delete-confirm-btn', '#delete-confirm-input'] : ['#delete-cancel-btn', '#delete-confirm-input']
+          : enabledConfirm ? ['#delete-confirm-btn', '#delete-cancel-btn', '#delete-confirm-input'] : ['#delete-cancel-btn', '#delete-confirm-input'];
+        for (const target of stops) {
           await page.keyboard.press(direction);
-          expect(await page.evaluate(() => !!document.activeElement?.closest('#delete-account-modal')), 'keyboard focus stays in the deletion dialog').toBe(true);
+          await expect(page.locator(target)).toBeFocused();
         }
         await expect(page.locator('#delete-confirm-input')).toBeFocused();
       }

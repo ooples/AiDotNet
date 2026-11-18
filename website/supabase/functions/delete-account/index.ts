@@ -3,6 +3,7 @@ import { withCors } from "../_shared/cors.ts";
 const serve = (handler: (req: Request) => Response | Promise<Response>) => serveHttp(withCors(handler));
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import { ownedBillingCustomers } from "../_shared/checkout-ownership.ts";
 
 // Deletes the caller's own account: POST { confirm: "DELETE" }.
 //
@@ -50,17 +51,22 @@ serve(async (req: Request) => {
     console.error(`delete-account: profile lookup failed for ${user.id}:`, profileError);
     return json({ error: "profile_lookup_failed", message: "Could not check your billing account. Nothing was deleted; please try again." }, 503);
   }
-  const customer = profile?.stripe_customer_id as string | null | undefined;
-  if (customer) {
+  let customers: string[];
+  try { customers = await ownedBillingCustomers(admin, user.id, profile?.stripe_customer_id); }
+  catch { return json({ error: "billing_ownership_unverified", message: "Could not verify every billing account. Nothing was deleted; please contact support." }, 503); }
+  if (customers.length) {
     const key = Deno.env.get("STRIPE_SECRET_KEY");
     if (!key) return json({ error: "server_configuration_error" }, 500);
     const stripe = new Stripe(key, { apiVersion: "2023-10-16", httpClient: Stripe.createFetchHttpClient() });
     try {
       // Every page: a billing subscription can sit behind any number of ended ones.
       let billing = false;
-      for await (const s of stripe.subscriptions.list({ customer, status: "all", limit: 100 })) {
-        const endsBeforeRenewal = s.cancel_at_period_end || (s.cancel_at != null && s.cancel_at <= s.current_period_end);
-        if (BILLING_STATUSES.has(s.status) && !endsBeforeRenewal) { billing = true; break; }
+      for (const customer of customers) {
+        for await (const s of stripe.subscriptions.list({ customer, status: "all", limit: 100 })) {
+          const endsBeforeRenewal = s.cancel_at_period_end || (s.cancel_at != null && s.cancel_at <= s.current_period_end);
+          if (BILLING_STATUSES.has(s.status) && !endsBeforeRenewal) { billing = true; break; }
+        }
+        if (billing) break;
       }
       if (billing) {
         return json({

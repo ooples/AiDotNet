@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { EventEmitter } from 'node:events';
 import { crawl } from './helpers/crawler';
 import { signIn } from './helpers/personas';
+import { withCleanup } from './helpers/cleanup';
 
 // Test the coverage gate itself against an isolated HTTP fixture. A passing
 // production crawl is only meaningful if broken controls make the gate fail.
@@ -11,14 +12,21 @@ test.describe('crawler regression checks', () => {
   let origin: string;
   let coveredRowLoads = 0;
   let bootstrapAborted = 0;
+  let bootstrapStarted = 0, bootstrapCompleted = 0, loginVisits = 0;
 
   test.beforeAll(async () => {
     server = createServer((req, res) => {
       if (req.url === '/slow-bootstrap/') {
+        bootstrapStarted++;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.flushHeaders();
         res.on('close', () => { if (!res.writableEnded) bootstrapAborted++; });
-        setTimeout(() => res.end('{}'), 1500);
+        setTimeout(() => { bootstrapCompleted++; res.end('{}'); }, 1500);
+        return;
+      }
+      if (req.url === '/fast-body/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        setTimeout(() => res.end('{}'), 1000);
         return;
       }
       if (req.url === '/slow-body/') {
@@ -33,6 +41,7 @@ test.describe('crawler regression checks', () => {
         return;
       }
       if (req.url === '/login/') {
+        loginVisits++;
         res.setHeader('Content-Type', 'text/html');
         res.end('<!doctype html><label>Email address<input id="email"></label><label>Password<input id="password" type="password"></label><button onclick="location.href=\'/account/\'">Sign In</button>');
         return;
@@ -72,6 +81,14 @@ test.describe('crawler regression checks', () => {
           ? '<div style="position:relative"><button onclick="alert(\'First\')">Row action</button><div style="position:absolute;inset:0;background:white"></div></div><button onclick="alert(\'Second\')">Row action</button>'
         : req.url === '/async-control/'
           ? '<button id="update" onclick="fetch(\'/slow-body/\').then(r=>r.json()).then(j=>document.getElementById(\'result\').textContent=j.message)">Update</button><span id="result"></span>'
+        : req.url === '/delayed-request/'
+          ? '<button id="update" onclick="fetch(\'/fast-body/\');setTimeout(()=>fetch(\'/slow-body/\').then(r=>r.json()).then(j=>document.getElementById(\'result\').textContent=j.message),500)">Update</button><span id="result"></span>'
+        : req.url === '/hidden-value/'
+          ? '<button id="update" onclick="document.getElementById(\'secret\').checked=true">Update</button><div hidden><input type="checkbox" id="secret"></div>'
+        : req.url === '/visible-style/'
+          ? '<button id="update" onclick="fetch(\'/ping/\').then(()=>document.getElementById(\'swatch\').style.backgroundColor=\'blue\')">Update</button><div id="swatch" style="width:20px;height:20px;background:red"></div>'
+        : req.url === '/enable-at-limit/'
+          ? '<button id="enable" onclick="document.getElementById(\'deep\').disabled=false">Enable</button><button id="deep" disabled onclick="alert(\'Deep\')">Deep</button>'
         : req.url === '/unrelated-abort/'
           ? '<script>fetch(\'/aborted/\').catch(()=>{}); setTimeout(()=>console.error(\'Failed to fetch: genuine unrelated failure\'),200)</script><h1>Abort fixture</h1>'
           : '<h1>Fixture</h1><button id="dialog" onclick="alert(\'Hello\')">Open dialog</button><script>if(localStorage.getItem("sb-fixture-auth-token"))fetch("/slow-bootstrap/").catch(e=>console.error(e))</script>';
@@ -90,6 +107,12 @@ test.describe('crawler regression checks', () => {
 
   const options = () => ({ origin, persona: null, inScope: () => false, dedicated: [] });
 
+  test('cleanup failures preserve the original verification failure', async () => {
+    const original = new Error('original verification failure'), cleanup = new Error('cleanup failure');
+    await expect(withCleanup(async () => { throw original; }, async () => { throw cleanup; })).rejects.toMatchObject({ errors: [original, cleanup] });
+    await expect(withCleanup(async () => {}, async () => { throw cleanup; })).rejects.toBe(cleanup);
+  });
+
   test('sign-in waits for destination styles before the crawler observes controls', async ({ browser }) => {
     const context = await browser.newContext({ baseURL: origin });
     try {
@@ -102,6 +125,7 @@ test.describe('crawler regression checks', () => {
   });
 
   test('restored sessions finish bootstrap requests before the first forced visit', async ({ browser, request }) => {
+    const before = { started: bootstrapStarted, completed: bootstrapCompleted, login: loginVisits };
     const context = await browser.newContext({ baseURL: origin, storageState: {
       cookies: [], origins: [{ origin, localStorage: [{ name: 'sb-fixture-auth-token', value: 'fixture' }] }],
     } });
@@ -112,7 +136,40 @@ test.describe('crawler regression checks', () => {
       });
       expect(report.findings).toEqual([]);
       expect(bootstrapAborted, 'the crawler must not interrupt session bootstrap').toBe(0);
+      expect(bootstrapStarted - before.started).toBe(1);
+      expect(bootstrapCompleted - before.completed).toBe(1);
+      expect(loginVisits).toBe(before.login);
     } finally { await context.close(); }
+  });
+
+  test('hidden field property changes are inert while a rendered style result counts', async ({ page, request }) => {
+    const hidden = await crawl({ ...options(), page, request, seeds: [`${origin}/hidden-value/`] });
+    expect(hidden.findings).toEqual(expect.arrayContaining([expect.objectContaining({ control: expect.stringContaining('#update'), problem: expect.stringContaining('did nothing visible') })]));
+    const visible = await crawl({ ...options(), page, request, seeds: [`${origin}/visible-style/`] });
+    expect(visible.findings).toEqual([]);
+  });
+
+  test('requests that start while an action settles finish before its result is checked', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, seeds: [`${origin}/delayed-request/`] });
+    expect(report.findings).toEqual([]);
+    await expect(page.locator('#result')).toHaveText('Updated');
+  });
+
+  test('enabling a control at the depth limit clears its disabled-only record', async ({ page, request }) => {
+    const report = await crawl({ ...options(), page, request, maxDepth: 0, seeds: [`${origin}/enable-at-limit/`] });
+    expect(report.findings.some(f => f.problem.includes('control is disabled'))).toBe(false);
+  });
+
+  test('a caller listener registered during exploration survives crawl cleanup', async ({ page, request }) => {
+    const caller = () => {};
+    await page.route('**/caller-listener/', async route => {
+      if (!(page as unknown as EventEmitter).listeners('response').includes(caller)) page.on('response', caller);
+      await route.fallback();
+    });
+    try {
+      await crawl({ ...options(), page, request, seeds: [`${origin}/caller-listener/`] });
+      expect((page as unknown as EventEmitter).listeners('response')).toContain(caller);
+    } finally { page.off('response', caller); }
   });
 
   test('the depth limit reports revealed controls it did not exercise', async ({ page, request }) => {

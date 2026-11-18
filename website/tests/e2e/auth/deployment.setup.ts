@@ -1,17 +1,10 @@
-import { test as setup, expect } from '@playwright/test';
+import { test as setup } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
+import { authorizePreview } from '../../../scripts/authorize-preview.mjs';
+import { DEPLOYMENT_STORAGE_STATE } from '../helpers/auth-state';
 
-setup('authorize the protected preview deployment', async ({ request, baseURL }) => {
-  const secret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
-  if (!secret) throw new Error('A preview automation credential is required');
-  // Establish a same-origin cookie once. Never attach a Vercel credential
-  // globally: that would send it to Stripe, Supabase, and external links.
-  const first = await request.get(baseURL!, {
-    headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' },
-    maxRedirects: 0,
-  });
-  expect([200, 302, 303, 307, 308]).toContain(first.status());
-  const response = await request.get(baseURL!);
-  expect(response.status(), 'preview home must exist before browser journeys run').toBe(200);
-  expect(new URL(response.url()).origin).toBe(new URL(baseURL!).origin);
-  await request.storageState({ path: 'tests/e2e/.auth/deployment.json' });
+setup('authorize the protected preview deployment', async ({ baseURL }) => {
+  const state = await authorizePreview({ baseURL: baseURL!, secret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+    expectedCommit: process.env.EXPECTED_PREVIEW_COMMIT, expectedRun: process.env.EXPECTED_PREVIEW_RUN });
+  writeFileSync(DEPLOYMENT_STORAGE_STATE, JSON.stringify(state), { mode: 0o600 });
 });

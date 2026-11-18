@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BASE = '';
 
 test.describe('Link Validation', () => {
-  test('internal navigation links on landing page work', async ({ page, context }) => {
+  test('internal navigation links on landing page work', async ({ page, context, baseURL }) => {
     await page.goto(`${BASE}/`);
     const internalLinks = page.locator('a[href^="/"]');
     const hrefs: string[] = [];
@@ -24,7 +24,7 @@ test.describe('Link Validation', () => {
         const response = await target.goto(href, { waitUntil: 'load' });
         expect(response?.status(), `Link ${href} should return 200`).toBe(200);
         if (/^\/(account|admin)(\/|$)/.test(href)) {
-          await expect(target).toHaveURL(/\/login\//);
+          await expect(target).toHaveURL(url => url.origin === new URL(baseURL!).origin && url.pathname === '/login/');
         }
         await expect(target.locator('h1')).toBeVisible();
       } finally {

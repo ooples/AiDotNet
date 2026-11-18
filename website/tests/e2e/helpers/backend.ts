@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
+import { serverRequest } from '../../../scripts/secure-backend-http.mjs';
 
 // Server-side helpers for the real-backend journeys. The E2E workflow provides:
 //   SUPABASE_URL               the project URL (PUBLIC_SUPABASE_URL secret)
@@ -45,7 +46,7 @@ export function randomPassword(): string {
 export interface AdminUser { id: string; email: string }
 
 export async function createConfirmedUser(request: APIRequestContext, email: string, password: string, fullName: string): Promise<AdminUser> {
-  const res = await request.post(`${env('SUPABASE_URL')}/auth/v1/admin/users`, {
+  const res = await serverRequest(`${env('SUPABASE_URL')}/auth/v1/admin/users`, { method: 'POST',
     headers: adminHeaders(),
     data: { email, password, email_confirm: true, user_metadata: { full_name: fullName } },
   });
@@ -55,7 +56,7 @@ export async function createConfirmedUser(request: APIRequestContext, email: str
 }
 
 export async function findUserIdByEmail(request: APIRequestContext, email: string): Promise<string> {
-  const res = await request.get(`${env('SUPABASE_URL')}/rest/v1/profiles?select=id&email=eq.${encodeURIComponent(email)}`, {
+  const res = await serverRequest(`${env('SUPABASE_URL')}/rest/v1/profiles?select=id&email=eq.${encodeURIComponent(email)}`, { method: 'GET',
     headers: adminHeaders(),
   });
   if (!res.ok()) throw new Error(`profile lookup: HTTP ${res.status()} ${await res.text()}`);
@@ -65,7 +66,7 @@ export async function findUserIdByEmail(request: APIRequestContext, email: strin
 }
 
 export async function deleteUser(request: APIRequestContext, id: string): Promise<void> {
-  const res = await request.delete(`${env('SUPABASE_URL')}/auth/v1/admin/users/${id}`, { headers: adminHeaders() });
+  const res = await serverRequest(`${env('SUPABASE_URL')}/auth/v1/admin/users/${id}`, { method: 'DELETE', headers: adminHeaders() });
   if (!res.ok() && res.status() !== 404) throw new Error(`deleteUser: HTTP ${res.status()} ${await res.text()}`);
 }
 
@@ -77,7 +78,7 @@ export async function generateLink(
   redirectTo: string,
   password?: string,
 ): Promise<string> {
-  const res = await request.post(`${env('SUPABASE_URL')}/auth/v1/admin/generate_link?redirect_to=${encodeURIComponent(redirectTo)}`, {
+  const res = await serverRequest(`${env('SUPABASE_URL')}/auth/v1/admin/generate_link?redirect_to=${encodeURIComponent(redirectTo)}`, { method: 'POST',
     headers: adminHeaders(),
     data: { type, email, password, redirect_to: redirectTo },
   });
@@ -89,13 +90,13 @@ export async function generateLink(
 }
 
 export async function restSelect<T>(request: APIRequestContext, pathAndQuery: string): Promise<T> {
-  const res = await request.get(`${env('SUPABASE_URL')}/rest/v1/${pathAndQuery}`, { headers: adminHeaders() });
+  const res = await serverRequest(`${env('SUPABASE_URL')}/rest/v1/${pathAndQuery}`, { method: 'GET', headers: adminHeaders() });
   if (!res.ok()) throw new Error(`select ${pathAndQuery}: HTTP ${res.status()} ${await res.text()}`);
   return (await res.json()) as T;
 }
 
 export async function restInsert<T>(request: APIRequestContext, table: string, row: Record<string, unknown>): Promise<T> {
-  const res = await request.post(`${env('SUPABASE_URL')}/rest/v1/${table}`, {
+  const res = await serverRequest(`${env('SUPABASE_URL')}/rest/v1/${table}`, { method: 'POST',
     headers: { ...adminHeaders(), prefer: 'return=representation' },
     data: row,
   });
@@ -104,7 +105,7 @@ export async function restInsert<T>(request: APIRequestContext, table: string, r
 }
 
 export async function restPatch(request: APIRequestContext, pathAndQuery: string, patch: Record<string, unknown>): Promise<number> {
-  const res = await request.patch(`${env('SUPABASE_URL')}/rest/v1/${pathAndQuery}`, {
+  const res = await serverRequest(`${env('SUPABASE_URL')}/rest/v1/${pathAndQuery}`, { method: 'PATCH',
     headers: { ...adminHeaders(), prefer: 'return=representation' },
     data: patch,
   });
@@ -117,7 +118,9 @@ export async function postSignedStripeEvent(request: APIRequestContext, event: R
   const payload = JSON.stringify(event);
   const t = Math.floor(Date.now() / 1000);
   const v1 = createHmac('sha256', env('STRIPE_WEBHOOK_SECRET')).update(`${t}.${payload}`).digest('hex');
-  return request.post(`${env('SUPABASE_URL')}/functions/v1/stripe-webhook`, {
+  const target = process.env.STRIPE_WEBHOOK_FUNCTION || 'stripe-webhook';
+  if (!['stripe-webhook','stripe-webhook-preview'].includes(target)) throw new Error('Unexpected webhook verification target');
+  return serverRequest(`${env('SUPABASE_URL')}/functions/v1/${target}`, { method: 'POST',
     headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` },
     data: payload,
   });

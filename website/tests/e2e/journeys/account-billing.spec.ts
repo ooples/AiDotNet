@@ -1,6 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { randomBytes } from 'node:crypto';
-import { journeySkipReason, restInsert, restSelect } from '../helpers/backend';
+import { journeySkipReason, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, signIn, type Persona } from '../helpers/personas';
 import { changeSubscriptionPrice, getSubscription, planPrice, scheduleLaterTrialCancellation } from '../helpers/stripe';
 
@@ -52,12 +51,8 @@ test.describe('Pro bought online', () => {
     test.skip(!!skip, skip);
     p = await createPersona(request, 'pro-stripe');
     // The license the webhook issues at checkout, so deletion can be checked to revoke it.
-    const lic = await restInsert<{ id: string }>(request, 'license_keys', {
-      user_id: p.id, license_key: `AIDN-PROD-PRO-E2E${randomBytes(14).toString('hex').toUpperCase()}`, tier: 'professional',
-      status: 'active', max_activations: 10, stripe_subscription_id: p.stripe!.subscriptionId, stripe_customer_id: p.stripe!.customerId,
-      notes: 'e2e persona',
-    });
-    licenseId = lic.id;
+    if (!p.licenseId) throw new Error('Paid persona entitlement was not created');
+    licenseId = p.licenseId;
   });
   test.afterAll(async ({ request }) => { await disposePersona(request, p); });
 
@@ -98,7 +93,7 @@ test.describe('Pro bought online', () => {
     await expect(card(page, 'pro')).toHaveText('Current plan');
     await expect(card(page, 'pro')).toBeDisabled();
     await expect(card(page, 'enterprise')).toHaveText('Upgrade to Enterprise');
-    await expect(card(page, 'community')).toHaveText('Downgrade to Community');
+    await expect(card(page, 'community')).toHaveText('Cancel paid subscription');
     await expect(page.locator('[data-plan-status="community"]')).toHaveText(/Cancels Professional/);
 
     const yearly = await planPrice(request, 'pro', 'year').catch(() => null);
@@ -190,11 +185,12 @@ test.describe('Pro bought online', () => {
     await pricingLoaded(page);
     await expect(page.locator('#current-plan-text')).toHaveText(/It ends on /);
     await expect(page.locator('[data-plan-status="enterprise"]')).toHaveText('Ends at the close of this billing period');
-    await expect(card(page, 'community')).toHaveText('Downgrade scheduled');
-    await expect(card(page, 'community')).toBeDisabled();
+    await expect(card(page, 'community')).toHaveText('Register Community license');
+    await expect(card(page, 'community')).toBeEnabled();
+    await expect(page.locator('[data-plan-status="community"]')).toContainText('Community registration is a separate step');
   });
 
-  test('a later scheduled cancellation can be moved before renewal to unblock deletion', async ({ page, request }) => {
+  test('a later scheduled cancellation can be reviewed and changed in Stripe before deletion', async ({ page, request, baseURL }) => {
     await scheduleLaterTrialCancellation(request, p.stripe!.subscriptionId);
     await signIn(page, p);
     await page.goto('/account/settings/');
@@ -204,14 +200,30 @@ test.describe('Pro bought online', () => {
     await expect(page.locator('#delete-account-error')).toHaveText(/Cancel your subscription on the Billing page first/);
     await page.locator('#delete-cancel-btn').click();
     await billingLoaded(page);
-    const cancel = page.getByRole('button', { name: 'End before the next renewal' });
+    const cancel = page.getByRole('button', { name: 'Review cancellation in Stripe' });
     let accept = false;
     page.on('dialog', d => accept ? d.accept() : d.dismiss());
     const previous = (await getSubscription(request, p.stripe!.subscriptionId)).cancel_at;
     await cancel.click();
     expect((await getSubscription(request, p.stripe!.subscriptionId)).cancel_at).toBe(previous);
     accept = true;
-    await cancel.click();
+    await openStripe(page, () => cancel.click());
+    // Stripe owns both confirmations. An already scheduled cancellation may
+    // first require resuming before cancellation at the current period end.
+    const resume = page.getByRole('button', { name: /^(renew|resume).*(subscription|plan)$/i });
+    await expect(resume).toBeVisible({ timeout: 15_000 });
+    await resume.click();
+    const confirmResume = page.getByRole('button', { name: /^(confirm|renew|resume)/i });
+    if (await confirmResume.count()) await confirmResume.first().click();
+    await expect.poll(async () => {
+      const current=await getSubscription(request,p.stripe!.subscriptionId);
+      return !current.cancel_at_period_end && current.cancel_at===null;
+    },{timeout:30_000}).toBe(true);
+    await billingLoaded(page);
+    await openStripe(page, () => page.locator('#billing-cancel').click());
+    await page.getByRole('button', { name: /^cancel (subscription|plan)$/i }).click();
+    await page.waitForURL(url => url.href.startsWith(`${baseURL}/account/billing/`), { timeout: 60_000 });
+    await billingLoaded(page);
     await expect(page.locator('#billing-badge')).toHaveText('Cancels at period end');
     const sub = await getSubscription(request, p.stripe!.subscriptionId);
     expect(sub.cancel_at_period_end || sub.cancel_at === sub.current_period_end).toBe(true);
@@ -260,7 +272,7 @@ test.describe('Pro set up by the team (no Stripe account)', () => {
     await expect(page.locator('#billing-no-account a')).toHaveAttribute('href', 'mailto:support@aidotnet.dev');
   });
 
-  test('pricing marks Pro current and sells the Enterprise upgrade through checkout', async ({ page }) => {
+  test('pricing marks Pro current and sells the Enterprise upgrade through checkout', async ({ page, request }) => {
     await signIn(page, p);
     await pricingLoaded(page);
     await expect(page.locator('#current-plan-text')).toHaveText('You are on the Pro plan.');
@@ -274,7 +286,9 @@ test.describe('Pro set up by the team (no Stripe account)', () => {
     });
     await card(page, 'enterprise').click();
     await expect.poll(() => checkout?.href, { timeout: 15_000 }).toBeTruthy();
-    expect(checkout!.searchParams.get('client_reference_id')).toBe(p.id);
+    const reference=checkout!.searchParams.get('client_reference_id');
+    expect(reference).not.toBe(p.id);
+    expect(await restSelect<Array<{user_id:string}>>(request,`billing_checkout_intents?select=user_id&id=eq.${reference}`)).toEqual([{user_id:p.id}]);
     expect(checkout!.searchParams.get('prefilled_email')).toBe(p.email);
   });
 });

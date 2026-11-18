@@ -1,4 +1,4 @@
-import type { APIRequestContext, ElementHandle, Page, Request, Response, Route } from '@playwright/test';
+import type { APIRequestContext, ConsoleMessage, Dialog, ElementHandle, Page, Request, Response, Route } from '@playwright/test';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -236,9 +236,14 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   // Desktop and mobile reuse this page. Keep instrumentation scoped to this
   // pass, including when navigation or fixture cleanup throws.
-  const events = ['dialog', 'pageerror', 'console', 'requestfailed', 'request', 'response'] as const;
   const emitter = page as unknown as EventEmitter;
-  const existingListeners = new Map(events.map((event) => [event, new Set(emitter.listeners(event))]));
+  const ownedListeners: Array<[string, (...args: unknown[]) => void]> = [];
+  type Payload = { dialog: Dialog; pageerror: Error; console: ConsoleMessage; request: Request; response: Response };
+  function on<E extends keyof Payload>(event: E, callback: (payload: Payload[E]) => void) {
+    const listener = callback as (...args: unknown[]) => void;
+    ownedListeners.push([event, listener]);
+    emitter.on(event, listener);
+  }
   let intercept: ((route: Route) => Promise<void>) | undefined;
   try {
 
@@ -306,15 +311,15 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   let current = { page: '', control: '' };
   const dialogs: string[] = [];
-  page.on('dialog', async (d) => {
+  on('dialog', async (d) => {
     dialogs.push(`${d.type()}: ${d.message()}`);
     if (d.type() === 'alert' && /error|fail|unable|could not|couldn't|try again|being configured|not configured|unavailable/i.test(d.message())) {
       add(current.page, current.control, `alert shows a failure: "${d.message()}"`);
     }
     await (d.type() === 'alert' ? d.accept() : d.dismiss()).catch(() => {});
   });
-  page.on('pageerror', (e) => add(current.page, current.control || '(page load)', `page error: ${e.message}`));
-  page.on('console', (m) => {
+  on('pageerror', (e) => add(current.page, current.control || '(page load)', `page error: ${e.message}`));
+  on('console', (m) => {
     if (m.type() !== 'error') return;
     const t = m.text();
     if (/Failed to load resource: net::ERR_(ABORTED|BLOCKED)|favicon|stubbed by crawler/.test(t)) return;
@@ -328,8 +333,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const signedIn = !!o.persona;
   const pending: Request[] = [];
   const responses: Response[] = [];
-  page.on('request', (r) => { if (['fetch', 'xhr', 'document', 'eventsource'].includes(r.resourceType())) pending.push(r); });
-  page.on('response', (r) => responses.push(r));
+  on('request', (r) => { if (['fetch', 'xhr', 'document', 'eventsource'].includes(r.resourceType())) pending.push(r); });
+  on('response', (r) => responses.push(r));
 
   async function ensureSession() {
     if (!o.persona) return;
@@ -444,14 +449,26 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       const parts: string[] = [];
       for (const el of Array.from(document.querySelectorAll('[aria-selected],[aria-expanded],[aria-pressed],[aria-checked],details,[role="tabpanel"],select,input,textarea'))) {
         const e = el as HTMLInputElement;
+        if (!e.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
         parts.push([e.getAttribute('aria-selected'), e.getAttribute('aria-expanded'), e.getAttribute('aria-pressed'), e.getAttribute('aria-checked'),
           (e as unknown as HTMLDetailsElement).open, e.hidden || e.classList.contains('hidden'), 'value' in e ? e.value : '', e.checked].join(','));
+      }
+      const visualWindow = window as unknown as { __visualIds?: WeakMap<Element, number>; __visualNext?: number };
+      visualWindow.__visualIds ??= new WeakMap();
+      visualWindow.__visualNext ??= 0;
+      const visual: Array<[number, string]> = [];
+      for (const el of Array.from(document.querySelectorAll('body *'))) {
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+        let id = visualWindow.__visualIds.get(el);
+        if (id === undefined) { id = ++visualWindow.__visualNext; visualWindow.__visualIds.set(el, id); }
+        const s = getComputedStyle(el);
+        visual.push([id, [s.backgroundColor,s.color,s.opacity,s.transform,s.borderColor,s.width,s.height].join('|')]);
       }
       const state = parts.join('|');
       let sh = 0;
       for (let i = 0; i < state.length; i++) sh = (sh * 31 + state.charCodeAt(i)) | 0;
       return {
-        url: location.href, visibleCount, textHash: h, stateHash: sh, htmlClass: document.documentElement.className,
+        url: location.href, visibleCount, textHash: h, stateHash: sh, visual, htmlClass: document.documentElement.className,
         mut: w.__fx?.mut ?? 0, clip: w.__fx?.clip ?? 0, open: w.__fx?.open ?? 0,
       };
     }).catch(() => null);
@@ -506,6 +523,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     exercised.add(c.key);
     console.log(`[crawl ${tag}]   click ${c.key}`);
     const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount, state: before.stateHash !== idle.stateHash };
+    const idleVisual = new Map(idle.visual);
+    const stableVisual = new Map(before.visual.filter(([id, value]) => idleVisual.get(id) === value));
     pending.length = 0;
     responses.length = 0;
     const navsBefore = externalNavs.length, dialogsBefore = dialogs.length;
@@ -537,18 +556,28 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       after = s;
       if (s.url !== before.url || (!noisy.mut && s.mut !== before.mut) || s.clip !== before.clip || pending.length || dialogs.length > dialogsBefore) break;
     }
-    await Promise.race([
-      Promise.all(pending.map(async (r) => {
-        const response = await r.response().catch(() => null);
-        await response?.finished().catch(() => null);
-      })),
-      page.waitForTimeout(10_000),
-    ]);
-    await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
-    // The response body can complete before the fetch handler renders its result.
-    await page.waitForTimeout(100);
     const opened = (await popup) ?? null;
     const dl = (await download) ?? null;
+    const deadline = Date.now() + 10_000;
+    let observed = 0;
+    while (Date.now() < deadline) {
+      const batch = pending.slice(observed);
+      observed = pending.length;
+      if (!batch.length) {
+        await page.waitForTimeout(Math.min(350, Math.max(1, deadline - Date.now())));
+        if (pending.length === observed) break;
+        continue;
+      }
+      await Promise.race([
+        Promise.all(batch.map(async r => {
+          const response = await r.response().catch(() => null);
+          await response?.finished().catch(() => null);
+        })),
+        page.waitForTimeout(Math.max(1, deadline - Date.now())),
+      ]);
+    }
+    await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
+    await page.waitForTimeout(100);
     if (opened) await opened.close().catch(() => {});
     const final = (await snapshot()) ?? after;
     const effect = final.url !== before.url || after.url !== before.url || externalNavs.length > navsBefore
@@ -557,6 +586,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
       || (!noisy.count && final.visibleCount !== before.visibleCount)
       || (!noisy.state && final.stateHash !== before.stateHash)
+      || final.visual.some(([id, value]) => stableVisual.has(id) && stableVisual.get(id) !== value)
       || final.htmlClass !== before.htmlClass;
     if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);
@@ -632,7 +662,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
         const revealed = await page.evaluate(ENUMERATE, pg);
         for (const control of revealed.controls) {
           keys.add(control.key);
-          if (control.visible && !control.disabled && !enabledSeen.has(control.key)) enabledSeen.set(control.key, pg);
+          if (control.visible && !control.disabled) {
+            if (!enabledSeen.has(control.key)) enabledSeen.set(control.key, pg);
+            disabledSeen.delete(control.key);
+          }
         }
       }
       if (o.persona && !(await hasSession(page).catch(() => false))) await ensureSession();
@@ -724,11 +757,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   return { findings, pages: visited, httpPages: fetched, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
   } finally {
-    for (const event of events) {
-      for (const listener of emitter.listeners(event)) {
-        if (!existingListeners.get(event)!.has(listener)) emitter.removeListener(event, listener);
-      }
-    }
+    for (const [event, listener] of ownedListeners) emitter.removeListener(event, listener);
     if (intercept) await page.unroute('**/*', intercept);
   }
 }

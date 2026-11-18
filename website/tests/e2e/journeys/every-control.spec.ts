@@ -1,4 +1,5 @@
 import { test, expect, devices } from '@playwright/test';
+import { withCleanup } from '../helpers/cleanup';
 import { deleteUser, journeySkipReason, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona, type PersonaKind } from '../helpers/personas';
 import { crawl, formatFindings, staticRoutes, type CrawlOptions } from '../helpers/crawler';
@@ -25,7 +26,7 @@ const SIGNED_IN_DEDICATED: Array<[RegExp, string]> = [
 const PRO_STRIPE_DEDICATED: CrawlOptions['dedicated'] = [
   ...SIGNED_IN_DEDICATED,
   [/^\/pricing\/ button::Current plan.*\[data-tier=pro\]/, 'account-billing.spec: the current plan is shown and cannot be bought again'],
-  [/^\/pricing\/ button::Downgrade scheduled/, 'account-billing.spec: cancellation shows the scheduled Community downgrade', { optional: true }],
+  [/^\/pricing\/ button::Cancel paid subscription/, 'account-billing.spec: Stripe confirms paid cancellation separately from Community registration', { optional: true }],
 ];
 const PRO_GRANTED_DEDICATED = PRO_STRIPE_DEDICATED;
 
@@ -106,7 +107,7 @@ for (const run of RUNS) {
     const origin = new URL(baseURL!).origin;
     let persona: Persona | null = null;
     const generatedEmails = new Set<string>();
-    try {
+    await withCleanup(async () => {
       if (run.kind !== 'anon') persona = await createPersona(request, run.kind);
       const desktop = await crawl({
         page, request, origin, persona, seeds: run.seeds, inScope: run.inScope,
@@ -139,24 +140,24 @@ for (const run of RUNS) {
       // A crawl that found almost nothing is a broken crawl, not a clean site.
       expect(desktop.pages.length, 'pages crawled').toBeGreaterThanOrEqual(run.minPages);
       expect(desktop.exercised.length, 'controls exercised').toBeGreaterThanOrEqual(run.minControls ?? run.minPages);
+      expect(mobile.exercised.length, 'mobile controls exercised').toBeGreaterThanOrEqual(run.minControls ?? run.minPages);
       expect(findings, `Broken for ${run.kind}:\n${formatFindings(findings)}`).toEqual([]);
-    } finally {
-      try {
-        if (run.kind === 'anon') {
-          // Only exact, randomly minted addresses from this run are eligible.
-          // Empty results cover login/recovery forms that did not create a user.
-          const cleanup = await Promise.allSettled([...generatedEmails].map(async email => {
-            const rows = await restSelect<Array<{ id: string; email: string }>>(request,
-              `profiles?select=id,email&email=eq.${encodeURIComponent(email)}`);
-            for (const row of rows) {
-              if (row.email !== email) throw new Error('Signup fixture ownership mismatch');
-              await deleteUser(request, row.id);
-            }
-          }));
-          const failed = cleanup.find(result => result.status === 'rejected');
-          if (failed?.status === 'rejected') throw failed.reason;
-        }
-      } finally { await disposePersona(request, persona ?? undefined); }
-    }
+    }, async () => {
+      const tasks: Array<Promise<unknown>> = [];
+      if (run.kind === 'anon') for (const email of generatedEmails) {
+        tasks.push((async () => {
+          const rows = await restSelect<Array<{ id: string; email: string }>>(request,
+            `profiles?select=id,email&email=eq.${encodeURIComponent(email)}`);
+          for (const row of rows) {
+            if (row.email !== email) throw new Error('Signup fixture ownership mismatch');
+            await deleteUser(request, row.id);
+          }
+        })());
+      }
+      tasks.push(disposePersona(request, persona ?? undefined));
+      const cleanup = await Promise.allSettled(tasks);
+      const failures = cleanup.filter(result => result.status === 'rejected').map(result => result.reason);
+      if (failures.length) throw new AggregateError(failures, 'Persona/signup cleanup failed');
+    });
   });
 }

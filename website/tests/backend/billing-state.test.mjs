@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
 const exports = {};
-const source = readFileSync(new URL('../../src/lib/billing.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../src/lib/billing.ts', import.meta.url), 'utf8').replaceAll('import.meta.env.PUBLIC_BILLING_FUNCTION', 'undefined');
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 runInNewContext(code, { exports, require: () => ({ supabase: {} }) });
 

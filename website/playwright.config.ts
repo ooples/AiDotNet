@@ -1,11 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
+import { USER_STORAGE_STATE, ADMIN_STORAGE_STATE } from './tests/e2e/helpers/auth-state';
 
 // Storage-state files produced by the auth.setup.ts projects. Each
 // auth-required test project `dependencies`-chains on the matching setup
 // project, so Playwright runs the login sequence once per suite run
 // instead of re-logging in for every spec file.
-const USER_STORAGE_STATE = 'tests/e2e/.auth/user.json';
-const ADMIN_STORAGE_STATE = 'tests/e2e/.auth/admin.json';
 
 // Production-mutating safety: the auth-backed specs perform real writes
 // (API key create/revoke, profile update, license issuance). Rather than
@@ -47,8 +46,8 @@ export default defineConfig({
   // for failure output. The stock 'github' reporter produces confusing
   // empty-body annotations when every test passes.
   reporter: process.env.CI
-    ? [['dot'], ['github'], ['html', { open: 'never' }]]
-    : 'html',
+    ? [['./tests/e2e/helpers/redact-reporter.ts'], ['dot'], ['github'], ['html', { open: 'never' }]]
+    : [['./tests/e2e/helpers/redact-reporter.ts'], ['html']],
   use: {
     baseURL,
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
@@ -57,7 +56,7 @@ export default defineConfig({
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
     screenshot: 'only-on-failure',
-    trace: 'on-first-retry',
+    trace: 'off',
     // Most tests run under Chromium; Firefox/WebKit surface real-world
     // differences (notably webcrypto semantics and cookie handling)
     // but at 3x the CI runtime. Stick to Chromium for the baseline and
@@ -92,10 +91,12 @@ export default defineConfig({
     {
       name: 'user.setup',
       testMatch: /user\.setup\.ts/,
+      use: { screenshot: 'off' },
     },
     {
       name: 'admin.setup',
       testMatch: /admin\.setup\.ts/,
+      use: { screenshot: 'off' },
     },
 
     // ---------- Anonymous auth specs ----------
@@ -120,7 +121,7 @@ export default defineConfig({
       testDir: './tests/e2e/journeys',
       // No traces: these specs send the Supabase service key and the Stripe secret key in request
       // headers, and a trace (embedded in the uploaded HTML report) records them in clear text.
-      use: { viewport: { width: 1440, height: 900 }, trace: 'off' },
+      use: { viewport: { width: 1440, height: 900 }, trace: 'off', screenshot: 'off' },
     },
 
     // ---------- Authenticated projects ----------
@@ -128,6 +129,7 @@ export default defineConfig({
       name: 'user-auth',
       testDir: './tests/e2e/user',
       use: {
+        screenshot: 'off',
         viewport: { width: 1440, height: 900 },
         storageState: USER_STORAGE_STATE,
       },
@@ -137,6 +139,7 @@ export default defineConfig({
       name: 'admin-auth',
       testDir: './tests/e2e/admin',
       use: {
+        screenshot: 'off',
         viewport: { width: 1440, height: 900 },
         // admin/user-management.spec.ts reads rows with the service key: no traces, as for journeys.
         trace: 'off',

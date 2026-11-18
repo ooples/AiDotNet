@@ -14,6 +14,7 @@ permissions:
 concurrency:
   group: website-preview-verification
   cancel-in-progress: false
+  queue: max
 jobs:
   deploy-preview:
     environment: Preview
@@ -55,6 +56,9 @@ jobs:
         env:
           VERCEL: "1"
           PUBLIC_ENV_MODE: dev
+          PUBLIC_BILLING_FUNCTION: billing-portal-preview
+          PUBLIC_COMMUNITY_FUNCTION: register-community-license-preview
+          PUBLIC_DELETE_ACCOUNT_FUNCTION: delete-account-preview
           NODE_OPTIONS: --max-old-space-size=6144
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
@@ -98,4 +102,6 @@ jobs:
       part: all
       preview_pipeline: true
       configure_preview_auth: true
+      expected_preview_commit: ${{ github.sha }}
+      expected_preview_run: ${{ github.run_id }}
     secrets: inherit

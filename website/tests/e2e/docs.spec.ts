@@ -21,17 +21,24 @@ function docRoutes(): string[] {
   return [...new Set(['/docs/', ...out])].sort();
 }
 
-test('documentation search finds a page, opens its result, and clears an empty search', async ({ page }) => {
+test('documentation search finds a page, opens its result, and clears an empty search', async ({ page, request, baseURL }) => {
+  const bundle = await request.get('/pagefind/pagefind-ui.js');
+  const built = bundle.ok() && (bundle.headers()['content-type'] ?? '').includes('javascript');
+  await bundle.dispose();
+  test.skip(!built && process.env.PLAYWRIGHT_SITE_KIND === 'dev' && !process.env.CI && /^(localhost|127\.0\.0\.1)$/.test(new URL(baseURL!).hostname), 'Explicit dev target: Pagefind requires npm run build and astro preview');
+  expect(built, 'built targets must serve Pagefind').toBe(true);
   await page.goto('/docs/getting-started/installation/');
   const search = page.locator('#docs-search input');
   await expect(search).toBeVisible();
-  await search.fill('installation');
-  const result = page.locator('#docs-search .pagefind-ui__result-link').first();
+  await search.fill('neural network');
+  const result = page.locator('#docs-search .pagefind-ui__result-link').filter({ hasNotText: /^Installation$/ }).first();
   await expect(result).toBeVisible({ timeout: 15_000 });
   const target = await result.getAttribute('href');
   expect(target).toBeTruthy();
+  const destination = new URL(target!, page.url()).href;
+  expect(destination).not.toBe(page.url());
   await result.click();
-  await expect(page).toHaveURL(new RegExp(new URL(target!, page.url()).pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  await expect(page).toHaveURL(destination);
   await expect(page.locator('article h1').or(page.locator('main h1')).first()).toBeVisible();
   // Quoting asks Pagefind for an exact phrase; unquoted queries intentionally fall back to
   // shorter prefix matches and can find one-letter identifiers in the generated API docs.
@@ -81,10 +88,12 @@ test('every generated API reference route is served with a heading', async ({ re
   // A deployed preview supplies its complete build inventory even when the
   // test runner checkout does not contain the generated, uncommitted wiki.
   const inventory = await request.get('/verification-routes.json');
-  if (inventory.ok()) {
-    const built = await inventory.json();
-    if (Array.isArray(built)) routes = built.filter((route: unknown): route is string => typeof route === 'string' && route.startsWith('/docs/reference/wiki/'));
-  }
+  test.skip(inventory.status() === 404 && process.env.PLAYWRIGHT_SITE_KIND === 'dev' && !process.env.CI, 'Explicit dev target has no build inventory');
+  expect(inventory.ok(), 'built targets must provide verification-routes.json').toBe(true);
+  const built = await inventory.json();
+  expect(Array.isArray(built), 'build inventory must be an array').toBe(true);
+  expect(built.every((route: unknown) => typeof route === 'string' && route.startsWith('/')), 'all inventory entries must be canonical paths').toBe(true);
+  routes = built.filter((route: string) => route.startsWith('/docs/reference/wiki/'));
   await inventory.dispose();
   test.skip(routes.length === 0, 'API reference was not generated in this build');
   const problems: string[] = [];
@@ -94,7 +103,7 @@ test('every generated API reference route is served with a heading', async ({ re
       const route = routes[next++];
       let response;
       try {
-        response = await request.get(route, { timeout: 30_000 });
+        response = await request.get(route, { timeout: 30_000, maxRedirects: 0 });
         if (response.status() !== 200) problems.push(`${route}: HTTP ${response.status()}`);
         else if (!/<h1(?:\s|>)/i.test(await response.text())) problems.push(`${route}: no heading`);
       } catch (error) { problems.push(`${route}: ${String(error).split('\n')[0]}`); }

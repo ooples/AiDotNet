@@ -1,5 +1,6 @@
 import { defineConfig } from '@playwright/test';
 import base from './playwright.config';
+import { DEPLOYMENT_STORAGE_STATE } from './tests/e2e/helpers/auth-state';
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 const launchOptions = executablePath ? { executablePath } : undefined;
@@ -7,11 +8,11 @@ const selected = ['anon-desktop', 'anon-mobile', 'auth-anon', 'user.setup', 'adm
 
 export default defineConfig({
   ...base,
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report/deployed', open: 'never' }]],
+  reporter: [['./tests/e2e/helpers/redact-reporter.ts'], ['list'], ['html', { outputFolder: 'playwright-report/deployed', open: 'never' }]],
   outputDir: 'test-results/deployed',
-  use: { ...base.use, launchOptions, storageState: 'tests/e2e/.auth/deployment.json', trace: 'off' },
+  use: { ...base.use, launchOptions, storageState: DEPLOYMENT_STORAGE_STATE, trace: 'off' },
   projects: [
-    { name: 'deployment.setup', testMatch: /deployment\.setup\.ts/, use: { storageState: { cookies: [], origins: [] } } },
+    { name: 'deployment.setup', testMatch: /deployment\.setup\.ts/, use: { storageState: { cookies: [], origins: [] }, screenshot: 'off' } },
     ...base.projects!.filter((project) => selected.includes(project.name!)).map((project) => ({
       ...project,
       dependencies: [...(project.dependencies ?? []), 'deployment.setup'],

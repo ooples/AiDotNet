@@ -1,5 +1,6 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
+import { withCleanup } from '../helpers/cleanup';
 import { createConfirmedUser, deleteUser, journeySkipReason, randomPassword, restInsert, restSelect, testUserEmail } from '../helpers/backend';
 
 test('real customer tokens cannot bypass profile, key or usage boundaries', async ({ request }) => {
@@ -10,7 +11,7 @@ test('real customer tokens cannot bypass profile, key or usage boundaries', asyn
   if (!anon) throw new Error('PUBLIC_SUPABASE_ANON_KEY is required for direct customer-token RLS checks');
   const url = process.env.SUPABASE_URL!;
   const users: Array<{ id: string; email: string; token: string }> = [];
-  try {
+  await withCleanup(async () => {
     for (const label of ['owner', 'other']) {
       const password = randomPassword(), email = testUserEmail(`rls-${label}`);
       const user = await createConfirmedUser(request, email, password, 'E2E RLS boundary');
@@ -50,9 +51,9 @@ test('real customer tokens cannot bypass profile, key or usage boundaries', asyn
       expect(response.status(), 'untrusted usage insertion is denied').toBe(token ? 403 : 401);
       expect((await response.json()).code, 'the database denies the write').toBe('42501');
     }
-  } finally {
+  }, async () => {
     const cleanup = await Promise.allSettled(users.map(user => deleteUser(request as APIRequestContext, user.id)));
-    const failure = cleanup.find(result => result.status === 'rejected');
-    if (failure?.status === 'rejected') throw failure.reason;
-  }
+    const failures = cleanup.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (failures.length) throw new AggregateError(failures, 'Boundary fixture cleanup failed');
+  });
 });

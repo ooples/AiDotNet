@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
 import { type ProductSlug } from "../_shared/products.ts";
+import { checkoutOwner, rememberCheckoutOwner } from "../_shared/checkout-ownership.ts";
 
 // Product this webhook issues licenses for. All Stripe products created
 // for aidotnet.dev route through here; Harmonic Engine (and any future
@@ -140,42 +141,6 @@ serve(async (req: Request) => {
 });
 
 /**
- * Resolves a Supabase user ID from a Stripe Checkout Session.
- *
- * Preferred path is `client_reference_id`, which the pricing page sets to
- * session.user.id when the customer is signed in at checkout. When that's
- * missing (customer paid without signing in), we fall back to looking up
- * the user by the email address Stripe collected at checkout.
- *
- * Returns null when no matching user is found. Callers log + surface a
- * provisional license row so the admin can reconcile manually.
- */
-async function resolveUserIdFromSession(
-  client: SupabaseClient,
-  session: Stripe.Checkout.Session,
-): Promise<string | null> {
-  if (session.client_reference_id) {
-    return session.client_reference_id;
-  }
-
-  const email = session.customer_details?.email?.toLowerCase();
-  if (!email) return null;
-
-  const { data, error } = await client
-    .from("profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Profile lookup by email failed:", error);
-    return null;
-  }
-
-  return data?.id ?? null;
-}
-
-/**
  * Derives the profile mirror without discarding other active grants.
  */
 async function syncBillingProfile(client: SupabaseClient, customer: string | null, tier: string, status: string, userId?: string) {
@@ -198,7 +163,7 @@ async function handleCheckoutCompleted(client: SupabaseClient, session: Stripe.C
   if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
     throw new Error("Unknown Checkout payment status");
   }
-  const userId = await resolveUserIdFromSession(client, session);
+  const userId = await checkoutOwner(client, session);
   if (!userId) throw new Error("cannot_resolve_user");
   let canonical = resolveTier(session.metadata?.tier);
   if (!canonical) throw new Error("Checkout has no recognized plan tier");
@@ -206,17 +171,21 @@ async function handleCheckoutCompleted(client: SupabaseClient, session: Stripe.C
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
   const identity = subscriptionId ? "stripe_subscription_id" : "stripe_checkout_session_id";
   const { data: existing, error: lookupError } = await client.from("license_keys")
-    .select("id,status").eq(identity, subscriptionId ?? session.id).eq("product", WEBHOOK_PRODUCT).limit(1).maybeSingle();
+    .select("id,status,user_id").eq(identity, subscriptionId ?? session.id).eq("product", WEBHOOK_PRODUCT).limit(1).maybeSingle();
   if (lookupError) throw lookupError;
   if (existing?.status === "revoked") return;
 
-  // Preserve profile repair even when the entitlement already exists. Linkage
-  // is separate from access: only reconciliation may promote a subscription.
-  if (customer) {
-    const { error } = await client.from("profiles").update({ stripe_customer_id: customer }).eq("id", userId);
+  if (existing && existing.user_id !== userId) throw new Error("Entitlement belongs to a different verified account");
+  await rememberCheckoutOwner(client, userId, session);
+  const repairProfileLink = async () => {
+    if (!customer) return;
+    // Replays may repair a missing link, never replace another billing account.
+    const { error } = await client.from("profiles").update({ stripe_customer_id: customer })
+      .eq("id", userId).is("stripe_customer_id", null);
     if (error) throw error;
-  }
+  };
   if (existing) {
+    await repairProfileLink();
     if (subscriptionId) await reconcileSubscription(client, subscriptionId);
     else await syncBillingProfile(client, customer, "free", "expired", userId);
     return;
@@ -234,6 +203,8 @@ async function handleCheckoutCompleted(client: SupabaseClient, session: Stripe.C
     notes: `Issued by Stripe Checkout (session ${session.id})`,
   });
   if (insertError) throw insertError; // Unique conflicts retry against the existing durable row.
+  // A failed profile repair must leave the verified paid entitlement recoverable.
+  await repairProfileLink();
   if (subscriptionId) {
     const current = await reconcileSubscription(client, subscriptionId);
     if (current.status === "canceled" || current.status === "incomplete_expired") return;

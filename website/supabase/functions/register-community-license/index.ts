@@ -125,6 +125,7 @@ serve(async (req: Request) => {
         .eq("product", COMMUNITY_PRODUCT)
         .eq("tier", COMMUNITY_TIER)
         .eq("status", "active")
+        .order("id", { ascending: true })
         .limit(1)
         .maybeSingle();
     }

@@ -3,6 +3,7 @@ import { withCors, websiteOrigin } from "../_shared/cors.ts";
 const serve = (handler: (req: Request) => Response | Promise<Response>) => serveHttp(withCors(handler));
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import { checkoutOwner, rememberCheckoutOwner, ownedBillingCustomers } from "../_shared/checkout-ownership.ts";
 
 // Signed-in customers' window into their Stripe subscription.
 //
@@ -133,10 +134,10 @@ serve(async (req: Request) => {
   const { data: { user }, error: authError } = await createClient(url, anon).auth.getUser(jwt);
   if (authError || !user) return json({ error: "unauthorized", message: "Invalid or expired session." }, 401);
 
-  let body: { action?: unknown; tier?: unknown; interval?: unknown; return_path?: unknown; expected_subscription_id?: unknown; expected_renewal?: unknown; expected_cancel_at?: unknown };
+  let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
   const action = body.action;
-  if (action !== "summary" && action !== "manage" && action !== "change_plan" && action !== "cancel" && action !== "cancel_before_renewal") {
+  if (action !== "summary" && action !== "manage" && action !== "change_plan" && action !== "cancel" && action !== "cancel_before_renewal" && action !== "checkout_reference" && action !== "claim_checkout") {
     return json({ error: "invalid_action" }, 400);
   }
   const returnPath = typeof body.return_path === "string" && /^\/(account|pricing)\/[\w\-/]*$/.test(body.return_path)
@@ -147,33 +148,75 @@ serve(async (req: Request) => {
   const { data: profile, error: profileError } = await admin
     .from("profiles").select("stripe_customer_id, subscription_tier").eq("id", user.id).single();
   if (profileError || !profile) return json({ error: "profile_not_found" }, 404);
-  const customer = profile.stripe_customer_id as string | null;
-  if (!customer) {
-    if (action === "summary") return json({ billing_account: false, subscription: null });
-    return json({
-      error: "no_billing_account",
-      message: "There is no Stripe billing account on this profile, so there is nothing to manage online. Email support@aidotnet.dev for billing changes.",
-    }, 409);
-  }
-
   try {
-    const s = getStripe();
-    if (action === "summary") {
-      return json({ billing_account: true, ...summarize(await liveSubscription(s, customer)) });
+    const customers = await ownedBillingCustomers(admin, user.id, action === "claim_checkout" ? null : profile.stripe_customer_id);
+    if (typeof body.customer_id === "string" && !customers.includes(body.customer_id)) {
+      return json({ error: "not_your_billing_account" }, 403);
     }
+    let selected: Stripe.Subscription | null = null;
+    let ongoing = false;
+    let customer = typeof body.customer_id === "string" ? body.customer_id : profile.stripe_customer_id ?? customers[0] ?? null;
+    const s = customers.length || action === "claim_checkout" ? getStripe() : null;
+    for (const id of customers) {
+      const candidate = await liveSubscription(s!, id);
+      if (candidate) ongoing = true;
+      if (body.customer_id && id !== body.customer_id) continue;
+      if (candidate && (!selected || candidate.created > selected.created)) { selected = candidate; customer = id; }
+    }
+    if (action === "checkout_reference") {
+      if (body.tier !== "pro" && body.tier !== "enterprise") return json({ error: "invalid_tier" }, 400);
+      if (body.interval !== "month" && body.interval !== "year") return json({ error: "invalid_interval" }, 400);
+      if (ongoing) return json({ error: "existing_subscription", message: "Manage your existing subscription instead of starting another checkout." }, 409);
+      const { data, error } = await admin.from("billing_checkout_intents")
+        .insert({ user_id: user.id, tier: body.tier, interval: body.interval }).select("id").single();
+      if (error || !data) throw error ?? new Error("Checkout reference was not saved");
+      return json({ reference: data.id });
+    }
+    if (action === "claim_checkout") {
+      if (typeof body.checkout_session_id !== "string" || !/^cs_[A-Za-z0-9_]+$/.test(body.checkout_session_id)) return json({ error: "invalid_checkout" }, 400);
+      if (!user.email || !user.email_confirmed_at) return json({ error: "verified_email_required", message: "Verify your account email before claiming a checkout." }, 403);
+      const session = await getStripe().checkout.sessions.retrieve(body.checkout_session_id);
+      if (session.status !== "complete" || !["paid","no_payment_required"].includes(session.payment_status)) {
+        return json({ error: "checkout_not_paid", message: "This checkout has not completed payment." }, 409);
+      }
+      if (session.customer_details?.email?.toLowerCase() !== user.email.toLowerCase()) {
+        return json({ error: "checkout_email_mismatch", message: "Sign in with the verified email used for this checkout." }, 403);
+      }
+      const owner = await checkoutOwner(admin, session);
+      if (owner && owner !== user.id) return json({ error: "checkout_already_claimed" }, 403);
+      await rememberCheckoutOwner(admin, user.id, session);
+      const secret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+      if (!secret) throw new Error("Webhook fulfillment is not configured");
+      const payload = JSON.stringify({ id: `evt_claim_${crypto.randomUUID()}`, object: "event",
+        type: "checkout.session.completed", data: { object: session } });
+      const timestamp = Math.floor(Date.now()/1000);
+      const signingKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name:"HMAC",hash:"SHA-256" }, false, ["sign"]);
+      const signature = Array.from(new Uint8Array(await crypto.subtle.sign("HMAC",signingKey,new TextEncoder().encode(`${timestamp}.${payload}`)))).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+      const webhook = new URL(req.url).pathname.split('/').at(-1) === 'billing-portal-preview' ? 'stripe-webhook-preview' : 'stripe-webhook';
+      const fulfilled = await fetch(`${url}/functions/v1/${webhook}`, { method:"POST",
+        headers: { "Content-Type":"application/json","stripe-signature":`t=${timestamp},v1=${signature}` }, body:payload });
+      if (!fulfilled.ok) throw new Error("Verified checkout fulfillment will need a retry");
+      await fulfilled.body?.cancel();
+      return json({ claimed:true });
+    }
+    if (action === "summary") {
+      return json({ billing_account: customers.length > 0, billing_accounts: customers.map(id=>({id,selected:id===customer})), ...summarize(selected) });
+    }
+    if (!customer || !s) return json({ error: "no_billing_account", message: "There is no Stripe billing account to manage. Contact support@aidotnet.dev for team-granted plans." }, 409);
 
     if (action === "cancel_before_renewal") {
-      const sub = await liveSubscription(s, customer);
+      const sub = selected;
       if (!sub || body.expected_subscription_id !== sub.id || body.expected_renewal !== sub.current_period_end || body.expected_cancel_at !== sub.cancel_at) {
         return json({ error: "billing_state_changed", message: "Your subscription, renewal, or scheduled cancellation changed. Review the refreshed billing details and confirm again." }, 409);
       }
       if (!sub || sub.cancel_at == null || sub.cancel_at <= sub.current_period_end) {
         return json({ error: "no_later_cancellation", message: "There is no later cancellation to move. Refresh your billing details." }, 409);
       }
-      // The customer explicitly confirmed this in-app. Do not depend on the
-      // portal accepting a second cancellation for an already scheduled end.
-      const updated = await s.subscriptions.update(sub.id, { cancel_at: sub.current_period_end, proration_behavior: "none" });
-      return json({ ...summarize(updated) });
+      // Stripe owns the final confirmation and write. Our earlier read must not
+      // overwrite a cancellation that another session changed in the meantime.
+      const configuration = await portalConfiguration(s, await planPrices(s));
+      const session = await s.billingPortal.sessions.create({ customer, return_url:returnUrl, configuration });
+      return json({ url: session.url });
     }
 
     const prices = await planPrices(s);

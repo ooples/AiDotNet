@@ -9,7 +9,7 @@ export async function syncFunctionMailKey({ token, key, fetcher = fetch }) {
   const digest = createHash('sha256').update(key).digest('hex');
   async function list() {
     const response = await fetcher(url, { headers, signal: AbortSignal.timeout(30_000) });
-    if (!response.ok) throw new Error(`Cannot verify the function mail key: HTTP ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`Cannot verify the function mail key: HTTP ${response.status}`), { status: response.status });
     return response.json();
   }
   const matches = rows => rows.some(row => row.name === 'RESEND_API_KEY' && (row.value ?? row.digest) === digest);
@@ -17,7 +17,11 @@ export async function syncFunctionMailKey({ token, key, fetcher = fetch }) {
   const response = await fetcher(url, { method: 'POST', headers, body: JSON.stringify([{ name: 'RESEND_API_KEY', value: key }]), signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`Function mail key differs and could not be synchronized: HTTP ${response.status}; edge_functions_secrets_write is required`);
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (matches(await list())) return { changed: true };
+    try { if (matches(await list())) return { changed: true }; }
+    catch (error) {
+      if (error.status && error.status !== 408 && error.status !== 429 && error.status < 500) throw error;
+      if (attempt === 4) throw new Error('Transient verification failed after the mail key write; rerun verification without changing the key');
+    }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   throw new Error('The function mail key could not be verified after synchronization');
