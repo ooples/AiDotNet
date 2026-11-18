@@ -339,6 +339,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   async function load(path: string): Promise<boolean> {
     current = { page: path, control: '' };
     await ensureSession();
+    // A context restored from storage can already be signed in: ensureSession
+    // visits this origin to inspect it without calling signIn. Let its bootstrap
+    // requests settle before our forced visit, just as after a fresh login.
+    await page.waitForLoadState('networkidle', { timeout: 10_000 });
     responses.length = 0;
     const res = await page.goto(new URL(path, origin).href, { waitUntil: 'load', timeout: 30_000 }).catch((e) => { add(path, '(page load)', `navigation failed: ${e}`); return null; });
     if (!res) return false;

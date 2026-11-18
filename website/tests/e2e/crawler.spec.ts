@@ -10,9 +10,17 @@ test.describe('crawler regression checks', () => {
   let server: Server;
   let origin: string;
   let coveredRowLoads = 0;
+  let bootstrapAborted = 0;
 
   test.beforeAll(async () => {
     server = createServer((req, res) => {
+      if (req.url === '/slow-bootstrap/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.flushHeaders();
+        res.on('close', () => { if (!res.writableEnded) bootstrapAborted++; });
+        setTimeout(() => res.end('{}'), 1500);
+        return;
+      }
       if (req.url === '/slow-body/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.flushHeaders();
@@ -58,7 +66,7 @@ test.describe('crawler regression checks', () => {
           ? '<button id="update" onclick="fetch(\'/slow-body/\').then(r=>r.json()).then(j=>document.getElementById(\'result\').textContent=j.message)">Update</button><span id="result"></span>'
         : req.url === '/unrelated-abort/'
           ? '<script>fetch(\'/aborted/\').catch(()=>{}); setTimeout(()=>console.error(\'Failed to fetch: genuine unrelated failure\'),200)</script><h1>Abort fixture</h1>'
-          : '<h1>Fixture</h1><button id="dialog" onclick="alert(\'Hello\')">Open dialog</button>';
+          : '<h1>Fixture</h1><button id="dialog" onclick="alert(\'Hello\')">Open dialog</button><script>if(localStorage.getItem("sb-fixture-auth-token"))fetch("/slow-bootstrap/").catch(e=>console.error(e))</script>';
       res.statusCode = req.url === '/missing/' ? 404 : 200;
       res.end(`<!doctype html><html><head><title>Fixture</title></head><body>${body}</body></html>`);
     });
@@ -82,6 +90,20 @@ test.describe('crawler regression checks', () => {
       expect(await page.evaluate(() => document.readyState)).toBe('complete');
       await expect(page.locator('#desktop-menu')).toBeHidden();
       expect(await page.locator('body').getAttribute('data-auth-ready')).toBe('true');
+    } finally { await context.close(); }
+  });
+
+  test('restored sessions finish bootstrap requests before the first forced visit', async ({ browser, request }) => {
+    const context = await browser.newContext({ baseURL: origin, storageState: {
+      cookies: [], origins: [{ origin, localStorage: [{ name: 'sb-fixture-auth-token', value: 'fixture' }] }],
+    } });
+    try {
+      const page = await context.newPage();
+      const report = await crawl({ ...options(), page, request, seeds: [`${origin}/account/`],
+        persona: { kind: 'free', email: 'fixture@example.test', password: 'fixture' },
+      });
+      expect(report.findings).toEqual([]);
+      expect(bootstrapAborted, 'the crawler must not interrupt session bootstrap').toBe(0);
     } finally { await context.close(); }
   });
 
