@@ -238,7 +238,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   // pass, including when navigation or fixture cleanup throws.
   const emitter = page as unknown as EventEmitter;
   const ownedListeners: Array<[string, (...args: unknown[]) => void]> = [];
-  type Payload = { dialog: Dialog; pageerror: Error; console: ConsoleMessage; request: Request; response: Response };
+  type Payload = { dialog: Dialog; pageerror: Error; console: ConsoleMessage; request: Request; requestfailed: Request; response: Response };
   function on<E extends keyof Payload>(event: E, callback: (payload: Payload[E]) => void) {
     const listener = callback as (...args: unknown[]) => void;
     ownedListeners.push([event, listener]);
@@ -310,6 +310,20 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   });
 
   let current = { page: '', control: '' };
+  function resourceLabel(value: string): string {
+    try {
+      const url=new URL(value);
+      if(!['http:','https:'].includes(url.protocol)) return `${url.protocol}(inline)`;
+      // Keep endpoint attribution, without query tokens or external session paths.
+      const path=url.origin===origin||SUPABASE_HOST.test(url.hostname)
+        ? url.pathname : '/'+url.pathname.split('/').filter(Boolean).slice(0,2).join('/');
+      return url.origin+path;
+    } catch { return '(unknown source)'; }
+  }
+  on('requestfailed',request=>{
+    const failure=request.failure()?.errorText??'unknown network failure';
+    if(!/ERR_(ABORTED|BLOCKED)/.test(failure)) console.log(`[crawl ${tag}] request failure ${request.method()} ${resourceLabel(request.url())}: ${failure}`);
+  });
   const dialogs: string[] = [];
   on('dialog', async (d) => {
     dialogs.push(`${d.type()}: ${d.message()}`);
@@ -327,7 +341,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (/Failed to load resource: the server responded with a status of/.test(t)) return;
     // Console messages do not identify the failed request. An unrelated navigation
     // abort cannot safely explain this error, so retain it synchronously.
-    add(current.page, current.control || '(page load)', `console error: ${t.slice(0, 200)}`);
+    add(current.page, current.control || '(page load)', `console error: ${t.slice(0, 200)} [source: ${resourceLabel(m.location().url)}]`);
   });
 
   const signedIn = !!o.persona;
@@ -373,10 +387,12 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     await page.evaluate(async () => {
       const step = Math.max(200, Math.floor(window.innerHeight * 0.8));
       for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
-        window.scrollTo(0, y);
+        // CSS scroll-smooth otherwise cancels each still-running scroll with
+        // the next one, leaving most scroll-triggered controls unrevealed.
+        window.scrollTo({top:y,left:0,behavior:'instant'});
         await new Promise((r) => setTimeout(r, 60));
       }
-      window.scrollTo(0, 0);
+      window.scrollTo({top:0,left:0,behavior:'instant'});
     }).catch(() => {});
     await page.waitForTimeout(400);
   }

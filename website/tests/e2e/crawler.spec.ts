@@ -55,6 +55,10 @@ test.describe('crawler regression checks', () => {
       res.setHeader('Content-Type', 'text/html');
       const body = req.url === '/broken/'
         ? '<button id="noop">Do nothing</button><button id="request-only" onclick="fetch(\'/ping/\')">Send request without a result</button><a href="/missing/">Missing page</a>'
+        : req.url === '/smooth-reveal/'
+          ? '<style>html{scroll-behavior:smooth}button{display:block;margin-top:1500px;opacity:0}button:first-of-type{margin-top:0}</style>'
+            + Array.from({length:8},(_,i)=>`<button id="reveal-${i}" onclick="alert('Reached ${i}')">Action ${i}</button>`).join('')
+            + '<script>const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.style.opacity="1"}));document.querySelectorAll("button").forEach(b=>observer.observe(b));</script>'
         : req.url === '/depth/'
           ? '<button id="reveal" onclick="document.getElementById(\'deep\').hidden=false">Reveal</button><button hidden id="deep" onclick="alert(\'Hello\')">Deep control</button>'
         : req.url === '/error/'
@@ -170,6 +174,13 @@ test.describe('crawler regression checks', () => {
       await crawl({ ...options(), page, request, seeds: [`${origin}/caller-listener/`] });
       expect((page as unknown as EventEmitter).listeners('response')).toContain(caller);
     } finally { page.off('response', caller); }
+  });
+
+  test('scroll-triggered controls are all revealed despite CSS smooth scrolling',async({page,request})=>{
+    test.setTimeout(90_000);
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/smooth-reveal/`]});
+    expect(report.findings).toEqual([]);
+    expect(report.exercised.filter(key=>key.startsWith('/smooth-reveal/ #reveal-'))).toHaveLength(8);
   });
 
   test('the depth limit reports revealed controls it did not exercise', async ({ page, request }) => {
