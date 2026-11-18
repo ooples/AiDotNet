@@ -159,6 +159,14 @@ public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     }
 
     // The 16 kHz waveform's samples, truncated to the longest recording transcribed.
+    private Tensor<T> TruncateAudio(Tensor<T> audio)
+    {
+        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        return audio.Length <= length
+            ? Engine.Reshape(audio, new[] { audio.Length })
+            : Engine.TensorSlice(Engine.Reshape(audio, new[] { audio.Length }), new[] { 0 }, new[] { length });
+    }
+
     private double[] Samples(Tensor<T> audio)
     {
         int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
@@ -183,7 +191,7 @@ public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
-            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(Samples(Row(input, r, rows)), training), _options.Instruction));
+            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(TruncateAudio(Row(input, r, rows)), training), _options.Instruction));
         return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
 
@@ -222,17 +230,25 @@ public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         return ids;
     }
 
-    private Tensor<T> BatchLoss(FireRedAsrLlmNetwork<T> network, Tensor<T> input, Tensor<T> target, bool training)
+    private Tensor<T> BatchLoss(FireRedAsrLlmNetwork<T> network, Tensor<T> input, int[][] transcripts, bool training)
     {
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
         Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
-            var prompt = network.Prompt(network.Speech(Samples(Row(input, r, rows)), training), _options.Instruction);
-            var loss = Engine.Reshape(network.Loss(prompt, Transcript(network, Row(target, r, rows))), new[] { 1 });
+            var prompt = network.Prompt(network.Speech(TruncateAudio(Row(input, r, rows)), training), _options.Instruction);
+            var loss = Engine.Reshape(network.Loss(prompt, transcripts[r]), new[] { 1 });
             total = total is null ? loss : Engine.TensorAdd(total, loss);
         }
         return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    private int[][] ExtractTranscripts(FireRedAsrLlmNetwork<T> network, Tensor<T> target, int rows)
+    {
+        var transcripts = new int[rows][];
+        for (int r = 0; r < rows; r++)
+            transcripts[r] = Transcript(network, Row(target, r, rows));
+        return transcripts;
     }
 
     /// <inheritdoc />
@@ -241,8 +257,13 @@ public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         var network = _network;
         if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var transcripts = ExtractTranscripts(network, target, rows);
         network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true)); }
+        try
+        {
+            TrainWithCustomObjective(input, target, (stepInput, _) => BatchLoss(network, stepInput, transcripts, training: true));
+        }
         finally { network.Llm.Training = false; }
         return true;
     }
@@ -270,7 +291,9 @@ public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target, training: false)[0];
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var transcripts = ExtractTranscripts(network, target, rows);
+        return BatchLoss(network, input, transcripts, training: false)[0];
     }
 
     /// <inheritdoc />

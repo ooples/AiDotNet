@@ -128,19 +128,25 @@ internal sealed class SanmEncoder<T>
         if (t == 0) throw new ArgumentException("The recording is shorter than one filterbank frame.", nameof(audio));
         // apply_lfr: (m − 1)/2 copies of the first frame before, stacks of m every n, the last frame repeated past the end.
         int left = (c.LfrM - 1) / 2, padded = t + left, frames = (t + c.LfrN - 1) / c.LfrN;
-        var features = new Tensor<T>(new[] { frames, c.InputSize });
+        var indices = new int[frames * c.LfrM];
+        int idx = 0;
         for (int f = 0; f < frames; f++)
             for (int j = 0; j < c.LfrM; j++)
             {
                 int row = Math.Min(f * c.LfrN + j, padded - 1) - left;
-                row = Math.Max(0, row);
-                for (int m = 0; m < c.Mels; m++)
-                {
-                    int k = j * c.Mels + m;
-                    features[f, k] = NumOps.FromDouble((NumOps.ToDouble(fbank[row, m]) + _shift[k]) * _scale[k]);
-                }
+                indices[idx++] = Math.Max(0, row);
             }
-        return features;
+        var gathered = _engine.TensorGather(fbank, new Tensor<int>(indices, new[] { indices.Length }), axis: 0);
+        var stacked = _engine.Reshape(gathered, new[] { frames, c.InputSize });
+        var shiftTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        var scaleTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        for (int k = 0; k < c.InputSize; k++)
+        {
+            shiftTensor[0, k] = NumOps.FromDouble(_shift[k]);
+            scaleTensor[0, k] = NumOps.FromDouble(_scale[k]);
+        }
+        var shifted = _engine.TensorAdd(stacked, _engine.TensorBroadcastTo(shiftTensor, new[] { frames, c.InputSize }));
+        return _engine.TensorMultiply(shifted, _engine.TensorBroadcastTo(scaleTensor, new[] { frames, c.InputSize }));
     }
 
     /// <summary>The encoder's output <c>[frames, width]</c> of features <c>[frames, Mels · LfrM]</c>.</summary>
@@ -198,7 +204,9 @@ internal sealed class SanmEncoder<T>
         int pad = (c.Kernel - 1) / 2, right = c.Kernel - 1 - pad;
         var channels = _engine.Reshape(_engine.TensorTranspose(v), new[] { 1, d, length });
         var paddedValues = _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, d, pad }), channels, new Tensor<T>(new[] { 1, d, right }) }, 2);
-        var memory = _engine.TensorAdd(_engine.TensorTranspose(_engine.Reshape(block.Fsmn.Forward(paddedValues), new[] { d, length })), v);
+        var fsmnInput = _engine.Reshape(paddedValues, new[] { 1, d, 1, paddedValues.Shape[2] });
+        var fsmnOutput = _engine.DepthwiseConv2D(fsmnInput, block.Fsmn.Kernel(), new[] { 1, 1 }, new[] { 0, 0 });
+        var memory = _engine.TensorAdd(_engine.TensorTranspose(_engine.Reshape(fsmnOutput, new[] { d, length })), v);
         Tensor<T> Heads(Tensor<T> t, int rows) => _engine.TensorPermute(_engine.Reshape(t, new[] { rows, heads, dk }), new[] { 1, 0, 2 });
         var scores = _engine.BatchMatMul(_engine.TensorMultiplyScalar(Heads(q, length), NumOps.FromDouble(Math.Pow(dk, -0.5))),
             _engine.TensorPermute(Heads(k, keys), new[] { 0, 2, 1 }));

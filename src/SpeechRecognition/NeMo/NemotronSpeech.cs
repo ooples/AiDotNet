@@ -132,7 +132,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         else
         {
             using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-            var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
+            var encoded = _network.Encode(_network.FeatureTensor(waveform), training: false);
             tokens = _network.GreedyTransducer(encoded);
         }
         return new TranscriptionResult<T>
@@ -179,9 +179,15 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private double[] Samples(Tensor<T> waveform, int offset, int count)
@@ -199,7 +205,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.FeatureTensor(Row(input, r, rows, samples)), training));
         return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
 
@@ -250,17 +256,18 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = new int[rows][];
         for (int r = 0; r < rows; r++) labels[r] = Labels(Row(target, rows, r));
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var encoded = network.Encode(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), training: true);
+                var wave = Row(stepInput, r, rows, samples);
+                var encoded = network.Encode(network.SpecAugment(network.FeatureTensor(wave), _random), training: true);
                 var loss = network.TransducerLoss(encoded, labels[r]);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-        });
+        }, _optimizer);
         return true;
     }
 
@@ -279,7 +286,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         double total = 0;
         for (int r = 0; r < rows; r++)
         {
-            var features = network.Features(Samples(input, r * samples, samples));
+            var features = network.FeatureTensor(Row(input, r, rows, samples));
             total += NumOps.ToDouble(network.TransducerLoss(network.Encode(features, training: false), Labels(Row(target, rows, r)))[0]);
         }
         return NumOps.FromDouble(total / rows);

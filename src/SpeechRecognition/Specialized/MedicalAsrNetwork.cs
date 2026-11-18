@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -135,6 +136,33 @@ internal sealed class MedicalAsrNetwork<T>
                 for (int b = 0; b < bins; b++) features[s, k * bins + b] = NumOps.FromDouble(normalized[t, b]);
             }
         return features;
+    }
+
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        if (waveform.Length < WindowSamples)
+        {
+            var pad = new Tensor<T>(new[] { WindowSamples - waveform.Length });
+            waveform = _engine.TensorConcatenate(new[] { _engine.Reshape(waveform, new[] { waveform.Length }), pad }, 0);
+        }
+        var mel = _mel.Forward(_engine.Reshape(waveform, new[] { waveform.Length }));
+        int frames = mel.Shape[0], bins = mel.Shape[1], stack = Math.Max(1, _o.StackedFrames);
+        var normMel = ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+        int steps = (frames + stack - 1) / stack;
+        int needed = steps * stack - frames;
+        Tensor<T> padded;
+        if (needed > 0)
+        {
+            var lastFrame = _engine.TensorSlice(normMel, new[] { frames - 1, 0 }, new[] { 1, bins });
+            var pieces = new List<Tensor<T>> { normMel };
+            for (int i = 0; i < needed; i++) pieces.Add(lastFrame);
+            padded = _engine.TensorConcatenate(pieces.ToArray(), 0);
+        }
+        else
+        {
+            padded = normMel;
+        }
+        return _engine.Reshape(padded, new[] { steps, stack * bins });
     }
 
     /// <summary>The encoder output <c>[steps, units]</c>. The unidirectional model with an output delay of D reads its

@@ -158,9 +158,13 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
+    {
+        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
     }
 
     private double[] Samples(Tensor<T> waveform, int offset, int count)
@@ -176,11 +180,11 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return Ctc(Samples(input, 0, input.Length), training);
+        if (input.Rank == 1) return Ctc(input, training);
         int rows = input.Shape[0], samples = input.Length / rows;
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
-            outputs[r] = Ctc(Samples(input, r * samples, samples), training);
+            outputs[r] = Ctc(Row(input, r, rows, samples), training);
         return Engine.TensorStack(outputs, 0);
     }
 
@@ -188,10 +192,10 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
-    private Tensor<T> Ctc(double[] waveform, bool training)
+    private Tensor<T> Ctc(Tensor<T> waveform, bool training)
     {
         var network = _network ?? throw new InvalidOperationException("The native SPIRAL network is not initialized.");
-        return network.CtcLogits(network.Encode(network.ToTensor(network.Features(waveform)), training, _random), training, _random);
+        return network.CtcLogits(network.Encode(network.FeatureTensor(waveform), training, _random), training, _random);
     }
 
     /// <summary>
@@ -349,12 +353,40 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public T Pretrain(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        if (_network is null) throw new NotSupportedException("Pre-training runs on the native SPIRAL network.");
+        var network = _network ?? throw new NotSupportedException("Pre-training runs on the native SPIRAL network.");
         // A caller's optimizer serves both phases; otherwise the paper's pre-training recipe (section 4.2).
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var loss = TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+
+        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
+        var teacherOutputs = new Tensor<T>[rows];
+        var perturbedInputs = new Tensor<T>[rows];
+        using (new NoGradScope<T>())
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                var wave = Row(audio, r, rows, samples);
+                var features = network.Features(Samples(wave, 0, wave.Length));
+                teacherOutputs[r] = TeacherOutput(features, training: true, _random);
+                perturbedInputs[r] = network.ToTensor(Perturb(features, _random));
+            }
+        }
+
+        var dummyTarget = teacherOutputs[0];
+        var loss = TrainWithCustomObjective(audio, dummyTarget, (stepAudio, _) =>
+        {
+            int stepRows = stepAudio.Rank == 1 ? 1 : stepAudio.Shape[0], stepSamples = stepAudio.Length / stepRows;
+            Tensor<T>? total = null;
+            for (int r = 0; r < stepRows; r++)
+            {
+                var student = network.Predictor(network.Project(network.Encode(perturbedInputs[r], training: true, _random)), training: true);
+                var stepLoss = network.ContrastiveLoss(student, teacherOutputs[r], _options.Negatives, _options.Temperature, _random);
+                total = total is null ? stepLoss : Engine.TensorAdd(total, stepLoss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(audio)), NumOps.FromDouble(1.0 / stepRows));
+        }, _pretrainingOptimizer);
+
         double progress = Math.Min(1.0, (double)_pretrainingStep++ / Math.Max(1, _options.PretrainingSteps));
         double alpha = _options.TeacherMomentumEnd
             - (_options.TeacherMomentumEnd - _options.TeacherMomentumStart) * (Math.Cos(Math.PI * progress) + 1) / 2;

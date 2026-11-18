@@ -133,6 +133,20 @@ internal sealed class SpiralNetwork<T>
         return frames;
     }
 
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        int n = waveform.Length;
+        var wide = waveform.Contiguous().Cast<double>();
+        var mean = _engine.TensorDivideScalar(_engine.ReduceSum(wide, new[] { 0 }, true), (double)n);
+        var centered = _engine.TensorSubtract(wide, mean);
+        var scaled = _engine.TensorDivideScalar(centered, Math.Sqrt(n));
+        var std = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorSquare(scaled), new[] { 0 }, true));
+        var usable = _engine.TensorGreaterThan(std, 1e-8);
+        var normalized = _engine.TensorWhere(usable, _engine.TensorDivide(centered, std), new Tensor<double>(new[] { n })).Cast<T>();
+        var mel = _mel.Forward(normalized);
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+    }
+
     /// <summary>Log-mel features <c>[frames, bins]</c> of a waveform: the waveform scaled to zero mean and unit variance,
     /// then each bin normalized over the utterance, as the released preprocessing does (normalize_time_domain,
     /// per_feature).</summary>
