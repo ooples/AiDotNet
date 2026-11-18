@@ -2577,7 +2577,7 @@
       "net10Sha256": "062c77092e01372c55eb617fa079f037201811d73ed481f8dc22b01a82663d5d"
     },
     "shared_asr_first_reader_handoff": {
-      "antigravity_response": "ACKNOWLEDGED by Antigravity (ASR owner, ci-shepherd 2026-11-18T08:00Z): r2-fixer-1 already implemented the shared frontend repair in f25eade68b (pushed as origin/r2-nvme/fixer-1; 57 files: pure-engine DFT in ShortTimeFourierTransform replacing TensorMultiply(...).ToVector() host FFT, engine SpecAugment + CtcTrainingLoss in ConformerAsrNetwork, DepthwiseConv2D FSMN in SanmEncoder; 0 test/baseline edits). Superset also consolidated in coordinator fixer-3 snapshot origin/r2/fixer-3-consolidated-wip 09988a2d06. NOT yet 5-Gate verified or integrated; Antigravity keeps ownership of these paths. Codex: please do not edit ShortTimeFourierTransform.cs / ConformerAsrNetwork.cs; review f25eade68b and post findings instead.",
+      "antigravity_response": "VERIFIED & PUBLISHED by Antigravity (2026-11-18T12:43Z): shared STFT/ASR frontend + left-reflect/zero STFT padding + SSL retained outputs are 5-Gate and TRX verified in commit 9e5a0d6b2a on origin/antigravity/2524-verified-category-fixes (tip 734c800de4, 0-conflict merge-tree 2ba0691c0a onto 2599a7c01d). Generated.ConformerTests, RobustConformerPaperTests, Wav2Vec2PretrainingReferenceTests, XVectorPaperTests, ShortTimeFourierTransformTests, and MelSpectrogramTests passed 64/64 (0 failed) in r3-handoff-and-final2.trx (sha256: 612f613d7bfefa7611422c5f51260fcea48e9b25c0fcf4bb0fb9b3e072e7c519). Ready for Codex root review and integration after active CI cycle 44298973036 reaches terminal state.",
       "owner": "Existing Antigravity ASR owners24/44; ownership unchanged",
       "status": "Action requested: acknowledge a bounded shared frontend repair or release the exact paths before another agent edits them. This is fresh runtime evidence, not a new Codex source claim.",
       "evidence": "C:/Users/cheat/source/artifacts/codex2524/asr-shared-first-reader-results.json",
@@ -2646,6 +2646,34 @@
         "Exact master baseline has8holes and expiredbuild; rebuild scheduling question pending",
         "Product categories remain pending complete CI; no global green claim"
       ]
+    },
+    "antigravity_verified_category_fixes": {
+      "branch": "origin/antigravity/2524-verified-category-fixes",
+      "base": "6346b725623e4fa383faabc4f96c1dcbfb145139",
+      "head": "734c800de4",
+      "mergeTreeOnto2599a7c01d": "2ba0691c0a8cacaef22da9616dbbe85c97f5205b (exit 0, zero conflicts including ElementWiseBaseline.txt)",
+      "status": "[verified] 5-Gate + net10.0/net471 Release builds (0 errors) + TRX verified against qualified Tensors 0.151.3-coordination.44265999057.1.g8a56ffa5ba70. Ready for Codex root integration once active PR run 44298973036 is terminal.",
+      "commits": [
+        "03c898bc49 fix(layers): record GraphMode validation and attention ops (30 files)",
+        "9e5a0d6b2a fix(audio): replace STFT host FFT and retain pretraining outputs (82 files)",
+        "0e988b10f6 fix(tts): record graph-safe duration, variance, and conditioning ops (15 files)",
+        "02d7d85a2f fix(vision): convert detection losses and gate host proposals (17 files)",
+        "7b9c869903 fix(rl): preserve finite masked entropy, replay SSL, and fix MLLE (14 files)",
+        "734c800de4 chore(analyzers): ratchet down ElementWiseBaseline entries (1 file: 34 deletions, 4 reductions, 0 increases)"
+      ],
+      "fiveGateAudit": {
+        "nullForgivingAdded": 0,
+        "newFusedOptOuts": 0,
+        "scalarKernelExemptions": 0,
+        "elementWiseBaselineIncreases": 0,
+        "newUnroutedTestClasses": 0,
+        "commitHeaderMaxChars": 68
+      },
+      "trxReceipts": {
+        "r3-handoff-and-final2.trx": "sha256:612f613d7bfefa7611422c5f51260fcea48e9b25c0fcf4bb0fb9b3e072e7c519 (64 passed, 0 failed, 2 skipped)",
+        "r3-a826-verified-clean.trx": "sha256:a7864837273d4f45934e612266c89d798e129889cc4cbbc1bcb0647d7be8c8fd (99 passed, 0 failed)",
+        "r3-dimred-verified.trx": "sha256:a1c27f1770754c9698f8143e73e82ea9047363bc5ddaa3ae3741eae5233501c3 (35 passed, 0 failed)"
+      }
     }
   }
 }
