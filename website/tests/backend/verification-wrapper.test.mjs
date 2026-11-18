@@ -27,12 +27,13 @@ test('the real verification wrapper rejects setup-only success and preserves lis
     const listed=spawnSync(process.execPath,[...args,'--list'],{env,encoding:'utf8',timeout:30_000});
     assert.equal(listed.status,0,listed.stdout+listed.stderr);
     assert.match(listed.stdout,/fixture intentionally skipped/);
-    writeFileSync(fixture,"import {test} from '@playwright/test';test('fixture redacts private failure',()=>{throw new Error('Authorization: '+process.env.VERCEL_AUTOMATION_BYPASS_SECRET)});\n");
+    writeFileSync(fixture,"import {test} from '@playwright/test';test('fixture redacts private failure',()=>{throw new Error('Authorization: '+process.env.VERCEL_AUTOMATION_BYPASS_SECRET+'\\nReset link https://fixture.invalid/verify?token=fixture-recovery-token&type=recovery')});\n");
     const failed=spawnSync(process.execPath,args,{env,encoding:'utf8',timeout:60_000});
     assert.equal(failed.status,1);
     assert.equal((failed.stdout+failed.stderr).includes('fixture-private-bypass'),false,'terminal reporters must redact credentials before displaying failures');
+    assert.equal((failed.stdout+failed.stderr).includes('fixture-recovery-token'),false,'one-time Auth links are credentials too');
     const inspect=spawnSync(process.platform==='win32'?'python':'python3',['-c',
-      "import base64,io,json,pathlib,re,sys,zipfile; h=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'); a=zipfile.ZipFile(io.BytesIO(base64.b64decode(re.search(r'data:application/zip;base64,([A-Za-z0-9+/=]+)',h).group(1)))); assert not any(b'fixture-private-bypass' in a.read(n) for n in a.namelist()); [json.loads(a.read(n)) for n in a.namelist() if n.endswith('.json')]; print('Report credentials redacted and JSON structure preserved')",
+      "import base64,io,json,pathlib,re,sys,zipfile; h=pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'); a=zipfile.ZipFile(io.BytesIO(base64.b64decode(re.search(r'data:application/zip;base64,([A-Za-z0-9+/=]+)',h).group(1)))); assert not any(secret in a.read(n) for n in a.namelist() for secret in [b'fixture-private-bypass',b'fixture-recovery-token']); [json.loads(a.read(n)) for n in a.namelist() if n.endswith('.json')]; print('Report credentials redacted and JSON structure preserved')",
       join(root,'report','index.html')],{encoding:'utf8',timeout:30_000});
     assert.equal(inspect.status,0,inspect.stdout+inspect.stderr);
   } finally {
