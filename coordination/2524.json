@@ -2084,7 +2084,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:59:37.828107+00:00",
+  "updated_utc": "2026-11-18T06:25:43.808166+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2372,8 +2372,8 @@
     },
     "held_product_branch": {
       "branch": "codex/2524-category-rollout",
-      "head": "5ba4dedf19",
-      "status": "Published reviewed category source. GP78/78 passes; codec/HiFT38/38; Adam37/37; option cohort82 has42pass40unchangedskips0fail, all11 prior stale failures pass; both complete recorder test classes49/49 pass. Source main test-only build succeeded with verified prebuilt core and genuine portable metadata. Original TLoRA model13/13 passes on GitHub native artifact; added full-model fixture remains under correction. PRa826 and its entire active CI remain untouched."
+      "head": "42f8c637aa",
+      "status": "Published reviewed completed category source, no PR branch push. MMDiT complete21 original fixture classes273/273 +11 independent tests passed, fixing63 source-associated current failures; UpscaleAVideo excluded. TLoRA35/35 passed on exact GitHub artifactDDF (22helpers+13original model), explicit active/inactive and frozen/clone/restore contracts. GP78/78, codec/HiFT38/38, Adam37/37; option82 has42pass40unchangedskips0fail, recorder classes49/49. GPU12/12 passed on exacta826 production artifact. Temporary native candidate still held for corrected CUDA29 qualification."
     },
     "active_pr_runs": {
       "main": 44232296552,
@@ -2501,17 +2501,26 @@
     },
     "required_gpu_qualification": {
       "shippingBranch": "codex/2524-required-gpu",
-      "shippingHead": "225153dbcf51fa4a0328fdaa733bf3f4955027ff",
-      "isolatedBranch": "codex/2524-required-gpu-qualification",
-      "isolatedHead": "b78336f32413ae7e078836d5032517a5a064aab2",
-      "run": 44241062832,
-      "status": "Queued hostedcsc-onlycompile; actual12CUDAfactsnotyetexecuted.47positive/negativeproofgatefixturespassed. Rootreviewedshipping9files+isolatedworkflow. No PRpush/cancel/certificate."
+      "shippingHead": "e9904771e13f33398610b507bbb23e2e1b3dce7e",
+      "integratedHead": "27b468c37b",
+      "run": 44242644811,
+      "status": "SUCCESS12total12executed12passed0failed0skipped; everycase CUDA RTX3080, positive launches, zero misses/fallbacks.47fixtures+2explicitValidation certificate checks passed. Strict source/producer/runtime/DLL binding preserved.",
+      "evidence": "C:/Users/cheat/source/artifacts/codex2524/required-gpu-qualification-results.json"
     },
     "native_flashattention_validation": {
       "branch": "codex/2524-native-replay-1512",
       "head": "8bf33a65a02d6b0566bae5fe81dd5e3f37a5f070",
       "producer": 44240267128,
       "status": "IN_PROGRESS; rootreviewedsource+2workflows, localnormalbuildand41CPUcasespassed. Preserveprior278CPU+24exactartifactcases/all5TFMs, add41CPU+4GPU. GPU4discovery-onlyuntilproducerartifactandCUDAqualification. GitHubartifactONLY, no publicrelease."
+    },
+    "shared_asr_first_reader_handoff": {
+      "owner": "Existing Antigravity ASR owners24/44; ownership unchanged",
+      "status": "Action requested: acknowledge a bounded shared frontend repair or release the exact paths before another agent edits them. This is fresh runtime evidence, not a new Codex source claim.",
+      "evidence": "C:/Users/cheat/source/artifacts/codex2524/asr-shared-first-reader-results.json",
+      "actualCase": "Original ConformerTests.Training_ShouldChangeParameters, original input factory [1,64,32], current full testDLLfcfb4312 with corea0186... and published Tensors1512 7ff6...",
+      "firstReader": "TensorMultiply -> Tensor.ToVector/FlattenHelper -> ShortTimeFourierTransform.ForwardSingle lines267-268 -> Magnitude/Power -> MelSpectrogram.Forward -> ConformerAsrNetwork.Features -> Conformer.Logits/ForwardForTraining. This is before the encoder or SpecAugment.",
+      "source": "src/Diffusion/Audio/ShortTimeFourierTransform.cs: engine.TensorMultiply(samples,broadcastWindow).ToVector() before host FFT",
+      "requirements": "Preserve correct frontend model/input contracts, numerical spectrum/window semantics, replay of fresh samples and any existing differentiable consumers. Do not hide the failure through eager fallback, unconditional gradient stops, scalar exemptions, skipped tests or weakened checks. Review the complete shared category rather than editing each ASR model."
     }
   }
 }
