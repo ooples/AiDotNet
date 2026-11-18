@@ -14,15 +14,20 @@ try {
         @{ Prefix = 'optimizerEnrollment'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledOptimizerEnrollmentTests' }
         @{ Prefix = 'enrollmentCheckpoint'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledEnrollmentCheckpointTests' }
     )
+    $fixtureAdditionalGroups = @(
+        @{ Prefix = 'normalizationSearch'; Class = 'Fixture.NormalizationSearch'; Trx = 'TestResults/normalization-search-signature.trx' }
+        @{ Prefix = 'flashAttention'; Class = 'Fixture.FlashAttention'; Trx = 'TestResults/flashattention-signature.trx' }
+    )
+    $allFixtureGroups = @($fixtureCpuGroups) + @($fixtureAdditionalGroups)
     $fixtureCpuCases = @{}
-    foreach ($group in $fixtureCpuGroups) {
+    foreach ($group in $allFixtureGroups) {
         $cases = [string[]]@(1..2 | ForEach-Object { "$($group.Class).FixtureCase$_" })
         $fixtureCpuCases[$group.Prefix] = $cases
         $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([string]::Join("`n", $cases)))).ToLowerInvariant()
         $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCount') -NotePropertyValue 2 -Force
         $pin | Add-Member -NotePropertyName ($group.Prefix + 'TestCasesSha256') -NotePropertyValue $digest -Force
     }
-    $pin.mandatoryCpuTestCount = $pin.testCount + $pin.retainedOutputTestCount + 8
+    $pin.mandatoryCpuTestCount = $pin.testCount + $pin.retainedOutputTestCount + 12
     $props = "<Project><ItemGroup><PackageVersion Include=`"AiDotNet.Tensors`" Version=`"$version`" /></ItemGroup></Project>"
     Set-Content "$root/Directory.Packages.props" $props
     Add-Type -AssemblyName System.IO.Compression.ZipFile
@@ -55,7 +60,7 @@ try {
         $manifest.retainedOutputTestCounters[$outcome] = 0
     }
     $zeroOutcomes = @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')
-    foreach ($group in $fixtureCpuGroups) {
+    foreach ($group in $allFixtureGroups) {
         $groupCounters = @{ total = 2; executed = 2; passed = 2 }
         foreach ($outcome in $zeroOutcomes) { $groupCounters[$outcome] = 0 }
         $manifest[$group.Prefix + 'TestCounters'] = $groupCounters
@@ -67,6 +72,16 @@ try {
     $unionTrxPath = "$root/evidence/TestResults/optimizer-enrollment-signature.trx"
     Set-Content -LiteralPath $unionTrxPath -Value $unionTrx -Encoding utf8 -NoNewline
     $manifest.sha256['TestResults/optimizer-enrollment-signature.trx'] = (Get-FileHash $unionTrxPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $additionalTrx = @{}
+    foreach ($group in $fixtureAdditionalGroups) {
+        $cases = @($fixtureCpuCases[$group.Prefix] | ForEach-Object { "<UnitTestResult testName=`"$_`" outcome=`"Passed`" />" })
+        $counters = 'total="2" executed="2" passed="2" ' + (($zeroOutcomes | ForEach-Object { "$_=`"0`"" }) -join ' ')
+        $text = "<TestRun><Results>$($cases -join '')</Results><ResultSummary outcome=`"Completed`"><Counters $counters /></ResultSummary></TestRun>"
+        $additionalTrx[$group.Prefix] = $text
+        $path = Join-Path "$root/evidence" $group.Trx
+        Set-Content -LiteralPath $path -Value $text -Encoding utf8 -NoNewline
+        $manifest.sha256[$group.Trx] = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
     function Test-Case([string] $Name, [scriptblock] $Mutate, [string] $ExpectedError) {
         $case = $manifest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
         & $Mutate $case
@@ -85,7 +100,7 @@ try {
     Test-Case 'skipped retained-output tests' { param($m) $m.retainedOutputTestCounters.notExecuted = 1 } 'Nonzero retained-output test outcome'
     Test-Case 'duplicate retained-output identities' { param($m) $m.retainedOutputTestCases[1] = $m.retainedOutputTestCases[0] } 'must be nonempty and unique'
     Test-Case 'missing retained-output identity' { param($m) $m.retainedOutputTestCases = @($m.retainedOutputTestCases | Select-Object -Skip 1) } 'test identity count'
-    foreach ($group in $fixtureCpuGroups) {
+    foreach ($group in $allFixtureGroups) {
         $prefix = $group.Prefix
         Test-Case "$prefix missing counters" { param($m) $m.PSObject.Properties.Remove($prefix + 'TestCounters') } 'Missing mandatory CPU test group'
         Test-Case "$prefix skipped case" { param($m) $m.($prefix + 'TestCounters').notExecuted = 1 } 'Nonzero mandatory CPU test outcome'
@@ -102,7 +117,40 @@ try {
     } finally {
         Set-Content -LiteralPath $unionTrxPath -Value $unionTrx -Encoding utf8 -NoNewline
     }
+    foreach ($group in $fixtureAdditionalGroups) {
+        $prefix = $group.Prefix
+        $relativeTrx = $group.Trx
+        $path = Join-Path "$root/evidence" $relativeTrx
+        $text = $additionalTrx[$prefix]
+        Test-Case "$prefix wrong TRX checksum" { param($m) $m.sha256.$relativeTrx = 'wrong' } 'Mandatory CPU union TRX checksum did not match'
+        try {
+            Move-Item -LiteralPath $path -Destination "$path.saved"
+            Test-Case "$prefix missing TRX" {} 'Mandatory CPU union TRX checksum did not match'
+        } finally { Move-Item -LiteralPath "$path.saved" -Destination $path }
+        try {
+            Set-Content -LiteralPath $path -Value ($text.Replace('outcome="Passed"', 'outcome="NotExecuted"')) -Encoding utf8 -NoNewline
+            Test-Case "$prefix checksummed skipped TRX" { param($m) $m.sha256.$relativeTrx = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU union TRX cases must be distinct and passed'
+            Set-Content -LiteralPath $path -Value ($text.Replace('.FixtureCase2', '.DifferentCase2')) -Encoding utf8 -NoNewline
+            Test-Case "$prefix checksummed substituted TRX identity" { param($m) $m.sha256.$relativeTrx = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU TRX identities did not match'
+            Set-Content -LiteralPath $path -Value ($text.Replace('total="2"', 'total="3"')) -Encoding utf8 -NoNewline
+            Test-Case "$prefix checksummed wrong TRX total" { param($m) $m.sha256.$relativeTrx = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU cohort TRX count did not match'
+            Set-Content -LiteralPath $path -Value ($text.Replace('outcome="Completed"', 'outcome="Aborted"')) -Encoding utf8 -NoNewline
+            Test-Case "$prefix checksummed incomplete TRX" { param($m) $m.sha256.$relativeTrx = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU union TRX did not complete'
+        } finally { Set-Content -LiteralPath $path -Value $text -Encoding utf8 -NoNewline }
+    }
+    try {
+        Set-Content -LiteralPath $unionTrxPath -Value ($unionTrx.Replace('total="8"', 'total="9"')) -Encoding utf8 -NoNewline
+        Test-Case 'checksummed wrong optimizer union total' { param($m) $m.sha256.'TestResults/optimizer-enrollment-signature.trx' = (Get-FileHash $unionTrxPath -Algorithm SHA256).Hash.ToLowerInvariant() } 'Mandatory CPU union TRX count did not match'
+    } finally { Set-Content -LiteralPath $unionTrxPath -Value $unionTrx -Encoding utf8 -NoNewline }
     Test-Case 'wrong mandatory CPU total' { param($m) $m.mandatoryCpuTestCount-- } 'Mandatory CPU test total'
+    try {
+        $pin.mandatoryCpuTestCount--
+        $pin | ConvertTo-Json -Depth 10 | Set-Content "$root/.github/tensors-validation.json"
+        Test-Case 'pinned mandatory CPU arithmetic mismatch' {} 'Mandatory CPU test total'
+    } finally {
+        $pin.mandatoryCpuTestCount++
+        $pin | ConvertTo-Json -Depth 10 | Set-Content "$root/.github/tensors-validation.json"
+    }
     Test-Case 'missing target framework' { param($m) $m.targetFrameworks = @('net10.0') } 'target frameworks'
     Test-Case 'wrong package hash' { param($m) $m.sha256."packages/AiDotNet.Tensors.$version.nupkg" = 'wrong' } 'Package hash'
     Test-Case 'wrong tested binary' { param($m) $m.testedAndPackagedNet10BinarySha256 = 'wrong' } 'Tested binary hash'
@@ -112,10 +160,17 @@ try {
     $oldRepository = $env:GITHUB_REPOSITORY
     $oldEvent = $env:GITHUB_EVENT_NAME
     $oldEventPath = $env:GITHUB_EVENT_PATH
+    $oldArtifactToken = $env:TENSORS_ARTIFACT_TOKEN
     try {
         $env:GITHUB_REPOSITORY = 'ooples/AiDotNet'
         $env:GITHUB_EVENT_NAME = 'pull_request'
         $env:GITHUB_EVENT_PATH = "$root/event.json"
+        $env:TENSORS_ARTIFACT_TOKEN = $null
+        '{"pull_request":{"head":{"repo":{"full_name":"ooples/AiDotNet"}}}}' | Set-Content $env:GITHUB_EVENT_PATH
+        $caught = $null
+        try { & $script -RepositoryRoot $root } catch { $caught = $_.Exception.Message }
+        if ($caught -notlike '*artifact read token is required*') { throw "Trusted PR did not reach the token guard before network access: $caught" }
+        Write-Host 'PASS: same-repository PR requires token before network access'
         '{"pull_request":{"head":{"repo":{"full_name":"fork/AiDotNet"}}}}' | Set-Content $env:GITHUB_EVENT_PATH
         $caught = $null
         try { & $script -RepositoryRoot $root } catch { $caught = $_.Exception.Message }
@@ -126,10 +181,17 @@ try {
         try { & $script -RepositoryRoot $root } catch { $caught = $_.Exception.Message }
         if ($caught -notlike '*including merge_group*') { throw "Merge queue guard did not fail closed: $caught" }
         Write-Host 'PASS: merge_group fails before token or network access'
+        $env:GITHUB_REPOSITORY = 'fork/AiDotNet'
+        $env:GITHUB_EVENT_NAME = 'push'
+        $caught = $null
+        try { & $script -RepositoryRoot $root } catch { $caught = $_.Exception.Message }
+        if ($caught -notlike '*trusted consumer repository*') { throw "Repository guard did not run before token access: $caught" }
+        Write-Host 'PASS: wrong repository fails before token or network access'
     } finally {
         $env:GITHUB_REPOSITORY = $oldRepository
         $env:GITHUB_EVENT_NAME = $oldEvent
         $env:GITHUB_EVENT_PATH = $oldEventPath
+        $env:TENSORS_ARTIFACT_TOKEN = $oldArtifactToken
     }
     # Mock only the existing read-only transport boundary; exercise the real bootstrap.
     [void](New-Item -ItemType Directory -Path "$root/tools/TestImpact", "$root/runner")
