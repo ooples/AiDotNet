@@ -153,7 +153,7 @@ internal static class DimensionalityReductionOps
         var masked = distances.Clone();
         engine.TensorFillDiagonalInPlace(masked, numOps.FromDouble(double.PositiveInfinity));
         var order = AnomalyTensorOps.StableSortRows(masked, descending: false).Order;
-        return take == n ? order : engine.TensorNarrow(order, 1, 0, take);
+        return take == n ? order : engine.TensorNarrow(order, 1, 0, take).Contiguous();
     }
 
     /// <summary>Gathers source[indices[i, j], j] for a [n, k] index matrix.</summary>

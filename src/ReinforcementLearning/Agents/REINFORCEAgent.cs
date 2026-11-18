@@ -256,9 +256,18 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
         int trajLen = _trajectory.Length;
         var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
 
-        // [trajLen, stateSize] states and [trajLen] returns, stacked in bulk.
+        // [trajLen, stateSize] states, [trajLen] returns, and step actions prepared before tracing so
+        // discrete action extraction (RLTensorOps.FirstPositiveIndex -> TensorGreaterThan + host read) never
+        // executes on a live LazyTensorScope during closure-objective compilation.
         var batchStates = RLTensorOps.StackRows(_trajectory.States.Select(stateRow => RLTensorOps.Head(stateRow, stateSize)).ToList());
         var returnsTensor = RLTensorOps.FromList(returns, trajLen);
+        int actionSize = _reinforceOptions.ActionSize;
+        Tensor<T>? continuousActionsTensor = _reinforceOptions.IsContinuous
+            ? RLTensorOps.StackRows(_trajectory.Actions.Select(actionRow => RLTensorOps.Head(actionRow, actionSize)).ToList())
+            : null;
+        int[]? discreteActionIndices = _reinforceOptions.IsContinuous
+            ? null
+            : _trajectory.Actions.Take(trajLen).Select(GetDiscreteAction).ToArray();
 
         // Policy gradient objective: maximize Σ_t G_t · log π(a_t | s_t).
         // Minimize the negation. All ops below are engine-routed so the
@@ -272,20 +281,22 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
 
             if (_reinforceOptions.IsContinuous)
             {
-                int actionSize = _reinforceOptions.ActionSize;
                 var means = eng.TensorSlice(policyOutput, [0, 0], [trajLen, actionSize]);
                 // TensorSlice takes (start, length): the log-std half is actionSize wide, not the full output width.
                 var logStds = eng.TensorSlice(policyOutput, [0, actionSize], [trajLen, actionSize]);
 
-                var actionsTensor = RLTensorOps.StackRows(_trajectory.Actions.Select(actionRow => RLTensorOps.Head(actionRow, actionSize)).ToList());
-
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(eng, means, logStds, actionsTensor);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(
+                    eng,
+                    means,
+                    logStds,
+                    continuousActionsTensor ?? throw new InvalidOperationException("Continuous actions tensor was not initialized."));
             }
             else
             {
-                var actionIndices = _trajectory.Actions.Take(trajLen).Select(GetDiscreteAction).ToArray();
-
-                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(eng, policyOutput, actionIndices);
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(
+                    eng,
+                    policyOutput,
+                    discreteActionIndices ?? throw new InvalidOperationException("Discrete action indices were not initialized."));
             }
 
             // weighted = G_t · log π(a_t|s_t), shape [trajLen]

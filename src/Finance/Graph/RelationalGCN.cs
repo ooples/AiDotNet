@@ -1067,6 +1067,11 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> NodeFeatures(Tensor<T> input)
     {
         int width = _sequenceLength * _numFeatures;
+        if (input.Length == width && _numNodes > 1)
+        {
+            return Engine.TensorTile(Engine.Reshape(input.Contiguous(), new[] { 1, width }), new[] { _numNodes, 1 });
+        }
+
         if (input.Length != _numNodes * width)
         {
             throw new ArgumentException(

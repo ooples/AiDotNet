@@ -134,9 +134,17 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// and the pretraining session and pretrainer that call TrainStep, silently skipped training.
     /// </para>
     /// </remarks>
+    [Scratch]
+    private protected Tensor<T>? _lastStepView1;
+
+    [Scratch]
+    private protected Tensor<T>? _lastStepView2;
+
     protected virtual SelfSupervisedLearningStepResult<T> TrainStepCore(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
     {
         var (view1, view2) = CreateViews(batch, augmentationContext);
+        _lastStepView1 = view1;
+        _lastStepView2 = view2;
         var optimizer = _trainingOptimizer ??= CreateOptimizer();
         // The configured schedule (linear scaling, warmup, cosine decay) sets this step's rate.
         double learningRate = GetEffectiveLearningRate();
@@ -147,6 +155,15 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
         // gradient of (wd / 2) * ||w||^2 added to the objective; the decoupled optimizers apply it themselves.
         double coupledDecay = CoupledWeightDecay();
         T penalty = NumOps.Zero;
+        if (coupledDecay > 0)
+        {
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var preStepL2 = L2Penalty(GetOnlineTrainableTensors(), coupledDecay);
+                penalty = preStepL2.Length > 0 ? preStepL2.GetFlat(0) : NumOps.Zero;
+            }
+        }
+
         T loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
             GetOnlineTrainableTensors,
             () =>
@@ -154,7 +171,6 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
                 var objective = ComputeObjective(view1, view2);
                 if (coupledDecay <= 0) return objective;
                 var l2 = L2Penalty(GetOnlineTrainableTensors(), coupledDecay);
-                penalty = l2.Length > 0 ? l2.GetFlat(0) : NumOps.Zero;
                 return Engine.TensorAdd(objective, l2);
             },
             optimizer);
