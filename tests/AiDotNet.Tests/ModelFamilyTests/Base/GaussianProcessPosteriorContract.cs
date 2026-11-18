@@ -12,6 +12,64 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 internal static class GaussianProcessPosteriorContract
 {
+    internal static Vector<double> BuilderTargets(IGaussianProcess<double> model,
+        Matrix<double> inputs, Vector<double> originalTargets, Random rng)
+    {
+        if (model is not StudentTGaussianProcess<double> student) return originalTargets;
+        // A builder smoke test should draw from the declared fixed prior and
+        // likelihood. Large linear targets can legitimately make non-log-concave
+        // EP fail; that behavior has a separate, exact-input refusal regression.
+        int count = inputs.Rows;
+        var lower = new double[count, count];
+        for (int i = 0; i < count; i++)
+            for (int j = 0; j <= i; j++)
+            {
+                double entry = student.Kernel.Calculate(inputs.GetRow(i), inputs.GetRow(j));
+                // The model factory uses the documented default jitter.
+                if (i == j) entry += 1e-6;
+                for (int k = 0; k < j; k++) entry -= lower[i, k] * lower[j, k];
+                if (i == j)
+                {
+                    Assert.True(entry > 0, "The declared fixture prior must be positive definite.");
+                    lower[i, j] = Math.Sqrt(entry);
+                }
+                else lower[i, j] = entry / lower[j, j];
+            }
+        // Independent scalar Cholesky sampling: Cov(Lz) = LL^T = K.
+        var normal = new double[count];
+        for (int i = 0; i < count; i++) normal[i] = ModelTestHelpers.NextGaussian(rng);
+        var targets = new Vector<double>(count);
+        for (int i = 0; i < count; i++)
+        {
+            double latent = 0;
+            for (int j = 0; j <= i; j++) latent += lower[i, j] * normal[j];
+            // Student-t = N(0,1) / sqrt(ChiSquare(nu)/nu), with independent
+            // draws. Gamma(nu/2, 2) is ChiSquare(nu); scale is not its SD.
+            double noiseNormal = ModelTestHelpers.NextGaussian(rng);
+            double chiSquare = 2 * SampleUnitScaleGamma(student.DegreesOfFreedom / 2, rng);
+            targets[i] = latent + student.Scale * noiseNormal / Math.Sqrt(chiSquare / student.DegreesOfFreedom);
+        }
+        return targets;
+    }
+
+    private static double SampleUnitScaleGamma(double shape, Random rng)
+    {
+        // Marsaglia-Tsang rejection sampler, with the standard shape<1 identity.
+        if (shape < 1)
+            return SampleUnitScaleGamma(shape + 1, rng) * Math.Pow(1 - rng.NextDouble(), 1 / shape);
+        double d = shape - 1.0 / 3, c = 1 / Math.Sqrt(9 * d);
+        while (true)
+        {
+            double z = ModelTestHelpers.NextGaussian(rng);
+            double v = 1 + c * z;
+            if (v <= 0) continue;
+            v = v * v * v;
+            double u = 1 - rng.NextDouble();
+            if (u < 1 - 0.0331 * Math.Pow(z, 4) || Math.Log(u) < 0.5 * z * z + d * (1 - v + Math.Log(v)))
+                return d * v;
+        }
+    }
+
     internal static bool VerifyIndependentAdditionalData(IGaussianProcess<double> model, int features)
     {
         if (model is not StudentTGaussianProcess<double> student) return false;

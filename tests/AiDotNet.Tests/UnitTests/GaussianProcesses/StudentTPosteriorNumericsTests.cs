@@ -299,6 +299,59 @@ public sealed class StudentTPosteriorNumericsTests
             Assert.Throws<InvalidOperationException>(() => model.Predict(new Vector<double>(1)));
         });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DifficultBuilderSplit_FailedFitRefusesPredictions(bool refit)
+        => OnCpu(() =>
+        {
+            // Exact original seed-42 builder training split: normalized X,
+            // unnormalized linear Y, and default zero-mean GP prior. Preserve
+            // this difficult input independently of future splitter changes.
+            var rows = new double[,]
+            {
+                { 0.0098408616639191395, 0.80522935948950947, 33.045879634863397 },
+                { 0.36265406190844318, 0.78321955589100312, 38.746980681117776 },
+                { 0.47655703143697603, 0.79962717168900477, 41.330400608725718 },
+                { 0.18735680172920147, 0.7681467520213352, 34.919683205369722 },
+                { 0.1816266654459896, 0.26234375513197838, 14.712369204727853 },
+                { 0.83821984017845474, 0.67766126332753429, 43.167297854034253 },
+                { 0.67388509367085003, 0.041069108273932578, 15.170556720386399 },
+                { 0.56497625806645724, 0.031813361011817969, 12.599482157332844 },
+                { 0.20133606790332412, 0.038093220947352735, 6.3135782454254157 },
+                { 0.8185984399323083, 0.38607259954429152, 31.406179837929873 },
+                { 0.052650356617327497, 0.78883130561296877, 33.391062100813549 },
+                { 0.2365575809175903, 0.0094321553608642719, 5.88863750619955 },
+                { 0.43319320714993925, 0.15036227866912016, 15.025048699322703 },
+                { 0.15440056131639965, 0.041124431291861822, 5.5173272516628664 },
+                { 0.052414952824993276, 0.42237792633321408, 18.72224396882676 },
+                { 1, 0.93827017067104512, 56.350311922791263 },
+                { 0.27117302446592512, 0.7794846804209522, 36.846965611293129 },
+                { 0.15892011301988476, 0.91518607121532336, 40.050956743270923 },
+                { 0.072038589721975757, 0.72445371769450051, 31.062815879224686 },
+                { 0.55196326136769558, 0.32081018011281431, 23.915098518388206 },
+                { 0.77723498449778994, 0.16067772337377934, 21.663944405177549 },
+            };
+            var x = new Matrix<double>(rows.GetLength(0), 2);
+            var y = new Vector<double>(rows.GetLength(0));
+            for (int i = 0; i < x.Rows; i++)
+            {
+                x[i, 0] = rows[i, 0]; x[i, 1] = rows[i, 1]; y[i] = rows[i, 2];
+            }
+            using var model = new StudentTGaussianProcess<double>(new GaussianKernel<double>());
+            if (refit)
+            {
+                model.Fit(new Matrix<double>(1, 2), new Vector<double>(new[] { 0.5 }));
+                var before = model.Predict(new Vector<double>(2));
+                Assert.True(!double.IsNaN(before.mean) && !double.IsInfinity(before.mean));
+                Assert.True(before.variance > 0);
+            }
+            var failure = Assert.Throws<InvalidOperationException>(() => model.Fit(x, y));
+            Assert.Contains("proper damped posterior and cavities", failure.Message);
+            Assert.Throws<InvalidOperationException>(() => model.Predict(x.GetRow(0)));
+            Assert.Throws<InvalidOperationException>(() => model.PredictBatch(x));
+        });
+
     private static (double[] Mean, double V00, double V01, double V11) ReferenceEp(double diagonal, double offDiagonal, double[] targets)
     {
         // Independent scalar 2x2 precision algebra plus direct density

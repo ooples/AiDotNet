@@ -682,6 +682,7 @@ public abstract class GaussianProcessModelTestBase
 
         // GP models implement IGaussianProcess but also IFullModel for the builder
         using var model = CreateModel();
+        trainY = GaussianProcessPosteriorContract.BuilderTargets(model, trainX, trainY, rng);
         if (model is IFullModel<double, Matrix<double>, Vector<double>> fullModel)
         {
             var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
