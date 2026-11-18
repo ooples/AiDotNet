@@ -31,7 +31,7 @@ test.describe('crawler regression checks', () => {
       }
       if (req.url === '/account/') {
         res.setHeader('Content-Type', 'text/html');
-        res.end('<!doctype html><link rel="stylesheet" href="/slow-auth.css"><h1>Account</h1><button id="desktop-menu">Desktop menu</button>');
+        res.end('<!doctype html><link rel="stylesheet" href="/slow-auth.css"><h1>Account</h1><button id="desktop-menu">Desktop menu</button><script>fetch("/slow-body/").then(r=>r.json()).then(()=>document.body.dataset.authReady="true").catch(e=>console.error(e))</script>');
         return;
       }
       if (req.url === '/covered-rows/') coveredRowLoads++;
@@ -81,6 +81,7 @@ test.describe('crawler regression checks', () => {
       await signIn(page, { kind: 'free', email: 'fixture@example.test', password: 'fixture' });
       expect(await page.evaluate(() => document.readyState)).toBe('complete');
       await expect(page.locator('#desktop-menu')).toBeHidden();
+      expect(await page.locator('body').getAttribute('data-auth-ready')).toBe('true');
     } finally { await context.close(); }
   });
 

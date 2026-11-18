@@ -63,6 +63,10 @@ export async function signIn(page: Page, p: Persona): Promise<void> {
   // The URL changes at document commit, before CSS has loaded. Enumerating at
   // that point can mistake unstyled desktop-only controls for visible phone UI.
   await page.waitForLoadState('load');
+  // The crawler may immediately visit another route. Let dashboard Auth/profile
+  // requests finish first, so that forced navigation does not abort the SDK fetch.
+  // Retain console errors: request failures are not explained away by this wait.
+  await page.waitForLoadState('networkidle', { timeout: 10_000 });
 }
 
 /** True while the page's Supabase session is present in localStorage. */
