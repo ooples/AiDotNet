@@ -47,10 +47,14 @@ jobs:
       # 20260921 files, which were still pending when 20261027 was applied) must still be pushed. Without it
       # db push refuses to insert a migration before the newest remote version.
       - name: Apply Supabase migrations
-        run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
+        run: |
+          set -euo pipefail
+          psql "$(cat supabase/.temp/pooler-url)" -X -v ON_ERROR_STOP=1 -f supabase/require-existing-entitlement-history.sql
+          supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       # Edge functions used to be deployed by hand, so production drifted from the repo (the admin
       # resend-license-email function was never deployed at all). Deploy every function on each run;

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { touchScrollIntoView } from './helpers/touch-scroll';
 
 // Deterministic UI contracts, not a substitute for Stripe/Supabase integration.
 // Only the isolated build produced by test:preview can run these sessions.
@@ -20,9 +21,10 @@ async function installBackend(page: Page, options: {
   summaryAfterAction?: () => Promise<void>; summaryFailureAfterAction?: boolean;
   rescheduleAppliedFailure?: boolean; ordinaryCancelConflict?: boolean;
   licenses?: Array<Record<string,unknown>>;
+  admin?: boolean;
 } = {}) {
   const profile = {
-    id: user.id, email: user.email, full_name: 'Preview Customer', role: 'user',
+    id: user.id, email: user.email, full_name: 'Preview Customer', role: options.admin ? 'admin' : 'user',
     subscription_tier: options.tier ?? 'free', subscription_status: 'active',
     stripe_customer_id: options.customer ? 'cus_preview' : null,
   };
@@ -236,6 +238,22 @@ test('a failed portal request surfaces its error and allows retry', async ({ pag
     { action: 'manage', return_path: '/account/billing/' },
     { action: 'manage', return_path: '/account/billing/' },
   ]);
+});
+
+test('phone license dialog Cancel is reached through touch scrolling',async({page},info)=>{
+  test.skip(info.project.name!=='anon-mobile','phone touch behavior');
+  await installBackend(page,{admin:true});
+  let writes=0;
+  await page.route('**/functions/v1/issue-license',async route=>{writes++;await route.fulfill({status:409,json:{error:'unexpected_issuance'}});});
+  await page.goto('/admin/licenses/');
+  await expect(page.locator('#licenses-loading')).toBeHidden();
+  await page.getByRole('button',{name:'Issue License',exact:true}).click();
+  const modal=page.locator('#issue-modal'), panel=modal.locator(':scope > div'), cancel=page.locator('#cancel-issue-btn');
+  await panel.evaluate(el=>{el.scrollTop=0;});
+  expect(await touchScrollIntoView(page,panel,cancel),'a real swipe is required from the initial dialog position').toBeGreaterThan(0);
+  await cancel.tap();
+  await expect(modal).toBeHidden();
+  expect(writes).toBe(0);
 });
 
 for (const validOlder of [true,false]) {

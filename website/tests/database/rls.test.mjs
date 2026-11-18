@@ -303,3 +303,12 @@ test('release DDL and its exact migration history entry commit or roll back toge
   assert.throws(() => docker(args, 'create table public.failed_release_marker(id int);\n' + history), /duplicate key/);
   assert.equal(sql("select to_regclass('public.failed_release_marker') is null"), 't');
 });
+
+test('fixed-project release refuses to replay historical index DDL on an unknown legacy database', () => {
+  const guard=readFileSync(new URL('../../supabase/require-existing-entitlement-history.sql',import.meta.url),'utf8');
+  assert.throws(()=>sql(guard),/Existing entitlement migration history is required/);
+  sql("insert into supabase_migrations.schema_migrations(version) values ('20261118000000'),('20261118010000')");
+  assert.doesNotThrow(()=>sql(guard));
+  sql("delete from supabase_migrations.schema_migrations where version='20261118010000'");
+  assert.throws(()=>sql(guard),/separate online rollout/);
+});

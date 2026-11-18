@@ -11,6 +11,7 @@ on:
       - website/supabase/migrations/20261118010000_independent_subscription_entitlements.sql
       - website/supabase/migrations/20261118020000_secure_checkout_ownership.sql
       - website/supabase/verify-entitlement-prerequisites.sql
+      - website/supabase/require-existing-entitlement-history.sql
       - website/tests/database/rls.test.mjs
   workflow_dispatch:
     inputs:
@@ -75,7 +76,8 @@ jobs:
         run: |
           set -euo pipefail
           database_url=$(cat supabase/.temp/pooler-url)
-          for filename in 20261117000000_close_legacy_policy_bypasses 20261118000000_unique_subscription_entitlement 20261118010000_independent_subscription_entitlements 20261118020000_secure_checkout_ownership; do
+          psql "$database_url" -X -v ON_ERROR_STOP=1 -f supabase/require-existing-entitlement-history.sql
+          for filename in 20261118020000_secure_checkout_ownership; do
           version=${filename%%_*}
           migration=supabase/migrations/${filename}.sql
           migration_name=${filename#*_}
