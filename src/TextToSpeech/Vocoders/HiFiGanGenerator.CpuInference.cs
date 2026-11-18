@@ -11,8 +11,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 
 internal sealed partial class HiFiGanGenerator<T>
 {
-    // Exclusive per-generator ownership bounds inference to five maximum-stage activation
-    // buffers. Shape growth replaces old capacity; stable calls create no fresh backing arrays.
+    // Exclusive per-generator ownership bounds inference to five single-example activation
+    // buffers. Stream independent examples so batch growth does not retain batch-sized scratch.
     // Concurrent/reentrant calls retain the ordinary execution path.
     private float[][]? _privateCpuBuffers;
     private int _privateCpuBusy;
@@ -30,17 +30,22 @@ internal sealed partial class HiFiGanGenerator<T>
             || AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
             || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null
             || _engine.Unwrap().GetType() != typeof(CpuEngine) || !ReferenceEquals(_engine, _engine.Unwrap())
-            || features.Rank != 3 || features.Shape[0] <= 0 || features.Shape[2] <= 0
+            || features.Rank != 3 || !features.IsContiguous || features.Shape[0] <= 0 || features.Shape[2] <= 0
             || !_layers.All(layer => layer is NormedConv1DLayer<T> convolution && convolution.SupportsPrivateCpuInference))
             return false;
-        int batch = features.Shape[0], time = features.Shape[2];
+        int fullBatch = features.Shape[0], batch = 1, time = features.Shape[2];
+        int inputCount = checked(features.Shape[1] * time);
         if (!_pre.TryPrivateCpuOutputTime(time, out time)) return false;
-        long maximum = (long)batch * _pre.OutputChannels * time;
+        long maximum = Math.Max(inputCount, (long)_pre.OutputChannels * time);
         foreach (var up in _ups)
         {
             if (!up.TryPrivateCpuOutputTime(time, out time)) return false;
-            maximum = Math.Max(maximum, (long)batch * up.OutputChannels * time);
+            maximum = Math.Max(maximum, (long)up.OutputChannels * time);
         }
+        if (!_post.TryPrivateCpuOutputTime(time, out int outputTime)) return false;
+        long sampleOutputCount = (long)_post.OutputChannels * outputTime;
+        maximum = Math.Max(maximum, sampleOutputCount);
+        if (sampleOutputCount <= 0 || sampleOutputCount * fullBatch > int.MaxValue) return false;
         if (maximum <= 0 || maximum > int.MaxValue || Interlocked.CompareExchange(ref _privateCpuBusy, 1, 0) != 0) return false;
         try
         {
@@ -70,44 +75,56 @@ internal sealed partial class HiFiGanGenerator<T>
                 cpu.LeakyReLUInto(target, input, MathHelper.GetNumericOperations<T>().FromDouble(slope));
                 return target;
             }
-            var x = Conv(_pre, features, 0);
-            for (int stage = 0; stage < _ups.Count; stage++)
+            // Predict performs the single durable public copy. Keep this complete result
+            // arena-owned while each example reuses the same private activation storage.
+            var complete = TensorAllocator.RentUninitialized<T>(new[] { fullBatch, _post.OutputChannels, outputTime });
+            using var sourceKeep = new KeepAliveScope(features);
+            using var destinationKeep = new KeepAliveScope(complete);
+            var source = features.AsSpanUnmarked();
+            var destination = complete.AsWritableSpanUnmarked();
+            for (int example = 0; example < fullBatch; example++)
             {
-                using var activatedInput = Activate(x, 1, Slope);
-                x = Conv(_ups[stage], activatedInput, 0);
-                Tensor<T>? sum = null;
-                foreach (var (first, second) in _blocks[stage])
+                source.Slice(example * inputCount, inputCount).CopyTo(((T[])(object)buffers[4]).AsSpan(0, inputCount));
+                using var sample = View(4, features.Shape[1], features.Shape[2], false);
+                var x = Conv(_pre, sample, 0);
+                for (int stage = 0; stage < _ups.Count; stage++)
                 {
-                    var h = x;
-                    int residualSlot = 0;
-                    for (int pair = 0; pair < first.Count; pair++)
+                    using var activatedInput = Activate(x, 1, Slope);
+                    x = Conv(_ups[stage], activatedInput, 0);
+                    Tensor<T>? sum = null;
+                    foreach (var (first, second) in _blocks[stage])
                     {
-                        int nextSlot = residualSlot == 1 ? 2 : 1;
-                        using var activatedResidual = Activate(h, nextSlot, Slope);
-                        using var middle = Conv(first[pair], activatedResidual, 3, activate: true);
-                        h = Conv(second[pair], middle, nextSlot, h);
-                        residualSlot = nextSlot;
+                        var h = x;
+                        int residualSlot = 0;
+                        for (int pair = 0; pair < first.Count; pair++)
+                        {
+                            int nextSlot = residualSlot == 1 ? 2 : 1;
+                            using var activatedResidual = Activate(h, nextSlot, Slope);
+                            using var middle = Conv(first[pair], activatedResidual, 3, activate: true);
+                            h = Conv(second[pair], middle, nextSlot, h);
+                            residualSlot = nextSlot;
+                        }
+                        if (sum is null)
+                        {
+                            sum = View(4, h.Shape[1], h.Shape[2], false);
+                            h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
+                        }
+                        else cpu.TensorAddInPlace(sum, h);
                     }
-                    if (sum is null)
-                    {
-                        sum = View(4, h.Shape[1], h.Shape[2], false);
-                        h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
-                    }
-                    else cpu.TensorAddInPlace(sum, h);
+                    if (sum is null) throw new InvalidOperationException("Private CPU residual stage is empty.");
+                    cpu.TensorMultiplyScalarInPlace(sum, _residualAverageScale);
+                    x = sum;
                 }
-                if (sum is null) throw new InvalidOperationException("Private CPU residual stage is empty.");
-                cpu.TensorMultiplyScalarInPlace(sum, _residualAverageScale);
-                x = sum;
+                using var finalActivation = Activate(x, 1, 0.01);
+                if (!_post.TryPrivateCpuOutputTime(finalActivation.Shape[2], out int finalTime)) throw new InvalidOperationException("Private CPU post geometry changed.");
+                // Slot0's stage input is dead after finalActivation; it can hold this example's
+                // waveform without another backing array or a view into a public output buffer.
+                using var final4 = View(0, _post.OutputChannels, finalTime, true);
+                _post.ForwardPrivateCpuInto(finalActivation, final4, null, false, MathHelper.GetNumericOperations<T>().Zero);
+                if (_tanhOutput) cpu.TanhInto(final4, final4);
+                final4.AsSpanUnmarked().CopyTo(destination.Slice(checked(example * (int)sampleOutputCount), (int)sampleOutputCount));
             }
-            using var finalActivation = Activate(x, 1, 0.01);
-            if (!_post.TryPrivateCpuOutputTime(finalActivation.Shape[2], out int finalTime)) throw new InvalidOperationException("Private CPU post geometry changed.");
-            // Predict owns the durable public copy. Match ordinary eager outputs by renting
-            // this final result from its caller arena, retaining the arena's escape/quarantine
-            // rules for direct generator callers instead of adding a second fresh waveform.
-            var final4 = TensorAllocator.RentUninitialized<T>(new[] { batch, _post.OutputChannels, 1, finalTime });
-            _post.ForwardPrivateCpuInto(finalActivation, final4, null, false, MathHelper.GetNumericOperations<T>().Zero);
-            if (_tanhOutput) cpu.TanhInto(final4, final4);
-            output = _engine.Reshape(final4, new[] { batch, _post.OutputChannels, finalTime });
+            output = complete;
             return true;
         }
         finally { Volatile.Write(ref _privateCpuBusy, 0); }
