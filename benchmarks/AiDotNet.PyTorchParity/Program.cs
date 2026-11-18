@@ -276,17 +276,20 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
     {
         // Create each requested model, measure its training and inference
         // phases, and collect those measurements into one framework-level report.
-        var sharedFixture = options.HifiGanFixture is null ? null : new HifiBenchmarkFixture(
-            options.HifiGanFixture, options.Epochs, options.TrainBatches, options.BatchSize, options.Seed,
-            options.InferenceBatchSizes, options.HifiGanWorkloadReceipt ?? (options.OutputPath + ".workload.json"));
-        var factory = new AiDotNetTensorBackend(options.Seed, sharedFixture);
+        HifiBenchmarkFixture? sharedFixture = null;
+        var factory = new AiDotNetTensorBackend(options.Seed);
         var results = new List<ModelReport>();
         foreach (var modelName in options.Models)
         {
             var modelStart = Stopwatch.StartNew();
             Console.WriteLine($"[bench] {modelName}: building network…");
             BenchmarkPhaseTelemetry.Mark(modelName, "construction");
-            var model = factory.Create(modelName);
+            if (options.HifiGanFixture is not null)
+                sharedFixture = new HifiBenchmarkFixture(options.HifiGanFixture, options.Epochs, options.TrainBatches,
+                    options.BatchSize, options.Seed, options.InferenceBatchSizes,
+                    options.HifiGanWorkloadReceipt ?? (options.OutputPath + ".workload.json"));
+            var model = sharedFixture is null ? factory.Create(modelName)
+                : new AiDotNetTensorBackend(options.Seed, sharedFixture).Create(modelName);
             BenchmarkPhaseTelemetry.Mark(modelName, "construction-complete");
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
             TrainingReport? training = null;
