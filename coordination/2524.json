@@ -1319,6 +1319,22 @@
       ],
       "scope": "Necessary shared1537category finding: exactcurrent1512+099 graphFA block eagerlyreadsqueryTensorPermute duringClosureObjectiveGuard probe. True lazyoutputandsavedLSE/statsrefreshperforward, dependencyorderedstats-firstread, existingQ/K/Vbackwardandbiasdata-only contract. No guardweakening/CPUfallback/disableFA; regiondisjointfromAntigravityGroupNorm/SVD/Half. IndependentCPUsoftmax/LSE/gradientoraclesandactualGPUreplay/captureproof. Basedverified099artifactbranch; GitHubartifactsONLY no publicNuGet/newpublicAPI.",
       "status": "CLAIMEDbeforeedits underexistinguserapprovedupstream/native replay objective; rootdesignreviewedexact3fileproposal. Workflow/testcountsfromactualbuiltresultsrequiredafterrootdiffreview."
+    },
+    {
+      "owner": "Codex/cuda_capture category required recovery/concurrency GPU coverage",
+      "files": [
+        "tests/AiDotNet.Tests/Recovery/GpuRecoveryTests.cs",
+        "tests/AiDotNet.Tests/Concurrency/ThreadSafetyTests.cs",
+        "tests/AiDotNet.Tests/Helpers/RequiredGpuTestContract.cs",
+        ".github/workflows/sonarcloud.yml (only new requiredGPUjob+dependency/proof/summary wiring)",
+        ".github/test-shards.yml (only remove empty Other-Recovery/Concurrency entry)",
+        ".github/test-shard-changes.json (only explicit movedcoverage disposition)",
+        "tools/TestImpact/Assert-RequiredGpuResults.ps1",
+        "tools/TestImpact/Test-RequiredGpuResults.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1 (only requiredGPU result/proof check + direct fixtures)"
+      ],
+      "scope": "USEREXPLICITAPPROVAL interactive Include requiredGPUcoverage. Existing CPUentry selects0cases; 2GPUonlyclasses have7obsoleteunimplementedhealthAPI placeholders andsilent-success constructor/unavailable paths. Replace with supportedcurrentAPI contracts, actualCUDA capability+realnumericlaunches/no fallback eachcase, completeexpectedTRXinventory/no skip/nonempty/sha+DLL provenance ononlineRTX3080Windowsrunner. Move166remainingCPUproofs+newGPUrequiredproofdistinct, preservetotalcoverage andmakefailuresvisible. No new productGPUhealthfeatures, no benchmarkmatrix, no scalar/gateassertweakening. DedicatedjobconsumesSAMEbuild artifact/version, no build/restore. Claimpreservesmonitoringcurrenta826cycle, no PRpushmidcycle.",
+      "status": "CLAIMEDbeforeedits; rootdesignACK required thenfullrootdiffreview+positive/negativefixtures+actualGPU GitHubvalidation. 1-2hbounded initialbatch."
     }
   ],
   "codex_assignments": {
@@ -2004,7 +2020,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T04:04:04.886003+00:00",
+  "updated_utc": "2026-11-18T04:21:25.411402+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2304,6 +2320,7 @@
       "Adam": "37actualoriginalcasespassed across35CPU+2GPU; source2b476heldnotonPR",
       "GP": "66current1512cases63pass3fail; standardsequentialEPscreen3datasetsconverges; rank1O(n3)draftrootreview",
       "TLoRA": "20helperunitpasses; countduplicateownershiprootcausefound,aliasfixheld;2originalmodelfailuresnowtracednativeFA; newwholemodelcheckpoint/factorupdateunprovenuntilnativefix"
-    }
+    },
+    "gpu_coverage_decision": "Userapproved explicit requiredGPU job ononlineRTX3080 withcurrentvalidnumericcontracts, replaceobsoleteplaceholders, removeemptyCPUentry withapprovedinventorychange. cuda_capture owns exactfiles andcontinuesactivecyclebackgroundmonitor."
   }
 }
