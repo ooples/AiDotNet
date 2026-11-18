@@ -60,6 +60,9 @@ export async function signIn(page: Page, p: Persona): Promise<void> {
   await page.getByLabel('Password').fill(p.password);
   await page.getByRole('button', { name: 'Sign In' }).click();
   await expect(page).toHaveURL(/\/account\/?$/, { timeout: 20_000 });
+  // The URL changes at document commit, before CSS has loaded. Enumerating at
+  // that point can mistake unstyled desktop-only controls for visible phone UI.
+  await page.waitForLoadState('load');
 }
 
 /** True while the page's Supabase session is present in localStorage. */

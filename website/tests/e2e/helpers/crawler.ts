@@ -568,6 +568,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   }
 
   async function explore(pg: string, path: string[], depth: number, doneOnPage: Set<string>) {
+    // Auth or a replayed control can commit a new document without waiting for
+    // its stylesheet. Visibility checks must observe the completed document.
+    await page.waitForLoadState('load');
     const info = await page.evaluate(ENUMERATE, pg).catch(() => null);
     if (!info) return;
     await harvestLinks(pg, info.links, info.ids);

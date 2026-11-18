@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createServer, type Server } from 'node:http';
 import type { EventEmitter } from 'node:events';
 import { crawl } from './helpers/crawler';
+import { signIn } from './helpers/personas';
 
 // Test the coverage gate itself against an isolated HTTP fixture. A passing
 // production crawl is only meaningful if broken controls make the gate fail.
@@ -12,6 +13,21 @@ test.describe('crawler regression checks', () => {
 
   test.beforeAll(async () => {
     server = createServer((req, res) => {
+      if (req.url === '/slow-auth.css') {
+        res.setHeader('Content-Type', 'text/css');
+        setTimeout(() => res.end('#desktop-menu { display: none }'), 1500);
+        return;
+      }
+      if (req.url === '/login/') {
+        res.setHeader('Content-Type', 'text/html');
+        res.end('<!doctype html><label>Email address<input id="email"></label><label>Password<input id="password" type="password"></label><button onclick="location.href=\'/account/\'">Sign In</button>');
+        return;
+      }
+      if (req.url === '/account/') {
+        res.setHeader('Content-Type', 'text/html');
+        res.end('<!doctype html><link rel="stylesheet" href="/slow-auth.css"><h1>Account</h1><button id="desktop-menu">Desktop menu</button>');
+        return;
+      }
       if (req.url === '/covered-rows/') coveredRowLoads++;
       res.setHeader('Content-Type', 'text/html');
       const body = req.url === '/broken/'
@@ -43,6 +59,16 @@ test.describe('crawler regression checks', () => {
   });
 
   const options = () => ({ origin, persona: null, inScope: () => false, dedicated: [] });
+
+  test('sign-in waits for destination styles before the crawler observes controls', async ({ browser }) => {
+    const context = await browser.newContext({ baseURL: origin });
+    try {
+      const page = await context.newPage();
+      await signIn(page, { kind: 'free', email: 'fixture@example.test', password: 'fixture' });
+      expect(await page.evaluate(() => document.readyState)).toBe('complete');
+      await expect(page.locator('#desktop-menu')).toBeHidden();
+    } finally { await context.close(); }
+  });
 
   test('the depth limit reports revealed controls it did not exercise', async ({ page, request }) => {
     const report = await crawl({ ...options(), page, request, maxDepth: 0, seeds: [`${origin}/depth/`] });
