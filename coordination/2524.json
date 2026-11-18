@@ -1409,7 +1409,29 @@
         "tests/AiDotNet.Tests/TextToSpeech/OuteTTSComponentTests.cs"
       ],
       "scope": "One exact original Synthesize_IsDeterministic invocation reproduced the 11189MiB managed-cap OOM in99.21s on exact a826/public1512 binaries. Static lifetime/allocation design first; no arbitrary sequences, heap-cap increase, forced-GC or shortened synthesis/test assertions. Only claim OuteTTS generation/sampler files; no ASR/STFT/coordinator overlap.",
-      "status": "CLAIMED before source edits. Diagnostic dump attempt failed and does not prove retained ownership. Inspect complete generation/arena lifetime contract before selecting a bounded fix. No source edits yet."
+      "status": "MEASURED: actual original float fixture vocab157760; sampler Process+Sample retains13,885,272bytes/token in caller arena, 222,164,352bytes/16tokens. Dedicated detached sampling scratch arena with per-token Reset stays13,885,272bytes, exact same16tokens and unchanged logits. One bounded3.04second screen. Implement bounded sampling scratch lifetime in Generate, then original full cohort under unchanged11189MiB cap; no model-forward rerun yet."
+    },
+    {
+      "owner": "Codex/artifact_feed native NanToNum dtype contract",
+      "repository": "ooples/AiDotNet.Tensors",
+      "files": [
+        "src/AiDotNet.Tensors/Engines/CpuEngine.Parity210.cs (ONLY TensorNanToNum method)",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NanToNumReplayTests.cs"
+      ],
+      "scope": "Current a826 Unassigned01 artifact14407309260 original HalfLayoutCoordinates test fails typed Half to IConvertible in TensorNanToNum. Repair this direct dtype/default finite-endpoint contract with independent value/view/backward/replay tests; check original downstream Round/Clamp pipeline. No PNorm/SVD/GroupNorm/other owner45 hunks, no blanket scan or guard weakening.",
+      "status": "CLAIMED before edits. Agent prepares full proposed diff for root review before implementation/build. Existing qualified d1aff artifact remains unchanged; next artifact cycle separate."
+    },
+    {
+      "owner": "Codex/artifact_feed qualified temporary consumer feed",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        "Directory.Packages.props",
+        ".github/tensors-validation.json",
+        ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+        ".github/scripts/Test-TensorsValidationFeed.ps1"
+      ],
+      "scope": "Pin qualified d1aff artifact and validate all319CPU identities including normalization20 and FlashAttention41. Preserve prior union112, framework/hash/trust/token/fork guards and default stable-version behavior. Existing full matrix bootstrap wiring unchanged.",
+      "status": "COMPLETE local3c7b2c0c5f20a5b353f6743604db5e1db6389284; root-reviewed initial complete diff;66fixtures and actual producer artifact validation passed, no production rebuild. Root final integration pending; no PR push during active a826 cycle."
     }
   ],
   "codex_assignments": {
@@ -2102,7 +2124,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T07:43:42.032748+00:00",
+  "updated_utc": "2026-11-18T07:52:22.645287+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
