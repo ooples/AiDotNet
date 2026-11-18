@@ -539,6 +539,92 @@ try {
         $published.Proof.shards = @($published.Proof.shards[0], $published.Proof.shards[0])
         Assert-FailoverPublishedProof @published
     } $true
+    Assert-Case 'diagnostics promote resolved jobs only after successful bound proof' {
+        $published = New-PublishedEvidence 'diagnostic-verified'
+        $resolved = [pscustomobject]@{ name = 'Tests (net10.0) - Core'; conclusion = 'success' }
+        $original = [pscustomobject]@{ name = $resolved.name; conclusion = 'failure' }
+        $context = Get-FailoverDiagnosticContext 'success' $published.Proof $published.Proof.testedSha '7001' '1' `
+            -OriginalJobs @($original) -ResolvedJobs @($resolved) -RequireResolvedJobs
+        if (-not $context.verified -or $context.jobs[0].conclusion -cne 'success' -or
+            $context.regressionArtifactPrefix -cne 'test-outcome-ledger' -or $context.aggregateArtifactPrefix -cne 'ci-test-analysis') {
+            throw 'Verified recovery was not represented by its certified logical result.'
+        }
+    }
+    foreach ($kind in @('missing-proof', 'failed-verifier', 'wrong-sha', 'wrong-run', 'wrong-attempt', 'incomplete', 'untyped-complete', 'proof-errors', 'missing-slice', 'missing-resolved-job')) {
+        Assert-Case "diagnostic $kind preserves failure and cannot certify a baseline" {
+            $published = New-PublishedEvidence "diagnostic-$kind"
+            $sha = $published.Proof.testedSha; $verifier = 'success'
+            $resolved = @([pscustomobject]@{ name = 'Tests (net10.0) - Core'; conclusion = 'success' })
+            $original = @([pscustomobject]@{ name = 'Tests (net10.0) - Core'; conclusion = 'failure' })
+            switch ($kind) {
+                missing-proof { $published.Proof = $null }
+                failed-verifier { $verifier = 'failure' }
+                wrong-sha { $published.Proof.testedSha = 'wrong' }
+                wrong-run { $published.Proof.runId = '7002' }
+                wrong-attempt { $published.Proof.runAttempt = '2' }
+                incomplete { $published.Proof.complete = $false }
+                untyped-complete { $published.Proof.complete = 'true' }
+                proof-errors { $published.Proof.errors = @('Required receipt rejected.') }
+                missing-slice { $published.Proof.shards = @() }
+                missing-resolved-job { $resolved = @() }
+            }
+            $context = Get-FailoverDiagnosticContext $verifier $published.Proof $sha '7001' '1' `
+                -OriginalJobs $original -ResolvedJobs $resolved -RequireResolvedJobs
+            if ($context.verified -or -not $context.diagnosticOnly -or $context.reasons.Count -eq 0 -or
+                $context.jobs[0].conclusion -cne 'failure' -or
+                $context.regressionArtifactPrefix -cne 'test-outcome-diagnostics' -or
+                $context.aggregateArtifactPrefix -cne 'ci-test-diagnostics') { throw 'Untrusted evidence was promoted or its original failure disappeared.' }
+        }
+    }
+    Assert-Case 'successful diagnostic jobs cannot satisfy the failed validation gate' {
+        $shell = (Get-Process -Id $PID).Path
+        & $shell -NoProfile -File (Join-Path $PSScriptRoot 'Assert-CiGate.ps1') -Stage Validation -ReuseScope None `
+            -SourceResult success -RequiresValidation true -RequiresTests true -SelectResult success `
+            -BuildResult success -BuildCompatResult success -TestsResult failure `
+            -RegressionAnalysisResult success -VerdictEnforced false -AggregateAnalysisResult success -SizeCheckResult success | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw 'Diagnostic output bypassed the failed logical shard gate.' }
+    }
+    Assert-Case 'diagnostic writer persists missing proof and original failure without certification' {
+        $directory = Join-Path $scratch 'diagnostic-writer'
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        $raw = Join-Path $directory 'original.json'; $chosen = Join-Path $directory 'chosen.json'
+        ConvertTo-Json -InputObject @([pscustomobject]@{ name = 'Tests (net10.0) - Core'; conclusion = 'failure' }) |
+            Set-Content -LiteralPath $raw
+        $priorOutput = $env:GITHUB_OUTPUT; $priorSummary = $env:GITHUB_STEP_SUMMARY
+        try {
+            $env:GITHUB_OUTPUT = Join-Path $directory 'outputs.txt'; $env:GITHUB_STEP_SUMMARY = Join-Path $directory 'summary.md'
+            & "$PSScriptRoot/Write-RunnerDiagnosticContext.ps1" -VerifierResult failure -TestedSha ('a' * 40) `
+                -RunId 7001 -RunAttempt 1 -ProofDirectory (Join-Path $directory 'missing') `
+                -OutputDirectory $directory -OriginalJobsPath $raw -JobsOutputPath $chosen -WarningAction SilentlyContinue
+            $metadata = Get-Content (Join-Path $directory 'evidence-provenance.json') -Raw | ConvertFrom-Json
+            $outputs = Get-Content $env:GITHUB_OUTPUT -Raw
+            $selected = @(Get-Content $chosen -Raw | ConvertFrom-Json)
+            if ($metadata.verified -or -not $metadata.diagnosticOnly -or $metadata.reasons.Count -lt 2 -or
+                $selected[0].conclusion -cne 'failure' -or $outputs -notmatch '(?m)^verified=false\r?$' -or
+                $outputs -notmatch 'aggregate_artifact_prefix=ci-test-diagnostics' -or
+                (Get-Content $env:GITHUB_STEP_SUMMARY -Raw) -notmatch 'DIAGNOSTIC ONLY') { throw 'Diagnostic writer omitted the unverified status or promoted raw results.' }
+        }
+        finally { $env:GITHUB_OUTPUT = $priorOutput; $env:GITHUB_STEP_SUMMARY = $priorSummary }
+    }
+    Assert-Case 'raw primary intake prevents certification even after a successful verifier' {
+        $published = New-PublishedEvidence 'diagnostic-writer-intake'
+        $directory = Join-Path $scratch 'diagnostic-writer-intake'
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        $published.Proof | ConvertTo-Json -Depth 100 | Set-Content (Join-Path $directory 'proof.json')
+        [pscustomobject]@{ imported = 1; rejected = 0; canonical = 0 } | ConvertTo-Json |
+            Set-Content (Join-Path $directory 'intake.json')
+        $priorOutput = $env:GITHUB_OUTPUT; $priorSummary = $env:GITHUB_STEP_SUMMARY
+        try {
+            $env:GITHUB_OUTPUT = Join-Path $directory 'outputs.txt'; $env:GITHUB_STEP_SUMMARY = ''
+            & "$PSScriptRoot/Write-RunnerDiagnosticContext.ps1" -VerifierResult success -TestedSha $published.Proof.testedSha `
+                -RunId 7001 -RunAttempt 1 -ProofDirectory $directory -OutputDirectory $directory `
+                -PrimaryAttemptImportPath (Join-Path $directory 'intake.json')
+            $metadata = Get-Content (Join-Path $directory 'evidence-provenance.json') -Raw | ConvertFrom-Json
+            if ($metadata.verified -or -not $metadata.diagnosticOnly -or $metadata.primaryAttemptDiagnostics.imported -ne 1 -or
+                $metadata.regressionArtifactPrefix -cne 'test-outcome-diagnostics') { throw 'Substituted raw primary TRX was certified.' }
+        }
+        finally { $env:GITHUB_OUTPUT = $priorOutput; $env:GITHUB_STEP_SUMMARY = $priorSummary }
+    }
     foreach ($kind in @('canonical', 'coverage', 'attempt')) {
         Assert-Case "published $kind artifact replacement invalidates proof" {
             $published = New-PublishedEvidence "published-replaced-$kind"

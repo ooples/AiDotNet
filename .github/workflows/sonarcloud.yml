@@ -1709,6 +1709,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           SELF_HOSTED_RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
           TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           SHARD_JSON: ${{ toJSON(matrix.shard) }}
@@ -2890,7 +2891,7 @@ jobs:
           ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
           # The plan job wrote the list for both modes: the reachable classes (Impact) or every discovered class (Full).
           ./tools/PaperFidelity/Invoke-PaperFidelitySlice.ps1 -Slice ([int] $env:PAPER_FIDELITY_SLICE) `
-            -SliceCount ([int] $env:PAPER_FIDELITY_SLICES) -ClassListFile 'paper-fidelity-plan/classes.txt'
+            -SliceCount ([int] $env:PAPER_FIDELITY_SLICES) -ClassListFile 'paper-fidelity-plan/classes.txt' -ChunkSize 10
 
       - name: Upload paper-fidelity results
         if: always()
@@ -2908,7 +2909,7 @@ jobs:
     name: Test regression analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && (needs.reconcile-shard-attempts.result == 'success' || needs.reconcile-shard-attempts.result == 'failure') && needs.build.result == 'success' && needs.select-shards.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - reconcile-shard-attempts
 
@@ -2932,12 +2933,28 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/test-regression-analysis.tests.ps1
 
+      - name: Download logical shard provenance for diagnostics
+        if: needs.reconcile-shard-attempts.outputs.proof_artifact_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.reconcile-shard-attempts.outputs.proof_artifact_id }}
+          path: diagnostic-shard-provenance
+
       - name: Download current shard results
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         continue-on-error: true
         with:
           pattern: coverage-${{ github.sha }}-*
           path: current-test-results
+          merge-multiple: false
+
+      - name: Download immutable primary attempts for missing diagnostics
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: shard-attempt-primary-${{ github.sha }}-*-${{ github.run_attempt }}
+          path: primary-attempt-diagnostics
           merge-multiple: false
 
       # Post-merge delta reuse: the shards this run did not re-run are the pull request's results,
@@ -3087,6 +3104,35 @@ jobs:
           ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           '@ | Set-Content -LiteralPath expected-shard-matrix.json -Encoding utf8
 
+      - name: Stage missing initial primary TRX diagnostics
+        shell: pwsh
+        env: &diagnostic-intake-env
+          MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+          SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
+          REQUIRES_VALIDATION: ${{ needs.select-shards.outputs.requires_validation }}
+          REQUIRES_TESTS: ${{ needs.select-shards.outputs.requires_tests }}
+          COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+          COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+          COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
+          SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+        run: |
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+            -AttemptRoot primary-attempt-diagnostics -CanonicalRoot current-test-results -ArtifactPrefix coverage `
+            -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
+            -OutputPath test-regression-analysis/primary-attempt-intake.json
+
+      - name: Classify regression evidence provenance
+        id: provenance
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Write-RunnerDiagnosticContext.ps1 `
+            -VerifierResult '${{ needs.reconcile-shard-attempts.result }}' `
+            -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -ProofDirectory diagnostic-shard-provenance -OutputDirectory test-regression-analysis `
+            -PrimaryAttemptImportPath test-regression-analysis/primary-attempt-intake.json
+
       - name: Build final test report and enforce regression policy
         id: analyze
         shell: pwsh
@@ -3099,6 +3145,7 @@ jobs:
           LEDGER_DOWNLOAD_OUTCOME: ${{ steps.baseline-ledger-download.outcome }}
           TRX_DOWNLOAD_OUTCOME: ${{ steps.baseline-trx-download.outcome }}
           PROMOTED_TRX_DOWNLOAD_OUTCOME: ${{ steps.promoted-trx-download.outcome }}
+          EVIDENCE_VERIFIED: ${{ steps.provenance.outputs.verified }}
         run: |
           # A baseline shard with no current artifact is Incomplete, and enough of those fail the
           # policy. That rule is right for a host that died mid-run and wrong for a shard that
@@ -3147,6 +3194,7 @@ jobs:
             RepositoryPath = '.'
             ApprovedShardChangesPath = 'merged-shard-changes.json'
             ExpectedShardNames = $expectedShardNames
+            EvidenceProvenancePath = 'test-regression-analysis/evidence-provenance.json'
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
@@ -3174,7 +3222,10 @@ jobs:
             ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
           if ($baselineReady) {
             $arguments.BaselineSha = $env:BASE_SHA
-            $arguments.FailOnPolicy = $true
+            # The ordinary comparison remains useful after failures, but uncertified observations
+            # cannot enforce or mint a regression verdict. The unchanged gate still requires the
+            # failed shard verifier whenever verdict_enforced is false.
+            $arguments.FailOnPolicy = $env:EVIDENCE_VERIFIED -ceq 'true'
             if ($env:BASELINE_MODE -eq 'ledger') {
               $arguments.BaselineLedgerPath = $ledger.FullName
             } elseif ($env:BASELINE_MODE -eq 'promoted') {
@@ -3188,7 +3239,8 @@ jobs:
             "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
-          "verdict_enforced=$($baselineReady.ToString().ToLowerInvariant())" |
+          $verdictEnforced = $baselineReady -and $env:EVIDENCE_VERIFIED -ceq 'true'
+          "verdict_enforced=$($verdictEnforced.ToString().ToLowerInvariant())" |
             Add-Content -LiteralPath $env:GITHUB_OUTPUT
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
@@ -3198,7 +3250,7 @@ jobs:
         if: always() && steps.analyze.outputs.inventory_valid == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
-          name: test-outcome-ledger-${{ github.sha }}
+          name: ${{ steps.provenance.outputs.regression_artifact_prefix }}-${{ github.sha }}
           path: test-regression-analysis/
           if-no-files-found: error
           retention-days: 90
@@ -3623,10 +3675,14 @@ jobs:
   ci-test-analysis:
     name: Test analysis (aggregate)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: "${{ always() && needs.reconcile-shard-attempts.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    # Includes failed primary TRX and the separate 20-slice paper diagnostic inventory.
+    timeout-minutes: 30
+    if: "${{ always() && (needs.reconcile-shard-attempts.result == 'success' || needs.reconcile-shard-attempts.result == 'failure') && needs.build.result == 'success' && needs.select-shards.result == 'success' && !cancelled() && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - reconcile-shard-attempts
+      - build
+      - paper-fidelity-plan
+      - paper-fidelity
 
       - test-net10-sharded
       - validation-source
@@ -3677,6 +3733,24 @@ jobs:
           run-id: ${{ needs.validation-source.outputs.import_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Download immutable primary attempts for missing diagnostics
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: shard-attempt-primary-${{ github.sha }}-*-${{ github.run_attempt }}
+          path: primary-attempt-diagnostics
+          merge-multiple: false
+
+      - name: Stage missing initial primary TRX diagnostics
+        shell: pwsh
+        env: *diagnostic-intake-env
+        run: |
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+            -AttemptRoot primary-attempt-diagnostics -CanonicalRoot TestDiagnostics -ArtifactPrefix test-results `
+            -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
+            -OutputPath TestAnalysis/primary-attempt-intake.json
+
       - name: Import pull-request diagnostics
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         shell: pwsh
@@ -3688,13 +3762,16 @@ jobs:
             -DestinationDirectory TestDiagnostics -ArtifactPrefix test-results `
             -ImportSha $env:IMPORT_SHA -ImportShardsJson $env:IMPORT_SHARDS
 
-      - name: Download verified logical shard provenance
+      - name: Download logical shard provenance for diagnostics
+        if: needs.reconcile-shard-attempts.outputs.proof_artifact_id != ''
+        continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ needs.reconcile-shard-attempts.outputs.proof_artifact_id }}
           path: verified-shard-provenance
 
       - name: Collect shard states and latest merged baseline
+        id: provenance
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -3723,14 +3800,13 @@ jobs:
             $jobs += @($response.jobs)
             $page++
           } while ($response.jobs.Count -eq $perPage)
-          $proof = Get-Content verified-shard-provenance/proof.json -Raw | ConvertFrom-Json
-          if ($proof.complete -ne $true -or $proof.testedSha -cne $env:GITHUB_SHA -or
-              [string]$proof.runId -cne $env:GITHUB_RUN_ID -or [string]$proof.runAttempt -cne $env:GITHUB_RUN_ATTEMPT) {
-            throw 'Logical shard provenance is incomplete or bound to a different run.'
-          }
-          $logicalJobs = @(Get-Content verified-shard-provenance/resolved-jobs.json -Raw | ConvertFrom-Json)
-          $jobs = @($jobs | Where-Object { $_.name -notlike 'Tests (*) - *' -and $_.name -notlike 'Alternate attempt (*) - *' }) + $logicalJobs
-          @($jobs) | ConvertTo-Json -Depth 20 | Set-Content current-jobs.json
+          ConvertTo-Json -InputObject @($jobs) -Depth 100 | Set-Content original-jobs.json
+          ./tools/TestImpact/Write-RunnerDiagnosticContext.ps1 `
+            -VerifierResult '${{ needs.reconcile-shard-attempts.result }}' `
+            -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -ProofDirectory verified-shard-provenance -OutputDirectory TestAnalysis `
+            -OriginalJobsPath original-jobs.json -JobsOutputPath current-jobs.json `
+            -PrimaryAttemptImportPath TestAnalysis/primary-attempt-intake.json
 
           $baselinePath = '.github/ci-test-baseline.json'
           $baselineSource = 'checked-in seed'
@@ -3814,7 +3890,47 @@ jobs:
         shell: pwsh
         run: ./tools/TestImpact/Write-ShardPackReport.ps1 -JobsFile current-jobs.json -ExpandJobs
 
+      - name: Download separate paper-fidelity diagnostics
+        if: always() && needs.paper-fidelity-plan.result == 'success' && needs.paper-fidelity-plan.outputs.mode != 'None'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: paper-fidelity-results-pr-*
+          path: paper-diagnostic-artifacts
+          merge-multiple: false
+
+      - name: Download paper-fidelity class plan
+        if: always() && needs.paper-fidelity-plan.result == 'success' && needs.paper-fidelity-plan.outputs.mode != 'None'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: paper-fidelity-plan
+          path: paper-diagnostic-plan
+
+      - name: Build separate paper-fidelity inventory
+        if: always() && needs.paper-fidelity-plan.result == 'success' && needs.paper-fidelity-plan.outputs.mode != 'None'
+        shell: pwsh
+        env:
+          PAPER_SLICES: ${{ needs.paper-fidelity-plan.outputs.slices }}
+        run: |
+          ./tools/TestImpact/Import-PaperDiagnostics.ps1 -SlicesJson $env:PAPER_SLICES `
+            -ArtifactRoot paper-diagnostic-artifacts -Destination paper-diagnostic-results `
+            -TestedSha $env:GITHUB_SHA -OutputDirectory paper-diagnostic-report `
+            -ClassListFile paper-diagnostic-plan/classes.txt -ChunkSize 10
+          $expected = @(Get-Content paper-diagnostic-report/expected-shards.json -Raw | ConvertFrom-Json)
+          ./.github/scripts/test-regression-analysis.ps1 -CurrentResultsPath paper-diagnostic-results `
+            -OutputDirectory paper-diagnostic-report -CurrentSha $env:GITHUB_SHA -ExpectedShardNames $expected `
+            -EvidenceProvenancePath paper-diagnostic-report/evidence-provenance.json
+
+      - name: Upload separate paper-fidelity diagnostics
+        if: always() && hashFiles('paper-diagnostic-report/ledger.json') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: paper-test-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          path: paper-diagnostic-report/
+          if-no-files-found: error
+
       - name: Build aggregate failure analysis
+        if: always() && hashFiles('current-jobs.json') != ''
         shell: pwsh
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -3826,7 +3942,9 @@ jobs:
             -BaselinePath $env:BASELINE_PATH `
             -Repository '${{ github.repository }}' `
             -CommitSha '${{ github.sha }}' `
-            -RunUrl $env:RUN_URL
+            -RunUrl $env:RUN_URL `
+            -EvidenceProvenancePath TestAnalysis/evidence-provenance.json `
+            -PaperResultsPath paper-diagnostic-report/comparison.json
 
       - name: Upload aggregate test analysis
         if: always()
@@ -3834,7 +3952,7 @@ jobs:
         with:
           # The PR head remains queryable after merge, whereas refs/pull/*/merge is temporary.
           # A master-push promotion below also publishes the same report under the landed SHA.
-          name: ci-test-analysis-${{ github.event.pull_request.head.sha || github.sha }}
+          name: ${{ steps.provenance.outputs.aggregate_artifact_prefix }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: TestAnalysis/
           if-no-files-found: error
           retention-days: 90
