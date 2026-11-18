@@ -347,6 +347,10 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         double oldPrecision = _numOps.ToDouble(_sitePrecisions![i]);
         double oldNaturalMean = _numOps.ToDouble(_siteNaturalMeans![i]);
         double oldWeight = _numOps.ToDouble(_weights![i]);
+        var oldSite = new Tensor<double>(new[] { 3 },
+            new Vector<double>(new[] { oldPrecision, oldNaturalMean, oldWeight }));
+        var siteChange = Engine.TensorSubtract(new Tensor<double>(new[] { 3 },
+            new Vector<double>(new[] { proposal.Precision, proposal.NaturalMean, proposal.Weight })), oldSite);
         int n = _sitePrecisions.Length;
         var covariance = Tensor<T>.FromMatrix(_posteriorCov!).Cast<double>();
         var mean = Tensor<T>.FromVector(_posteriorMean!).Cast<double>();
@@ -357,13 +361,12 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         while (true)
         {
             double step = fraction * _damping;
-            T nextPrecision = _numOps.FromDouble(oldPrecision + step * (proposal.Precision - oldPrecision));
-            T nextNaturalMean = _numOps.FromDouble(oldNaturalMean + step * (proposal.NaturalMean - oldNaturalMean));
-            T nextWeight = _numOps.FromDouble(oldWeight + step * (proposal.Weight - oldWeight));
+            var nextSite = Engine.TensorAdd(oldSite, Engine.TensorMultiplyScalar(siteChange, step)).Cast<T>();
             // The accepted site is stored in T, so the rank-one update must
             // use the changes after rounding, not the unrepresentable proposal.
-            double deltaPrecision = _numOps.ToDouble(nextPrecision) - oldPrecision;
-            double deltaNaturalMean = _numOps.ToDouble(nextNaturalMean) - oldNaturalMean;
+            var roundedChange = Engine.TensorSubtract(nextSite.Cast<double>(), oldSite);
+            double deltaPrecision = Engine.TensorSum(Engine.TensorSlice(roundedChange, new[] { 0 }, new[] { 1 }));
+            double deltaNaturalMean = Engine.TensorSum(Engine.TensorSlice(roundedChange, new[] { 1 }, new[] { 1 }));
             double denominator = 1 + deltaPrecision * variance;
             if (denominator > 0 && !double.IsInfinity(denominator))
             {
@@ -373,16 +376,22 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
                 var candidateMean = Engine.TensorAdd(mean,
                     Engine.TensorMultiplyScalar(column.Reshape(new[] { n }),
                         (deltaNaturalMean - deltaPrecision * siteMean) / denominator)).Cast<T>();
-                var candidateSites = _sitePrecisions.Clone();
-                candidateSites[i] = nextPrecision;
+                var candidateSites = Engine.TensorSetSlice(Tensor<T>.FromVector(_sitePrecisions),
+                    Engine.TensorSlice(nextSite, new[] { 0 }, new[] { 1 }), new[] { i }).ToVector();
                 if (IsAdmissiblePosterior(candidateCovariance, candidateMean, candidateSites))
                 {
+                    var candidateNaturalMeans = Engine.TensorSetSlice(Tensor<T>.FromVector(_siteNaturalMeans),
+                        Engine.TensorSlice(nextSite, new[] { 1 }, new[] { 1 }), new[] { i }).ToVector();
+                    var candidateWeights = Engine.TensorSetSlice(Tensor<T>.FromVector(_weights),
+                        Engine.TensorSlice(nextSite, new[] { 2 }, new[] { 1 }), new[] { i }).ToVector();
+                    var nextCovariance = candidateCovariance.ToMatrix();
+                    var nextMean = candidateMean.ToVector();
                     // Commit only after the complete candidate is admissible.
-                    _sitePrecisions[i] = nextPrecision;
-                    _siteNaturalMeans[i] = nextNaturalMean;
-                    _weights[i] = nextWeight;
-                    _posteriorCov = candidateCovariance.ToMatrix();
-                    _posteriorMean = candidateMean.ToVector();
+                    _sitePrecisions = candidateSites;
+                    _siteNaturalMeans = candidateNaturalMeans;
+                    _weights = candidateWeights;
+                    _posteriorCov = nextCovariance;
+                    _posteriorMean = nextMean;
                     return (proposal.Precision, proposal.NaturalMean);
                 }
             }
