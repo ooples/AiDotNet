@@ -124,7 +124,6 @@ public sealed class NormedConvBiasLeakyInferenceTests
         {
             using var layer = Create<float>();
             using var input = Input<float>();
-            gpu.LeakyReLU(layer.Forward(input), .1f).ToArray();
             for (int iteration = 0; iteration < 3; ++iteration)
             {
                 if (iteration > 0)
@@ -133,6 +132,9 @@ public sealed class NormedConvBiasLeakyInferenceTests
                         parameter[0] += .03125f;
                         gpu.InvalidatePersistentTensor(parameter);
                     }
+                // Both measured paths must see already-normalized parameters and warm native kernels.
+                using (var warmed = gpu.LeakyReLU(layer.Forward(input), .1f)) warmed.ToArray();
+                using (var warmedFused = layer.ForwardLeakyInference(input, .1f)) warmedFused.ToArray();
                 long before = GpuLaunchProbe.Count;
                 using var ordinary = gpu.LeakyReLU(layer.Forward(input), .1f);
                 long ordinaryLaunches = GpuLaunchProbe.Count - before;
