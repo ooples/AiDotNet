@@ -1307,7 +1307,17 @@
         "tests/AiDotNet.Tests/UnitTests/GaussianProcesses/StudentTPosteriorNumericsTests.cs"
       ],
       "scope": "All3originalGPfailurespersiston1512(66cohort63pass3fail). DampedparallelEPapproachesimpropercavityboundary. Standardsequentialacceptedsiteupdateswithrank1Gaussianposteriorandonce/sweepcanonicalrefresh, unchangednu/scale/prior/quadrature/damping/convergencecriteria; independentdenseandmomentoracles. No native/SVD/baseGPpolicyedits.",
-      "status": "CLAIMEDbeforeproductionedit; rootreviewbeforeonebuild+all76cases; noPRpush."
+      "status": "CLAIMEDbeforeproductionedit; rootreviewbeforeonebuild+all76cases; noPRpush.",
+      "bounded_test_contract_amendment": {
+        "status": "CLAIMED before dependent edits; existing user-approved shared fixed-prior GP test-contract scope, root design review before patch",
+        "files": [
+          "tests/AiDotNet.Tests/ModelFamilyTests/Base/GaussianProcessPosteriorContract.cs",
+          "tests/AiDotNet.Tests/ModelFamilyTests/Base/GaussianProcessModelTestBase.cs",
+          "tests/AiDotNet.Tests/UnitTests/GaussianProcesses/StudentTPosteriorNumericsTests.cs"
+        ],
+        "scope": "Builder integration retains seed42/inputs/split/NotNull; use independently sampled declared fixed-zero-mean GP prior +StudentT likelihood for fixed-prior model only, without seed/scale tuning. Preserve original difficult21row split in explicit nonconvergence/admissibility+failed-refit Predict-refusal test. No weakened oracle assertions, either-success-or-throw test, tolerance/floor/fallback/new algorithm. Exact fixture no-build screen succeeded; full category tests after root diff review."
+      },
+      "design_screen": "Independent dense sequential EP reproduces exact21row cavity boundary; strict energy/Newton double-loop screen also stalls at surrogate cavity boundary. No production implementation of unqualified solver. Preserve documented explicit nonconvergence contract; independent numeric oracles31pass and75/76 prior tests. Root accepts shared integration fixture repair under existing approved contract scope, with difficult input refusal regression retained."
     },
     {
       "owner": "Codex/artifact_feed category FlashAttention native replay",
@@ -2028,7 +2038,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T05:00:30Z",
+  "updated_utc": "2026-11-18T05:00:28.614090+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
@@ -2434,6 +2444,14 @@
           "evidence": "C:\\Users\\cheat\\source\\artifacts\\codex2524\\head-a826446b\\artifact-14399325726-summary.json"
         }
       ]
+    },
+    "codec_hift_extended_qualification": {
+      "head": "d99ee71312",
+      "runtimeCoreSha256": "a0186b3d7f625a2f0db9377529a924b681af56d57c15b6f41e720c9a94042c4d",
+      "tensors": "published0.151.2 SHA7ff6...",
+      "focused": "38pass0fail0skip",
+      "originalWholeSparkTTS": "146total130pass7fail9skip; NOTcategorycomplete. All7generatedoptions nowreach TensorMax(no matching trace-time shape) hostread after priorTensorAdd/codec boundary fixed. No further sourceclaim; Claude/existingSparkownerpleaseinvestigate preserving guards and numericassertions.",
+      "evidence": "Z:/codex-ci-artifacts/aidotnet2524/held1512-codec-hift-focused/original-spark-results/original-spark-all.trx"
     }
   }
 }
