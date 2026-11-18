@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -140,6 +141,13 @@ internal sealed class CodeSwitchingAsrNetwork<T>
             for (int t = 0; t < frames; t++) features[t, b] = NumOps.FromDouble(std > 1e-8 ? (NumOps.ToDouble(mel[t, b]) - mean) / std : 0.0);
         }
         return features;
+    }
+
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        if (waveform.Length < 400) waveform = _engine.TensorConcatenate(new[] { _engine.Reshape(waveform, new[] { waveform.Length }), new Tensor<T>(new[] { 400 - waveform.Length }) }, 0);
+        var mel = _mel.Forward(waveform);
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
     }
 
     /// <summary>The encoder output <c>[L, EncoderProjection]</c> of features <c>[frames, bins]</c>.</summary>

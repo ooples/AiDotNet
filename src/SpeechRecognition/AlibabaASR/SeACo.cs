@@ -356,16 +356,15 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
     }
 
-    private Tensor<T> Samples(Tensor<T> waveform, int offset, int count)
+    private Tensor<T> Row(Tensor<T> waveform, int r, int rows, int samples)
     {
-        var samples = new Tensor<T>(new[] { count });
-        waveform.Data.Span.Slice(offset, count).CopyTo(samples.Data.Span);
-        return samples;
+        if (rows == 1) return waveform.Rank == 1 ? waveform : Engine.Reshape(waveform, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(waveform, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     // The backbone decoder's logits [1, vocabulary] for the first acoustic token of a waveform [S] (at least one token is
@@ -378,7 +377,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
         {
-            var encoded = _encoder.Encode(Samples(input, r * samples, samples));
+            var encoded = _encoder.Encode(Row(input, r, rows, samples));
             var acoustic = _network.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
             var logits = _network.Decode(encoded, acoustic);
             outputs[r] = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
@@ -499,7 +498,8 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
 
     // The stage's loss [1], averaged over the batch: Paraformer-large's loss for the backbone stage, the bias loss over
     // the frozen backbone's outputs for the bias stage, and their sum for the joint stage.
-    private Tensor<T> StageLoss(Tensor<T> input, int[][] labels, Random hotwordRandom, bool sample)
+    private Tensor<T> StageLoss(Tensor<T> input, int[][] labels, Random hotwordRandom, bool sample,
+        (List<int[]> Hotwords, bool[][] Positions)? preSampled = null)
     {
         var encoder = _encoder ?? throw new InvalidOperationException("No native network.");
         var network = _network ?? throw new InvalidOperationException("No native network.");
@@ -510,7 +510,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         var bias = stage == SeACoTrainingStage.Backbone ? null : _bias;
         if (bias is not null)
         {
-            var sampled = SampleHotwords(labels, hotwordRandom);
+            var sampled = preSampled ?? SampleHotwords(labels, hotwordRandom);
             positions = sampled.Positions;
             hotwords = bias.Hotwords(sampled.Hotwords.Select(h => network.TargetEmbeddings(h)).ToList());
         }
@@ -523,15 +523,15 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
                 Tensor<T> acoustic, hidden;
                 using (new Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    var encoded = encoder.Encode(Samples(input, r * samples, samples));
-                    acoustic = network.TrainingAcousticEmbeddings(encoded, network.Targets(labels[r]).Length);
-                    hidden = network.Hidden(encoded, acoustic);
+                    var encoded = encoder.Encode(Row(input, r, rows, samples));
+                    acoustic = Engine.StopGradient(network.TrainingAcousticEmbeddings(encoded, network.Targets(labels[r]).Length));
+                    hidden = Engine.StopGradient(network.Hidden(encoded, acoustic));
                 }
                 loss = Engine.Reshape(BiasLoss(bias, hotwords, acoustic, hidden, labels[r], positions[r]), new[] { 1 });
             }
             else
             {
-                var encoded = encoder.Encode(Samples(input, r * samples, samples));
+                var encoded = encoder.Encode(Row(input, r, rows, samples));
                 loss = network.Loss(encoded, labels[r], _random, null, sample);
                 if (bias is not null && hotwords is not null)
                 {
@@ -553,7 +553,9 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         EnsureBiasStageIsSupported();
         if (_encoder is null || _network is null) return false;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ => StageLoss(input, labels, _hotwordRandom, sample: true));
+        (List<int[]> Hotwords, bool[][] Positions)? preSampled =
+            _options.TrainingStage == SeACoTrainingStage.Backbone ? null : SampleHotwords(labels, _hotwordRandom);
+        TrainWithCustomObjective(input, target, (stepInput, _) => StageLoss(stepInput, labels, _hotwordRandom, sample: true, preSampled));
         return true;
     }
 

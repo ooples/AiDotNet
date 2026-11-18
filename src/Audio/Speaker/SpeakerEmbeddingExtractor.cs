@@ -539,10 +539,12 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         var network = _network;
         if (network?.Classifier is null || target.Shape[^1] != _options.NumTrainingSpeakers) return false;
         int speakers = _options.NumTrainingSpeakers;
-        var weights = Engine.TensorMultiplyScalar(Engine.Reshape(target, new[] { target.Length / speakers, speakers }), NumOps.FromDouble(-1.0));
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, stepTarget) =>
         {
-            var logits = network.SpeakerLogits(network.Embed(NetworkFeatures(input), training: true));
+            var xvectors = ForwardForTraining(stepInput);
+            var weights = Engine.TensorMultiplyScalar(Engine.Reshape(stepTarget, new[] { stepTarget.Length / speakers, speakers }), NumOps.FromDouble(-1.0));
+            var batched = xvectors.Rank == 2 ? xvectors : Engine.Reshape(xvectors, new[] { xvectors.Length / EmbeddingDimension, EmbeddingDimension });
+            var logits = network.SpeakerLogits(batched);
             var loss = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
             return Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(1.0 / logits.Shape[0]));
         }, _optimizer);

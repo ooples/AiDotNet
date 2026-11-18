@@ -736,19 +736,23 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
         return NormalizePerBin(_engine, mel);
     }
 
+    /// <summary>The features of <see cref="Features(IReadOnlyList{double})"/> computed on a whole waveform tensor.</summary>
+    public Tensor<T> Features(Tensor<T> waveform) => FeatureTensor(waveform);
+
     /// <summary>Normalize each feature bin over time using double mean and variance reductions.
     /// Bins with population deviation at most 1e-8 become zero.</summary>
     internal static Tensor<T> NormalizePerBin(IEngine engine, Tensor<T> mel)
     {
         int frames = mel.Shape[0], bins = mel.Shape[1];
-        var wide = mel.Contiguous().Cast<double>();
-        var mean = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorDivideScalar(wide, (double)frames), new[] { 0 }, true), new[] { frames, bins });
-        var centered = engine.TensorSubtract(wide, mean);
-        var scaled = engine.TensorDivideScalar(centered, Math.Sqrt(frames));
+        var melContig = mel.Contiguous();
+        var mean = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorDivideScalar(melContig, NumOps.FromDouble(frames)), new[] { 0 }, true), new[] { frames, bins });
+        var centered = engine.TensorSubtract(melContig, mean);
+        var scaled = engine.TensorDivideScalar(centered, NumOps.FromDouble(Math.Sqrt(frames)));
         var std = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 0 }, true));
         var spread = engine.TensorBroadcastTo(std, new[] { frames, bins });
-        var usable = engine.TensorGreaterThan(spread, 1e-8);
-        return engine.TensorWhere(usable, engine.TensorDivide(centered, spread), new Tensor<double>(new[] { frames, bins })).Cast<T>();
+        var usable = engine.TensorGreaterThan(spread, NumOps.FromDouble(1e-8));
+        var zeros = new Tensor<T>(new[] { frames, bins });
+        return engine.TensorWhere(usable, engine.TensorDivide(centered, spread), zeros);
     }
 
     /// <summary>SpecAugment (Park et al. 2019, section 2) as the Conformer paper sets it (section 3.1): frequency masks of
@@ -771,6 +775,45 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
                 for (int b = 0; b < bins; b++) masked[t, b] = 0.0;
         }
         return masked;
+    }
+
+    /// <summary>
+    /// SpecAugment (Park et al. 2019, section 2) computed on a feature tensor using compiled step random masking.
+    /// Frequency masks of width up to F and time masks of length up to a ratio of the utterance are zeroed.
+    /// </summary>
+    public Tensor<T> SpecAugment(Tensor<T> features, Random random)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1];
+        if (_o.FrequencyMasks <= 0 && (_o.TimeMasks <= 0 || (int)(_o.TimeMaskRatio * frames) <= 0))
+            return features;
+
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { frames, bins }, tensor =>
+        {
+            var span = tensor.Data.Span;
+            span.Fill(NumOps.One);
+            for (int m = 0; m < _o.FrequencyMasks; m++)
+            {
+                int width = random.Next(Math.Min(_o.FrequencyMaskWidth, bins) + 1), start = random.Next(Math.Max(1, bins - width + 1));
+                int end = Math.Min(bins, start + width);
+                for (int t = 0; t < frames; t++)
+                {
+                    int offset = t * bins;
+                    for (int b = start; b < end; b++) span[offset + b] = NumOps.Zero;
+                }
+            }
+            int maxLength = (int)(_o.TimeMaskRatio * frames);
+            for (int m = 0; m < _o.TimeMasks && maxLength > 0; m++)
+            {
+                int length = random.Next(maxLength + 1), start = random.Next(Math.Max(1, frames - length + 1));
+                int end = Math.Min(frames, start + length);
+                for (int t = start; t < end; t++)
+                {
+                    int offset = t * bins;
+                    for (int b = 0; b < bins; b++) span[offset + b] = NumOps.Zero;
+                }
+            }
+        });
+        return _engine.TensorMultiply(features, mask);
     }
 
     /// <summary>The encoder output <c>[L, EncoderDim]</c> of features <c>[frames, bins]</c>.</summary>
@@ -879,13 +922,27 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
             new Tensor<int>(labels, new[] { labels.Length }), new[] { logits.Shape[0] }, new[] { labels.Length }, 0);
 
     /// <summary>
-    /// The CTC training loss of an utterance: the final layer's CTC loss, mixed with the mean intermediate CTC loss as
+    /// The CTC training loss of an utterance given a feature tensor: the final layer's CTC loss, mixed with the mean intermediate CTC loss as
     /// L = (1 - w) L_CTC + w L_inter when intermediate layers are configured (InterCTC Equation 14; self-conditioned CTC
     /// Equations 11 and 12).
+    /// </summary>
+    public Tensor<T> CtcTrainingLoss(Tensor<T> features, int[] labels, bool training)
+    {
+        var (output, intermediates) = EncodeWithIntermediates(features, training);
+        return ComputeCtcTrainingLoss(output, intermediates, labels);
+    }
+
+    /// <summary>
+    /// The CTC training loss of an utterance given host features: delegates to <see cref="EncodeWithIntermediates(double[,], bool)"/>.
     /// </summary>
     public Tensor<T> CtcTrainingLoss(double[,] features, int[] labels, bool training)
     {
         var (output, intermediates) = EncodeWithIntermediates(features, training);
+        return ComputeCtcTrainingLoss(output, intermediates, labels);
+    }
+
+    private Tensor<T> ComputeCtcTrainingLoss(Tensor<T> output, List<Tensor<T>> intermediates, int[] labels)
+    {
         if (_o.Decoder == ConformerAsrDecoder.Attention) return AttentionLoss(output, labels);
         var loss = CtcLoss(CtcLogits(output), labels);
         // Hybrid CTC/attention (Watanabe et al. 2017, Equation 13): L = w L_CTC + (1 - w) L_attention.
@@ -903,6 +960,7 @@ internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
         return _engine.TensorAdd(_engine.TensorMultiplyScalar(loss, NumOps.FromDouble(1 - w)),
             _engine.TensorMultiplyScalar(inter ?? loss, NumOps.FromDouble(w / intermediates.Count)));
     }
+
 
     /// <summary>The prediction network's output <c>[U + 1, PredictionDim]</c> for the label history: the blank, then each
     /// label.</summary>

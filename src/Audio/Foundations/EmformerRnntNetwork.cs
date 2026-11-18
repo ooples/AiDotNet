@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.Audio.Foundations;
 
@@ -126,6 +127,53 @@ internal sealed class EmformerRnntNetwork<T>
 
     public EmformerRnntConfiguration Configuration => _o;
 
+    /// <summary>Log-mel features from a waveform tensor, each bin normalized over the utterance.</summary>
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        var mel = _mel.Forward(waveform);
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+    }
+
+    /// <summary>SpecAugment for tensor features: frequency and time masks set to zero.</summary>
+    public Tensor<T> SpecAugment(Tensor<T> features, Random random)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1];
+        int numFreq = _o.FrequencyMasks;
+        int numTime = _o.TimeMasks;
+        int maxFreqWidth = _o.FrequencyMaskWidth;
+        int maxTimeWidth = (int)(_o.TimeMaskRatio * frames);
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { frames, bins }, tensor =>
+        {
+            var span = tensor.Data.Span;
+            span.Fill(NumOps.One);
+            for (int f = 0; f < numFreq; f++)
+            {
+                int width = random.Next(Math.Min(maxFreqWidth, bins) + 1);
+                int start = random.Next(Math.Max(1, bins - width + 1));
+                int end = Math.Min(bins, start + width);
+                for (int t = 0; t < frames; t++)
+                {
+                    int offset = t * bins;
+                    for (int b = start; b < end; b++)
+                        span[offset + b] = NumOps.Zero;
+                }
+            }
+            for (int tm = 0; tm < numTime && maxTimeWidth > 0; tm++)
+            {
+                int length = random.Next(maxTimeWidth + 1);
+                int start = random.Next(Math.Max(1, frames - length + 1));
+                int end = Math.Min(frames, start + length);
+                for (int t = start; t < end; t++)
+                {
+                    int offset = t * bins;
+                    for (int b = 0; b < bins; b++)
+                        span[offset + b] = NumOps.Zero;
+                }
+            }
+        });
+        return _engine.TensorMultiply(features, mask);
+    }
+
     /// <summary>Log-mel features <c>[frames, bins]</c>, each bin normalized over the utterance.</summary>
     public double[,] Features(IReadOnlyList<double> waveform)
     {
@@ -171,11 +219,18 @@ internal sealed class EmformerRnntNetwork<T>
     /// frames serving only as look-ahead.</summary>
     public Tensor<T> Encode(double[,] features, bool training)
     {
-        int frames = features.GetLength(0), bins = features.GetLength(1), stride = _o.TimeReductionStride;
+        int frames = features.GetLength(0), bins = features.GetLength(1);
         var x = new Tensor<T>(new[] { frames, bins });
         for (int t = 0; t < frames; t++)
             for (int b = 0; b < bins; b++) x[t, b] = NumOps.FromDouble(features[t, b]);
-        var projected = InputLinear.Forward(x);
+        return Encode(x, training);
+    }
+
+    /// <summary>The encoder output <c>[T', EncodingDim]</c> for tensor features.</summary>
+    public Tensor<T> Encode(Tensor<T> features, bool training)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1], stride = _o.TimeReductionStride;
+        var projected = InputLinear.Forward(features);
         int reduced = frames / stride, rc = _o.RightContextLength / stride, segment = _o.SegmentLength / stride;
         if (reduced <= rc) throw new ArgumentException("The audio is shorter than the right context.", nameof(features));
         var input = _engine.Reshape(_engine.TensorSlice(projected, new[] { 0, 0 }, new[] { reduced * stride, _o.TimeReductionInputDim }), new[] { reduced, _width });

@@ -170,9 +170,15 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length <= length
+            ? Engine.Reshape(rawAudio, new[] { rawAudio.Length })
+            : Engine.TensorSlice(Engine.Reshape(rawAudio, new[] { rawAudio.Length }), new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int r, int rows, int samples)
+    {
+        if (rows == 1) return Engine.Reshape(input, new[] { samples });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
     }
 
     private double[] Samples(Tensor<T> waveform, int offset, int count)
@@ -193,7 +199,7 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
         {
-            var encoded = _encoder.Encode(_encoder.Features(Samples(input, r * samples, samples)), training);
+            var encoded = _encoder.Encode(_encoder.FeatureTensor(Row(input, r, rows, samples)), training);
             var acoustic = _network.AcousticEmbeddings(encoded, minimumTokens: 1) ?? throw new InvalidOperationException("No acoustic token.");
             var logits = _network.Decode(encoded, acoustic);
             outputs[r] = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { 1, logits.Shape[1] });
@@ -236,7 +242,7 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     }
 
     // One utterance's loss (ParaformerNetwork.Loss), the encoder's CTC loss included.
-    private Tensor<T> Loss(double[,] features, int[] labels, bool training)
+    private Tensor<T> Loss(Tensor<T> features, int[] labels, bool training)
     {
         var encoder = _encoder ?? throw new InvalidOperationException("No native network.");
         var network = _network ?? throw new InvalidOperationException("No native network.");
@@ -253,12 +259,13 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (encoder is null || _network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var loss = Loss(encoder.SpecAugment(encoder.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
+                var wave = Row(stepInput, r, rows, samples);
+                var loss = Loss(encoder.SpecAugment(encoder.FeatureTensor(wave), _random), labels[r], training: true);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));

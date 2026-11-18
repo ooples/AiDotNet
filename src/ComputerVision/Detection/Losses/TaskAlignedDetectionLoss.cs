@@ -64,14 +64,6 @@ public sealed class TaskAlignedDetectionLoss<T>
     }
 
     /// <summary>Builds the differentiable objective over the live head outputs.</summary>
-    /// <param name="classLevels">Raw class logits per level, [batch, classes, height, width].</param>
-    /// <param name="distributionLevels">Raw box-distribution logits per level, [batch, 4 * regMax, height, width].</param>
-    /// <param name="strides">Input pixels per feature cell for each level.</param>
-    /// <param name="imageHeight">Height in pixels of the network input the targets are normalized against.</param>
-    /// <param name="imageWidth">Width in pixels of the network input the targets are normalized against.</param>
-    /// <param name="targets">Normalized center-format targets, one list per image; empty lists are valid.</param>
-    /// <param name="topK">Anchors selected per object: <see cref="TopK"/> or <see cref="OneToOneTopK"/>.</param>
-    /// <returns>A scalar connected to every class and distribution level on the active tape.</returns>
     public Tensor<T> ComputeTapeLoss(IReadOnlyList<Tensor<T>> classLevels, IReadOnlyList<Tensor<T>> distributionLevels,
         IReadOnlyList<int> strides, int imageHeight, int imageWidth, DetectionTrainingBatch<T> targets, int topK)
     {
@@ -82,117 +74,104 @@ public sealed class TaskAlignedDetectionLoss<T>
         var cells = new int[levels];
         var widths = new int[levels];
         var levelStart = new int[levels + 1];
+        var classOffsets = new int[levels + 1];
+        var distOffsets = new int[levels + 1];
+        var flatClasses = new Tensor<T>[levels];
+        var flatDists = new Tensor<T>[levels];
         for (int level = 0; level < levels; level++)
         {
             widths[level] = classLevels[level].Shape[3];
             cells[level] = classLevels[level].Shape[2] * widths[level];
             levelStart[level + 1] = levelStart[level] + cells[level];
+            classOffsets[level + 1] = classOffsets[level] + classLevels[level].Length;
+            distOffsets[level + 1] = distOffsets[level] + distributionLevels[level].Length;
+            flatClasses[level] = engine.Reshape(classLevels[level], new[] { classLevels[level].Length });
+            flatDists[level] = engine.Reshape(distributionLevels[level], new[] { distributionLevels[level].Length });
         }
+
+        var allClassFlat = levels == 1 ? flatClasses[0] : engine.TensorConcatenate(flatClasses, 0);
+        var allDistFlat = levels == 1 ? flatDists[0] : engine.TensorConcatenate(flatDists, 0);
+        int totalClassLen = classOffsets[levels];
+        int totalDistLen = distOffsets[levels];
+
+        if (targets.TargetCount == 0)
+        {
+            var bgLoss = engine.TensorMultiplyScalar(engine.ReduceSum(engine.Softplus(allClassFlat), null),
+                NumOps.FromDouble(_options.ClassGain));
+            var zeroDistBg = engine.TensorMultiplyScalar(engine.ReduceSum(allDistFlat, null), NumOps.Zero);
+            return engine.TensorAdd(bgLoss, zeroDistBg);
+        }
+
         int anchors = levelStart[levels];
-
-        var classData = new T[levels][];
-        var distributionData = new T[levels][];
-        for (int level = 0; level < levels; level++)
-        {
-            classData[level] = classLevels[level].ToArray();
-            distributionData[level] = distributionLevels[level].ToArray();
-        }
-
-        var positives = new List<Positive>();
-        double targetMass = 0;
-        for (int image = 0; image < batch; image++)
-            targetMass += Assign(image, targets[image], classData, distributionData, strides, cells, widths, levelStart,
-                imageHeight, imageWidth, topK, positives);
-        double normalizer = Math.Max(1.0, targetMass);
-
-        // Classification: BCE-with-logits, softplus(x) - t x, over every class logit of every anchor.
-        Tensor<T>? classification = null;
-        var byLevel = positives.GroupBy(positive => positive.Level).ToDictionary(group => group.Key, group => group.ToArray());
-        for (int level = 0; level < levels; level++)
-        {
-            var targetValues = new T[classLevels[level].Length];
-            if (byLevel.TryGetValue(level, out var levelPositives))
-                foreach (var positive in levelPositives)
-                    targetValues[(positive.Image * _numClasses + positive.ClassId) * cells[level] + positive.Cell] = NumOps.FromDouble(positive.Target);
-            var logits = classLevels[level];
-            var targetTensor = new Tensor<T>(targetValues, logits.Shape.ToArray());
-            var bce = engine.ReduceSum(engine.TensorSubtract(engine.Softplus(logits), engine.TensorMultiply(targetTensor, logits)), null);
-            classification = classification is null ? bce : engine.TensorAdd(classification, bce);
-        }
-        var loss = engine.TensorMultiplyScalar(classification ?? throw new InvalidOperationException("No class levels were supplied."),
-            NumOps.FromDouble(_options.ClassGain / normalizer));
-
-        if (positives.Count == 0)
-        {
-            // Background classification is still trained. Connect each distribution level with an exact zero derivative.
-            foreach (var distribution in distributionLevels)
-                loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(engine.ReduceSum(distribution, null), NumOps.Zero));
-            return loss;
-        }
-
-        var ordered = Enumerable.Range(0, levels).Where(byLevel.ContainsKey).SelectMany(level => byLevel[level]).ToArray();
-        int count = ordered.Length;
+        int maxPositives = Math.Max(1, Math.Min(checked(batch * anchors), checked(targets.TargetCount * topK)));
         int bins = _regMax;
-        var gathered = new List<Tensor<T>>();
-        foreach (int level in Enumerable.Range(0, levels).Where(byLevel.ContainsKey))
-        {
-            var levelPositives = byLevel[level];
-            var indices = new int[checked(levelPositives.Length * 4 * bins)];
-            int write = 0;
-            foreach (var positive in levelPositives)
-                for (int side = 0; side < 4; side++)
-                    for (int bin = 0; bin < bins; bin++)
-                        indices[write++] = (positive.Image * 4 * bins + side * bins + bin) * cells[level] + positive.Cell;
-            var flat = engine.Reshape(distributionLevels[level], new[] { distributionLevels[level].Length });
-            gathered.Add(CvTensorOps<T>.Select(flat, indices, 0));
-        }
-        var rows = engine.Reshape(gathered.Count == 1 ? gathered[0] : engine.TensorConcatenate(gathered.ToArray(), 0),
-            new[] { count * 4, bins });
+        int numClasses = _numClasses;
+        double alpha = _options.Alpha;
+        double beta = _options.Beta;
+        double classGain = _options.ClassGain;
+        double boxGain = _options.BoxGain;
+        double dflGain = _options.DflGain;
 
-        // Decoded distances: the expectation of each side's softmax distribution, in stride units.
-        var binValues = new T[count * 4 * bins];
-        for (int row = 0; row < count * 4; row++)
+        // Packed layout:
+        // [0 .. totalClassLen): classTargets
+        // [totalClassLen]: classGain / normalizer
+        // [.. + maxPositives * 4 * bins]: distGatherIndices
+        // [.. + maxPositives]: anchorX
+        // [.. + maxPositives]: anchorY
+        // [.. + maxPositives * 4]: goldBoxes
+        // [.. + maxPositives]: boxWeights (positive.Target * boxGain / normalizer)
+        // [.. + maxPositives * 8]: dflIndices
+        // [.. + maxPositives * 8]: dflWeights (sideWeight * interp * dflGain / normalizer)
+        int oScale = totalClassLen;
+        int oDistIdx = oScale + 1;
+        int distIdxLen = checked(maxPositives * 4 * bins);
+        int oAnchorX = oDistIdx + distIdxLen;
+        int oAnchorY = oAnchorX + maxPositives;
+        int oGold = oAnchorY + maxPositives;
+        int goldLen = checked(maxPositives * 4);
+        int oBoxW = oGold + goldLen;
+        int oDflIdx = oBoxW + maxPositives;
+        int dflLen = checked(maxPositives * 8);
+        int oDflW = oDflIdx + dflLen;
+        int totalPackedLen = oDflW + dflLen;
+
+        var packedSupervision = PackSupervision(
+            batch, levels, strides, cells, widths, levelStart, classOffsets, distOffsets,
+            imageHeight, imageWidth, topK, targets);
+        var supervision = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "TaskAlignedSupervision",
+            new[] { allClassFlat, allDistFlat, packedSupervision },
+            new[] { totalPackedLen },
+            (inputs, dst) => FillSupervision(
+                inputs[0], inputs[1], inputs[2], numClasses, bins, maxPositives,
+                alpha, beta, classGain, boxGain, dflGain, totalClassLen, dst));
+
+        var classTargets = engine.TensorSlice(supervision, new[] { 0 }, new[] { totalClassLen });
+        var classScale = engine.TensorSlice(supervision, new[] { oScale }, new[] { 1 });
+        var distGatherIndices = engine.TensorSlice(supervision, new[] { oDistIdx }, new[] { distIdxLen });
+        var x = engine.Reshape(engine.TensorSlice(supervision, new[] { oAnchorX }, new[] { maxPositives }), new[] { maxPositives, 1 });
+        var y = engine.Reshape(engine.TensorSlice(supervision, new[] { oAnchorY }, new[] { maxPositives }), new[] { maxPositives, 1 });
+        var goldBoxes = engine.Reshape(engine.TensorSlice(supervision, new[] { oGold }, new[] { goldLen }), new[] { maxPositives, 4 });
+        var boxWeights = engine.TensorSlice(supervision, new[] { oBoxW }, new[] { maxPositives });
+        var dflIndices = engine.TensorSlice(supervision, new[] { oDflIdx }, new[] { dflLen });
+        var dflWeights = engine.TensorSlice(supervision, new[] { oDflW }, new[] { dflLen });
+
+        var bceElements = engine.TensorSubtract(engine.Softplus(allClassFlat), engine.TensorMultiply(classTargets, allClassFlat));
+        var bceSum = engine.Reshape(engine.ReduceSum(bceElements, new[] { 0 }, keepDims: true), new[] { 1 });
+        var loss = engine.ReduceSum(engine.TensorMultiply(bceSum, classScale), null);
+
+        var gatheredDist = engine.TensorEmbeddingLookupFromFloatIndices(
+            engine.Reshape(allDistFlat, new[] { totalDistLen, 1 }), distGatherIndices);
+        var rows = engine.Reshape(gatheredDist, new[] { maxPositives * 4, bins });
+
+        var binValues = new double[maxPositives * 4 * bins];
+        for (int row = 0; row < maxPositives * 4; row++)
             for (int bin = 0; bin < bins; bin++)
-                binValues[row * bins + bin] = NumOps.FromDouble(bin);
+                binValues[row * bins + bin] = bin;
         var distances = engine.Reshape(engine.ReduceSum(
-            engine.TensorMultiply(engine.TensorSoftmax(rows, 1), new Tensor<T>(binValues, new[] { count * 4, bins })),
-            new[] { 1 }, false), new[] { count, 4 });
+            engine.TensorMultiply(engine.TensorSoftmax(rows, 1), new Tensor<double>(binValues, new[] { maxPositives * 4, bins }).Cast<T>()),
+            new[] { 1 }, false), new[] { maxPositives, 4 });
 
-        var anchorX = new T[count];
-        var anchorY = new T[count];
-        var goldBoxes = new T[count * 4];
-        var weights = new T[count];
-        var dflIndices = new int[count * 8];
-        var dflWeights = new T[count * 8];
-        for (int index = 0; index < count; index++)
-        {
-            var positive = ordered[index];
-            double stride = strides[positive.Level];
-            double gridX = positive.AnchorX / stride;
-            double gridY = positive.AnchorY / stride;
-            anchorX[index] = NumOps.FromDouble(gridX);
-            anchorY[index] = NumOps.FromDouble(gridY);
-            var gold = new[] { positive.Gold[0] / stride, positive.Gold[1] / stride, positive.Gold[2] / stride, positive.Gold[3] / stride };
-            for (int coordinate = 0; coordinate < 4; coordinate++) goldBoxes[index * 4 + coordinate] = NumOps.FromDouble(gold[coordinate]);
-            weights[index] = NumOps.FromDouble(positive.Target);
-
-            var sides = new[] { gridX - gold[0], gridY - gold[1], gold[2] - gridX, gold[3] - gridY };
-            for (int side = 0; side < 4; side++)
-            {
-                double distance = Math.Min(Math.Max(sides[side], 0), bins - 1 - 0.01);
-                int lower = (int)Math.Floor(distance);
-                int row = index * 4 + side;
-                double sideWeight = positive.Target / 4;
-                dflIndices[row * 2] = row * bins + lower;
-                dflIndices[row * 2 + 1] = row * bins + lower + 1;
-                dflWeights[row * 2] = NumOps.FromDouble((lower + 1 - distance) * sideWeight);
-                dflWeights[row * 2 + 1] = NumOps.FromDouble((distance - lower) * sideWeight);
-            }
-        }
-
-        var column = new[] { count, 1 };
-        var x = new Tensor<T>(anchorX, column);
-        var y = new Tensor<T>(anchorY, column);
         var predicted = engine.TensorConcatenate(new[]
         {
             engine.TensorSubtract(x, engine.TensorNarrow(distances, 1, 0, 1)),
@@ -200,28 +179,222 @@ public sealed class TaskAlignedDetectionLoss<T>
             engine.TensorAdd(x, engine.TensorNarrow(distances, 1, 2, 1)),
             engine.TensorAdd(y, engine.TensorNarrow(distances, 1, 3, 1))
         }, 1);
-        var ciou = engine.TensorCIoULoss(predicted, new Tensor<T>(goldBoxes, new[] { count, 4 }));
-        var box = engine.ReduceSum(engine.TensorMultiply(engine.Reshape(ciou, new[] { count }), new Tensor<T>(weights, new[] { count })), null);
-        loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(box, NumOps.FromDouble(_options.BoxGain / normalizer)));
+        var ciou = engine.TensorCIoULoss(predicted, goldBoxes);
+        var boxTerm = engine.ReduceSum(engine.TensorMultiply(engine.Reshape(ciou, new[] { maxPositives }), boxWeights), null);
+        loss = engine.TensorAdd(loss, boxTerm);
 
-        // Gather only the two neighbouring bins, so an extreme finite logit elsewhere cannot turn 0 * -inf into NaN.
-        var logProbabilities = engine.Reshape(engine.TensorLogSoftmax(rows, 1), new[] { count * 4 * bins });
-        var dfl = engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(
-            CvTensorOps<T>.Select(logProbabilities, dflIndices, 0), new Tensor<T>(dflWeights, new[] { dflWeights.Length })), null));
-        loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(dfl, NumOps.FromDouble(_options.DflGain / normalizer)));
+        var logProbabilities = engine.Reshape(engine.TensorLogSoftmax(rows, 1), new[] { maxPositives * 4 * bins, 1 });
+        var selectedLogProbs = engine.Reshape(
+            engine.TensorEmbeddingLookupFromFloatIndices(logProbabilities, dflIndices),
+            new[] { dflLen });
+        var dflTerm = engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(selectedLogProbs, dflWeights), null));
+        loss = engine.TensorAdd(loss, dflTerm);
 
-        // A level can hold no positives (always true for most levels under top-1). Its distribution logits
-        // still belong to the objective, with an exact zero derivative, so every head output has a gradient.
-        foreach (int level in Enumerable.Range(0, levels).Where(level => !byLevel.ContainsKey(level)))
-            loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(engine.ReduceSum(distributionLevels[level], null), NumOps.Zero));
+        // Keep every distribution level connected even when positives do not touch it.
+        loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(engine.ReduceSum(allDistFlat, null), NumOps.Zero));
         return loss;
     }
 
-    private double Assign(int image, IReadOnlyList<DetectionTrainingTarget<T>> objects, T[][] classData, T[][] distributionData,
-        IReadOnlyList<int> strides, int[] cells, int[] widths, int[] levelStart, int imageHeight, int imageWidth, int topK,
-        List<Positive> positives)
+    private static Tensor<T> PackSupervision(
+        int batch, int levels, IReadOnlyList<int> strides, int[] cells, int[] widths, int[] levelStart,
+        int[] classOffsets, int[] distOffsets, int imageHeight, int imageWidth, int topK, DetectionTrainingBatch<T> targets)
     {
-        if (objects.Count == 0) return 0;
+        var values = new List<double> { batch, levels, imageHeight, imageWidth, topK };
+        for (int l = 0; l < levels; l++)
+        {
+            values.Add(strides[l]);
+            values.Add(cells[l]);
+            values.Add(widths[l]);
+            values.Add(levelStart[l]);
+            values.Add(classOffsets[l]);
+            values.Add(distOffsets[l]);
+        }
+        values.Add(levelStart[levels]);
+        values.Add(classOffsets[levels]);
+        values.Add(distOffsets[levels]);
+
+        int totalObjects = targets.TargetCount;
+        var rawCoords = new T[totalObjects * 4];
+        int coordWrite = 0;
+        for (int image = 0; image < batch; image++)
+        {
+            var imgTargets = targets[image];
+            for (int t = 0; t < imgTargets.Count; t++)
+            {
+                var item = imgTargets[t];
+                rawCoords[coordWrite++] = item.CenterX;
+                rawCoords[coordWrite++] = item.CenterY;
+                rawCoords[coordWrite++] = item.Width;
+                rawCoords[coordWrite++] = item.Height;
+            }
+        }
+        var doubleCoords = totalObjects > 0
+            ? new Tensor<T>(rawCoords, new[] { rawCoords.Length }).Cast<double>().ToArray()
+            : Array.Empty<double>();
+        int coordRead = 0;
+        for (int image = 0; image < batch; image++)
+        {
+            var imgTargets = targets[image];
+            values.Add(imgTargets.Count);
+            for (int t = 0; t < imgTargets.Count; t++)
+            {
+                values.Add(imgTargets[t].ClassId);
+                values.Add(doubleCoords[coordRead++]);
+                values.Add(doubleCoords[coordRead++]);
+                values.Add(doubleCoords[coordRead++]);
+                values.Add(doubleCoords[coordRead++]);
+            }
+        }
+
+        return new Tensor<double>(values.ToArray(), new[] { values.Count }).Cast<T>();
+    }
+
+    private static void FillSupervision(
+        Tensor<T> allClassFlat, Tensor<T> allDistFlat, Tensor<T> packedSupervision,
+        int numClasses, int bins, int maxPositives,
+        double alpha, double beta, double classGain, double boxGain, double dflGain,
+        int totalClassLen, Tensor<T> dst)
+    {
+        var classData = allClassFlat.Contiguous().Cast<double>().ToArray();
+        var distData = allDistFlat.Contiguous().Cast<double>().ToArray();
+        var sup = packedSupervision.Contiguous().Cast<double>().ToArray();
+
+        int cursor = 0;
+        int batch = (int)Math.Round(sup[cursor++]);
+        int levels = (int)Math.Round(sup[cursor++]);
+        int imageHeight = (int)Math.Round(sup[cursor++]);
+        int imageWidth = (int)Math.Round(sup[cursor++]);
+        int topK = (int)Math.Round(sup[cursor++]);
+
+        var strides = new int[levels];
+        var cells = new int[levels];
+        var widths = new int[levels];
+        var levelStart = new int[levels + 1];
+        var classOffsets = new int[levels + 1];
+        var distOffsets = new int[levels + 1];
+        for (int l = 0; l < levels; l++)
+        {
+            strides[l] = (int)Math.Round(sup[cursor++]);
+            cells[l] = (int)Math.Round(sup[cursor++]);
+            widths[l] = (int)Math.Round(sup[cursor++]);
+            levelStart[l] = (int)Math.Round(sup[cursor++]);
+            classOffsets[l] = (int)Math.Round(sup[cursor++]);
+            distOffsets[l] = (int)Math.Round(sup[cursor++]);
+        }
+        levelStart[levels] = (int)Math.Round(sup[cursor++]);
+        classOffsets[levels] = (int)Math.Round(sup[cursor++]);
+        distOffsets[levels] = (int)Math.Round(sup[cursor++]);
+
+        var positives = new List<Positive>();
+        double targetMass = 0;
+        for (int image = 0; image < batch; image++)
+        {
+            int objCount = (int)Math.Round(sup[cursor++]);
+            var objects = new (int ClassId, double Cx, double Cy, double W, double H)[objCount];
+            for (int t = 0; t < objCount; t++)
+            {
+                int cid = (int)Math.Round(sup[cursor++]);
+                double cx = sup[cursor++];
+                double cy = sup[cursor++];
+                double w = sup[cursor++];
+                double h = sup[cursor++];
+                objects[t] = (cid, cx, cy, w, h);
+            }
+            targetMass += AssignStatic(
+                image, objects, classData, distData, strides, cells, widths, levelStart,
+                classOffsets, distOffsets, imageHeight, imageWidth, numClasses, bins, alpha, beta, topK, positives);
+        }
+
+        double normalizer = Math.Max(1.0, targetMass);
+        var buffer = new double[dst.Length];
+        int oScale = totalClassLen;
+        int oDistIdx = oScale + 1;
+        int distIdxLen = maxPositives * 4 * bins;
+        int oAnchorX = oDistIdx + distIdxLen;
+        int oAnchorY = oAnchorX + maxPositives;
+        int oGold = oAnchorY + maxPositives;
+        int oBoxW = oGold + (maxPositives * 4);
+        int oDflIdx = oBoxW + maxPositives;
+        int oDflW = oDflIdx + (maxPositives * 8);
+
+        buffer[oScale] = classGain / normalizer;
+
+        var ordered = positives.OrderBy(p => p.Level).ToArray();
+        foreach (var p in ordered)
+        {
+            int clsIdx = classOffsets[p.Level] + ((p.Image * numClasses + p.ClassId) * cells[p.Level] + p.Cell);
+            buffer[clsIdx] = p.Target;
+        }
+
+        int activeCount = Math.Min(ordered.Length, maxPositives);
+        for (int index = 0; index < maxPositives; index++)
+        {
+            if (index < activeCount)
+            {
+                var p = ordered[index];
+                int cellCount = cells[p.Level];
+                int distBase = distOffsets[p.Level];
+                int write = oDistIdx + (index * 4 * bins);
+                for (int side = 0; side < 4; side++)
+                    for (int bin = 0; bin < bins; bin++)
+                        buffer[write++] = distBase + ((p.Image * 4 * bins + side * bins + bin) * cellCount + p.Cell);
+
+                double stride = strides[p.Level];
+                double gridX = p.AnchorX / stride;
+                double gridY = p.AnchorY / stride;
+                buffer[oAnchorX + index] = gridX;
+                buffer[oAnchorY + index] = gridY;
+                double g0 = p.Gold[0] / stride, g1 = p.Gold[1] / stride, g2 = p.Gold[2] / stride, g3 = p.Gold[3] / stride;
+                buffer[oGold + (index * 4)] = g0;
+                buffer[oGold + (index * 4) + 1] = g1;
+                buffer[oGold + (index * 4) + 2] = g2;
+                buffer[oGold + (index * 4) + 3] = g3;
+                buffer[oBoxW + index] = p.Target * (boxGain / normalizer);
+
+                var sides = new[] { gridX - g0, gridY - g1, g2 - gridX, g3 - gridY };
+                double sideScale = (p.Target / 4.0) * (dflGain / normalizer);
+                for (int side = 0; side < 4; side++)
+                {
+                    double distance = Math.Min(Math.Max(sides[side], 0.0), bins - 1 - 0.01);
+                    int lower = (int)Math.Floor(distance);
+                    int row = (index * 4) + side;
+                    buffer[oDflIdx + (row * 2)] = (row * bins) + lower;
+                    buffer[oDflIdx + (row * 2) + 1] = (row * bins) + lower + 1;
+                    buffer[oDflW + (row * 2)] = (lower + 1 - distance) * sideScale;
+                    buffer[oDflW + (row * 2) + 1] = (distance - lower) * sideScale;
+                }
+            }
+            else
+            {
+                // Non-degenerate zero-weight padding slot so CIoU and DFL stay strictly finite.
+                buffer[oAnchorX + index] = 0.5;
+                buffer[oAnchorY + index] = 0.5;
+                buffer[oGold + (index * 4)] = 0.0;
+                buffer[oGold + (index * 4) + 1] = 0.0;
+                buffer[oGold + (index * 4) + 2] = 1.0;
+                buffer[oGold + (index * 4) + 3] = 1.0;
+                for (int side = 0; side < 4; side++)
+                {
+                    int row = (index * 4) + side;
+                    buffer[oDflIdx + (row * 2)] = row * bins;
+                    buffer[oDflIdx + (row * 2) + 1] = (row * bins) + 1;
+                }
+            }
+        }
+
+        var typed = new Tensor<double>(dst._shape, new Vector<double>(buffer)).Cast<T>();
+        typed.AsSpan().CopyTo(dst.AsWritableSpan());
+    }
+
+    private static double AssignStatic(
+        int image, (int ClassId, double Cx, double Cy, double W, double H)[] objects,
+        double[] classData, double[] distData,
+        int[] strides, int[] cells, int[] widths, int[] levelStart,
+        int[] classOffsets, int[] distOffsets,
+        int imageHeight, int imageWidth, int numClasses, int regMax,
+        double alpha, double beta, int topK, List<Positive> positives)
+    {
+        if (objects.Length == 0) return 0;
         int anchors = levelStart[levelStart.Length - 1];
         var anchorX = new double[anchors];
         var anchorY = new double[anchors];
@@ -230,18 +403,18 @@ public sealed class TaskAlignedDetectionLoss<T>
         for (int level = 0; level < cells.Length; level++)
         {
             int stride = strides[level];
+            int distBase = distOffsets[level];
             for (int cell = 0; cell < cells[level]; cell++)
             {
                 int anchor = levelStart[level] + cell;
                 anchorLevel[anchor] = level;
-                // Row-major grid: the integer quotient is the row, the remainder the column.
                 int row = cell / widths[level];
                 int column = cell % widths[level];
                 anchorX[anchor] = (column + 0.5) * stride;
                 anchorY[anchor] = (row + 0.5) * stride;
                 for (int side = 0; side < 4; side++)
                 {
-                    double expectation = ExpectedBin(distributionData[level], image, side, cells[level], cell) * stride;
+                    double expectation = ExpectedBinStatic(distData, distBase, image, side, cells[level], cell, regMax) * stride;
                     predicted[anchor, side] = side < 2
                         ? (side == 0 ? anchorX[anchor] : anchorY[anchor]) - expectation
                         : (side == 2 ? anchorX[anchor] : anchorY[anchor]) + expectation;
@@ -249,18 +422,18 @@ public sealed class TaskAlignedDetectionLoss<T>
             }
         }
 
-        var gold = new double[objects.Count][];
+        var gold = new double[objects.Length][];
         var assigned = new int[anchors];
         var assignedIoU = new double[anchors];
         var assignedMetric = new double[anchors];
         for (int anchor = 0; anchor < anchors; anchor++) assigned[anchor] = -1;
-        for (int index = 0; index < objects.Count; index++)
+        for (int index = 0; index < objects.Length; index++)
         {
             var target = objects[index];
-            double cx = NumOps.ToDouble(target.CenterX) * imageWidth;
-            double cy = NumOps.ToDouble(target.CenterY) * imageHeight;
-            double halfWidth = NumOps.ToDouble(target.Width) * imageWidth / 2;
-            double halfHeight = NumOps.ToDouble(target.Height) * imageHeight / 2;
+            double cx = target.Cx * imageWidth;
+            double cy = target.Cy * imageHeight;
+            double halfWidth = target.W * imageWidth / 2;
+            double halfHeight = target.H * imageHeight / 2;
             gold[index] = new[] { cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight };
 
             var candidates = new List<(int Anchor, double Metric, double IoU)>();
@@ -271,9 +444,10 @@ public sealed class TaskAlignedDetectionLoss<T>
                 if (inside <= InsideEpsilon) continue;
                 int level = anchorLevel[anchor];
                 int cell = anchor - levelStart[level];
-                double score = Logistic(NumOps.ToDouble(classData[level][(image * _numClasses + target.ClassId) * cells[level] + cell]));
+                double logit = classData[classOffsets[level] + ((image * numClasses + target.ClassId) * cells[level] + cell)];
+                double score = Logistic(logit);
                 double iou = IoU(predicted, anchor, gold[index]);
-                candidates.Add((anchor, Math.Pow(score, _options.Alpha) * Math.Pow(iou, _options.Beta), iou));
+                candidates.Add((anchor, Math.Pow(score, alpha) * Math.Pow(iou, beta), iou));
             }
             foreach (var candidate in candidates.OrderByDescending(item => item.Metric).ThenBy(item => item.Anchor).Take(topK))
             {
@@ -284,8 +458,8 @@ public sealed class TaskAlignedDetectionLoss<T>
             }
         }
 
-        var maximumMetric = new double[objects.Count];
-        var maximumIoU = new double[objects.Count];
+        var maximumMetric = new double[objects.Length];
+        var maximumIoU = new double[objects.Length];
         for (int anchor = 0; anchor < anchors; anchor++)
         {
             int index = assigned[anchor];
@@ -308,16 +482,16 @@ public sealed class TaskAlignedDetectionLoss<T>
         return mass;
     }
 
-    private double ExpectedBin(T[] distribution, int image, int side, int cells, int cell)
+    private static double ExpectedBinStatic(double[] distData, int distBase, int image, int side, int cells, int cell, int regMax)
     {
         double maximum = double.NegativeInfinity;
-        for (int bin = 0; bin < _regMax; bin++)
-            maximum = Math.Max(maximum, NumOps.ToDouble(distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell]));
+        for (int bin = 0; bin < regMax; bin++)
+            maximum = Math.Max(maximum, distData[distBase + ((image * 4 * regMax + side * regMax + bin) * cells + cell)]);
         double total = 0;
         double weighted = 0;
-        for (int bin = 0; bin < _regMax; bin++)
+        for (int bin = 0; bin < regMax; bin++)
         {
-            double value = Math.Exp(NumOps.ToDouble(distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell]) - maximum);
+            double value = Math.Exp(distData[distBase + ((image * 4 * regMax + side * regMax + bin) * cells + cell)] - maximum);
             total += value;
             weighted += value * bin;
         }

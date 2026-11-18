@@ -158,9 +158,13 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         if (_network is null) return rawAudio;
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
+    }
+
+    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
+    {
+        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
     }
 
     private CodeSwitchingAsrNetwork<T> RequireNetwork() =>
@@ -204,7 +208,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         var network = RequireNetwork();
         using var _ = new NoGradScope<T>();
-        var encoded = network.Encode(network.Features(PreprocessAudio(audio)));
+        var encoded = network.Encode(network.FeatureTensor(PreprocessAudio(audio)));
         return network.Greedy(encoded, _options.MaxTextLength);
     }
 
@@ -277,10 +281,15 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        var rows = Rows(input);
-        var outputs = new Tensor<T>[rows.Length];
-        for (int r = 0; r < rows.Length; r++)
-            outputs[r] = _network.CtcLogits(_network.Encode(_network.Features(rows[r]), training, training ? _random : null));
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+        {
+            var wave = Row(input, r, rows, samples);
+            if (samples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
+            outputs[r] = _network.CtcLogits(_network.Encode(_network.FeatureTensor(wave), training, training ? _random : null));
+        }
         return input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
 
@@ -342,16 +351,30 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         var network = _network;
         if (network is null) return false;
-        var batch = Batch(input, target, network.Boundary);
-        TrainWithCustomLoss(input, _ =>
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
+        int width = target.Rank >= 2 ? target.Shape[^1] : 0;
+        bool distributions = width == network.Boundary || width == network.Boundary + 1;
+        var allLabels = new int[rows][];
+        for (int r = 0; r < rows; r++)
         {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                distributions ? new[] { perRow / width, width } : new[] { perRow });
+            allLabels[r] = Labels(row, network.Boundary);
+        }
+
+        TrainWithCustomObjective(input, target, (stepInput, _) =>
+        {
+            int stepRows = stepInput.Rank == 1 ? 1 : stepInput.Shape[0], stepSamples = stepInput.Length / stepRows;
             Tensor<T>? total = null;
-            foreach (var (waveform, labels) in batch)
+            for (int r = 0; r < stepRows; r++)
             {
-                var loss = network.Loss(network.Features(waveform), labels, training: true, _random).Total;
+                var wave = Row(stepInput, r, stepRows, stepSamples);
+                if (stepSamples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
+                var loss = network.Loss(network.FeatureTensor(wave), allLabels[r], training: true, _random).Total;
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / stepRows));
         }, _optimizer);
         return true;
     }
@@ -366,10 +389,21 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         var network = RequireNetwork();
         using var _ = new NoGradScope<T>();
-        var batch = Batch(input, target, network.Boundary);
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        int length = Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds);
+        int width = target.Rank >= 2 ? target.Shape[^1] : 0;
+        bool distributions = width == network.Boundary || width == network.Boundary + 1;
         double total = 0;
-        foreach (var (waveform, labels) in batch) total += NumOps.ToDouble(network.Loss(network.Features(waveform), labels).Total[0]);
-        return NumOps.FromDouble(total / batch.Length);
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                distributions ? new[] { perRow / width, width } : new[] { perRow });
+            var labels = Labels(row, network.Boundary);
+            var wave = Row(input, r, rows, samples);
+            if (samples != length) wave = Engine.TensorSlice(wave, new[] { 0 }, new[] { length });
+            total += NumOps.ToDouble(network.Loss(network.FeatureTensor(wave), labels).Total[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />

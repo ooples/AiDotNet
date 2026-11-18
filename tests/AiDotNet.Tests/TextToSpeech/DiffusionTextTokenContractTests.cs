@@ -46,11 +46,11 @@ public sealed class DiffusionTextTokenContractTests
     {
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
-        var half = TtsModelBase<Half>.ScaledCharacterCodes(engine, "�A￿", 3).ToArray();
+        var half = TtsModelBase<Half>.ScaledCharacterCodes(engine, "\uFFFDA\uFFFF", 3).ToArray();
         Assert.Equal(ops.ToDouble(ops.FromDouble(65533 / 128.0)), ops.ToDouble(half[0]));
         Assert.Equal(65 / 128.0, ops.ToDouble(half[1]));
         Assert.Equal(ops.ToDouble(ops.FromDouble(65535 / 128.0)), ops.ToDouble(half[2]));
-        var full = TtsModelBase<double>.ScaledCharacterCodes(engine, "�A￿", 3).ToArray();
+        var full = TtsModelBase<double>.ScaledCharacterCodes(engine, "\uFFFDA\uFFFF", 3).ToArray();
         Assert.Equal(new[] { 65533 / 128.0, 65 / 128.0, 65535 / 128.0 }, full);
     }
 }

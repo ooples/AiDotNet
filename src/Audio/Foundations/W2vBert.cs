@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.Audio.Foundations;
 
@@ -343,28 +344,33 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
         return Unbatch(input, network.Forward(network.Features(input), mask: null, training: true, _random).Final);
     }
 
-    private Tensor<T> PretrainingLoss(Tensor<T> input, bool training, Random random)
+    private Tensor<T> PretrainingLoss(
+        Tensor<T> input, bool training, Random random, int[,]? fixedCodes = null, bool[,]? preDrawnMask = null, int[,,]? preDrawnNegatives = null)
     {
         var network = RequireNetwork();
         var pretraining = RequirePretraining();
         var mel = network.Features(input);
         int batch = mel.Shape[0], length = network.EncodedLength(mel.Shape[1]);
-        var mask = network.DrawMask(batch, length, _options.MaskProbability, random);
+        var mask = preDrawnMask ?? network.DrawMask(batch, length, _options.MaskProbability, random);
         var output = network.Forward(mel, mask, training, random);
         // wav2vec 2.0's contrastive task on the context vectors, quantizing the unmasked encoded features.
         var asWav2Vec2 = new Wav2Vec2Network<T>.Output(output.Context, output.Features, output.BlockStates, output.Features, mask);
-        int[,]? codes = null;
+        int[,]? codes = fixedCodes;
         long key = 0;
-        if (_options.FixedDraw is not null)
+        if (_options.FixedDraw is not null && codes is null)
         {
             key = Fingerprint(input);
             _fixedDrawCodes.TryGetValue(key, out codes);
         }
-        var losses = pretraining.Loss(asWav2Vec2, pretraining.SampleNegatives(mask, random), training, random, codes);
-        if (_options.FixedDraw is not null && codes is null) _fixedDrawCodes[key] = losses.CodeIds;
-        var maskedPrediction = network.MaskedPredictionLoss(output, losses.CodeIds);
-        LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]),
-            NumOps.ToDouble(maskedPrediction[0]));
+        var negatives = preDrawnNegatives ?? pretraining.SampleNegatives(mask, random);
+        var losses = pretraining.Loss(asWav2Vec2, negatives, training, random, codes);
+        if (!GraphMode.IsActive && _options.FixedDraw is not null && codes is null) _fixedDrawCodes[key] = losses.CodeIds;
+        var maskedPrediction = network.MaskedPredictionLoss(output, losses.CodeIds, losses.CodeOneHot);
+        if (!GraphMode.IsActive)
+        {
+            LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]),
+                NumOps.ToDouble(maskedPrediction[0]));
+        }
         return Engine.TensorAdd(losses.Total, maskedPrediction);                                                  // β = γ = 1
     }
 
@@ -377,7 +383,38 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         var pretraining = RequirePretraining();
-        TrainWithCustomLoss(input, _ => PretrainingLoss(input, training: true, DrawRandom()), Optimizer());
+        var network = RequireNetwork();
+        var random = DrawRandom();
+        int[,]? codes = null;
+        long key = 0;
+        if (_options.FixedDraw is not null)
+        {
+            key = Fingerprint(input);
+            if (!_fixedDrawCodes.TryGetValue(key, out codes))
+            {
+                using (new NoGradScope<T>())
+                {
+                    var mel = network.Features(input);
+                    int batch = mel.Shape[0], length = network.EncodedLength(mel.Shape[1]);
+                    var mask = network.DrawMask(batch, length, _options.MaskProbability, random);
+                    var output = network.Forward(mel, mask, training: true, random);
+                    var asWav2Vec2 = new Wav2Vec2Network<T>.Output(output.Context, output.Features, output.BlockStates, output.Features, mask);
+                    var eagerLosses = pretraining.Loss(asWav2Vec2, pretraining.SampleNegatives(mask, random), training: true, random, fixedIds: null);
+                    codes = eagerLosses.CodeIds;
+                    _fixedDrawCodes[key] = codes;
+                }
+            }
+        }
+        bool[,] stepMask;
+        int[,,] stepNegatives;
+        using (new NoGradScope<T>())
+        {
+            var mel = network.Features(input);
+            int batch = mel.Shape[0], length = network.EncodedLength(mel.Shape[1]);
+            stepMask = network.DrawMask(batch, length, _options.MaskProbability, random);
+            stepNegatives = pretraining.SampleNegatives(stepMask, random);
+        }
+        TrainWithCustomObjective(input, expected, (stepInput, _) => PretrainingLoss(stepInput, training: true, random, codes, stepMask, stepNegatives), Optimizer());
         pretraining.AfterUpdate();
         return true;
     }

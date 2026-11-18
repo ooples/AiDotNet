@@ -1359,17 +1359,19 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             // Key j is in the future of query i when j > (seqKv - seqQ) + i.
             int keyOffset = seqKv - seqQ;
-            int[] planeShape = [seqQ, seqKv];
-            var lastAllowedKey = Engine.TensorBroadcastTo(
-                Engine.Reshape(Engine.TensorArange<int>(keyOffset, keyOffset + seqQ, 1), [seqQ, 1]), planeShape);
-            var keyIndex = Engine.TensorBroadcastTo(
-                Engine.Reshape(Engine.TensorArange<int>(0, seqKv, 1), [1, seqKv]), planeShape);
-            var negInf = new Tensor<T>(planeShape);
-            negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
-            plane = Engine.Reshape(
-                Engine.TensorWhere(Engine.TensorGreaterThan(keyIndex, lastAllowedKey).Cast<T>(), negInf, new Tensor<T>(planeShape)),
-                [1, seqQ, seqKv]);
+            var maskValues = new double[seqQ * seqKv];
+            for (int qi = 0; qi < seqQ; qi++)
+            {
+                int lastAllowed = keyOffset + qi;
+                int rowStart = qi * seqKv;
+                for (int kj = lastAllowed + 1; kj < seqKv; kj++)
+                {
+                    if (kj >= 0)
+                        maskValues[rowStart + kj] = double.NegativeInfinity;
+                }
+            }
 
+            plane = new Tensor<double>(maskValues, [1, seqQ, seqKv]).Cast<T>();
             planes = 1;
         }
         else
@@ -1378,7 +1380,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         // Tile to every (batch, head) slice; batch-major so slice b*H + h receives head h's plane.
-        var source = Engine.Reshape(plane.Contiguous(), [planes, seqQ, seqKv]);
+        var contiguousPlane = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? plane : plane.Contiguous();
+        var source = Engine.Reshape(contiguousPlane, [planes, seqQ, seqKv]);
         int repeats = (batchHeads + planes - 1) / planes;
         var tiled = Engine.TensorTile(source, [repeats, 1, 1]);
         return repeats * planes == batchHeads
@@ -1767,11 +1770,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // computes the same attention without ever materializing it.
         bool scoresNeeded = cacheForManualBackward || (UseAuxiliaryLoss && IsTrainingMode);
 
-        if (attentionDropoutActive && _attentionDropout is { } attentionDropout)
+        if ((attentionDropoutActive && _attentionDropout is not null)
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            // Training-time attention dropout: P = softmax(QK^T * scale + bias), context = Dropout(P) V.
-            // Every step is an engine op the gradient tape records, so the backward multiplies by the same
-            // mask the forward drew. The pre-dropout P is what the auxiliary losses and diagnostics read.
+            // Training-time attention dropout or GraphMode trace (Engine.FlashAttention has no GraphMode
+            // training recorder for non-float/causal attention): P = softmax(QK^T * scale + bias),
+            // context = Dropout(P) V (or P V when attention dropout is inactive).
             int bh = batchSize * _headCount;
             var q3 = Engine.Reshape(queries, [bh, attentionSeqLengthQ, attentionHeadDimension]);
             var kT3 = Engine.Reshape(
@@ -1787,9 +1791,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 logits = Engine.TensorAdd(logits, bias);
 
             var probabilities = Engine.Softmax(logits, -1);
-            var dropped = attentionDropout.Forward(probabilities);
+            var effectiveWeights = attentionDropoutActive && _attentionDropout is { } attentionDropout
+                ? attentionDropout.Forward(probabilities)
+                : probabilities;
             context_4D = Engine.Reshape(
-                Engine.BatchMatMul(dropped, v3),
+                Engine.BatchMatMul(effectiveWeights, v3),
                 [batchSize, _headCount, attentionSeqLengthQ, attentionHeadDimension]);
             attentionWeights4D = scoresNeeded
                 ? Engine.Reshape(probabilities, [batchSize, _headCount, attentionSeqLengthQ, attentionSeqLengthKV])

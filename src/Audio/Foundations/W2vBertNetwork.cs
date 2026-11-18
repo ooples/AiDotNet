@@ -118,21 +118,57 @@ internal sealed class W2vBertNetwork<T>
         {
             if (mask.GetLength(0) != batch || mask.GetLength(1) != length)
                 throw new ArgumentException($"The mask must be [{batch}, {length}].", nameof(mask));
-            var keep = new Tensor<T>(new[] { batch, length, d });
-            var noise = new Tensor<T>(new[] { batch, length, d });
-            for (int b = 0; b < batch; b++)
-                for (int t = 0; t < length; t++)
-                    for (int i = 0; i < d; i++)
-                    {
-                        if (!mask[b, t])
+            int total = batch * length * d;
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                Tensor<T> keep;
+                Tensor<T> drop;
+                using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                {
+                    var keepArr = new double[total];
+                    var dropArr = new double[total];
+                    for (int b = 0; b < batch; b++)
+                        for (int t = 0; t < length; t++)
                         {
-                            keep[b, t, i] = NumOps.One;
-                            continue;
+                            int rowOffset = (b * length + t) * d;
+                            if (!mask[b, t])
+                            {
+                                for (int i = 0; i < d; i++) keepArr[rowOffset + i] = 1.0;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < d; i++) dropArr[rowOffset + i] = 1.0;
+                            }
                         }
-                        double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                        noise[b, t, i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+                    keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                    drop = new Tensor<double>(dropArr, new[] { batch, length, d }).Cast<T>();
+                }
+                var stdNormal = AiDotNet.Training.CompiledStepRandom<T>.StandardNormal(new[] { batch, length, d }, random);
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), _engine.TensorMultiply(stdNormal, drop));
+            }
+            else
+            {
+                var keepArr = new double[total];
+                var noiseArr = new double[total];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                    {
+                        int rowOffset = (b * length + t) * d;
+                        for (int i = 0; i < d; i++)
+                        {
+                            if (!mask[b, t])
+                            {
+                                keepArr[rowOffset + i] = 1.0;
+                                continue;
+                            }
+                            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+                            noiseArr[rowOffset + i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+                        }
                     }
-            input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), noise);
+                var keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                var noise = new Tensor<double>(noiseArr, new[] { batch, length, d }).Cast<T>();
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), noise);
+            }
         }
         var states = new List<Tensor<T>>();
         var h = _engine.Reshape(ContrastiveProjection.Forward(_engine.Reshape(input, new[] { batch * length, d })), new[] { batch, length, d });
@@ -156,14 +192,34 @@ internal sealed class W2vBertNetwork<T>
 
     /// <summary>The masked-prediction loss (§3.2): the cross-entropy of each masked step's assigned codebook entry,
     /// summed over the masked steps.</summary>
-    public Tensor<T> MaskedPredictionLoss(Output output, int[,] targets)
+    public Tensor<T> MaskedPredictionLoss(Output output, int[,] targets, Tensor<T>? codeOneHot = null)
     {
         var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
         var logProbabilities = _engine.TensorLogSoftmax(output.Logits, axis: -1);
-        var weights = new Tensor<T>(output.Logits._shape);
-        for (int b = 0; b < mask.GetLength(0); b++)
-            for (int t = 0; t < mask.GetLength(1); t++)
-                if (mask[b, t]) weights[b, t, targets[b, t]] = NumOps.FromDouble(-1.0);
+        Tensor<T> weights;
+        if (codeOneHot is not null)
+        {
+            int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
+            Tensor<T> maskScale;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var maskScaleArr = new double[batch * length];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                        if (mask[b, t]) maskScaleArr[b * length + t] = -1.0;
+                maskScale = new Tensor<double>(maskScaleArr, new[] { batch, length, 1 }).Cast<T>();
+            }
+            weights = _engine.TensorMultiply(codeOneHot, _engine.TensorTile(maskScale, new[] { 1, 1, vocab }));
+        }
+        else
+        {
+            int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
+            var weightsArr = new double[batch * length * vocab];
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < length; t++)
+                    if (mask[b, t]) weightsArr[(b * length + t) * vocab + targets[b, t]] = -1.0;
+            weights = new Tensor<double>(weightsArr, output.Logits._shape).Cast<T>();
+        }
         return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, weights), new[] { 0, 1, 2 }, keepDims: false);
     }
 }

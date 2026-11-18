@@ -101,7 +101,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         using (new Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             if (_network is null) tokens = ConformerAsrNetwork<T>.GreedyCtc(Logits(waveform));
-            else tokens = _network.Greedy(_network.Encode(_network.Features(waveform)), _options.MaxTextLength);
+            else tokens = _network.Greedy(_network.Encode(_network.FeatureTensor(waveform)), _options.MaxTextLength);
         }
         return new TranscriptionResult<T>
         {
@@ -153,16 +153,13 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         if (_network is null) return base.PreprocessAudio(rawAudio);
         int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return rawAudio.Length == length ? rawAudio : Engine.TensorSlice(rawAudio, new[] { 0 }, new[] { length });
     }
 
-    private Tensor<T> Samples(Tensor<T> waveform, int offset, int count)
+    private Tensor<T> Row(Tensor<T> tensor, int r, int rows, int cols)
     {
-        var samples = new Tensor<T>(new[] { count });
-        waveform.Data.Span.Slice(offset, count).CopyTo(samples.Data.Span);
-        return samples;
+        if (rows == 1) return tensor.Rank == 1 ? tensor : Engine.Reshape(tensor, new[] { cols });
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(tensor, new[] { rows, cols }), new[] { r, 0 }, new[] { 1, cols }), new[] { cols });
     }
 
     // The decoder's logits [1, labels] for the first integrated embedding of a waveform [S] (the whole weight integrated
@@ -175,7 +172,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var outputs = new Tensor<T>[rows];
         for (int r = 0; r < rows; r++)
         {
-            var encoded = _network.Encode(_network.Features(Samples(input, r * samples, samples)));
+            var encoded = _network.Encode(_network.FeatureTensor(Row(input, r, rows, samples)));
             var logits = _network.Decode(ParaformerNetwork<T>.Integrate(Engine, encoded, _network.Alphas(encoded), 1));
             outputs[r] = logits;
         }
@@ -223,7 +220,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
-            var loss = network.Loss(network.Encode(network.Features(Samples(input, r * samples, samples))), labels[r]);
+            var loss = network.Loss(network.Encode(network.FeatureTensor(Row(input, r, rows, samples))), labels[r]);
             total = total is null ? loss : Engine.TensorAdd(total, loss);
         }
         return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
@@ -236,7 +233,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var network = _network;
         if (network is null) return false;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, labels));
+        TrainWithCustomObjective(input, target, (stepInput, _) => BatchLoss(network, stepInput, labels), _optimizer);
         return true;
     }
 

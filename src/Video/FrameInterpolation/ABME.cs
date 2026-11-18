@@ -383,7 +383,7 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     // SBMENet and ABMRNet have pre-trained Stage-1/2 flows; ramping from the single-pair Goyal
     // batch-scaled rate (lr / ReferenceBatchSize) to the full batch-N paper rate over the first
     // 200 steps prevents unscaled first-step Adam sign jumps from flipping 20x-scaled border flows.
-    private const int ColdStartWarmupSteps = 200;
+    private const int ColdStartWarmupSteps = 40;
 
     private static int ReferenceBatchSize(AbmeTrainingStage stage) => stage switch
     {

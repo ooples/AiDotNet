@@ -685,10 +685,11 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             for (int sample = 0; sample < audioList.Count; sample++)
             {
                 var mask = maskList[sample];
-                T loss = TrainWithCustomObjective(audioList[sample], FlattenToPatches(visualList[sample]), (waveform, framePatches) =>
+                var spectrogram = ComputeSpectrogram(audioList[sample], _audioSampleRate);
+                T loss = TrainWithCustomObjective(spectrogram, FlattenToPatches(visualList[sample]), (spec, framePatches) =>
                 {
                     // Mirrors SeparateAudioByVisual: pooled (unnormalized) encoder features into the fusion trunk.
-                    var audioPooled = PoolFeatures(ApplyAudioEncoder(ComputeSpectrogram(waveform, _audioSampleRate)));
+                    var audioPooled = PoolFeatures(ApplyAudioEncoder(spec));
                     var visualPooled = PoolFeatures(ApplyVisualPatches(framePatches));
                     var pairFeatures = Engine.TensorConcatenate(new[] { audioPooled, visualPooled }, axis: 0);
                     var probabilities = Engine.Sigmoid(GetSeparationHead().Forward(ApplyPairTrunk(pairFeatures)));

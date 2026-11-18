@@ -270,7 +270,9 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         // cannot capture that op at all, so it pools with the capturable Engine.MaxPool2D: otherwise the compiled
         // plan's buffers stayed resident after ReleaseCompiledPlans.
         var output4D = IsTrainingMode
-            ? Engine.MaxPool2DWithTensorIndices(input4D, new[] { PoolSize, PoolSize }, new[] { Stride, Stride }, out _)
+            ? (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                ? Engine.MaxPool2DWithIndices(input4D, new[] { PoolSize, PoolSize }, new[] { Stride, Stride }, out _)
+                : Engine.MaxPool2DWithTensorIndices(input4D, new[] { PoolSize, PoolSize }, new[] { Stride, Stride }, out _))
             : Engine.MaxPool2D(input4D, PoolSize, Stride);
 
         // Return with matching dimensions to preserve original tensor rank

@@ -416,8 +416,9 @@ internal sealed class MegaTts3Dit<T>
                     if (!keyMask[i, k]) bias[i, 0, 0, k] = NumOps.FromDouble(double.NegativeInfinity);
         foreach (var block in Blocks) x = RunBlock(block, x, time, cos, sin, bias);
         var modulation = OutputModulation.Forward(_engine.Swish(time));
-        var scale = _engine.TensorSlice(modulation, new[] { 0, 0 }, new[] { b, h });
-        var shift = _engine.TensorSlice(modulation, new[] { 0, h }, new[] { b, h });
+        var mod = _engine.Reshape(modulation, new[] { b, 2, h });
+        var scale = _engine.TensorSliceAxis(mod, 1, 0);
+        var shift = _engine.TensorSliceAxis(mod, 1, 1);
         x = Modulate(MegaTts3Ops.PlainLayerNorm(_engine, x, 1e-6), scale, shift);
         x = MegaTts3Ops.Rows(_engine, OutputProjection, x);
         return MegaTts3Ops.Rows(_engine, Postnet, x);
@@ -443,7 +444,8 @@ internal sealed class MegaTts3Dit<T>
     {
         int b = x.Shape[0], frames = x.Shape[1], h = Configuration.Width, heads = Configuration.Heads, hd = h / heads;
         var modulation = block.Modulation.Forward(_engine.Swish(time));
-        Tensor<T> Chunk(int i) => _engine.TensorSlice(modulation, new[] { 0, i * h }, new[] { b, h });
+        var mod = _engine.Reshape(modulation, new[] { b, 6, h });
+        Tensor<T> Chunk(int i) => _engine.TensorSliceAxis(mod, 1, i);
         var normed = Modulate(MegaTts3Ops.PlainLayerNorm(_engine, x, 1e-6), Chunk(1), Chunk(0));
         Tensor<T> Heads(DenseLayer<T> projection, bool rotate)
         {
@@ -489,14 +491,15 @@ internal sealed class MegaTts3Dit<T>
         var shape = x.Shape.ToArray();
         int b = shape[0], frames = shape[1], heads = shape[2], hd = shape[3], half = hd / 2;
         var pairs = _engine.Reshape(x, new[] { b, frames, heads, half, 2 });
-        var re = _engine.Reshape(_engine.TensorSlice(pairs, new[] { 0, 0, 0, 0, 0 }, new[] { b, frames, heads, half, 1 }), new[] { b, frames, heads, half });
-        var im = _engine.Reshape(_engine.TensorSlice(pairs, new[] { 0, 0, 0, 0, 1 }, new[] { b, frames, heads, half, 1 }), new[] { b, frames, heads, half });
+        var re = _engine.TensorSliceAxis(pairs, 4, 0);
+        var im = _engine.TensorSliceAxis(pairs, 4, 1);
         var c = _engine.TensorBroadcastTo(cos, new[] { b, frames, heads, half });
         var s = _engine.TensorBroadcastTo(sin, new[] { b, frames, heads, half });
         var outRe = _engine.TensorSubtract(_engine.TensorMultiply(re, c), _engine.TensorMultiply(im, s));
         var outIm = _engine.TensorAdd(_engine.TensorMultiply(re, s), _engine.TensorMultiply(im, c));
-        return _engine.Reshape(_engine.TensorConcatenate(new[] { _engine.Reshape(outRe, new[] { b, frames, heads, half, 1 }),
-            _engine.Reshape(outIm, new[] { b, frames, heads, half, 1 }) }, 4), shape);
+        var outRe5 = _engine.Reshape(outRe, new[] { b, frames, heads, half, 1 });
+        var outIm5 = _engine.Reshape(outIm, new[] { b, frames, heads, half, 1 });
+        return _engine.Reshape(_engine.TensorConcatenate(new[] { outRe5, outIm5 }, 4), shape);
     }
 
     /// <summary><c>_forward</c>'s multi-condition CFG: the predictions for (speaker and text, text, neither) combined as

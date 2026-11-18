@@ -268,8 +268,41 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         var network = _network;
         if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        if (rows == 0) throw new ArgumentException("No audio.", nameof(input));
+        var rowFeatures = new Tensor<T>[rows];
+        var rowLabels = new int[rows][];
+        bool isCtc = _options.TrainingStage == GraniteSpeechTrainingStage.EncoderCtc;
+        for (int r = 0; r < rows; r++)
+        {
+            rowFeatures[r] = network.Features(Samples(Row(input, r, rows)));
+            var labelsOf = Row(target, r, rows);
+            rowLabels[r] = isCtc
+                ? Labels(labelsOf, _options.CtcVocabSize, GraniteSpeechNetwork<T>.Blank)
+                : Labels(labelsOf, _options.VocabSize, network.EndToken);
+        }
         network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true)); }
+        try
+        {
+            TrainWithCustomObjective(rowFeatures[0], target, (_, _) =>
+            {
+                Tensor<T>? total = null;
+                for (int r = 0; r < rows; r++)
+                {
+                    Tensor<T> loss = isCtc
+                        ? network.CtcLoss(rowFeatures[r], rowLabels[r], training: true)
+                        : network.Loss(
+                            network.Prompt(
+                                network.Project(network.Encode(rowFeatures[r], training: true).Hidden),
+                                _options.SystemPrompt,
+                                _options.Instruction),
+                            rowLabels[r]);
+                    loss = Engine.Reshape(loss, new[] { 1 });
+                    total = total is null ? loss : Engine.TensorAdd(total, loss);
+                }
+                return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            });
+        }
         finally { network.Llm.Training = false; }
         return true;
     }

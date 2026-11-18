@@ -134,10 +134,11 @@ public static class PolicyDistributionHelper<T>
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (logProbs is null) throw new ArgumentNullException(nameof(logProbs));
 
-        var probs = engine.TensorExp(logProbs);
+        var finiteMask = engine.TensorIsFinite(logProbs);
         var zeros = engine.TensorZerosLike(logProbs);
-        var safeLogProbs = engine.TensorWhere(probs, logProbs, zeros);
-        var pLogP = engine.TensorMultiply(probs, safeLogProbs);
+        var safeLogProbs = engine.TensorWhere(finiteMask, logProbs, zeros);
+        var safeProbs = engine.TensorWhere(finiteMask, engine.TensorExp(safeLogProbs), zeros);
+        var pLogP = engine.TensorMultiply(safeProbs, safeLogProbs);
         var negPLogP = engine.TensorNegate(pLogP);
 
         // Sum over action dimension (axis 1) to get per-sample entropy

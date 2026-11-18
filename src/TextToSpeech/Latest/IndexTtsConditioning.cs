@@ -430,8 +430,10 @@ internal sealed class IndexTtsPerceiver<T>
                 ActivationHelper.ExactGelu(_engine.TensorNarrow(h, 1, _feedForward, _feedForward), _engine));
             latents = _engine.TensorAdd(layer.FeedForward2.Forward(gated), latents);
         }
+        T eps = NumOps.FromDouble(1e-12);
+        if (NumOps.Equals(eps, NumOps.Zero)) eps = NumOps.FromDouble(1e-4);
         var norm = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(latents, latents), new[] { 1 }, true));
-        norm = _engine.TensorMax(norm, NumOps.FromDouble(1e-12));
+        norm = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorAddScalar(norm, NumOps.Negate(eps))), eps);
         var normalized = _engine.TensorDivide(latents, _engine.TensorBroadcastTo(norm, new[] { _latents, _dim }));
         var gamma = _engine.TensorBroadcastTo(_engine.Reshape(IndexTtsOps.Value(Gamma), new[] { 1, _dim }), new[] { _latents, _dim });
         return _engine.TensorMultiply(_engine.TensorMultiplyScalar(normalized, NumOps.FromDouble(Math.Sqrt(_dim))), gamma);

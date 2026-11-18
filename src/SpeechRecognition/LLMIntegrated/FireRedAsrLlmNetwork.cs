@@ -87,6 +87,17 @@ internal sealed class FireRedAsrLlmNetwork<T> : ILayerAliasOwner<T>
         return Adapter2.Forward(_engine.ReLU(Adapter1.Forward(spliced)));
     }
 
+    /// <summary>The adapter's output given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
+        int frames = encoded.Shape[0] / DownsampleRate * DownsampleRate;
+        if (frames == 0) throw new ArgumentException($"The recording is shorter than {DownsampleRate} encoder frames.", nameof(waveform));
+        var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });
+        var spliced = _engine.Reshape(kept, new[] { frames / DownsampleRate, EncoderWidth * DownsampleRate });
+        return Adapter2.Forward(_engine.ReLU(Adapter1.Forward(spliced)));
+    }
+
     /// <summary>
     /// The prompt embeddings <c>[L, LLM width]</c> (the release's <c>preprocess_texts</c> template, no system message):
     /// <c>&lt;|im_start|&gt;user\n</c>, the adapter's output in place of <c>&lt;speech&gt;</c>, then

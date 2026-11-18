@@ -78,7 +78,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// otherwise one-hot an invalid label of a later batch to an all-zero row and drop the sample without an error.
     /// Does nothing until this loss has one-hot encoded index labels, or for a target that is already one-hot.
     /// </summary>
-    internal void ValidateIndexTargetOutsidePlan(Tensor<T> target)
+    internal virtual void ValidateIndexTargetOutsidePlan(Tensor<T> target)
     {
         if (_indexTargetPredictedRank < 0 || target is null || target.Shape.Length != _indexTargetPredictedRank - 1)
             return;
@@ -196,6 +196,19 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     // Every target value must be an integer class index in [0, numClasses).
     private void ValidateClassIndices(Tensor<T> target, int numClasses)
     {
+        if (target.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                ValidateClassIndicesCore(target, numClasses);
+            return;
+        }
+
+        ValidateClassIndicesCore(target, numClasses);
+    }
+
+    private void ValidateClassIndicesCore(Tensor<T> target, int numClasses)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Validate every target value at once: it must be an integer class index in [0, numClasses).
         // A value is not an integer class index when it has a fractional part (NaN included) or lies
         // outside the int range, where the old (int) cast could not represent it.

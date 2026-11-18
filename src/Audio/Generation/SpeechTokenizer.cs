@@ -253,7 +253,11 @@ public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
         foreach (var scale in _melScales!)
         {
             Tensor<T> target;
-            using (new NoGradScope<T>()) target = Detached(scale.Forward(x));
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            using (new NoGradScope<T>())
+            {
+                target = Detached(scale.Forward(x));
+            }
             var d = Engine.TensorSubtract(target, scale.Forward(y));
             terms.Add(Engine.TensorAdd(Mean(Engine.TensorAbs(d)), Mean(Engine.TensorMultiply(d, d))));
         }
@@ -274,15 +278,30 @@ public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
         var o = PaperOptions;
         var fake = Discriminate(generated);
         List<(Tensor<T> Logits, List<Tensor<T>> Features)> realOut;
-        using (new NoGradScope<T>()) realOut = Discriminate(real);
+        var realDetached = new List<List<(Tensor<T> Feature, double Scale)>>();
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        using (new NoGradScope<T>())
+        {
+            realOut = Discriminate(real);
+            for (int k = 0; k < fake.Count; k++)
+            {
+                var layerList = new List<(Tensor<T> Feature, double Scale)>(fake[k].Features.Count);
+                for (int l = 0; l < fake[k].Features.Count; l++)
+                {
+                    var r = Detached(realOut[k].Features[l]);
+                    double scale = NumOps.ToDouble(Mean(Engine.TensorAbs(r))[0]);
+                    layerList.Add((r, scale));
+                }
+                realDetached.Add(layerList);
+            }
+        }
         var adversarial = Engine.TensorMultiplyScalar(
             Sum(fake.Select(f => Mean(Engine.ReLU(Engine.TensorAddScalar(Engine.TensorNegate(f.Logits), NumOps.One))))), NumOps.FromDouble(1.0 / fake.Count));
         var featureTerms = new List<Tensor<T>>();
         for (int k = 0; k < fake.Count; k++)
             for (int l = 0; l < fake[k].Features.Count; l++)
             {
-                var r = Detached(realOut[k].Features[l]);
-                double scale = NumOps.ToDouble(Mean(Engine.TensorAbs(r))[0]);
+                var (r, scale) = realDetached[k][l];
                 featureTerms.Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))),
                     NumOps.FromDouble(1.0 / Math.Max(scale, 1e-12))));
             }
