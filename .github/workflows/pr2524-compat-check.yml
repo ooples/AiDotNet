@@ -1,0 +1,40 @@
+name: PR2524 compatibility qualification
+
+on:
+  push:
+    branches:
+      - codex/2524-compat-finiteness-f37fe8b
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: f37fe8b47daac7307bdf407b680497e6939460df
+      - name: Verify the exact fix source
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = f37fe8b47daac7307bdf407b680497e6939460df
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        with:
+          dotnet-version: 10.0.x
+      - name: Set up qualified Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ secrets.AUTOFIX_PAT }}
+      - name: Restore
+        run: dotnet restore
+      - name: Build generator
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+      - name: Run the unchanged PR compatibility build
+        run: >-
+          dotnet build -c Release --no-restore -m:2
+          -p:RunAnalyzers=false -p:CompatBuildOnly=true
+          -p:PackageVersion=0.204.0-ci.gf37fe8b47daac7307bdf407b680497e6939460df
+          -p:CompatNet471Only=true
