@@ -46,7 +46,9 @@ test('real customer tokens cannot bypass profile, key or usage boundaries', asyn
       const response = await request.post(`${url}/rest/v1/api_usage`, {
         headers: token ? headers(token) : { apikey: anon }, data: { user_id: owner.id, endpoint: '/e2e-forged' },
       });
-      expect(response.status(), 'untrusted usage insertion is denied').toBe(403);
+      // PostgREST maps insufficient privileges to 401 without a customer JWT.
+      expect(response.status(), 'untrusted usage insertion is denied').toBe(token ? 403 : 401);
+      expect((await response.json()).code, 'the database denies the write').toBe('42501');
     }
   } finally {
     const cleanup = await Promise.allSettled(users.map(user => deleteUser(request as APIRequestContext, user.id)));
