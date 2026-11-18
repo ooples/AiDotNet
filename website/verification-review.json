@@ -1,25 +1,23 @@
 {
   "reviewed_on": "2026-11-17",
   "baseline_commit": "f9f5daae24da0723084ae85d02079bbb89365d26",
-  "release_verified": false,
   "verification_results": {
     "preview_browser": {
-      "passed": 430,
+      "passed": 450,
       "failed": 0,
       "skipped": 6,
-      "duration": "2.7 minutes",
-      "report": "playwright-report/preview/index.html",
-      "note": "Isolated fixture build; six duplicate/inapplicable viewport checks skipped. Real-backend projects run separately."
+      "duration": "3.0 minutes",
+      "scope": "Isolated fixture build; real backend outcomes verified separately."
     },
     "backend_handler_contracts": {
-      "passed": 32,
+      "passed": 60,
       "failed": 0,
-      "scope": "Real handler bodies with external boundary doubles, plus client billing cancellation state"
+      "scope": "Actual handler bodies with external boundary doubles, redirect normalization and deployment-configuration contracts."
     },
     "postgres_policy_tests": {
-      "passed": 20,
+      "passed": 24,
       "failed": 0,
-      "scope": "Disposable local PostgreSQL; baseline owner-to-admin escalation reproduced before applying the migration"
+      "scope": "Disposable PostgreSQL 17; legacy escalation and public usage writes reproduced before applying the migration; protected fields, restrictive policies and atomic migration history verified."
     },
     "frontend_type_check": {
       "errors": 0,
@@ -27,7 +25,6 @@
       "hints": 26
     },
     "git_diff_check": "passed",
-    "deployed": true,
     "deployed_baseline": {
       "run": "https://github.com/ooples/AiDotNet/actions/runs/44153686945",
       "passed": 437,
@@ -43,9 +40,9 @@
       "note": "Actual issue, email, resend, SDK validation, revoke, online rejection and signed CRL checks passed. This targeted report is replaced by later deployed runs."
     },
     "crawler_regressions": {
-      "passed": 6,
+      "passed": 12,
       "failed": 0,
-      "note": "Nested-state blocking and delayed auth stylesheet regressions failed before their respective fixes; inert actions, depth limit, duplicate covered rows and handler cleanup are also checked."
+      "scope": "Eleven regressions passed together, including fresh-login and restored-session request sequencing; the additional cleanup-ownership regression passed separately after the final cleanup-only change."
     },
     "phone_license_regression": {
       "passed": 2,
@@ -62,58 +59,129 @@
       "note": "Real portal cancellation, plan presentation, account deletion and remaining plan personas all passed with a card-free disposable trial."
     },
     "preview_build": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44211019348",
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44229642638",
       "build_job": "passed",
       "built_routes": 12222,
-      "application_commit": "b026af8cf70fee6a26d348d4c0e28dfcc39de178",
-      "note": "Build, typecheck, 32 backend checks and deployment passed. The old browser matrix was canceled and replaced after a crawler-only fix."
+      "application_commit": "8d01bc788",
+      "note": "Source check, 60 handler checks, full build and preview deployment succeeded. The older test matrix was canceled after deployment to run the latest harness separately."
     },
     "deployed_full_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44215401897",
-      "test_commit": "efc5ae59cbef591db1bf18ea3e16e3a9c91564a3",
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44232839623",
+      "test_commit": "16af5261481e307e02394b2f78213c8be59bba53",
+      "application_commit": "8d01bc788",
       "status": "passed",
       "conclusion": "success",
       "parts": {
-        "pro-stripe": "passed",
+        "suite": {
+          "passed": 447,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 6,
+          "total": 453,
+          "did_not_run": 0,
+          "duration_ms": 478067,
+          "ok": true,
+          "global_errors": 0
+        },
+        "anon": {
+          "passed": 2,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "total": 2,
+          "did_not_run": 0,
+          "duration_ms": 528070,
+          "ok": true,
+          "global_errors": 0
+        },
+        "free": {
+          "passed": 2,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "total": 2,
+          "did_not_run": 0,
+          "duration_ms": 223329,
+          "ok": true,
+          "global_errors": 0
+        },
+        "pro-stripe": {
+          "passed": 2,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "total": 2,
+          "did_not_run": 0,
+          "duration_ms": 249636,
+          "ok": true,
+          "global_errors": 0
+        },
+        "pro-granted": {
+          "passed": 2,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "total": 2,
+          "did_not_run": 0,
+          "duration_ms": 219998,
+          "ok": true,
+          "global_errors": 0
+        },
+        "admin": {
+          "passed": 2,
+          "failed": 0,
+          "flaky": 0,
+          "skipped": 0,
+          "total": 2,
+          "did_not_run": 0,
+          "duration_ms": 524980,
+          "ok": true,
+          "global_errors": 0
+        }
+      },
+      "suite": {
+        "passed": 447,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 6,
+        "total": 453,
+        "did_not_run": 0,
+        "duration_ms": 478067,
+        "ok": true,
+        "global_errors": 0
+      },
+      "crawl_scope": "Each of the five persona jobs contains preview authorization and one crawl test covering desktop plus Pixel 5. There are zero failures, flaky retries, global errors or unrun checks.",
+      "local_html_reports": "playwright-report/verification-16af52614/<part>/deployed/index.html"
+    },
+    "deployed_suite": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44232839623/job/134562450342",
+      "passed": 447,
+      "failed": 0,
+      "flaky": 0,
+      "skipped": 6,
+      "total": 453,
+      "did_not_run": 0,
+      "duration_ms": 478067,
+      "ok": true,
+      "global_errors": 0,
+      "note": "Six intentional duplicate/inapplicable viewport skips. Real RLS, license email, delayed payment, later cancellation and deletion checks passed."
+    },
+    "previous_full_matrix": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44230709878",
+      "status": "failure",
+      "suite": {
+        "passed": 447,
+        "failed": 0,
+        "skipped": 6
+      },
+      "parts": {
         "anon": "passed",
         "free": "passed",
         "pro-granted": "passed",
-        "suite": "passed",
-        "admin": "passed"
-      },
-      "suite": {
-        "run": "https://github.com/ooples/AiDotNet/actions/runs/44215401897/job/134503871670",
-        "passed": 442,
-        "failed": 0,
-        "skipped": 6,
-        "did_not_run": 0,
-        "duration": "9.3m",
-        "note": "Six skips are duplicate/inapplicable viewport checks; real cancellation, license email and the phone license form passed."
-      },
-      "crawl_scope": "All five persona tests exercise desktop and Pixel 5 contexts; each crawl job also includes one preview-authorization setup.",
-      "local_html_reports": "playwright-report/verification-efc5ae59c/<part>/deployed/index.html"
-    },
-    "deployed_suite": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44215401897/job/134503871670",
-      "passed": 442,
-      "failed": 0,
-      "skipped": 6,
-      "did_not_run": 0,
-      "duration": "9.3m",
-      "note": "Six skips are duplicate/inapplicable viewport checks; real cancellation, license email and the phone license form passed."
-    },
-    "previous_full_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44213477733",
-      "status": "failure",
-      "parts": {
-        "suite": "passed",
-        "free": "passed",
-        "anon": "passed",
-        "admin": "passed",
         "pro-stripe": "failed",
-        "pro-granted": "failed"
+        "admin": "failed"
       },
-      "note": "Both Pro crawls recorded unstyled desktop-only navigation during a phone login transition; fixed by destination load waits and a regression that reproduced interactive readiness."
+      "note": "Both failed crawls interrupted pending Supabase Auth bootstrap requests during forced navigation. Fresh-login and restored-session regressions reproduced the gap; corrected sequencing passes the complete replacement matrix."
     },
     "expected_skips": [
       "Desktop projects omit phone-only menu and documentation navigation checks (2).",
@@ -121,33 +189,70 @@
       "Full documentation and generated-reference inventories run once rather than duplicating HTTP checks in the mobile project (2)."
     ],
     "test_fixture_cleanup": {
-      "owned_accounts_removed": 8,
-      "remaining_owned_accounts": 0,
-      "guard": "Exact recorded UUIDs and E2E inbox prefix; owned licenses revoked before Auth deletion.",
-      "note": "Standing CI seed users retained; persona and Stripe cleanup remains part of the suite, with existing nightly cleanup for abandoned runs."
+      "earlier_manually_removed_owned_accounts": 8,
+      "additional_orphan_signup_accounts_removed": 4,
+      "remaining_recent_owned_accounts_before_cleanup_verification": 0,
+      "automatic_cleanup_fix": "Exact randomly minted signup emails are tracked across both crawler contexts and cleaned in finally; existing form emails are ineligible.",
+      "verification_run": "https://github.com/ooples/AiDotNet/actions/runs/44235042352",
+      "verification_status": "passed",
+      "test_commit": "1678c5d247d3cc1da1833845618a399566e2a26d",
+      "anonymous_rerun": {
+        "passed": 2,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "total": 2,
+        "did_not_run": 0,
+        "duration_ms": 435113,
+        "ok": true,
+        "global_errors": 0
+      },
+      "observed_fixture_count_during_run": 1,
+      "remaining_recent_owned_accounts_after_run": 0,
+      "note": "Supabase read-only checks observed a signup user during the crawl and zero recent test users after automatic cleanup. Four earlier orphan fixtures were removed using exact UUID, label, no-customer and no-license guards."
     },
     "generated_api_reference": {
       "built_routes": 12222,
       "deployed_reference_http_and_heading_checks": "passed"
-    }
+    },
+    "preview_frontend_deployed": true,
+    "shared_backend_production_writes_performed": true,
+    "production_writes_performed": true,
+    "shared_backend_deployment": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44229385875",
+      "migration": "20261117000000",
+      "migration_applied": true,
+      "functions": {
+        "billing-portal": 11,
+        "stripe-webhook": 16
+      },
+      "deployed_source_matches": true,
+      "stripe_event_configuration": "Owner confirmed the existing webhook event subscription was updated. Independent configuration inspection is unavailable with the restricted key (HTTP 403).",
+      "mail_credentials": "Installed function credentials preserved; token cannot read/write secrets. Real license-email journey verifies actual API acceptance.",
+      "note": "Source verification, migration and both function deployment steps succeeded. Overall run failed only on the separate Stripe endpoint-configuration check.",
+      "real_customer_token_rls": "passed",
+      "delayed_payment_and_cancellation": "passed with a real card-free Stripe trial and signed injected events",
+      "license_email": "actual issue and resend API acceptance passed; mailbox receipt is outside scope"
+    },
+    "known_cleanup_html_report": "playwright-report/verification-1678c5d24/anon/deployed/index.html"
   },
-  "scope": "Adversarial review of website, browser coverage, and checkout webhook; isolated preview verification first",
+  "scope": "Adversarial review, fixes, shared-backend security deployment and existing-preview user automation; production frontend awaits PR review and merge.",
   "existing_preview_environment": {
     "url": "https://test.aidotnet.dev",
     "access_observed": "Existing protected preview is accessible with a same-origin automation cookie and includes all 12222 built routes.",
     "backend": "Existing shared Supabase project yfkqwpgjahoamlgckjib; no new branch or paid environment created.",
-    "deployment_url": "https://aidotnetwebsite-9u4s9i3v3-franklins-projects-02a0b5a0.vercel.app"
+    "deployment_url": "https://aidotnetwebsite-7lkkx4t9d-franklins-projects-02a0b5a0.vercel.app"
   },
   "findings": [
     {
       "severity": "critical",
       "problem": "Deployed legacy admin_update_all_profiles permits owners to update their own role and billing fields; permissive policies OR together, bypassing the stricter policy. API key update policies also bypass immutable-field checks, and api_usage permits public INSERT.",
-      "status": "Migration prepared and verified locally; not applied remotely",
+      "status": "Applied to the shared backend; all 24 PostgreSQL checks and real customer-token profile/key/usage boundaries passed.",
       "implementation": "supabase/migrations/20261117000000_close_legacy_policy_bypasses.sql",
       "tests": [
         "tests/database/rls.test.mjs"
       ],
-      "evidence": "Read-only pg_policies inspection of the deployed database, followed by reproducing owner-to-admin escalation in disposable PostgreSQL using the observed policy combination. Twenty post-fix tests cover protected fields, normal profile saves, multi-key revocation, admin operations, service writes, email sync, and forged usage."
+      "evidence": "Twenty-four PostgreSQL tests plus remote history, trigger and grants inspection. Anonymous usage insertion returned HTTP 401 and PostgreSQL 42501 after deployment."
     },
     {
       "severity": "high",
@@ -162,7 +267,7 @@
     {
       "severity": "high",
       "problem": "Login accepted external redirect destinations; callback path checks allowed backslash/control-character origin escapes.",
-      "status": "Deployed to preview and browser regressions passed",
+      "status": "Normalized-path escape fixed; unit and hosted login/callback regressions passed on the refreshed preview.",
       "implementation": "src/lib/redirect.ts",
       "tests": [
         "tests/e2e/auth/callback.spec.ts",
@@ -172,18 +277,18 @@
     {
       "severity": "high",
       "problem": "An unpaid Checkout completion granted entitlements; checkout.session.async_payment_succeeded was ignored.",
-      "status": "fixed locally",
+      "status": "Deployed as stripe-webhook v16; unpaid, delayed success, replay and cancellation behavior passed against the real backend.",
       "implementation": "supabase/functions/stripe-webhook/index.ts",
       "tests": [
         "tests/backend/stripe-webhook.test.mjs"
       ],
-      "remaining": "The deployed Stripe endpoint must subscribe to checkout.session.async_payment_succeeded. The handler tests use boundary doubles, not live Stripe or a database.",
+      "remaining": "Owner confirmed the Stripe event subscription update; independent dashboard configuration reads are unavailable with the restricted key.",
       "reference": "https://docs.stripe.com/checkout/fulfillment.md?ui=full-page"
     },
     {
       "severity": "high",
       "problem": "Crawler handlers leaked across passes; request emission and unsuccessful clipboard operations could count as success; unexplored visible controls could be silently omitted.",
-      "status": "Fixed coverage gates, duplicate-row replay, nested-state tracking and destination readiness; six local regressions and all five hosted desktop/phone persona crawls pass.",
+      "status": "Coverage, errors, response completion, representative selection and both session-bootstrap paths are fixed; all five hosted desktop/phone crawls passed.",
       "implementation": "tests/e2e/helpers/crawler.ts",
       "tests": [
         "tests/e2e/crawler.spec.ts"
@@ -253,12 +358,11 @@
     }
   ],
   "integration_requirements": [
-    "Apply the reviewed RLS migration and unpaid-Checkout handler correction in a controlled backend release; neither has been applied remotely.",
-    "Mailbox receipt, a settled Stripe test-mode payment, and third-party OAuth consent remain outside the current generated-link, signed-event, card-free trial and provider-handoff checks."
+    "Production frontend deployment follows review and merge; it was not performed here."
   ],
   "known_test_substitutions": [
     "Preview billing tests simulate Supabase responses and do not validate database policies or edge-function deployment.",
-    "Webhook tests execute the real handler with Stripe, database, and mail boundary doubles; signature cryptography, SQL semantics, and network delivery are outside their scope.",
+    "Backend webhook contracts use external boundary doubles; the separate hosted delayed-payment journey verifies actual signature checking, database writes and current Stripe subscription handling with signed injected events.",
     "Existing new-customer journey injects a signed checkout event instead of completing a payment.",
     "Existing account-billing upgrade journey changes the plan through Stripe's API after asserting the portal asks for a card.",
     "Existing admin crawler stubs writes; dedicated integration tests must prove persistence.",
@@ -272,28 +376,99 @@
   ],
   "backend_access_observed": {
     "github_supabase_secret_name_exists": true,
-    "github_preview_environment_secrets": [],
+    "github_preview_environment_secrets": [
+      "VERCEL_AUTOMATION_BYPASS_SECRET"
+    ],
     "supabase_tools_exposed_in_this_session": true,
     "verified_project": "yfkqwpgjahoamlgckjib",
     "project_status": "ACTIVE_HEALTHY",
     "available_branches": [
       "main"
     ],
-    "note": "Supabase OAuth and MCP tools verified after CLI daemon restart. Project, branches, migrations, security advisors, and log access work. A preview branch creation attempt made no changes because Supabase requires cost confirmation."
+    "note": "Supabase MCP access is verified. The GitHub token can link the database and deploy functions but cannot read/write function secrets. Source deployments preserve installed mail credentials; hosted mail checks verify API acceptance."
   },
   "remote_changes": {
     "production_frontend_deployed": false,
-    "database_migration_applied": false,
-    "checkout_webhook_fix_deployed": false,
+    "database_migration_applied": true,
+    "checkout_webhook_fix_deployed": true,
     "shared_backend_functions": [
       "billing-portal",
       "delete-account",
       "register-community-license",
       "issue-license",
       "admin-resend-license-email",
-      "validate-license"
+      "validate-license",
+      "stripe-webhook"
     ],
-    "note": "The existing shared backend received approved-origin CORS, safe portal return destinations, cancel_at summaries and duplicate-cancellation guards, and the scheduled-cancellation account-deletion guard. Auth redirect configuration includes the preview host. The user replaced the Supabase Resend secret. Integration writes use disposable labelled records."
+    "note": "Existing shared production Supabase project received the authorized RLS migration and reviewed billing functions. Remote source matches the checkout. The user separately rotated the Resend credential. Preview integration uses disposable labelled records; production frontend remains unchanged.",
+    "database_migration_version": "20261117000000",
+    "shared_backend_production_writes_performed": true,
+    "reviewed_function_versions": {
+      "billing-portal": 11,
+      "stripe-webhook": 16
+    },
+    "stripe_delayed_payment_event_subscription_owner_confirmed": true,
+    "stripe_delayed_payment_event_subscription_independently_verified": false
   },
-  "last_updated_at": "2026-11-18T01:45:28.934Z"
+  "last_updated_at": "2026-11-18T04:22:58.695Z",
+  "preview_verified": true,
+  "adversarial_review": [
+    {
+      "issue": "Normalized dot segments could turn a same-origin redirect into a protocol-relative navigation.",
+      "resolution": "Reject normalized // pathnames; unit and callback/login regressions cover the escape."
+    },
+    {
+      "issue": "A scheduled cancellation later than renewal blocked the cancel-then-delete path.",
+      "resolution": "Authenticated cancel_before_renewal action selects the customer-owned subscription and changes the end without proration; confirm/dismiss/retry and real trial journey added."
+    },
+    {
+      "issue": "Delayed success, invoice or update events could replay stale subscription state.",
+      "resolution": "Reconcile current Stripe status and price tier; preserve canceled and revoked licenses; retry provider/database failures."
+    },
+    {
+      "issue": "Permissive legacy RLS policies bypassed protected-field policies.",
+      "resolution": "Applied reviewed trigger-backed policies, clamped repaired-profile identity/audit fields, denied key reactivation, revoked untrusted usage INSERT and preserved restrictive policies."
+    },
+    {
+      "issue": "Database regression setup did not reproduce the deployed public usage policy.",
+      "resolution": "Prove anon and customer insertion succeeds with the legacy policy before migration and fails afterward; verify atomic migration/history rollback."
+    },
+    {
+      "issue": "Crawler could miss errors, skip reachable duplicate controls or reject valid streamed-response controls.",
+      "resolution": "Record application console failures synchronously, await response bodies, track attempts by selector, anchor CSS paths and include visible pointer-disabled controls."
+    },
+    {
+      "issue": "Auth configuration and manual preview verification could race the build/alias update.",
+      "resolution": "Auth prerequisite is explicit; build, backend release and manual preview runs share a lock without reusable-workflow deadlock."
+    },
+    {
+      "issue": "Keyboard coverage alternated between only two dialog controls.",
+      "resolution": "Traverse every enabled stop consecutively in both directions and assert full wrap/containment."
+    },
+    {
+      "issue": "Code deployment required unavailable secret-management permissions and could overwrite a separately rotated key.",
+      "resolution": "Preserve installed credentials during source deployment; leave explicit digest-verified rotation script for appropriately scoped operators and verify mail through actual hosted journeys."
+    },
+    {
+      "issue": "PostgreSQL fixture readiness could connect during temporary initialization.",
+      "resolution": "Wait for final TCP readiness; 24 local and CI database checks passed."
+    },
+    {
+      "issue": "The report had ambiguous deployed and production-write scope.",
+      "resolution": "Record preview frontend, shared production backend writes, migration/function deployment and external configuration separately."
+    },
+    {
+      "issue": "Anonymous signup exploration left test users after otherwise successful crawls.",
+      "resolution": "Track only newly generated form emails, delete matching signup fixtures in finally across both contexts, preserve pre-existing addresses, and verify cleanup with the affected hosted anonymous crawl."
+    }
+  ],
+  "shared_backend_code_and_rls_verified": true,
+  "production_frontend_release_verified": false,
+  "pull_request_base_commit": "53c7c2c00f1424a9461526cac34813c31d25e6a5",
+  "verification_boundaries": [
+    "Stripe event destination settings were updated and confirmed by the owner; the restricted repository key cannot independently inspect them.",
+    "Payment verification uses disposable card-free trials and signed injected events, not a settled payment.",
+    "OAuth checks cover provider handoff; mail acceptance and generated links do not prove external consent or mailbox receipt.",
+    "Templated pages are sampled in browser contexts and all generated routes are checked by HTTP. Passing results do not claim every possible external-provider state."
+  ]
 }
