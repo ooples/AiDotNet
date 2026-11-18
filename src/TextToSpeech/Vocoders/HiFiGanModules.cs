@@ -17,7 +17,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// the average of |k_r| multi-receptive-field residual blocks, then a leaky ReLU (0.01), a 7-tap output convolution and
 /// tanh. Input <c>[1, channels, frames]</c>, output <c>[1, 1, frames · Πu]</c>.
 /// </summary>
-internal sealed class HiFiGanGenerator<T>
+internal sealed partial class HiFiGanGenerator<T>
 {
     private const double Slope = 0.1;
     private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
@@ -354,6 +354,8 @@ internal sealed class HiFiGanGenerator<T>
             && _layers.All(layer => !layer.InTrainingMode))
             return ForwardGpuInference(features, condition, gpu);
 
+
+        if (TryForwardPrivateCpu(features, condition, out var privateCpuOutput)) return privateCpuOutput;
 
         // The native forward bypasses the generic layer walk's scratch recycling. Keep each branch's residual
         // boundary, not every convolution's normalization and activation temporaries. A private arena never

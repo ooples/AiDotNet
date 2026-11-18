@@ -34,6 +34,7 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
                 expected = generator.Forward(input).ToArray();
                 changedExpected = generator.Forward(changedInput).ToArray();
             }
+            Assert.Equal(0, generator.PrivateCpuInferenceCalls);
 
             using var callerArena = TensorArena.Create();
             var sentinel = TensorAllocator.Rent<float>(new[] { batch * 32 });
@@ -50,6 +51,34 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
             }
             Assert.Equal(inputCopy, input.ToArray());
             Assert.Equal(parameters, generator.Layers.SelectMany(layer => layer.GetParameters().ToArray()).ToArray());
+            Assert.Equal(5, generator.PrivateCpuInferenceCalls);
+        }
+        finally { AiDotNetEngine.Current = previousEngine; }
+    }
+
+    [Fact]
+    public void PrivateCpuWorkspacePreservesPublishedOutputsAcrossBatchGrowthAndReuse()
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            var generator = Create<float>(new[] { 2, 4, 2 }, new[] { 4, 8, 4 });
+            int[] batches = { 1, 8, 16, 1 };
+            var inputs = batches.Select(batch => new Tensor<float>(Enumerable.Range(0, batch * 4 * 9)
+                .Select(i => .13f * (float)Math.Sin(i * .19 + batch)).ToArray(), new[] { batch, 4, 9 })).ToArray();
+            float[][] expected;
+            using (new NoGradScope<float>()) expected = inputs.Select(input => generator.Forward(input).ToArray()).ToArray();
+            Assert.Equal(0, generator.PrivateCpuInferenceCalls);
+            var published = new List<Tensor<float>>();
+            using var arena = TensorArena.Create();
+            using var noGrad = new NoGradScope<float>();
+            for (int call = 0; call < inputs.Length; call++)
+            {
+                published.Add(generator.Forward(inputs[call]));
+                for (int prior = 0; prior <= call; prior++) AssertBitwise(expected[prior], published[prior].ToArray());
+            }
+            Assert.Equal(4, generator.PrivateCpuInferenceCalls);
         }
         finally { AiDotNetEngine.Current = previousEngine; }
     }
