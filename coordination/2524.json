@@ -3,7 +3,7 @@
   "purpose": "Coordinate PR2524 fixes without opening a PR or interrupting its current CI",
   "branch": "codex/2524-ci-coordination",
   "pr_branch": "perf/elementwise-sweep-combined-v1",
-  "current_pr_head": "a826446bc36bdf0d28919bef291c99ace6f4e958",
+  "current_pr_head": "7064f23427ba017012f68b371e059e797f12d93c",
   "rules": [
     "No PR yet; no merge or force push.",
     "ACTIVE newPR2524fullCI ata826446bc36bdf0d28919bef291c99ace6f4e958. UserapprovedDependency+CIDiagnosticsfirst; pushedstableTensors0.151.2+failedprimary/paperreporting+alternateauthonly. No productcategoryfixes included. DO NOTcancelorpushPRsourceagainuntilENTIREcycleterminal; continueexclusiveverifiedcategoryworkonbranches. Rootsingleintegrationwriter; no forcepush/publicvalidationrelease.",
@@ -1434,6 +1434,15 @@
       ],
       "scope": "Pin qualified d1aff artifact and validate all319CPU identities including normalization20 and FlashAttention41. Preserve prior union112, framework/hash/trust/token/fork guards and default stable-version behavior. Existing full matrix bootstrap wiring unchanged.",
       "status": "COMPLETE qualified335pin d43171a3 integrated7064f23427 and published on category-rollout.77fixtures and actual335producer artifact validation passed; all prior319CPU/29CUDA identities preserved. No public release; PR head remainsa826 pending Oute checks."
+    },
+    {
+      "owner": "Codex/root MMDiT shard inventory build repair",
+      "repository": "ooples/AiDotNet",
+      "files": [
+        ".github/test-shards.yml (only Unit03a exact MmditReplayTests clause)"
+      ],
+      "scope": "Fix sole confirmed7064 build-gate blocker: new MmditReplayTests six methods are unrouted. Assign the entire class to existing diffusion core shard. Preserve all checks/categories/assertions/shards; no catchall or inventory exemption. Run actual TypeImpact inventory engine on fresh main test assembly before/after; existing compilation is successful.",
+      "status": "CLAIMED before edit. Source7064 main44271103746 automatically cancelled after Build134692766929 inventory failure. All nine associated workflows are terminal. Root missed this required pre-push gate; exact inventory validation is now required for this batch before push."
     }
   ],
   "codex_assignments": {
@@ -2126,7 +2135,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-18T08:47:38.531121+00:00",
+  "updated_utc": "2026-11-18T11:53:03.054790+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43990270445",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
