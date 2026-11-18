@@ -338,6 +338,7 @@ internal sealed class HiFiGanGenerator<T>
                 ? ResidualAccumulatorLength(x)
                 : 0;
         var accumulatorOwner = accumulatorLength > 0 ? TensorArena.Current : null;
+        bool scaleOwnedAccumulator = accumulatorOwner is not null && _engine.GetType() == typeof(CpuEngine);
         Tensor<T>? accumulator = null;
         for (int i = 0; i < _ups.Count; i++)
         {
@@ -345,6 +346,7 @@ internal sealed class HiFiGanGenerator<T>
             if (condition is not null && _stageConditions.Count > 0)
                 x = _engine.TensorAdd(x, _engine.TensorTile(_stageConditions[i].Forward(condition), new[] { 1, 1, x.Shape[2] }));
             Tensor<T>? sum = null;
+            bool ownsStageSum = false;
             foreach (var (first, second) in _blocks[i])
             {
                 using var active = scratch?.Activate();
@@ -370,6 +372,7 @@ internal sealed class HiFiGanGenerator<T>
                         using var sourceKeep = new KeepAliveScope(h);
                         using var destinationKeep = new KeepAliveScope(sum);
                         h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
+                        ownsStageSum = true;
                     }
                     else
                     {
@@ -383,7 +386,16 @@ internal sealed class HiFiGanGenerator<T>
                 else if (scratch is null) sum = _engine.TensorAdd(sum, h);
                 else _engine.TensorAddInPlace(sum, h);
             }
-            x = _engine.TensorMultiplyScalar(sum!, ops.FromDouble(1.0 / _blocks[i].Count));
+            var average = ops.FromDouble(1.0 / _blocks[i].Count);
+            if (scaleOwnedAccumulator && ownsStageSum && sum is not null)
+            {
+                // The next stage consumes x through its activation/upsampler before copying
+                // its first branch into this prefix. The post-convolution also produces a
+                // separate result, so no caller-visible output aliases this private workspace.
+                _engine.TensorMultiplyScalarInPlace(sum, average);
+                x = sum;
+            }
+            else x = _engine.TensorMultiplyScalar(sum!, average);
         }
         // F.leaky_relu with its default slope 0.01 before the output convolution (reference Generator.forward).
         x = LeakyRelu(x, 0.01);

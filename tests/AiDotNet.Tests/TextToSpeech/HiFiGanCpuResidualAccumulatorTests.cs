@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
@@ -116,6 +117,55 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
                 AssertBitwise(changed ? changedExpected : expected, generator.Forward(changed ? changedInput : input).ToArray());
                 AssertBitwise(expected, published.ToArray());
             }
+        }
+        finally { AiDotNetEngine.Current = previousEngine; }
+    }
+
+    [Fact]
+    public void RecycledOwnedAverageDoesNotChangeLaterTapedTrainingOrPublishedOutput()
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            var generator = Create<double>(new[] { 2, 1, 3 }, new[] { 5, 3, 6 }, condition: true);
+            var input = new Tensor<double>(Enumerable.Range(0, 4 * 7)
+                .Select(i => .15 * Math.Sin(i * .13)).ToArray(), new[] { 1, 4, 7 });
+            var condition = new Tensor<double>(new[] { .2, -.1, .3 }, new[] { 1, 3, 1 });
+            var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+                generator.Layers.Cast<ILayer<double>>().ToList());
+            double[][] TrainingGradients()
+            {
+                foreach (var layer in generator.Layers) layer.SetTrainingMode(true);
+                using var tape = new GradientTape<double>();
+                var output = generator.Forward(input, condition);
+                var engine = AiDotNetEngine.Current;
+                var loss = engine.ReduceSum(engine.TensorMultiply(output, output), null, false);
+                var gradients = tape.ComputeGradients(loss, sources: parameters);
+                return parameters.Select(parameter => gradients[parameter].ToArray()).ToArray();
+            }
+            var expectedGradients = TrainingGradients();
+            foreach (var layer in generator.Layers) layer.SetTrainingMode(false);
+            double[] expectedOutput;
+            using (new NoGradScope<double>()) expectedOutput = generator.Forward(input, condition).ToArray();
+            using var callerArena = TensorArena.Create();
+            Tensor<double> published;
+            using (new NoGradScope<double>())
+            {
+                published = generator.Forward(input, condition);
+                AssertBitwise(expectedOutput, published.ToArray());
+                var changed = new Tensor<double>(input.ToArray().Select(value => value * -.7 + .1).ToArray(), input.Shape.ToArray());
+                _ = generator.Forward(changed, condition).ToArray();
+                AssertBitwise(expectedOutput, published.ToArray());
+            }
+            // Keep the caller arena and published eval output alive while training resumes.
+            // The taped route must preserve every parameter gradient instead of overwriting
+            // a stage value needed by an earlier convolution's backward action.
+            var actualGradients = TrainingGradients();
+            Assert.Equal(expectedGradients.Length, actualGradients.Length);
+            for (int i = 0; i < expectedGradients.Length; i++)
+                AssertBitwise(expectedGradients[i], actualGradients[i]);
+            AssertBitwise(expectedOutput, published.ToArray());
         }
         finally { AiDotNetEngine.Current = previousEngine; }
     }
