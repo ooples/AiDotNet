@@ -94,7 +94,9 @@ internal static class SpeechT5Ops
     public static Tensor<T> Normalize<T>(IEngine engine, Tensor<T> v)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var norm = engine.TensorMax(engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(v, v), null, true)), ops.FromDouble(1e-12));
+        var eps = ops.FromDouble(1e-12);
+        var rawNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(v, v), null, true));
+        var norm = engine.TensorAddScalar(engine.ReLU(engine.TensorSubtractScalar(rawNorm, eps)), eps);
         return engine.TensorDivide(v, engine.TensorBroadcastTo(norm, v.Shape.ToArray()));
     }
 }

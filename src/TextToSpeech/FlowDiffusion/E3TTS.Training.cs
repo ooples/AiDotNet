@@ -5,7 +5,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 public partial class E3TTS<T>
 {
     private sealed record TrainingExample(int[] TokenIds, Tensor<T> Clean, Tensor<T> Noise, Tensor<T> Weights,
-        double AlphaBar, int SpeakerId);
+        double AlphaBar, int SpeakerId, double WeightSum);
 
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
@@ -50,13 +50,15 @@ public partial class E3TTS<T>
             else weights[i] = Ops.FromDouble(_options.PaddingLossWeight);
         }
 
+        double weightSum = valid + (total - valid) * _options.PaddingLossWeight;
+
         // Equation 4 samples alpha-bar from an interval between adjacent schedule entries.
         int interval = random.Next(_options.NumDiffusionSteps);
         double left = TrainingAlphaBar(interval), right = TrainingAlphaBar(interval + 1);
         double alphaBar = left + random.NextDouble() * (right - left);
         int speaker = sample.SpeakerId ?? _options.DefaultSpeakerId;
         if (speaker < 0 || speaker >= _options.SpeakerCount) throw new ArgumentOutOfRangeException(nameof(sample), "SpeakerId is outside E3's speaker table.");
-        return new TrainingExample(ids, clean, Gaussian(total, random), weights, alphaBar, speaker);
+        return new TrainingExample(ids, clean, Gaussian(total, random), weights, alphaBar, speaker, weightSum);
     }
 
     private Tensor<T> DiffusionObjective(TrainingExample example)
@@ -72,15 +74,15 @@ public partial class E3TTS<T>
         }
         else text = TextEncoder!.Forward(example.TokenIds);
         var (prediction, logVariance) = WaveformUnet!.Forward(noisy, text, signal, example.SpeakerId);
-        return VarianceWeightedNoiseLoss(prediction, example.Noise, example.Weights, logVariance);
+        return VarianceWeightedNoiseLoss(prediction, example.Noise, example.Weights, logVariance, example.WeightSum);
     }
 
     internal Tensor<T> VarianceWeightedNoiseLoss(Tensor<T> prediction, Tensor<T> noise,
-        Tensor<T> weights, Tensor<T> logVariance)
+        Tensor<T> weights, Tensor<T> logVariance, double? weightSum = null)
     {
         var error = Engine.TensorSubtract(prediction, noise);
         var weightedSquared = Engine.TensorMultiply(weights, Engine.TensorMultiply(error, error));
-        double normalization = weights.ToArray().Sum(Ops.ToDouble);
+        double normalization = weightSum ?? weights.ToArray().Sum(Ops.ToDouble);
         var mse = Engine.TensorMultiplyScalar(Engine.ReduceSum(weightedSquared, new[] { 0 }, keepDims: true),
             Ops.FromDouble(1.0 / Math.Max(normalization, 1e-12)));
         mse = Engine.Reshape(mse, new[] { 1, 1 });
