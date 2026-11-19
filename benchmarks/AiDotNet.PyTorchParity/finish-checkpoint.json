@@ -4,12 +4,12 @@
   "overall_acceptance_pass": false,
   "family_complete": false,
   "source": {
-    "aidotnet_commit": "6981e9a6e29b6ead56406a336dc55cb0b4223249",
+    "aidotnet_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
     "tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
     "tensors_tree": "4fdbe76f1e3b4b5d6633a303e093e4b78c3d77dc",
-    "framework_build_ai_commit": "e300b9c3a6e7d8b378ee191b785587da04913098",
-    "framework_build_tensors_commit": "566e601094925c32ca7503f6ace1a350ef65a824",
-    "source_equivalence": "Tensors final stack tree equals built integration tree; AiDotNet library sources unchanged since five-framework build. Later Ai changes are matched benchmark files and checkpoint evidence."
+    "framework_build_ai_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+    "framework_build_tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
+    "source_equivalence": "Five-framework rebuild uses replay-fix commit d8dbe5fb89. The numerical runtime was built from identical library sources before the fix commit; archive hashes are preserved. Tensors final stack remains the identical published source tree."
   },
   "pull_requests": {
     "aidotnet": [
@@ -19,7 +19,7 @@
       },
       {
         "number": 2604,
-        "files_before_this_receipt": 59
+        "files": 61
       }
     ],
     "tensors_merge_order": [
@@ -56,7 +56,7 @@
       "netstandard2.0"
     ],
     "all_pass": true,
-    "framework_receipts_sha256": "2e5ea97e77f5d9189f2b46ac69dde5ec1b31db633647cb206ff473d7dc99581a",
+    "framework_receipts_sha256": "e916350653d51b77c04c17353d6512645ad2190e0d7abdae4dd36c6d3d61885b",
     "standalone_net10_stages": [
       {
         "stage": "perf/2561-engine-foundation",
@@ -118,14 +118,19 @@
     "non_cuda_runtime_tested": false
   },
   "fresh_cuda_numerical": {
-    "pass": false,
-    "checks_reached": 805,
+    "pass": true,
+    "checks_reached": 1615,
     "failed_tensor_checks": 0,
     "expected_checks": 1615,
-    "workload_exit_code": 94,
+    "workload_exit_code": 0,
+    "native_dispatch_pass": true,
     "archive_unchanged": true,
-    "summary_sha256": "90fc3ac234e643af3818c8f7e537d5351865f409216bbcc907411a056db12aea",
-    "blocker": "Second update aborts: closure replay TensorMax has no matching trace-time shape. Diagnostic-only replay attempt55 identifies missing cache entry at node244. Guard remains unchanged; diagnostic patch archived outside the repos."
+    "summary_sha256": "de54e9ea525fc2d401f0aa409cd5271b790f878597ee0e3f18411a8cbb0240f4",
+    "runtime_assemblies_sha256": {
+      "AiDotNet": "8f238d0bfc2c3ad54d3e8caf16678a9d59ba5fa64e1326f674cd41b994423dbe",
+      "Tensors": "d8332b648d68c8438321f49c9f6e563490c9274998ceb01a447b8e0072a57565"
+    },
+    "scope": "Full matched CUDA correctness check after spectral replay fix; no performance claim."
   },
   "prior_cuda_checkpoint": {
     "aidotnet_commit": "a3b3cebb8026aef91a71b03a557b2681ede5a050",
@@ -134,14 +139,31 @@
     "scope": "Before integrating latest remote fixes; does not establish current integration correctness."
   },
   "cpu_numerical": {
-    "fresh_integration_rerun": false,
-    "last_completed_preintegration_checks": 1612,
+    "fresh_integration_rerun": true,
+    "pass": false,
+    "passed": 1612,
     "expected": 1615,
-    "unresolved_preintegration": [
-      "train/step1/generator/001/bias",
-      "train/step2/generator/001/bias",
-      "train/step3/generator/001/bias"
-    ]
+    "errors": 0,
+    "replay_failure": false,
+    "failed": [
+      {
+        "name": "train/step1/generator/001/bias",
+        "relative_l2": 0.002806617609186483,
+        "max_absolute_error": 0.00039996273699216545
+      },
+      {
+        "name": "train/step2/generator/001/bias",
+        "relative_l2": 0.0028095625932973863,
+        "max_absolute_error": 0.000400044780690223
+      },
+      {
+        "name": "train/step3/generator/001/bias",
+        "relative_l2": 0.002812718367088688,
+        "max_absolute_error": 0.00040006955350690987
+      }
+    ],
+    "numerical_receipt_sha256": "f62c417199f33699ebeb111e23ceb59b8bf7c487067404c790899bf5fd3a347f",
+    "scope": "All checks completed; same three generator/001/bias learned-state failures remain blocking."
   },
   "performance": {
     "accepted_win": false,
@@ -162,9 +184,40 @@
     "scope": "Diagnostic historical candidate; these blockers remain open and are not acceptance evidence for the integration."
   },
   "next_work": [
-    "Repair the closure shape-cache replay integration without relaxing guards; rerun all1615 CUDA checks.",
+    "Resolve the upstream CPU numerical discrepancy causing the three bias-update failures; keep all strict thresholds.",
     "Resolve the CPU learned-state mismatch and rerun strict CPU numerical checks.",
     "Eliminate measured warm GPU allocation/free calls and lower phase peak memory, then collect five alternating matched pairs.",
     "Continue the family manifest in measured-bottleneck order; close each CPU/CUDA family only when every numerical, allocation, latency and peak-memory gate passes."
-  ]
+  ],
+  "history": {
+    "before_replay_fix_cuda": {
+      "pass": false,
+      "checks_reached": 805,
+      "failed_tensor_checks": 0,
+      "expected_checks": 1615,
+      "workload_exit_code": 94,
+      "archive_unchanged": true,
+      "summary_sha256": "90fc3ac234e643af3818c8f7e537d5351865f409216bbcc907411a056db12aea",
+      "blocker": "Second update aborts: closure replay TensorMax has no matching trace-time shape. Diagnostic-only replay attempt55 identifies missing cache entry at node244. Guard remains unchanged; diagnostic patch archived outside the repos."
+    }
+  },
+  "replay_fix": {
+    "commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+    "root_cause": "Probe-only omission of spectral state copies/snapshots shifted later shape-cache node positions.",
+    "change": "Record identical lazy copy/snapshot operations during probes; abandon them without executing writes.",
+    "guard_or_tolerance_changes": false,
+    "canonical_baseline": {
+      "passed": 11,
+      "failed": 3,
+      "skipped": 0,
+      "trx_sha256": "dd080c4d05437f2cf1b05c86a93318e419dc1cb4f13fa43d6059700a5f9b5e77"
+    },
+    "fixed_regression_suite": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "CPU float/double and CUDA; multiple layers/repeated forwards, two probes per step, state unchanged bitwise and three SGD updates matching eager; existing spectral and AdamW trajectory checks retained.",
+      "trx_sha256": "4ef24d4c7305c53bda8f4147f0360f5ad0643bb813d7abfd3c4b35d1651527a6"
+    }
+  }
 }
