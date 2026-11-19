@@ -94,6 +94,9 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _options = options ?? new VoxtLMOptions(); Options = _options; _useNativeMode = true;
         base.SampleRate = _options.SampleRate; base.NumMels = 0;
         SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+        // ESPnet clips the global gradient norm once, at the recipe's MaxGradientNorm, in the optimizer. The network's
+        // inherited 1.0 clip ran first and capped every step at 1, so MaxGradientNorm (5) never acted.
+        MaxGradNorm = NumOps.Zero;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer ?? RecipeOptimizer());
     }
 
@@ -292,7 +295,22 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         var network = _network;
         if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true));
+        // The speech tokenizer is fixed: the prompts and transcripts are this step's data, built before the step so the
+        // traced objective is the language model's loss alone.
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var batch = Enumerable.Range(0, rows)
+            .Select(r => (Prompt: network.AsrPrompt(Recording(input, r, rows)), Transcript: Transcript(network, TargetRow(target, r, rows))))
+            .ToArray();
+        TrainWithCustomObjective(input, input, (_, _) =>
+        {
+            Tensor<T>? total = null;
+            foreach (var (prompt, transcript) in batch)
+            {
+                var loss = network.AsrLoss(prompt, transcript, training: true, _random);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        });
         return true;
     }
 

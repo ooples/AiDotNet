@@ -211,7 +211,7 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             labels[r] = Labels(row);
         }
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)

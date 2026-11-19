@@ -268,16 +268,19 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         if (_network is null || _pretraining is null) throw new InvalidOperationException("The native network is not initialized.");
         var network = _network;
         var pretraining = _pretraining;
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             var output = network.Forward(input, training: true, _random, maskProbability: pretraining.Configuration.MaskProbability,
                 featureGradientScale: pretraining.Configuration.FeatureGradientScale);
             // A zero mask probability disables masking in the encoder. The objective still
             // needs an explicit empty mask so it has zero masked targets rather than null.
             output = output.Mask is null ? output with { Mask = new bool[output.Hidden.Shape[0], output.Hidden.Shape[1]] } : output;
-            var negatives = pretraining.SampleNegatives(output.Mask!, _random);
+            var negatives = pretraining.DrawNegatives(output.Mask!, _random);
             var losses = pretraining.Loss(output, negatives, training: true, _random);
-            LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]), NumOps.ToDouble(losses.FeaturePenalty[0]));
+            // The terms are read on the host only on a step whose values are concrete (the eager tape); a traced step
+            // leaves them to the plan, and a replayed step keeps the last eager step's.
+            if (losses.Total.LazySource is not { IsRealized: false })
+                LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]), NumOps.ToDouble(losses.FeaturePenalty[0]));
             return losses.Total;
         }, _optimizer);
         pretraining.AfterUpdate();

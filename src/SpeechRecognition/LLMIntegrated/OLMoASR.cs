@@ -275,7 +275,7 @@ public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     {
         var network = _network;
         if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target));
+        TrainWithCustomObjective(input, input, (_, _) => BatchLoss(network, input, target));
         return true;
     }
 

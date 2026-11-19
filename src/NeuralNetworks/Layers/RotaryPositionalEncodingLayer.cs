@@ -129,7 +129,12 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
             return (new Tensor<T>([Math.Max(0, count), halfDim]), new Tensor<T>([Math.Max(0, count), halfDim]));
         }
 
-        // The caches are constants built from fresh tensors, so they stay off the tape.
+        // The caches are constants built from fresh tensors, so they stay off the tape. They outlive the call, so they
+        // are built outside any tensor arena and scope: built inside one (a constructor or a first forward run inside a
+        // caller's arena), the arena recycled their memory at its next reset and the tables read whatever was written
+        // there next (a trained model then predicted differently from its own clone).
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var scope = TensorScope.Suspend();
         using var noGrad = new NoGradScope<T>();
         var positions = Engine.TensorArange<T>(startPos, endPos, 1.0);                                // [count]
         var frequencies = Engine.TensorLogspace<T>(0.0, -(2.0 * (halfDim - 1)) / _headDimension, halfDim, _theta);
@@ -173,6 +178,8 @@ public partial class RotaryPositionalEncodingLayer<T> : LayerBase<T>, IShapeCont
             var (extraCos, extraSin) = BuildCacheRows(caches.Length, requiredLength);
             Tensor<T> newCos;
             Tensor<T> newSin;
+            using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+            using (TensorScope.Suspend())
             using (new NoGradScope<T>())
             {
                 newCos = Engine.TensorConcatenate(new[] { caches.Cos, extraCos }, 0);

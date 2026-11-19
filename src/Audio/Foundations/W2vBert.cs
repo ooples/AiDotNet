@@ -344,15 +344,24 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     }
 
     private Tensor<T> PretrainingLoss(Tensor<T> input, bool training, Random random)
+        => PretrainingLossOfFeatures(RequireNetwork().Features(input), input, training, random);
+
+    // The pre-training loss of log-mel features (the front end has no parameters, so a training step computes them
+    // before its objective). Outside a fixed draw the mask, its noise and the distractors are per-step draws, so a
+    // compiled plan replays the step; a fixed draw reseeds the same draw every step, which stays a constant.
+    private Tensor<T> PretrainingLossOfFeatures(Tensor<T> mel, Tensor<T> input, bool training, Random random)
     {
         var network = RequireNetwork();
         var pretraining = RequirePretraining();
-        var mel = network.Features(input);
         int batch = mel.Shape[0], length = network.EncodedLength(mel.Shape[1]);
-        var mask = network.DrawMask(batch, length, _options.MaskProbability, random);
-        var output = network.Forward(mel, mask, training, random);
+        bool perStep = _options.FixedDraw is null;
+        bool[,] mask;
+        Tensor<T>? maskValues = null;
+        if (perStep) (mask, maskValues) = network.DrawStepMask(batch, length, _options.MaskProbability, random);
+        else mask = network.DrawMask(batch, length, _options.MaskProbability, random);
+        var output = network.Forward(mel, mask, training, random, maskValues);
         // wav2vec 2.0's contrastive task on the context vectors, quantizing the unmasked encoded features.
-        var asWav2Vec2 = new Wav2Vec2Network<T>.Output(output.Context, output.Features, output.BlockStates, output.Features, mask);
+        var asWav2Vec2 = new Wav2Vec2Network<T>.Output(output.Context, output.Features, output.BlockStates, output.Features, mask, output.MaskValues);
         int[,]? codes = null;
         long key = 0;
         if (_options.FixedDraw is not null)
@@ -360,11 +369,16 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
             key = Fingerprint(input);
             _fixedDrawCodes.TryGetValue(key, out codes);
         }
-        var losses = pretraining.Loss(asWav2Vec2, pretraining.SampleNegatives(mask, random), training, random, codes);
+        var losses = perStep
+            ? pretraining.Loss(asWav2Vec2, pretraining.DrawNegatives(mask, random), training, random, codes)
+            : pretraining.Loss(asWav2Vec2, pretraining.SampleNegatives(mask, random), training, random, codes, redrawPerStep: false);
         if (_options.FixedDraw is not null && codes is null) _fixedDrawCodes[key] = losses.CodeIds;
-        var maskedPrediction = network.MaskedPredictionLoss(output, losses.CodeIds);
-        LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]),
-            NumOps.ToDouble(maskedPrediction[0]));
+        var maskedPrediction = network.MaskedPredictionLoss(output, losses.CodeIdValues);
+        // The terms are read on the host only when the values are concrete (the eager tape); a traced step leaves them to
+        // the plan, and a replayed step keeps the last eager step's.
+        if (maskedPrediction.LazySource is not { IsRealized: false })
+            LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]),
+                NumOps.ToDouble(maskedPrediction[0]));
         return Engine.TensorAdd(losses.Total, maskedPrediction);                                                  // β = γ = 1
     }
 
@@ -377,7 +391,8 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         var pretraining = RequirePretraining();
-        TrainWithCustomLoss(input, _ => PretrainingLoss(input, training: true, DrawRandom()), Optimizer());
+        var mel = RequireNetwork().Features(input);
+        TrainWithCustomObjective(input, input, (_, _) => PretrainingLossOfFeatures(mel, input, training: true, DrawRandom()), Optimizer());
         pretraining.AfterUpdate();
         return true;
     }

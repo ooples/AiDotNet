@@ -30,7 +30,7 @@ internal sealed class FunAsrNanoNetwork<T>
         if (o.VocabSize < 2) throw new ArgumentException("The vocabulary needs a text token and the end token.", nameof(options));
         if (o.CtcVocabSize < 2) throw new ArgumentException("The CTC vocabulary needs a token and the blank.", nameof(options));
         Encoder = new SanmEncoder<T>(engine, EncoderLayers, new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim,
-            o.NumAttentionHeads, o.EncoderFeedForwardDim, o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize), random);
+            o.NumAttentionHeads, o.EncoderFeedForwardDim, o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize, SampleRate: o.SampleRate), random);
         Adaptor = new MinMoInputProjector<T>(engine, AdaptorLayers, o.EncoderDim, o.AdaptorDownsampleRate, o.AdaptorFeedForwardDim,
             o.LlmHiddenDim, o.NumAdaptorLayers, o.AdaptorHeads, random);
         Llm = new LlamaNetwork<T>(engine, LlmLayers, new LlamaConfiguration

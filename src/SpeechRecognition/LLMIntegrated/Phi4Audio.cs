@@ -272,7 +272,7 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         var network = _network;
         if (network is null) return false;
         network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target)); }
+        try { TrainWithCustomObjective(input, input, (_, _) => BatchLoss(network, input, target)); }
         finally { network.Llm.Training = false; }
         return true;
     }

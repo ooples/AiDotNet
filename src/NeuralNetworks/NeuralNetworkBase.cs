@@ -7858,11 +7858,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
             var fullParams = paramsList.ToList();
+            var contextInput = input;
             var context = new TapeStepContext<T>(
                 fullParams, avgGrads, avgLoss,
                 input, target,
-                (inp, tgt) => ForwardForTraining(inp),
-                (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred),
+                // The composite objective re-runs the heads on the step's INPUT; passing the prediction ran the model
+                // on its own output.
+                (inp, tgt) => ForwardForTraining(contextInput = inp),
+                (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), contextInput),
                 parameterBuffer: null);
             // Past the point of no return: weights are about to be written in place (#1624 OOM-retry gate).
             MarkTrainMutationStarted();
@@ -12907,6 +12910,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
 
+        // The eager step clips by the model's norm over its layer-owned parameters only, then by the optimizer's over
+        // all of them. The plan clips one global norm: the model's clip is that norm when it covers every trained
+        // parameter, absent when it covers none (VoxtLM trains model-owned language-model layers), and has no single-
+        // norm form when it covers some.
+        int modelClipped = MaxGradNormValue > 0.0 ? CollectLayerOwnedTrainableTensorsForClipping(parameters).Count : 0;
+        bool partialModelClip = modelClipped > 0 && modelClipped < parameters.Count;
+
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
         // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
         // time). Selection keeps the trained set exactly the one collected above.
@@ -12920,7 +12930,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Optimizer = resolvedOptimizer,
             ExtraParameters = parameters,
             Selection = parameters,
-            ModelGradientClip = MaxGradNormValue,
+            ModelGradientClip = modelClipped == 0 ? 0.0 : MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
@@ -12932,7 +12942,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Only their ordinary independent Train path must defer to the parent graph.
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
-                : null,
+                : partialModelClip
+                    ? "the model's gradient clip covers only its layer-owned parameters; the plan clips one global norm"
+                    : null,
             VerifyReplayAgreement = verifyReplayAgreement,
             EagerReplay = eagerFallback,
             ObjectiveKey = verifyReplayAgreement ? warmupKey ?? forward.Method : null,
@@ -13580,7 +13592,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // `tgt`. Moving alignment into the loss callback is what the
             // reviewer suggested and it also keeps the gradient chain intact
             // (we reshape the leaf target, never the tape-tracked prediction).
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => ForwardForTraining(inp);
+            // The composite objective re-runs the heads on the forward's INPUT, not on its prediction.
+            var forwardInput = input;
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => ForwardForTraining(forwardInput = inp);
 
             Tensor<T> ComputeLossAligned(Tensor<T> pred, Tensor<T> tgt)
             {
@@ -13592,7 +13606,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     tgt = Engine.Reshape(tgt, pred._shape);
                 }
-                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), forwardInput);
             }
 
             // ---------------- Mixed-precision (#1354) — unscale gradients + overflow check ----------------
@@ -14582,7 +14596,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"disabled by {GetType().Name}'s configuration (FusedTrainingDisabledByConfiguration), not by a fallback");
         }
         if (FusedSession.IsDisabled)
-            return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
+        {
+            // Keep the cause the disabling step recorded, as the session's own gate does: the bare message hid it from the
+            // audit and the model's diagnostics.
+            const string sticky = "fused path sticky-disabled from prior fallback";
+            string? prior = FusedSession.LastMissReason;
+            return EmitFusedMissAndFallback(prior is null || prior.StartsWith("fused path sticky-disabled", StringComparison.Ordinal)
+                ? prior ?? sticky
+                : sticky + ": " + prior);
+        }
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return EmitFusedMissAndFallback("TensorCodecOptions.EnableCompilation = false");
         // The compiled training cache currently owns persistent storage and shape keys only for
@@ -14678,19 +14700,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
         // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
         var fusedReadoutHead = FusedReadoutForTraining();
+        var fusedForwardInput = input;
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
             Input = input,
             Target = expected,
-            Forward = fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout,
+            // The composite objective re-runs the heads on the traced INPUT; passing the prediction ran the model on
+            // its own output (ABCNet's 17 detection channels into its 3-channel trunk).
+            Forward = fusedReadoutHead is null
+                ? x => ForwardForTraining(fusedForwardInput = x)
+                : x => ForwardForTrainingToReadout(fusedForwardInput = x),
             ComputeLoss = fusedReadoutHead is null
                 ? (pred, tgt) =>
                 {
                     tgt = AlignTargetToOutputShape(pred, tgt);
-                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), fusedForwardInput);
                 }
-                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, h),
+                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, fusedForwardInput),
             Optimizer = resolvedOptimizer,
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,

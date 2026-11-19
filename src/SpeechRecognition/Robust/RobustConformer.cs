@@ -182,7 +182,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         if (noisy.Length != clean.Length) throw new ArgumentException("The clean references must match the noisy waveforms.", nameof(clean));
         var x = Rows(noisy);
         var y = Engine.Reshape(clean, x.Shape.ToArray());
-        TrainWithCustomLoss(x, _ =>
+        TrainWithCustomObjective(x, x, (_, _) =>
         {
             var (total, reconstruction) = network.ContinualPretrainingLoss(x, y, training: true, _random);
             LastReconstructionLoss = NumOps.ToDouble(reconstruction[0]);
@@ -241,7 +241,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     {
         if (_network is null) return false;
         var batch = Batch(input, target);
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             foreach (var (waveform, labels) in batch)

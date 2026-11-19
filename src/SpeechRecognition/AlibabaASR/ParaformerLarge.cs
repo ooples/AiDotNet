@@ -152,7 +152,7 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         var layers = new List<LayerBase<T>>();
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? 42);
         _encoder = new SanmEncoder<T>(Engine, layers, new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim, o.NumAttentionHeads,
-            o.FeedForwardDim, o.NumEncoderLayers, 0, o.FsmnKernelSize, 1e-12), random);
+            o.FeedForwardDim, o.NumEncoderLayers, 0, o.FsmnKernelSize, 1e-12, o.SampleRate), random);
         _network = new ParaformerNetwork<T>(Engine, layers, new ParaformerConfiguration
         {
             Width = o.EncoderDim, Heads = o.NumAttentionHeads, FeedForward = o.FeedForwardDim, DecoderLayers = o.NumDecoderLayers,
@@ -242,7 +242,7 @@ public partial class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         if (encoder is null || network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)

@@ -919,6 +919,26 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     #region Model-Specific Processing
 
     /// <summary>
+    /// The instance mean and population standard deviation plus <paramref name="eps"/> as detached <c>[1]</c> tensors,
+    /// computed on the engine so a compiled training step traces them instead of reading the input on the host.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> Std) InstanceStatistics(Tensor<T> input, double eps)
+    {
+        int n = input.Length;
+        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
+        var mean = Engine.StopGradient(Engine.TensorDivideScalar(
+            Engine.Reshape(Engine.ReduceSum(flat, new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n)));
+        var centered = Engine.TensorSubtract(flat, Engine.TensorBroadcastTo(mean, new[] { n }));
+        var variance = Engine.TensorDivideScalar(
+            Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n));
+        var std = Engine.StopGradient(Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(eps)));
+        return (mean, std);
+    }
+
+    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
+        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
+
+    /// <summary>
     /// Applies RevIN (Reversible Instance Normalization).
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -933,31 +953,18 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var eps = NumOps.FromDouble(1e-5);
-
         if (normalize)
         {
-            // Compute mean and std for this instance (scalar reductions)
-            T mean;
-            T varSum;
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            {
-                // Detached statistics, as before: the stats are constants for the affine map below.
-                var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
-                mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-                varSum = input.Length > 0 ? Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
-            }
-
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
-            std = NumOps.Add(std, eps);
+            if (input.Length == 0) return input;
+            // Detached statistics, as before: the stats are constants for the affine map below.
+            var (mean, std) = InstanceStatistics(input, 1e-5);
 
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
-            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
+            _instanceMean = mean;
+            _instanceStd = std;
 
             // Normalize: (input - mean) / std
-            var centered = Engine.TensorSubtractScalar(input, mean);
-            return Engine.TensorDivideScalar(centered, std);
+            return Engine.TensorDivide(Engine.TensorSubtract(input, Wide(mean, input)), Wide(std, input));
         }
         else
         {
@@ -967,12 +974,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 return input;
             }
 
-            var mean = _instanceMean.Data.Span[0];
-            var std = _instanceStd.Data.Span[0];
-
             // De-normalize: input * std + mean
-            var scaled = Engine.TensorMultiplyScalar(input, std);
-            return Engine.TensorAddScalar(scaled, mean);
+            return Engine.TensorAdd(Engine.TensorMultiply(input, Wide(_instanceStd, input)), Wide(_instanceMean, input));
         }
     }
 

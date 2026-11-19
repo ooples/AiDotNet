@@ -293,15 +293,12 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     // The ground-truth frame group of step `step`, zero-padded past the end.
     private Tensor<T> TargetGroup(Tensor<T> target, int step)
     {
+        // Slice, flatten and zero-pad on the engine, so a compiled training plan traces the target instead of reading it.
         int r = _options.OutputsPerStep, mel = _options.MelChannels;
-        var group = new Tensor<T>(new[] { 1, mel * r });
-        for (int f = 0; f < r; f++)
-        {
-            int frame = step * r + f;
-            if (frame >= target.Shape[0]) break;
-            for (int m = 0; m < mel; m++) group[0, f * mel + m] = target[frame, m];
-        }
-        return group;
+        int kept = Math.Max(0, Math.Min(r, target.Shape[0] - step * r));
+        if (kept == 0) return new Tensor<T>(new[] { 1, mel * r });
+        var frames = Engine.Reshape(Engine.TensorSlice(target, new[] { step * r, 0 }, new[] { kept, mel }), new[] { 1, kept * mel });
+        return kept == r ? frames : Engine.TensorConcatenate(new[] { frames, new Tensor<T>(new[] { 1, (r - kept) * mel }) }, 1);
     }
 
     /// <inheritdoc />

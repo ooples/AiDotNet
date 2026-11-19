@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
@@ -197,4 +198,33 @@ public class RotaryPositionalEncodingLayerTests
     }
 
     #endregion
+    /// <summary>
+    /// The cos/sin tables outlive the call that builds them, so built inside a caller's tensor arena (a constructor, or
+    /// a first longer forward that grows them) they must not take arena memory: the arena's next reset handed it to the
+    /// next allocation, and a trained Conformer transducer then predicted differently from its own clone.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Tables_BuiltInsideAnArena_SurviveItsReset()
+    {
+        await Task.Yield();
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+        var layer = new RotaryPositionalEncodingLayer<float>(8, 4);
+        var (cos, sin) = layer.GetInterleavedCaches(24);                           // grows past the constructor's 8 rows
+        var expectedCos = cos.ToArray();
+        var expectedSin = sin.ToArray();
+        arena.Reset();
+        for (int k = 0; k < 16; k++)
+        {
+            var scratch = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAddScalar(new Tensor<float>(new[] { 24, 2 }), 7f);
+            Assert.Equal(7f, scratch[0]);
+        }
+        var (cosAfter, sinAfter) = layer.GetInterleavedCaches(24);
+        Assert.Equal(expectedCos, cosAfter.ToArray());
+        Assert.Equal(expectedSin, sinAfter.ToArray());
+        for (int pos = 0; pos < 24; pos++)
+        {
+            Assert.Equal(System.Math.Cos(pos), cosAfter[pos, 0], 4);
+            Assert.Equal(System.Math.Sin(pos), sinAfter[pos, 0], 4);
+        }
+    }
 }

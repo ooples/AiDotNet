@@ -381,5 +381,6 @@ internal sealed class MinMoCore<T>
         return actions.ToArray();
     }
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), x.ToVector());
+    // A traced device copy without gradient: a host copy would read the traced value and refuse a compiled plan.
+    private static Tensor<T> Detached(Tensor<T> x) => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.StopGradient(x);
 }

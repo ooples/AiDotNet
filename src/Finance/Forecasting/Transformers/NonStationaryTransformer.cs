@@ -969,6 +969,26 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     #region Model-Specific Processing
 
     /// <summary>
+    /// The instance mean and population standard deviation plus <paramref name="eps"/> as detached <c>[1]</c> tensors,
+    /// computed on the engine so a compiled training step traces them instead of reading the input on the host.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> Std) InstanceStatistics(Tensor<T> input, double eps)
+    {
+        int n = input.Length;
+        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
+        var mean = Engine.StopGradient(Engine.TensorDivideScalar(
+            Engine.Reshape(Engine.ReduceSum(flat, new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n)));
+        var centered = Engine.TensorSubtract(flat, Engine.TensorBroadcastTo(mean, new[] { n }));
+        var variance = Engine.TensorDivideScalar(
+            Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n));
+        var std = Engine.StopGradient(Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(eps)));
+        return (mean, std);
+    }
+
+    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
+        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
+
+    /// <summary>
     /// Applies Series Stationarization or its inverse (de-stationarization).
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -984,24 +1004,20 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     private Tensor<T> ApplySeriesStationarization(Tensor<T> input, bool normalize)
     {
         var result = new Tensor<T>(input._shape);
-        var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
         {
-            // Compute mean and std for this instance (population std plus eps), then normalize.
+            if (input.Length == 0) return result;
+            // Compute mean and std for this instance (population std plus eps), then normalize. The whole map stays
+            // detached, as before.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
-            var mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-            var centered = Engine.TensorSubtractScalar(flat, mean);
-            T varSum = input.Length > 0 ? Engine.TensorSumOfSquares(centered) : NumOps.Zero;
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
-            std = NumOps.Add(std, eps); // Prevent division by zero
+            var (mean, std) = InstanceStatistics(input, 1e-5);
 
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
-            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
+            _instanceMean = mean;
+            _instanceStd = std;
 
-            result = Engine.Reshape(Engine.TensorDivideScalar(centered, std), input._shape);
+            result = Engine.TensorDivide(Engine.TensorSubtract(input, Wide(mean, input)), Wide(std, input));
         }
         else
         {

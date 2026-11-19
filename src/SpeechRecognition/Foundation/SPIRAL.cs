@@ -324,7 +324,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var loss = TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        var loss = TrainWithCustomObjective(audio, audio, (_, _) => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
         double progress = Math.Min(1.0, (double)_pretrainingStep++ / Math.Max(1, _options.PretrainingSteps));
         double alpha = _options.TeacherMomentumEnd
             - (_options.TeacherMomentumEnd - _options.TeacherMomentumStart) * (Math.Cos(Math.PI * progress) + 1) / 2;

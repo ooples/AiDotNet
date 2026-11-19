@@ -808,23 +808,31 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// i.e. the constant interior overlap of a fully-covered output sample. Used as the single scalar
     /// overlap-add normalizer (see IstftDifferentiable).
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("A constant of the frame layout (the symmetric Hann window's squared overlap-add peak): no model value is read, so it is computed on the host and a compiled training step does not trace it.")]
     private double PeakWindowOverlap(int numFrames, int fullLen)
     {
         if (fullLen < 0) throw new OverflowException("Signal length must be non-negative.");
         if (numFrames <= 0 || fullLen == 0) return 1e-8;
 
-        // Peak of the overlap-added squared analysis window.
-        var squared = Engine.TensorSquare(HannWindow());
-        var frames = new List<Tensor<T>>(numFrames);
-        var starts = new List<int>(numFrames);
+        // Peak of the overlap-added squared analysis window: 0.5 - 0.5 cos(2 pi i / (L - 1)), and a one-sample window
+        // is 0 (HannWindow's definition). Frames past the signal's end are cut at fullLen, as OverlapAdd cuts them.
+        int L = FrameLen;
+        var squared = new double[Math.Max(L, 0)];
+        for (int i = 0; L > 1 && i < L; i++)
+        {
+            double w = 0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / (L - 1));
+            squared[i] = w * w;
+        }
+        var sum = new double[fullLen];
         for (int t = 0; t < numFrames; t++)
         {
-            frames.Add(squared);
-            starts.Add(t * _hopSize);
+            long start = (long)t * _hopSize;
+            for (int i = 0; i < squared.Length && start + i < fullLen; i++)
+                sum[start + i] += squared[i];
         }
-        var sum = AudioEngineOps.OverlapAdd(Engine, frames, starts, fullLen);
 
-        double peak = Math.Max(0.0, NumOps.ToDouble(Engine.TensorMaxValue(sum)));
+        double peak = 0.0;
+        foreach (var v in sum) peak = Math.Max(peak, v);
         return peak < 1e-8 ? 1e-8 : peak;
     }
 

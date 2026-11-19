@@ -119,37 +119,43 @@ internal sealed class CifAsrNetwork<T>
         var fbank = _fbank.Forward(waveform);
         int frames = fbank.Shape[0], mels = _o.Mels;
         if (frames == 0) throw new ArgumentException("The waveform is shorter than one analysis window.", nameof(waveform));
-        var channels = new double[3][,];
-        channels[0] = new double[frames, mels];
-        for (int t = 0; t < frames; t++) for (int m = 0; m < mels; m++) channels[0][t, m] = NumOps.ToDouble(fbank[t, m]);
-        channels[1] = Deltas(channels[0]);
-        channels[2] = Deltas(channels[1]);
-        var features = new Tensor<T>(new[] { 1, 3, frames, mels });
-        for (int k = 0; k < 3; k++)
-            for (int m = 0; m < mels; m++)
-            {
-                double mean = 0, square = 0;
-                for (int t = 0; t < frames; t++) { mean += channels[k][t, m]; square += channels[k][t, m] * channels[k][t, m]; }
-                mean /= frames;
-                double deviation = Math.Sqrt(Math.Max(square / frames - mean * mean, 0)) + 1e-5;
-                for (int t = 0; t < frames; t++) features[0, k, t, m] = NumOps.FromDouble((channels[k][t, m] - mean) / deviation);
-            }
-        return features;
+        // All engine ops, so a compiled training plan traces the front end too.
+        var statics = fbank;
+        var delta = Deltas(statics);
+        var deltaDelta = Deltas(delta);
+        var channels = new[] { Normalized(statics), Normalized(delta), Normalized(deltaDelta) };
+        return _engine.Reshape(_engine.TensorStack(channels, 0), new[] { 1, 3, frames, mels });
+    }
+
+    // Each band [frames, bands] to zero mean and unit (population) deviation over the utterance, the deviation + 1e-5.
+    private Tensor<T> Normalized(Tensor<T> x)
+    {
+        var mean = _engine.ReduceMean(x, new[] { 0 }, keepDims: true);                                   // [1, bands]
+        var square = _engine.ReduceMean(_engine.TensorMultiply(x, x), new[] { 0 }, keepDims: true);
+        var variance = _engine.ReLU(_engine.TensorSubtract(square, _engine.TensorMultiply(mean, mean)));
+        var deviation = _engine.TensorAddScalar(_engine.TensorSqrt(variance), NumOps.FromDouble(1e-5));
+        return _engine.TensorDivide(_engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, x._shape)),
+            _engine.TensorBroadcastTo(deviation, x._shape));
     }
 
     // Kaldi's deltas with a window of 2: Σ n (x[t+n] − x[t−n]) / (2 Σ n²), the edges repeated.
-    private static double[,] Deltas(double[,] x)
+    private Tensor<T> Deltas(Tensor<T> x)
     {
-        int frames = x.GetLength(0), bands = x.GetLength(1);
-        var d = new double[frames, bands];
-        for (int t = 0; t < frames; t++)
-            for (int m = 0; m < bands; m++)
-            {
-                double sum = 0;
-                for (int n = 1; n <= 2; n++) sum += n * (x[Math.Min(frames - 1, t + n), m] - x[Math.Max(0, t - n), m]);
-                d[t, m] = sum / 10.0;
-            }
-        return d;
+        int frames = x.Shape[0];
+        Tensor<T>? sum = null;
+        var weights = new[] { NumOps.One, NumOps.FromDouble(2) };
+        for (int n = 1; n <= 2; n++)
+        {
+            var later = new int[frames];
+            var earlier = new int[frames];
+            for (int t = 0; t < frames; t++) { later[t] = Math.Min(frames - 1, t + n); earlier[t] = Math.Max(0, t - n); }
+            var difference = _engine.TensorSubtract(
+                _engine.TensorIndexSelect(x, new Tensor<int>(new[] { frames }, new Vector<int>(later)), 0),
+                _engine.TensorIndexSelect(x, new Tensor<int>(new[] { frames }, new Vector<int>(earlier)), 0));
+            var term = _engine.TensorMultiplyScalar(difference, weights[n - 1]);
+            sum = sum is null ? term : _engine.TensorAdd(sum, term);
+        }
+        return _engine.TensorMultiplyScalar(sum!, NumOps.FromDouble(0.1));
     }
 
     // [1, C, T, F] normalized over each frame's channels and frequencies.

@@ -420,15 +420,21 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     #region Preprocessing
 
     /// <summary>
-    /// Applies Pix2Struct's industry-standard preprocessing: ImageNet normalization.
+    /// Applies Pix2Struct's preprocessing: the variable-resolution rescale to the patch budget, then ImageNet
+    /// normalization.
     /// </summary>
     /// <remarks>
-    /// Pix2Struct (Google paper) uses patch-based encoding with ImageNet normalization
-    /// with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
+    /// Pix2Struct (Lee et al., 2023, section 2.2) rescales the input, preserving its aspect ratio, to the largest size
+    /// whose patch grid fits <c>MaxPatches</c>: with <c>scale = sqrt(MaxPatches * (P / H) * (P / W))</c> the grid is
+    /// <c>rows = clamp(floor(scale * H / P), 1, MaxPatches)</c> by <c>cols = clamp(floor(scale * W / P), 1, MaxPatches)</c>,
+    /// the rule of the reference image processor, and the image is resized bilinearly (half-pixel centres) to
+    /// <c>rows * P</c> by <c>cols * P</c>. The encoder therefore sees at most <c>MaxPatches</c> patches at any input
+    /// size or aspect ratio. Normalization uses mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225]; it is
+    /// per-channel affine and the bilinear weights sum to one, so it commutes with the resize.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
-        var image = EnsureBatchDimension(rawImage);
+        var image = ResizeToPatchBudget(EnsureBatchDimension(rawImage));
         int batchSize = image.Shape[0];
         int channels = image.Shape[1];
         int height = image.Shape[2];
@@ -456,6 +462,19 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             }
         }
         return normalized;
+    }
+
+    private Tensor<T> ResizeToPatchBudget(Tensor<T> image)
+    {
+        int height = image.Shape[2], width = image.Shape[3];
+        double scale = Math.Sqrt(_maxPatches * ((double)_patchSize / height) * ((double)_patchSize / width));
+        int rows = Math.Max(Math.Min((int)Math.Floor(scale * height / _patchSize), _maxPatches), 1);
+        int cols = Math.Max(Math.Min((int)Math.Floor(scale * width / _patchSize), _maxPatches), 1);
+        int outH = rows * _patchSize, outW = cols * _patchSize;
+        if (outH == height && outW == width)
+            return image;
+
+        return AiDotNet.ComputerVision.CvTensorOps<T>.ResizeBilinearHalfPixel(image, outH, outW);
     }
 
     /// <summary>

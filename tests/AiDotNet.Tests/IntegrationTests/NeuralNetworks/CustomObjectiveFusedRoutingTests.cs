@@ -26,7 +26,7 @@ public class CustomObjectiveFusedRoutingTests
 {
     private const int Steps = 6;
 
-    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3, StepNoise }
+    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3, StepNoise, StepIndices, CapturedTargetHostRead }
 
     private sealed class ObjectiveNetwork : FeedForwardNeuralNetwork<float>
     {
@@ -74,6 +74,39 @@ public class CustomObjectiveFusedRoutingTests
                 var noise = AiDotNet.Training.CompiledStepRandom<float>.StandardNormal(y.Shape.ToArray(), _noise);
                 var noisy = Engine.TensorAdd(y, Engine.TensorMultiplyScalar(noise, 0.5f));
                 return new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, noisy);
+            });
+
+        // Reads a captured, already-computed data tensor on the host and builds a constant from it (as a vocoder's
+        // teacher-forcing inputs are built from its target audio): the constant differs every step.
+        internal float CapturedTargetHostReadStep(Tensor<float> x, Tensor<float> capturedTarget)
+            => TrainWithCustomLoss(x, prediction =>
+            {
+                var shifted = new Tensor<float>(capturedTarget.Shape.ToArray());
+                var source = capturedTarget.ToArray();
+                var span = shifted.AsWritableSpan();
+                for (int i = 0; i < span.Length; i++) span[i] = source[i] > 0 ? 1f : -1f;
+                return new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, shifted);
+            });
+
+        private readonly Random _rows = new(11);
+
+        // Draws per-step row indices, then noise whose scale depends on that draw (as wav2vec 2.0's distractors depend on its
+        // mask): the target rows are resampled with replacement every step, and the replay must refill both in order.
+        internal float ResampledTargetStep(Tensor<float> x, Tensor<float> y)
+            => TrainWithCustomObjective(x, y, (input, target) =>
+            {
+                int rows = target.Shape[0];
+                int lastFirst = 0;
+                var picks = AiDotNet.Training.CompiledStepRandom<float>.DrawIndices(new[] { rows }, t =>
+                {
+                    var span = t.AsWritableSpan();
+                    for (int i = 0; i < span.Length; i++) span[i] = _rows.Next(rows);
+                    lastFirst = span[0];
+                });
+                var scale = AiDotNet.Training.CompiledStepRandom<float>.Draw(new[] { 1 }, t => t.AsWritableSpan()[0] = 0.25f * (1 + lastFirst));
+                var resampled = Engine.TensorIndexSelect(target, picks, 0);
+                var scaled = Engine.TensorMultiply(resampled, Engine.TensorBroadcastTo(Engine.Reshape(scale, new[] { 1, 1 }), resampled._shape));
+                return new MeanSquaredErrorLoss<float>().ComputeTapeLoss(ForwardForTraining(input), scaled);
             });
 
         // Reads its own forward on the host only when asked (as Paraformer's sampler does on some steps).
@@ -157,6 +190,8 @@ public class CustomObjectiveFusedRoutingTests
                     case Objective.HostRead: model.HostReadStep(x, y); break;
                     case Objective.HostReadOnStep3: model.SometimesHostReadStep(x, y, read: s == 3); break;
                     case Objective.StepNoise: model.NoisyTargetStep(x, y); break;
+                    case Objective.StepIndices: model.ResampledTargetStep(x, y); break;
+                    case Objective.CapturedTargetHostRead: model.CapturedTargetHostReadStep(x, y); break;
                 }
             }
             return (model.GetParameters(), model);
@@ -191,6 +226,7 @@ public class CustomObjectiveFusedRoutingTests
     [InlineData(Objective.CapturedTarget)]
     [InlineData(Objective.CapturedScale)]
     [InlineData(Objective.StepNoise)]
+    [InlineData(Objective.StepIndices)]
     public async System.Threading.Tasks.Task AGuardedObjective_TrainsFused_AndMatchesEager(Objective objective)
     {
         await System.Threading.Tasks.Task.CompletedTask;
@@ -199,6 +235,17 @@ public class CustomObjectiveFusedRoutingTests
             + (fused.LastObjectiveMissReason ?? "no reason recorded"));
         Assert.Equal(Steps, fused.CustomFusedStepCount);
         Assert.True(divergence < 1e-4, $"{objective}: fused diverged from eager by {divergence:E3}");
+    }
+
+    // A constant built on the host from a captured data tensor changes with the data: whether the step fuses or not,
+    // the parameters must follow the eager tape.
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task AConstantBuiltFromCapturedData_FollowsTheData_FusedOrNot()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        var (fused, divergence) = FusedVersusEager(Objective.CapturedTargetHostRead);
+        Assert.True(divergence < 1e-4, $"a constant built from captured data diverged from eager by {divergence:E3} "
+            + "(fused steps " + fused.CustomFusedStepCount + ", " + (fused.LastObjectiveMissReason ?? "no reason") + ")");
     }
 
     [Fact(Timeout = 120000)]
