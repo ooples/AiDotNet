@@ -97,6 +97,11 @@ test.describe('crawler regression checks', () => {
           ? '<div id="dropdown" onmouseleave="document.getElementById(\'panel\').hidden=true"><button id="open" onclick="document.getElementById(\'panel\').hidden=false">Open menu</button><div id="panel" hidden><button id="inert-child">Inert child</button></div></div>'
         : req.url === '/focus-transfer/'
           ? '<style>input:focus{background:rgb(255,255,0)}</style><button id="focus" onclick="document.getElementById(\'search\').focus()">Focus search</button><input id="search" aria-label="Search">'
+        : req.url === '/mutable-record/'
+          ? '<button id="refresh-record" onclick="localStorage.setItem(\'record-tier\',\'enterprise\');document.querySelector(\'tbody button\').dataset.tier=\'enterprise\';document.querySelector(\'tbody button\').dataset.name=\'Changed Customer\';document.getElementById(\'result\').textContent=\'Record updated\'">Refresh record</button><p id="result"></p>'
+            + '<table><tbody><tr><td><button data-id="11111111-1111-4111-8111-111111111111" data-name="Original Customer" data-role="user" data-tier="pro" data-action="edit" onclick="alert(\'Edit opened\')">Edit</button></td></tr></tbody></table>'
+            + '<button data-tier="pro" onclick="alert(\'Pro checkout\')">Subscribe</button><button data-tier="enterprise" onclick="alert(\'Enterprise checkout\')">Subscribe</button>'
+            + '<script>if(localStorage.getItem("record-tier")){document.querySelector("tbody button").dataset.tier="enterprise";document.querySelector("tbody button").dataset.name="Changed Customer"}</script>'
         : req.url === '/enable-at-limit/'
           ? '<button id="enable" onclick="document.getElementById(\'deep\').disabled=false">Enable</button><button id="deep" disabled onclick="alert(\'Deep\')">Deep</button>'
         : req.url === '/unrelated-abort/'
@@ -176,6 +181,16 @@ test.describe('crawler regression checks', () => {
     expect(report.findings).toEqual([]);
     await expect(page.locator('#search')).toBeFocused();
     await expect(page.locator('#search')).toHaveCSS('background-color','rgb(255, 255, 0)');
+  });
+
+  test('record action identity survives mutable customer data while plan choices stay distinct', async ({page,request}) => {
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/mutable-record/`]});
+    expect(report.findings).toEqual([]);
+    expect(report.exercised.filter(key=>key.includes('button::Edit'))).toHaveLength(1);
+    expect(report.exercised.some(key=>key.includes('Customer')),'customer payload is not control identity').toBe(false);
+    expect(report.exercised).toEqual(expect.arrayContaining([
+      expect.stringContaining('Subscribe[data-tier=pro]'),expect.stringContaining('Subscribe[data-tier=enterprise]'),
+    ]));
   });
 
   test('requests that start while an action settles finish before its result is checked', async ({ page, request }) => {

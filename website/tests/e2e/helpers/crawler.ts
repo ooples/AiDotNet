@@ -81,6 +81,7 @@ export function staticRoutes(): string[] {
 
 interface ControlInfo {
   key: string;
+  recordId: string | null;
   selector: string;
   label: string;
   tag: string;
@@ -189,12 +190,18 @@ const ENUMERATE = (input: string | { path: string; target: Element }) => {
       // data-* values tell same-label controls apart (Subscribe on the Pro card vs the Enterprise card);
       // ids and counters in them are normalised so table rows still collapse to one control.
       const norm = (v: string) => v.replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*|\d+/gi, 'N');
+      // Repeated CRUD actions keep their identity when another customer changes
+      // plan/name/role during a crawl. Those values are record payload, not paths.
+      // Keep plan selectors elsewhere distinct (Subscribe Pro vs Enterprise).
+      const recordAction = !!el.closest('tbody tr') && el.hasAttribute('data-id');
       const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && !a.name.startsWith('data-crawl-') && a.value.length < 40)
+        .filter((a) => !recordAction || !/^data-(?:name|email|role|tier|status)$/.test(a.name))
         .map((a) => `[${a.name}=${norm(a.value)}]`).sort().join('');
       const controlName = el.matches('tbody .copy-key-btn') ? 'Copy license key' : label;
       const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(controlName)}${data}`;
       return {
         key: `${scope} ${el.id ? `#${el.id}` : generic}`,
+        recordId: recordAction ? el.getAttribute('data-id') : null,
         selector: cssPath(el),
         isTarget: el === target,
         label: label || cssPath(el),
@@ -555,7 +562,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
     const loc = await page.locator(c.selector).first().elementHandle();
     const verified = loc && (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
-    if (!loc || !verified || verified.key !== c.key) {
+    if (!loc || !verified || verified.key !== c.key || verified.recordId !== c.recordId) {
       add(pg, c.key, 'control identity changed before the action; coverage was not credited');
       return 'same';
     }
@@ -569,7 +576,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const before = await snapshot();
     if (!before || !idle) return 'nav';
     const finalIdentity = (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
-    if (!finalIdentity || finalIdentity.key !== c.key) {
+    if (!finalIdentity || finalIdentity.key !== c.key || finalIdentity.recordId !== c.recordId) {
       add(pg, c.key, 'control identity changed before the action; coverage was not credited');
       return 'same';
     }
