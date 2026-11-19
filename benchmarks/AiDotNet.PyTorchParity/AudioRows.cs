@@ -303,7 +303,11 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
         _label = new Tensor<float>(audio, [batchSize, samples]);
     }
 
-    public void Forward() => _ = _model.Predict(_input);
+    public void Forward()
+    {
+        // Match the PyTorch row's discarded-output lifetime: release device storage after each forward.
+        using var output = _model.Predict(_input);
+    }
 
     public void Backward()
     {
