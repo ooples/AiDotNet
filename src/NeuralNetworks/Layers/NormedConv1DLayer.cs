@@ -437,7 +437,23 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         if (ports.Count != 1 || ports[0].Source != TensorPortSource.External
             || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous || ports[0].ShapeConstraint.IsConstrained)
             BindInputContract(input.Shape.ToArray()).Validate(input);
-        var y = ForwardConvolution(input);
+        Tensor<T>? computedKernel = null;
+        if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CONV_BIAS_RESIDUAL") == "1"
+            && !_transposed && _groups == 1 && _useBias && input.Rank == 3 && input.Shape[1] == _in
+            && residual.Rank == 3 && residual.Shape[0] == input.Shape[0] && residual.Shape[1] == _out)
+        {
+            computedKernel = Kernel();
+            var input4 = Engine.Reshape(input, new[] { input.Shape[0], _in, 1, input.Shape[2] });
+            var residual4 = Engine.Reshape(residual, new[] { residual.Shape[0], _out, 1, residual.Shape[2] });
+            if (((DirectGpuTensorEngine)Engine).TryConvBiasResidualInference(input4, computedKernel, _bias, residual4,
+                1, _stride, 0, _padding, 1, _dilation, alpha, writeActivation, out var fusedSum, out var fusedActivated))
+            {
+                activated = fusedActivated is not null
+                    ? Engine.Reshape(fusedActivated, new[] { input.Shape[0], _out, residual.Shape[2] }) : null;
+                return Engine.Reshape(fusedSum, new[] { input.Shape[0], _out, residual.Shape[2] });
+            }
+        }
+        var y = ForwardConvolution(input, computedKernel);
         int batch = y.Shape[0], outTime = y.Shape[3];
         if (_useBias && residual.Rank == 3 && residual.Shape[0] == batch
             && residual.Shape[1] == _out && residual.Shape[2] == outTime)
@@ -456,12 +472,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         return sum;
     }
 
-    private Tensor<T> ForwardConvolution(Tensor<T> input)
+    private Tensor<T> ForwardConvolution(Tensor<T> input, Tensor<T>? computedKernel = null)
     {
         if (input.Rank != 3 || input.Shape[1] != _in)
             throw new ArgumentException($"Expected [batch, {_in}, time], got [{string.Join(", ", input.Shape)}].", nameof(input));
         int batch = input.Shape[0], time = input.Shape[2];
-        var kernel = Kernel();
+        var kernel = computedKernel ?? Kernel();
         var x4 = Engine.Reshape(input, new[] { batch, _in, 1, time });
         Tensor<T> y;
         if (_transposed && _groups > 1)
