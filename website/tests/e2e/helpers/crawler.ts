@@ -32,6 +32,24 @@ import { hasSession, signIn, type Persona } from './personas';
 
 export interface Finding { page: string; control: string; problem: string }
 
+type Visual = Array<[number, string, boolean]>;
+interface CapturedAction {
+  target: Element;
+  visual?: Visual;
+  activated?: boolean;
+  pressBaselines: WeakMap<Event, Visual>;
+  pressResults: Array<[number, string]>;
+  cleanup: Array<() => void>;
+}
+interface CaptureWindow {
+  __fx: { mut: number; clip: number; open: number };
+  __visualIds?: WeakMap<Element, number>;
+  __visualNext?: number;
+  __crawlVisual?: () => Visual;
+  __crawlAction?: CapturedAction;
+  __crawlPressResult?: (event: Event) => void;
+}
+
 export interface CrawlOptions {
   page: Page;
   request: APIRequestContext;
@@ -294,13 +312,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   await page.route('**/*', intercept);
   await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
   await page.addInitScript(() => {
-    type Visual = Array<[number, string, boolean]>;
-    const w = window as unknown as {
-      __fx: { mut: number; clip: number; open: number };
-      __visualIds?: WeakMap<Element, number>; __visualNext?: number;
-      __crawlVisual?: () => Visual;
-      __crawlAction?: { target: Element; visual?: Visual; activated?: boolean };
-    };
+    const w = window as unknown as CaptureWindow;
     w.__fx = { mut: 0, clip: 0, open: 0 };
     w.__crawlVisual = () => {
       w.__visualIds ??= new WeakMap();
@@ -325,6 +337,35 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       // must remain available after the click. Focus elsewhere is the result.
       action.visual = w.__crawlVisual!();
     };
+    // Press-handler output precedes native focus, which may replace visual.
+    // Observe each propagation node after its existing handlers, including
+    // handlers that stop propagation. Never change pointer or focus state.
+    w.__crawlPressResult = event => {
+      const action = w.__crawlAction;
+      const baseline = action?.pressBaselines.get(event);
+      if (!action || action.activated || !baseline) return;
+      const before = new Map(baseline.map(([id,value,animated]) => [id,{value,animated}]));
+      for (const [id,value,animated] of w.__crawlVisual!()) {
+        const prior = before.get(id);
+        if (prior && !prior.animated && !animated && prior.value !== value
+          && !action.pressResults.some(([seen,result]) => seen === id && result === value)) action.pressResults.push([id,value]);
+      }
+    };
+    const capturePress = (event: Event) => {
+      const action = w.__crawlAction;
+      if (!action || action.activated || !(event.target instanceof Element) || !action.target.contains(event.target)) return;
+      action.pressBaselines.set(event, w.__crawlVisual!());
+      for (const node of event.composedPath()) {
+        if (node === window) continue;
+        for (const capture of [true, false]) {
+          const listener = w.__crawlPressResult!;
+          node.addEventListener(event.type, listener, { capture, once: true });
+          action.cleanup.push(() => node.removeEventListener(event.type, listener, capture));
+        }
+      }
+    };
+    window.addEventListener('pointerdown', capturePress, true);
+    window.addEventListener('mousedown', capturePress, true);
     window.addEventListener('mouseover', captureNativeInteraction, true);
     window.addEventListener('focus', captureNativeInteraction, true);
     window.addEventListener('click', event => {
@@ -493,12 +534,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   async function snapshot() {
     return page.evaluate(() => {
-      type Visual = Array<[number, string, boolean]>;
-      const w = window as unknown as {
-        __fx?: { mut: number; clip: number; open: number };
-        __crawlVisual?: () => Visual;
-        __crawlAction?: { visual?: Visual };
-      };
+      const w = window as unknown as CaptureWindow;
       let visibleCount = 0;
       for (const el of Array.from(document.querySelectorAll('body *'))) {
         const r = (el as HTMLElement).getBoundingClientRect();
@@ -522,7 +558,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       for (let i = 0; i < state.length; i++) sh = (sh * 31 + state.charCodeAt(i)) | 0;
       return {
         url: location.href, visibleCount, textHash: h, stateHash: sh, visual,
-        interactionVisual: w.__crawlAction?.visual ?? null, htmlClass: document.documentElement.className,
+        interactionVisual: w.__crawlAction?.visual ?? null,
+        pressResults: w.__crawlAction?.pressResults ?? [], htmlClass: document.documentElement.className,
         mut: w.__fx?.mut ?? 0, clip: w.__fx?.clip ?? 0, open: w.__fx?.open ?? 0,
       };
     }).catch(() => null);
@@ -554,7 +591,9 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   async function clearActionCapture() {
     await page.evaluate(() => {
-      delete (window as unknown as { __crawlAction?: unknown }).__crawlAction;
+      const w = window as unknown as CaptureWindow;
+      for (const cleanup of w.__crawlAction?.cleanup ?? []) cleanup();
+      delete w.__crawlAction;
     }).catch(() => {});
   }
 
@@ -594,7 +633,16 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const download = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
     try {
       await loc.evaluate(el => {
-        (window as unknown as { __crawlAction?: { target: Element } }).__crawlAction = { target: el };
+        const w = window as unknown as CaptureWindow;
+        const action: CapturedAction = { target: el, pressBaselines: new WeakMap(), pressResults: [], cleanup: [] };
+        w.__crawlAction = action;
+        // Registered after application window handlers; descendants are added
+        // by capturePress before dispatch reaches them.
+        for (const type of ['pointerdown', 'mousedown']) for (const capture of [true, false]) {
+          const listener = w.__crawlPressResult!;
+          window.addEventListener(type, listener, capture);
+          action.cleanup.push(() => window.removeEventListener(type, listener, capture));
+        }
       });
       if (c.tag === 'select') {
         // Clicking a native select changes nothing; choosing another option fires input and change.
@@ -661,7 +709,8 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       || (!noisy.state && final.stateHash !== before.stateHash)
       || final.visual.some(([id,value,animated]) => stableVisual.has(id) && !animated
         && !settledVisual.get(id)?.animated && settledVisual.get(id)?.value === value
-        && interactionVisual.has(id) && !interactionVisual.get(id)!.animated && interactionVisual.get(id)!.value !== value)
+        && ((interactionVisual.has(id) && !interactionVisual.get(id)!.animated && interactionVisual.get(id)!.value !== value)
+          || final.pressResults.some(([resultId,result]) => resultId === id && result === value)))
       || final.htmlClass !== before.htmlClass;
     if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);

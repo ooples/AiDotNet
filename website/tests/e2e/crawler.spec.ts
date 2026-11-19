@@ -91,6 +91,10 @@ test.describe('crawler regression checks', () => {
           ? '<button id="update" onclick="document.getElementById(\'secret\').checked=true">Update</button><div hidden><input type="checkbox" id="secret"></div>'
         : req.url === '/visible-style/'
           ? '<button id="update" onclick="fetch(\'/ping/\').then(()=>document.getElementById(\'swatch\').style.backgroundColor=\'blue\')">Update</button><div id="swatch" style="width:20px;height:20px;background:red"></div>'
+        : req.url === '/preclick-pointerdown/' || req.url === '/preclick-mousedown/'
+          ? `<button id="press" on${req.url.includes('pointerdown') ? 'pointerdown' : 'mousedown'}="event.stopPropagation();document.getElementById('swatch').style.backgroundColor='blue'">Change color</button><div id="swatch" style="width:20px;height:20px;background:red"></div>`
+        : req.url === '/inert-press/'
+          ? '<style>#swatch{background:red;width:20px;height:20px}button:active+#swatch,button:focus+#swatch{background:blue}</style><button id="inert">Inert press styling</button><div id="swatch"></div>'
         : req.url === '/inert-style/'
           ? '<style>button,#swatch{background:red;transition:background-color 1s .5s}button:hover,button:focus,button:hover+#swatch,button:focus+#swatch{background:blue}</style><button id="inert">Inert styled button</button><div id="swatch" style="width:20px;height:20px"></div>'
         : req.url === '/mouseleave-dropdown/'
@@ -166,6 +170,19 @@ test.describe('crawler regression checks', () => {
 
   test('hover and focus styling cannot give an inert button effect credit', async ({page,request}) => {
     const report=await crawl({...options(),page,request,seeds:[`${origin}/inert-style/`]});
+    expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({control:expect.stringContaining('#inert'),problem:expect.stringContaining('did nothing visible')})]));
+  });
+
+  for (const phase of ['pointerdown', 'mousedown']) {
+    test(`${phase} rendered results survive native focus`, async ({page,request}) => {
+      const report=await crawl({...options(),page,request,seeds:[`${origin}/preclick-${phase}/`]});
+      expect(report.findings).toEqual([]);
+      await expect(page.locator('#swatch')).toHaveCSS('background-color','rgb(0, 0, 255)');
+    });
+  }
+
+  test('native active and focus styles cannot give an inert press effect credit', async ({page,request}) => {
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/inert-press/`]});
     expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({control:expect.stringContaining('#inert'),problem:expect.stringContaining('did nothing visible')})]));
   });
 
