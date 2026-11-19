@@ -66,7 +66,7 @@ internal sealed partial class HiFiGanGenerator<T>
             var cpu = _engine.Cast<CpuEngine>();
             var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();
             views = activeViews;
-            var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(ReferenceEqualityComparer.Instance);
+            var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(AiDotNet.Helpers.TensorReferenceComparer<NormedConv1DLayer<T>>.Instance);
             var numOps = MathHelper.GetNumericOperations<T>();
             T slope = numOps.FromDouble(Slope), finalSlope = numOps.FromDouble(0.01);
             PrivateCpuActivation View(int slot, int channels, int length)
