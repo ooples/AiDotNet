@@ -22,6 +22,7 @@ internal sealed partial class HiFiGanGenerator<T>
     private const double Slope = 0.1;
     private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
     private readonly bool _gpuOwnedResidualsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_OWNED_RESIDUALS") == "1";
+    private readonly bool _gpuDetachedLifetimesEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_DETACHED_LIFETIMES") == "1";
     private string? _gpuLifetimeDiagnosticState;
 
     private readonly IEngine _engine;
@@ -353,6 +354,24 @@ internal sealed partial class HiFiGanGenerator<T>
     // training mode and normalization behavior remain unchanged.
     internal Tensor<T> ForwardDetachedForDiscriminator(Tensor<T> features)
     {
+        if (_gpuDetachedLifetimesEnabled && NoGradScope<T>.IsSuppressed && GradientTape<T>.Current is null
+            && _engine.GetType() == typeof(DirectGpuTensorEngine) && _engine is DirectGpuTensorEngine gpu
+            && !gpu.ResidentStepActive && !gpu.InferenceCaptureActive
+            && !AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive
+            && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+            && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+            && _layers.All(layer => layer.GetType() == typeof(NormedConv1DLayer<T>))
+            && (gpu.GetBackend() is not AiDotNet.Tensors.Engines.DirectGpu.IGpuGraphCapture capture
+                || !capture.SupportsGraphCapture || !capture.IsStreamCapturing()))
+        {
+            // Detached discriminator generation needs only the waveform. Keep training mode and the existing
+            // host-owned return contract while returning convolution/residual scratch at each pair boundary.
+            using var scratch = TensorScope.Begin();
+            var detached = ForwardGpuInference(features, null, gpu);
+            return new Tensor<T>(detached.ToArray(), detached.Shape.ToArray());
+        }
+
         bool recycle = InferenceArenaSettings.Enabled && InferenceArenaSettings.RecycleLayerScratch
             && CanRecycleDetachedTraining;
         using var arena = recycle ? TensorArena.CreateDetached() : null;
