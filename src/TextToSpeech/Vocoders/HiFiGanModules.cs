@@ -23,6 +23,7 @@ internal sealed partial class HiFiGanGenerator<T>
     private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
     private readonly bool _gpuOwnedResidualsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_OWNED_RESIDUALS") == "1";
     private readonly bool _gpuDetachedLifetimesEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_DETACHED_LIFETIMES") == "1";
+    private readonly int _gpuInferenceBatchLimit = ReadGpuInferenceBatchLimit();
     private string? _gpuLifetimeDiagnosticState;
 
     private readonly IEngine _engine;
@@ -177,6 +178,27 @@ internal sealed partial class HiFiGanGenerator<T>
 
     private Tensor<T> LeakyRelu(Tensor<T> x, double slope)
         => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(slope));
+
+    private static int ReadGpuInferenceBatchLimit()
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_INFERENCE_BATCH_LIMIT"), out int limit)
+            && limit >= 1 && limit <= 8 ? limit : 0;
+    }
+
+    private Tensor<T> ForwardGpuMicrobatched(Tensor<T> features, DirectGpuTensorEngine gpu)
+    {
+        using var owner = TensorScope.Begin();
+        var outputs = new List<Tensor<T>>();
+        int batch = features.Shape[0], channels = features.Shape[1], frames = features.Shape[2];
+        for (int start = 0; start < batch; start += _gpuInferenceBatchLimit)
+        {
+            int count = Math.Min(_gpuInferenceBatchLimit, batch - start);
+            using var chunk = TensorScope.Begin();
+            var input = _engine.TensorSlice(features, new[] { start, 0, 0 }, new[] { count, channels, frames });
+            outputs.Add(chunk.Keep(ForwardGpuInference(input, null, gpu)));
+        }
+        return owner.Keep(_engine.TensorConcatenate(outputs.ToArray(), 0));
+    }
 
     private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
     {
@@ -399,7 +421,13 @@ internal sealed partial class HiFiGanGenerator<T>
             && GradientTape<T>.Current is null && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
             && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
             && _layers.All(layer => !layer.InTrainingMode))
+        {
+            if (_gpuInferenceBatchLimit > 0 && condition is null && features.Rank == 3
+                && features.Shape[0] > _gpuInferenceBatchLimit && typeof(T) == typeof(float)
+                && ReferenceEquals(_engine, gpu) && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled)
+                return ForwardGpuMicrobatched(features, gpu);
             return ForwardGpuInference(features, condition, gpu);
+        }
 
 
         if (TryForwardPrivateCpu(features, condition, out var privateCpuOutput)) return privateCpuOutput;
