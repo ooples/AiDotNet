@@ -11116,38 +11116,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
     }
 
-    // The layers whose forward reads non-parameter tensors a compiled plan bakes in (a graph's adjacency), collected
-    // once per layer structure, and the sum of their binding versions the compiled plans were last checked against.
+    // Reused traversal and identity/version snapshots of non-parameter inputs held by compiled plans.
     [AiDotNet.Attributes.Scratch]
-    private NeuralNetworks.Layers.ICompiledBindingSource[]? _compiledBindingSources;
+    private object? _compiledBindingGate;
     [AiDotNet.Attributes.Scratch]
-    private int _compiledBindingSourcesStructure = -1;
+    private List<(NeuralNetworks.Layers.ICompiledBindingSource Source, int Version)>? _compiledBindingSnapshot;
+    [AiDotNet.Attributes.Scratch]
+    private List<(NeuralNetworks.Layers.ICompiledBindingSource Source, int Version)>? _compiledBindingWork;
+    [AiDotNet.Attributes.Scratch]
+    private HashSet<ILayer<T>>? _compiledBindingVisited;
+    [AiDotNet.Attributes.Scratch]
+    private Stack<ILayer<T>>? _compiledBindingPending;
+    [AiDotNet.Attributes.Scratch]
+    private long _compiledBindingGeneration;
     [AiDotNet.Attributes.Scratch]
     private long _compiledBindingSum = long.MinValue;
+    private static long s_nextCompiledBindingGeneration;
 
     /// <summary>
-    /// The sum of the binding versions of this network's layers (see <see cref="NeuralNetworks.Layers.ICompiledBindingSource"/>):
-    /// it moves when a layer's graph is replaced or written in place, so anything that caches a compiled forward of
-    /// this network re-traces. Each version only increases, so the sum never returns to a value it had.
+    /// A generation for the identities and versions of graph bindings throughout the layer graph.
+    /// Replacing a source advances it even when the replacement reports the same local version.
     /// </summary>
     internal long CompiledBindingVersion
     {
         get
         {
-            if (_compiledBindingSources is null || _compiledBindingSourcesStructure != _layerStructureVersion)
+            lock (System.Threading.LazyInitializer.EnsureInitialized(ref _compiledBindingGate)
+                ?? throw new InvalidOperationException("Compiled binding lock initialization failed."))
             {
-                var sources = new List<NeuralNetworks.Layers.ICompiledBindingSource>();
-                foreach (var layer in Layers)
+                var snapshot = _compiledBindingSnapshot ??= new();
+                var current = _compiledBindingWork ??= new();
+                var seen = _compiledBindingVisited ??= new(ReferenceEqualityComparer<ILayer<T>>.Instance);
+                var pending = _compiledBindingPending ??= new();
+                current.Clear();
+                seen.Clear();
+                pending.Clear();
+                foreach (var layer in Layers) pending.Push(layer);
+                foreach (var layer in GetExtraTrainableLayers())
+                    if (layer is not null) pending.Push(layer);
+                while (pending.Count > 0)
                 {
-                    if (layer is NeuralNetworks.Layers.ICompiledBindingSource source) sources.Add(source);
+                    var layer = pending.Pop();
+                    if (!seen.Add(layer)) continue;
+                    if (layer is NeuralNetworks.Layers.ICompiledBindingSource source)
+                        current.Add((source, source.CompiledBindingVersion));
+                    if (layer.GetSubLayers() is { } children)
+                        foreach (var child in children)
+                            if (child is not null) pending.Push(child);
                 }
-                _compiledBindingSources = sources.ToArray();
-                _compiledBindingSourcesStructure = _layerStructureVersion;
+                bool changed = current.Count != snapshot.Count;
+                for (int i = 0; i < current.Count && !changed; i++)
+                    changed = !ReferenceEquals(current[i].Source, snapshot[i].Source)
+                        || current[i].Version != snapshot[i].Version;
+                if (changed)
+                {
+                    _compiledBindingGeneration = System.Threading.Interlocked.Increment(ref s_nextCompiledBindingGeneration);
+                    snapshot.Clear();
+                    _compiledBindingSnapshot = current;
+                    _compiledBindingWork = snapshot;
+                }
+                return _compiledBindingGeneration;
             }
-
-            long sum = 0;
-            foreach (var source in _compiledBindingSources) sum += source.CompiledBindingVersion;
-            return sum;
         }
     }
 

@@ -67,7 +67,11 @@ internal sealed class CompiledNeuralPredictor<T>
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        if (package is not null && TryBind(package)) _package = package;
+        if (package is not null && TryBind(package))
+        {
+            _package = package;
+            _programBinding = _model.CompiledBindingVersion;
+        }
     }
 
     /// <summary>The network this predictor serves.</summary>

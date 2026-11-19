@@ -2053,8 +2053,8 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
                 rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
         total = sum(steady)
-        mark_phase(model_name, f"inference-b{batch_size}-complete")
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
+        mark_phase(model_name, f"inference-b{batch_size}-complete")
         # p95 latency: robust to rig-contention noise that swings the mean.
         steady_sorted = sorted(steady)
         p95_idx = min(len(steady_sorted) - 1, round(0.95 * (len(steady_sorted) - 1)))

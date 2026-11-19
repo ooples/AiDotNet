@@ -89,6 +89,64 @@ public class GraphConvolutionalCompiledBindingTests : IDisposable
         return () => Copy(network.PredictCompiled(input));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SuppliedPackage_InvalidatesGraphChangeBeforeFirstUse(bool exportFirst)
+    {
+        using var network = Build("gcn");
+        network.SetAdjacencyMatrix(Ring(0));
+        var input = Input(2);
+        var original = new AiDotNet.Inference.CompiledNeuralPredictor<double>(network, JitCompilationConfig.Default).Export(input);
+        Assert.NotNull(original);
+        var predictor = new AiDotNet.Inference.CompiledNeuralPredictor<double>(network, JitCompilationConfig.Default, original);
+        network.SetAdjacencyMatrix(Ring(2));
+        var expected = Eager(network, input);
+        if (exportFirst) Assert.NotSame(original, predictor.Export(input));
+        AssertClose(expected, predictor.Predict(new[] { input })[0], "supplied package after a graph change");
+    }
+
+    [Fact]
+    public void TiledAdjacency_RebuildsAfterSameVersionStorageReplacement()
+    {
+        using var network = Build("gcn");
+        var adjacency = Ring(0);
+        adjacency[0, 0] = 1;
+        network.SetAdjacencyMatrix(adjacency);
+        var input = Input(2);
+        var before = Eager(network, input);
+        int version = adjacency.StorageMutationVersion;
+        adjacency.AdoptFrom(Ring(2));
+        Assert.Equal(version, adjacency.StorageMutationVersion);
+        var after = Eager(network, input);
+        AssertDiffer(before, after, "storage replacement must rebuild the cached graph");
+        using var reference = Build("gcn");
+        reference.SetAdjacencyMatrix(Ring(2));
+        AssertClose(Eager(reference, input), after, "rebound storage vs a fresh graph");
+    }
+
+    [Fact]
+    public void CompiledPackageKeepsUnchangedSourcesAndRetracesEqualVersionReplacements()
+    {
+        using var network = Build("gcn");
+        network.SetAdjacencyMatrix(Ring(0));
+        var input = Input(2);
+        var predictor = new AiDotNet.Inference.CompiledNeuralPredictor<double>(network, JitCompilationConfig.Default);
+        var original = predictor.Export(input);
+        Assert.NotNull(original);
+        Assert.Same(original, predictor.Export(input));
+        var before = Eager(network, input);
+        using var replacement = Build("gcn");
+        replacement.SetAdjacencyMatrix(Ring(2));
+        _ = replacement.CompiledBindingVersion;
+        var expected = Eager(replacement, input);
+        AssertDiffer(before, expected, "replacement graph must change the output");
+        var layers = (IList<ILayer<double>>)network.LayersReadOnly;
+        for (int i = 0; i < layers.Count; i++) layers[i] = replacement.LayersReadOnly[i];
+        Assert.NotSame(original, predictor.Export(input));
+        AssertClose(expected, predictor.Predict(new[] { input })[0], "replacement source after compiled export");
+    }
+
     // The forward with compilation off, so the reference never routes through a compiled plan.
     private static Tensor<double> Eager(GraphNeuralNetwork<double> network, Tensor<double> input)
     {

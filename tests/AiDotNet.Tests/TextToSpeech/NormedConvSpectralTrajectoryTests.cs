@@ -166,7 +166,7 @@ public sealed class NormedConvSpectralTrajectoryTests
     {
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
-            Assert.True(double.IsFinite(actual[i]) && Math.Abs(expected[i] - actual[i]) <= tolerance,
+            Assert.True(!double.IsNaN(actual[i]) && !double.IsInfinity(actual[i]) && Math.Abs(expected[i] - actual[i]) <= tolerance,
                 $"{phase}[{i}]: expected {expected[i]:R}, actual {actual[i]:R}, tolerance {tolerance:R}");
     }
 

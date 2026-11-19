@@ -160,7 +160,8 @@ internal static class HifiGanReferenceVerifier
         double cosine = expectedSquared > 0 && actualSquared > 0 ? dot / Math.Sqrt(expectedSquared * actualSquared)
             : expectedSquared == actualSquared ? 1 : 0;
         bool pass = kind == ComparisonKind.LearnedState
-            ? finite && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
+            ? finite && worst <= tolerance.Absolute + tolerance.Relative * scale
+                && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
             : finite && worst <= tolerance.Absolute + tolerance.Relative * scale
                 && (relative <= tolerance.Relative || worst <= tolerance.Absolute);
         if (total is not null)

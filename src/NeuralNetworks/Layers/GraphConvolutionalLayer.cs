@@ -910,6 +910,8 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     [Scratch]
     private Tensor<T>? _tiledAdjacencySource;
     private int _tiledAdjacencyVersion;
+    [Scratch]
+    private object? _tiledAdjacencyStorageIdentity;
 
     /// <summary>Adds the [1, 1, F] bias by broadcasting (no [B, N, F] tile is materialized), when the layer has one.</summary>
     private Tensor<T> AddBias(Tensor<T> output, int outputFeatures)
@@ -917,17 +919,22 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     [Scratch]
     private Tensor<T>? _residentTiledAdjacency;
+    [Scratch]
+    private IEngine? _residentTiledAdjacencyOwner;
 
     /// <summary>
-    /// Registers the graph as a persistent constant so a GPU engine uploads it once and keeps it on the device, instead
-    /// of re-uploading the host matrix on every forward (the previous one, if any, is released).
+    /// Registers the graph as a persistent constant on its owning engine, releasing the previous registration.
     /// </summary>
     private void KeepResident(ref Tensor<T>? slot, Tensor<T> tensor)
     {
-        if (ReferenceEquals(slot, tensor)) return;
-        if (slot is not null) Engine.UnregisterPersistentTensor(slot);
-        Engine.RegisterPersistentTensor(tensor, PersistentTensorRole.Constant);
+        var owner = Engine;
+        if (ReferenceEquals(slot, tensor) && ReferenceEquals(_residentTiledAdjacencyOwner, owner)) return;
+        if (slot is not null) _residentTiledAdjacencyOwner?.UnregisterPersistentTensor(slot);
+        slot = null;
+        _residentTiledAdjacencyOwner = null;
+        owner.RegisterPersistentTensor(tensor, PersistentTensorRole.Constant);
         slot = tensor;
+        _residentTiledAdjacencyOwner = owner;
     }
 
     /// <summary>The 2-D adjacency repeated over <paramref name="batchSize"/> graphs, cached while the matrix is unchanged.</summary>
@@ -949,8 +956,12 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         if (_tiledAdjacency is not null && ReferenceEquals(adjacency, _tiledAdjacencySource)
+            && ReferenceEquals(adjacency.StorageIdentity, _tiledAdjacencyStorageIdentity)
             && adjacency.StorageMutationVersion == _tiledAdjacencyVersion && _tiledAdjacency.Shape[0] == batchSize)
+        {
+            KeepResident(ref _residentTiledAdjacency, _tiledAdjacency);
             return _tiledAdjacency;
+        }
         // A plain host copy, not an engine op: an op here would be recorded into whichever compiled plan is tracing
         // this forward, and the cached tensor would then only hold data while that plan runs.
         var source = adjacency.ToArray();
@@ -960,8 +971,21 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _tiledAdjacency = new Tensor<T>(tiled, [batchSize, numNodes, numNodes]);
         KeepResident(ref _residentTiledAdjacency, _tiledAdjacency);
         _tiledAdjacencySource = adjacency;
+        _tiledAdjacencyStorageIdentity = adjacency.StorageIdentity;
         _tiledAdjacencyVersion = adjacency.StorageMutationVersion;
         return _tiledAdjacency;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _residentTiledAdjacency is not null)
+        {
+            _residentTiledAdjacencyOwner?.UnregisterPersistentTensor(_residentTiledAdjacency);
+            _residentTiledAdjacency = null;
+            _residentTiledAdjacencyOwner = null;
+        }
+        base.Dispose(disposing);
     }
 
     // What a compiled inference plan reads besides the weights: the adjacency, or the edge list in sparse mode.

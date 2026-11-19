@@ -37,12 +37,39 @@ internal static class OrderedTopKSelection<T>
         var equal = engine.TensorSubtract(engine.TensorSubtract(Filled(new[] { rows, n, n }, 1), larger), smaller);
         var earlier = engine.TensorTile(Constant(n, n, (i, j) => j < i ? 1 : 0), new[] { rows, 1, 1 });
         var before = engine.TensorAdd(larger, engine.TensorMultiply(equal, earlier));
-        var rank = engine.ReduceSum(before, new[] { 2 }, keepDims: false);                                   // [rows, n]
+        // Masks are exact 0/1 values in T, but low-precision counters are not (BF16 rounds 257 to 256).
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return CastData<float, T>(engine, OrderedTopKSelection<float>.SelectByRank(engine,
+                CastData<T, float>(engine, before), rows, n, k));
+        return SelectByRank(engine, before, rows, n, k);
+    }
+
+    private static Tensor<T> SelectByRank(IEngine engine, Tensor<T> before, int rows, int n, int k)
+    {
+        var rank = engine.ReduceSum(before, new[] { 2 }, keepDims: false);                                    // [rows, n]
 
         // slot[r, u, i] = 1 when rank[r, i] == u (ranks are small whole numbers, so |rank − u| < ½ is equality).
         var ranks = engine.TensorTile(engine.Reshape(rank, new[] { rows, 1, n }), new[] { 1, k, 1 });
         var slots = engine.TensorTile(Constant(k, n, (u, _) => u), new[] { rows, 1, 1 });
         return engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtract(ranks, slots)), NumOps.FromDouble(0.5));
+    }
+
+    // Selection is data, with no gradient across the dtype boundary. Record both casts so replay recomputes ranks.
+    private static Tensor<TOut> CastData<TIn, TOut>(IEngine engine, Tensor<TIn> input)
+    {
+        if (typeof(TIn) == typeof(TOut)) return (Tensor<TOut>)(object)input;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is { } scope)
+        {
+            scope.BindEngineIfUnset(engine);
+            return scope.RecordCrossType<TIn, TOut>(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+                "OrderedTopKSelection.Cast", input, input._shape, (e, output) =>
+                {
+                    var converted = CastData<TIn, TOut>(e, input);
+                    DirectGpuTensorEngine.CopyResultInto(e, converted, output);
+                });
+        }
+        return engine.TryGet<DirectGpuTensorEngine>(out var gpu) ? gpu.CastResidentDtype<TIn, TOut>(input) : input.Cast<TOut>();
     }
 
     /// <summary>A <c>[1, rows, columns]</c> constant with entry <c>value(i, j)</c>.</summary>

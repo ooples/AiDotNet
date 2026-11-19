@@ -277,9 +277,8 @@ internal sealed class InformerNetwork<T>
         int top = Math.Min(factor * (int)Math.Ceiling(Math.Log(lq)), lq);
         if (masked && lq != lk) throw new InvalidOperationException("Masked ProbSparse attention is self-attention: L_Q must equal L_K.");
 
-        // The sampled keys per query, shared by every batch row and head (torch.randint(L_K, (L_Q, U))), as a count
-        // per (query, key): a per-step draw, so a compiled training plan samples new keys on every replay.
-        var sampled = SampledKeyCounts(lq, samples, lk, random);
+        // Sampled key rows, shared across heads/batches, with a fresh draw on every compiled training replay.
+        var sampled = SampledKeyIndices(bh, lq, samples, lk, random);
 
         // The sparsity measurement and the top-u queries per row, chosen from the step's own queries and keys as
         // engine ops (the selection is not differentiated), so a compiled GPU plan chooses on the device every replay.
@@ -316,51 +315,46 @@ internal sealed class InformerNetwork<T>
         return _engine.TensorAdd(initial, _engine.BatchMatMul(selectT, _engine.TensorSubtract(updated, _engine.BatchMatMul(select, initial))));
     }
 
-    // How many times each key is sampled for each query, as a [L_Q, L_K] tensor: from KeySampler's indices when set,
-    // otherwise a per-step draw of L_Q x U keys in the reference's order.
+    // Key rows [BH, L_Q, U], with batch/head offsets into the flattened key table. The random draw is shared
+    // across batch/head rows and follows the reference's query/sample order.
     [AiDotNet.Attributes.ScalarKernel("Host draw of L_Q x U key indices (an upload each step, not a device read).")]
-    private Tensor<T> SampledKeyCounts(int queries, int samples, int keys, Random random)
+    private Tensor<int> SampledKeyIndices(int batchHeads, int queries, int samples, int keys, Random random)
     {
-        if (KeySampler is not null)
+        var fixedKeys = KeySampler?.Invoke(queries, samples, keys);
+        void Fill(Tensor<int> tensor)
         {
-            var fixedKeys = KeySampler(queries, samples, keys);
-            var tensor = new Tensor<T>(new[] { queries, keys });
             var span = tensor.AsWritableSpan();
-            for (int i = 0; i < queries; i++)
-                for (int s = 0; s < samples; s++) span[i * keys + fixedKeys[i, s]] = NumOps.Add(span[i * keys + fixedKeys[i, s]], NumOps.One);
-            return tensor;
-        }
-        return AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { queries, keys }, t =>
-        {
-            var span = t.AsWritableSpan();
-            span.Clear();
             for (int i = 0; i < queries; i++)
                 for (int s = 0; s < samples; s++)
                 {
-                    int j = random.Next(keys);
-                    span[i * keys + j] = NumOps.Add(span[i * keys + j], NumOps.One);
+                    int j = fixedKeys is null ? random.Next(keys) : fixedKeys[i, s];
+                    for (int b = 0; b < batchHeads; b++)
+                        span[(b * queries + i) * samples + s] = checked(b * keys + j);
                 }
-        });
+        }
+        var shape = new[] { batchHeads, queries, samples };
+        if (fixedKeys is null) return AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(shape, Fill);
+        var result = new Tensor<int>(shape);
+        Fill(result);
+        return result;
     }
 
-    // The one-hot rows [BH, u, L_Q] of the u queries with the largest sparsity measurement
-    // M(q_i) = max_s q_i·k_{j_s} − Σ_s q_i·k_{j_s} / L_K over the sampled keys j_s, in descending order with ties
-    // keeping the earlier query. All engine ops: the rank of query i is the count of queries that come before it in
-    // that order (a larger measure, or an equal one at an earlier position), and row u picks the query of rank u
-    // (OrderedTopKSelection).
-    private Tensor<T> SelectActiveQueries(Tensor<T> q, Tensor<T> k, Tensor<T> sampleCounts, int top)
+    // Only sampled pairs are materialized: [BH, Lq, U, E], independent of the full Lq x Lk product.
+    // Repeated samples remain repeated rows, preserving their multiplicity in the sum and the reference's /Lk divisor.
+    internal Tensor<T> SampledQueryMeasurement(Tensor<T> q, Tensor<T> k, Tensor<int> sampledKeys)
     {
-        int bh = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1];
-        var dots = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));                   // [BH, Lq, Lk]
-        var counts = _engine.TensorTile(_engine.Reshape(sampleCounts, new[] { 1, lq, lk }), new[] { bh, 1, 1 });
-        var sum = _engine.ReduceSum(_engine.TensorMultiply(dots, counts), new[] { 2 }, keepDims: false);    // [BH, Lq]
-        var sampledOnly = _engine.TensorWhere(_engine.TensorGreaterThan(counts, NumOps.FromDouble(0.5)), dots,
-            OrderedTopKSelection<T>.Filled(new[] { bh, lq, lk }, double.NegativeInfinity));
-        var max = _engine.ReduceMax(sampledOnly, new[] { 2 }, keepDims: false);                             // [BH, Lq]
-        var measure = _engine.TensorSubtract(max, _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / lk)));
-
-        return OrderedTopKSelection<T>.Select(_engine, measure, top);
+        int bh = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1], e = q.Shape[2], samples = sampledKeys.Shape[2];
+        var sampled = _engine.TensorEmbeddingLookup<T, int>(_engine.Reshape(k, new[] { bh * lk, e }), sampledKeys);
+        var queries = _engine.TensorTile(_engine.Reshape(q, new[] { bh, lq, 1, e }), new[] { 1, 1, samples, 1 });
+        var dots = _engine.ReduceSum(_engine.TensorMultiply(queries, sampled), new[] { 3 }, keepDims: false);
+        var sum = _engine.ReduceSum(dots, new[] { 2 }, keepDims: false);
+        var max = _engine.ReduceMax(dots, new[] { 2 }, keepDims: false);
+        return _engine.TensorSubtract(max, _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / lk)));
     }
+
+    // Stable descending ranks of the sampled sparsity measurements, computed on device on every replay.
+    private Tensor<T> SelectActiveQueries(Tensor<T> q, Tensor<T> k, Tensor<int> sampledKeys, int top)
+        => OrderedTopKSelection<T>.Select(_engine, SampledQueryMeasurement(q, k, sampledKeys), top);
 
     // [1, L_Q, L_K]: 1 on the keys after each query's position (the keys a causal query at that position must not see).
     private static Tensor<T> LaterKeys(int queries, int keys)

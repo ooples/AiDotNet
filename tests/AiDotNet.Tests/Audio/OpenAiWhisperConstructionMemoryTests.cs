@@ -101,6 +101,7 @@ public class OpenAiWhisperConstructionMemoryTests
         Assert.Equal(streamedLayers.Count, compared);
     }
 
+#if NET8_0_OR_GREATER
     [Fact]
     public void Construction_AllocatesAboutItsWeights_NotASecondCopy()
     {
@@ -122,6 +123,7 @@ public class OpenAiWhisperConstructionMemoryTests
             $"constructing a {weightBytes / 1e6:F0} MB whisper network allocated {allocated / 1e6:F0} MB "
             + $"({(double)allocated / weightBytes:F2}x its weights); initialization is materializing whole tensors again.");
     }
+#endif
 
     [Fact]
     public void RepeatedConstruction_RetainsNothing()

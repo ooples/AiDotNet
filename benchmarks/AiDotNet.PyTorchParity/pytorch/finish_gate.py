@@ -58,6 +58,8 @@ def paired_gate(ours: list[float | None], theirs: list[float | None], maximum: f
         # A zero-allocation reference cannot be beaten by 10%; equality is reported as a tie, never a win.
         return {"status": "fail", "reason": "Reference includes zero; a strict percentage win is not established."}
     ratios = [a / b for a, b in zip(ours, theirs)]
+    if any(not math.isfinite(ratio) for ratio in ratios):
+        return {"status": "unverified", "reason": "Derived ratios must be finite."}
     if all(ratio == 0 for ratio in ratios):
         return {"status": "pass", "median_ratio": 0.0, "upper_95_ratio": 0.0, "pairs": len(ratios)}
     # Tiny positive floor admits genuine zero allocations without log(0).
@@ -323,6 +325,18 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         env.pop("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE", None)
     for key in ("PROFILE_RANGE", "PROFILE_INFERENCE_BATCH", "BENCH_MEMSTEP", "AIDOTNET_FUSED_DIAG"):
         env.pop(key, None)
+    gpu_mapping = None
+    if device == "cuda":
+        gpu_id = str(config.get("gpu_id", "")).strip()
+        identity = nvidia_query(gpu_id, "index,uuid,pci.bus_id") if gpu_id else None
+        fields = [field.strip() for field in identity.split(",")] if identity and "\n" not in identity else []
+        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].startswith("GPU-") or not fields[2]:
+            raise ValueError("CUDA scoring requires gpu_id to resolve to one physical nvidia-smi GPU.")
+        gpu_mapping = dict(requested_id=gpu_id, physical_index=fields[0], uuid=fields[1], pci_bus_id=fields[2],
+                           cuda_visible_devices=fields[1], logical_device=0)
+        env["CUDA_VISIBLE_DEVICES"] = fields[1]
+        env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        env["AIDOTNET_DIRECTGPU_BACKENDS"] = "cuda"
     metadata = provenance(config)
     receipt_path = config.get("correctness_receipts", {}).get(model, {}).get(device)
     if receipt_path:
@@ -330,8 +344,9 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         metadata["correctness_receipt"] = {"path": str(receipt_file),
             "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
     metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
-                    cache_state=cache_state,
+                    cache_state=cache_state, gpu_mapping=gpu_mapping,
                     environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
+                        ({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "AIDOTNET_DIRECTGPU_BACKENDS"} & set(env)) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
                          "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
     blockers = contending_processes()
@@ -343,7 +358,13 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         return {"path": str(run_dir), **metadata}
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
-        sampler = Sampler(process.pid, config.get("gpu_id") if device == "cuda" else None)
+        try:
+            sampler = Sampler(process.pid, gpu_mapping["uuid"] if gpu_mapping else None)
+        except psutil.NoSuchProcess:
+            metadata.update(return_code=process.wait(), memory={}, phase_events=[], contention=[],
+                            invalid_reason="Child exited before memory sampling could start.")
+            write_json(run_dir / "measurement.json", metadata)
+            return {"path": str(run_dir), **metadata}
         sampler.start()
         try:
             return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
@@ -484,6 +505,8 @@ def correctness_gate(run: dict) -> dict:
 
 def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     path = Path(run["path"])
+    if run.get("invalid_reason"):
+        return {}, [run["invalid_reason"]]
     if run["return_code"] != 0 or not (path / "report.json").exists():
         return {}, ["process failed or report missing"]
     report = normalize(read_json(path / "report.json"))
@@ -536,7 +559,8 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         rows = {side: [metrics(run) if run else ({}, ["missing pair member"]) for run in sides[side]] for side in sides}
         names = sorted(set().union(*(row[0].keys() for side in rows.values() for row in side)))
         outcomes = {name: paired_gate([row[0].get(name) for row in rows["aidotnet"]],
-                                      [row[0].get(name) for row in rows["pytorch"]], maximum) for name in names}
+                                      [row[0].get(name) for row in rows["pytorch"]],
+                                      1.0 if name.endswith("_bytes") else maximum) for name in names}
         # Disk-cache redirection alone cannot prove a complete cold/warm regime across vendor libraries.
         outcomes["first_epoch_cache_coverage"] = {"status": "unverified", "reason":
             "Known cache directories are isolated; complete framework/vendor cache coverage is not yet proven."}

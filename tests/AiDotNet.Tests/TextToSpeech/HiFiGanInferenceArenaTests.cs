@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -51,18 +52,24 @@ public sealed class HiFiGanInferenceArenaTests
     [Fact]
     public void ResidualScratchPeakDoesNotGrowWithResidualDepth()
     {
-        var shallow = Create(1);
-        var deep = Create(8);
-        var input = new Tensor<double>(new[] { 1, 4, 128 });
-        input.Fill(.1);
-        using var callerArena = TensorArena.Create();
-        using var noGrad = new NoGradScope<double>();
-        _ = shallow.Forward(input).ToArray();
-        long shallowPeak = TensorArena.LastDisposedPeakBackingBytes;
-        _ = deep.Forward(input).ToArray();
-        long deepPeak = TensorArena.LastDisposedPeakBackingBytes;
-        Assert.True(shallowPeak > 0);
-        Assert.True(deepPeak <= shallowPeak * 1.15 + 65536,
-            $"Residual scratch grew with depth: shallow={shallowPeak}, deep={deepPeak}.");
+        bool savedRecycle = InferenceArenaSettings.RecycleLayerScratch;
+        try
+        {
+            InferenceArenaSettings.RecycleLayerScratch = true;
+            var shallow = Create(1);
+            var deep = Create(8);
+            var input = new Tensor<double>(new[] { 1, 4, 128 });
+            input.Fill(.1);
+            using var callerArena = TensorArena.Create();
+            using var noGrad = new NoGradScope<double>();
+            _ = shallow.Forward(input).ToArray();
+            long shallowPeak = TensorArena.LastDisposedPeakBackingBytes;
+            _ = deep.Forward(input).ToArray();
+            long deepPeak = TensorArena.LastDisposedPeakBackingBytes;
+            Assert.True(shallowPeak > 0);
+            Assert.True(deepPeak <= shallowPeak * 1.15 + 65536,
+                $"Residual scratch grew with depth: shallow={shallowPeak}, deep={deepPeak}.");
+        }
+        finally { InferenceArenaSettings.RecycleLayerScratch = savedRecycle; }
     }
 }

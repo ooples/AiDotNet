@@ -43,17 +43,35 @@ public class GraphAttentionSparseKernelTests
     public async Task SparseKernel_TrainingDropout_KeepsOrZeroesEachCoefficientAndStaysFinite()
     {
         await Task.Yield();
-        var input = CreateInput([1, Nodes, Features]);
-        var layer = new GraphAttentionLayer<float>(Features, 4, numHeads: 2, dropoutRate: 0.5,
-            activationFunction: new ELUActivation<float>(), concatenateHeads: true);
-        layer.SetAdjacencyMatrix(CreateAdjacency());
+        var input = new Tensor<float>([1, Nodes, Nodes]);
+        for (int i = 0; i < Nodes; i++) input[0, i, i] = 1f;
+        var layer = new GraphAttentionLayer<float>(Nodes, Nodes, numHeads: 2, dropoutRate: 0.5,
+            activationFunction: new IdentityActivation<float>(), concatenateHeads: true);
+        var adjacency = CreateAdjacency();
+        layer.SetAdjacencyMatrix(adjacency);
         layer.SetTrainingMode(true);
         var parameters = layer.GetTrainableParameters();
+        foreach (var parameter in parameters) parameter.Fill(0f);
+        for (int h = 0; h < 2; h++)
+            for (int i = 0; i < Nodes; i++) parameters[0][h, i, i] = 1f;
         using var tape = new GradientTape<float>();
         var output = layer.Forward(input);
         var loss = AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(output, output), null);
         var grads = tape.ComputeGradients(loss, parameters);
         Assert.All(output.AsSpan().ToArray(), v => Assert.False(float.IsNaN(v) || float.IsInfinity(v)));
+        for (int i = 0; i < Nodes; i++)
+        {
+            int degree = Enumerable.Range(0, Nodes).Count(j => adjacency[i, j] != 0f);
+            float kept = 2f / degree;
+            for (int h = 0; h < 2; h++)
+                for (int j = 0; j < Nodes; j++)
+                {
+                    float coefficient = output[0, i, h * Nodes + j];
+                    if (adjacency[i, j] == 0f) Assert.Equal(0f, coefficient);
+                    else Assert.True(Math.Abs(coefficient) < 1e-6f || Math.Abs(coefficient - kept) < 1e-6f,
+                        $"Coefficient [{h},{i},{j}] was {coefficient}; expected zero or {kept}.");
+                }
+        }
         foreach (var p in parameters)
         {
             Assert.True(grads.TryGetValue(p, out var g), "every parameter must receive a gradient");
