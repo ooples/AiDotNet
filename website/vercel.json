@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "ignoreCommand": "bash scripts/vercel-ignore.sh",
+  "redirects": [
+    { "source": "/docs", "destination": "/docs/getting-started/", "permanent": false },
+    { "source": "/docs/", "destination": "/docs/getting-started/", "permanent": false }
+  ],
   "git": {
     "deploymentEnabled": {
       "**": false,

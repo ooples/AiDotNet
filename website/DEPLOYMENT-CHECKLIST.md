@@ -71,6 +71,7 @@ runtime:
    (or update the existing endpoint to LIVE if you have one). Subscribe
    to at least:
    - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded` (delayed payment methods)
    - `invoice.paid`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`

@@ -1,4 +1,6 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve as serveHttp } from "https://deno.land/std@0.177.0/http/server.ts";
+import { withCors } from "../_shared/cors.ts";
+const serve = (handler: (req: Request) => Response | Promise<Response>) => serveHttp(withCors(handler));
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
 import { type ProductSlug } from "../_shared/products.ts";
@@ -55,13 +57,7 @@ const COMMUNITY_PRODUCT: ProductSlug = "aidotnet";
 // dash form is the only viable issuance path here. See ooples/AiDotNet#1262.
 const COMMUNITY_PREFIX = "AIDN-PROD" as const;
 const COMMUNITY_TIER = "community" as const;
-// Unique partial index name that enforces at-most-one active license per
-// (user, product, tier). See migration
-// 20260419000000_add_product_to_license_keys.sql. When a concurrent request
-// races us and wins the insert, Postgres surfaces this constraint name in
-// the error and we treat it as "the other request already issued the
-// license — go read it back".
-const UNIQUE_ACTIVE_INDEX = "idx_license_keys_one_active_per_user_product_tier";
+// Self-service issuance is serialized by a service-only database function.
 
 serve(async (req: Request) => {
   // Handle CORS preflight
@@ -119,10 +115,8 @@ serve(async (req: Request) => {
     // Use service role to check existing licenses and create new ones
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Helper that fetches the user's existing active community license for
-    // this product, if any. Used both as the fast path (skip insert if one
-    // already exists) and as the race-recovery path (another concurrent
-    // request inserted it while we were running — read back what they wrote).
+    // Fast path for existing Community grants, including legacy duplicate rows.
+    // The issuance RPC below rechecks under a lock before creating a new key.
     async function fetchExistingActiveLicense() {
       return await serviceClient
         .from("license_keys")
@@ -131,6 +125,8 @@ serve(async (req: Request) => {
         .eq("product", COMMUNITY_PRODUCT)
         .eq("tier", COMMUNITY_TIER)
         .eq("status", "active")
+        .order("id", { ascending: true })
+        .limit(1)
         .maybeSingle();
     }
 
@@ -169,64 +165,24 @@ serve(async (req: Request) => {
     const keyHex = crypto.randomUUID().replace(/-/g, "");
     const licenseKey = `${COMMUNITY_PREFIX}-${COMMUNITY_TIER.toUpperCase()}-${keyHex}`;
 
-    // Insert the new community license. The at-most-one-active partial
-    // unique index (migration 20260419000000) guarantees atomicity: if a
-    // concurrent request from the same user wins the insert race, this
-    // insert fails with Postgres error code 23505 (unique_violation) and
-    // we recover by reading back the winner's row instead of creating a
-    // duplicate.
-    const { data: inserted, error: insertError } = await serviceClient
-      .from("license_keys")
-      .insert({
-        user_id: user.id,
-        license_key: licenseKey,
-        product: COMMUNITY_PRODUCT,
-        tier: COMMUNITY_TIER,
-        status: "active",
-        max_activations: 3,
-        notes: "Self-registered community license",
-      })
-      .select("id")
-      .single();
-
-    if (insertError) {
-      // PostgREST surfaces the native Postgres SQLSTATE in `code`; 23505 is
-      // unique_violation. We additionally match on the constraint name so
-      // that other unique constraints (e.g., the license_key column's own
-      // uniqueness) don't get silently swallowed.
-      const isRaceViolation =
-        insertError.code === "23505" &&
-        typeof insertError.message === "string" &&
-        insertError.message.includes(UNIQUE_ACTIVE_INDEX);
-
-      if (isRaceViolation) {
-        // A concurrent request already issued an active community license
-        // for this user. Read it back and return that one.
-        const { data: racedLicense, error: refetchError } = await fetchExistingActiveLicense();
-        if (!refetchError && racedLicense) {
-          const bootstrap_token = await mintCommunityBootstrap(racedLicense.id);
-          return new Response(
-            JSON.stringify({
-              success: true,
-              license_key: racedLicense.license_key,
-              tier: COMMUNITY_TIER,
-              is_existing: true,
-              bootstrap_token,
-              message: "You already have an active community license.",
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        // The unique violation fired but we can't read the winner back.
-        // Fall through to the generic 500 so the caller retries cleanly.
-        console.error("Race-recovery refetch failed:", refetchError);
-      }
-
-      console.error("Insert error:", insertError);
+    // Serialize concurrent self-service signups without restricting independent grants.
+    const { data: issued, error: insertError } = await serviceClient.rpc("issue_aidotnet_community_license", {
+      p_user_id: user.id,
+      p_license_key: licenseKey,
+    });
+    if (insertError || !issued?.id || !issued?.license_key) {
+      console.error("Community issuance error:", insertError);
       return new Response(
         JSON.stringify({ success: false, error: "server_error", message: "Failed to create license. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+    if (issued.is_existing) {
+      const bootstrap_token = await mintCommunityBootstrap(issued.id);
+      return new Response(JSON.stringify({
+        success: true, license_key: issued.license_key, tier: COMMUNITY_TIER,
+        is_existing: true, bootstrap_token, message: "You already have an active community license.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Best-effort key delivery email. The license row above is the source
@@ -248,7 +204,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const bootstrap_token = inserted?.id ? await mintCommunityBootstrap(inserted.id) : null;
+    const bootstrap_token = await mintCommunityBootstrap(issued.id);
     return new Response(
       JSON.stringify({
         success: true,
