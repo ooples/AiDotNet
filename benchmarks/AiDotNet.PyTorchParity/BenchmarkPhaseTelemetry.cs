@@ -66,6 +66,7 @@ internal static class BenchmarkPhaseTelemetry
             runtime_managed_allocated_bytes = Diagnostics ? GC.GetTotalAllocatedBytes(true) : (long?)null,
             // Raw workspace-inclusive buffer requests are not mislabeled as complete ATen tensor-storage coverage.
             allocator_diagnostics = Diagnostics ? EngineAllocators() : null,
+            clr_arrays = Diagnostics ? ArrayAllocationTelemetry.Read() : null,
         };
         File.AppendAllText(Output, JsonConvert.SerializeObject(record) + Environment.NewLine);
         PreviousPhase = phase;

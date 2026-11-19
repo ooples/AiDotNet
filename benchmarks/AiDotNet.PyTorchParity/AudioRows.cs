@@ -238,6 +238,8 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
         set => (_input, _label) = value;
     }
 
+    internal HiFiGAN<float> NativeModelForStateDiagnostics => _model;
+
     /// <summary>Waveforms of a few random partials plus noise, peak 0.95 (the reference loader's normalization).</summary>
     public void LoadSyntheticBatch(int batchSize)
     {

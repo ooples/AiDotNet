@@ -20,6 +20,11 @@ def mark_phase(model: str, phase: str) -> None:
         "model": model, "phase": phase, "diagnostics": diagnostics,
     }
     import torch
+    if diagnostics and os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE"):
+        # A zero-duration marker maps allocator events to fixed-work windows; adaptive
+        # warm-up call counts must not be mixed into the allocation efficiency score.
+        with torch.profiler.record_function("aidotnet.phase/" + model + "/" + phase):
+            pass
     if torch.cuda.is_initialized() and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":
         stats = torch.cuda.memory_stats()
         record["gpu_memory_interval"] = {

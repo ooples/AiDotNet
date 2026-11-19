@@ -454,7 +454,7 @@ internal sealed class FusedTrainingSession<T>
         // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
         bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
             && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
-        var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
+        using var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
@@ -993,7 +993,49 @@ internal sealed class FusedTrainingSession<T>
     // tensors instead downloaded every GPU-resident parameter before and after each checked step (#1804: four times
     // the step's allocation on N-BEATS). Any real update moves a sampled element: Adam, SGD and the rest update every
     // parameter whose gradient is nonzero, and a plan decoupled from the live tensors moves none.
-    private static (Tensor<T> Source, int Count, Tensor<T> Before)[] SampleParameters(FusedTrainingStepRequest<T> request)
+    private sealed class PersistenceProbe : IDisposable
+    {
+        private readonly IEngine _engine;
+        private (Tensor<T> Source, int Count, Tensor<T> Before)[]? _samples;
+        public PersistenceProbe(IEngine engine, (Tensor<T> Source, int Count, Tensor<T> Before)[] samples)
+        { _engine = engine; _samples = samples; }
+        public int Length => _samples?.Length ?? 0;
+        public (Tensor<T> Source, int Count, Tensor<T> Before)[] Samples
+            => _samples ?? throw new ObjectDisposedException(nameof(PersistenceProbe));
+        public void Dispose()
+        {
+            var samples = _samples;
+            _samples = null;
+            if (samples is null) return;
+            foreach (var sample in samples) ReleaseProbeSnapshot(_engine, sample.Source, sample.Before);
+        }
+    }
+
+    private static void ReleaseProbeSnapshot(IEngine engine, Tensor<T> source, Tensor<T> before)
+    {
+        if (ReferenceEquals(before, source)) return;
+        try
+        {
+            // Deferred results can belong to the engine's activation cache rather than their tensor.
+            // Only the private copied snapshot is dead; its caller-owned parameter remains live.
+            if (!before.SharesStorageWith(source) && engine.TryGet<DirectGpuTensorEngine>(out var gpu))
+            {
+                if (before.DataVector._deviceState is { Buffer: not null })
+                    gpu.ReleaseDeadDeviceStorage(before, afterQueuedWork: true);
+                else
+                {
+                    object vector = before.DataVector;
+                    var array = before.GetBackingArrayForCacheLookupUnsafe();
+                    gpu.EvictActivationsCreatedAfter(0, protect: null, mode: ActivationReleaseMode.Release,
+                        releasableOnly: key => ReferenceEquals(key, vector) || (array is not null && ReferenceEquals(key, array)),
+                        afterQueuedWork: true);
+                }
+            }
+        }
+        finally { before.Dispose(); }
+    }
+
+    private static PersistenceProbe SampleParameters(FusedTrainingStepRequest<T> request)
     {
         var parameters = request.Selection is not null
             ? request.Selection
@@ -1002,22 +1044,34 @@ internal sealed class FusedTrainingSession<T>
         var engine = AiDotNetEngine.Current;
         var samples = new List<(Tensor<T>, int, Tensor<T>)>(parameters.Count);
         using var noGrad = new NoGradScope<T>();
-        foreach (var parameter in parameters)
+        using var scratch = TensorScope.Begin();
+        try
         {
-            if (parameter.Length == 0) continue;
-            int count = Math.Min(perTensor, parameter.Length);
-            samples.Add((parameter, count, engine.TensorMultiplyScalar(Head(engine, parameter, count), NumOps.One)));
+            foreach (var parameter in parameters)
+            {
+                if (parameter.Length == 0) continue;
+                int count = Math.Min(perTensor, parameter.Length);
+                var before = engine.TensorMultiplyScalar(Head(engine, parameter, count), NumOps.One);
+                samples.Add((parameter, count, before));
+                scratch.Keep(before);
+            }
+            return new PersistenceProbe(engine, samples.ToArray());
         }
-        return samples.ToArray();
+        catch
+        {
+            foreach (var sample in samples) ReleaseProbeSnapshot(engine, sample.Item1, sample.Item3);
+            throw;
+        }
     }
 
-    private static bool AnySampleChanged((Tensor<T> Source, int Count, Tensor<T> Before)[] samples)
+    private static bool AnySampleChanged(PersistenceProbe samples)
     {
         if (samples.Length == 0) return false;
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
+        using var scratch = TensorScope.Begin();
         Tensor<T>? total = null;
-        foreach (var (source, count, before) in samples)
+        foreach (var (source, count, before) in samples.Samples)
         {
             var delta = engine.TensorSubtract(Head(engine, source, count), before);
             var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(delta, delta), null), new[] { 1 });
