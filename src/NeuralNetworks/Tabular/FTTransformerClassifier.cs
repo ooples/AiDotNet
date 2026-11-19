@@ -233,55 +233,14 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         T learningRate,
         Matrix<int>? categoricalIndices = null)
     {
-        // Collect every trainable tensor as a LIVE field instance — tokenizer
-        // (custom), then backbone encoder layers + final LayerNorm + the
-        // classification head (via the tape param collector). ComputeGradients
-        // maps gradients back to exactly these instances, and we apply SGD to
-        // them in place so the model actually updates.
-        var trainable = new System.Collections.Generic.List<Tensor<T>>(Tokenizer.GetTrainableTensors());
-        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>>();
-        foreach (var encoderLayer in EncoderLayers) layers.Add(encoderLayer);
-        layers.Add(FinalLayerNorm);
-        layers.Add(_classificationHead);
-        trainable.AddRange(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(layers));
-
-        // Reverse-mode AD over the whole network: the forward (tokenizer +
-        // transformer + head) and the cross-entropy below are Engine ops, so a
-        // forward under the tape records them and ComputeGradients fills in the
-        // gradient for every leaf tensor we collected. (Previously TrainStep had
-        // only a "// Backward pass" comment, so UpdateParameters threw "Backward
-        // pass must be called before updating parameters" — training never ran.)
-        // Plain SGD at the caller's rate, the update this step has always applied, as one step on the shared fused
-        // session: the compiled plan when it applies, the eager tape otherwise. Categorical features are looked up
-        // by integer index on the host, which a plan would bake in, so a batch carrying them stays eager.
-        T lossValue;
-        if (categoricalIndices is null)
-        {
-            var stepper = _tapeStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
-            lossValue = stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
-            {
-                Layers = Array.Empty<AiDotNet.Interfaces.ITrainableLayer<T>>(),
-                Input = numericalFeatures,
-                Target = OneHot(targets, numericalFeatures.Shape[0]),
-                Forward = features => Forward(features, null),
-                ComputeLoss = SoftmaxCrossEntropyLoss,
-                Optimizer = SgdAt(NumOps.ToDouble(learningRate)),
-                ExtraParameters = trainable,
-            });
-        }
-        else
-        {
-            // The same plain SGD on the shared eager tape step.
-            var onehot = OneHot(targets, numericalFeatures.Shape[0]);
-            lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-                () => trainable,
-                () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), onehot),
-                learningRate,
-                owner: this);
-        }
-
-        ResetState();
-        return lossValue;
+        var onehot = OneHot(targets, numericalFeatures.Shape[0]);
+        return RunSharedTrainingStep(
+            numericalFeatures,
+            onehot,
+            learningRate,
+            categoricalIndices,
+            Forward,
+            SoftmaxCrossEntropyLoss);
     }
 
     // The class targets as a one-hot [batch, classes] tensor: data the step carries, not a closure.
@@ -289,33 +248,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         var targetIndex = Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, batch), new[] { batch });
         return Engine.TensorOneHot<T>(targetIndex, _numClasses);
-    }
-
-    private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
-
-    /// <summary>Training steps run on the fused compiled plan.</summary>
-    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
-
-    /// <summary>Training steps run on the eager tape.</summary>
-    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _sgd;
-    private double _sgdRate = double.NaN;
-
-    // Plain SGD at a rate, without the clipping the optimizer options enable by default (this step never clipped).
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> SgdAt(double rate)
-    {
-        // An exact match is the point: the cached optimizer is reused only for the very rate it was built with.
-        if (_sgd is null || !_sgdRate.Equals(rate))
-        {
-            _sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
-                new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = rate,
-                    EnableGradientClipping = false,
-                });
-            _sgdRate = rate;
-        }
-        return _sgd;
     }
 
     /// <summary>

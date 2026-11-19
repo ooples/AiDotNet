@@ -1541,7 +1541,7 @@ public static class CompiledTapeTrainingStep<T>
         CompiledStepRandom<T>.CaptureScope? probeDraws = null;
         if (configured is null && closure.PlanCount == 0)
         {
-            var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstLeaves, out var firstReason);
+            var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstLeaves, out var firstShapes, out var firstReason);
             if (firstGuard is null)
             {
                 first.Dispose();
@@ -1552,7 +1552,7 @@ public static class CompiledTapeTrainingStep<T>
                 ReportClosureFallback(closure, ClosureFallbackReason.Unsignable, why);
                 return false;
             }
-            entry = new ClosureObjectiveState<T>.Entry(first, firstGuard, firstLeaves);
+            entry = new ClosureObjectiveState<T>.Entry(first, firstGuard, firstLeaves, firstShapes);
             closure.Add(entry, keepAlive: null);
             closure.RecordStep(failed: false, reason: null);
             compiledThisCall = true;
@@ -1565,8 +1565,45 @@ public static class CompiledTapeTrainingStep<T>
                 ObjectiveSignature? signature;
                 object[] leaves;
                 string? reason;
+                CompiledOpShapeCache? primaryShapes = null;
+                var cachedEntries = closure.Entries;
+                for (int i = 0; i < cachedEntries.Count; i++)
+                {
+                    if (cachedEntries[i].Shapes is { } candidateShapes)
+                    {
+                        primaryShapes = candidateShapes;
+                        break;
+                    }
+                }
+
                 using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
-                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
+                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, primaryShapes);
+                if (probe == ClosureGuardResult.Aborted
+                    && reason is not null
+                    && reason.IndexOf("(no matching trace-time shape)", StringComparison.Ordinal) >= 0)
+                {
+                    for (int i = 0; i < cachedEntries.Count; i++)
+                    {
+                        if (cachedEntries[i].Shapes is not { } alternateShapes
+                            || ReferenceEquals(alternateShapes, primaryShapes))
+                        {
+                            continue;
+                        }
+
+                        using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
+                            probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, alternateShapes);
+                        if (probe == ClosureGuardResult.Matched
+                            || reason is null
+                            || reason.IndexOf("(no matching trace-time shape)", StringComparison.Ordinal) < 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                bool shapeCacheMiss = probe == ClosureGuardResult.Aborted
+                    && reason is not null
+                    && reason.IndexOf("(no matching trace-time shape)", StringComparison.Ordinal) >= 0;
                 if (probe == ClosureGuardResult.Matched && signature is not null)
                 {
                     entry = closure.Find(signature);
@@ -1582,6 +1619,12 @@ public static class CompiledTapeTrainingStep<T>
                         closure.Remove(entry, keepAlive: configured);
                         entry = null;
                     }
+                }
+                else if (shapeCacheMiss)
+                {
+                    // New tensor geometry for a cached-shape op (e.g. PadNd / STFT on a different utterance length):
+                    // treat as a plan cache miss so a plan for this shape is compiled below.
+                    entry = null;
                 }
                 else
                 {
@@ -1608,9 +1651,10 @@ public static class CompiledTapeTrainingStep<T>
                 ICompiledTrainingPlan<T> traced;
                 ClosureObjectiveGuard<T>? tracedGuard;
                 object[]? tracedLeaves;
+                CompiledOpShapeCache? tracedShapes;
                 string? tracedReason;
                 using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
-                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out tracedReason);
+                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out tracedShapes, out tracedReason);
                 if (tracedGuard is null)
                 {
                     traced.Dispose();
@@ -1618,7 +1662,7 @@ public static class CompiledTapeTrainingStep<T>
                     _lastFallbackException = new InvalidOperationException("Closure objective replay contract is missing: " + tracedReason);
                     return false;
                 }
-                entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard, tracedLeaves);
+                entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard, tracedLeaves, tracedShapes);
                 closure.Add(entry, keepAlive: configured);
                 compiledThisCall = true;
             }
@@ -1646,6 +1690,7 @@ public static class CompiledTapeTrainingStep<T>
         Tensor<T>[] parameters,
         out ClosureObjectiveGuard<T>? guard,
         out object[]? leaves,
+        out CompiledOpShapeCache? shapes,
         out string? reason)
     {
         // A compiled plan keeps its traced buffers: they must be fresh and outside any per-step arena.
@@ -1664,6 +1709,7 @@ public static class CompiledTapeTrainingStep<T>
             // compilation, which may rewrite the node list.
             var traced = ObjectiveSignature.Build(scope.Nodes, parameters, out var tracedLeaves);
             leaves = traced.Signable ? tracedLeaves : null;
+            shapes = scope.CompiledOpShapes.Snapshot();
             plan = scope.CompileTraining(parameters, loss);
         }
         CompiledStepRandom<T>.Attach(plan, stepRandom);

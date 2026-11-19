@@ -139,6 +139,8 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         base.MelChannels = o.MelChannels;
         base.HopSize = o.HopSize;
         base.HiddenDim = o.ModelDim;
+        if (o.DiscriminatorWidthDivisor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.DiscriminatorWidthDivisor));
         if (o.ModelDim <= 0 || o.Heads <= 0 || o.ModelDim % o.Heads != 0)
             throw new ArgumentException("The positive model width must divide by the positive head count.");
         if (o.StyleDim != o.ModelDim)
@@ -240,7 +242,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
             o.UpsampleRates, o.UpsampleInitialChannels, o.ResBlockDilations, o.UpsampleKernels, o.IstftFftSize, o.IstftHopSize, o.SampleRate);
         _aligner = new StyleTtsTextAligner<T>(Engine, Module("text_aligner"), o.MelChannels, o.AlignerHidden, o.VocabSize, o.AlignerTokenEmbedding, o.AlignerConvLayers);
         _pitch = new StyleTtsPitchExtractor<T>(Engine, Module("pitch_extractor"), o.PitchExtractorChannels, o.PitchExtractorLstm, o.MelChannels);
-        _waveDiscriminators = new CosyVoiceHiFTDiscriminators<T>(Engine);
+        _waveDiscriminators = new CosyVoiceHiFTDiscriminators<T>(Engine, periodChannels: o.CreateWavePeriodChannels());
         int periodLayers = _waveDiscriminators.Periods.Layers.Count;
         Module("mpd").AddRange(_waveDiscriminators.Layers.Take(periodLayers));
         Module("msd").AddRange(_waveDiscriminators.Layers.Skip(periodLayers));

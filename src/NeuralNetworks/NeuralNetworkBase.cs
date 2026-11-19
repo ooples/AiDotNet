@@ -14814,7 +14814,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool verifyReplayAgreement = false,
         System.Reflection.MethodInfo? warmupKey = null,
         Func<T>? eagerFallback = null,
-        bool clipCustomObjective = true)
+        bool clipCustomObjective = true,
+        string? eagerReason = null)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -14825,7 +14826,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var resolvedOptimizer = ResolveCustomStepOptimizer(optimizer);
         var session = sessionPerOptimizer ? ObjectiveSession(resolvedOptimizer) : FusedSession;
-        var layerGraphBreak = LayerGraphBreakReason();
+        var layerGraphBreak = eagerReason ?? LayerGraphBreakReason();
         bool declaredClosureBreak = closureObjective is not null && layerGraphBreak is not null;
 
         // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
@@ -16998,11 +16999,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>> objective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null,
-        bool sessionPerOptimizer = false)
+        bool sessionPerOptimizer = false,
+        string? eagerReason = null)
     {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (objective is null) throw new ArgumentNullException(nameof(objective));
-        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider, sessionPerOptimizer: sessionPerOptimizer);
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider, sessionPerOptimizer: sessionPerOptimizer, eagerReason: eagerReason);
     }
 
     public T TrainWithCustomLoss(

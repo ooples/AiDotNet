@@ -7002,7 +7002,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "UpsampleKernels = [4, 8], HopSize = 8, FftSize = 64, WindowLength = 64, WavePadding = 40, PromptFrames = 96, " +
                     "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
                     "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
-                    "SlmPositionalConvGroups = 2, SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
+                    "SlmPositionalConvGroups = 2, DiscriminatorWidthDivisor = 16, MaxTrainingFrames = 128, " +
+                    "SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
             }
             else if (model.ClassName == "EmotiVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))

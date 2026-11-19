@@ -1249,7 +1249,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         var extended = Engine.Concat(new[] { history, appended }, 1);
         int keepStart = Math.Max(0, extended.Shape[1] - _sequenceLength);
         var window = Engine.TensorNarrow(extended, 1, keepStart, _sequenceLength);
-        return Engine.Reshape(window.Contiguous(), input._shape);
+        return window.Length == input.Length
+            ? Engine.Reshape(window.Contiguous(), input._shape)
+            : window.Contiguous();
     }
 
     /// <summary>

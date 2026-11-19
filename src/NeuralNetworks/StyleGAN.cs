@@ -396,7 +396,8 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
                         targetIsReal: false));
                 return _options.R1Gamma > 0 ? Engine.TensorAdd(objective, R1Penalty(real)) : objective;
             },
-            _discriminatorOptimizer);
+            _discriminatorOptimizer,
+            eagerReason: _options.R1Gamma > 0 ? "R1 gradient penalty differentiates a nested tape (createGraph: true)" : null);
 
         // ----- Generator: the synthesis and mapping networks, trained by one loss at their own rates -----
         // Both differentiate the loss at this iteration's weights, each with its own optimizer. The mapping step runs

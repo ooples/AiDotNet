@@ -137,12 +137,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     internal List<Tensor<T>> ForwardTrainingHeads(Tensor<T> input)
     {
         var neckFeatures = EnsureNeck.Forward(EnsureBackbone.ExtractFeatures(input));
-        // Wang et al. 2024 Sec. 3.1 & Fig. 2(a) (v10Detect.forward): stop gradient between the neck and the
-        // one-to-one head so backbone and neck optimize strictly from the rich one-to-many supervision.
-        var detachedNeckFeatures = new List<Tensor<T>>(neckFeatures.Count);
-        for (int i = 0; i < neckFeatures.Count; i++)
-            detachedNeckFeatures.Add(Engine.StopGradient(neckFeatures[i]));
-        var (oneToOneClasses, oneToOneDistributions) = _head.Forward(detachedNeckFeatures);
+        var (oneToOneClasses, oneToOneDistributions) = _head.Forward(neckFeatures);
         var (oneToManyClasses, oneToManyDistributions) = _auxHead.Forward(neckFeatures);
         _auxHeadShapesResolved = true;
         var outputs = new List<Tensor<T>>();

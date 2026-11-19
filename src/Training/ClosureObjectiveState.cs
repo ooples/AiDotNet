@@ -49,18 +49,26 @@ internal sealed class ClosureObjectiveState<T>
         private object?[]? _saved;
         private bool[]? _overwritten;
 
-        internal Entry(ICompiledTrainingPlan<T> plan, ClosureObjectiveGuard<T>? guard, object[]? leaves = null)
+        internal Entry(
+            ICompiledTrainingPlan<T> plan,
+            ClosureObjectiveGuard<T>? guard,
+            object[]? leaves = null,
+            CompiledOpShapeCache? shapes = null)
         {
             Plan = plan;
             _leaves = leaves ?? Array.Empty<object>();
             // Without the plan's own leaves a replay could not give the caller's tensors back, so it does not replay.
             Guard = guard is not null && leaves is not null && guard.LeafCount == leaves.Length ? guard : null;
+            Shapes = shapes;
         }
 
         internal ICompiledTrainingPlan<T> Plan { get; }
 
         /// <summary>Null for a plan traced from one step that cannot be replayed (kept only until evicted).</summary>
         internal ClosureObjectiveGuard<T>? Guard { get; }
+
+        /// <summary>Trace-time output shapes for ops whose storage-free probe queries <see cref="CompiledOpShapeCache"/>.</summary>
+        internal CompiledOpShapeCache? Shapes { get; }
 
         /// <summary>
         /// Copies this step's leaves (<paramref name="probedLeaves"/>, from a probe whose signature equals the plan's)
@@ -198,6 +206,9 @@ internal sealed class ClosureObjectiveState<T>
 
     /// <summary>Plans currently held (replayable or not).</summary>
     internal int PlanCount => _entries.Count;
+
+    /// <summary>Cached entries in most-recently-used order.</summary>
+    internal IReadOnlyList<Entry> Entries => _entries;
 
     /// <summary>Replayable plans currently held.</summary>
     internal int ReplayablePlanCount

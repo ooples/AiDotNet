@@ -185,9 +185,7 @@ internal sealed class WhisperSpeechVq<T>
     private Tensor<T> L2Normalize(Tensor<T> x)
     {
         var norm = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, true));
-        var floor = new Tensor<T>(norm._shape);
-        for (int i = 0; i < floor.Length; i++) floor[i] = NumOps.FromDouble(NumOps.ToDouble(norm[i]) < 1e-12 ? 1e-12 - NumOps.ToDouble(norm[i]) : 0);
-        return _engine.TensorDivide(x, _engine.TensorBroadcastTo(_engine.TensorAdd(norm, floor), x._shape));
+        return _engine.TensorDivide(x, _engine.TensorBroadcastTo(_engine.TensorClampMin(norm, NumOps.FromDouble(1e-12)), x._shape));
     }
 
     /// <summary>The encoder states <c>[audio context, width]</c> downsampled and through the residual MLP
@@ -317,7 +315,7 @@ internal sealed class WhisperSpeechVq<T>
                 this,
                 stateTag,
                 new[] { normalized },
-                new[] { frames, c.CodebookWidth },
+                normalized._shape,
                 static (self, tag, inputs, dst) => self.ExecuteQuantizeStep(tag >> 1, (tag & 1) == 1, inputs[0], dst));
             var difference = _engine.TensorSubtract(code, normalized);
             var term = _engine.ReduceMean(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false);
@@ -333,9 +331,19 @@ internal sealed class WhisperSpeechVq<T>
         {
             // x[~mask] = project_out(embed[padding code]) — the codebook after this step's update.
             var padding = ProjectOut[0].Forward(Rows(0, new[] { c.Codes }));
-            var keep = new Tensor<T>(new[] { frames, 1 });
-            var drop = new Tensor<T>(new[] { frames, 1 });
-            for (int i = 0; i < frames; i++) (mask[i] ? keep : drop)[i, 0] = NumOps.One;
+            Tensor<T> keep, drop;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var keepArr = new double[frames];
+                var dropArr = new double[frames];
+                for (int i = 0; i < frames; i++)
+                {
+                    if (mask[i]) keepArr[i] = 1.0;
+                    else dropArr[i] = 1.0;
+                }
+                keep = new Tensor<double>(keepArr, new[] { frames, 1 }).Cast<T>();
+                drop = new Tensor<double>(dropArr, new[] { frames, 1 }).Cast<T>();
+            }
             x = _engine.TensorAdd(_engine.TensorMultiply(x, _engine.TensorBroadcastTo(keep, x._shape)),
                 _engine.TensorMultiply(_engine.TensorBroadcastTo(padding, x._shape), _engine.TensorBroadcastTo(drop, x._shape)));
         }
@@ -343,26 +351,32 @@ internal sealed class WhisperSpeechVq<T>
         var logits = Whisper.Logits(inputTokens, _engine.Reshape(x, new[] { 1, frames, w }));
         var log = _engine.TensorLogSoftmax(logits, axis: 1);
         int valid = outputTokens.Count(t => t != -100);
-        // The teacher's distribution p (rows of ignored targets zeroed to uniform); KL = Σ p log p − Σ p log q.
-        var weights = new Tensor<T>(log._shape);
-        double entropy = 0;
-        for (int i = 0; i < n; i++)
+        // The teacher's distribution p (rows of ignored targets zeroed to uniform); KL = Σ p (log p − log q).
+        Tensor<T> keepRow, ceTarget;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
         {
-            bool ignored = outputTokens[i] == -100;
-            double max = double.NegativeInfinity;
-            for (int v = 0; v < vocabulary; v++) max = Math.Max(max, ignored ? 0 : NumOps.ToDouble(teacher[i, v]));
-            double sum = 0;
-            for (int v = 0; v < vocabulary; v++) sum += Math.Exp((ignored ? 0 : NumOps.ToDouble(teacher[i, v])) - max);
-            for (int v = 0; v < vocabulary; v++)
+            var keepArr = new double[n];
+            var ceArr = new double[n * vocabulary];
+            double ceScale = valid > 0 ? -1.0 / valid : 0.0;
+            for (int i = 0; i < n; i++)
             {
-                double lp = (ignored ? 0 : NumOps.ToDouble(teacher[i, v])) - max - Math.Log(sum), p = Math.Exp(lp);
-                entropy += p * lp;
-                double weight = -c.KlLossMul * p;
-                if (!ignored && v == outputTokens[i]) weight -= 1.0 / valid;
-                weights[i, v] = NumOps.FromDouble(weight);
+                int tok = outputTokens[i];
+                if (tok != -100)
+                {
+                    keepArr[i] = 1.0;
+                    if (tok >= 0 && tok < vocabulary)
+                        ceArr[i * vocabulary + tok] = ceScale;
+                }
             }
+            keepRow = new Tensor<double>(keepArr, new[] { n, 1 }).Cast<T>();
+            ceTarget = new Tensor<double>(ceArr, new[] { n, vocabulary }).Cast<T>();
         }
-        var loss = _engine.TensorAddScalar(_engine.ReduceSum(_engine.TensorMultiply(log, weights), new[] { 0, 1 }, false), NumOps.FromDouble(c.KlLossMul * entropy));
+        var effectiveTeacher = _engine.TensorMultiply(_engine.StopGradient(teacher), _engine.TensorBroadcastTo(keepRow, teacher._shape));
+        var lp = _engine.TensorLogSoftmax(effectiveTeacher, axis: 1);
+        var p = _engine.TensorExp(lp);
+        var kl = _engine.ReduceSum(_engine.TensorMultiply(p, _engine.TensorSubtract(lp, log)), new[] { 0, 1 }, false);
+        var ce = _engine.ReduceSum(_engine.TensorMultiply(log, ceTarget), new[] { 0, 1 }, false);
+        var loss = _engine.TensorAdd(ce, _engine.TensorMultiplyScalar(kl, NumOps.FromDouble(c.KlLossMul)));
         var commitTensor = commitment ?? new Tensor<T>(new[] { 1 });
         return _engine.TensorAdd(loss, _engine.TensorMultiplyScalar(commitTensor, NumOps.FromDouble(1.0 / c.QuantizerDepth)));
     }

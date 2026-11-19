@@ -150,7 +150,7 @@ function Invoke-FailoverApi {
         [object[]]$batch = if ($property) { @($response.$property) } elseif ($null -eq $response) { @() } else { @($response) }
         $items += $batch; $page++
     } while ($batch.Count -eq 50)
-    return ,@($items)
+    return $items
 }
 
 function Assert-FailoverSourceArtifact {

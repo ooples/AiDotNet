@@ -139,14 +139,15 @@ public partial class FeatureTokenizer<T>
         _numCategoricalFeatures = categoricalCardinalities?.Length ?? 0;
         _useNumericalBias = useNumericalBias;
 
-        // Initialize numerical feature embeddings
+        // Gorishniy et al. (2021) §3.1: initialize W_num, b_num, W_cat and [CLS] from U(-scale/sqrt(d), +scale/sqrt(d)).
+        // Non-zero numerical biases prevent zero-valued features from collapsing to zero-variance tokens before LayerNorm.
         _numericalWeights = new Tensor<T>([_numNumericalFeatures, embeddingDimension]);
-        InitializeXavier(_numericalWeights, initScale);
+        InitializeTokenUniform(_numericalWeights, embeddingDimension, initScale);
 
         if (useNumericalBias)
         {
             _numericalBias = new Tensor<T>([_numNumericalFeatures, embeddingDimension]);
-            _numericalBias.Fill(_numOps.Zero);
+            InitializeTokenUniform(_numericalBias, embeddingDimension, initScale);
         }
 
         // Initialize categorical embeddings
@@ -157,7 +158,7 @@ public partial class FeatureTokenizer<T>
             foreach (int cardinality in categoricalCardinalities)
             {
                 var embedding = new Tensor<T>([cardinality, embeddingDimension]);
-                InitializeXavier(embedding, initScale);
+                InitializeTokenUniform(embedding, embeddingDimension, initScale);
                 _categoricalEmbeddings.Add(embedding);
                 _categoricalEmbeddingsGrad.Add(null);
             }
@@ -165,21 +166,23 @@ public partial class FeatureTokenizer<T>
 
         // Initialize [CLS] token
         _clsToken = new Tensor<T>([1, embeddingDimension]);
-        InitializeXavier(_clsToken, initScale);
+        InitializeTokenUniform(_clsToken, embeddingDimension, initScale);
     }
 
     /// <summary>
-    /// Initializes a tensor with Xavier/Glorot initialization.
+    /// Initializes a token parameter tensor uniformly in <c>[-scale / sqrt(embeddingDimension), +scale / sqrt(embeddingDimension)]</c>
+    /// per Gorishniy et al. (2021) §3.1.
     /// </summary>
-    private void InitializeXavier(Tensor<T> tensor, double scale)
+    private static void InitializeTokenUniform(Tensor<T> tensor, int embeddingDimension, double scale)
     {
-        var random = RandomHelper.CreateSecureRandom();
-        int fanIn = tensor.Shape.Length > 1 ? tensor.Shape[0] : 1;
-        int fanOut = tensor.Shape.Length > 1 ? tensor.Shape[1] : tensor.Shape[0];
-        double stdDev = scale * Math.Sqrt(2.0 / (fanIn + fanOut));
+        if (tensor.Length == 0)
+        {
+            return;
+        }
 
-        // N(0, stdDev^2) for every element in one engine call (unseeded secure source as before).
-        AiDotNetEngine.Current.TensorNormalInPlace(tensor, 0.0, stdDev, random.Next());
+        var random = RandomHelper.CreateSecureRandom();
+        double bound = Math.Abs(scale) / Math.Sqrt(Math.Max(1, embeddingDimension));
+        AiDotNetEngine.Current.TensorUniformInPlace(tensor, -bound, bound, random.Next());
     }
 
     /// <summary>

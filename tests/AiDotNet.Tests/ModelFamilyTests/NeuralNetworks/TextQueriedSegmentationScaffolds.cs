@@ -152,7 +152,11 @@ public class OMGLLaVATests : SegmentationTestBase<float>
             options: new OMGLLaVAOptions { NumClasses = TextQueriedScaffold.NumClasses, DropRate = 0.0 });
 }
 
-/// <summary>Manual scaffold for PixelLM (Ren et al. 2024).</summary>
+/// <summary>
+/// Manual scaffold for PixelLM (Ren et al. 2024), at reduced SegFormer encoder width and depth
+/// matching its generated smoke fixture: the paper-default 64.8M-parameter backbone overruns
+/// per-test CPU budgets.
+/// </summary>
 public class PixelLMTests : SegmentationTestBase<float>
 {
     private int[]? _outputShape;
@@ -161,7 +165,15 @@ public class PixelLMTests : SegmentationTestBase<float>
 
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new PixelLM<float>(TextQueriedScaffold.Architecture(), TextQueriedScaffold.Encoder(),
-            options: new PixelLMOptions { NumClasses = TextQueriedScaffold.NumClasses, DropRate = 0.0 });
+            options: new PixelLMOptions
+            {
+                NumClasses = TextQueriedScaffold.NumClasses,
+                DropRate = 0.0,
+                ChannelDimensions = new[] { 16, 32, 64, 96 },
+                StageDepths = new[] { 1, 1, 1, 1 },
+                DecoderDimension = 32,
+                OptimizerBatchSize = 1,
+            });
 }
 
 /// <summary>
