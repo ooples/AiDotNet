@@ -75,7 +75,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     [Buffer]
     private Tensor<T> _v;
 
-    private readonly DerivedTensorCache<T> _inferenceWeightKernel = new();
+    private readonly DerivedTensorCache<T> _inferenceWeightKernel = new(disposeReplacedValues:
+        Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1");
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
