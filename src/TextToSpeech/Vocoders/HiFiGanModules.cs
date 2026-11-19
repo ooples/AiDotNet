@@ -389,8 +389,8 @@ internal sealed partial class HiFiGanGenerator<T>
         {
             // Detached discriminator generation needs only the waveform. Keep training mode and the existing
             // host-owned return contract while returning convolution/residual scratch at each pair boundary.
-            // Apply the existing no-grad memory-demand policy without changing training mode or normalization.
-            using var workspaceDemand = InferenceWorkspaceDemandScope.Enter(gpu);
+            // Reuse idle buffers without retiring workspace needed by the next training step.
+            using var workspaceDemand = InferenceWorkspaceDemandScope.EnterIdleBufferReuse(gpu);
             using var scratch = TensorScope.Begin();
             using var detached = ForwardGpuInference(features, null, gpu);
             return new Tensor<T>(detached.ToArray(), detached.Shape.ToArray());
