@@ -92,7 +92,11 @@ test.describe('crawler regression checks', () => {
         : req.url === '/visible-style/'
           ? '<button id="update" onclick="fetch(\'/ping/\').then(()=>document.getElementById(\'swatch\').style.backgroundColor=\'blue\')">Update</button><div id="swatch" style="width:20px;height:20px;background:red"></div>'
         : req.url === '/inert-style/'
-          ? '<style>button{background:red;transition:background-color 1s}button:hover,button:focus{background:blue}</style><button id="inert">Inert styled button</button>'
+          ? '<style>button,#swatch{background:red;transition:background-color 1s .5s}button:hover,button:focus,button:hover+#swatch,button:focus+#swatch{background:blue}</style><button id="inert">Inert styled button</button><div id="swatch" style="width:20px;height:20px"></div>'
+        : req.url === '/mouseleave-dropdown/'
+          ? '<div id="dropdown" onmouseleave="document.getElementById(\'panel\').hidden=true"><button id="open" onclick="document.getElementById(\'panel\').hidden=false">Open menu</button><div id="panel" hidden><button id="inert-child">Inert child</button></div></div>'
+        : req.url === '/focus-transfer/'
+          ? '<style>input:focus{background:rgb(255,255,0)}</style><button id="focus" onclick="document.getElementById(\'search\').focus()">Focus search</button><input id="search" aria-label="Search">'
         : req.url === '/enable-at-limit/'
           ? '<button id="enable" onclick="document.getElementById(\'deep\').disabled=false">Enable</button><button id="deep" disabled onclick="alert(\'Deep\')">Deep</button>'
         : req.url === '/unrelated-abort/'
@@ -158,6 +162,20 @@ test.describe('crawler regression checks', () => {
   test('hover and focus styling cannot give an inert button effect credit', async ({page,request}) => {
     const report=await crawl({...options(),page,request,seeds:[`${origin}/inert-style/`]});
     expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({control:expect.stringContaining('#inert'),problem:expect.stringContaining('did nothing visible')})]));
+  });
+
+  test('revealed dropdown children are explored before a mouseleave can close them', async ({page,request}) => {
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/mouseleave-dropdown/`]});
+    expect(report.exercised).toEqual(expect.arrayContaining([expect.stringContaining('#inert-child')]));
+    expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({control:expect.stringContaining('#inert-child'),problem:expect.stringContaining('did nothing visible')})]));
+    await expect(page.locator('#panel')).toBeVisible();
+  });
+
+  test('a handler focus transfer retains its visible result through final snapshots', async ({page,request}) => {
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/focus-transfer/`]});
+    expect(report.findings).toEqual([]);
+    await expect(page.locator('#search')).toBeFocused();
+    await expect(page.locator('#search')).toHaveCSS('background-color','rgb(255, 255, 0)');
   });
 
   test('requests that start while an action settles finish before its result is checked', async ({ page, request }) => {

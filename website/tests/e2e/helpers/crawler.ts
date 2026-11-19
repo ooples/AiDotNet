@@ -287,8 +287,43 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   await page.route('**/*', intercept);
   await page.addInitScript({ content: `window.__activeModal = ${ACTIVE_MODAL.toString()};` });
   await page.addInitScript(() => {
-    const w = window as unknown as { __fx: { mut: number; clip: number; open: number } };
+    type Visual = Array<[number, string, boolean]>;
+    const w = window as unknown as {
+      __fx: { mut: number; clip: number; open: number };
+      __visualIds?: WeakMap<Element, number>; __visualNext?: number;
+      __crawlVisual?: () => Visual;
+      __crawlAction?: { target: Element; visual?: Visual; activated?: boolean };
+    };
     w.__fx = { mut: 0, clip: 0, open: 0 };
+    w.__crawlVisual = () => {
+      w.__visualIds ??= new WeakMap();
+      w.__visualNext ??= 0;
+      const visual: Visual = [];
+      for (const el of Array.from(document.querySelectorAll('body *'))) {
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+        let id = w.__visualIds.get(el);
+        if (id === undefined) { id = ++w.__visualNext; w.__visualIds.set(el, id); }
+        const s = getComputedStyle(el);
+        // Pending/delayed transitions can look stable during the idle samples.
+        const animated = el.getAnimations().some(a => a.pending || a.playState === 'running');
+        visual.push([id, [s.backgroundColor,s.color,s.opacity,s.transform,s.borderColor,s.width,s.height].join('|'), animated]);
+      }
+      return visual;
+    };
+    const captureNativeInteraction = (event: Event) => {
+      const action = w.__crawlAction;
+      if (!action || action.activated || !(event.target instanceof Element) || !action.target.contains(event.target)) return;
+      // Observe native hover/focus styles before application handlers run. Do not
+      // move the pointer or blur anything: children and deliberate focus transfers
+      // must remain available after the click. Focus elsewhere is the result.
+      action.visual = w.__crawlVisual!();
+    };
+    window.addEventListener('mouseover', captureNativeInteraction, true);
+    window.addEventListener('focus', captureNativeInteraction, true);
+    window.addEventListener('click', event => {
+      const action = w.__crawlAction;
+      if (action && event.target instanceof Element && action.target.contains(event.target)) action.activated = true;
+    }, true); // A handler's later focus/mouse events are results, not new baselines.
     new MutationObserver((list) => {
       for (const m of list) if (!(m.type === 'attributes' && m.attributeName === 'style')) w.__fx.mut++;
     }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
@@ -451,7 +486,12 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
 
   async function snapshot() {
     return page.evaluate(() => {
-      const w = window as unknown as { __fx?: { mut: number; clip: number; open: number } };
+      type Visual = Array<[number, string, boolean]>;
+      const w = window as unknown as {
+        __fx?: { mut: number; clip: number; open: number };
+        __crawlVisual?: () => Visual;
+        __crawlAction?: { visual?: Visual };
+      };
       let visibleCount = 0;
       for (const el of Array.from(document.querySelectorAll('body *'))) {
         const r = (el as HTMLElement).getBoundingClientRect();
@@ -469,22 +509,13 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
         parts.push([e.getAttribute('aria-selected'), e.getAttribute('aria-expanded'), e.getAttribute('aria-pressed'), e.getAttribute('aria-checked'),
           (e as unknown as HTMLDetailsElement).open, e.hidden || e.classList.contains('hidden'), 'value' in e ? e.value : '', e.checked].join(','));
       }
-      const visualWindow = window as unknown as { __visualIds?: WeakMap<Element, number>; __visualNext?: number };
-      visualWindow.__visualIds ??= new WeakMap();
-      visualWindow.__visualNext ??= 0;
-      const visual: Array<[number, string]> = [];
-      for (const el of Array.from(document.querySelectorAll('body *'))) {
-        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-        let id = visualWindow.__visualIds.get(el);
-        if (id === undefined) { id = ++visualWindow.__visualNext; visualWindow.__visualIds.set(el, id); }
-        const s = getComputedStyle(el);
-        visual.push([id, [s.backgroundColor,s.color,s.opacity,s.transform,s.borderColor,s.width,s.height].join('|')]);
-      }
+      const visual = w.__crawlVisual?.() ?? [];
       const state = parts.join('|');
       let sh = 0;
       for (let i = 0; i < state.length; i++) sh = (sh * 31 + state.charCodeAt(i)) | 0;
       return {
-        url: location.href, visibleCount, textHash: h, stateHash: sh, visual, htmlClass: document.documentElement.className,
+        url: location.href, visibleCount, textHash: h, stateHash: sh, visual,
+        interactionVisual: w.__crawlAction?.visual ?? null, htmlClass: document.documentElement.className,
         mut: w.__fx?.mut ?? 0, clip: w.__fx?.clip ?? 0, open: w.__fx?.open ?? 0,
       };
     }).catch(() => null);
@@ -514,14 +545,13 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     }
   }
 
-  // Clicks one control and reports what it did. Returns 'nav' when the page changed.
-  async function clearPointerAndFocus() {
-    await page.mouse.move(-1, -1);
+  async function clearActionCapture() {
     await page.evaluate(() => {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    }).catch(() => {}); // Navigation may have replaced the document.
+      delete (window as unknown as { __crawlAction?: unknown }).__crawlAction;
+    }).catch(() => {});
   }
 
+  // Clicks one control and reports what it did. Returns 'nav' when the page changed.
   async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
     const loc = await page.locator(c.selector).first().elementHandle();
     const verified = loc && (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
@@ -533,7 +563,6 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     current = { page: pg, control: c.key };
     if (c.inForm) await fillForm(loc);
     await loc.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => {});
-    await clearPointerAndFocus();
     // Two idle snapshots: a signal that moves on its own (animation, clock) cannot count as an effect.
     const idle = await snapshot();
     await page.waitForTimeout(300);
@@ -547,21 +576,26 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     exercised.add(c.key);
     console.log(`[crawl ${tag}]   click ${c.key}`);
     const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount, state: before.stateHash !== idle.stateHash };
-    const idleVisual = new Map(idle.visual);
-    const stableVisual = new Map(before.visual.filter(([id, value]) => idleVisual.get(id) === value));
+    const idleVisual = new Map(idle.visual.map(([id,value,animated]) => [id,{value,animated}]));
+    const stableVisual = new Map(before.visual
+      .filter(([id,value,animated]) => !animated && !idleVisual.get(id)?.animated && idleVisual.get(id)?.value === value)
+      .map(([id,value]) => [id,value]));
     pending.length = 0;
     responses.length = 0;
     const navsBefore = externalNavs.length, dialogsBefore = dialogs.length;
     const popup = page.context().waitForEvent('page', { timeout: 2_500 }).catch(() => null);
     const download = page.waitForEvent('download', { timeout: 2_500 }).catch(() => null);
     try {
+      await loc.evaluate(el => {
+        (window as unknown as { __crawlAction?: { target: Element } }).__crawlAction = { target: el };
+      });
       if (c.tag === 'select') {
         // Clicking a native select changes nothing; choosing another option fires input and change.
         const next = await loc.evaluate((el) => {
           const sel = el as HTMLSelectElement;
           return Array.from(sel.options).findIndex((op, k) => k !== sel.selectedIndex && !op.disabled);
         });
-        if (next < 0) { add(pg, c.key, 'select has no other enabled option to choose'); return 'same'; }
+        if (next < 0) { add(pg, c.key, 'select has no other enabled option to choose'); await clearActionCapture(); return 'same'; }
         await loc.selectOption({ index: next }, { timeout: 5_000 });
       } else {
         await loc.click({ timeout: 5_000 });
@@ -569,6 +603,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     } catch (e) {
       const msg = String(e).split('\n').find((l) => /intercepts pointer|not visible|outside of the viewport|detached/.test(l)) ?? String(e).split('\n')[0];
       add(pg, c.key, `cannot be clicked: ${msg.trim().slice(0, 200)}`);
+      await clearActionCapture();
       return 'nav';
     }
     // Give the handler time to do something, then let its requests finish.
@@ -603,20 +638,23 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(100);
     if (opened) await opened.close().catch(() => {});
-    // Compare the same pointer/focus state on both sides of the click. Hover/focus
-    // chrome alone is not an application result; also exclude styles still transitioning.
-    await clearPointerAndFocus();
+    // Read the resulting state without undoing a revealed panel or focused field.
     const settling = (await snapshot()) ?? after;
     await page.waitForTimeout(300);
     const final = (await snapshot()) ?? after;
-    const settledVisual = new Map(settling.visual);
+    const settledVisual = new Map(settling.visual.map(([id,value,animated]) => [id,{value,animated}]));
+    const interactionVisual = new Map((final.interactionVisual ?? before.visual)
+      .map(([id,value,animated]) => [id,{value,animated}]));
+    await clearActionCapture();
     const effect = final.url !== before.url || after.url !== before.url || externalNavs.length > navsBefore
       || !!opened || !!dl || dialogs.length > dialogsBefore
       || final.clip > before.clip
       || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
       || (!noisy.count && final.visibleCount !== before.visibleCount)
       || (!noisy.state && final.stateHash !== before.stateHash)
-      || final.visual.some(([id, value]) => stableVisual.has(id) && settledVisual.get(id) === value && stableVisual.get(id) !== value)
+      || final.visual.some(([id,value,animated]) => stableVisual.has(id) && !animated
+        && !settledVisual.get(id)?.animated && settledVisual.get(id)?.value === value
+        && interactionVisual.has(id) && !interactionVisual.get(id)!.animated && interactionVisual.get(id)!.value !== value)
       || final.htmlClass !== before.htmlClass;
     if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);
