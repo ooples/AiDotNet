@@ -23,7 +23,8 @@ jobs:
   preview-tests:
     if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
     name: Preview browser tests
-    runs-on: ubuntu-latest
+    # Match the OS supported by the pinned Playwright browser/dependency build.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:

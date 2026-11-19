@@ -102,7 +102,8 @@ jobs:
     if: ${{ !cancelled() && needs.validate-inputs.result == 'success' && inputs.part != 'auth-config' && (needs.preview-auth.result == 'success' || needs.preview-auth.result == 'skipped') }}
     name: Playwright (${{ matrix.part }})
     environment: ${{ inputs.preview && 'Preview' || 'Production' }}
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports Ubuntu 24.04, not the moving ubuntu-latest image.
+    runs-on: ubuntu-24.04
     # One job runs the suite; the full-site crawl runs as one job per kind of visitor, in parallel.
     # Run back to back on one worker, with failures retried, they took hours.
     strategy:
