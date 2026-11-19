@@ -265,13 +265,10 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       const change = $('billing-change-plan')!;
       change.textContent = paid ? 'Change plan' : 'Upgrade';
 
-      if (state.hasBillingAccount) {
-        $('portal-section')!.classList.remove('hidden');
-        $('billing-cancel')!.classList.toggle('hidden', !sub || (!!cancellationAt && !laterCancellation));
-        $('billing-cancel')!.textContent = laterCancellation ? 'Review cancellation in Stripe' : 'Cancel subscription';
-      } else if (paid) {
-        $('billing-no-account')!.classList.remove('hidden');
-      }
+      $('portal-section')!.classList.toggle('hidden', !state.hasBillingAccount);
+      $('billing-no-account')!.classList.toggle('hidden', state.hasBillingAccount || !paid || !!state.ownershipMessage);
+      $('billing-cancel')!.classList.toggle('hidden', !state.hasBillingAccount || !sub || (!!cancellationAt && !laterCancellation));
+      $('billing-cancel')!.textContent = laterCancellation ? 'Review cancellation in Stripe' : 'Cancel subscription';
 
       root.setAttribute('data-billing-loaded', 'true');
       return !state.error;

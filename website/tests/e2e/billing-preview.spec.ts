@@ -25,6 +25,7 @@ async function installBackend(page: Page, options: {
   claimSuccess?: boolean;
   ownershipPending?: boolean;
   portalSuccess?: boolean;
+  billingAccount?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: options.admin ? 'admin' : 'user',
@@ -63,6 +64,7 @@ async function installBackend(page: Page, options: {
           if (options.summaryFailureAfterAction) return reply({ message: 'Refresh unavailable' }, 502);
         }
         return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub,
+          billing_account:options.billingAccount,
           ownership_resolution_required:options.ownershipPending,
           ownership_message:options.ownershipPending?'A legacy billing account needs ownership verification. Your verified billing accounts remain available.':undefined });
       }
@@ -133,6 +135,18 @@ test('legacy ownership recovery stays visible while verified billing controls re
   await page.locator('#manage-subscription-btn').click();
   await expect(page).toHaveURL(/^https:\/\/billing\.stripe\.com\//);
   expect(calls.some(call=>call.action==='manage')).toBe(true);
+});
+
+test('an unresolved legacy Stripe account is not labeled as a team-granted plan', async ({page}) => {
+  // The profile link exists, but the trusted ownership response overrides it.
+  await installBackend(page,{tier:'pro',customer:true,billingAccount:false,ownershipPending:true});
+  await page.goto('/account/billing/');
+  await expect(page.locator('#billing-root')).toHaveAttribute('data-billing-loaded','true');
+  await expect(page.locator('#billing-ownership-notice')).toBeVisible();
+  await expect(page.locator('#billing-no-account')).toBeHidden();
+  await expect(page.locator('#portal-section')).toBeHidden();
+  await expect(page.locator('#billing-error')).toBeHidden();
+  await expect(page.locator('#billing-ownership-notice a').first()).toHaveAttribute('href','/account/licenses/');
 });
 
 test('a stale renewal confirmation refreshes the date before a second confirmation', async ({ page }) => {
