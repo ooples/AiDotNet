@@ -5662,6 +5662,123 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <inheritdoc />
+    internal IEnumerable<(Vector<T>? Vector, int Length)> EnumerateParameterGradientSegments()
+    {
+        if (_gradientSurfaceUnavailable)
+        {
+            throw new NotSupportedException(
+                "The most recent streaming step deliberately did not retain its full gradient set. " +
+                "Raise MaxRetainedGradientScalars only when the model can afford that retention.");
+        }
+
+        var overrideMethod = GetType().GetMethod(nameof(GetParameterGradients), Type.EmptyTypes);
+        if (overrideMethod is not null && overrideMethod.DeclaringType != typeof(NeuralNetworkBase<T>))
+        {
+            var custom = GetParameterGradients();
+            if (custom.Length > 0)
+            {
+                yield return (custom, custom.Length);
+            }
+            yield break;
+        }
+
+        foreach (var segment in EnumerateBaseParameterGradientSegments())
+        {
+            yield return segment;
+        }
+    }
+
+    private IEnumerable<(Vector<T>? Vector, int Length)> EnumerateBaseParameterGradientSegments()
+    {
+        if (_publishedFlatParameterGradients is not null)
+        {
+            if (_publishedFlatParameterGradients.Length > 0)
+            {
+                yield return (_publishedFlatParameterGradients, _publishedFlatParameterGradients.Length);
+            }
+            yield break;
+        }
+
+        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
+        {
+            // PREFER THE TAPE-SCATTERED SLICE over the layer's own accessor. 170 files override
+            // GetParameterGradients, and most of those overrides pre-date the autodiff tape and
+            // hand back a freshly allocated zero vector, so asking them returns manufactured zeros
+            // however good the tape's gradients were. Reading the scattered field first bypasses
+            // all of them; a layer the scatter never reached still falls back to its own accessor,
+            // so nothing that works today regresses.
+            var scattered = (layer as LayerBase<T>)?.ScatteredParameterGradients;
+            if (scattered is not null)
+            {
+                if (scattered.Length > 0) yield return (scattered, scattered.Length);
+            }
+            else if (_hasPublishedParameterGradients)
+            {
+                int len = ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount);
+                if (len > 0) yield return (null, len);
+            }
+            else
+            {
+                var layerGrad = layer.GetParameterGradients();
+                if (layerGrad.Length > 0) yield return (layerGrad, layerGrad.Length);
+            }
+        }
+
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null || !layer.SupportsTraining || layer.ParameterCount <= 0) continue;
+            var scattered = layer.ScatteredParameterGradients;
+            if (scattered is not null)
+            {
+                if (scattered.Length > 0) yield return (scattered, scattered.Length);
+            }
+            else if (_hasPublishedParameterGradients)
+            {
+                int len = ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount);
+                if (len > 0) yield return (null, len);
+            }
+            else
+            {
+                var layerGrad = layer.GetParameterGradients();
+                if (layerGrad.Length > 0) yield return (layerGrad, layerGrad.Length);
+            }
+        }
+
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            if (_publishedExtraTensorGradients is not null &&
+                _publishedExtraTensorGradients.TryGetValue(tensor, out var gradient))
+            {
+                if (gradient.Length > 0) yield return (gradient, gradient.Length);
+            }
+            else if (_hasPublishedParameterGradients)
+            {
+                yield return (null, tensor.Length);
+            }
+        }
+
+        // The registered components are GetParameters' tail, chunk by chunk in the registry's order: a published
+        // gradient where the step produced one, zero for frozen chunks and chunks it did not reach.
+        if (_hasPublishedParameterGradients && _parameterRegistry.HasComponents)
+        {
+            foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+            {
+                if (chunk.Tensor.Length == 0) continue;
+                if (_publishedExtraTensorGradients is not null && chunk.SourceTensor is not null &&
+                    _publishedExtraTensorGradients.TryGetValue(chunk.SourceTensor, out var gradient) &&
+                    gradient.Length == chunk.Tensor.Length)
+                {
+                    yield return (gradient, gradient.Length);
+                }
+                else
+                {
+                    yield return (null, chunk.Tensor.Length);
+                }
+            }
+        }
+    }
+
     public virtual Vector<T> GetParameterGradients()
     {
         if (_gradientSurfaceUnavailable)
@@ -5673,71 +5790,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (_publishedFlatParameterGradients is not null) return _publishedFlatParameterGradients;
 
-        var allGradients = new List<Vector<T>>();
-
-        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
+        var segments = new List<(Vector<T>? Vector, int Length)>();
+        long totalLengthLong = 0;
+        foreach (var segment in EnumerateBaseParameterGradientSegments())
         {
-            // PREFER THE TAPE-SCATTERED SLICE over the layer's own accessor. 170 files override
-            // GetParameterGradients, and most of those overrides pre-date the autodiff tape and
-            // hand back a freshly allocated zero vector, so asking them returns manufactured zeros
-            // however good the tape's gradients were. Reading the scattered field first bypasses
-            // all of them; a layer the scatter never reached still falls back to its own accessor,
-            // so nothing that works today regresses.
-            var scattered = (layer as LayerBase<T>)?.ScatteredParameterGradients;
-            allGradients.Add(scattered ?? (_hasPublishedParameterGradients
-                ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
-                : layer.GetParameterGradients()));
+            segments.Add(segment);
+            totalLengthLong += segment.Length;
         }
 
-        foreach (var layer in GetExtraTrainableLayers())
-        {
-            if (layer is null || !layer.SupportsTraining || layer.ParameterCount <= 0) continue;
-            var scattered = layer.ScatteredParameterGradients;
-            allGradients.Add(scattered ?? (_hasPublishedParameterGradients
-                ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
-                : layer.GetParameterGradients()));
-        }
-
-        foreach (var tensor in GetExtraTrainableTensors())
-        {
-            if (tensor is null || tensor.Length == 0) continue;
-            if (_publishedExtraTensorGradients is not null &&
-                _publishedExtraTensorGradients.TryGetValue(tensor, out var gradient))
-            {
-                allGradients.Add(gradient);
-            }
-            else if (_hasPublishedParameterGradients)
-            {
-                allGradients.Add(new Vector<T>(tensor.Length));
-            }
-        }
-
-        // The registered components are GetParameters' tail, chunk by chunk in the registry's order: a published
-        // gradient where the step produced one, zero for frozen chunks and chunks it did not reach.
-        if (_hasPublishedParameterGradients && _parameterRegistry.HasComponents)
-        {
-            foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
-            {
-                if (_publishedExtraTensorGradients is not null && chunk.SourceTensor is not null &&
-                    _publishedExtraTensorGradients.TryGetValue(chunk.SourceTensor, out var gradient) &&
-                    gradient.Length == chunk.Tensor.Length)
-                {
-                    allGradients.Add(gradient);
-                }
-                else
-                {
-                    allGradients.Add(new Vector<T>(chunk.Tensor.Length));
-                }
-            }
-        }
-
-        // Concatenate all gradients into a single vector
-        if (allGradients.Count == 0)
+        if (totalLengthLong == 0)
         {
             return new Vector<T>(0);
         }
 
-        return Vector<T>.Concatenate(allGradients.ToArray());
+        int totalLength = checked((int)totalLengthLong);
+        if (segments.Count == 1 && segments[0].Vector is { } single)
+        {
+            return single.Clone();
+        }
+
+        var result = new Vector<T>(totalLength);
+        var destination = result.AsWritableSpan();
+        int offset = 0;
+        foreach (var (vector, length) in segments)
+        {
+            if (vector is not null)
+            {
+                vector.AsSpan().CopyTo(destination.Slice(offset, length));
+            }
+            offset += length;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -14810,6 +14894,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         Func<IReadOnlyList<Tensor<T>>>? parameterProvider,
         bool sessionPerOptimizer,
+        Func<Tensor<T>>? closureObjective,
+        bool verifyReplayAgreement,
+        System.Reflection.MethodInfo? warmupKey,
+        Func<T>? eagerFallback,
+        bool clipCustomObjective)
+        => TrainCustomTapeStep(
+            input,
+            target,
+            forward,
+            loss,
+            optimizer,
+            parameterProvider,
+            sessionPerOptimizer,
+            closureObjective,
+            verifyReplayAgreement,
+            warmupKey,
+            eagerFallback,
+            clipCustomObjective,
+            eagerReason: null);
+
+    private T TrainCustomTapeStep(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider,
+        bool sessionPerOptimizer,
         Func<Tensor<T>>? closureObjective = null,
         bool verifyReplayAgreement = false,
         System.Reflection.MethodInfo? warmupKey = null,
@@ -14909,9 +15021,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
         MarkTrainMutationStarted();
         T lossValue = NumOps.Zero;
-        var outcome = parameters.Count == 0
-            ? Training.FusedStepOutcome.Declined
-            : session.TryStep(request, out lossValue);
+        Training.FusedStepOutcome outcome;
+        if (parameters.Count == 0)
+        {
+            outcome = Training.FusedStepOutcome.Declined;
+        }
+        else
+        {
+            using var fusedAttemptArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            outcome = session.TryStep(request, out lossValue);
+        }
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
             if (session.LastStepRanOutsidePlan) CustomOutsidePlanStepCount++;
@@ -14928,11 +15047,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (eagerFallback is not null)
             {
                 // The caller's own eager step (its contracts: a finite check before any mutation, re-evaluation for line
-                // searches, per-component and per-group clipping). It updates the weight caches itself.
+                // searches, per-component and per-group clipping). It opens its own step arena and updates caches itself.
                 lossValue = eagerFallback();
             }
             else
             {
+                using var eagerArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
                 lossValue = Training.TapeTrainingStepper<T>.EagerStep(request, this);
                 InvalidateWeightCachesAfterSuccessfulWeightUpdate();
             }
@@ -17291,7 +17411,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 throw new InvalidOperationException("A custom training objective must return exactly one scalar loss.");
             return result;
         }
-        using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
         SetTrainingMode(true);
         T lossValue;
         try
