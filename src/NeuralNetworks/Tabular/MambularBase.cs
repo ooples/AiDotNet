@@ -158,6 +158,11 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             throw new ArgumentException("Model must have at least one feature");
         }
 
+        if (Options.InnerDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "MambularOptions.InnerDimension must be positive.");
+        }
+
         // Feature embeddings
         _numericalEmbeddings = new Tensor<T>(new[] { NumNumericalFeatures, Options.EmbeddingDimension });
         InitializeWeights(_numericalEmbeddings);

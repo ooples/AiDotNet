@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.Diagnostics;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
@@ -730,7 +730,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         // First language with the highest probability (a stable descending sort's head); NaN ranks last.
         var languages = probabilities.Keys.ToArray();
         var scores = new Tensor<T>(probabilities.Values.ToArray(), [1, languages.Length]);
-        var cleaned = Engine.TensorNanToNum(scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, scores, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         return languages[Engine.TensorArgMax(cleaned, 1).ToArray()[0]];
     }
 
@@ -1119,7 +1119,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             else
             {
                 var labels = Engine.Reshape(target, [batchSize, sequenceLength]);
-                var rounded = Engine.TensorRound(Engine.TensorNanToNum(labels, 0.0, double.PositiveInfinity, double.NegativeInfinity));
+                var rounded = Engine.TensorRound(AiDotNet.Helpers.NanToNumHelper.Apply(Engine, labels, 0.0, double.PositiveInfinity, double.NegativeInfinity));
                 ids = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(vocabSize - 1));
             }
 
@@ -1292,7 +1292,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         var numOps = MathHelper.GetNumericOperations<T>();
         int vocabSize = logits.Shape[^1];
         var row = engine.TensorSlice(logits, [0, position, 0], [1, 1, vocabSize]).Reshape([1, vocabSize]);
-        var cleaned = engine.TensorNanToNum(row, numOps.ToDouble(numOps.MinValue), numOps.ToDouble(numOps.MaxValue), numOps.ToDouble(numOps.MinValue));
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(engine, row, numOps.ToDouble(numOps.MinValue), numOps.ToDouble(numOps.MaxValue), numOps.ToDouble(numOps.MinValue));
         int maxIdx = engine.TensorArgMax(cleaned, 1).ToArray()[0];
         var probabilities = engine.TensorSoftmax(cleaned.Cast<double>(), 1);
         double probability = probabilities.GetFlat(maxIdx);

@@ -33,18 +33,17 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
 
     // StandardScaler statistics (LTSF-Linear reference pipeline: the series is z-score normalized before
     // training/inference, then predictions are denormalized). Fit on the training data; identity until then.
-    // Inputs and targets get SEPARATE scalers: for a real forecast x and y are the same series so the two
-    // coincide and this reduces to plain NLinear, but normalizing in the model's own space is what makes
-    // training converge independent of the series magnitude (Adam can't otherwise move the bias/weights far
-    // enough on large-scale targets within the epoch budget).
-    [Buffer]
-    private T _xMean;
-    [Buffer]
-    private T _xStd;
-    [Buffer]
-    private T _yMean;
-    [Buffer]
-    private T _yStd;
+    // Stored in double (with exact-double state persistence across Serialize/Deserialize and Clone/DeepCopy)
+    // so training and inference apply the exact same affine transform even when subnormal Half statistics
+    // (e.g. std ≈ 2.58e-8 on [0, 0, 0, Half.Epsilon]) would underflow to zero if rounded to T.
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private double _xMean;
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private double _xStd;
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private double _yMean;
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private double _yStd;
 
     /// <param name="options">Model configuration (window, horizon, epochs, batch size, learning rate).</param>
     /// <param name="optimizer">
@@ -64,10 +63,10 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         _l = Math.Max(2, _options.LookbackWindow);
         _w = Engine.Fill(_l, NumOps.FromDouble(1.0 / _l));
         _b = NumOps.Zero;
-        _xMean = NumOps.Zero;
-        _xStd = NumOps.One;
-        _yMean = NumOps.Zero;
-        _yStd = NumOps.One;
+        _xMean = 0.0;
+        _xStd = 1.0;
+        _yMean = 0.0;
+        _yStd = 1.0;
         _optimizer = optimizer;
     }
 
@@ -88,7 +87,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
             ? Engine.TensorSlice(raw, new[] { 0, start }, new[] { batch, take })
             : new Tensor<double>(new[] { batch, 0 });
         window = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(window, xMean), xStd);
-        window = Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        window = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, window, 0.0, 0.0, 0.0);
         if (take < _l)
         {
             window = Engine.TensorConcatenate(new[] { window, new Tensor<double>(new[] { batch, _l - take }) }, 1);
@@ -131,7 +130,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         // Half statistics, small moments, and Adam's 1e-8 epsilon never overflow or underflow to 0/0.
         var windows = NormalizedWindow(rows, xMean, xStd);
         var targetsNorm = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(targets, yMean), yStd);
-        targetsNorm = Engine.TensorNanToNum(targetsNorm, 0.0, 0.0, 0.0);
+        targetsNorm = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, targetsNorm, 0.0, 0.0, 0.0);
 
         if (_optimizer is not null)
         {
@@ -235,16 +234,16 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     {
         var (xMean, xStd) = FitScaler(x);
         var (yMean, yStd) = FitScaler(y);
-        _xMean = NumOps.FromDouble(xMean);
-        _xStd = NumOps.FromDouble(xStd);
-        _yMean = NumOps.FromDouble(yMean);
-        _yStd = NumOps.FromDouble(yStd);
+        _xMean = xMean;
+        _xStd = xStd;
+        _yMean = yMean;
+        _yStd = yStd;
         return (xMean, xStd, yMean, yStd);
     }
 
-    // Mean and population std of the finite entries (identity scaler when there are none). A (near-)constant
-    // series has zero variance; guard the std to 1 so normalization is a pure mean-shift and never divides
-    // by zero.
+    // Mean and population std of the finite entries (identity scaler when there are none). Only genuinely
+    // constant series (max == min) use unit scale; non-degenerate small-amplitude series (including subnormal
+    // Half inputs whose std is ~2.58e-8) keep their exact double std rather than collapsing to 1.0.
     private (double Mean, double Std) FitScaler(Tensor<double> v)
     {
         var finite = Engine.TensorIsFinite(v);
@@ -255,27 +254,40 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
             return (0.0, 1.0);
         }
 
+        var posInf = Engine.TensorFullLike(v, double.PositiveInfinity);
+        var negInf = Engine.TensorFullLike(v, double.NegativeInfinity);
+        double min = Engine.TensorMinValue(Engine.TensorWhere(finite, v, posInf));
+        double max = Engine.TensorMaxValue(Engine.TensorWhere(finite, v, negInf));
+        if (!(max > min))
+        {
+            return (min, 1.0);
+        }
+
         double mean = Engine.TensorSum(Engine.TensorWhere(finite, v, zeros)) / count;
         var deviations = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(v, mean), zeros);
         double std = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(deviations, deviations)) / count);
-        return (mean, std < 1e-8 ? 1.0 : std);
+        if (!(std > 0.0) || double.IsNaN(std) || double.IsInfinity(std))
+        {
+            return (mean, 1.0);
+        }
+
+        return (mean, std);
     }
 
     /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
-        double xMean = NumOps.ToDouble(_xMean);
-        double xStd = NumOps.ToDouble(_xStd);
-        double yMean = NumOps.ToDouble(_yMean);
-        double yStd = NumOps.ToDouble(_yStd);
-        if (xStd == 0.0 || double.IsNaN(xStd) || double.IsInfinity(xStd)) xStd = 1.0;
-        if (yStd == 0.0 || double.IsNaN(yStd) || double.IsInfinity(yStd)) yStd = 1.0;
+        if (!(_xStd > 0.0) || double.IsNaN(_xStd) || double.IsInfinity(_xStd)
+            || !(_yStd > 0.0) || double.IsNaN(_yStd) || double.IsInfinity(_yStd))
+        {
+            throw new InvalidOperationException("NLinear scaler standard deviations must be finite and strictly positive.");
+        }
 
         var raw = Tensor<T>.FromVector(input, new[] { 1, input.Length }).Cast<double>();
-        var window = NormalizedWindow(raw, xMean, xStd);
+        var window = NormalizedWindow(raw, _xMean, _xStd);
         var weights = _w.AsTensor().Cast<double>().ToVector();
         double bias = NumOps.ToDouble(_b);
-        double predDouble = ForecastNormalized(window, weights, bias).Prediction[0, 0] * yStd + yMean;
+        double predDouble = ForecastNormalized(window, weights, bias).Prediction[0, 0] * _yStd + _yMean;
         if (double.IsNaN(predDouble) || double.IsInfinity(predDouble))
         {
             return NumOps.Zero;

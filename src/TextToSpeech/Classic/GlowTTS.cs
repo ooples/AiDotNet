@@ -187,7 +187,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     /// <summary>Predicted log durations from the encoder output, with its gradient stopped (§3.1).</summary>
     private Tensor<T> LogDurations(Tensor<T> hidden)
     {
-        var detached = new Tensor<T>(hidden._shape, hidden.ToVector());
+        var detached = DetachTensor(hidden);
         return Engine.Reshape(_durationPredictor!.Forward(detached), new[] { hidden.Shape[0] });
     }
 

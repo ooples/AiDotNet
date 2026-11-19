@@ -5312,7 +5312,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// own clip), so they are copied like every other eager step's. Referencing them as a plan's buffers are referenced
     /// published the clipped gradient, on the CPU and the GPU engine alike.
     /// </remarks>
-    private void PublishEagerFallbackGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    private protected void PublishEagerFallbackGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
         => PublishFusedRequestGradients(grads, sourcesOutliveStep: false);
 
     private void PublishFusedRequestGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
@@ -14146,7 +14146,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// thread is currently inside <see cref="TrainWithTape"/> on this
     /// instance.
     /// </summary>
-    private TrainSentinel AcquireTrainSentinel()
+    private protected TrainSentinel AcquireTrainSentinel()
     {
         if (Interlocked.CompareExchange(ref _trainInFlight, 1, 0) != 0)
         {
@@ -14169,7 +14169,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// return path including exceptions. Allocation-free (value type) and
     /// readonly so the compiler doesn't defensively-copy.
     /// </summary>
-    private readonly struct TrainSentinel : IDisposable
+    private protected readonly struct TrainSentinel : IDisposable
     {
         private readonly NeuralNetworkBase<T> _owner;
         private readonly NeuralNetworkBase<T>? _previousActiveNetwork;
@@ -14840,7 +14840,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// the first forward resolves lazily shaped layers.</param>
     /// <returns>The step's loss.</returns>
     // The optimizer a custom step trains with: an explicitly configured one wins over the one the model passes in.
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveCustomStepOptimizer(
+    private protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveCustomStepOptimizer(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         => _externalStepOptimizer
             ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
@@ -15204,7 +15204,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // O(1). InvalidateParameterCountCache resets _skipParameterBufferVersion
         // to -1 (and clears _parameterBuffer) so a layer-structure change
         // re-tests the threshold from scratch.
-        if (_distributedCoordinator is not null || (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion))
+        if (_distributedCoordinator is not null || IsWeightStreamingActive || (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion))
         {
             paramBuffer = null;
         }
@@ -16621,7 +16621,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// The first <see cref="LayerBase{T}.CompiledTrainingGraphBreakReason"/> any layer reports, at any depth, or null
     /// when every layer can be compiled and replayed.
     /// </summary>
-    private string? LayerGraphBreakReason()
+    private protected string? LayerGraphBreakReason()
     {
         var pending = new Stack<ILayer<T>>(Layers);
         var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
@@ -17052,11 +17052,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> data,
         Func<Tensor<T>, Tensor<T>> objective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null,
+        bool sessionPerOptimizer = false)
     {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (objective is null) throw new ArgumentNullException(nameof(objective));
-        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider);
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider, sessionPerOptimizer: sessionPerOptimizer);
     }
 
     public T TrainWithCustomLoss(
@@ -17078,6 +17079,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>> computeLoss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
         SetTrainingMode(true);
         try
         {
@@ -18388,7 +18390,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// cached: lazily sized layers replace their parameter tensors on the first forward without a structure change, so a
     /// set kept from before it would name the discarded placeholders and exclude nothing.
     /// </summary>
-    private HashSet<Tensor<T>> DecayExcludedParameters()
+    private protected HashSet<Tensor<T>> DecayExcludedParameters()
     {
         var excluded = new List<Tensor<T>>();
         var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
@@ -18424,7 +18426,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// their host download, so they must NOT be treated as host-authoritative: doing so dropped the device update and
     /// detached the buffer the plan keeps writing, and GPU Train() stopped learning after its first step.
     /// </param>
-    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate(bool updatedOnDevice)
+    private protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate(bool updatedOnDevice)
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // InvalidateAllWeightCaches only clears the PERSISTENT + activation caches. It does NOT
@@ -20474,7 +20476,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var _ = new NoGradScope<T>();
 
         // Comparer<double> places NaN below every number, so NaN takes the lowest key.
-        var keyed = engine.TensorNanToNum(
+        var keyed = AiDotNet.Helpers.NanToNumHelper.Apply(engine, 
             values.Reshape(new[] { n }), double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         var distinct = engine.TensorUnique(keyed, true);
         long distinctCount = distinct.Length;

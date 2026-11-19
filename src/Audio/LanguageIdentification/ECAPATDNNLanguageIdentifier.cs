@@ -360,9 +360,7 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Apply softmax to get probabilities
-        var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput._shape);
+        return Engine.Softmax(modelOutput, axis: -1);
     }
 
     /// <inheritdoc/>

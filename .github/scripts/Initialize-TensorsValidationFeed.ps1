@@ -90,24 +90,27 @@ $newCpuGroups = @(
     @{ Prefix = 'noGrad'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NoGradTrainingTraceTests' }
     @{ Prefix = 'optimizerEnrollment'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledOptimizerEnrollmentTests' }
     @{ Prefix = 'enrollmentCheckpoint'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.CompiledEnrollmentCheckpointTests' }
+    @{ Prefix = 'normalizationSearch'; Class = ''; Trx = 'TestResults/normalization-search-signature.trx' }
+    @{ Prefix = 'flashAttention'; Class = ''; Trx = 'TestResults/flashattention-signature.trx' }
+    @{ Prefix = 'nanToNum'; Class = 'AiDotNet.Tensors.Tests.Engines.Compilation.NanToNumReplayTests'; Trx = 'TestResults/nantonum-signature.trx' }
 )
-$relativeNewTrx = 'TestResults/optimizer-enrollment-signature.trx'
-$newTrxPath = Join-Path $EvidenceDirectory $relativeNewTrx
-Assert-Feed ($null -ne $manifest.sha256.PSObject.Properties[$relativeNewTrx] -and
-    $manifest.sha256.$relativeNewTrx -cmatch '^[0-9a-f]{64}$' -and (Test-Path -LiteralPath $newTrxPath) -and
-    (Get-Sha256 $newTrxPath) -ceq $manifest.sha256.$relativeNewTrx) 'Mandatory CPU union TRX checksum did not match.'
-[xml]$newTrx = Get-Content -LiteralPath $newTrxPath -Raw
-$newResults = @($newTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
-$newCounters = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
-$newSummary = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]')
-Assert-Feed ($null -ne $newCounters -and $null -ne $newSummary -and $newSummary.GetAttribute('outcome') -ceq 'Completed') 'Mandatory CPU union TRX did not complete.'
-$newNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($result in $newResults) {
-    Assert-Feed ($result.GetAttribute('outcome') -ceq 'Passed' -and $newNames.Add($result.GetAttribute('testName'))) 'Mandatory CPU union TRX cases must be distinct and passed.'
-}
 $newExpectedTotal = 0
 $newManifestTotal = 0
 foreach ($group in $newCpuGroups) {
+    $relativeNewTrx = if ($group.ContainsKey('Trx')) { $group.Trx } else { 'TestResults/optimizer-enrollment-signature.trx' }
+    $newTrxPath = Join-Path $EvidenceDirectory $relativeNewTrx
+    Assert-Feed ($null -ne $manifest.sha256.PSObject.Properties[$relativeNewTrx] -and
+        $manifest.sha256.$relativeNewTrx -cmatch '^[0-9a-f]{64}$' -and (Test-Path -LiteralPath $newTrxPath) -and
+        (Get-Sha256 $newTrxPath) -ceq $manifest.sha256.$relativeNewTrx) 'Mandatory CPU union TRX checksum did not match.'
+    [xml]$newTrx = Get-Content -LiteralPath $newTrxPath -Raw
+    $newResults = @($newTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+    $newCounters = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+    $newSummary = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]')
+    Assert-Feed ($null -ne $newCounters -and $null -ne $newSummary -and $newSummary.GetAttribute('outcome') -ceq 'Completed') 'Mandatory CPU union TRX did not complete.'
+    $newNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($result in $newResults) {
+        Assert-Feed ($result.GetAttribute('outcome') -ceq 'Passed' -and $newNames.Add($result.GetAttribute('testName'))) 'Mandatory CPU union TRX cases must be distinct and passed.'
+    }
     $counterField = $group.Prefix + 'TestCounters'
     $caseField = $group.Prefix + 'TestCases'
     $countField = $group.Prefix + 'TestCount'
@@ -129,15 +132,36 @@ foreach ($group in $newCpuGroups) {
     Assert-Feed ($cases.Count -eq $expectedCount) "Mandatory CPU test identity count did not match: $($group.Prefix)"
     $identities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($case in $cases) {
-        Assert-Feed (-not [string]::IsNullOrWhiteSpace($case) -and $case.StartsWith($group.Class + '.', [StringComparison]::Ordinal) -and $identities.Add($case)) 'Mandatory CPU test identities must be nonempty and unique and belong to the pinned class.'
+        Assert-Feed (-not [string]::IsNullOrWhiteSpace($case) -and ([string]::IsNullOrEmpty($group.Class) -or $case.StartsWith($group.Class + '.', [StringComparison]::Ordinal)) -and $identities.Add($case)) 'Mandatory CPU test identities must be nonempty and unique and belong to the pinned class.'
     }
     Assert-Feed ((Get-CaseDigest $cases) -ceq $pin.$digestField) "Mandatory CPU test identity digest did not match: $($group.Prefix)"
-    $trxCases = [string[]]@($newResults | Where-Object { $_.GetAttribute('testName').StartsWith($group.Class + '.', [StringComparison]::Ordinal) } | ForEach-Object { $_.GetAttribute('testName') })
+    $trxCases = [string[]]@($newResults | Where-Object { [string]::IsNullOrEmpty($group.Class) -or $_.GetAttribute('testName').StartsWith($group.Class + '.', [StringComparison]::Ordinal) } | ForEach-Object { $_.GetAttribute('testName') })
     Assert-Feed ($trxCases.Count -eq $expectedCount -and (Get-CaseDigest $trxCases) -ceq $pin.$digestField) "Mandatory CPU TRX identities did not match: $($group.Prefix)"
+    if ($group.ContainsKey('Trx')) {
+        Assert-Feed ($newResults.Count -eq $expectedCount -and [int]$newCounters.GetAttribute('total') -eq $expectedCount -and [int]$newCounters.GetAttribute('executed') -eq $expectedCount -and [int]$newCounters.GetAttribute('passed') -eq $expectedCount) 'Mandatory CPU cohort TRX count did not match.'
+        foreach ($counter in $newCounters.Attributes) {
+            if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero mandatory CPU cohort TRX outcome: $($counter.Name)" }
+        }
+    }
     $newExpectedTotal += $expectedCount
     $newManifestTotal += [int]$groupCounters.total
 }
-Assert-Feed ($newResults.Count -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('total') -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('executed') -eq $newExpectedTotal -and [int]$newCounters.GetAttribute('passed') -eq $newExpectedTotal) 'Mandatory CPU union TRX count did not match.'
+$relativeNewTrx = 'TestResults/optimizer-enrollment-signature.trx'
+$newTrxPath = Join-Path $EvidenceDirectory $relativeNewTrx
+Assert-Feed ($null -ne $manifest.sha256.PSObject.Properties[$relativeNewTrx] -and
+    $manifest.sha256.$relativeNewTrx -cmatch '^[0-9a-f]{64}$' -and (Test-Path -LiteralPath $newTrxPath) -and
+    (Get-Sha256 $newTrxPath) -ceq $manifest.sha256.$relativeNewTrx) 'Mandatory CPU union TRX checksum did not match.'
+[xml]$newTrx = Get-Content -LiteralPath $newTrxPath -Raw
+$newResults = @($newTrx.SelectNodes('//*[local-name()="UnitTestResult"]'))
+$newCounters = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+$newSummary = $newTrx.SelectSingleNode('//*[local-name()="ResultSummary"]')
+Assert-Feed ($null -ne $newCounters -and $null -ne $newSummary -and $newSummary.GetAttribute('outcome') -ceq 'Completed') 'Mandatory CPU union TRX did not complete.'
+$newNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($result in $newResults) {
+    Assert-Feed ($result.GetAttribute('outcome') -ceq 'Passed' -and $newNames.Add($result.GetAttribute('testName'))) 'Mandatory CPU union TRX cases must be distinct and passed.'
+}
+$unionExpectedTotal = $newExpectedTotal - [int]$pin.normalizationSearchTestCount - [int]$pin.flashAttentionTestCount - [int]$pin.nanToNumTestCount
+Assert-Feed ($newResults.Count -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('total') -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('executed') -eq $unionExpectedTotal -and [int]$newCounters.GetAttribute('passed') -eq $unionExpectedTotal) 'Mandatory CPU union TRX count did not match.'
 foreach ($counter in $newCounters.Attributes) {
     if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero mandatory CPU union TRX outcome: $($counter.Name)" }
 }

@@ -182,17 +182,21 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var protectedVals = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
         var featureVals = PreprocessingTensorOps.ColumnVector(X, featureIndex);
 
-        // Split by protected attribute at the n/2-th sorted order statistic (lower <= median, upper > median).
-        // When upperMiddle equals the column maximum of a non-constant attribute (e.g. balanced binary [0, 0, 1, 1]),
-        // strict "> upperMiddle" leaves the upper group empty, so fall back to "< upperMiddle" vs ">= upperMiddle".
+        // Split by protected attribute at its conventional sample median: for even n, the midpoint of the two middle
+        // sorted values (0.5 * (sorted[(n - 1) / 2] + sorted[n / 2])), so continuous even samples such as [0, 1, 2, 3]
+        // split evenly at 1.5 and balanced binary [0, 0, 1, 1] splits at 0.5. When ties at the maximum make the median
+        // equal the column maximum of a non-constant attribute (e.g. skewed binary [0, 1, 1, 1] where median = 1),
+        // strict "> median" leaves the upper group empty, so fall back to "< median" vs ">= median".
         var protectedColumn = engine.Reshape(protectedVals.Cast<double>(), new[] { n, 1 });
+        double lowerMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, (n - 1) / 2));
         double upperMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, n / 2));
-        var upper = engine.TensorGreaterThan(protectedColumn, upperMiddle);
+        double median = (lowerMiddle * 0.5) + (upperMiddle * 0.5);
+        var upper = engine.TensorGreaterThan(protectedColumn, median);
         var lower = PreprocessingTensorOps.Not(upper);
         int count1 = PreprocessingTensorOps.CountNonZero(upper);
-        if (count1 == 0 && PreprocessingTensorOps.CountNonZero(engine.TensorLessThan(protectedColumn, upperMiddle)) > 0)
+        if (count1 == 0 && PreprocessingTensorOps.CountNonZero(engine.TensorLessThan(protectedColumn, median)) > 0)
         {
-            lower = engine.TensorLessThan(protectedColumn, upperMiddle);
+            lower = engine.TensorLessThan(protectedColumn, median);
             upper = PreprocessingTensorOps.Not(lower);
             count1 = PreprocessingTensorOps.CountNonZero(upper);
         }

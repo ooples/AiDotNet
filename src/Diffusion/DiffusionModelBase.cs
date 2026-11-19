@@ -1621,21 +1621,54 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         //
         // Default optimizer: paper-faithful Adam (DDPM: beta1=0.9, beta2=0.999, eps=1e-8, no weight decay, fixed LR
         // captured at the first Train). Supply DiffusionModelOptions.OptimizerFactory for schedules.
-        var eagerLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
-            TrainedTensors,
-            NoisePredictionLoss,
-            GetOrCreateTrainingOptimizer(),
-            onGradients: RetainTrainingGradientSurface
-                ? gradients => RetainTrainingParameterGradients(trainedTensors ?? CollectTrainableParameters(), gradients)
-                : null,
-            beforeUpdate: qatParams is { } shadowedParams && qatShadows is { } shadows
-                ? () =>
+        var trainingOptimizer = GetOrCreateTrainingOptimizer();
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? gradientHook = RetainTrainingGradientSurface
+            ? gradients => RetainTrainingParameterGradients(trainedTensors ?? CollectTrainableParameters(), gradients)
+            : null;
+        T eagerLoss;
+        if (qatParams is { } shadowedParams && qatShadows is { } shadows)
+        {
+            eagerLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                TrainedTensors,
+                NoisePredictionLoss,
+                trainingOptimizer,
+                onGradients: gradientHook,
+                beforeUpdate: () =>
                 {
                     for (int i = 0; i < shadowedParams.Length; i++)
                         RestoreShadow(shadowedParams[i], shadows[i]);
-                }
-                : null);
+                });
+        }
+        else
+        {
+            // True eager step: models reaching this fallback either lack CanPredictFromTimestepTensor (so timesteps
+            // is a host int[] that must not be baked into a compiled closure plan) or declined fused denoising above.
+            var placeholder = new Tensor<T>(new[] { 1 });
+            eagerLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerStep(
+                new AiDotNet.Training.FusedTrainingStepRequest<T>
+                {
+                    Layers = Array.Empty<ITrainableLayer<T>>(),
+                    Input = placeholder,
+                    Target = placeholder,
+                    Forward = _ => NoisePredictionLoss(),
+                    ComputeLoss = (loss, _) => loss,
+                    Optimizer = trainingOptimizer,
+                    ExtraParameters = new DeferredParameterList(TrainedTensors),
+                    OnEagerGradients = gradientHook,
+                },
+                owner: this);
+        }
         RecordTrainingLoss(eagerLoss);
+    }
+
+    private sealed class DeferredParameterList(Func<IReadOnlyList<Tensor<T>>> provider) : IReadOnlyList<Tensor<T>>
+    {
+        private IReadOnlyList<Tensor<T>>? _resolved;
+        private IReadOnlyList<Tensor<T>> Resolved => _resolved ??= provider();
+        public int Count => Resolved.Count;
+        public Tensor<T> this[int index] => Resolved[index];
+        public IEnumerator<Tensor<T>> GetEnumerator() => Resolved.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private void RecordTrainingLoss(T loss)

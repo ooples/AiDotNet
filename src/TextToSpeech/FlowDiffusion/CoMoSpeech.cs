@@ -256,7 +256,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
 
     private Tensor<T> LogDurations(Tensor<T> hidden)
     {
-        var detached = new Tensor<T>(hidden._shape, hidden.ToVector());
+        var detached = DetachTensor(hidden);
         return Engine.Reshape(_durationPredictor!.Forward(detached), new[] { hidden.Shape[0] });
     }
 
@@ -545,7 +545,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         var y = PadFrames(Engine.TensorSlice(mel, new[] { draw.SegmentOffset, 0 }, new[] { length, channels }), padded);
         var muFull = LengthRegulator.Expand(means, durations);
         var mu = PadFrames(Engine.TensorSlice(muFull, new[] { draw.SegmentOffset, 0 }, new[] { length, channels }), padded);
-        if (distilling) mu = new Tensor<T>(mu._shape, mu.ToVector());
+        if (distilling) mu = DetachTensor(mu);
         var mask = FrameMask(length, padded);
         var maskRows = MaskRows(mask, padded);
         double elements = padded * (double)channels;
@@ -563,7 +563,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
                 var d = Engine.TensorMultiplyScalar(Engine.TensorSubtract(xNext, Denoise(_teacher!, xNext, tNext, mu, mask)), NumOps.FromDouble(1.0 / tNext));
                 var xHat = Engine.TensorAdd(xNext, Engine.TensorMultiplyScalar(d, NumOps.FromDouble(t - tNext)));
                 var ema = Denoise(_target!, xHat, t, mu, mask);
-                emaTarget = new Tensor<T>(ema._shape, ema.ToVector());
+                emaTarget = DetachTensor(ema);
             }
             var gap = Engine.TensorMultiply(Engine.TensorSubtract(online, emaTarget), maskRows);
             return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(gap, gap), new[] { 0, 1 }, keepDims: false),

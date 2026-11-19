@@ -335,12 +335,31 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
             if (stream.Rank != 2 || stream.Shape[0] != l || stream.Shape[1] != _hidden)
                 throw new ArgumentException($"Every DocFormer stream must have shape [{l}, {_hidden}].", nameof(visual));
 
-        var relativeIndex = new int[l * l];
+        int span = l * l;
+        var qRow = new int[span];
+        var kRow = new int[span];
         for (int q = 0; q < l; q++)
+        {
             for (int k = 0; k < l; k++)
-                relativeIndex[(q * l) + k] = Math.Min(Math.Max(k - q, -_maxRelative), _maxRelative) + _maxRelative;
-        var relText = Engine.Reshape(CvTensorOps<T>.Select(_relativeText, relativeIndex, 0), new[] { l, l, _headDim });
-        var relImage = Engine.Reshape(CvTensorOps<T>.Select(_relativeImage, relativeIndex, 0), new[] { l, l, _headDim });
+            {
+                int bucket = Math.Min(Math.Max(k - q, -_maxRelative), _maxRelative) + _maxRelative;
+                qRow[(q * l) + k] = bucket;
+                kRow[(k * l) + q] = bucket;
+            }
+        }
+
+        var qBuckets = new int[_numHeads * span];
+        var kBuckets = new int[_numHeads * span];
+        for (int h = 0; h < _numHeads; h++)
+        {
+            Array.Copy(qRow, 0, qBuckets, h * span, span);
+            Array.Copy(kRow, 0, kBuckets, h * span, span);
+        }
+
+        var qBucketIndices = new Tensor<int>(qBuckets, new[] { _numHeads, l, l });
+        var kBucketIndices = new Tensor<int>(kBuckets, new[] { _numHeads, l, l });
+        var relTextT = Engine.TensorTranspose(_relativeText);
+        var relImageT = Engine.TensorTranspose(_relativeImage);
 
         var t = text;
         for (int i = 0; i < _numLayers; i++)
@@ -352,9 +371,9 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
             var vsn = _normVs[i].Forward(visualSpatial);
 
             var textContext = StreamContext(_qText[i].Forward(tn), _kText[i].Forward(tn), _vText[i].Forward(tn),
-                _qSpatial[i].Forward(tsn), _kSpatial[i].Forward(tsn), relText, l);
+                _qSpatial[i].Forward(tsn), _kSpatial[i].Forward(tsn), relTextT, qBucketIndices, kBucketIndices, l);
             var imageContext = StreamContext(_qImage[i].Forward(vn), _kImage[i].Forward(vn), _vImage[i].Forward(vn),
-                _qSpatial[i].Forward(vsn), _kSpatial[i].Forward(vsn), relImage, l);
+                _qSpatial[i].Forward(vsn), _kSpatial[i].Forward(vsn), relImageT, qBucketIndices, kBucketIndices, l);
             var context = Engine.Reshape(Engine.TensorPermute(Engine.TensorAdd(textContext, imageContext), new[] { 1, 0, 2 }), new[] { l, _hidden });
 
             var x = Engine.TensorAdd(_output[i].Forward(context), skip);
@@ -364,7 +383,16 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>softmax(scores) V for one stream, <c>[heads, L, head_dim]</c>.</summary>
-    private Tensor<T> StreamContext(Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> qs, Tensor<T> ks, Tensor<T> relative, int l)
+    private Tensor<T> StreamContext(
+        Tensor<T> q,
+        Tensor<T> k,
+        Tensor<T> v,
+        Tensor<T> qs,
+        Tensor<T> ks,
+        Tensor<T> relativeTransposed,
+        Tensor<int> qBucketIndices,
+        Tensor<int> kBucketIndices,
+        int l)
     {
         Tensor<T> Heads(Tensor<T> x) => Engine.TensorPermute(Engine.Reshape(x, new[] { l, _numHeads, _headDim }), new[] { 1, 0, 2 });
         var qh = Heads(q);
@@ -374,14 +402,19 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
         scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(
             Engine.TensorBatchMatMul<T>(Heads(qs), Engine.TensorPermute(Heads(ks), new[] { 0, 2, 1 })), scale));
 
-        // q_l . a_lr: batch over l, [L, H, dh] x [L, dh, L] -> [L, H, L] -> [H, L, L].
-        var relT = Engine.TensorPermute(relative, new[] { 0, 2, 1 });
-        var queryTerm = Engine.TensorBatchMatMul<T>(Engine.TensorPermute(qh, new[] { 1, 0, 2 }), relT);
-        scores = Engine.TensorAdd(scores, Engine.TensorPermute(queryTerm, new[] { 1, 0, 2 }));
-        // k_r . a_lr: batch over r, [L, H, dh] x [L(r), dh, L(l)] -> [r, H, l] -> [H, l, r].
-        var relByKey = Engine.TensorPermute(relative, new[] { 1, 2, 0 });
-        var keyTerm = Engine.TensorBatchMatMul<T>(Engine.TensorPermute(kh, new[] { 1, 0, 2 }), relByKey);
-        scores = Engine.TensorAdd(scores, Engine.TensorPermute(keyTerm, new[] { 1, 2, 0 }));
+        int buckets = relativeTransposed.Shape[1];
+        // q_l · a_lr via bucket table [H * L, dh] x [dh, B] -> [H, L, B], then gather [H, L, L] (avoids 48x [L, L, dh] allocations).
+        var qByBucket = Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(qh, new[] { _numHeads * l, _headDim }), relativeTransposed),
+            new[] { _numHeads, l, buckets });
+        scores = Engine.TensorAdd(scores, Engine.TensorTakeAlongDim(qByBucket, qBucketIndices, 2));
+
+        // k_r · a_lr via bucket table [H * L(r), dh] x [dh, B] -> [H, L(r), B], gather [H, L(r), L(l)], permute -> [H, L(l), L(r)].
+        var kByBucket = Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(kh, new[] { _numHeads * l, _headDim }), relativeTransposed),
+            new[] { _numHeads, l, buckets });
+        var keyTermByR = Engine.TensorTakeAlongDim(kByBucket, kBucketIndices, 2);
+        scores = Engine.TensorAdd(scores, Engine.TensorPermute(keyTermByR, new[] { 0, 2, 1 }));
 
         return Engine.TensorBatchMatMul<T>(Engine.TensorSoftmax(scores, 2), Heads(v));
     }

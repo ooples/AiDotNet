@@ -1140,4 +1140,199 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         Assert.All(values.Take(3600), v => Assert.Equal(1.0, v));
         Assert.All(values.Skip(3600), v => Assert.Equal(2.0, v));
     }
+
+    private static NeuralNetworkArchitecture<double> TinyStride32Backbone(int size)
+    {
+        IActivationFunction<double> identity = new IdentityActivation<double>();
+        return new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: size, inputWidth: size, inputDepth: 3, outputSize: 2,
+            layers: new List<ILayer<double>>
+            {
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+                new ConvolutionalLayer<double>(4, 3, 2, 1, identity),
+            });
+    }
+
+    private static KMaXDeepLabOptions SmallAtrousOptions(int[] atrousRates) => new()
+    {
+        NumClasses = 2, NumClusterCenters = 3, PixelEmbeddingDimension = 4, NumKMeansIterations = 2, QueryDimension = 8,
+        NumAttentionHeads = 2, FeedForwardDimension = 16, PixelHeadDimension = 6, Seed = 19,
+        InstanceDiscriminationLossWeight = 1.0, SemanticLossWeight = 1.0,
+        SemanticAsppDimension = 4, SemanticAtrousRates = atrousRates, SemanticAsppDropRate = 0.0,
+        SemanticDecoderDimension = 4, SemanticLowLevelProjections = [3, 2], SemanticHeadDimension = 4,
+    };
+
+    private static Tensor<double> ReferenceSemanticDecoder(
+        IReadOnlyList<ILayer<double>> layers, IReadOnlyList<int> atrousRates, IReadOnlyList<Tensor<double>> stages)
+    {
+        var engine = AiDotNetEngine.Current;
+        var coarsest = stages[stages.Count - 1];
+        int b = coarsest.Shape[0], h = coarsest.Shape[2], w = coarsest.Shape[3];
+        int idx = 0;
+
+        var branches = new List<Tensor<double>>(atrousRates.Count + 2)
+        {
+            engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(coarsest))),
+        };
+        idx += 2;
+        foreach (int rate in atrousRates)
+        {
+            var kernel = TapeTrainingStep<double>.CollectParameters(new[] { layers[idx] }, -1)[0];
+            var dilated = engine.Conv2D(coarsest, kernel, new[] { 1, 1 }, new[] { rate, rate }, new[] { rate, rate });
+            branches.Add(engine.TensorGELU(layers[idx + 1].Forward(dilated)));
+            idx += 2;
+        }
+
+        var pooled = engine.ReduceMean(coarsest, new[] { 2, 3 }, true);
+        pooled = engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(pooled)));
+        idx += 2;
+        branches.Add(engine.TensorBroadcastTo(pooled, new[] { b, pooled.Shape[1], h, w }));
+
+        var x = engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(engine.TensorConcatenate(branches.ToArray(), 1))));
+        x = layers[idx + 2].Forward(x);
+        idx += 3;
+
+        for (int p = 0; p < 2; p++)
+        {
+            var low = engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(stages[1 - p])));
+            idx += 2;
+            int lh = low.Shape[2], lw = low.Shape[3];
+            if (x.Shape[2] != lh || x.Shape[3] != lw)
+                x = engine.Interpolate(x, new[] { lh, lw }, InterpolateMode.Bilinear, true);
+            x = engine.TensorConcatenate(new[] { x, low }, 1);
+            x = engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(x)));
+            x = engine.TensorGELU(layers[idx + 3].Forward(layers[idx + 2].Forward(x)));
+            idx += 4;
+        }
+
+        x = engine.TensorGELU(layers[idx + 1].Forward(layers[idx].Forward(x)));
+        x = engine.TensorGELU(layers[idx + 3].Forward(layers[idx + 2].Forward(x)));
+        idx += 4;
+        return layers[idx].Forward(x);
+    }
+
+    private static void RandomizeUnitScale(IEnumerable<Tensor<double>> parameters, int seed)
+    {
+        var random = RandomHelper.CreateSeededRandom(seed);
+        foreach (var parameter in parameters)
+        {
+            for (int i = 0; i < parameter.Length; i++) parameter[i] = 2.0 * random.NextDouble() - 1.0;
+            AiDotNetEngine.Current.InvalidatePersistentTensor(parameter);
+        }
+    }
+
+    [Fact]
+    public void KMaXDeepLab_SemanticAtrousRates_WiresOptionToDecoderWithExactCopiedParameterOracle()
+    {
+        using var rates123 = new KMaXDeepLab<double>(TinyBackbone(20), options: SmallAtrousOptions(new[] { 1, 2, 3 }));
+        using var rates321 = new KMaXDeepLab<double>(TinyBackbone(20), options: SmallAtrousOptions(new[] { 3, 2, 1 }));
+        using var rates246 = new KMaXDeepLab<double>(TinyBackbone(20), options: SmallAtrousOptions(new[] { 2, 4, 6 }));
+
+        // Materialize lazy weights and copy identical non-trivial parameters across all three models.
+        _ = rates123.GetParameters();
+        _ = rates321.GetParameters();
+        _ = rates246.GetParameters();
+        var parameters = TapeTrainingStep<double>.CollectParameters(rates123.Layers, -1);
+        RandomizeUnitScale(parameters, 91);
+        var sharedWeights = rates123.GetParameters();
+        rates321.SetParameters(sharedWeights);
+        rates246.SetParameters(sharedWeights);
+
+        rates123.SetTrainingMode(false);
+        rates321.SetTrainingMode(false);
+        rates246.SetTrainingMode(false);
+
+        // Multi-pixel pyramid stages (finest first, coarsest stage5 = 5x5): rates 1, 2, 3 sample distinct offsets.
+        var stages5x5 = new[]
+        {
+            Pattern(101, 1, 4, 20, 20),
+            Pattern(102, 1, 4, 10, 10),
+            Pattern(103, 1, 4, 5, 5),
+            Pattern(104, 1, 4, 5, 5),
+        };
+
+        var out123 = rates123.RunSemanticDecoder(stages5x5);
+        var out321 = rates321.RunSemanticDecoder(stages5x5);
+        var out246 = rates246.RunSemanticDecoder(stages5x5);
+        var oracle123 = ReferenceSemanticDecoder(rates123.GetSemanticDecoderLayers(), new[] { 1, 2, 3 }, stages5x5);
+        var oracle246 = ReferenceSemanticDecoder(rates246.GetSemanticDecoderLayers(), new[] { 2, 4, 6 }, stages5x5);
+
+        AssertValues(out123, oracle123.ToArray());
+        AssertValues(out246, oracle246.ToArray());
+
+        var v123 = out123.ToArray();
+        var v321 = out321.ToArray();
+        var v246 = out246.ToArray();
+        Assert.Contains(Enumerable.Range(0, v123.Length), i => Math.Abs(v123[i] - v321[i]) > 1e-4);
+        Assert.Contains(Enumerable.Range(0, v123.Length), i => Math.Abs(v123[i] - v246[i]) > 1e-4);
+
+        // At 1x1 stage5 (32x32 / 32), every positive 3x3 same-padded dilation rate samples only the center pixel.
+        var stages1x1 = new[]
+        {
+            Pattern(105, 1, 4, 4, 4),
+            Pattern(106, 1, 4, 2, 2),
+            Pattern(107, 1, 4, 1, 1),
+            Pattern(108, 1, 4, 1, 1),
+        };
+        AssertValues(rates123.RunSemanticDecoder(stages1x1), rates246.RunSemanticDecoder(stages1x1).ToArray());
+    }
+
+    [Fact]
+    public void KMaXDeepLab_SemanticAtrousRates_ChangesMultiPixelTrainingLossParametersAndPostTrainPredict()
+    {
+        // 64x64 image through a stride-32 5-stage tiny backbone gives stage5 = 2x2: rate 1 couples 2x2 neighbors,
+        // whereas rates >= 2 sample zero-padded neighbors outside [0..1] x [0..1].
+        var image = Pattern(111, 1, 3, 64, 64);
+        var target = T(new[] { 1, 64, 64 }, Enumerable.Range(0, 64 * 64).Select(i => (i % 64) < 32 ? 0.0 : 1.0).ToArray());
+
+        static AiDotNet.Optimizers.AdamWOptimizer<double, Tensor<double>, Tensor<double>> TestOptimizer() =>
+            new(null, new AiDotNet.Models.Options.AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 1e-2,
+            });
+
+        using var twoBranches = new KMaXDeepLab<double>(TinyStride32Backbone(64), optimizer: TestOptimizer(), options: SmallAtrousOptions(new[] { 1, 2 }));
+        using var threeBranchesA = new KMaXDeepLab<double>(TinyStride32Backbone(64), optimizer: TestOptimizer(), options: SmallAtrousOptions(new[] { 1, 2, 3 }));
+        using var threeBranchesB = new KMaXDeepLab<double>(TinyStride32Backbone(64), optimizer: TestOptimizer(), options: SmallAtrousOptions(new[] { 2, 4, 6 }));
+
+        // Adding a third 4-wide atrous branch adds 4*4*9 (3x3 conv) + 2*4 (BN scale/shift) + 4*4 (ASPP 1x1 projection input)
+        // = 168 trainable parameters, plus 2*4 = 8 BN running-stat slots in GetParameters() (= 176 total).
+        _ = twoBranches.GetParameters();
+        _ = threeBranchesA.GetParameters();
+        _ = threeBranchesB.GetParameters();
+        Assert.Equal(28, twoBranches.GetSemanticDecoderLayers().Count);
+        Assert.Equal(30, threeBranchesA.GetSemanticDecoderLayers().Count);
+        Assert.Equal(SmallKMaXSemanticParameters, TapeTrainingStep<double>.CollectParameters(twoBranches.GetSemanticDecoderLayers(), -1).Sum(p => p.Length));
+        Assert.Equal(SmallKMaXSemanticParameters + (4 * 4 * 9 + 2 * 4 + 4 * 4),
+            TapeTrainingStep<double>.CollectParameters(threeBranchesA.GetSemanticDecoderLayers(), -1).Sum(p => p.Length));
+        Assert.Equal(twoBranches.GetParameters().Length + (4 * 4 * 9 + 4 * 4 + 4 * 4), threeBranchesA.GetParameters().Length);
+
+        RandomizeUnitScale(TapeTrainingStep<double>.CollectParameters(twoBranches.Layers, -1), 121);
+        RandomizeUnitScale(TapeTrainingStep<double>.CollectParameters(threeBranchesA.Layers, -1), 121);
+        threeBranchesB.SetParameters(threeBranchesA.GetParameters());
+
+        // Same-length differing rates ([1, 2, 3] vs [2, 4, 6]) with bit-identical initial weights differ on 2x2 stage5:
+        double lossA = threeBranchesA.SetPredictionLoss(image, target).ToArray()[0];
+        double lossB = threeBranchesB.SetPredictionLoss(image, target).ToArray()[0];
+        Assert.True(Math.Abs(lossA - lossB) > 1e-5, $"Expected multi-pixel losses to differ: {lossA:R} vs {lossB:R}.");
+
+        twoBranches.Train(image, target);
+        threeBranchesA.Train(image, target);
+        threeBranchesB.Train(image, target);
+
+        var paramsA = threeBranchesA.GetParameters().ToArray();
+        var paramsB = threeBranchesB.GetParameters().ToArray();
+        Assert.Contains(Enumerable.Range(0, paramsA.Length), i => Math.Abs(paramsA[i] - paramsB[i]) > 1e-4);
+
+        var postTrainPredTwo = twoBranches.Predict(image).ToArray();
+        var postTrainPredA = threeBranchesA.Predict(image).ToArray();
+        var postTrainPredB = threeBranchesB.Predict(image).ToArray();
+        Assert.Contains(Enumerable.Range(0, postTrainPredA.Length), i => Math.Abs(postTrainPredTwo[i] - postTrainPredA[i]) > 1e-4);
+        Assert.Contains(Enumerable.Range(0, postTrainPredA.Length), i => Math.Abs(postTrainPredA[i] - postTrainPredB[i]) > 1e-4);
+    }
 }

@@ -377,5 +377,5 @@ internal sealed class MinMoCore<T>
         return actions.ToArray();
     }
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), x.ToVector());
+    private static Tensor<T> Detached(Tensor<T> x) => AiDotNetEngine.Current.StopGradient(x);
 }

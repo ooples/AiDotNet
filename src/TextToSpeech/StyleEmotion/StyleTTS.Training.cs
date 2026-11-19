@@ -63,10 +63,19 @@ public partial class StyleTTS<T>
             Tensor<T> fake;
             using (new NoGradScope<T>()) fake = Generate(prepared, step, training: true, refineStyleNorms: false).Mel;
             var real = prepared.RealForDiscriminator;
+            var realShape = (int[])real._shape.Clone();
+            var fakeShape = (int[])fake._shape.Clone();
+            int realLength = real.Length;
             _discriminatorStep = true;
             try
             {
-                TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => DiscriminatorLoss(real, fake), DiscriminatorOptimizer());
+                TrainObjectiveFused(
+                    Training.StepInputPacking<T>.Pack(real, fake),
+                    packed => DiscriminatorLoss(
+                        Training.StepInputPacking<T>.Slice(packed, 0, realShape),
+                        Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape)),
+                    DiscriminatorOptimizer(),
+                    sessionPerOptimizer: true);
             }
             finally
             {
@@ -170,6 +179,18 @@ public partial class StyleTTS<T>
         return path;
     }
 
+    private static void FillHardPath(Tensor<T> soft, Tensor<T> dst)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var hardMat = HardPath(ToMatrix(soft, ops));
+        int rows = hardMat.GetLength(0), cols = hardMat.GetLength(1);
+        var flat = new double[rows * cols];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                flat[i * cols + j] = hardMat[i, j];
+        new Tensor<double>(flat, new[] { rows, cols }).Cast<T>().AsSpan().CopyTo(dst.AsWritableSpan());
+    }
+
     private Tensor<T> FromMatrix(double[,] m)
     {
         var t = new Tensor<T>(new[] { m.GetLength(0), m.GetLength(1) });
@@ -260,13 +281,13 @@ public partial class StyleTTS<T>
 
     private sealed class GeneratorPass
     {
-        public Tensor<T> Mel = default!;
+        public Tensor<T> Mel = new(new[] { 1 });
         public Tensor<T>? Soft;
         public Tensor<T>? Logits;
         public Tensor<T>? Durations;
         public Tensor<T>? F0;
         public Tensor<T>? Energy;
-        public double[,]? Hard;
+        public Tensor<T>? HardTensor;
     }
 
     private bool TmaActive => ReconstructionUpdates >= _options.TmaStartStep;
@@ -284,9 +305,14 @@ public partial class StyleTTS<T>
             pass.Soft = soft;
             pass.Logits = logits;
             // The monotonic hard alignment of this pass's attention; the decoder reads it or the soft attention (§II-B's
-            // 50%-50% strategy).
-            pass.Hard = HardPath(ToMatrix(soft, NumOps));
-            var alignment = step.Hard ? FromMatrix(pass.Hard) : soft;
+            // 50%-50% strategy). Computed via CompiledStepHostValue so compiled-plan replay never reads soft on the host.
+            var hardTensor = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+                "StyleTtsHardPath",
+                new[] { soft },
+                soft._shape,
+                static (inputs, dst) => FillHardPath(inputs[0], dst));
+            pass.HardTensor = hardTensor;
+            var alignment = step.Hard ? hardTensor : soft;
             var text = TextEncoderModule.Forward(ToTensor(p.Ids), training, random);
             var asr = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(text, new[] { c, p.Ids.Length }), alignment), new[] { 1, c, alignment.Shape[1] });
             var en = Crop(asr, p.Segment);
@@ -328,7 +354,7 @@ public partial class StyleTTS<T>
     private Tensor<T> SmoothL1(Tensor<T> a, Tensor<T> b)
     {
         var abs = Engine.TensorAbs(Engine.TensorSubtract(a, Engine.Reshape(b, a._shape)));
-        var q = Engine.TensorMin(abs, NumOps.One);
+        var q = Engine.TensorClampMax(abs, NumOps.One);
         var loss = Engine.TensorMultiply(q, Engine.TensorSubtract(abs, Engine.TensorMultiplyScalar(q, NumOps.FromDouble(0.5))));
         return Engine.ReduceMean(loss, Enumerable.Range(0, loss.Rank).ToArray(), keepDims: false);
     }
@@ -357,11 +383,14 @@ public partial class StyleTTS<T>
             {
                 // L_s2s: the decoder steps after the start token predict the phonemes (cross-entropy, mean over them).
                 int tokens = _options.VocabSize, length = p.Ids.Length;
-                var logits = Engine.TensorSlice(pass.Logits!, new[] { 0, 0 }, new[] { length, tokens });
+                var passLogits = pass.Logits ?? throw new InvalidOperationException("Alignment logits are required.");
+                var logits = Engine.TensorSlice(passLogits, new[] { 0, 0 }, new[] { length, tokens });
                 var selection = new Tensor<T>(new[] { length, tokens });
                 for (int i = 0; i < length; i++) selection[i, p.Ids[i]] = NumOps.FromDouble(-1.0 / length);
                 var s2s = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, axis: -1), selection), new[] { 0, 1 }, keepDims: false);
-                var mono = MeanAbsolute(pass.Soft!, FromMatrix(pass.Hard!));
+                var mono = MeanAbsolute(
+                    pass.Soft ?? throw new InvalidOperationException("Soft alignment is required."),
+                    pass.HardTensor ?? throw new InvalidOperationException("Hard alignment is required."));
                 loss = Engine.TensorAdd(loss, Scaled(s2s, paper ? 0.2 : 1.0));
                 loss = Engine.TensorAdd(loss, Scaled(mono, paper ? 5.0 : 10.0));
             }

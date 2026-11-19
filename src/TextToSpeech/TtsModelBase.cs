@@ -570,7 +570,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if (count == frames) return flat;
         if (count == 0) throw new ArgumentException("Per-frame pitch or energy targets are empty.", nameof(values));
         // The pitch tracker and the STFT can disagree by a frame at the end; repeat or drop the last value.
-        var rows = Engine.TensorMin(Engine.TensorArange<int>(0, frames, 1), count - 1);
+        Tensor<int> rows;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            rows = Engine.TensorMin(Engine.TensorArange<int>(0, frames, 1), count - 1);
         return Engine.TensorIndexSelect(flat, rows, 0);
     }
 
@@ -638,7 +640,57 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     protected int[] RoundedIds(Tensor<T> tensor)
     {
         Guard.NotNull(tensor);
+        if (tensor.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                return Engine.TensorRound(tensor).Cast<int>().ToArray();
+            }
+        }
+
         return Engine.TensorRound(tensor).Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// Detaches <paramref name="tensor"/> from backpropagation via <see cref="IEngine.StopGradient{T}"/> without
+    /// materializing traced graph values onto the host.
+    /// </summary>
+    protected Tensor<T> DetachTensor(Tensor<T> tensor)
+    {
+        Guard.NotNull(tensor);
+        return Engine.StopGradient(tensor);
+    }
+
+    /// <summary>
+    /// Trains one custom-objective generator step while retaining an intermediate generator output tensor across both
+    /// compiled-plan replay and eager fallback so an alternating discriminator step can consume the detached output.
+    /// </summary>
+    private protected (T Loss, Tensor<T>? CapturedOutput) TrainWithCapturedOutput(
+        Tensor<T> input,
+        Tensor<T> expected,
+        string retainKey,
+        Func<Tensor<T>, Tensor<T>, Action<Tensor<T>>, Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        Tensor<T>? eagerCaptured = null;
+        using var capture = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
+        var loss = TrainWithCustomObjective(
+            input,
+            expected,
+            (stepInput, stepExpected) => objective(stepInput, stepExpected, generated =>
+            {
+                eagerCaptured = generated;
+                if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                        retainKey,
+                        Engine.TensorAddScalar(Engine.StopGradient(generated), NumOps.Zero));
+                }
+            }),
+            optimizer);
+        capture.Complete();
+        var captured = capture.Get(retainKey);
+        return (loss, captured);
     }
 
     /// <summary>

@@ -143,44 +143,21 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
         Layers.AddRange(layers);
     }
 
-    // AV-HuBERT reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private double[] Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new double[count];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
-        return samples;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S]: the audio stream alone.
-    private Tensor<T> Logits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return Recognize(Samples(input, 0, input.Length), null, training);
-        int rows = input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = Recognize(Samples(input, r * samples, samples), null, training);
-        return Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (_, wave) => Recognize(wave, null, training));
 
     // CTC logits from the audio, the lips [frames, H, W], or both; a missing stream is zeros (Equation 2).
-    private Tensor<T> Recognize(double[]? waveform, Tensor<T>? lips, bool training)
+    private Tensor<T> Recognize(Tensor<T>? waveform, Tensor<T>? lips, bool training)
     {
         var network = _network ?? throw new InvalidOperationException("The native AV-HuBERT network is not initialized.");
-        var audio = waveform is null ? null : network.EncodeAudio(network.AudioFeatures(waveform), null);
+        var audio = waveform is null ? null : network.EncodeAudio(network.AudioFeatureTensor(waveform), null);
         var video = lips is null ? null : network.EncodeVideo(RequireLips(lips), null, _random, training);
         return network.CtcLogits(network.Encode(network.Fuse(audio, video, training, _random), training, _random));
     }
+
 
     private Tensor<T> RequireLips(Tensor<T> lips)
     {
@@ -214,7 +191,7 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
         ThrowIfDisposed();
         if (_network is null) throw new NotSupportedException("Audio-visual recognition runs on the native AV-HuBERT network.");
         var waveform = PreprocessAudio(audio);
-        return Decode(Recognize(Samples(waveform, 0, waveform.Length), lips, training: false), language, (double)waveform.Length / SampleRate, includeTimestamps);
+        return Decode(Recognize(waveform, lips, training: false), language, (double)waveform.Length / SampleRate, includeTimestamps);
     }
 
     /// <summary>Transcribes from the lip video alone (lip reading).</summary>
@@ -253,24 +230,35 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     {
         var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native AV-HuBERT network.");
         if (clusterTargets is null) throw new ArgumentNullException(nameof(clusterTargets));
-        var features = network.AudioFeatures(Samples(audio, 0, audio.Length));
-        int frames = Math.Min(Math.Min(features.GetLength(0), RequireLips(lips).Shape[0]), clusterTargets.Length);
+        var features = network.AudioFeatureTensor(audio);
+        int frames = Math.Min(Math.Min(features.Shape[0], RequireLips(lips).Shape[0]), clusterTargets.Length);
         if (frames < 1) throw new ArgumentException("The audio, the lips and the targets share no frames.");
-        var cut = new double[frames, features.GetLength(1)];
-        for (int t = 0; t < frames; t++)
-            for (int i = 0; i < features.GetLength(1); i++) cut[t, i] = features[t, i];
+        var cut = Engine.TensorSlice(features, new[] { 0, 0 }, new[] { frames, features.Shape[1] });
         var video = Engine.TensorSlice(lips, new[] { 0, 0, 0 }, new[] { frames, lips.Shape[1], lips.Shape[2] });
         var audioMask = network.DrawMask(frames, _options.AudioMaskProbability, _options.AudioMaskLength, random);
         var videoMask = network.DrawMask(frames, _options.VideoMaskProbability, _options.VideoMaskLength, random);
-        Tensor<T>? a = network.EncodeAudio(cut, audioMask);
-        Tensor<T>? v = network.EncodeVideo(video, videoMask, random, training);
-        if (training && random.NextDouble() < _options.ModalityDropout)
+        Tensor<T> a = network.EncodeAudio(cut, audioMask);
+        Tensor<T> v = network.EncodeVideo(video, videoMask, random, training);
+        if (training && _options.ModalityDropout > 0)
         {
-            if (random.NextDouble() < _options.AudioDropout) a = null;
-            else v = null;
+            var modalityKeep = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { 2 }, g =>
+            {
+                var span = g.AsWritableSpan();
+                span[0] = NumOps.One;
+                span[1] = NumOps.One;
+                if (random.NextDouble() < _options.ModalityDropout)
+                {
+                    if (random.NextDouble() < _options.AudioDropout) span[0] = NumOps.Zero;
+                    else span[1] = NumOps.Zero;
+                }
+            });
+            var keepA = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorSlice(modalityKeep, new[] { 0 }, new[] { 1 }), new[] { 1, 1 }), a._shape);
+            var keepV = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorSlice(modalityKeep, new[] { 1 }, new[] { 1 }), new[] { 1, 1 }), v._shape);
+            a = Engine.TensorMultiply(a, keepA);
+            v = Engine.TensorMultiply(v, keepV);
         }
         // Mean squared fused features over [frames, 2D]; a dropped stream contributes zeros.
-        Tensor<T> Squares(Tensor<T>? x) => x is null ? new Tensor<T>(new[] { 1 }) : Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 0, 1 }, keepDims: false);
+        Tensor<T> Squares(Tensor<T> x) => Engine.ReduceSum(Engine.TensorMultiply(x, x), new[] { 0, 1 }, keepDims: false);
         var penalty = Engine.TensorMultiplyScalar(Engine.TensorAdd(Squares(a), Squares(v)), NumOps.FromDouble(1.0 / (frames * 2.0 * _options.EncoderDim)));
         var logits = network.ClusterLogits(network.Encode(network.Fuse(a, v, training, random), training, random));
         var pick = new Tensor<T>(logits._shape);
@@ -302,7 +290,7 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, lips, clusterTargets, training: true, _random), _pretrainingOptimizer);
+        return TrainWithCustomObjective(audio, lips, (stepAudio, stepLips) => PretrainingLossTensor(stepAudio, stepLips, clusterTargets, training: true, _random), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />
@@ -317,9 +305,9 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
 
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, _options.MaxTextLength);
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
+    private static string TokensToText(List<int> tokens) => DecodeUnicodeTokens(tokens);
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) => BuildSingleUtteranceSegment(text, duration, confidence);
+    private string ClassifyLanguageFromTokens(List<int> tokens) => ClassifyCjkOrDefaultLanguage(tokens, SupportedLanguages, _options.Language);
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(AVHuBERT<T>)); }
     /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }

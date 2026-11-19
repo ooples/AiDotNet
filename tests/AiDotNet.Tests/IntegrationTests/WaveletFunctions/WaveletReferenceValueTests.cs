@@ -412,6 +412,57 @@ public class WaveletReferenceValueTests
         Assert.Equal(expected, actual, 5);
     }
 
+    [Theory(Timeout = 120000)]
+    [InlineData(4)]
+    [InlineData(6)]
+    [InlineData(8)]
+    [InlineData(10)]
+    public async Task FejerKorovkin_PointwiseKernel_HasZeroDcUnitL2AndMatchesTrigonometricSeries(int order)
+    {
+        await Task.Yield();
+        int n = order / 2;
+        int count = 2 * n + 1;
+        var wavelet = new FejérKorovkinWavelet<double>(order);
+
+        // Independent closed-form trigonometric series u_k = sum_{j=1..n} (1 - cos(theta_j)) cos(2 k theta_j) / (2n + 1)
+        // normalized by Parseval L2 norm ||u||_2 = sqrt((1 / (2 * (2n + 1))) * sum_{j=1..n} (1 - cos(theta_j))^2).
+        var raw = new double[count];
+        double parsevalEnergy = 0.0;
+        for (int j = 1; j <= n; j++)
+        {
+            double theta = Math.PI * j / count;
+            double weight = 1.0 - Math.Cos(theta);
+            parsevalEnergy += (weight * weight) / (2.0 * count);
+            for (int m = 0; m < count; m++)
+            {
+                int k = m - n;
+                raw[m] += weight * Math.Cos(2.0 * k * theta) / count;
+            }
+        }
+
+        double expectedNorm = Math.Sqrt(parsevalEnergy);
+        double dcSum = 0.0;
+        double l2Energy = 0.0;
+        for (int m = 0; m < count; m++)
+        {
+            double tap = wavelet.Calculate(m + 0.5);
+            double expectedTap = raw[m] / expectedNorm;
+            Assert.Equal(expectedTap, tap, 1e-12);
+            dcSum += tap;
+            l2Energy += tap * tap;
+        }
+
+        // Zero-DC admissibility (sum_k c_k = 0) and unit L2 normalization (sum_k c_k^2 = 1) to machine precision,
+        // with strictly positive centre tap k = 0 and symmetric sidelobes c_{-k} = c_k within SIMD cos rounding.
+        Assert.Equal(0.0, dcSum, 1e-15);
+        Assert.Equal(1.0, l2Energy, 1e-14);
+        Assert.True(wavelet.Calculate(n + 0.5) > 0.0);
+        for (int m = 0; m < n; m++)
+        {
+            Assert.Equal(wavelet.Calculate(m + 0.5), wavelet.Calculate((2 * n - m) + 0.5), 1e-13);
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task PointwiseReconstruct_DecimalZeroDenominator_FallsBackWithoutThrowing()
     {

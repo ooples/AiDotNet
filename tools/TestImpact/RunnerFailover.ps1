@@ -144,11 +144,13 @@ function Invoke-FailoverApi {
         $uri = "https://api.github.com/$Path${separator}per_page=50&page=$page"
         $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri $uri
         if (-not $Paginate) { return $response }
-        $property = @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
-        $batch = if ($property) { @($response.$property) } else { @($response) }
+        $property = if ($null -ne $response) {
+            @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
+        } else { $null }
+        [object[]]$batch = if ($property) { @($response.$property) } elseif ($null -eq $response) { @() } else { @($response) }
         $items += $batch; $page++
     } while ($batch.Count -eq 50)
-    return $items
+    return ,@($items)
 }
 
 function Assert-FailoverSourceArtifact {
@@ -362,5 +364,49 @@ function Assert-FailoverPublishedProof {
                 if ([string]$artifact[0].name -cne "$prefix-$($Proof.testedSha)-$(Get-FailoverSlug $shard.shard)") { throw 'Published canonical artifact name mismatch.' }
             }
         }
+    }
+}
+
+function Get-FailoverDiagnosticContext {
+    param([string] $VerifierResult, [AllowNull()] $Proof,
+        [Parameter(Mandatory)] [string] $TestedSha, [Parameter(Mandatory)] [string] $RunId,
+        [Parameter(Mandatory)] [string] $RunAttempt,
+        [AllowEmptyCollection()] [object[]] $OriginalJobs = @(),
+        [AllowEmptyCollection()] [object[]] $ResolvedJobs = @(), [switch] $RequireResolvedJobs)
+    $reasons = [Collections.Generic.List[string]]::new()
+    if ($VerifierResult -cne 'success') { $reasons.Add("Logical shard verifier concluded '$VerifierResult'.") }
+    if ($null -eq $Proof) { $reasons.Add('Logical shard proof is missing or unreadable.') }
+    else {
+        if ((Get-FailoverProperty $Proof 'schemaVersion' 0) -ne 1 -or
+            (Get-FailoverProperty $Proof 'complete' $null) -isnot [bool] -or
+            (Get-FailoverProperty $Proof 'complete' $false) -ne $true) { $reasons.Add('Logical shard proof is incomplete.') }
+        if ([string](Get-FailoverProperty $Proof 'testedSha' '') -cne $TestedSha -or
+            [string](Get-FailoverProperty $Proof 'runId' '') -cne $RunId -or
+            [string](Get-FailoverProperty $Proof 'runAttempt' '') -cne $RunAttempt) { $reasons.Add('Logical shard proof does not match this run, attempt and tested SHA.') }
+        if (@(Get-FailoverProperty $Proof 'errors' @()).Count -ne 0) { $reasons.Add('Logical shard proof reports rejected evidence.') }
+        $requiresTests = Get-FailoverProperty $Proof 'requiresTests' $null
+        if ($requiresTests -isnot [bool]) { $reasons.Add('Logical shard proof omits its explicit test requirement.') }
+        elseif ($requiresTests) {
+            try { Assert-FailoverLogicalInventory @(Get-FailoverProperty $Proof 'requiredShards' @()) @(Get-FailoverProperty $Proof 'shards' @()) }
+            catch { $reasons.Add($_.Exception.Message) }
+        }
+        if ($RequireResolvedJobs -and $requiresTests -eq $true) {
+            $expected = @(Get-FailoverProperty $Proof 'requiredShards' @() | ForEach-Object { "Tests ($($_.framework)) - $($_.name)" })
+            $actual = @($ResolvedJobs | ForEach-Object { [string]$_.name })
+            if ($expected.Count -ne $actual.Count -or @($actual | Select-Object -Unique).Count -ne $actual.Count -or
+                @($expected | Where-Object { $_ -cnotin $actual }).Count -ne 0) { $reasons.Add('Resolved job inventory is missing or does not match the proof.') }
+        }
+    }
+    $verified = $reasons.Count -eq 0
+    $jobs = @($OriginalJobs)
+    if ($verified -and $RequireResolvedJobs) {
+        $jobs = @($OriginalJobs | Where-Object { $_.name -notlike 'Tests (*) - *' -and $_.name -notlike 'Alternate attempt (*) - *' }) + @($ResolvedJobs)
+    }
+    return [pscustomobject]@{
+        schemaVersion = 1; verified = $verified; diagnosticOnly = -not $verified
+        testedSha = $TestedSha; runId = $RunId; runAttempt = $RunAttempt; verifierResult = $VerifierResult
+        reasons = @($reasons); proofErrors = @(Get-FailoverProperty $Proof 'errors' @()); jobs = $jobs
+        regressionArtifactPrefix = $(if ($verified) { 'test-outcome-ledger' } else { 'test-outcome-diagnostics' })
+        aggregateArtifactPrefix = $(if ($verified) { 'ci-test-analysis' } else { 'ci-test-diagnostics' })
     }
 }

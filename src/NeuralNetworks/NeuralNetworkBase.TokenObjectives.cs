@@ -75,9 +75,25 @@ public abstract partial class NeuralNetworkBase<T>
         int count = Math.Min(target.Length, maxCount);
         if (count == 0) return new int[0];
         // Round half to even (Math.Round's default) in one pass, then clamp each id.
-        var engine = AiDotNetEngine.Current;
-        var leading = engine.TensorSlice(engine.Reshape(target, new[] { target.Length }), new[] { 0 }, new[] { count });
-        var ids = engine.TensorRound(leading).Cast<int>().ToArray();
+        // Suspend GraphMode when reading a host/input leaf target tensor so integer label extraction does not
+        // record a 'Round' node and trip HostReadGuard during compiled objective probing/tracing.
+        static int[] ExtractRoundedIds(Tensor<T> source, int length)
+        {
+            var engine = AiDotNetEngine.Current;
+            var leading = engine.TensorSlice(engine.Reshape(source, new[] { source.Length }), new[] { 0 }, new[] { length });
+            return engine.TensorRound(leading).Cast<int>().ToArray();
+        }
+
+        int[] ids;
+        if (target.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                ids = ExtractRoundedIds(target, count);
+        }
+        else
+        {
+            ids = ExtractRoundedIds(target, count);
+        }
         for (int i = 0; i < ids.Length; i++) ids[i] = clamp(ids[i]);
         return ids;
     }

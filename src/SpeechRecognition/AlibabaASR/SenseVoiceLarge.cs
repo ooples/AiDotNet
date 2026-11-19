@@ -191,24 +191,10 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         return OpenAiWhisperTranscriber<T>.Window(mel, 0, frames);
     }
 
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
-
     // The decoder's logits [prompt, vocabulary] over the prompt for a waveform [S] (the last row is the first output's
     // distribution), or [batch, prompt, vocabulary] for [batch, S].
-    private Tensor<T> PromptLogits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = _network.Logits(Prompt(), _network.Encode(Window(Row(input, r, rows))));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> PromptLogits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) => net.Logits(Prompt(), net.Encode(Window(wave))));
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -221,23 +207,24 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     private int[] Outputs(Tensor<T> target)
     {
         int vocabulary = _options.VocabSize;
-        var span = target.Data.Span;
+        double[] values = target.Cast<double>().ToArray();
         if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
         {
             var tokens = new int[target.Length / vocabulary];
             for (int r = 0; r < tokens.Length; r++)
             {
                 int best = 0;
-                for (int v = 1; v < vocabulary; v++) if (NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best])) best = v;
+                int rowOffset = r * vocabulary;
+                for (int v = 1; v < vocabulary; v++) if (values[rowOffset + v] > values[rowOffset + best]) best = v;
                 tokens[r] = Math.Min(best, EventTask - 1);
             }
             return tokens;
         }
-        var ids = new int[target.Length];
+        var ids = new int[values.Length];
         for (int i = 0; i < ids.Length; i++)
         {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= EventTask) throw new ArgumentException($"Token {value} is a special token or outside the vocabulary.", nameof(target));
+            double value = Math.Round(values[i]);
+            if (!(value >= 0 && value < EventTask)) throw new ArgumentException($"Token {value} is a special token or outside the vocabulary.", nameof(target));
             ids[i] = (int)value;
         }
         return ids;
@@ -250,32 +237,17 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         var logits = network.Logits(prompt.Concat(outputs).ToArray(), network.Encode(Window(audio)));
         int predicted = outputs.Length + 1, vocabulary = _options.VocabSize;
         var rows = Engine.TensorSlice(logits, new[] { prompt.Length - 1, 0 }, new[] { predicted, vocabulary });
-        var weights = new Tensor<T>(new[] { predicted, vocabulary });
-        for (int i = 0; i < predicted; i++) weights[i, i < outputs.Length ? outputs[i] : EndOfText] = NumOps.FromDouble(-1.0 / predicted);
+        var wData = new T[predicted * vocabulary];
+        T negWeight = NumOps.FromDouble(-1.0 / predicted);
+        for (int i = 0; i < predicted; i++) wData[i * vocabulary + (i < outputs.Length ? outputs[i] : EndOfText)] = negWeight;
+        var weights = new Tensor<T>(wData, new[] { predicted, vocabulary });
         return Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(rows, axis: -1), weights), new[] { 0, 1 }, keepDims: false), new[] { 1 });
-    }
-
-    private Tensor<T> BatchLoss(OpenAiWhisperNetwork<T> network, Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = OutputLoss(network, Row(input, r, rows), Outputs(Row(target, r, rows)));
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
     }
 
     /// <inheritdoc />
     /// <remarks>The teacher-forced cross-entropy of the target outputs after the prompt, averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target));
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(input, target, _network, null, (_, row) => Outputs(row), OutputLoss);
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
@@ -283,12 +255,8 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target)[0];
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(input, target, _network, (_, row) => Outputs(row), OutputLoss);
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

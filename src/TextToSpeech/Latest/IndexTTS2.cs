@@ -467,7 +467,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         var wideRows = rows.Cast<double>();
         var column = Engine.Reshape(vector.Cast<double>(), new[] { k, 1 });
         var dot = Engine.Reshape(Engine.TensorMatMul(wideRows, column), new[] { n });
-        var rowNorms = Engine.TensorMax(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(wideRows), new[] { 1 }, keepDims: false)), Floor);
+        var rowNorms = Engine.TensorClampMin(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(wideRows), new[] { 1 }, keepDims: false)), Floor);
         double vectorNorm = Math.Max(Math.Sqrt(Engine.TensorSum(Engine.TensorSquare(column))), Floor);
         return Engine.TensorDivide(dot, Engine.TensorMultiplyScalar(rowNorms, vectorNorm)).Cast<T>();
     }

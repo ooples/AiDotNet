@@ -311,6 +311,29 @@ internal sealed class EmotiVoiceAlignment<T>
         return path;
     }
 
+    /// <summary>
+    /// Computes the detached Viterbi monotonic alignment matrix <c>[T, N]</c> (<c>1</c> at <c>(t, path[t])</c>, <c>0</c> elsewhere)
+    /// via <see cref="AiDotNet.Training.CompiledStepHostValue{T}"/> so compiled training plans recompute the alignment on every replay.
+    /// </summary>
+    internal static Tensor<T> ViterbiAlignmentMatrix(Tensor<T> logP)
+    {
+        if (logP is null) throw new ArgumentNullException(nameof(logP));
+        int frames = logP.Shape[0], n = logP.Shape[1];
+        T one = NumOps.One;
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "EmotiVoiceViterbiAlignment",
+            new[] { logP },
+            new[] { frames, n },
+            (inputs, dest) =>
+            {
+                var path = Viterbi(inputs[0]);
+                var span = dest.AsWritableSpan();
+                span.Clear();
+                for (int t = 0; t < frames; t++)
+                    span[t * n + path[t]] = one;
+            });
+    }
+
     /// <summary>The durations (frames per phoneme) of a monotonic path (<c>np.bincount</c>, padded to N).</summary>
     internal static int[] Durations(int[] path, int phonemes)
     {
@@ -329,6 +352,19 @@ internal sealed class EmotiVoiceAlignment<T>
             new[] { new Tensor<int>(frameIndex, new[] { frames }), new Tensor<int>(path, new[] { frames }) },
             Tensor<T>.CreateDefault(new[] { frames }, NumOps.FromDouble(-1.0 / frames)), false);
         return _engine.ReduceSum(_engine.TensorMultiply(logP, mask), new[] { 0, 1 }, keepDims: false);
+    }
+
+    /// <summary>The binarization loss from a <c>[T, N]</c> one-hot alignment matrix: minus the mean log-probability along the path.</summary>
+    public Tensor<T> BinarizationLoss(Tensor<T> logP, Tensor<T> alignmentMatrix)
+    {
+        int frames = logP.Shape[0];
+        var selected = _engine.TensorWhere(
+            _engine.TensorGreaterThan(alignmentMatrix, NumOps.Zero),
+            logP,
+            _engine.TensorZerosLike(logP));
+        return _engine.TensorMultiplyScalar(
+            _engine.ReduceSum(selected, new[] { 0, 1 }, keepDims: false),
+            NumOps.FromDouble(-1.0 / frames));
     }
 
     /// <summary>
@@ -364,7 +400,7 @@ internal sealed class EmotiVoiceAlignment<T>
             var one = _engine.TensorConcatenate(new[] { floorRow, _engine.TensorSlice(alpha, new[] { 0 }, new[] { states - 1 }) }, 0);
             var two = _engine.TensorAdd(_engine.TensorConcatenate(new[] { floorRow, floorRow, _engine.TensorSlice(alpha, new[] { 0 }, new[] { states - 2 }) }, 0), skipMask);
             // Unreachable states are held at the floor so a 16-bit T never reaches −∞ − (−∞).
-            alpha = _engine.TensorMax(_engine.TensorAdd(LogSumExp(stay, one, two), Emission(t)), floorValue);
+            alpha = _engine.TensorClampMin(_engine.TensorAdd(LogSumExp(stay, one, two), Emission(t)), floorValue);
         }
         var last = LogSumExp(_engine.TensorSlice(alpha, new[] { states - 1 }, new[] { 1 }), _engine.TensorSlice(alpha, new[] { states - 2 }, new[] { 1 }));
         return _engine.TensorMultiplyScalar(_engine.TensorNegate(last), NumOps.FromDouble(1.0 / n));
@@ -385,7 +421,7 @@ internal sealed class EmotiVoiceAlignment<T>
         {
             max = terms[0];
             for (int i = 1; i < terms.Length; i++) max = _engine.TensorMax(max, terms[i]);
-            max = max.Clone();
+            max = _engine.StopGradient(max);
         }
         Tensor<T>? sum = null;
         foreach (var x in terms)

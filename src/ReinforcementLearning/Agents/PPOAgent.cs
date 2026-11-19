@@ -426,23 +426,8 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
         T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
-            // Compute new log-probs using engine ops via PolicyDistributionHelper
-            Tensor<T> newLogProbs;
-            Tensor<T> entropy;
-            if (_ppoOptions.IsContinuous)
-            {
-                int actSize = _ppoOptions.ActionSize;
-                var means = Engine.TensorSlice(policyOutput, [0, 0], [batchCount, actSize]);
-                // TensorSlice takes (start, length): the log-std half is actSize wide, not the full output width.
-                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize]);
-                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
-                entropy = PolicyDistributionHelper<T>.ComputeGaussianEntropy(Engine, logStds);
-            }
-            else
-            {
-                newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
-                entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(Engine, policyOutput);
-            }
+            var (newLogProbs, entropy) = PolicyDistributionHelper<T>.ComputePolicyLogProbAndEntropy(
+                Engine, policyOutput, _ppoOptions.IsContinuous, batchCount, _ppoOptions.ActionSize, actionsTensor, actionIndices);
 
             // ratio = exp(new_log_prob - old_log_prob) — all engine ops
             var logDiff = Engine.TensorSubtract(newLogProbs, oldLogProbsTensor);
@@ -458,17 +443,12 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var surr2 = Engine.TensorMultiply(clippedRatio, advantagesTensor);
 
             // min(surr1, surr2) = -max(-surr1, -surr2)
-            var negSurr1 = Engine.TensorNegate(surr1);
-            var negSurr2 = Engine.TensorNegate(surr2);
-            var negMin = Engine.TensorMax(negSurr1, negSurr2);
-            var minSurr = Engine.TensorNegate(negMin);
+            var minSurr = Engine.TensorNegate(Engine.TensorMax(Engine.TensorNegate(surr1), Engine.TensorNegate(surr2)));
 
             // loss = -mean(min(surr1, surr2)) - c2·mean(H(π)) — the clipped surrogate plus the entropy bonus of
             // Schulman et al. 2017, Eq. 9. The value term of that equation is trained on the value network.
-            var allAxes = Enumerable.Range(0, minSurr.Shape.Length).ToArray();
-            var mean = Engine.ReduceMean(minSurr, allAxes, keepDims: false);
-            var meanEntropy = Engine.ReduceMean(entropy, Enumerable.Range(0, entropy.Shape.Length).ToArray(), keepDims: false);
-            return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _ppoOptions.EntropyCoefficient)));
+            return PolicyDistributionHelper<T>.ComputeEntropyRegularizedPolicyLoss(
+                Engine, minSurr, entropy, _ppoOptions.EntropyCoefficient);
         });
 
         // Reported loss: the two losses each network minimised. They are trained by separate optimizers,

@@ -232,10 +232,10 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
         {
             var energy = targets.Energy ?? throw new ArgumentException(
                 $"{GetType().Name} trains on frame energy: supply the recording or Energy.", nameof(sample));
-            energyTarget = Engine.Reshape(energy, new[] { energy.Length });
+            energyTarget = energy.Rank == 1 ? energy : Engine.Reshape(energy, new[] { energy.Length });
         }
 
-        var adaptorTargets = new VarianceTargets<T> { Durations = durations, Pitch = continuousF0, Energy = targets.Energy };
+        var adaptorTargets = new VarianceTargets<T> { Durations = durations, Pitch = continuousF0, Energy = energyTarget };
         var logDurationTarget = Engine.TensorLog(Engine.TensorAddScalar(
             new Tensor<int>(durations, new[] { durations.Length }).Cast<T>(), NumOps.One));
 
@@ -248,13 +248,13 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
             if (conditioned.AuxiliaryLoss is not null)
                 loss = Engine.TensorAdd(loss, conditioned.AuxiliaryLoss);
             var variance = MeanSquaredError(adapted.LogDuration, logDurationTarget);
-            if (adapted.PitchSpectrogram is not null && adapted.PitchStatistics is not null)
+            if (adapted.PitchSpectrogram is not null && adapted.PitchStatistics is not null && pitchTarget is not null && statisticsTarget is not null)
             {
-                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchSpectrogram, pitchTarget!));
-                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchStatistics, statisticsTarget!));
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchSpectrogram, pitchTarget));
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchStatistics, statisticsTarget));
             }
-            if (adapted.Energy is not null)
-                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.Energy, energyTarget!));
+            if (adapted.Energy is not null && energyTarget is not null)
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.Energy, energyTarget));
             return Engine.TensorAdd(loss, VarianceLossWeight == 1.0
                 ? variance
                 : Engine.TensorMultiplyScalar(variance, NumOps.FromDouble(VarianceLossWeight)));
@@ -266,14 +266,16 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
     /// <summary>Mean absolute error over every element.</summary>
     protected Tensor<T> MeanAbsoluteError(Tensor<T> prediction, Tensor<T> target)
     {
-        var diff = Engine.TensorAbs(Engine.TensorSubtract(prediction, Engine.Reshape(target, prediction._shape)));
+        var targetReshaped = prediction._shape.SequenceEqual(target._shape) ? target : Engine.Reshape(target, prediction._shape);
+        var diff = Engine.TensorAbs(Engine.TensorSubtract(prediction, targetReshaped));
         return Engine.ReduceMean(diff, Enumerable.Range(0, diff.Rank).ToArray(), keepDims: false);
     }
 
     /// <summary>Mean squared error over every element.</summary>
     protected Tensor<T> MeanSquaredError(Tensor<T> prediction, Tensor<T> target)
     {
-        var diff = Engine.TensorSubtract(prediction, Engine.Reshape(target, prediction._shape));
+        var targetReshaped = prediction._shape.SequenceEqual(target._shape) ? target : Engine.Reshape(target, prediction._shape);
+        var diff = Engine.TensorSubtract(prediction, targetReshaped);
         var sq = Engine.TensorMultiply(diff, diff);
         return Engine.ReduceMean(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
     }

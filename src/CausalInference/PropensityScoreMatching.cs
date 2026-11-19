@@ -664,6 +664,8 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        EnsureFitted();
+
         // Accept both the augmented [N, p+1] form (column 0 = treatment indicator,
         // columns 1.. = covariates) that Train()/CausalModelBase consumes, and the
         // plain [N, p] covariate form. Strip the treatment column when present so

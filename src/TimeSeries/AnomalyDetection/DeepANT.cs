@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;
@@ -194,9 +194,9 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         if (samples.Length > 0)
         {
             min = _numOps.ToDouble(Engine.TensorMinValue(
-                Engine.TensorNanToNum(samples, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)));
+                AiDotNet.Helpers.NanToNumHelper.Apply(Engine, samples, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)));
             max = _numOps.ToDouble(Engine.TensorMaxValue(
-                Engine.TensorNanToNum(samples, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity)));
+                AiDotNet.Helpers.NanToNumHelper.Apply(Engine, samples, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity)));
         }
         _scaleMin = min;
         // sklearn's MinMaxScaler leaves a constant feature unscaled (range treated as 1).

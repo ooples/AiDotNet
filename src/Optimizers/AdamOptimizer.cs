@@ -95,6 +95,255 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     [Buffer] private T[]? _halfPreviousParameters;
     [Buffer] private T[]? _halfUpdatedParameters;
 
+    // The generated declaration of HalfTapeState is the sole checkpoint owner. These maps are
+    // identity/index views of that same state, not additional serialized copies.
+    [ParameterAlias(nameof(HalfTapeState))]
+    private readonly Dictionary<Tensor<T>, HalfTapeSlot> _halfTapeSlots = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    [ParameterAlias(nameof(HalfTapeState))]
+    private Dictionary<int, HalfTapeSlot>? _halfTapePending;
+    [ParameterAlias(nameof(HalfTapeState))] private int _halfTapeVersion;
+    [ParameterAlias(nameof(HalfTapeState))] private int _halfTapeParameterCount;
+
+    private sealed class HalfTapeSlot
+    {
+        public int[] Shape { get; set; } = Array.Empty<int>();
+        public float[] Master { get; set; } = Array.Empty<float>();
+        public float[] M { get; set; } = Array.Empty<float>();
+        public float[] V { get; set; } = Array.Empty<float>();
+        public float[]? VMax { get; set; }
+        public float[] Published { get; set; } = Array.Empty<float>();
+        public long Age { get; set; }
+    }
+
+    private sealed class HalfTapeCheckpoint : AiDotNet.Models.IValidatableModelState
+    {
+        public int Version { get; set; }
+        public int ParameterCount { get; set; }
+        public Dictionary<int, HalfTapeSlot> Slots { get; set; } = new();
+
+        public void ValidateModelState()
+        {
+            if (Version != 1 || ParameterCount < 0 || Slots is null)
+                throw new InvalidOperationException("Invalid Half Adam tape checkpoint header.");
+            foreach (var entry in Slots)
+            {
+                if (entry.Key < 0 || entry.Key >= ParameterCount || entry.Value is null)
+                    throw new InvalidOperationException("Invalid Half Adam tape checkpoint parameter index.");
+                ValidateHalfTapeSlot(entry.Value);
+            }
+        }
+    }
+
+    [Buffer]
+    private HalfTapeCheckpoint? HalfTapeState
+    {
+        get
+        {
+            if (typeof(T) != typeof(Half)) return null;
+            if ((_halfTapeVersion == 0 && _tapeStep != 0) || _tapeM.Any() || _tapeV.Any() || _tapeVMax.Any())
+                throw new NotSupportedException("Unpromoted Half Adam tape state cannot be checkpointed without FP32 masters and moments.");
+            var snapshot = new HalfTapeCheckpoint { Version = 1, ParameterCount = _halfTapeParameterCount };
+            if (_halfTapePending is not null)
+                foreach (var entry in _halfTapePending) snapshot.Slots.Add(entry.Key, entry.Value);
+            foreach (var entry in _halfTapeSlots)
+                if (TryGetTapeParameterIndex(entry.Key, out int index)) snapshot.Slots[index] = entry.Value;
+            return snapshot;
+        }
+        set
+        {
+            value?.ValidateModelState();
+            ResetHalfTapeState();
+            if (value is null) return;
+            _halfTapeVersion = value.Version;
+            _halfTapeParameterCount = value.ParameterCount;
+            _halfTapePending = value.Slots;
+        }
+    }
+
+    // Sharded tape export currently transports Tensor<T> moments only. It cannot carry these
+    // FP32 slots losslessly when T is Half, so the existing export capability gate must refuse it.
+    internal override bool SupportsShardedTapeStateConsolidation => typeof(T) != typeof(Half);
+
+    private protected override StagedRestore StageDeserialize(byte[] data)
+    {
+        var staged = base.StageDeserialize(data);
+        if (typeof(T) != typeof(Half)) return staged;
+        // Missing promoted state in an old payload must not reuse state from the target instance.
+        // HalfTapeCheckpoint validates at stage time via IValidatableModelState, so commit stays snapshot-free.
+        return new StagedRestore(staged.Options, () =>
+        {
+            ResetHalfTapeState();
+            staged.Commit();
+        }, staged.HasFallibleCommit);
+    }
+
+    private void ResetHalfTapeState()
+    {
+        _halfTapeSlots.Clear();
+        _halfTapePending = null;
+        _halfTapeVersion = 0;
+        _halfTapeParameterCount = 0;
+    }
+
+    private static void ValidateHalfTapeSlot(HalfTapeSlot slot)
+    {
+        long length = 1;
+        if (slot.Shape is null) throw new InvalidOperationException("Half Adam tape state has no shape.");
+        foreach (int dimension in slot.Shape)
+        {
+            if (dimension < 0 || length > int.MaxValue / Math.Max(1, dimension))
+                throw new InvalidOperationException("Half Adam tape state has an invalid shape.");
+            length *= dimension;
+        }
+        if (slot.Age < 0 || slot.Age == long.MaxValue || slot.Master?.Length != length
+            || slot.M?.Length != length || slot.V?.Length != length || slot.Published?.Length != length
+            || (slot.VMax is not null && slot.VMax.Length != length))
+            throw new InvalidOperationException("Half Adam tape state is incomplete or inconsistent; no update was applied.");
+    }
+
+    private void StepHalfTape(TapeStepContext<T> context)
+    {
+        if ((_halfTapeVersion == 0 && _tapeStep != 0) || _tapeM.Any() || _tapeV.Any() || _tapeVMax.Any())
+            throw new NotSupportedException("Unpromoted Half Adam tape state cannot resume without FP32 masters and moments. Reset the optimizer before starting a new run.");
+        if (_halfTapePending is not null && _halfTapeParameterCount != 0
+            && _halfTapeParameterCount != context.Parameters.Count)
+            throw new InvalidOperationException("Half Adam tape checkpoint parameter count does not match this step.");
+
+        // Resolve and validate the entire binding batch before changing any slot, age or parameter.
+        var bindings = new List<(Tensor<T> Parameter, Tensor<T> Gradient, HalfTapeSlot Slot, int[]? SparseRows)>();
+        var restored = new List<(Tensor<T> Parameter, HalfTapeSlot Slot)>();
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int index = 0; index < context.Parameters.Count; index++)
+        {
+            var parameter = context.Parameters[index];
+            if (!seen.Add(parameter))
+                throw new ArgumentException("Half Adam tape parameters must be unique.", nameof(context));
+            if (!TryGetTapeParameterIndex(parameter, out int canonicalIndex) || canonicalIndex != index)
+                throw new InvalidOperationException("Half Adam tape state requires the base canonical parameter order.");
+            HalfTapeSlot? slot = null;
+            if (_halfTapePending is not null && _halfTapePending.TryGetValue(canonicalIndex, out var pending))
+            {
+                slot = pending;
+                restored.Add((parameter, pending));
+            }
+            else _halfTapeSlots.TryGetValue(parameter, out slot);
+            if (slot is not null)
+            {
+                ValidateHalfTapeSlot(slot);
+                if (!parameter.Shape.Span.SequenceEqual(slot.Shape) || (_options.UseAMSGrad && slot.VMax is null))
+                    throw new InvalidOperationException("Half Adam tape parameter shape or AMSGrad state changed; no update was applied.");
+            }
+            int[]? sparseRows = null;
+            Tensor<T> gradient;
+            if (!TryGetHalfSparseRows(context, parameter, out gradient, out sparseRows))
+            {
+                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var resolvedGradient)) continue;
+                gradient = resolvedGradient ?? throw new InvalidOperationException("Half Adam gradient resolution returned no gradient.");
+                if (!parameter.Shape.Equals(gradient.Shape))
+                    throw new ArgumentException("Half Adam tape gradient shape must match its parameter.", nameof(context));
+            }
+            if (slot is null)
+            {
+                var published = parameter.Cast<float>().ToArray();
+                slot = new HalfTapeSlot
+                {
+                    Shape = parameter.Shape.ToArray(), Master = (float[])published.Clone(), Published = published,
+                    M = new float[parameter.Length], V = new float[parameter.Length],
+                    VMax = _options.UseAMSGrad ? new float[parameter.Length] : null,
+                };
+            }
+            bindings.Add((parameter, gradient, slot, sparseRows));
+        }
+        foreach (var binding in restored) _halfTapeSlots[binding.Parameter] = binding.Slot;
+        _halfTapePending = null;
+        _halfTapeVersion = 1;
+        _halfTapeParameterCount = context.Parameters.Count;
+        _tapeStep++;
+        foreach (var binding in bindings)
+        {
+            var slot = binding.Slot;
+            var current = binding.Parameter.Cast<float>().ToArray();
+            if (!current.AsSpan().SequenceEqual(slot.Published)) current.CopyTo(slot.Master, 0);
+            slot.Age++;
+            if (binding.SparseRows is { } rows)
+            {
+                int width = slot.Shape[1];
+                for (int position = 0; position < rows.Length; position++)
+                {
+                    if (rows[position] < 0) continue; // Preserve the existing sparse helper's ignored invalid-row contract.
+                    var rowGradient = Engine.TensorSlice(binding.Gradient, new[] { position, 0 }, new[] { 1, width });
+                    UpdateHalfTapeRegion(slot, rowGradient, rows[position] * width, new[] { 1, width });
+                }
+            }
+            else UpdateHalfTapeRegion(slot, binding.Gradient, 0, slot.Shape);
+            var master = Tensor<float>.FromMemory(slot.Master.AsMemory(), slot.Shape);
+            var published = master.Cast<T>();
+            if (binding.Parameter.IsContiguous)
+                Engine.TensorCopy(published, binding.Parameter);
+            else
+                // TensorCopy requires contiguous output. The bulk logical writer preserves the
+                // parameter view's strides and updates its storage version for GPU cache coherence.
+                binding.Parameter.CopyFromArray(published.ToArray());
+            binding.Parameter.Cast<float>().CopyLogicalTo(slot.Published);
+            _halfTapeSlots[binding.Parameter] = slot;
+        }
+        ReportRetainedOutputUpdateAccepted();
+    }
+
+    private bool TryGetHalfSparseRows(TapeStepContext<T> context, Tensor<T> parameter,
+        out Tensor<T> gradient, out int[]? rows)
+    {
+        gradient = parameter; rows = null;
+        if (_options.UseAMSGrad || parameter.Rank != 2
+            || !SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, parameter)) return false;
+        var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(parameter);
+        if (sparse is null || sparse.Count != 1) return false;
+        var contribution = sparse[0];
+        var indices = contribution.Indices.ToArray();
+        // The existing scatter helper declines duplicates/multiple chunks: their summed effective
+        // gradient takes the dense path, including evolution of the other rows' moments.
+        if (new HashSet<long>(indices).Count != indices.Length) return false;
+        if (contribution.VocabSize != parameter.Shape[0] || contribution.EmbeddingDim != parameter.Shape[1]
+            || contribution.Values.Rank != 2 || contribution.Values.Shape[0] != indices.Length
+            || contribution.Values.Shape[1] != parameter.Shape[1])
+            throw new ArgumentException("Half Adam sparse gradient metadata does not match its parameter.", nameof(context));
+        rows = new int[indices.Length];
+        for (int i = 0; i < indices.Length; i++)
+            rows[i] = indices[i] >= 0 && indices[i] < parameter.Shape[0] ? (int)indices[i] : -1;
+        gradient = contribution.Values;
+        return true;
+    }
+
+    private void UpdateHalfTapeRegion(HalfTapeSlot slot, Tensor<T> sourceGradient, int offset, int[] shape)
+    {
+        int length = sourceGradient.Length;
+        var master = Tensor<float>.FromMemory(slot.Master.AsMemory(offset, length), shape);
+        var mState = Tensor<float>.FromMemory(slot.M.AsMemory(offset, length), shape);
+        var vState = Tensor<float>.FromMemory(slot.V.AsMemory(offset, length), shape);
+        var gradient = sourceGradient.Cast<float>();
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(mState, (float)_options.Beta1),
+            Engine.TensorMultiplyScalar(gradient, (float)(1 - _options.Beta1)));
+        var v = Engine.TensorAdd(Engine.TensorMultiplyScalar(vState, (float)_options.Beta2),
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(gradient, gradient), (float)(1 - _options.Beta2)));
+        Engine.TensorCopy(m, mState); mState.CopyLogicalTo(slot.M.AsSpan(offset, length));
+        Engine.TensorCopy(v, vState); vState.CopyLogicalTo(slot.V.AsSpan(offset, length));
+        Tensor<float> secondMoment = v;
+        if (_options.UseAMSGrad)
+        {
+            var maximumArray = slot.VMax ?? throw new InvalidOperationException("Missing Half AMSGrad state.");
+            var maximum = Tensor<float>.FromMemory(maximumArray.AsMemory(offset, length), shape);
+            secondMoment = Engine.TensorMax(maximum, v);
+            Engine.TensorCopy(secondMoment, maximum); maximum.CopyLogicalTo(maximumArray.AsSpan(offset, length));
+        }
+        var mHat = Engine.TensorDivideScalar(m, (float)(1 - Math.Pow(_options.Beta1, slot.Age)));
+        var vHat = Engine.TensorDivideScalar(secondMoment, (float)(1 - Math.Pow(_options.Beta2, slot.Age)));
+        var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), (float)_options.Epsilon);
+        var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denominator),
+            (float)NumOps.ToDouble(CurrentLearningRate));
+        Engine.TensorCopy(Engine.TensorSubtract(master, update), master);
+        master.CopyLogicalTo(slot.Master.AsSpan(offset, length));
+    }
+
 
     /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.
@@ -218,6 +467,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // early updates in the new run. (PR #1350 round-2 review.)
         _vMaxVector = null;
         ResetHalfVectorState();
+        ResetHalfTapeState();
         // Reset the NN tape-side state. The flat-vector path got reset
         // above; the tape path uses parameter-tensor-keyed dictionaries
         // (_tapeM, _tapeV, _tapeVMax) and a separate _tapeStep counter
@@ -967,6 +1217,16 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             return;
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Keep the shared clipping/anomaly gates above, then update promoted per-parameter state.
+            // Bias correction belongs to each enrolled parameter's accepted age, not the global step.
+            if (clipActive)
+                ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm, globalNormSq);
+            StepHalfTape(context);
+            return;
+        }
+
         _tapeStep++;
 
         double b1 = _options.Beta1;
@@ -1600,6 +1860,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // Also clear the AMSGrad per-coord v̂_max so reuse after Reset
         // doesn't carry a stale upper bound into the next training run.
         ResetHalfVectorState();
+        ResetHalfTapeState();
         _vMaxVector = null;
         // Tape-step moment dictionaries + tape step counter: same
         // rationale — reusing the optimizer with WithParameters-cloned

@@ -68,7 +68,9 @@ internal sealed class SerializedPatchAttention<T>
             }
 
             // [p, h, l, d]: memory linear in the patch length instead of quadratic.
-            var mixed = engine.FlashAttention(Heads(0), Heads(1), Heads(2), scale, isCausal: false, out _, attentionBias: null);
+            var mixed = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                ? engine.ScaledDotProductAttention(Heads(0), Heads(1), Heads(2), mask: null, scale: scale, out _)
+                : engine.FlashAttention(Heads(0), Heads(1), Heads(2), scale, isCausal: false, out _, attentionBias: null);
             var merged = engine.TensorPermute(mixed, new[] { 0, 2, 1, 3 });
             outputs[g] = engine.Reshape(merged, new[] { p * l, c });
         }

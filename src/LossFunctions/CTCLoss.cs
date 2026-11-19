@@ -162,9 +162,12 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     /// <returns>The label sequences and their lengths.</returns>
     private static (int[][] Targets, int[] TargetLengths) DecodeTargets(Vector<T> encoded, int batchSize, string paramName)
     {
-        // The encoding holds integer metadata (lengths and label ids). Each code is rounded to the nearest
-        // integer in bulk before the int conversion, so a float code such as 1.9999999 reads as label 2.
-        int[] codes = AiDotNetEngine.Current.TensorRound(encoded.AsTensor()).Cast<int>().ToArray();
+        // The encoding holds integer metadata (lengths and label ids). Decode directly from the concrete
+        // vector with banker's rounding so GraphMode traces never record and immediately realize a Round op.
+        var rawCodes = encoded.AsTensor().Cast<double>().ToArray();
+        var codes = new int[rawCodes.Length];
+        for (int i = 0; i < rawCodes.Length; i++)
+            codes[i] = (int)Math.Round(rawCodes[i], MidpointRounding.ToEven);
 
         var targets = new int[batchSize][];
         var targetLengths = new int[batchSize];

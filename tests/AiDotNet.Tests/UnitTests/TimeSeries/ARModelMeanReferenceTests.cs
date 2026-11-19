@@ -49,4 +49,84 @@ public class ARModelMeanReferenceTests
 
         Assert.Equal(8.0 / 3.0, model.PredictSingle(new Vector<double>(Series)), 10);
     }
+
+    [Fact]
+    public void ConstantNonzeroSeries_PreservesMeanAndParameterLayoutAcrossSerializeAndClone()
+    {
+        var untrained = new ARModel<double>(new ARModelOptions<double> { AROrder = 1 });
+        Assert.Equal(0, untrained.ParameterCount);
+
+        var constantSeries = new[] { 7.5, 7.5, 7.5, 7.5, 7.5, 7.5 };
+        var x = new Matrix<double>(constantSeries.Length, 1);
+        for (int i = 0; i < constantSeries.Length; i++)
+        {
+            x[i, 0] = i;
+        }
+
+        var trained = new ARModel<double>(new ARModelOptions<double> { AROrder = 1 });
+        trained.Train(x, new Vector<double>(constantSeries));
+
+        // Parameter surface is _arCoefficients (AROrder = 1) + _trainedSeries buffer (6);
+        // _seriesMean is [FittedParameter(InputSized = true)] so it adds 0 flat parameter slots.
+        int expectedParameterCount = 1 + constantSeries.Length;
+        Assert.Equal(expectedParameterCount, trained.ParameterCount);
+        Assert.Equal(expectedParameterCount, trained.GetParameters().Length);
+        var arCoeffs = (Vector<double>)trained.GetModelMetadata().AdditionalInfo["ARCoefficients"];
+        Assert.Single(arCoeffs);
+        Assert.Equal(0.0, arCoeffs[0], 10);
+
+        var query = new Vector<double>(new[] { 7.5, 7.5, 7.5 });
+        var zeroQuery = new Vector<double>(new[] { 0.0, 0.0, 0.0 });
+        AssertConstantForecast(trained, query, zeroQuery, 7.5);
+
+        byte[] payload = trained.Serialize();
+        var reloaded = new ARModel<double>(new ARModelOptions<double> { AROrder = 1 });
+        reloaded.Deserialize(payload);
+        Assert.Equal(expectedParameterCount, reloaded.ParameterCount);
+        AssertConstantForecast(reloaded, query, zeroQuery, 7.5);
+
+        var cloned = (ARModel<double>)trained.Clone();
+        Assert.Equal(expectedParameterCount, cloned.ParameterCount);
+        AssertConstantForecast(cloned, query, zeroQuery, 7.5);
+
+        var deepCopied = (ARModel<double>)trained.DeepCopy();
+        Assert.Equal(expectedParameterCount, deepCopied.ParameterCount);
+        AssertConstantForecast(deepCopied, query, zeroQuery, 7.5);
+    }
+
+    [Fact]
+    public void NonConstantSeries_PreservesMeanAcrossSerializeAndClone()
+    {
+        var trained = TrainAR1();
+        int expectedParameterCount = 1 + Series.Length;
+        Assert.Equal(expectedParameterCount, trained.ParameterCount);
+
+        var reloaded = new ARModel<double>(new ARModelOptions<double> { AROrder = 1 });
+        reloaded.Deserialize(trained.Serialize());
+
+        var cloned = (ARModel<double>)trained.Clone();
+
+        foreach (var candidate in new[] { reloaded, cloned })
+        {
+            Assert.Equal(expectedParameterCount, candidate.ParameterCount);
+            var forecast = candidate.Forecast(new Vector<double>(Series), 2);
+            Assert.Equal(8.0 / 3.0, forecast[0], 10);
+            Assert.Equal(55.0 / 18.0, forecast[1], 10);
+            Assert.Equal(8.0 / 3.0, candidate.PredictSingle(new Vector<double>(Series)), 10);
+        }
+    }
+
+    private static void AssertConstantForecast(
+        ARModel<double> model,
+        Vector<double> constantHistory,
+        Vector<double> zeroHistory,
+        double expectedMean)
+    {
+        var forecast = model.Forecast(constantHistory, 2);
+        Assert.Equal(2, forecast.Length);
+        Assert.Equal(expectedMean, forecast[0], 10);
+        Assert.Equal(expectedMean, forecast[1], 10);
+        Assert.Equal(expectedMean, model.PredictSingle(constantHistory), 10);
+        Assert.Equal(expectedMean, model.PredictSingle(zeroHistory), 10);
+    }
 }

@@ -76,8 +76,11 @@ public sealed class FlowDPMSolverScheduler<T> : NoiseSchedulerBase<T>
             _lambdas.RemoveAt(0);
         }
 
-        bool lowerOrderFinal = index < 0 || index == timesteps.Length - 1;
-        bool lowerOrderSecond = index >= 0 && index == timesteps.Length - 2 && timesteps.Length < 15;
+        int finalStepIndex = timesteps.Length > 0 && timesteps[timesteps.Length - 1] == 0
+            ? timesteps.Length - 2
+            : timesteps.Length - 1;
+        bool lowerOrderFinal = index < 0 || index >= finalStepIndex || sNext <= 0.0;
+        bool lowerOrderSecond = index >= 0 && index == finalStepIndex - 1 && finalStepIndex + 1 < 15;
         int order;
         if (_solverOrder == 1 || _lowerOrderNums < 1 || lowerOrderFinal)
             order = 1;
@@ -87,6 +90,11 @@ public sealed class FlowDPMSolverScheduler<T> : NoiseSchedulerBase<T>
             order = 3;
         if (_lowerOrderNums < _solverOrder)
             _lowerOrderNums++;
+
+        // At s_next == 0 (sigma_t == 0, lambda_t == +inf), the exact first-order ODE limit over [s, 0] is D_0 = m_0;
+        // evaluating 1 / r_0 with h = +inf would divide by zero and turn constant-velocity differences into 0 * inf = NaN.
+        if (sNext <= 0.0)
+            return dataPrediction;
 
         double alphaT = 1.0 - sNext;
         double sigmaT = sNext;

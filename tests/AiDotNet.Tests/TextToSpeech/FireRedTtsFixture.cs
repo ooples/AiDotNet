@@ -121,28 +121,37 @@ internal static class FireRedTtsFixture
 
     private static readonly Lazy<double[]> Trained = new(() =>
     {
-        // Taught at 1e-2 (the suite's own steps run at the fixture's 1e-3).
-        var model = Build<double>(1e-2);
-        var reference = Recording<double>();
-        var pairs = new[]
+        int previousDop = AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism;
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = Environment.ProcessorCount;
+        try
         {
-            (Text: "the quick brown fox", Tokens: new[] { 3, 17, 29, 41, 53, 5, 11, 23 }),
-            (Text: "a completely different sentence", Tokens: new[] { 60, 48, 36, 24, 12, 58, 46, 34 }),
-        };
-        var samples = pairs.Select(p =>
-        {
-            var codes = new Tensor<double>(new[] { p.Tokens.Length, 1 });
-            for (int i = 0; i < p.Tokens.Length; i++) codes[i, 0] = p.Tokens[i];
-            var ids = model.TokenizeText(p.Text);
-            return new TtsTrainingSample<double>
+            // Taught at 1e-2 (the suite's own steps run at the fixture's 1e-3).
+            var model = Build<double>(1e-2);
+            var reference = Recording<double>();
+            var pairs = new[]
             {
-                Tokens = new Tensor<double>(new[] { ids.Length }, new Vector<double>(ids.Select(v => (double)v).ToArray())),
-                CodecTokens = codes,
-                SpeakerReference = reference,
+                (Text: "the quick brown fox", Tokens: new[] { 3, 17, 29, 41, 53, 5, 11, 23 }),
+                (Text: "a completely different sentence", Tokens: new[] { 60, 48, 36, 24, 12, 58, 46, 34 }),
             };
-        }).ToArray();
-        for (int step = 0; step < 200; step++) model.Train(samples[step % 2]);
-        return model.GetParameters().ToArray();
+            var samples = pairs.Select(p =>
+            {
+                var codes = new Tensor<double>(new[] { p.Tokens.Length, 1 });
+                for (int i = 0; i < p.Tokens.Length; i++) codes[i, 0] = p.Tokens[i];
+                var ids = model.TokenizeText(p.Text);
+                return new TtsTrainingSample<double>
+                {
+                    Tokens = new Tensor<double>(new[] { ids.Length }, new Vector<double>(ids.Select(v => (double)v).ToArray())),
+                    CodecTokens = codes,
+                    SpeakerReference = reference,
+                };
+            }).ToArray();
+            for (int step = 0; step < 200; step++) model.Train(samples[step % 2]);
+            return model.GetParameters().ToArray();
+        }
+        finally
+        {
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = previousDop;
+        }
     });
 
     public static FireRedTTS<T> Create<T>()

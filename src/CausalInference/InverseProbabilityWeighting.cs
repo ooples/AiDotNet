@@ -549,6 +549,8 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        EnsureFitted();
+
         // #1713: Train(X, Y) drops column 0 (the treatment indicator) before fitting the
         // propensity model, so this IFullModel Predict path must reconcile the same
         // [treatment | covariates] layout — otherwise the extra column overruns the fitted

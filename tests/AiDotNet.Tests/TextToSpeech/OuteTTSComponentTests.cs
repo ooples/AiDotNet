@@ -254,4 +254,101 @@ public class OuteTTSComponentTests
         Assert.True(draws.Count(d => d == 4999) <= 3, $"{draws.Count(d => d == 4999)} of 400 draws on the last token");
         Assert.True(draws.Distinct().Count() >= 300, $"{draws.Distinct().Count()} distinct draws");
     }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(0.4)]
+    [InlineData(0.0)]
+    public async Task SamplingSession_ReusesScratchAndPreservesTheCallerAndSeededSequence(double temperature)
+    {
+        await Task.Yield();
+        const int vocabulary = 157760, steps = 16;
+        var original = Enumerable.Range(0, vocabulary).Select(i => (i - vocabulary / 2) * 0.0001f).ToArray();
+        var logits = new Tensor<float>((float[])original.Clone(), new[] { 1, vocabulary });
+        var options = new OuteTTSOptions { Temperature = temperature };
+        var expected = new List<int> { 2, 5, 9 };
+        var referenceRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(37);
+        // The unchanged processors define the sequence; no generation-wide arena retains their temporaries here.
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+            for (int i = 0; i < steps; i++)
+            {
+                var scores = OuteTTSSampler<float>.Process(logits, expected, options.RepetitionPenalty,
+                    options.RepetitionRange, temperature > 0 ? temperature : 1.0,
+                    temperature > 0 ? options.TopK : 0, temperature > 0 ? options.TopP : 1.0,
+                    temperature > 0 ? options.MinP : 0);
+                expected.Add(temperature > 0 ? OuteTTSSampler<float>.Sample(scores, referenceRandom)
+                    : OuteTTSSampler<float>.Greedy(scores));
+            }
+
+        using var outer = AiDotNet.Tensors.Helpers.TensorArena.Create();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        logits = engine.TensorAddScalar(logits, 0f);
+        var sentinel = engine.TensorAddScalar(new Tensor<float>(new[] { 3f, -4f }, new[] { 2 }), 1f);
+        var sentinelValues = sentinel.ToArray();
+        long outerPeak = outer.PeakBackingBytes;
+        Assert.True(outerPeak > 0, "The input and sentinel must exercise live caller-arena storage.");
+        var actual = new List<int> { 2, 5, 9 };
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(37);
+        var session = new OuteTTSSamplingSession<float>();
+        long firstPeak = 0;
+        using (session)
+            for (int i = 0; i < steps; i++)
+            {
+                actual.Add(session.Select(logits, actual, options, random));
+                Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+                Assert.Equal(outerPeak, outer.PeakBackingBytes);
+                Assert.Equal(sentinelValues, sentinel.ToArray());
+                Assert.Equal(original, logits.ToArray());
+                if (i == 0) firstPeak = session.PeakBackingBytes;
+                Assert.True(firstPeak > 0, "The regression must measure real sampling scratch allocations.");
+                Assert.Equal(firstPeak, session.PeakBackingBytes);
+            }
+        Assert.Equal(expected, actual);
+        Assert.Equal(referenceRandom.NextDouble(), random.NextDouble());
+        Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+        Assert.Equal(sentinelValues, sentinel.ToArray());
+        Assert.Throws<ObjectDisposedException>(() => session.Select(logits, actual, options, random));
+    }
+
+    [Fact]
+    public void SamplingSession_RestoresCallerAfterFailureAndCanContinue()
+    {
+        using var outer = AiDotNet.Tensors.Helpers.TensorArena.Create();
+        var logits = new Tensor<float>(new[] { 1f, 2f, 3f, 4f }, new[] { 1, 4 });
+        var original = logits.ToArray();
+        var options = new OuteTTSOptions();
+        var ids = new List<int> { 1 };
+        using (var session = new OuteTTSSamplingSession<float>())
+        {
+            Assert.Throws<InvalidOperationException>(() => session.Select(logits, ids, options,
+                new FailingSamplingRandom(outer)));
+            Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+            Assert.Equal(original, logits.ToArray());
+            int token = session.Select(logits, ids, options, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4));
+            Assert.InRange(token, 0, 3);
+            Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+        }
+        Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            using (var session = new OuteTTSSamplingSession<float>())
+            {
+                session.Select(logits, ids, options, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4));
+                Assert.Null(AiDotNet.Tensors.Helpers.TensorArena.Current);
+            }
+            Assert.Null(AiDotNet.Tensors.Helpers.TensorArena.Current);
+        }
+        Assert.Same(outer, AiDotNet.Tensors.Helpers.TensorArena.Current);
+    }
+
+    private sealed class FailingSamplingRandom : Random
+    {
+        private readonly AiDotNet.Tensors.Helpers.TensorArena _caller;
+        internal FailingSamplingRandom(AiDotNet.Tensors.Helpers.TensorArena caller) => _caller = caller;
+        public override double NextDouble()
+        {
+            Assert.NotNull(AiDotNet.Tensors.Helpers.TensorArena.Current);
+            Assert.NotSame(_caller, AiDotNet.Tensors.Helpers.TensorArena.Current);
+            throw new InvalidOperationException("Injected sampling failure.");
+        }
+    }
 }

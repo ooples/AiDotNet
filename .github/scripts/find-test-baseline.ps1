@@ -41,12 +41,24 @@ function Set-ActionOutput {
 $artifactName = "test-outcome-ledger-$BaseSha"
 $encodedName = [Uri]::EscapeDataString($artifactName)
 $artifactResponse = Invoke-GhJson "repos/$Repository/actions/artifacts?name=$encodedName&per_page=100"
-$ledgerArtifact = @($artifactResponse.artifacts |
+$ledgerCandidates = @($artifactResponse.artifacts |
     Where-Object {
         -not $_.expired -and $_.name -eq $artifactName -and
         $_.workflow_run -and $_.workflow_run.head_sha -eq $BaseSha
     } |
-    Sort-Object created_at -Descending | Select-Object -First 1)
+    Sort-Object created_at -Descending)
+
+$ledgerArtifact = @()
+foreach ($candidate in $ledgerCandidates) {
+    $candidateRunId = [string] $candidate.workflow_run.id
+    $candidateRun = Invoke-GhJson "repos/$Repository/actions/runs/$candidateRunId"
+    if ($candidateRun.event -eq 'schedule' -and $candidateRun.conclusion -ne 'success') {
+        Write-Host "::warning::skipping non-successful scheduled run $candidateRunId for baseline ledger '$artifactName' (conclusion '$($candidateRun.conclusion)')"
+        continue
+    }
+    $ledgerArtifact = @($candidate)
+    break
+}
 
 if ($ledgerArtifact.Count -gt 0) {
     Set-ActionOutput 'baseline_mode' 'ledger'

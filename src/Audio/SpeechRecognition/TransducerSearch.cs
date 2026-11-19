@@ -264,7 +264,7 @@ internal static class TransducerSearch
     {
         var engine = AiDotNetEngine.Current;
         var flat = scores.Reshape(new[] { scores.Length });
-        var cleaned = engine.TensorNanToNum(flat, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(engine, flat, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         return engine.TensorArgMax(cleaned, 0).GetFlat(0);
     }
 

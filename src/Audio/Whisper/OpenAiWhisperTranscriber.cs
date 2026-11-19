@@ -233,13 +233,35 @@ internal sealed class OpenAiWhisperTranscriber<T>
         var framed = engine.TensorMultiply(windows, engine.TensorBroadcastTo(stft.Window, new[] { used, FftSize }));
         var re = engine.TensorMatMul(framed, stft.Cos);
         var im = engine.TensorMatMul(framed, stft.Sin);
+        T unit = NumOps.FromDouble(PowerUnit);
+        var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            var peakTensor = engine.ReduceMax(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)), new[] { 0, 1 }, keepDims: true);
+            var ones = Tensor<T>.CreateDefault(peakTensor._shape, NumOps.One);
+            var scaleTensor = engine.TensorWhere(engine.TensorGreaterThan(peakTensor, NumOps.Zero), peakTensor, ones);
+            var scale2D = engine.TensorBroadcastTo(scaleTensor, re._shape);
+            var powerG = engine.TensorAdd(
+                engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivide(re, scale2D), unit)),
+                engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivide(im, scale2D), unit)));
+            var melG = engine.TensorMatMul(filters, engine.TensorTranspose(powerG));
+            var offsetTensor = engine.TensorMultiplyScalar(
+                engine.TensorSubtractScalar(engine.TensorLog(scaleTensor), NumOps.FromDouble(Math.Log(PowerUnit))),
+                NumOps.FromDouble(2.0 / Math.Log(10.0)));
+            var logG = engine.TensorMax(
+                engine.TensorAdd(engine.TensorLog10(melG), engine.TensorBroadcastTo(offsetTensor, melG._shape)),
+                NumOps.FromDouble(-10.0));
+            var maxTensor = engine.ReduceMax(logG, new[] { 0, 1 }, keepDims: true);
+            var floorTensor = engine.TensorBroadcastTo(engine.TensorSubtractScalar(maxTensor, NumOps.FromDouble(8.0)), logG._shape);
+            var clippedG = engine.TensorMax(logG, floorTensor);
+            return engine.TensorDivideScalar(engine.TensorAddScalar(clippedG, NumOps.FromDouble(4.0)), NumOps.FromDouble(4.0));
+        }
+
         T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
         T scale = NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;
         // Divided by the peak first (into [-1, 1]), then multiplied by 128 (a power of two, exact in every T).
-        T unit = NumOps.FromDouble(PowerUnit);
         var power = engine.TensorAdd(engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivideScalar(re, scale), unit)),
             engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivideScalar(im, scale), unit)));
-        var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
         var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));
         // 2 log10(peak / 128), the scale the squares were taken at.
         T offset = NumOps.Multiply(NumOps.FromDouble(2.0 / Math.Log(10.0)),
@@ -266,7 +288,9 @@ internal sealed class OpenAiWhisperTranscriber<T>
         int take = Math.Max(0, Math.Min(Math.Min(size, ChunkFrames), available - start));
         if (take == 0) return new Tensor<T>(new[] { mels, ChunkFrames });
         var part = engine.TensorSlice(mel, new[] { 0, start }, new[] { mels, take });
-        return take == ChunkFrames ? part.Contiguous() : engine.PadNd(part, new[] { 0, ChunkFrames - take }, EnginePadMode.Constant, NumOps.Zero);
+        if (take == ChunkFrames)
+            return AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? part : part.Contiguous();
+        return engine.PadNd(part, new[] { 0, ChunkFrames - take }, EnginePadMode.Constant, NumOps.Zero);
     }
 
     // ---------------------------------------------------------------- language detection and decoding

@@ -4,6 +4,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -351,11 +352,20 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                 }
                 var nextU = Normalize(Engine.TensorMatMul(v, vT));
                 var nextV = Normalize(Engine.TensorMatMul(Engine.Reshape(nextU, new[] { 1, rows }), v));
-                Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
-                Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
-                // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
-                uT = Engine.Reshape(Engine.TensorAddScalar(_u, NumOps.Zero), new[] { 1, rows });
-                vT = Engine.Reshape(Engine.TensorAddScalar(_v, NumOps.Zero), new[] { per, 1 });
+                if (CompiledStepRandom<T>.InNonStepForward || GraphMode.IsProbe)
+                {
+                    // A forward that only resolves shapes or probes the step must not advance the accepted state.
+                    uT = Engine.Reshape(nextU, new[] { 1, rows });
+                    vT = Engine.Reshape(nextV, new[] { per, 1 });
+                }
+                else
+                {
+                    Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
+                    Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
+                    // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
+                    uT = Engine.Reshape(Engine.TensorAddScalar(_u, NumOps.Zero), new[] { 1, rows });
+                    vT = Engine.Reshape(Engine.TensorAddScalar(_v, NumOps.Zero), new[] { per, 1 });
+                }
             }
         }
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]

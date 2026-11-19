@@ -51,7 +51,14 @@ internal sealed class CompiledNeuralPredictor<T>
     private int _graphStructureVersion = int.MinValue;
     private int _graphParameterEpoch = int.MinValue;
     private Tensor<T>[] _graphParameters = Array.Empty<Tensor<T>>();
-    private readonly ConcurrentDictionary<TensorShape, JitValueStability<T>> _stabilityByShape = new();
+    private readonly ConcurrentDictionary<TensorShape, GraphShapeSlot> _graphSlotsByShape = new();
+
+    private sealed class GraphShapeSlot
+    {
+        internal readonly object Gate = new();
+        internal readonly JitValueStability<T> Stability = new();
+        internal Tensor<T>? StagedInput;
+    }
 
     /// <summary>How far a replayed graph-capture plan may sit from the eager forward before it is not value-stable.</summary>
     internal const double ValueStabilityTolerance = 1e-3;
@@ -113,7 +120,13 @@ internal sealed class CompiledNeuralPredictor<T>
         lock (_programGate)
         {
             if (_programDisabled) return false;
-            _example ??= input.Clone();
+            if (_example is null)
+            {
+                using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+                {
+                    _example = input.Clone();
+                }
+            }
             DropProgramIfBindingsMoved();
             if (_package is { } bound && !EnsureBoundToCurrentParameters(bound)) _package = null;
             if (_package is null && !TryTrace(input)) return false;
@@ -180,6 +193,14 @@ internal sealed class CompiledNeuralPredictor<T>
                               && epoch == AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
                 if (stable || ++attempt >= 2) break;
             }
+            if (program.Nodes.Count == 0)
+            {
+                // A forward that recorded zero tensor operations (such as an identity or host-only override) has no
+                // compilable program; defer to the graph-capture tier so per-shape capture limitations and
+                // ThrowOnFailure are enforced consistently.
+                _programDisabled = true;
+                return false;
+            }
             var package = new ProgramPackage(program);
             if (ResolveParameters(package) is not { } traced)
             {
@@ -202,6 +223,7 @@ internal sealed class CompiledNeuralPredictor<T>
     // A loaded package's parameters were saved by stable id and shape only; attach the model's live tensors.
     private bool TryBind(ProgramPackage package)
     {
+        if (package.Program.Nodes.Count == 0) return false;
         if (ResolveParameters(package) is not { } bound)
         {
             System.Diagnostics.Trace.TraceWarning(
@@ -295,7 +317,7 @@ internal sealed class CompiledNeuralPredictor<T>
                 if (!same && _graphStructureVersion != int.MinValue)
                 {
                     _cache.Invalidate();
-                    _stabilityByShape.Clear();
+                    _graphSlotsByShape.Clear();
                 }
                 _graphParameters = current;
                 _graphStructureVersion = structure;
@@ -308,39 +330,57 @@ internal sealed class CompiledNeuralPredictor<T>
                 if (_graphBinding != long.MinValue)
                 {
                     _cache.Invalidate();
-                    _stabilityByShape.Clear();
+                    _graphSlotsByShape.Clear();
                 }
                 _graphBinding = binding;
             }
         }
-        var stability = _stabilityByShape.GetOrAdd(input.Shape, static _ => new JitValueStability<T>());
+        var slot = _graphSlotsByShape.GetOrAdd(input.Shape, static _ => new GraphShapeSlot());
+        var stability = slot.Stability;
         try
         {
-            Func<Tensor<T>> traceForward = () => CaptureCompatiblePredict(_model, input);
             if (stability.IsPermanentlyDisabled) return new[] { EagerPredict(_model, input) };
 
-            var plan = _cache.GetOrCompileInference(input, traceForward);
-            if (stability.IsVerified) return new[] { plan.Execute() };
-
-            var reference = CaptureCompatiblePredict(_model, input);
-            // At the traced input a broken plan and a correct one agree, so wait for an input that differs.
-            if (!stability.RecordAndCheckDiffers(input)) return new[] { reference };
-
-            var replayed = plan.Execute();
-            double discrepancy = MaxAbsoluteDifference(replayed, reference);
-            if (discrepancy <= ValueStabilityTolerance)
+            Tensor<T> replayed;
+            lock (slot.Gate)
             {
-                stability.MarkVerified();
-                return new[] { replayed };
+                if (stability.IsPermanentlyDisabled) return new[] { EagerPredict(_model, input) };
+
+                var staged = slot.StagedInput;
+                if (staged is null)
+                {
+                    using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+                    {
+                        staged = new Tensor<T>(input.Shape.ToArray());
+                    }
+                    slot.StagedInput = staged;
+                }
+                input.Contiguous().AsSpan().CopyTo(staged.AsWritableSpan());
+
+                Func<Tensor<T>> traceForward = () => CaptureCompatiblePredict(_model, staged);
+                var plan = _cache.GetOrCompileInference(staged, traceForward);
+                if (stability.IsVerified) return new[] { (Tensor<T>)plan.Execute().CloneDeepCopy() };
+
+                var reference = CaptureCompatiblePredict(_model, input);
+                // At the traced input a broken plan and a correct one agree, so wait for an input that differs.
+                if (!stability.RecordAndCheckDiffers(input)) return new[] { reference };
+
+                replayed = (Tensor<T>)plan.Execute().CloneDeepCopy();
+                double discrepancy = MaxAbsoluteDifference(replayed, reference);
+                if (discrepancy <= ValueStabilityTolerance)
+                {
+                    stability.MarkVerified();
+                    return new[] { replayed };
+                }
+                if (stability.TryMarkPermanentlyDisabled())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"JIT disabled for {_model.GetType().FullName}: the compiled plan is not value-stable at shape " +
+                        $"[{string.Join(", ", input.Shape)}] (off by {discrepancy:E3}); the trace captured input values as " +
+                        "constants. Falling back to eager inference for this shape.");
+                }
+                return new[] { reference };
             }
-            if (stability.TryMarkPermanentlyDisabled())
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"JIT disabled for {_model.GetType().FullName}: the compiled plan is not value-stable at shape " +
-                    $"[{string.Join(", ", input.Shape)}] (off by {discrepancy:E3}); the trace captured input values as " +
-                    "constants. Falling back to eager inference for this shape.");
-            }
-            return new[] { reference };
         }
         catch (GraphCaptureNotSupportedException ex) when (!_config.ThrowOnFailure)
         {

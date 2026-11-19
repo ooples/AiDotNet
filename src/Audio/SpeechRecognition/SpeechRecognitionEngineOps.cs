@@ -19,7 +19,7 @@ internal static class SpeechRecognitionEngineOps
         int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
         int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
         var frames = logits.Reshape([numFrames, vocabSize]);
-        var cleaned = engine.TensorNanToNum(frames, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var cleaned = AiDotNet.Helpers.NanToNumHelper.Apply(engine, frames, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
         return engine.TensorArgMax(cleaned, 1).ToArray();
     }
 

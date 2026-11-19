@@ -33,19 +33,26 @@ public static class CompiledStepRandom<T>
 
     internal sealed class RecordedDraw
     {
-        public RecordedDraw(Tensor<T> tensor, Action<Tensor<T>> redraw, bool onDevice = false)
-        {
-            Tensor = tensor;
-            Redraw = redraw;
-            OnDevice = onDevice;
-        }
+        private readonly Action<IEngine> _redraw;
+        private RecordedDraw(Action<IEngine> redraw) => _redraw = redraw;
 
-        public Tensor<T> Tensor { get; }
-        public Action<Tensor<T>> Redraw { get; }
+        // onDevice: fill writes the tensor through an engine op, so its device copy becomes the value; bumping the
+        // version as a host fill needs would mark that copy stale and re-upload the old host values.
+        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill, bool onDevice = false)
+            => new(engine =>
+            {
+                if (onDevice)
+                {
+                    using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+                    fill(tensor);
+                    return;
+                }
+                fill(tensor);
+                tensor.IncrementVersion();
+                engine.InvalidatePersistentTensor(tensor);
+            });
 
-        /// <summary>Whether <see cref="Redraw"/> writes the tensor through an engine op (its device copy becomes the
-        /// value), rather than through its host span.</summary>
-        public bool OnDevice { get; }
+        internal void Redraw(IEngine engine) => _redraw(engine);
     }
 
     // The draws made while the current thread traces a plan; null when nothing is tracing.
@@ -96,18 +103,24 @@ public static class CompiledStepRandom<T>
     /// A forward that runs only to resolve lazily shaped layers draws nothing (the tensor is zeros and
     /// <paramref name="fill"/> is not called), so the model's generator advances exactly as on the eager tape.
     /// </remarks>
-    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => Draw(shape, fill, onDevice: false);
+    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
 
-    // onDevice: fill writes through an engine op (see RecordedDraw.OnDevice); it runs outside any graph recording.
-    private static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill, bool onDevice)
+    /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
+    /// <remarks>With <paramref name="onDevice"/>, <paramref name="fill"/> writes through an engine op (see
+    /// <see cref="RecordedDraw.Create{TData}"/>) and runs outside any graph recording.</remarks>
+    internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill, bool onDevice = false)
     {
         Guard.NotNull(shape);
         Guard.NotNull(fill);
-        var tensor = new Tensor<T>(shape);
+        var tensor = new Tensor<TData>(shape);
         if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
             return tensor;
-        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count && SameShape(replay.Draws[t_replayIndex], shape))
-            replay.Draws[t_replayIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
+        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count
+            && replay.Draws[t_replayIndex] is Tensor<TData> previous && SameShape(previous, shape))
+        {
+            previous.AsSpan().CopyTo(tensor.AsWritableSpan());
+            t_replayIndex++;
+        }
         else if (onDevice)
         {
             using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
@@ -116,8 +129,26 @@ public static class CompiledStepRandom<T>
         else
             fill(tensor);
         t_captured?.Draws.Add(tensor);
-        t_recording?.Add(new RecordedDraw(tensor, fill, onDevice));
+        t_recording?.Add(RecordedDraw.Create(tensor, fill, onDevice));
         return tensor;
+    }
+
+    /// <summary>
+    /// Registers an already-allocated per-step random tensor (such as a <see cref="NeuralNetworks.Layers.DropoutLayer{T}"/>
+    /// mask) with the active plan recording so every compiled replay refills it in place, including when the same layer
+    /// instance is invoked multiple times within one forward pass.
+    /// </summary>
+    /// <param name="tensor">The per-step tensor.</param>
+    /// <param name="fill">Refills it in place.</param>
+    /// <param name="onDevice">Whether <paramref name="fill"/> writes through an engine op (see
+    /// <see cref="RecordedDraw.Create{TData}"/>).</param>
+    internal static void RecordCustom(Tensor<T> tensor, Action<Tensor<T>> fill, bool onDevice = false)
+    {
+        if (t_recording is null)
+            return;
+        Guard.NotNull(tensor);
+        Guard.NotNull(fill);
+        t_recording.Add(RecordedDraw.Create(tensor, fill, onDevice));
     }
 
     /// <summary>
@@ -135,7 +166,7 @@ public static class CompiledStepRandom<T>
         Guard.NotNull(random);
         T rateT = NumOps.FromDouble(rate);
         T keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        return Draw(shape, m =>
+        return DrawData<T>(shape, m =>
         {
             var engine = AiDotNetEngine.Current;
             int seed = random.Next();
@@ -216,7 +247,7 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_replayCounterIndex;
 
-    private static bool SameShape(Tensor<T> tensor, int[] shape)
+    private static bool SameShape<TData>(Tensor<TData> tensor, int[] shape)
     {
         var own = tensor._shape;
         if (own.Length != shape.Length)
@@ -252,7 +283,7 @@ public static class CompiledStepRandom<T>
             t_captured = this;
         }
 
-        internal List<Tensor<T>> Draws { get; } = new List<Tensor<T>>();
+        internal List<object> Draws { get; } = new List<object>();
 
         internal List<ulong> Counters { get; } = new List<ulong>();
 
@@ -370,12 +401,7 @@ public static class CompiledStepRandom<T>
         var engine = AiDotNetEngine.Current;
         foreach (var draw in draws)
         {
-            draw.Redraw(draw.Tensor);
-            // A device redraw's engine copy already made its device buffer the current value; bumping the version
-            // again would mark that stale and re-upload the old host values.
-            if (draw.OnDevice) continue;
-            draw.Tensor.IncrementVersion();
-            engine.InvalidatePersistentTensor(draw.Tensor);
+            draw.Redraw(engine);
         }
     }
 

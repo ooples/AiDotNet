@@ -325,7 +325,7 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// The Fejér-Korovkin coefficients:
     /// - Are calculated using mathematical formulas based on trigonometric functions
     /// - Define the specific "shape" of this wavelet
-    /// - Are normalized so they add up correctly (sum to 1)
+    /// - Are normalized to zero mean (DC = 0) and unit L2 energy
     /// 
     /// You don't need to understand the math to use the wavelet, but these coefficients
     /// are what make this wavelet unique compared to other types of wavelets.
@@ -342,10 +342,12 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
         int n = order / 2;
         int count = 2 * n + 1;
 
-        // The coefficients are computed in double and converted once: their exact sum is zero, and the 1e-15 zero
-        // test only holds for double cancellation residue (float leaves ~1.5e-8, and dividing by it blows the
-        // coefficients up to ~1e6).
-        // c_k = sum_{j=1..n} (1 - cos(theta_j)) * cos(2 k theta_j) / (2n + 1), theta_j = pi j / (2n + 1), k = -n .. n
+        // c_k = sum_{j=1..n} (1 - cos(theta_j)) * cos(2 k theta_j) / (2n + 1), theta_j = pi j / (2n + 1), k = -n .. n.
+        // Because sum_{k=-n..n} cos(2 pi j k / (2n + 1)) = 0 identically for every 1 <= j <= n (sum of nontrivial
+        // (2n + 1)-th roots of unity), c_k is an analytically zero-DC wavelet sequence (sum_k c_k = 0) with strictly
+        // positive energy ||c||_2^2 = (1 / (2(2n + 1))) * sum_{j=1..n} (1 - cos(theta_j))^2 > 0 by discrete cosine
+        // orthogonality. Project out any floating-point DC cancellation drift (c <- c - mean(c)) and normalize to unit
+        // L2 norm (c <- c / ||c||_2) in double before converting to T.
         var theta = engine.TensorDivideScalar(
             engine.TensorMultiplyScalar(engine.TensorArange<double>(1, n + 1, 1), Math.PI), (double)count);
         var twiceK = engine.TensorMultiplyScalar(engine.TensorArange<double>(-n, n + 1, 1), 2.0);
@@ -355,15 +357,10 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
             engine.TensorBroadcastTo(weights.Reshape(1, n), new[] { count, n }));
         var coefficients = engine.ReduceSum(engine.TensorDivideScalar(terms, (double)count), new[] { 1 }, false);
 
-        // Normalize coefficients (or fall back to a uniform filter when they sum to zero: the exact mathematical
-        // sum over k = -n..n is zero by the Dirichlet identity, while SIMD polynomial cos leaves ~5e-14 residue)
-        double sum = engine.TensorSum(coefficients);
-        if (Math.Abs(sum) > 1e-12)
-        {
-            return engine.TensorDivideScalar(coefficients, sum).Cast<T>().ToVector();
-        }
-
-        return engine.TensorFullLike(coefficients, 1.0 / count).Cast<T>().ToVector();
+        double mean = engine.TensorSum(coefficients) / count;
+        var zeroMean = engine.TensorAddScalar(coefficients, -mean);
+        double l2Norm = Math.Sqrt(engine.TensorSum(engine.TensorMultiply(zeroMean, zeroMean)));
+        return engine.TensorDivideScalar(zeroMean, l2Norm).Cast<T>().ToVector();
     }
 
     /// <summary>

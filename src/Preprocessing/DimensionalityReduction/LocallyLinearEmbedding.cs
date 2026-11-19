@@ -181,23 +181,25 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     }
 
     /// <summary>
-    /// Modified LLE: per neighbourhood, W_i = I - U U^T where U holds the top d + 1 left singular vectors of the
-    /// centered neighbourhood (vectors over the k neighbours), accumulated into M.
+    /// Modified LLE: per neighbourhood, W_i = I - Q_i Q_i^T where Q_i orthonormalizes [1, tangent_i] over the k
+    /// neighbours (the constant vector plus the top min(d, k, p) local tangent coordinates), accumulated into M.
     /// </summary>
     private Tensor<T> ComputeModifiedLLEEmbedding(Tensor<T> x, Tensor<int> neighbors, int n)
     {
         var engine = Engine;
         int k = neighbors.Shape[1];
+        if (k <= _nComponents + 1)
+        {
+            return ComputeStandardLLEEmbedding(n);
+        }
+
         var centered = CenteredNeighborhoods(x, neighbors);
-
-        // Left singular vectors of X_i are the eigenvectors of X_i X_i^T
-        int count = Math.Min(_nComponents + 1, Math.Min(k, x.Shape[1]));
-        var (_, left) = DimensionalityReductionOps.SymmetricEigenEach(
-            DimensionalityReductionOps.BatchMatMulTranspose(centered, centered), descending: true);
-        var basis = engine.TensorNarrow(left, 2, 0, count);
-
+        var tangent = TangentCoordinates(centered, _nComponents);
+        var estimator = engine.TensorConcatenate(
+            new[] { DimensionalityReductionOps.Full(new[] { n, k, 1 }, NumOps.One), tangent }, 2);
+        var q = DimensionalityReductionOps.OrthonormalizeColumnsEach(estimator, unitFallback: false);
         var identity = engine.Reshape(DimensionalityReductionOps.Identity<T>(k), new[] { 1, k, k });
-        var local = engine.TensorSubtract(identity, DimensionalityReductionOps.BatchMatMulTranspose(basis, basis));
+        var local = engine.TensorSubtract(identity, DimensionalityReductionOps.BatchMatMulTranspose(q, q));
         return SmallestNonTrivialEigenvectors(DimensionalityReductionOps.ScatterAddBlocks(neighbors, local, n), n);
     }
 

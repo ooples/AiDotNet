@@ -239,27 +239,44 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     {
         RequirePipeline();
         ValidateReference(referenceAudio);
+        return EncodeConditioningLatents(ExtractConditioningMels(referenceAudio));
+    }
+
+    private List<Tensor<T>> ExtractConditioningMels(Tensor<T> referenceAudio)
+    {
         var input = HaspSpeakerEncoder<T>.Resample(Engine, Flatten(referenceAudio), _options.SampleRate, _options.InputSampleRate);
         int maximum = Math.Min(input.Length, (int)Math.Round(_options.MaximumReferenceSeconds * _options.InputSampleRate));
         int conditioning = Math.Min(maximum, (int)Math.Round(_options.ConditioningSeconds * _options.InputSampleRate));
         input = Engine.TensorSlice(input, new[] { 0 }, new[] { conditioning });
         int chunk = Math.Max(1, (int)Math.Round(_options.ConditioningChunkSeconds * _options.InputSampleRate));
         int minimum = Math.Max(1, (int)Math.Round(_options.MinimumConditioningChunkSeconds * _options.InputSampleRate));
-        Tensor<T>? sum = null;
-        int count = 0;
+        var mels = new List<Tensor<T>>();
         for (int start = 0; start < input.Length; start += chunk)
         {
             int length = Math.Min(chunk, input.Length - start);
             if (length < minimum) continue;
             var audio = Engine.TensorSlice(input, new[] { start }, new[] { length });
-            var mel = PowerMel(audio, _options.ConditioningFftSize, _options.ConditioningHopSize,
-                _options.ConditioningWindowSize);
-            var latent = _languageModel!.Condition(mel);
-            sum = sum is null ? latent : Engine.TensorAdd(sum, latent);
-            count++;
+            mels.Add(PowerMel(audio, _options.ConditioningFftSize, _options.ConditioningHopSize, _options.ConditioningWindowSize));
         }
-        if (sum is null) throw new ArgumentException("Reference audio has no conditioning chunk of at least 0.33 seconds.", nameof(referenceAudio));
-        return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / count));
+
+        if (mels.Count == 0)
+            throw new ArgumentException("Reference audio has no conditioning chunk of at least 0.33 seconds.", nameof(referenceAudio));
+        return mels;
+    }
+
+    private Tensor<T> EncodeConditioningLatents(IReadOnlyList<Tensor<T>> mels)
+    {
+        var lm = _languageModel ?? throw new InvalidOperationException("Language model is not initialized.");
+        Tensor<T>? sum = null;
+        for (int i = 0; i < mels.Count; i++)
+        {
+            var latent = lm.Condition(mels[i]);
+            sum = sum is null ? latent : Engine.TensorAdd(sum, latent);
+        }
+
+        if (sum is null)
+            throw new ArgumentException("At least one conditioning mel chunk is required.", nameof(mels));
+        return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / mels.Count));
     }
 
     /// <summary>Returns the released H/ASP speaker embedding, L2-normalized to 512 dimensions.</summary>
@@ -319,19 +336,27 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     {
         RequirePipeline();
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
-        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
+        var (conditioningMels, codes, text) = PrepareTrainingInputs(sample);
+        var lm = _languageModel ?? throw new InvalidOperationException("Language model is not initialized.");
+        return TrainWithCustomObjective(
+            sample.Tokens,
+            sample.Tokens,
+            (_, _) => lm.Objective(text, codes, EncodeConditioningLatents(conditioningMels)),
+            _optimizer);
     }
 
     /// <inheritdoc />
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
+        var (conditioningMels, codes, text) = PrepareTrainingInputs(sample);
+        var lm = _languageModel ?? throw new InvalidOperationException("Language model is not initialized.");
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
         try
         {
             using var _ = new NoGradScope<T>();
-            return BuildObjective(sample)[0];
+            return lm.Objective(text, codes, EncodeConditioningLatents(conditioningMels))[0];
         }
         finally { SetTrainingMode(wasTraining); }
     }
@@ -395,7 +420,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         return metadata;
     }
 
-    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample)
+    private (List<Tensor<T>> ConditioningMels, int[] Codes, int[] Text) PrepareTrainingInputs(TtsTrainingSample<T> sample)
     {
         Validation.Guard.NotNull(sample);
         var audio = sample.Audio;
@@ -403,12 +428,23 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentException("XTTS-v2 GPT training needs target audio or its frozen-dVAE codec tokens.", nameof(sample));
         var reference = sample.SpeakerReference ?? audio
             ?? throw new ArgumentException("XTTS-v2 GPT training needs a speaker reference recording.", nameof(sample));
-        var condition = ExtractConditioningLatents(reference);
+        List<Tensor<T>> conditioningMels;
+        using (new NoGradScope<T>())
+        {
+            conditioningMels = ExtractConditioningMels(reference);
+        }
         int[] codes = sample.CodecTokens is not null
             ? XttsOps<T>.IdsOf(sample.CodecTokens)
-            : XttsOps<T>.IdsOf(EncodeToTokens(audio!));
+            : XttsOps<T>.IdsOf(EncodeToTokens(audio ?? throw new InvalidOperationException("Audio target is required.")));
         int[] text = XttsOps<T>.IdsOf(sample.Tokens).Select(x => MathPolyfill.Clamp(x, 0, _options.TextVocabularySize - 1)).ToArray();
-        return _languageModel!.Objective(text, codes, condition);
+        return (conditioningMels, codes, text);
+    }
+
+    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample)
+    {
+        var (conditioningMels, codes, text) = PrepareTrainingInputs(sample);
+        var lm = _languageModel ?? throw new InvalidOperationException("Language model is not initialized.");
+        return lm.Objective(text, codes, EncodeConditioningLatents(conditioningMels));
     }
 
     private AiDotNet.TextToSpeech.Vocoders.CenteredLogMel<T> PowerMelTransform(int fft, int hop, int window)

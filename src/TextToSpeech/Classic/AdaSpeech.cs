@@ -285,8 +285,8 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         Tensor<T>? predictorLoss = null;
         if (CurrentPhase == AdaSpeechTrainingPhase.SourceJoint)
         {
-            // Stop-gradient label: a detached copy of the phoneme-level encoder output.
-            var label = new Tensor<T>(phonemeVectors._shape, phonemeVectors.ToVector());
+            // Stop-gradient label: a detached view of the phoneme-level encoder output.
+            var label = DetachTensor(phonemeVectors);
             predictorLoss = MeanSquaredError(_phonemePredictor!.Forward(hidden), label);
         }
         return new AcousticConditioning<T>(conditioned, speakerEmbedding, predictorLoss);

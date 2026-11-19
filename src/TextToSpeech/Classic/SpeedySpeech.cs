@@ -196,7 +196,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <summary>Log durations per phoneme, from encodings whose gradient is detached (§3.2).</summary>
     private Tensor<T> PredictLogDurations(Tensor<T> encodings)
     {
-        var x = new Tensor<T>(encodings._shape, encodings.ToVector());
+        var x = DetachTensor(encodings);
         foreach (var block in _durationBlocks) x = block.Forward(x);
         return Engine.Reshape(_durationProjection!.Forward(x), new[] { encodings.Shape[0] });
     }

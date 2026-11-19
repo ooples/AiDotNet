@@ -693,13 +693,15 @@ public class AdversarialTrainingTests
             PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
-        var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 }); // Out of [0,1] range
+        var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 }); // Preserves observed [-0.5, 2.0] range without DCT overshoot
 
         var preprocessed = defense.PreprocessInput(input);
 
+        Assert.Equal(input.Length, preprocessed.Length);
         for (int i = 0; i < preprocessed.Length; i++)
         {
-            Assert.InRange(preprocessed[i], 0.0, 1.0);
+            Assert.InRange(preprocessed[i], -0.5, 2.0);
+            Assert.Equal(input[i], preprocessed[i], 0.10);
         }
     }
 

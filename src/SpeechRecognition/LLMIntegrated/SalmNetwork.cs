@@ -85,6 +85,13 @@ internal sealed class SalmNetwork<T> : ILayerAliasOwner<T>
         return Projection.Forward(Adapter.Encode(encoded, training));
     }
 
+    /// <summary>The speech prompt given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
+        return Projection.Forward(Adapter.Encode(encoded, training));
+    }
+
     /// <summary>
     /// The prompt embeddings <c>[L, LLM width]</c>: the speech prompt prepended to the text instruction (§3.1, Figure 1;
     /// NeMo's <c>_concat_features</c>) in the release's template <c>Q: {input}\nA: {output}</c>, without a beginning of

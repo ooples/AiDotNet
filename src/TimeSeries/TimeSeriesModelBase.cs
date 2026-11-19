@@ -911,7 +911,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         double threshold = maxAbsValue > 0
             ? maxAbsValue
             : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
-        var finite = Engine.TensorNanToNum(values, 0.0, threshold, -threshold);
+        var finite = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, values, 0.0, threshold, -threshold);
         return Engine.TensorClamp(finite, NumOps.FromDouble(-threshold), NumOps.FromDouble(threshold)).ToVector();
     }
 
@@ -1312,19 +1312,26 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             var parameterLayout = Components.Count > 0
                 ? _parameterRegistry.ParameterLayout
                 : ParameterLayout;
-            writer.Write(parameterSnapshot.Length);
-            for (int i = 0; i < parameterSnapshot.Length; i++)
+            // Convert each numeric payload as a batch before the scalar binary-I/O loop.
+            using var parameterBuffer = Engine.TensorCast<T, double>(
+                new Tensor<T>(parameterSnapshot.ToArray(), new[] { parameterSnapshot.Length }));
+            var parameterValues = parameterBuffer.ToArray();
+            writer.Write(parameterValues.Length);
+            foreach (double value in parameterValues)
             {
-                writer.Write(Convert.ToDouble(parameterSnapshot[i]));
+                writer.Write(value);
             }
             WriteParameterCheckpointLayout(writer, parameterLayout);
 
-            // Serialize evaluation metrics
-            writer.Write(LastEvaluationMetrics.Count);
-            foreach (var kvp in LastEvaluationMetrics)
+            var metrics = LastEvaluationMetrics.ToArray();
+            using var metricBuffer = Engine.TensorCast<T, double>(new Tensor<T>(
+                metrics.Select(metric => metric.Value).ToArray(), new[] { metrics.Length }));
+            var metricValues = metricBuffer.ToArray();
+            writer.Write(metrics.Length);
+            for (int i = 0; i < metrics.Length; i++)
             {
-                writer.Write(kvp.Key);
-                writer.Write(Convert.ToDouble(kvp.Value));
+                writer.Write(metrics[i].Key);
+                writer.Write(metricValues[i]);
             }
         }
 

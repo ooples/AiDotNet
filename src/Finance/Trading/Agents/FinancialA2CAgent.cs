@@ -126,8 +126,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
         EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
 
-        _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        var lossFunction = TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>();
+        _actor = new NeuralNetwork<T>(actorArchitecture, optimizer: null, lossFunction: lossFunction);
+        _critic = new NeuralNetwork<T>(criticArchitecture, optimizer: null, lossFunction: lossFunction);
         // Registered for disposal. The replay buffer that used to be built here went with master's
         // move to a rollout held in _policyRuntime.Pending; the two networks still need owning.
         Networks.Add(_actor);
@@ -409,23 +410,53 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // The previous update regressed the logits onto the sampled one-hot action with MSE, which ignores
         // the advantage entirely (a punished action was reinforced exactly like a rewarded one) and treats
         // unbounded logits as probabilities.
-        // Every stored action is a validated one-hot vector, so its argmax is its single 1.
-        var actionIndices = engine.TensorArgMax(
-            engine.TensorStack(batch.Select(step => step.Action.AsTensor()).ToArray(), 0), 1).ToArray();
-
+        // Every stored action is a validated one-hot vector; stack them as [n, actionSize] so the
+        // fused objective slices per-step data along axis 0 without host array captures.
+        int stateSize = states.Shape[1];
+        int actionSize = TradingOptions.ActionSize;
+        var actionMask = engine.TensorStack(batch.Select(step => step.Action.AsTensor()).ToArray(), 0);
         using var maskBias = BuildMaskBias(batch);
+        bool hasMask = maskBias is not null;
+        var advantageColumn = engine.Reshape(advantages, [n, 1]);
+        var stepData = maskBias is not null
+            ? engine.TensorConcatenate([states, actionMask, maskBias, advantageColumn], axis: 1)
+            : engine.TensorConcatenate([states, actionMask, advantageColumn], axis: 1);
+
         var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
         var trainableActor = (NeuralNetworkBase<T>)_actor;
-        T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
+        T policyLoss;
+        trainableActor.SetTrainingMode(true);
+        try
         {
-            var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
-            var logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
-            var policyObjective = engine.TensorMultiply(logProbs, advantages);
-            var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(engine, logits);
-            var objective = engine.TensorAdd(policyObjective, engine.TensorMultiplyScalar(entropy, entropyCoefficient));
-            var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
-            return engine.TensorNegate(engine.ReduceMean(objective, allAxes, keepDims: false));
-        });
+            policyLoss = trainableActor.TrainObjectiveFused(stepData, packed =>
+            {
+                int rows = packed.Shape[0];
+                var stepStates = engine.TensorSlice(packed, [0, 0], [rows, stateSize]);
+                var stepActions = engine.TensorSlice(packed, [0, stateSize], [rows, actionSize]);
+                int advOffset = stateSize + actionSize;
+                Tensor<T>? stepMaskBias = null;
+                if (hasMask)
+                {
+                    stepMaskBias = engine.TensorSlice(packed, [0, advOffset], [rows, actionSize]);
+                    advOffset += actionSize;
+                }
+
+                var stepAdvantages = engine.Reshape(engine.TensorSlice(packed, [0, advOffset], [rows, 1]), [rows]);
+                var actorOutput = trainableActor.ForwardForTraining(stepStates);
+                var logits = stepMaskBias is null ? actorOutput : engine.TensorAdd(actorOutput, stepMaskBias);
+                var logProbsAll = engine.TensorLogSoftmax(logits, axis: 1);
+                var logProbs = PolicyDistributionHelper<T>.SelectDiscreteLogProbFromLogProbs(engine, logProbsAll, stepActions);
+                var policyObjective = engine.TensorMultiply(logProbs, stepAdvantages);
+                var entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropyFromLogProbs(engine, logProbsAll);
+                var objective = engine.TensorAdd(policyObjective, engine.TensorMultiplyScalar(entropy, entropyCoefficient));
+                var allAxes = Enumerable.Range(0, objective.Shape.Length).ToArray();
+                return engine.TensorNegate(engine.ReduceMean(objective, allAxes, keepDims: false));
+            });
+        }
+        finally
+        {
+            trainableActor.SetTrainingMode(false);
+        }
 
         T loss = NumOps.Add(policyLoss, NumOps.Multiply(NumOps.FromDouble(TradingOptions.ValueCoefficient), valueLoss));
         LossHistory.Add(loss);

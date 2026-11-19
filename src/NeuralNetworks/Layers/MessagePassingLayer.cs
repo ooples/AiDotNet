@@ -538,11 +538,8 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             return Engine.TensorSlice(tensor2D, [0, 0], [rows, toWidth]);
         }
         // Pad up: concat a zero block of the missing width along the column axis.
-        var zeros = TensorAllocator.Rent<T>([rows, toWidth - fromWidth]);
-        zeros.Fill(NumOps.Zero);
-        var result = Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
-        TensorAllocator.Return(zeros); // Return the rented padding tensor to the pool.
-        return result;
+        var zeros = new Tensor<T>([rows, toWidth - fromWidth]);
+        return Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
     }
 
     /// <inheritdoc/>

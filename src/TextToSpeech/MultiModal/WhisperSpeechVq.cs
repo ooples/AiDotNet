@@ -311,22 +311,22 @@ internal sealed class WhisperSpeechVq<T>
         for (int q = 0; q < c.QuantizerDepth; q++)
         {
             var normalized = L2Normalize(ProjectIn[q].Forward(residual));
-            int[] codes;
-            Tensor<T> code;
-            using (new NoGradScope<T>())
-            {
-                codes = MostSimilar(normalized, q);
-                code = new Tensor<T>(new[] { codes.Length, c.CodebookWidth }, Rows(q, codes).ToVector());
-                if (updateCodebook) UpdateCodebook(q, normalized, codes);
-            }
+            int stateTag = (q << 1) | (updateCodebook ? 1 : 0);
+            var code = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+                "WhisperSpeechVqCode",
+                this,
+                stateTag,
+                new[] { normalized },
+                new[] { frames, c.CodebookWidth },
+                static (self, tag, inputs, dst) => self.ExecuteQuantizeStep(tag >> 1, (tag & 1) == 1, inputs[0], dst));
             var difference = _engine.TensorSubtract(code, normalized);
             var term = _engine.ReduceMean(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false);
             commitment = commitment is null ? term : _engine.TensorAdd(commitment, term);
             // Straight-through: x + stop(q − x).
-            var straight = _engine.TensorAdd(normalized, new Tensor<T>(difference._shape, difference.ToVector()));
+            var straight = _engine.TensorAdd(normalized, _engine.StopGradient(difference));
             var output = ProjectOut[q].Forward(straight);
             quantized = quantized is null ? output : _engine.TensorAdd(quantized, output);
-            if (q + 1 < c.QuantizerDepth) residual = _engine.TensorSubtract(residual, new Tensor<T>(output._shape, output.ToVector()));
+            if (q + 1 < c.QuantizerDepth) residual = _engine.TensorSubtract(residual, _engine.StopGradient(output));
         }
         var x = Repeat(quantized!);
         if (c.MaskEmbeddings)
@@ -363,7 +363,19 @@ internal sealed class WhisperSpeechVq<T>
             }
         }
         var loss = _engine.TensorAddScalar(_engine.ReduceSum(_engine.TensorMultiply(log, weights), new[] { 0, 1 }, false), NumOps.FromDouble(c.KlLossMul * entropy));
-        return _engine.TensorAdd(loss, _engine.TensorMultiplyScalar(commitment!, NumOps.FromDouble(1.0 / c.QuantizerDepth)));
+        var commitTensor = commitment ?? new Tensor<T>(new[] { 1 });
+        return _engine.TensorAdd(loss, _engine.TensorMultiplyScalar(commitTensor, NumOps.FromDouble(1.0 / c.QuantizerDepth)));
+    }
+
+    private void ExecuteQuantizeStep(int currentQuantizer, bool updateCodebook, Tensor<T> currentNormalized, Tensor<T> dst)
+    {
+        var stepCodes = MostSimilar(currentNormalized, currentQuantizer);
+        var selected = Rows(currentQuantizer, stepCodes);
+        if (updateCodebook && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+        {
+            UpdateCodebook(currentQuantizer, currentNormalized, stepCodes);
+        }
+        selected.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 
     // CosineSimCodebook's training update: usage and sums by moving average (torch.lerp), the codes the sums over the

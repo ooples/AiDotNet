@@ -626,16 +626,22 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         T lambda = NumOps.FromDouble(_options.Lambda);
         var startFeatures = Engine.TensorConcatenate([start.Deterministic, start.Stochastic], axis: 1);
 
-        Tensor<T>? valueStates = null;
-        Tensor<T>? valueTargets = null;
-        Tensor<T>? valueWeights = null;
+        // Pre-draw the step's imagination reparameterisation noise once as external leaves so:
+        // (1) Random advances identically once per step in (action, state) order without Probe double-draws,
+        // (2) ClosureObjectiveGuard refreshes each step's noise on compiled replay, and
+        // (3) Equation 8's detached value targets can be materialized outside the actor's traced closure
+        //     from the exact same pre-step imagined rollout without reading traced Narrow tensors on the host.
+        var actionNoises = new Tensor<T>[horizon];
+        var stateNoises = new Tensor<T>[horizon];
+        for (int k = 0; k < horizon; k++)
+        {
+            actionNoises[k] = StandardNormalTensor(rows, _options.ActionSize);
+            stateNoises[k] = StandardNormalTensor(rows, stochasticSize);
+        }
 
         Func<NeuralNetwork<T>, Tensor<T>, Tensor<T>> train = (network, x) => network.ForwardForTraining(x);
 
-        // TrainWithCustomLoss differentiates only the action model's tensors, so the transition, reward, discount
-        // and value models supply analytic gradients through the imagined trajectory without being updated by it.
-        // They are forwarded with ForwardForTraining: Predict runs in a NoGradScope and would detach them.
-        T actorLoss = _actorNetwork.TrainWithCustomLoss(startFeatures, startActorOutput =>
+        (Tensor<T> States, Tensor<T>[] Returns, Tensor<T>[] Weights) RolloutImagination(Tensor<T>? firstActorRaw)
         {
             var h = start.Deterministic;
             var z = start.Stochastic;
@@ -647,13 +653,15 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             {
                 // The action model reads the state with its gradient stopped, as the authors' implementation does;
                 // the action's own gradient still flows into the transition model and on to every later state.
-                var actorRaw = k == 0 ? startActorOutput : _actorNetwork.ForwardForTraining(Engine.StopGradient(feature));
+                var actorRaw = k == 0 && firstActorRaw is not null
+                    ? firstActorRaw
+                    : _actorNetwork.ForwardForTraining(Engine.StopGradient(feature));
                 var (mean, std) = ActionDistribution(actorRaw);
                 // Equation 3: a = tanh(mu + sigma * epsilon), epsilon ~ Normal(0, I).
-                var action = Engine.TensorTanh(Engine.TensorAdd(mean, Engine.TensorMultiply(std, StandardNormalTensor(rows, _options.ActionSize))));
+                var action = Engine.TensorTanh(Engine.TensorAdd(mean, Engine.TensorMultiply(std, actionNoises[k])));
 
                 var (hNext, priorMean, priorStd) = ImagineStep(z, action, h, train);
-                z = Engine.TensorAdd(priorMean, Engine.TensorMultiply(priorStd, StandardNormalTensor(rows, stochasticSize)));
+                z = Engine.TensorAdd(priorMean, Engine.TensorMultiply(priorStd, stateNoises[k]));
                 h = hNext;
                 feature = Engine.TensorConcatenate([h, z], axis: 1);
                 trajectory[k + 1] = feature;
@@ -676,29 +684,37 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             var returns = ComputeLambdaReturns(rewards, values, discounts, lambda);
             var weights = CumulativeDiscountWeights(discounts);
+            return (states, returns, weights);
+        }
 
+        // Equation 8 regresses v(s_tau) onto detached V_lambda(s_tau) for tau = t..t+H-1 under the pre-update actor
+        // and world/value models (Hafner et al. 2020, Algorithm 1). Compute detached targets outside the actor's
+        // traced closure so no traced TensorNarrow is read on the host during compilation or replay probing.
+        Tensor<T> valueStates;
+        Tensor<T> targets;
+        Tensor<T> targetWeights;
+        using (new NoGradScope<T>())
+        {
+            var (eagerStates, eagerReturns, eagerWeights) = RolloutImagination(firstActorRaw: null);
+            valueStates = Detach(Engine.TensorNarrow(eagerStates, 0, 0, horizon * rows));
+            targets = Detach(Engine.TensorConcatenate(eagerReturns.Take(horizon).ToArray(), axis: 0));
+            targetWeights = Detach(Engine.TensorConcatenate(eagerWeights.Take(horizon).ToArray(), axis: 0));
+        }
+
+        // TrainWithCustomLoss differentiates only the action model's tensors, so the transition, reward, discount
+        // and value models supply analytic gradients through the imagined trajectory without being updated by it.
+        // They are forwarded with ForwardForTraining: Predict runs in a NoGradScope and would detach them.
+        T actorLoss = _actorNetwork.TrainWithCustomLoss(startFeatures, startActorOutput =>
+        {
+            var (_, returns, weights) = RolloutImagination(startActorOutput);
             // Equation 7 over tau = t..t+H, each step weighted by the cumulative predicted discount (Section 3).
             var weighted = new Tensor<T>[horizon + 1];
             for (int k = 0; k <= horizon; k++) weighted[k] = Engine.TensorMultiply(weights[k], returns[k]);
             var objective = MeanAll(Engine.TensorConcatenate(weighted, axis: 0));
-
-            // Equation 8 regresses v(s_tau) onto V_lambda(s_tau) for tau = t..t+H-1; at tau = t+H the target is
-            // v(s_{t+H}) itself, a term that is identically zero once the target's gradient is stopped.
-            valueStates = Detach(Engine.TensorNarrow(states, 0, 0, horizon * rows));
-            valueTargets = Detach(Engine.TensorConcatenate(returns.Take(horizon).ToArray(), axis: 0));
-            valueWeights = Detach(Engine.TensorConcatenate(weights.Take(horizon).ToArray(), axis: 0));
-
             // Ascending the objective is minimising its negation.
             return Engine.TensorNegate(objective);
         });
 
-        if (valueStates is null || valueTargets is null || valueWeights is null)
-        {
-            throw new InvalidOperationException("The action-model step did not produce value targets.");
-        }
-
-        var targets = valueTargets;
-        var targetWeights = valueWeights;
         T half = NumOps.FromDouble(0.5);
         T valueLoss = _valueNetwork.TrainWithCustomLoss(valueStates, predicted =>
         {

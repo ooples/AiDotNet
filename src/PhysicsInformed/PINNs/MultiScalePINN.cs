@@ -100,6 +100,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
+        private double _defaultOptimizerLearningRate;
+
+        internal IReadOnlyList<NeuralNetworkBase<T>> ScaleNetworks => _scaleNetworks;
 
         private Tensor<T> _collocationPoints;
         private readonly int _numCollocationPointsPerScale;
@@ -157,8 +160,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _numCollocationPointsPerScale = options.NumCollocationPointsPerScale;
             _trainingOptions = trainingOptions ?? new MultiScaleTrainingOptions<T>();
 
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;
+            _defaultOptimizerLearningRate = 0.001;
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _defaultOptimizerLearningRate,
+                    UseAMSGrad = false,
+                });
+            AdoptConfiguredOptimizer(_optimizer);
 
             // Initialize scale weights
             _scaleWeights = new T[_multiScalePDE.NumberOfScales];
@@ -375,15 +386,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <returns>Training history.</returns>
         public TrainingHistory<T> Solve(int epochs = 1000, double learningRate = 0.001, bool verbose = true)
         {
+            ThrowIfCannotTrain();
+            using var reentrancyGuard = AcquireTrainSentinel();
             var history = new TrainingHistory<T>();
 
-            if (_usesDefaultOptimizer)
+            if (_usesDefaultOptimizer
+                && ReferenceEquals(GetOrCreateBaseOptimizer(), _optimizer)
+                && !_defaultOptimizerLearningRate.Equals(learningRate))
             {
-                var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                var options = new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {
-                    InitialLearningRate = learningRate
+                    InitialLearningRate = learningRate,
+                    UseAMSGrad = false,
                 };
                 _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+                _defaultOptimizerLearningRate = learningRate;
+                SetBaseTrainOptimizer(_optimizer);
             }
 
             SetTrainingMode(true);
@@ -476,31 +494,185 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int batchSize = Math.Min(256, numPoints);
             var losses = new List<T>();
 
-            // ComputeMultiScaleLoss differentiates each scale network with respect to its inputs via nested
-            // PinnAutodiff inside the step and varies active scales and adaptive weights across epochs, which a
-            // compile-once plan cannot replay; run Solve steps on the eager tape.
-            bool wasFusedDisabled = IsFusedTrainingDisabled;
-            IsFusedTrainingDisabled = true;
-            try
+            for (int batchStart = 0; batchStart < numPoints; batchStart += batchSize)
             {
-                for (int batchStart = 0; batchStart < numPoints; batchStart += batchSize)
+                int actualBatchSize = Math.Min(batchSize, numPoints - batchStart);
+                Tensor<T> batch;
+                using (TensorArena.Suspend())
                 {
-                    int actualBatchSize = Math.Min(batchSize, numPoints - batchStart);
-                    var batch = Engine.TensorSlice(_collocationPoints, new[] { batchStart, 0 }, new[] { actualBatchSize, inputDim });
-
-                    // One tape step on the multi-scale loss: the gradient reaches every active scale network. The
-                    // step used to call the optimizer with no backward pass, so no network ever trained.
-                    losses.Add(TrainCustomTapeStep(
-                        batch, batch, points => points, (points, _) => ComputeMultiScaleLoss(points), _optimizer));
+                    batch = Engine.TensorSlice(_collocationPoints, new[] { batchStart, 0 }, new[] { actualBatchSize, inputDim });
                 }
-            }
-            finally
-            {
-                IsFusedTrainingDisabled = wasFusedDisabled;
+
+                losses.Add(StepMultiScaleBatch(batch));
             }
 
             var lossTensor = Tensor<T>.FromVector(Vector<T>.FromList(losses));
             return Engine.ReduceMean(lossTensor, new[] { 0 }, keepDims: false).AsSpan()[0];
+        }
+
+        private T StepMultiScaleBatch(Tensor<T> batch)
+        {
+            ThrowIfCannotTrain();
+            var stepOptimizer = ResolveCustomStepOptimizer(_usesDefaultOptimizer ? null : _optimizer);
+            var layerGraphBreak = LayerGraphBreakReason();
+            string? graphBreakReason = !SupportsFusedCompiledTraining
+                ? "model opts out of fused compiled training (per-step host state)"
+                : layerGraphBreak;
+
+            if (!SupportsFusedCompiledTraining && FusedSession.IsCommitted)
+            {
+                throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
+                    new InvalidOperationException("MultiScalePINN.Solve cannot continue a committed fused plan after opting out of fused compiled training."));
+            }
+
+            double valueClip = GradientValueClip;
+            if (valueClip > 0.0 && FusedSession.IsCommitted)
+            {
+                throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(
+                    new InvalidOperationException("MultiScalePINN.Solve cannot switch a committed fused plan to model value clipping."));
+            }
+
+            EnsureLayerRandomSeedsWired();
+            var parameters = CollectModelTrainableTensors();
+            Tensor<T> placeholderTarget;
+            using (TensorArena.Suspend())
+            {
+                placeholderTarget = new Tensor<T>(new[] { 1, 1, 1, 1, 1, Math.Max(1, _currentActiveScales) });
+            }
+
+            Tensor<T> Objective()
+            {
+                EnsureLayerRandomSeedsWired();
+                var loss = ComputeMultiScaleLoss(batch);
+                if (loss is null || loss.Length != 1)
+                {
+                    throw new InvalidOperationException("MultiScalePINN objective must return a scalar loss.");
+                }
+
+                return loss;
+            }
+
+            bool canTryFused = SupportsFusedCompiledTraining
+                && valueClip <= 0.0
+                && (layerGraphBreak is null || FusedSession.IsCommitted);
+            var request = new Training.FusedTrainingStepRequest<T>
+            {
+                Layers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers),
+                Input = batch,
+                Target = placeholderTarget,
+                Forward = _ => Objective(),
+                ComputeLoss = static (loss, _) => loss,
+                Optimizer = stepOptimizer,
+                ExtraParameters = null,
+                Selection = null,
+                ModelGradientClip = MaxGradNormValue,
+                ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
+                RegularizeGradients = GetDistributedOptimizerRegularizer(stepOptimizer),
+                GraphBreakReason = graphBreakReason,
+                ClosureGraphBreakPolicy = layerGraphBreak is not null && FusedSession.IsCommitted
+                    ? Training.ClosureGraphBreakPolicy.UseConfiguredOptimizer
+                    : Training.ClosureGraphBreakPolicy.Disallow,
+                OnGradients = ScatterFusedGradients,
+                OnEagerGradients = PublishEagerFallbackGradients,
+                ClosureObjective = canTryFused ? Objective : null,
+            };
+
+            MarkTrainMutationStarted();
+            T lossValue = NumOps.Zero;
+            var outcome = !canTryFused || parameters.Count == 0
+                ? Training.FusedStepOutcome.Declined
+                : FusedSession.TryStep(request, out lossValue);
+            if (outcome == Training.FusedStepOutcome.Stepped)
+            {
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+            }
+            else
+            {
+                if (outcome == Training.FusedStepOutcome.CommittedFailure)
+                {
+                    FusedSession.DropAfterCommittedFailure();
+                }
+
+                using (TensorArena.Create())
+                {
+                    lossValue = valueClip > 0.0
+                        ? StepMultiScaleBatchValueClippedEager(batch, placeholderTarget, Objective, stepOptimizer, valueClip)
+                        : Training.TapeTrainingStepper<T>.EagerStep(request, this);
+                }
+
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            }
+
+            double numericLoss = NumOps.ToDouble(lossValue);
+            if (double.IsNaN(numericLoss) || double.IsInfinity(numericLoss))
+            {
+                throw new InvalidOperationException("MultiScalePINN objective must return a finite scalar loss.");
+            }
+
+            LastLoss = lossValue;
+            return lossValue;
+        }
+
+        private T StepMultiScaleBatchValueClippedEager(
+            Tensor<T> batch,
+            Tensor<T> placeholderTarget,
+            Func<Tensor<T>> objective,
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> stepOptimizer,
+            double valueClip)
+        {
+            foreach (var layer in Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers))
+            {
+                layer.ZeroGrad();
+            }
+
+            Dictionary<Tensor<T>, Tensor<T>>? stepGradients = null;
+            T lower = NumOps.FromDouble(-valueClip);
+            T upper = NumOps.FromDouble(valueClip);
+            return Training.TapeTrainingStepper<T>.EagerTapeStep(
+                objective,
+                CollectModelTrainableTensors,
+                context =>
+                {
+                    stepOptimizer.Step(context);
+                    StepSchedulerIfSupported(stepOptimizer);
+                },
+                batch,
+                placeholderTarget,
+                (_, _) => objective(),
+                static (loss, _) => loss,
+                new Training.TapeTrainingStepper<T>.EagerStepHooks
+                {
+                    Owner = this,
+                    OnGradients = grads =>
+                    {
+                        stepGradients = grads as Dictionary<Tensor<T>, Tensor<T>>;
+                        PublishEagerFallbackGradients(grads);
+                    },
+                    RegularizeGradients = GetDistributedOptimizerRegularizer(stepOptimizer),
+                    ModelGradientClip = MaxGradNormValue,
+                    Optimizer = stepOptimizer,
+                    ReportsRetainedOutputOutcome = Training.TapeTrainingStepper<T>.ReportsRetainedOutputOutcome(stepOptimizer),
+                    BeforeUpdate = () =>
+                    {
+                        if (stepGradients is null || stepGradients.Count == 0)
+                        {
+                            return;
+                        }
+
+                        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                        {
+                            foreach (var g in stepGradients.Values)
+                            {
+                                if (g is not null && g.Length > 0)
+                                {
+                                    Engine.TensorClampInPlace(g, lower, upper);
+                                }
+                            }
+                        }
+
+                        PublishEagerFallbackGradients(stepGradients);
+                    },
+                });
         }
 
         /// <summary>
@@ -508,8 +680,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// the coupling weight times mean(C^2) for each adjacent pair of active scales.
         /// </summary>
         /// <remarks>
-        /// Every scale network's input derivatives come from the gradient tape, so the loss is differentiable
-        /// in the network weights; they were central differences of Predict, outside the tape, before.
+        /// Scale outputs and spatial/temporal derivatives up to order 3 are propagated analytically with pure
+        /// engine tensor operations over each scale MLP's live weights, so both compiled closure plans and the
+        /// eager gradient tape differentiate through the identical graph while leaving genuinely unreferenced
+        /// output biases structurally absent from the gradient domain.
         /// </remarks>
         private Tensor<T> ComputeMultiScaleLoss(Tensor<T> points)
         {
@@ -519,14 +693,21 @@ namespace AiDotNet.PhysicsInformed.PINNs
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
                 var network = _scaleNetworks[scale];
-                outputs[scale] = PinnAutodiff<T>.Evaluate(x => RunLayers(network, x), points, order, out derivatives[scale]);
+                outputs[scale] = EvaluateScaleNetwork(network, points, order, out derivatives[scale]);
             }
 
             Tensor<T>? total = null;
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
                 var residual = _multiScalePDE.ComputeScaleResidual(scale, points, outputs[scale], derivatives[scale]);
-                var term = Engine.TensorMultiplyScalar(MeanSquare(residual), _scaleWeights[scale]);
+                var meanSq = MeanSquare(residual);
+                Tensor<T> weightLeaf;
+                using (TensorArena.Suspend())
+                {
+                    weightLeaf = Tensor<T>.CreateDefault(meanSq._shape, _scaleWeights[scale]);
+                }
+
+                var term = Engine.TensorMultiply(meanSq, weightLeaf);
                 total = total is null ? term : Engine.TensorAdd(total, term);
             }
 
@@ -536,7 +717,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 int fine = coarse + 1;
                 var coupling = _multiScalePDE.ComputeScaleCoupling(
                     coarse, fine, points, outputs[coarse], outputs[fine], derivatives[coarse], derivatives[fine]);
-                var term = Engine.TensorMultiplyScalar(MeanSquare(coupling), couplingWeight);
+                var meanSq = MeanSquare(coupling);
+                Tensor<T> couplingLeaf;
+                using (TensorArena.Suspend())
+                {
+                    couplingLeaf = Tensor<T>.CreateDefault(meanSq._shape, couplingWeight);
+                }
+
+                var term = Engine.TensorMultiply(meanSq, couplingLeaf);
                 total = total is null ? term : Engine.TensorAdd(total, term);
             }
 
@@ -546,6 +734,239 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             return total;
+        }
+
+        internal Tensor<T> EvaluateScaleNetwork(
+            NeuralNetworkBase<T> network,
+            Tensor<T> points,
+            int order,
+            out PDEDerivatives<T> derivatives)
+        {
+            if (order == 0)
+            {
+                derivatives = new PDEDerivatives<T>();
+                return RunLayers(network, points);
+            }
+
+            if (!CanEvaluateScaleJet(network) || order > 3)
+            {
+                return PinnAutodiff<T>.Evaluate(x => RunLayers(network, x), points, order, out derivatives);
+            }
+
+            int n = points.Shape[0];
+            int d = points.Shape[1];
+            Tensor<T> h = points;
+
+            Tensor<T> eyeBase;
+            using (TensorArena.Suspend())
+            {
+                var eyeData = new T[d * d];
+                for (int i = 0; i < d; i++)
+                {
+                    eyeData[i * d + i] = NumOps.One;
+                }
+
+                eyeBase = new Tensor<T>(eyeData, new[] { 1, d, d });
+            }
+
+            Tensor<T> jacobian = n == 1 ? eyeBase : Engine.TensorTile(eyeBase, new[] { n, 1, 1 });
+            Tensor<T>? hessian = null;
+            Tensor<T>? third = null;
+            T two = NumOps.FromDouble(2.0);
+            T minusTwo = NumOps.FromDouble(-2.0);
+            T six = NumOps.FromDouble(6.0);
+
+            foreach (var layer in network.Layers)
+            {
+                var dense = (AiDotNet.NeuralNetworks.Layers.DenseLayer<T>)layer;
+                int inWidth = h.Shape[1];
+                if (!dense.IsShapeResolved)
+                {
+                    dense.ResolveFromShape(new[] { inWidth });
+                }
+
+                var weights = dense.GetWeights();
+                var biases = dense.GetBiases();
+                int outWidth = weights.Shape[1];
+
+                var pre = Engine.TensorMatMul(h, weights);
+                if (biases is { Length: > 0 })
+                {
+                    var biasRow = Engine.TensorTile(Engine.Reshape(biases, new[] { 1, outWidth }), new[] { n, 1 });
+                    pre = Engine.TensorAdd(pre, biasRow);
+                }
+
+                // First-order linear pushforward: G[n, p, i] = sum_q W[q, p] * J[n, q, i].
+                var jFlat = Engine.Reshape(Engine.TensorPermute(jacobian, new[] { 0, 2, 1 }), new[] { n * d, inWidth });
+                var g = Engine.TensorPermute(
+                    Engine.Reshape(Engine.TensorMatMul(jFlat, weights), new[] { n, d, outWidth }),
+                    new[] { 0, 2, 1 });
+
+                Tensor<T>? s = null;
+                if (order >= 2 && hessian is not null)
+                {
+                    var hFlat = Engine.Reshape(Engine.TensorPermute(hessian, new[] { 0, 2, 3, 1 }), new[] { n * d * d, inWidth });
+                    s = Engine.TensorPermute(
+                        Engine.Reshape(Engine.TensorMatMul(hFlat, weights), new[] { n, d, d, outWidth }),
+                        new[] { 0, 3, 1, 2 });
+                }
+
+                Tensor<T>? u = null;
+                if (order >= 3 && third is not null)
+                {
+                    var kFlat = Engine.Reshape(Engine.TensorPermute(third, new[] { 0, 2, 3, 4, 1 }), new[] { n * d * d * d, inWidth });
+                    u = Engine.TensorPermute(
+                        Engine.Reshape(Engine.TensorMatMul(kFlat, weights), new[] { n, d, d, d, outWidth }),
+                        new[] { 0, 4, 1, 2, 3 });
+                }
+
+                if (dense.ScalarActivation is AiDotNet.ActivationFunctions.TanhActivation<T>)
+                {
+                    var act = Engine.Tanh(pre);
+                    var actSq = Engine.TensorMultiply(act, act);
+                    Tensor<T> ones;
+                    using (TensorArena.Suspend())
+                    {
+                        ones = Tensor<T>.CreateDefault(actSq._shape, NumOps.One);
+                    }
+
+                    var sigma1 = Engine.TensorSubtract(ones, actSq);
+                    var sigma1J = Engine.TensorTile(Engine.Reshape(sigma1, new[] { n, outWidth, 1 }), new[] { 1, 1, d });
+                    var nextJacobian = Engine.TensorMultiply(g, sigma1J);
+
+                    Tensor<T>? nextHessian = null;
+                    Tensor<T>? sigma2 = null;
+                    Tensor<T>? gg = null;
+                    if (order >= 2)
+                    {
+                        sigma2 = Engine.TensorMultiplyScalar(Engine.TensorMultiply(act, sigma1), minusTwo);
+                        var gLeft = Engine.TensorTile(Engine.Reshape(g, new[] { n, outWidth, d, 1 }), new[] { 1, 1, 1, d });
+                        var gRight = Engine.TensorTile(Engine.Reshape(g, new[] { n, outWidth, 1, d }), new[] { 1, 1, d, 1 });
+                        gg = Engine.TensorMultiply(gLeft, gRight);
+                        var sigma2H = Engine.TensorTile(Engine.Reshape(sigma2, new[] { n, outWidth, 1, 1 }), new[] { 1, 1, d, d });
+                        nextHessian = Engine.TensorMultiply(gg, sigma2H);
+                        if (s is not null)
+                        {
+                            var sigma1H = Engine.TensorTile(Engine.Reshape(sigma1, new[] { n, outWidth, 1, 1 }), new[] { 1, 1, d, d });
+                            nextHessian = Engine.TensorAdd(nextHessian, Engine.TensorMultiply(s, sigma1H));
+                        }
+                    }
+
+                    Tensor<T>? nextThird = null;
+                    if (order >= 3 && sigma2 is not null && gg is not null)
+                    {
+                        Tensor<T> twos;
+                        using (TensorArena.Suspend())
+                        {
+                            twos = Tensor<T>.CreateDefault(actSq._shape, two);
+                        }
+
+                        var sixActSq = Engine.TensorMultiplyScalar(actSq, six);
+                        var sigma3 = Engine.TensorMultiply(sigma1, Engine.TensorSubtract(sixActSq, twos));
+                        var ggLeft = Engine.TensorTile(Engine.Reshape(gg, new[] { n, outWidth, d, d, 1 }), new[] { 1, 1, 1, 1, d });
+                        var gThird = Engine.TensorTile(Engine.Reshape(g, new[] { n, outWidth, 1, 1, d }), new[] { 1, 1, d, d, 1 });
+                        var ggg = Engine.TensorMultiply(ggLeft, gThird);
+                        var sigma3K = Engine.TensorTile(Engine.Reshape(sigma3, new[] { n, outWidth, 1, 1, 1 }), new[] { 1, 1, d, d, d });
+                        nextThird = Engine.TensorMultiply(ggg, sigma3K);
+
+                        if (s is not null)
+                        {
+                            var sIJ = Engine.TensorTile(Engine.Reshape(s, new[] { n, outWidth, d, d, 1 }), new[] { 1, 1, 1, 1, d });
+                            var sIK = Engine.TensorTile(Engine.Reshape(s, new[] { n, outWidth, d, 1, d }), new[] { 1, 1, 1, d, 1 });
+                            var sJK = Engine.TensorTile(Engine.Reshape(s, new[] { n, outWidth, 1, d, d }), new[] { 1, 1, d, 1, 1 });
+                            var gK = gThird;
+                            var gJ = Engine.TensorTile(Engine.Reshape(g, new[] { n, outWidth, 1, d, 1 }), new[] { 1, 1, d, 1, d });
+                            var gI = Engine.TensorTile(Engine.Reshape(g, new[] { n, outWidth, d, 1, 1 }), new[] { 1, 1, 1, d, d });
+                            var sgSum = Engine.TensorAdd(
+                                Engine.TensorAdd(Engine.TensorMultiply(sIJ, gK), Engine.TensorMultiply(sIK, gJ)),
+                                Engine.TensorMultiply(sJK, gI));
+                            var sigma2K = Engine.TensorTile(Engine.Reshape(sigma2, new[] { n, outWidth, 1, 1, 1 }), new[] { 1, 1, d, d, d });
+                            nextThird = Engine.TensorAdd(nextThird, Engine.TensorMultiply(sgSum, sigma2K));
+                        }
+
+                        if (u is not null)
+                        {
+                            var sigma1K = Engine.TensorTile(Engine.Reshape(sigma1, new[] { n, outWidth, 1, 1, 1 }), new[] { 1, 1, d, d, d });
+                            nextThird = Engine.TensorAdd(nextThird, Engine.TensorMultiply(u, sigma1K));
+                        }
+                    }
+
+                    h = act;
+                    jacobian = nextJacobian;
+                    hessian = nextHessian;
+                    third = nextThird;
+                }
+                else
+                {
+                    h = pre;
+                    jacobian = g;
+                    if (order >= 2)
+                    {
+                        if (s is not null)
+                        {
+                            hessian = s;
+                        }
+                        else
+                        {
+                            using (TensorArena.Suspend())
+                            {
+                                hessian = new Tensor<T>(new[] { n, outWidth, d, d });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        hessian = null;
+                    }
+
+                    if (order >= 3)
+                    {
+                        if (u is not null)
+                        {
+                            third = u;
+                        }
+                        else
+                        {
+                            using (TensorArena.Suspend())
+                            {
+                                third = new Tensor<T>(new[] { n, outWidth, d, d, d });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        third = null;
+                    }
+                }
+            }
+
+            derivatives = new PDEDerivatives<T>
+            {
+                FirstDerivatives = jacobian,
+                SecondDerivatives = order >= 2 ? hessian : null,
+                ThirdDerivatives = order >= 3 ? third : null,
+            };
+            return h;
+        }
+
+        private static bool CanEvaluateScaleJet(NeuralNetworkBase<T> network)
+        {
+            foreach (var layer in network.Layers)
+            {
+                if (layer is not AiDotNet.NeuralNetworks.Layers.DenseLayer<T> dense || dense.VectorActivation is not null)
+                {
+                    return false;
+                }
+
+                if (dense.ScalarActivation is not (null
+                    or AiDotNet.ActivationFunctions.IdentityActivation<T>
+                    or AiDotNet.ActivationFunctions.TanhActivation<T>))
+                {
+                    return false;
+                }
+            }
+
+            return network.Layers.Count > 0;
         }
 
         private Tensor<T> MeanSquare(Tensor<T> values)

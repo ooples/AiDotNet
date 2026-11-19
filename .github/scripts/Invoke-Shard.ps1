@@ -172,6 +172,7 @@ $collectCoverage = $policy.CollectCoverage
 $coverageDisposition = [CoverageDisposition]$policy.CoverageDisposition
 $forcedCoverageRun = $policy.ForcedCoverageRun
 $rollingCoverage = $policy.RollingCoverage
+$pullRequest = [bool]$policy.PullRequest
 
 # The logical evidence gate binds the actual instrumentation decision to the attempt receipt.
 if ($env:SHARD_ATTEMPT) {
@@ -311,7 +312,11 @@ if ($serializeShard) {
   # most of that peak was collectable garbage. With the cap the runtime collects before the box runs out, and a
   # test that truly needs more fails with OutOfMemoryException and a stack trace instead of taking the runner
   # down. Tensor storage is managed arrays, which the limit covers.
-  $memTotalLine = Select-String -Path '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
+  $memTotalLine = if (Test-Path -LiteralPath '/proc/meminfo') {
+    Select-String -LiteralPath '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
+  } else {
+    $null
+  }
   if ($null -ne $memTotalLine) {
     $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
     $heapCapBytes = [long]($memTotalBytes * 0.7)

@@ -238,7 +238,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         Validation.Guard.NotNull(engine);
         Validation.Guard.NotNull(input);
         var ops = MathHelper.GetNumericOperations<T>();
-        var rounded = engine.TensorNanToNum(engine.TensorRound(input), 0.0, count - 1.0, 0.0);
+        var rounded = AiDotNet.Helpers.NanToNumHelper.Apply(engine, engine.TensorRound(input), 0.0, count - 1.0, 0.0);
         return engine.TensorClamp(rounded, ops.Zero, ops.FromDouble(count - 1)).Cast<int>().ToArray();
     }
 
@@ -329,7 +329,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    private Tensor<T> Detached(Tensor<T> x) => DetachTensor(x);
 
     // discriminator_loss: Σ mean((1 − D(real))²) + mean(D(fake)²).
     private Tensor<T> DiscriminatorLoss(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)

@@ -94,18 +94,41 @@ public partial class GraFPrintCoordinateAugmentationLayer<T> : LayerBase<T>, ISh
             // Per-sample min and max as the scalar scan found them: starting from MaxValue / MinValue
             // and moving only to strictly smaller / larger values, so NaN and values beyond the
             // starting bound are never taken.
-            var isNan = Engine.TensorIsNan(source);
-            var maxFill = new Tensor<T>([batch, pixels]);
-            maxFill.Fill(NumOps.MaxValue);
-            var minFill = new Tensor<T>([batch, pixels]);
-            minFill.Fill(NumOps.MinValue);
-            var min = Engine.TensorMin(
-                Engine.TensorNegate(Engine.ReduceMax(
-                    Engine.TensorNegate(Engine.TensorWhere(isNan, maxFill, source)), new[] { 1 }, keepDims: true)),
-                NumOps.MaxValue);
-            var max = Engine.TensorMax(
-                Engine.ReduceMax(Engine.TensorWhere(isNan, minFill, source), new[] { 1 }, keepDims: true),
-                NumOps.MinValue);
+            var notNan = Engine.TensorEquals(source, source);
+            var isNan = Engine.ScalarMinusTensor(NumOps.One, notNan);
+            Tensor<T> maxFill;
+            Tensor<T> minFill;
+            Tensor<T> maxCol;
+            Tensor<T> minCol;
+            Tensor<T> ones;
+            Tensor<T> time;
+            Tensor<T> frequency;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                maxFill = new Tensor<T>([batch, pixels]);
+                maxFill.Fill(NumOps.MaxValue);
+                minFill = new Tensor<T>([batch, pixels]);
+                minFill.Fill(NumOps.MinValue);
+                maxCol = new Tensor<T>([batch, 1]);
+                maxCol.Fill(NumOps.MaxValue);
+                minCol = new Tensor<T>([batch, 1]);
+                minCol.Fill(NumOps.MinValue);
+                ones = new Tensor<T>([batch, 1]);
+                ones.Fill(NumOps.One);
+                time = width > 1
+                    ? new Tensor<double>(
+                        Enumerable.Range(0, width).Select(w => w / (double)(width - 1)).ToArray(), [width]).Cast<T>()
+                    : new Tensor<T>([width]);
+                frequency = height > 1
+                    ? new Tensor<double>(
+                        Enumerable.Range(0, height).Select(h => h / (double)(height - 1)).ToArray(), [height]).Cast<T>()
+                    : new Tensor<T>([height]);
+            }
+            var rawMin = Engine.TensorNegate(Engine.ReduceMax(
+                Engine.TensorNegate(Engine.TensorWhere(isNan, maxFill, source)), new[] { 1 }, keepDims: true));
+            var min = Engine.TensorWhere(Engine.TensorGreaterThan(rawMin, maxCol), maxCol, rawMin);
+            var rawMax = Engine.ReduceMax(Engine.TensorWhere(isNan, minFill, source), new[] { 1 }, keepDims: true);
+            var max = Engine.TensorWhere(Engine.TensorLessThan(rawMax, minCol), minCol, rawMax);
 
             // The reference formula is undefined for a constant spectrogram. Preserve its
             // finite absolute level in that degenerate case so distinct valid tensors do
@@ -114,31 +137,21 @@ public partial class GraFPrintCoordinateAugmentationLayer<T> : LayerBase<T>, ISh
             var range = Engine.TensorSubtract(max, min);                                     // [batch, 1]
             var hasDynamicRange = Engine.TensorBroadcastTo(
                 Engine.TensorGreaterThan(range, epsilon), [batch, pixels]);
-            var ones = new Tensor<T>([batch, 1]);
-            ones.Fill(NumOps.One);
             var safeRange = Engine.TensorWhere(Engine.TensorGreaterThan(range, epsilon), range, ones);
+            var minBroadcast = Engine.TensorBroadcastTo(min, [batch, pixels]);
+            var safeRangeBroadcast = Engine.TensorBroadcastTo(safeRange, [batch, pixels]);
             var normalized = Engine.TensorWhere(
-                hasDynamicRange, Engine.TensorDivide(Engine.TensorSubtract(source, min), safeRange), source);
+                hasDynamicRange, Engine.TensorDivide(Engine.TensorSubtract(source, minBroadcast), safeRangeBroadcast), source);
 
             // time = w / (width - 1) along the columns, frequency = h / (height - 1) along the rows.
-            // Each coordinate is one double division rounded once to T. The engine's scalar divide
-            // multiplies by a reciprocal in T, which is an ulp off the quotient for about one float
-            // coordinate in five (5/6 came out as 0.8333334 instead of 0.8333333).
-            var time = width > 1
-                ? new Tensor<double>(
-                    Enumerable.Range(0, width).Select(w => w / (double)(width - 1)).ToArray(), [width]).Cast<T>()
-                : new Tensor<T>([width]);
-            var frequency = height > 1
-                ? new Tensor<double>(
-                    Enumerable.Range(0, height).Select(h => h / (double)(height - 1)).ToArray(), [height]).Cast<T>()
-                : new Tensor<T>([height]);
+            // Each coordinate is one double division rounded once to T.
             var timeGrid = Engine.TensorBroadcastTo(Engine.Reshape(time, [1, 1, 1, width]), [batch, 1, height, width]);
             var frequencyGrid = Engine.TensorBroadcastTo(Engine.Reshape(frequency, [1, 1, height, 1]), [batch, 1, height, width]);
 
-            output = Engine.Reshape(
+            output = Engine.StopGradient(Engine.Reshape(
                 Engine.TensorConcatenate(
                     new[] { timeGrid, frequencyGrid, Engine.Reshape(normalized, [batch, 1, height, width]) }, 1),
-                outputShape).Clone();
+                outputShape));
         }
 
         // This is intentionally a detached data transformation. It is the first operation in

@@ -68,6 +68,23 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
         for (int i = 0; i < NumStages; i++)
             _stages[i] = new CascadeStage<T>(Channels * BoxRoiSize * BoxRoiSize, 1024, numClasses + 1);
         _loss = new TwoStageDetectionLoss<T>(numClasses, NumStages, CascadeRCNN<T>.ReferenceLossOptions(NumStages));
+        Materialize();
+    }
+
+    /// <summary>
+    /// Materializes every lazy detection/mask shim against the fixed FPN width and RoI resolutions so the parameter
+    /// layout is ready immediately after construction.
+    /// </summary>
+    internal void Materialize()
+    {
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using (InferenceMode.Enter())
+        {
+            _rpn.Forward(new Tensor<T>(new[] { 1, Channels, 2, 2 }));
+            var roiFeatures = new Tensor<T>(new[] { 1, Channels * BoxRoiSize * BoxRoiSize });
+            for (int i = 0; i < NumStages; i++) _stages[i].Forward(roiFeatures);
+            _maskHead.Forward(new Tensor<T>(new[] { 1, Channels, _maskHead.RoiSize, _maskHead.RoiSize }));
+        }
     }
 
     /// <inheritdoc />

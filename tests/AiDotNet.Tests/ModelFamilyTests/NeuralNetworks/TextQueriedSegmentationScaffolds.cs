@@ -42,8 +42,15 @@ internal static class TextQueriedScaffold
     internal static int[] ProbeOutputShape(Func<INeuralNetworkModel<float>> create)
     {
         var network = create();
-        var output = network.Predict(new Tensor<float>(InputShape));
-        return output.Shape.ToArray();
+        try
+        {
+            var output = network.Predict(new Tensor<float>(InputShape));
+            return output.Shape.ToArray();
+        }
+        finally
+        {
+            (network as IDisposable)?.Dispose();
+        }
     }
 }
 
@@ -95,7 +102,11 @@ public class MaskAdapterTests : SegmentationTestBase<float>
             options: new MaskAdapterOptions { NumClasses = TextQueriedScaffold.NumClasses, DropRate = 0.0 });
 }
 
-/// <summary>Manual scaffold for Open-Vocabulary SAM (Yuan et al. 2024).</summary>
+/// <summary>
+/// Manual scaffold for Open-Vocabulary SAM (Yuan et al. 2024), at reduced RN50x16/SAM2CLIP
+/// width and depth: the paper-default [384, 768, 1536, 3072] / [6, 8, 18, 8] backbone exhausts
+/// per-test CPU memory and wall-clock budgets.
+/// </summary>
 public class OpenVocabSAMTests : SegmentationTestBase<float>
 {
     private int[]? _outputShape;
@@ -104,7 +115,17 @@ public class OpenVocabSAMTests : SegmentationTestBase<float>
 
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new OpenVocabSAM<float>(TextQueriedScaffold.Architecture(), TextQueriedScaffold.Encoder(),
-            options: new OpenVocabSAMOptions { NumClasses = TextQueriedScaffold.NumClasses, DropRate = 0.0 });
+            options: new OpenVocabSAMOptions
+            {
+                NumClasses = TextQueriedScaffold.NumClasses,
+                DropRate = 0.0,
+                ChannelDimensions = new[] { 16, 32, 64, 96 },
+                StageDepths = new[] { 1, 1, 1, 1 },
+                NeckEmbeddingDimension = 32,
+                DecoderDimension = 32,
+                LearningRate = 1e-4,
+                WeightDecay = 1e-4
+            });
 }
 
 /// <summary>Manual scaffold for LISA (Lai et al. 2024).</summary>

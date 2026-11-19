@@ -534,6 +534,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             // Key j is blocked for query i when j - i > shift; the [sq, sk] mask broadcasts over batch and heads.
             Tensor<T> mask;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
             {
                 var offset = Engine.TensorSubtract(
                     Engine.Reshape(Engine.TensorArange<int>(0, sk, 1), new[] { 1, sk }),
@@ -619,9 +620,12 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         for (int offset = 0; offset < table.Length; offset++)
             table[offset] = RelativePositionBucket(offset - (seqLen - 1), bidirectional, numBuckets, maxDistance);
 
-        var engine = AiDotNetEngine.Current;
-        var windows = engine.TensorUnfold(new Tensor<int>(table, new[] { table.Length }), 0, seqLen, 1);
-        return engine.TensorFlip(windows, new[] { 0 }).Contiguous();
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            var engine = AiDotNetEngine.Current;
+            var windows = engine.TensorUnfold(new Tensor<int>(table, new[] { table.Length }), 0, seqLen, 1);
+            return engine.TensorFlip(windows, new[] { 0 }).Contiguous();
+        }
     }
 
     /// <summary>

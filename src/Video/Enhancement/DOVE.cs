@@ -389,7 +389,7 @@ public partial class DOVE<T> : VideoSuperResolutionBase<T>, ITrainingObjectivePr
 
     /// <inheritdoc />
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => _usingCustomLayers ? base.ForwardForTraining(input) : RunClips(PreprocessFrames(input), InferenceRandom());
+        => _usingCustomLayers ? base.ForwardForTraining(input) : PostprocessOutput(RunClips(PreprocessFrames(input), InferenceRandom()));
 
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> ReleaseAdamW(double rate)
         => new(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

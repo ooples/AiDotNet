@@ -134,35 +134,10 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     // Chirp reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private double[] Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new double[count];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
-        return samples;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return _network.CtcLogits(_network.Encode(_network.Features(Samples(input, 0, input.Length)), training));
-        int rows = input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = _network.CtcLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
-        return Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input, bool training) => ForwardNativeWaveformBatch(input, _network, (net, wave) => net.CtcLogits(net.Encode(net.FeatureTensor(wave), training)));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
@@ -176,25 +151,7 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     /// <param name="audio">The waveforms.</param>
     /// <param name="random">The mask and noise draws; the model's own generator when null.</param>
-    public T PretrainingLoss(Tensor<T> audio, Random? random = null)
-    {
-        ThrowIfDisposed();
-        using var _ = new NoGradScope<T>();
-        return PretrainingLossTensor(audio, training: false, random ?? _random)[0];
-    }
-
-    private Tensor<T> PretrainingLossTensor(Tensor<T> audio, bool training, Random random)
-    {
-        var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native Chirp network.");
-        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = network.PretrainingLoss(Samples(audio, r * samples, samples), training, random);
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(audio)), NumOps.FromDouble(1.0 / rows));
-    }
+    public T PretrainingLoss(Tensor<T> audio, Random? random = null) { ThrowIfDisposed(); return EvaluateBestRqPretrainingLoss(audio, _network, random ?? _random, "Chirp"); }
 
     /// <summary>One BEST-RQ pre-training step (section 2.2) on waveforms <c>[S]</c> or <c>[batch, S]</c>.</summary>
     /// <param name="audio">The unlabeled waveforms.</param>
@@ -205,7 +162,7 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (_network is null) throw new NotSupportedException("Pre-training runs on the native Chirp network.");
         // A caller's optimizer serves both phases; the paper states no pre-training optimizer.
         _pretrainingOptimizer ??= _suppliedOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        return PretrainBestRqBatch(audio, _network, _random, _pretrainingOptimizer, "Chirp");
     }
 
     /// <inheritdoc />
@@ -220,9 +177,9 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, _options.MaxTextLength);
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
+    private static string TokensToText(List<int> tokens) => DecodeUnicodeTokens(tokens);
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) => BuildSingleUtteranceSegment(text, duration, confidence);
+    private string ClassifyLanguageFromTokens(List<int> tokens) => ClassifyCjkOrDefaultLanguage(tokens, SupportedLanguages, _options.Language);
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Chirp<T>)); }
     /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }

@@ -344,6 +344,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> A slot predicting an object class is kept in the panoptic result only if its class
     /// probability reaches this value.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Filters thing-class slots in KMaXDeepLab.SegmentPanoptic (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double ClassThresholdThing { get; set; } = 0.7;
 
     /// <summary>
@@ -354,6 +355,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> A slot predicting a stuff class (such as sky or road) is kept only if its class
     /// probability reaches this value.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Filters stuff-class slots in KMaXDeepLab.SegmentPanoptic (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double ClassThresholdStuff { get; set; } = 0.5;
 
     /// <summary>
@@ -365,6 +367,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> A pixel joins a slot's mask only if the mask is at least this confident at that
     /// pixel.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Thresholds per-pixel cluster assignment in KMaXDeepLab.SegmentPanoptic (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double PixelConfidenceThreshold { get; set; } = 0.4;
 
     /// <summary>
@@ -376,6 +379,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> Segments are placed from the most to the least confident. A segment is kept only if
     /// at least this share of its mask is still free, which removes duplicates.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Controls unclaimed-mask overlap filtering in KMaXDeepLab.SegmentPanoptic (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double OverlapThreshold { get; set; } = 0.8;
 
     /// <summary>Gets or sets the class-score exponent of the merge order. Default: 1.0.</summary>
@@ -384,6 +388,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> Segments are ranked by class score raised to this power times mask score raised to
     /// ReorderMaskWeight. A larger value lets the class score dominate the order.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Weights class score in KMaXDeepLab.SegmentPanoptic's greedy merge ranking (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double ReorderClassWeight { get; set; } = 1.0;
 
     /// <summary>Gets or sets the mask-score exponent of the merge order. Default: 1.0.</summary>
@@ -392,6 +397,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> The counterpart of ReorderClassWeight: a larger value lets the mask score dominate
     /// the order in which segments are placed.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Weights mask score in KMaXDeepLab.SegmentPanoptic's greedy merge ranking (MergeKMaX), not semantic Predict logits or SetPredictionLoss. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double ReorderMaskWeight { get; set; } = 1.0;
 
     /// <summary>

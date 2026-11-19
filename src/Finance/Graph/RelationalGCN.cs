@@ -103,12 +103,21 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     
     #region Relational Graph Fields
     /// <summary>
+    /// Caller-supplied adjacency matrices, or null when using the model's auto-generated default graph.
+    /// Marked [ExternalState] so ClonePlanGenerator binds constructor parameter relationAdjacencies directly
+    /// to this field (regenerating default adjacencies when NumNodes or NumRelations is perturbed) without
+    /// duplicating checkpoint buffer serialization.
+    /// </summary>
+    [ExternalState]
+    private readonly Tensor<T>? _relationAdjacencies;
+
+    /// <summary>
     /// The adjacency of every relation type, shaped [numRelations, numNodes, numNodes]. Entry [r, i, j] is the
     /// weight of the edge of type r along which node i receives a message from node j. A buffer: saved with the
     /// model (the default graph is drawn at random) but never trained.
     /// </summary>
     [Buffer]
-    private readonly Tensor<T>? _relationAdjacencies;
+    private Tensor<T>? _graphAdjacency;
 
     /// <summary>
     /// Per R-GCN layer: the shared bases V_b [numBases, hidden, hidden] under basis decomposition, otherwise the
@@ -318,6 +327,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
 
         _relationAdjacencies = relationAdjacencies is null ? null : ValidatedAdjacency(relationAdjacencies);
+        _graphAdjacency = _relationAdjacencies;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
 
@@ -373,9 +383,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
 
         // Initialize random before CreateDefaultRelationAdjacencies which uses it
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
-        _relationAdjacencies = relationAdjacencies is null
-            ? CreateDefaultRelationAdjacencies()
-            : ValidatedAdjacency(relationAdjacencies);
+        _relationAdjacencies = relationAdjacencies is null ? null : ValidatedAdjacency(relationAdjacencies);
+        _graphAdjacency = _relationAdjacencies ?? CreateDefaultRelationAdjacencies();
 
         InitializeRelationalWeights();
         InitializeLayers();
@@ -479,7 +488,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// model's random stream so a fixed Seed reproduces it.
     /// </summary>
     private Tensor<T> UniformTensor(int[] shape, double limit)
-        => Engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-limit), NumOps.FromDouble(limit), _random.Next());
+    {
+        using var _ = TensorArena.Suspend();
+        return Engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-limit), NumOps.FromDouble(limit), _random.Next());
+    }
 
     /// <summary>
     /// Assembles block-diagonal relation weights [numRelations, hidden, hidden] from their stored diagonal blocks
@@ -519,6 +531,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CreateDefaultRelationAdjacencies()
     {
+        using var _ = TensorArena.Suspend();
         var edges = new int[_numRelations * _numNodes * _numNodes];
         for (int i = 0; i < edges.Length; i++)
             edges[i] = _random.NextDouble() < 0.1 ? 1 : 0;
@@ -584,7 +597,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Propagation()
     {
-        var adjacency = _relationAdjacencies
+        var adjacency = _graphAdjacency
             ?? throw new InvalidOperationException("RelationalGCN has no relation adjacencies to propagate over.");
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var normalized = _aggregation == RelationalAggregation.Mean ? DivideByRowSums(adjacency) : adjacency.Contiguous();
@@ -813,7 +826,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         {
             var prediction = Forecast(currentInput, null);
             predictions.Add(prediction);
-            currentInput = ShiftInputWindow(currentInput, prediction);
+            if (i + 1 < steps)
+            {
+                currentInput = ShiftInputWindow(currentInput, prediction);
+            }
         }
 
         return ConcatenatePredictions(predictions);
@@ -1054,6 +1070,11 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> NodeFeatures(Tensor<T> input)
     {
         int width = _sequenceLength * _numFeatures;
+        if (input.Length == width && _numNodes > 1)
+        {
+            return Engine.TensorTile(Engine.Reshape(input.Contiguous(), new[] { 1, width }), new[] { _numNodes, 1 });
+        }
+
         if (input.Length != _numNodes * width)
         {
             throw new ArgumentException(
@@ -1208,16 +1229,26 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        if (_numFeatures != 1)
+        var history = Engine.Reshape(NodeFeatures(input).Contiguous(), new[] { _numNodes, _sequenceLength, _numFeatures });
+        var predictedFeature = Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon, 1 });
+        Tensor<T> appended;
+        if (_numFeatures == 1)
         {
-            throw new NotSupportedException(
-                $"Autoregressive RelationalGCN forecasting feeds forecasts back as inputs, which needs future values of every input feature; it is only defined for NumFeatures = 1 (got {_numFeatures}).");
+            appended = predictedFeature;
+        }
+        else
+        {
+            var lastAuxiliary = Engine.TensorSlice(
+                history,
+                new[] { 0, _sequenceLength - 1, 1 },
+                new[] { _numNodes, 1, _numFeatures - 1 });
+            var tiledAuxiliary = Engine.TensorTile(lastAuxiliary, new[] { 1, _forecastHorizon, 1 });
+            appended = Engine.Concat(new[] { predictedFeature, tiledAuxiliary }, 2);
         }
 
-        var history = NodeFeatures(input);
-        var predicted = Engine.Reshape(prediction.Contiguous(), new[] { _numNodes, _forecastHorizon });
-        var extended = Engine.Concat(new[] { history, predicted }, 1);
-        var window = Engine.TensorNarrow(extended, 1, _forecastHorizon, _sequenceLength);
+        var extended = Engine.Concat(new[] { history, appended }, 1);
+        int keepStart = Math.Max(0, extended.Shape[1] - _sequenceLength);
+        var window = Engine.TensorNarrow(extended, 1, keepStart, _sequenceLength);
         return Engine.Reshape(window.Contiguous(), input._shape);
     }
 

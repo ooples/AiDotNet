@@ -294,12 +294,17 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         {
             var oldPrecision = _sitePrecisions.Clone();
             var oldNaturalMean = _siteNaturalMeans.Clone();
-            var oldWeights = _weights.Clone();
             var oldMean = _posteriorMean!.Clone();
             var oldCov = _posteriorCov!.Clone();
-            // The scalar tilted integrals are per-observation tasks; their
-            // undamped site proposals are compared and reduced on the engine.
-            var sites = Enumerable.Range(0, n).Select(UpdateSite).ToArray();
+            // Student-t sites can have negative precision. Accept each site
+            // against the current posterior before forming the next cavity.
+            var sites = Enumerable.Range(0, n).Select(UpdateAcceptedSite).ToArray();
+            // Canonical factorization once per sweep bounds accumulated
+            // rank-one roundoff without restoring a cubic cost per site.
+            UpdatePosterior();
+            if (!IsAdmissiblePosterior(Tensor<T>.FromMatrix(_posteriorCov!),
+                Tensor<T>.FromVector(_posteriorMean!), _sitePrecisions))
+                throw new InvalidOperationException("Student-t EP canonical posterior or cavities are improper.");
             var proposedSites = new Tensor<double>(new[] { n, 2 }, new Vector<double>(
                 sites.SelectMany(site => new[] { site.Precision, site.NaturalMean }).ToArray()));
             var oldSites = Engine.TensorStack(new[]
@@ -309,38 +314,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
             }, 1);
             var siteResiduals = NormalizedDifference(oldSites, proposedSites);
             double maxChange = Engine.TensorMaxValue(Engine.ReduceSum(siteResiduals, new[] { 1 }, false));
-            var proposedPrecision = _sitePrecisions.Clone();
-            var proposedNaturalMean = _siteNaturalMeans.Clone();
-            var proposedWeights = _weights.Clone();
-            // Negative Student-t sites are valid. Backtrack an update only if
-            // the combined Gaussian or a leave-one-out cavity is improper.
-            double fraction = 1;
-            while (true)
-            {
-                try
-                {
-                    UpdatePosterior();
-                    var variances = Engine.TensorDiagonal(Tensor<T>.FromMatrix(_posteriorCov!)).Cast<double>();
-                    if (!GaussianProcessEngineOps.AllFinite(variances) || Engine.TensorMinValue(variances) <= 0)
-                        throw new InvalidOperationException("EP update produced an improper posterior variance.");
-                    var cavities = Engine.TensorSubtract(Engine.TensorReciprocal(variances),
-                        Tensor<T>.FromVector(_sitePrecisions).Cast<double>());
-                    if (!GaussianProcessEngineOps.AllFinite(cavities) || Engine.TensorMinValue(cavities) <= 0)
-                        throw new InvalidOperationException("EP update produced an improper cavity.");
-                    break;
-                }
-                catch (InvalidOperationException)
-                {
-                    fraction *= 0.5;
-                    if (fraction < 1e-8)
-                        throw new InvalidOperationException("EP could not find a proper damped posterior and cavities.");
-                    _sitePrecisions = Blend(oldPrecision, proposedPrecision, fraction);
-                    _siteNaturalMeans = Blend(oldNaturalMean, proposedNaturalMean, fraction);
-                    _weights = Blend(oldWeights, proposedWeights, fraction);
-                }
-            }
-            // Likelihood values can barely change while the moments still
-            // move. Require both site and posterior fixed-point residuals.
+            // Require both undamped site and posterior fixed-point residuals.
             double posteriorChange = Math.Max(
                 Engine.TensorMaxValue(NormalizedDifference(Tensor<T>.FromVector(oldMean).Cast<double>(),
                     Tensor<T>.FromVector(_posteriorMean!).Cast<double>())),
@@ -357,6 +331,76 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         _isTrained = true;
     }
 
+    private bool IsAdmissiblePosterior(Tensor<T> covariance, Tensor<T> mean, Vector<T> sites)
+    {
+        var variances = Engine.TensorDiagonal(covariance).Cast<double>();
+        var cavities = Engine.TensorSubtract(Engine.TensorReciprocal(variances),
+            Tensor<T>.FromVector(sites).Cast<double>());
+        return GaussianProcessEngineOps.AllFinite(covariance) && GaussianProcessEngineOps.AllFinite(mean) &&
+            GaussianProcessEngineOps.AllFinite(cavities) && Engine.TensorMinValue(variances) > 0 &&
+            Engine.TensorMinValue(cavities) > 0;
+    }
+
+    private (double Precision, double NaturalMean) UpdateAcceptedSite(int i)
+    {
+        var proposal = UpdateSite(i);
+        double oldPrecision = _numOps.ToDouble(_sitePrecisions![i]);
+        double oldNaturalMean = _numOps.ToDouble(_siteNaturalMeans![i]);
+        double oldWeight = _numOps.ToDouble(_weights![i]);
+        var oldSite = new Tensor<double>(new[] { 3 },
+            new Vector<double>(new[] { oldPrecision, oldNaturalMean, oldWeight }));
+        var siteChange = Engine.TensorSubtract(new Tensor<double>(new[] { 3 },
+            new Vector<double>(new[] { proposal.Precision, proposal.NaturalMean, proposal.Weight })), oldSite);
+        int n = _sitePrecisions.Length;
+        var covariance = Tensor<T>.FromMatrix(_posteriorCov!).Cast<double>();
+        var mean = Tensor<T>.FromVector(_posteriorMean!).Cast<double>();
+        var column = Engine.TensorSlice(covariance, new[] { 0, i }, new[] { n, 1 });
+        double variance = _numOps.ToDouble(_posteriorCov![i, i]);
+        double siteMean = _numOps.ToDouble(_posteriorMean![i]);
+        double fraction = 1;
+        while (true)
+        {
+            double step = fraction * _damping;
+            var nextSite = Engine.TensorAdd(oldSite, Engine.TensorMultiplyScalar(siteChange, step)).Cast<T>();
+            // The accepted site is stored in T, so the rank-one update must
+            // use the changes after rounding, not the unrepresentable proposal.
+            var roundedChange = Engine.TensorSubtract(nextSite.Cast<double>(), oldSite);
+            double deltaPrecision = Engine.TensorSum(Engine.TensorSlice(roundedChange, new[] { 0 }, new[] { 1 }));
+            double deltaNaturalMean = Engine.TensorSum(Engine.TensorSlice(roundedChange, new[] { 1 }, new[] { 1 }));
+            double denominator = 1 + deltaPrecision * variance;
+            if (denominator > 0 && !double.IsInfinity(denominator))
+            {
+                var candidateCovariance = Engine.TensorSubtract(covariance,
+                    Engine.TensorMultiplyScalar(Engine.TensorMatMul(column, Engine.TensorTranspose(column)),
+                        deltaPrecision / denominator)).Cast<T>();
+                var candidateMean = Engine.TensorAdd(mean,
+                    Engine.TensorMultiplyScalar(column.Reshape(new[] { n }),
+                        (deltaNaturalMean - deltaPrecision * siteMean) / denominator)).Cast<T>();
+                var candidateSites = Engine.TensorSetSlice(Tensor<T>.FromVector(_sitePrecisions),
+                    Engine.TensorSlice(nextSite, new[] { 0 }, new[] { 1 }), new[] { i }).ToVector();
+                if (IsAdmissiblePosterior(candidateCovariance, candidateMean, candidateSites))
+                {
+                    var candidateNaturalMeans = Engine.TensorSetSlice(Tensor<T>.FromVector(_siteNaturalMeans),
+                        Engine.TensorSlice(nextSite, new[] { 1 }, new[] { 1 }), new[] { i }).ToVector();
+                    var candidateWeights = Engine.TensorSetSlice(Tensor<T>.FromVector(_weights),
+                        Engine.TensorSlice(nextSite, new[] { 2 }, new[] { 1 }), new[] { i }).ToVector();
+                    var nextCovariance = candidateCovariance.ToMatrix();
+                    var nextMean = candidateMean.ToVector();
+                    // Commit only after the complete candidate is admissible.
+                    _sitePrecisions = candidateSites;
+                    _siteNaturalMeans = candidateNaturalMeans;
+                    _weights = candidateWeights;
+                    _posteriorCov = nextCovariance;
+                    _posteriorMean = nextMean;
+                    return (proposal.Precision, proposal.NaturalMean);
+                }
+            }
+            fraction *= 0.5;
+            if (fraction < 1e-8)
+                throw new InvalidOperationException("EP could not find a proper damped posterior and cavities.");
+        }
+    }
+
     /// <summary>
     /// Updates a single EP site.
     /// </summary>
@@ -371,7 +415,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// 3. Projecting back to a Gaussian approximation
     /// </para>
     /// </remarks>
-    private (double Precision, double NaturalMean) UpdateSite(int i)
+    private (double Precision, double NaturalMean, double Weight) UpdateSite(int i)
     {
         if (_posteriorMean == null || _posteriorCov == null ||
             _sitePrecisions == null || _siteNaturalMeans == null || _y == null || _weights == null)
@@ -406,35 +450,14 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         double weight = (_nu + 1) / (_nu + scaledResidual * scaledResidual);
         weight = Math.Min(1.0, Math.Max(0.01, weight));
 
-        // Damped update
-        double oldPrecision = sitePrecision;
-        double oldNaturalMean = siteNaturalMean;
-        double oldWeight = _numOps.ToDouble(_weights[i]);
-
-        double dampedPrecision = _damping * newSitePrecision + (1 - _damping) * oldPrecision;
-        double dampedNaturalMean = _damping * newSiteNaturalMean + (1 - _damping) * oldNaturalMean;
-        double dampedWeight = _damping * weight + (1 - _damping) * oldWeight;
-
-        _sitePrecisions[i] = _numOps.FromDouble(dampedPrecision);
-        _siteNaturalMeans[i] = _numOps.FromDouble(dampedNaturalMean);
-        _weights[i] = _numOps.FromDouble(dampedWeight);
-
         // A small damping factor makes the update small even far from a
         // fixed point. Return the undamped moment match for engine reduction.
-        return (newSitePrecision, newSiteNaturalMean);
+        return (newSitePrecision, newSiteNaturalMean, weight);
     }
 
     private Tensor<double> NormalizedDifference(Tensor<double> previous, Tensor<double> current)
         => Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtract(current, previous)),
             Engine.TensorAddScalar(Engine.TensorAbs(current), 1.0));
-
-    private Vector<T> Blend(Vector<T> previous, Vector<T> proposed, double fraction)
-    {
-        var old = Tensor<T>.FromVector(previous).Cast<double>();
-        var next = Tensor<T>.FromVector(proposed).Cast<double>();
-        return Engine.TensorAdd(old, Engine.TensorMultiplyScalar(Engine.TensorSubtract(next, old), fraction))
-            .Cast<T>().ToVector();
-    }
 
     /// <summary>
     /// Computes moments of the tilted distribution via numerical integration.

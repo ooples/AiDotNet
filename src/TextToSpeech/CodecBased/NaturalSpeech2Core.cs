@@ -148,8 +148,19 @@ internal sealed class NaturalSpeech2Core<T>
             throw new ArgumentException($"Expected {expanded.Shape[0]} pitch frames, got {pitch.Length}.", nameof(pitch));
         if (pitchTokens is null)
             using (new NoGradScope<T>())
-                pitchTokens = PitchTokens(pitch ?? _engine.TensorExp(logPitch)).Cast<T>();
+                pitchTokens = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                    ? BucketizePitchGraph(pitch ?? _engine.TensorExp(logPitch))
+                    : PitchTokens(pitch ?? _engine.TensorExp(logPitch)).Cast<T>();
         return (_engine.TensorAdd(expanded, PitchEmbedding.Forward(pitchTokens)), logPitch);
+    }
+
+    private Tensor<T> BucketizePitchGraph(Tensor<T> pitchValues)
+    {
+        int n = pitchValues.Length;
+        int b = _pitchBoundaries.Length;
+        var col = _engine.TensorBroadcastTo(_engine.Reshape(pitchValues, new[] { n, 1 }), new[] { n, b });
+        var row = _engine.TensorBroadcastTo(_engine.Reshape(_pitchBoundaries, new[] { 1, b }), new[] { n, b });
+        return _engine.ReduceSum(_engine.TensorGreaterThan(col, row), new[] { 1 }, keepDims: false);
     }
 
     /// <summary>Rows <c>[n, d]</c> repeated by integer durations to <c>[Σd, d]</c> (the length regulator).</summary>

@@ -539,11 +539,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
                 : Engine.TensorSlice(rawAudio, new[] { 0, 0 }, new[] { rawAudio.Shape[0], targetLength });
         }
 
-        int length = Math.Min(rawAudio.Length, targetLength);
-
-        var waveform = new Tensor<T>([length]);
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return TruncateAudioWaveform(rawAudio, _maxAudioLengthSeconds);
     }
 
     /// <summary>

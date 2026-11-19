@@ -44,31 +44,33 @@ internal sealed class SamTraining<T>
         int h = image.Shape[2], w = image.Shape[3];
         if (groundTruth.Length != h * w)
             throw new ArgumentException($"The ground truth is one {h}x{w} mask.", nameof(groundTruth));
-        var values = groundTruth.ToArray();
+        var values = groundTruth.Contiguous().Cast<double>().ToArray();
         var gt = new double[h * w];
-        for (int i = 0; i < gt.Length; i++) gt[i] = NumOps.ToDouble(values[i]) > 0.5 ? 1.0 : 0.0;
-        var truth = new Tensor<T>(new[] { 1, 1, h, w }, new Vector<T>(gt.Select(NumOps.FromDouble).ToArray()));
+        for (int i = 0; i < gt.Length; i++) gt[i] = values[i] > 0.5 ? 1.0 : 0.0;
+        var truth = new Tensor<double>(new[] { 1, 1, h, w }, new Vector<double>(gt)).Cast<T>();
         int noPromptRound = 1 + random.Next(9);
         Tensor<T>? points = null, labels = null, box = null;
         if (random.NextDouble() < 0.5)
             box = Box();
         else if (Sample(gt, w, random, v => v > 0.5) is { } first)
         {
-            points = new Tensor<T>(new[] { NumOps.FromDouble(first.X), NumOps.FromDouble(first.Y) }, new[] { 1, 1, 2 });
+            points = new Tensor<double>(new[] { first.X, first.Y }, new[] { 1, 1, 2 }).Cast<T>();
             labels = Tensor<T>.CreateDefault(new[] { 1, 1 }, NumOps.One);
         }
         else box = Box();
-        Tensor<T> Box() => new(new[] { 1, 4 }, new Vector<T>(NoisyBox(gt, h, w, random).Select(NumOps.FromDouble).ToArray()));
+        Tensor<T> Box() => new Tensor<double>(new[] { 1, 4 }, new Vector<double>(NoisyBox(gt, h, w, random))).Cast<T>();
 
-        // Double inputs preserve the sampling resolution even when the model uses Half.
-        var draws = new Tensor<double>[11];
+        var draws = new Tensor<T>[11];
         for (int round = 0; round < draws.Length; round++)
-            draws[round] = new Tensor<double>(new[] { round > 0 && round != noPromptRound && round != 10 ? random.NextDouble() : 0.0 }, new[] { 1 });
+        {
+            double drawVal = round > 0 && round != noPromptRound && round != 10 ? random.NextDouble() : 0.0;
+            draws[round] = new Tensor<double>(new[] { drawVal }, new[] { 1 }).Cast<T>();
+        }
         return () => Loss(image, truth, points, labels, box, noPromptRound, draws, h, w);
     }
 
     private Tensor<T> Loss(Tensor<T> image, Tensor<T> truth, Tensor<T>? points, Tensor<T>? labels,
-        Tensor<T>? box, int noPromptRound, Tensor<double>[] draws, int h, int w)
+        Tensor<T>? box, int noPromptRound, Tensor<T>[] draws, int h, int w)
     {
         var net = _network;
         var embedding = net.EncodeImage(net.Preprocess(image));
@@ -80,9 +82,8 @@ internal sealed class SamTraining<T>
             if (round > 0 && round != noPromptRound && round != 10)
             {
                 var predicted = _engine.TensorGreaterThan(net.Postprocess(previous!, h, w, h, w), NumOps.Zero);
-                var error = ConvertPromptData<T, double>(
-                    _engine.Reshape(_engine.TensorSubtract(truth, predicted), new[] { h * w }));
-                var sampled = ConvertPromptData<double, T>(SampleErrorPoint(_engine, error, draws[round], w));
+                var error = _engine.Reshape(_engine.TensorSubtract(truth, predicted), new[] { h * w });
+                var sampled = SampleErrorPoint(_engine, error, draws[round], w);
                 var point = _engine.TensorSlice(sampled, new[] { 0, 0, 0 }, new[] { 1, 1, 2 });
                 var label = _engine.Reshape(_engine.TensorSlice(sampled, new[] { 0, 0, 2 }, new[] { 1, 1, 1 }), new[] { 1, 1 });
                 points = points is null ? point : _engine.TensorConcatenate(new[] { points, point }, 1);
@@ -145,27 +146,21 @@ internal sealed class SamTraining<T>
 
     internal static Tensor<T> ActualIou(IEngine engine, Tensor<T> logits, Tensor<T> truth)
     {
-        // Count in double: image-sized masks can exceed Half's finite range.
-        var predicted = ConvertPromptData<T, double>(engine.TensorGreaterThan(logits, NumOps.Zero));
-        var target = ConvertPromptData<T, double>(truth);
-        var intersection = engine.ReduceSum(engine.TensorMultiply(predicted, target), null);
-        var union = engine.ReduceSum(engine.TensorMax(predicted, target), null);
-        return ConvertPromptData<double, T>(engine.TensorWhere(engine.TensorGreaterThan(union, 0.0),
-            engine.TensorDivide(intersection, engine.TensorClampMin(union, 1.0)),
-            Tensor<double>.CreateDefault(union.Shape.ToArray(), 1.0)));
-    }
-
-    // Tensor.Cast materializes even an identity conversion. Keep same-dtype prompt/IoU data on
-    // its existing graph; different dtypes retain the eager conversion and its trace rejection.
-    // Compiled mixed-dtype prompt data requires heterogeneous forward replay support.
-    private static Tensor<TOut> ConvertPromptData<TIn, TOut>(Tensor<TIn> input)
-    {
-        if (typeof(TIn) == typeof(TOut)) return (Tensor<TOut>)(object)input;
-        return input.Cast<TOut>();
+        var predicted = engine.TensorGreaterThan(logits, NumOps.Zero);
+        int pixelCount = Math.Max(1, truth.Length);
+        var minPositiveMean = NumOps.FromDouble(0.5 / pixelCount);
+        var minDenomMean = NumOps.FromDouble(1.0 / pixelCount);
+        var allAxes = Enumerable.Range(0, predicted.Rank).ToArray();
+        var intersectionMean = engine.ReduceMean(engine.TensorMultiply(predicted, truth), allAxes, keepDims: false);
+        var unionMean = engine.ReduceMean(engine.TensorMax(predicted, truth), allAxes, keepDims: false);
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(unionMean, minPositiveMean),
+            engine.TensorDivide(intersectionMean, engine.TensorClampMin(unionMean, minDenomMean)),
+            Tensor<T>.CreateDefault(unionMean.Shape.ToArray(), NumOps.One));
     }
 
     /// <summary>A discrete, input-bound sampling node. Its output is data, so its derivative is zero.</summary>
-    internal static Tensor<double> SampleErrorPoint(IEngine engine, Tensor<double> error, Tensor<double> draw, int width)
+    internal static Tensor<T> SampleErrorPoint(IEngine engine, Tensor<T> error, Tensor<T> draw, int width)
     {
         if (error.Rank != 1 || width <= 0 || error.Length % width != 0 || draw.Length != 1)
             throw new ArgumentException("Expected flattened pixel errors, an image width and one uniform draw.");
@@ -177,25 +172,25 @@ internal sealed class SamTraining<T>
                 (replayEngine, output) => SelectErrorPoint(replayEngine, error, draw, width, output),
                 static (_, _, _, _, _, _) => { });
         }
-        var result = new Tensor<double>(new[] { 1, 1, 3 });
+        var result = new Tensor<T>(new[] { 1, 1, 3 });
         SelectErrorPoint(engine, error, draw, width, result);
         return result;
     }
 
-    private static void SelectErrorPoint(IEngine engine, Tensor<double> error, Tensor<double> draw, int width, Tensor<double> output)
+    private static void SelectErrorPoint(IEngine engine, Tensor<T> error, Tensor<T> draw, int width, Tensor<T> output)
     {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
-        double uniform = draw[0];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        double uniform = NumOps.ToDouble(draw[0]);
         if (double.IsNaN(uniform) || double.IsInfinity(uniform) || uniform < 0.0 || uniform >= 1.0)
             throw new ArgumentOutOfRangeException(nameof(draw), "A sampling draw must be in [0, 1).");
         int count = engine.TensorCountNonzero(error);
         output.AsWritableSpan().Clear();
-        if (count == 0) { output[2] = -2.0; return; }
+        if (count == 0) { output[2] = NumOps.FromDouble(-2.0); return; }
         var candidates = engine.TensorNonzero(error);
         int picked = candidates[Math.Min(count - 1, (int)(uniform * count)), 0];
-        output[0] = picked % width;
-        output[1] = picked / width;
-        output[2] = error[picked] > 0.0 ? 1.0 : 0.0;
+        output[0] = NumOps.FromDouble(picked % width);
+        output[1] = NumOps.FromDouble(picked / width);
+        output[2] = NumOps.ToDouble(error[picked]) > 0.0 ? NumOps.One : NumOps.Zero;
     }
 
     /// <summary>A pixel (x, y) drawn uniformly from those satisfying <paramref name="where"/>, or null if none does.</summary>

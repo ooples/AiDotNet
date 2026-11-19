@@ -164,7 +164,7 @@ public partial class AdaSpeech2<T> : AdaSpeech<T>
                 var phonemeHidden = RunEncoder(tokens);
                 expanded = LengthRegulator.Expand(phonemeHidden, durations);
             }
-            var label = new Tensor<T>(expanded._shape, expanded.ToVector());
+            var label = DetachTensor(expanded);
             return MeanSquaredError(RunMelEncoder(target), label);
         }
 

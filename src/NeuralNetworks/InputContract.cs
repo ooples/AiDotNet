@@ -525,11 +525,23 @@ public sealed class BoundInputContract
         InputContractValidator.Validate(input, PrimaryInput, Manifest.OwnerName);
     }
 
+    internal Tensor<T> ValidateForGraph<T>(Tensor<T> input)
+    {
+        RequireReadyForCaller();
+        return InputContractValidator.ValidateForGraph(input, PrimaryInput, Manifest.OwnerName);
+    }
+
     /// <summary>Validates named inputs, including required/defaulted ports and shape relations.</summary>
     public void Validate<T>(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         RequireReadyForCaller();
         InputContractValidator.Validate(inputs, InputPorts, Manifest.OwnerName);
+    }
+
+    internal IReadOnlyDictionary<string, Tensor<T>> ValidateForGraph<T>(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        RequireReadyForCaller();
+        return InputContractValidator.ValidateForGraph(inputs, InputPorts, Manifest.OwnerName);
     }
 
     private void RequireReadyForCaller()
@@ -576,6 +588,105 @@ public static class InputContractValidator
                 port.Name);
 
         ValidateValues(input, port.ValueDomain, ownerName, port.Name);
+    }
+
+    internal static Tensor<T> ValidateForGraph<T>(Tensor<T> input, LayerPort port, string ownerName)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        var shapeReasons = new List<string>();
+        InputContractManifest.ValidatePortShape(
+            input.Shape.ToArray(), port.ShapeConstraint, port.Name, shapeReasons);
+        if (shapeReasons.Count > 0)
+            throw new InputContractViolationException(
+                $"{ownerName}.{port.Name} violates its shape contract: {string.Join("; ", shapeReasons)}.",
+                port.Name);
+
+        var domain = port.ValueDomain;
+        if (!domain.IsResolved)
+            throw new InputContractBindingException(
+                $"{ownerName}.{port.Name} cannot execute because its value domain is {domain}.");
+        if (domain.Kind == LayerInputDomainKind.Continuous)
+            return input;
+
+        EnsureIntegerRangeRepresentable<T>(domain, ownerName, port.Name);
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            ValidateValues(input, domain, ownerName, port.Name);
+            return input;
+        }
+
+        var capturedInput = input;
+        var capturedDomain = domain;
+        string capturedOwner = ownerName;
+        string capturedPort = port.Name;
+        bool propagateGrad = domain.Kind == LayerInputDomainKind.AdditiveMask || domain.Kind == LayerInputDomainKind.Custom;
+        return scope.RecordUnary(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "ValidateInputContract",
+            input,
+            input._shape,
+            (replayEngine, result) =>
+            {
+                ValidateValues(capturedInput, capturedDomain, capturedOwner, capturedPort);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, capturedInput, result);
+            },
+            propagateGrad
+                ? static (gradOut, inputs, _, _, eng, grads) =>
+                {
+                    var x = inputs[0];
+                    grads[x] = grads.TryGetValue(x, out var existing) ? eng.TensorAdd(existing, gradOut) : gradOut;
+                }
+                : static (_, _, _, _, _, _) => { });
+    }
+
+    internal static IReadOnlyDictionary<string, Tensor<T>> ValidateForGraph<T>(
+        IReadOnlyDictionary<string, Tensor<T>> inputs,
+        IReadOnlyList<LayerPort> ports,
+        string ownerName)
+    {
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is null)
+        {
+            Validate(inputs, ports, ownerName);
+            return inputs;
+        }
+
+        Dictionary<string, Tensor<T>>? rewritten = null;
+        foreach (var port in ports)
+        {
+            if (!inputs.TryGetValue(port.Name, out var tensor))
+            {
+                if (port.Required && port.Source == TensorPortSource.External)
+                    throw new InputContractViolationException(
+                        $"{ownerName} requires input port '{port.Name}'.", port.Name);
+                continue;
+            }
+
+            var validated = ValidateForGraph(tensor, port, ownerName);
+            if (!ReferenceEquals(validated, tensor))
+            {
+                rewritten ??= new Dictionary<string, Tensor<T>>(inputs.Count, StringComparer.Ordinal);
+                if (rewritten.Count == 0)
+                {
+                    foreach (var kvp in inputs) rewritten[kvp.Key] = kvp.Value;
+                }
+                rewritten[port.Name] = validated;
+            }
+
+            if (!string.IsNullOrWhiteSpace(port.ShapeConstraint.SameShapeAs)
+                && inputs.TryGetValue((port.ShapeConstraint.SameShapeAs ?? throw new InvalidOperationException("port.ShapeConstraint.SameShapeAs is null where it is required.")), out var related)
+                && !SameShape(tensor.Shape.ToArray(), related.Shape.ToArray()))
+            {
+                throw new InputContractViolationException(
+                    $"{ownerName}.{port.Name} must have the same shape as "
+                    + $"'{port.ShapeConstraint.SameShapeAs}', but received "
+                    + $"[{string.Join(",", tensor.Shape)}] and [{string.Join(",", related.Shape)}].",
+                    port.Name);
+            }
+        }
+
+        return rewritten ?? inputs;
     }
 
     public static void Validate<T>(

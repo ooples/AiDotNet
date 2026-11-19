@@ -323,7 +323,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
             semantic = engine.TensorWhere(takes, winningClass, semantic);
         }
 
-        var union = engine.TensorMin(unionSum, numOps.One);
+        var union = engine.TensorClampMax(unionSum, numOps.One);
         return new OpenVocabSegmentationResult<T>
         {
             Masks = union.Reshape(new[] { count, height, width }), ClassNames = classes, Scores = scores.ToVector(),

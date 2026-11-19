@@ -1245,7 +1245,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
         bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
             && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
-        if (standardActivations && _stateCellClip == 0 && _stateZoneout is null
+        if (standardActivations && !graphActive && _stateCellClip == 0 && _stateZoneout is null
             && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;
@@ -1285,17 +1285,10 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // when the sequence primitive is unavailable, for other numeric types, or when the engine declines the primitive.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
-        var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-        var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-        // TensorAllocator.Rent returns POOLED memory that is not zero-initialized.
-        // currentH/currentC are the initial hidden/cell state (h0/c0) consumed at
-        // t=0 before being overwritten, so they MUST be zeroed — otherwise the
-        // sequence starts from leftover pool garbage. That garbage is consistent
-        // within one instance (hence deterministic per model) but differs across
-        // instances, so a clone with identical weights produced a different output
-        // (Clone_ShouldProduceIdenticalOutput). Standard LSTM init is h0 = c0 = 0.
-        currentH.Fill(NumOps.Zero);
-        currentC.Fill(NumOps.Zero);
+        // Non-pooled zero initial states: GraphMode captures h0/c0 leaf tensors by reference,
+        // so arena-rented buffers would be recycled and overwritten across compiled-plan steps.
+        var currentH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var currentC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
         if (_initialHidden is not null && _initialCell is not null)
         {
             if (_initialHidden.Shape.Length != 2 || _initialHidden.Shape[0] != batchSize || _initialHidden.Shape[1] != _hiddenSize

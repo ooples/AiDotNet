@@ -432,6 +432,16 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// </remarks>
     protected virtual Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
+        if (NativeWaveformMaxAudioLengthSeconds is int maxAudioLengthSeconds)
+        {
+            return TruncateAudioWaveform(rawAudio, maxAudioLengthSeconds);
+        }
+
+        if (NumMels <= 0 && _melSpec is null)
+        {
+            return rawAudio;
+        }
+
         var features = MelSpec.Forward(rawAudio);
         RequireTimeAxis(features);
         return features;

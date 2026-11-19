@@ -59,6 +59,7 @@ public class CUPSOptions : SegmentationModelOptions
     /// cars) and which are regions ("stuff", such as sky). A class counts as a thing when more than this fraction of
     /// its pixels fall inside instance masks. A larger value makes fewer classes things.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Controls CUPS.FitThingStuffSplit (Hahn et al. 2025, Sec. 3.3 psi_ts pseudo-label thing/stuff classification), not semantic Predict/Train. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double ThingStuffThreshold { get; set; } = 0.08;
 
     /// <summary>
@@ -70,6 +71,7 @@ public class CUPSOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> Each detected object has a confidence score. Objects scoring below this value are
     /// left out of the final panoptic map; a larger value keeps only the more certain detections.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Filters instance detections in CUPS.SegmentPanoptic's Panoptic FPN combine step, not semantic Predict/Train. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double InstanceScoreThreshold { get; set; } = 0.4;
 
     /// <summary>
@@ -82,6 +84,7 @@ public class CUPSOptions : SegmentationModelOptions
     /// skipped when more than this fraction of its pixels already belong to an object pasted before it, so a smaller
     /// value removes more overlapping duplicates.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Controls duplicate-instance rejection in CUPS.SegmentPanoptic's Panoptic FPN combine step, not semantic Predict/Train. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double OverlapThreshold { get; set; } = 0.5;
 
     /// <summary>
@@ -93,6 +96,7 @@ public class CUPSOptions : SegmentationModelOptions
     /// <para><b>For Beginners:</b> After the objects are placed, each stuff class keeps its remaining pixels only if
     /// they cover at least this many pixels, which removes small, noisy regions. Zero keeps every region.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Filters small stuff regions in CUPS.SegmentPanoptic's Panoptic FPN combine step, not semantic Predict/Train. Covered by PanopticVideoFewShotSegmentationReferenceTests.")]
     public double StuffAreaThreshold { get; set; } = 4096;
 
     /// <summary>

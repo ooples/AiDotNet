@@ -430,4 +430,253 @@ public class TimeSeriesHalfPrecisionTests
             }
         }
     }
+
+    [Fact]
+    public void NLinear_Half_SubnormalScalerPreservedAcrossPredictSerializeAndClone()
+    {
+        // Targets repeat [0, 0, 0, Half.Epsilon], whose population std is sqrt(3)/4 * 2^-24 ≈ 2.5809568e-8.
+        // Stored in Half, that std rounds to 0; a fallback divisor of 1.0 inflated the O(1) normalized bias
+        // into an O(1) prediction (~2.08) instead of Half.Epsilon (~5.96e-8).
+        const int blocks = 32;
+        const int rows = blocks * 4;
+        Half epsHalf = Half.Epsilon;
+        double epsDouble = (double)epsHalf;
+
+        var xHalf = new Matrix<Half>(rows, 4);
+        var yHalf = new Vector<Half>(rows);
+        var xFloat = new Matrix<float>(rows, 4);
+        var yFloat = new Vector<float>(rows);
+        var xDouble = new Matrix<double>(rows, 4);
+        var yDouble = new Vector<double>(rows);
+
+        for (int b = 0; b < blocks; b++)
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                int r = b * 4 + k;
+                xHalf[r, 3] = epsHalf;
+                xFloat[r, 3] = (float)epsDouble;
+                xDouble[r, 3] = epsDouble;
+                yHalf[r] = (Half)0;
+                yFloat[r] = 0.0f;
+                yDouble[r] = 0.0;
+            }
+
+            int r3 = b * 4 + 3;
+            yHalf[r3] = epsHalf;
+            yFloat[r3] = (float)epsDouble;
+            yDouble[r3] = epsDouble;
+        }
+
+        var halfModel = new NLinearModel<Half>(new NLinearOptions<Half>
+        {
+            LookbackWindow = 4,
+            Epochs = 80,
+            BatchSize = 16,
+            LearningRate = 0.05,
+            Seed = 42
+        });
+        var floatModel = new NLinearModel<float>(new NLinearOptions<float>
+        {
+            LookbackWindow = 4,
+            Epochs = 80,
+            BatchSize = 16,
+            LearningRate = 0.05,
+            Seed = 42
+        });
+        var doubleModel = new NLinearModel<double>(new NLinearOptions<double>
+        {
+            LookbackWindow = 4,
+            Epochs = 80,
+            BatchSize = 16,
+            LearningRate = 0.05,
+            Seed = 42
+        });
+
+        halfModel.Train(xHalf, yHalf);
+        floatModel.Train(xFloat, yFloat);
+        doubleModel.Train(xDouble, yDouble);
+
+        var zeroWindowHalf = new Vector<Half>(new[] { (Half)0, (Half)0, (Half)0, (Half)0 });
+        var pulseWindowHalf = new Vector<Half>(new[] { (Half)0, (Half)0, (Half)0, epsHalf });
+        var zeroWindowFloat = new Vector<float>(new[] { 0.0f, 0.0f, 0.0f, 0.0f });
+        var pulseWindowFloat = new Vector<float>(new[] { 0.0f, 0.0f, 0.0f, (float)epsDouble });
+        var zeroWindowDouble = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
+        var pulseWindowDouble = new Vector<double>(new[] { 0.0, 0.0, 0.0, epsDouble });
+
+        double refZero = doubleModel.PredictSingle(zeroWindowDouble);
+        double refPulse = doubleModel.PredictSingle(pulseWindowDouble);
+        Assert.InRange(refZero, 0.8 * epsDouble, 1.2 * epsDouble);
+        Assert.InRange(Math.Abs(refPulse), 0.0, 0.2 * epsDouble);
+
+        // 1. Half training + PredictSingle preserves subnormal std = 2.58e-8 (returns Half.Epsilon, not ~2.08 or 0).
+        Assert.Equal(epsHalf, halfModel.PredictSingle(zeroWindowHalf));
+        Assert.Equal((Half)0, halfModel.PredictSingle(pulseWindowHalf));
+
+        // 2. Public Half persistence must preserve both parameters and exact double scaler state.
+        // Populate metrics so the shared serializer also exercises its numeric metric values.
+        Assert.NotEmpty(halfModel.EvaluateModel(xHalf, yHalf));
+        var restoredHalf = new NLinearModel<Half>(new NLinearOptions<Half>
+        {
+            LookbackWindow = 4,
+            Epochs = 80,
+            BatchSize = 16,
+            LearningRate = 0.05,
+            Seed = 42
+        });
+        restoredHalf.Deserialize(halfModel.Serialize());
+        var clonedHalf = (NLinearModel<Half>)halfModel.Clone();
+        var deepCopiedHalf = (NLinearModel<Half>)halfModel.DeepCopy();
+        foreach (var candidate in new[] { restoredHalf, clonedHalf, deepCopiedHalf })
+        {
+            Assert.Equal(epsHalf, candidate.PredictSingle(zeroWindowHalf));
+            Assert.Equal((Half)0, candidate.PredictSingle(pulseWindowHalf));
+        }
+
+        // 3. Float persistence also preserves the same std = 2.58e-8.
+        var reloadedFloat = new NLinearModel<float>(new NLinearOptions<float>
+        {
+            LookbackWindow = 4,
+            Epochs = 80,
+            BatchSize = 16,
+            LearningRate = 0.05,
+            Seed = 42
+        });
+        reloadedFloat.Deserialize(floatModel.Serialize());
+
+        var clonedFloat = (NLinearModel<float>)floatModel.Clone();
+        var deepCopiedFloat = (NLinearModel<float>)floatModel.DeepCopy();
+
+        foreach (var candidate in new[] { floatModel, reloadedFloat, clonedFloat, deepCopiedFloat })
+        {
+            double predZero = candidate.PredictSingle(zeroWindowFloat);
+            double predPulse = candidate.PredictSingle(pulseWindowFloat);
+
+            Assert.InRange(predZero, 0.8 * epsDouble, 1.2 * epsDouble);
+            Assert.InRange(Math.Abs(predPulse), 0.0, 0.2 * epsDouble);
+        }
+    }
+
+    [Fact]
+    public void GARCH_Half_EstimatesNondegenerateParametersMatchingDouble()
+    {
+        // Simulated GARCH(1,1) volatility-clustering shocks (omega = 0.05, alpha = 0.35, beta = 0.50),
+        // quantized to Half so Half and double models observe identical input values.
+        // Previously in Half, omega ≈ 0.01 had ULP ≈ 7.63e-6 > epsilon = 1e-6, making plusOmega - minusOmega == 0,
+        // poisoning omega with 0/0 = NaN, and hiding the failed fit by clamping NaN to VarianceFloor (1e-5).
+        const int n = 180;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
+        var xHalf = new Matrix<Half>(n, 1);
+        var yHalf = new Vector<Half>(n);
+        var xDouble = new Matrix<double>(n, 1);
+        var yDouble = new Vector<double>(n);
+
+        double sigma2 = 0.05 / (1.0 - 0.35 - 0.50);
+        for (int t = 0; t < n; t++)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
+            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            double shock = Math.Sqrt(sigma2) * z;
+            Half h = (Half)shock;
+            double q = (double)h;
+
+            xHalf[t, 0] = (Half)(t % 16);
+            yHalf[t] = h;
+            xDouble[t, 0] = (double)(Half)(t % 16);
+            yDouble[t] = q;
+
+            sigma2 = 0.05 + 0.35 * (q * q) + 0.50 * sigma2;
+        }
+
+        var halfModel = new GARCHModel<Half>(new GARCHModelOptions<Half>
+        {
+            ARCHOrder = 1,
+            GARCHOrder = 1,
+            MeanModel = new ARIMAModel<Half>(new ARIMAOptions<Half> { P = 0, D = 0, Q = 0 })
+        });
+        var doubleModel = new GARCHModel<double>(new GARCHModelOptions<double>
+        {
+            ARCHOrder = 1,
+            GARCHOrder = 1,
+            MeanModel = new ARIMAModel<double>(new ARIMAOptions<double> { P = 0, D = 0, Q = 0 })
+        });
+
+        halfModel.Train(xHalf, yHalf);
+        doubleModel.Train(xDouble, yDouble);
+
+        var halfInfo = halfModel.GetModelMetadata().AdditionalInfo;
+        var doubleInfo = doubleModel.GetModelMetadata().AdditionalInfo;
+
+        double halfOmega = (double)((Vector<Half>)halfInfo["Omega"])[0];
+        double halfAlpha = (double)((Vector<Half>)halfInfo["Alpha"])[0];
+        double halfBeta = (double)((Vector<Half>)halfInfo["Beta"])[0];
+
+        double doubleOmega = ((Vector<double>)doubleInfo["Omega"])[0];
+        double doubleAlpha = ((Vector<double>)doubleInfo["Alpha"])[0];
+        double doubleBeta = ((Vector<double>)doubleInfo["Beta"])[0];
+
+        Assert.True(!double.IsNaN(halfOmega) && !double.IsInfinity(halfOmega), $"Half omega is non-finite: {halfOmega}");
+        Assert.True(!double.IsNaN(halfAlpha) && !double.IsInfinity(halfAlpha), $"Half alpha is non-finite: {halfAlpha}");
+        Assert.True(!double.IsNaN(halfBeta) && !double.IsInfinity(halfBeta), $"Half beta is non-finite: {halfBeta}");
+
+        // Must not collapse to the 1e-5 variance floor (the masked NaN signature) and must move off initial [0.01, 0.05, 0.85].
+        Assert.True(halfOmega > 1e-3, $"Expected non-degenerate Half omega > 1e-3, got {halfOmega}");
+        Assert.True(Math.Abs(halfOmega - (double)(Half)0.01) > 5e-3, $"Half omega stayed at initial 0.01: {halfOmega}");
+        Assert.True(halfAlpha > 0.0 && halfBeta >= 0.0 && halfAlpha + halfBeta < 1.0,
+            $"Half GARCH parameters violated stationarity: alpha={halfAlpha}, beta={halfBeta}");
+
+        // Half MLE parameters must closely match double MLE parameters within Half rounding tolerance.
+        Assert.InRange(Math.Abs(halfOmega - doubleOmega), 0.0, 5e-3);
+        Assert.InRange(Math.Abs(halfAlpha - doubleAlpha), 0.0, 1e-2);
+        Assert.InRange(Math.Abs(halfBeta - doubleBeta), 0.0, 1e-2);
+
+        // Fitted Half parameters must strictly improve the Gaussian log-likelihood over initial [0.01, 0.05, 0.85].
+        double initialLl = GaussianLogLikelihoodReference(yDouble, 0.01, 0.05, 0.85);
+        double fittedHalfLl = GaussianLogLikelihoodReference(yDouble, halfOmega, halfAlpha, halfBeta);
+        Assert.True(fittedHalfLl > initialLl + 1.0,
+            $"Expected fitted Half log-likelihood ({fittedHalfLl}) > initial ({initialLl})");
+
+        // Anti-masking check: ClampMinimum must preserve NaN rather than turning NaN into VarianceFloor.
+        var clampMethod = typeof(GARCHModel<Half>).GetMethod("ClampMinimum", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(clampMethod);
+        var clamped = clampMethod?.Invoke(
+            halfModel,
+            new object[] { new Vector<Half>(new[] { Half.NaN }), (Half)1e-5 }) as Vector<Half>;
+        Assert.NotNull(clamped);
+        Assert.True(float.IsNaN((float)(clamped ?? new Vector<Half>(1))[0]));
+    }
+
+    private static double GaussianLogLikelihoodReference(Vector<double> y, double omega, double alpha, double beta)
+    {
+        int n = y.Length;
+        double mean = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            mean += y[i];
+        }
+        mean /= n;
+
+        double sampleVar = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            double d = y[i] - mean;
+            sampleVar += d * d;
+        }
+        sampleVar /= (n - 1);
+
+        var sigma2 = new double[n];
+        sigma2[0] = sampleVar;
+        double sum = 0.0;
+        for (int t = 1; t < n; t++)
+        {
+            double prev = y[t - 1] - mean;
+            double rt = y[t] - mean;
+            double v = omega + alpha * (prev * prev) + beta * sigma2[t - 1];
+            sigma2[t] = v < 1e-5 ? 1e-5 : v;
+            sum += Math.Log(sigma2[t]) + (rt * rt) / sigma2[t];
+        }
+
+        return -0.5 * sum;
+    }
 }

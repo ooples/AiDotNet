@@ -327,7 +327,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         // Residuals with non-finite entries zeroed, then fit the ARMA part on them
         Vector<T> fitted = xWithInt * solution;
         Vector<T> residuals = (Vector<T>)Engine.Subtract(y, fitted);
-        residuals = Engine.TensorNanToNum(Tensor<T>.FromVector(residuals), 0.0, 0.0, 0.0).ToVector();
+        residuals = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, Tensor<T>.FromVector(residuals), 0.0, 0.0, 0.0).ToVector();
 
         FitARMAModel(residuals);
     }

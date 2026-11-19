@@ -436,6 +436,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        ValidatePatchInput(noisySample);
         using var streaming = BeginWeightStreamingForward();
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
@@ -445,6 +446,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        ValidatePatchInput(noisySample);
         using var streaming = BeginWeightStreamingForward();
         // The documented input is GetTimestepEmbedding's raw sinusoidal embedding, as PredictNoise builds it;
         // project it through the time MLP exactly as PredictNoise does.
@@ -536,62 +538,30 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Forward Helpers
 
+    private void ValidatePatchInput(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 4)
+            throw new ArgumentException("MMDiT requires rank-4 [batch, channels, height, width] input.", nameof(input));
+        var shape = input._shape;
+        if (shape[0] <= 0 || shape[1] != _inputChannels || shape[2] <= 0 || shape[3] <= 0)
+            throw new ArgumentException($"MMDiT requires a positive batch/spatial extent and {_inputChannels} input channels.", nameof(input));
+        if (_patchSize <= 0 || shape[2] % _patchSize != 0 || shape[3] % _patchSize != 0)
+            throw new ArgumentException($"MMDiT spatial dimensions must be divisible by patch size {_patchSize}.", nameof(input));
+    }
+
     private Tensor<T> PatchifyAndEmbed(Tensor<T> x)
     {
+        ValidatePatchInput(x);
         var shape = x._shape;
-        var batch = shape[0];
-        var channels = shape[1];
-        var height = shape[2];
-        var width = shape[3];
-
-        var numPatchesH = height / _patchSize;
-        var numPatchesW = width / _patchSize;
-        var numPatches = numPatchesH * numPatchesW;
-        var patchDim = channels * _patchSize * _patchSize;
-
-        var patches = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
-        var patchSpan = patches.AsWritableSpan();
-        var xSpan = x.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < numPatchesH; ph++)
-            {
-                for (int pw = 0; pw < numPatchesW; pw++)
-                {
-                    int dimIdx = 0;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        for (int py = 0; py < _patchSize; py++)
-                        {
-                            for (int px = 0; px < _patchSize; px++)
-                            {
-                                var ih = ph * _patchSize + py;
-                                var iw = pw * _patchSize + px;
-                                var srcIdx = b * channels * height * width + c * height * width + ih * width + iw;
-                                var dstIdx = b * numPatches * patchDim + patchIdx * patchDim + dimIdx;
-                                patchSpan[dstIdx] = xSpan[srcIdx];
-                                dimIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        // Batched linear embed: reshape [batch, numPatches, patchDim] -> [batch*numPatches, patchDim]
-        var flatPatches = TensorAllocator.Rent<T>(new[] { batch * numPatches, patchDim });
-        patches.AsSpan().CopyTo(flatPatches.AsWritableSpan());
-
-        var projected = _patchEmbed.Forward(flatPatches);
-
-        // Reshape back to [batch, numPatches, hiddenSize]
-        var embedded = TensorAllocator.Rent<T>(new[] { batch, numPatches, _hiddenSize });
-        projected.AsSpan().CopyTo(embedded.AsWritableSpan());
-
-        return embedded;
+        int batch = shape[0], channels = shape[1];
+        int patchRows = shape[2] / _patchSize, patchColumns = shape[3] / _patchSize;
+        int numPatches = patchRows * patchColumns, patchDim = channels * _patchSize * _patchSize;
+        // A token's channels are ordered [channel, patchY, patchX], and tokens [patchRow, patchColumn].
+        var grid = Engine.Reshape(x, new[] { batch, channels, patchRows, _patchSize, patchColumns, _patchSize });
+        var patches = Engine.TensorPermute(grid, new[] { 0, 2, 4, 1, 3, 5 });
+        var flatPatches = Engine.Reshape(patches, new[] { batch * numPatches, patchDim });
+        return Engine.Reshape(_patchEmbed.Forward(flatPatches), new[] { batch, numPatches, _hiddenSize });
     }
 
     private Tensor<T> AddPositionEmbedding(Tensor<T> x, int numPatches)
@@ -640,23 +610,21 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
         // Get AdaLN modulation for image stream
         var imgMod = block.ImageAdaLN.Forward(timeEmbed);
-        var imgModSpan = imgMod.AsSpan();
-        var imgShift1 = ExtractMod(imgModSpan, 0, _hiddenSize);
-        var imgScale1 = ExtractMod(imgModSpan, _hiddenSize, _hiddenSize);
-        var imgGate1 = ExtractMod(imgModSpan, _hiddenSize * 2, _hiddenSize);
-        var imgShift2 = ExtractMod(imgModSpan, _hiddenSize * 3, _hiddenSize);
-        var imgScale2 = ExtractMod(imgModSpan, _hiddenSize * 4, _hiddenSize);
-        var imgGate2 = ExtractMod(imgModSpan, _hiddenSize * 5, _hiddenSize);
+        var imgShift1 = ExtractMod(imgMod, 0, _hiddenSize);
+        var imgScale1 = ExtractMod(imgMod, _hiddenSize, _hiddenSize);
+        var imgGate1 = ExtractMod(imgMod, _hiddenSize * 2, _hiddenSize);
+        var imgShift2 = ExtractMod(imgMod, _hiddenSize * 3, _hiddenSize);
+        var imgScale2 = ExtractMod(imgMod, _hiddenSize * 4, _hiddenSize);
+        var imgGate2 = ExtractMod(imgMod, _hiddenSize * 5, _hiddenSize);
 
         // Get AdaLN modulation for text stream
         var txtMod = block.TextAdaLN.Forward(timeEmbed);
-        var txtModSpan = txtMod.AsSpan();
-        var txtShift1 = ExtractMod(txtModSpan, 0, _hiddenSize);
-        var txtScale1 = ExtractMod(txtModSpan, _hiddenSize, _hiddenSize);
-        var txtGate1 = ExtractMod(txtModSpan, _hiddenSize * 2, _hiddenSize);
-        var txtShift2 = ExtractMod(txtModSpan, _hiddenSize * 3, _hiddenSize);
-        var txtScale2 = ExtractMod(txtModSpan, _hiddenSize * 4, _hiddenSize);
-        var txtGate2 = ExtractMod(txtModSpan, _hiddenSize * 5, _hiddenSize);
+        var txtShift1 = ExtractMod(txtMod, 0, _hiddenSize);
+        var txtScale1 = ExtractMod(txtMod, _hiddenSize, _hiddenSize);
+        var txtGate1 = ExtractMod(txtMod, _hiddenSize * 2, _hiddenSize);
+        var txtShift2 = ExtractMod(txtMod, _hiddenSize * 3, _hiddenSize);
+        var txtScale2 = ExtractMod(txtMod, _hiddenSize * 4, _hiddenSize);
+        var txtGate2 = ExtractMod(txtMod, _hiddenSize * 5, _hiddenSize);
 
         // Normalize and modulate
         var imgNormed = block.ImageNorm1.Forward(imageTokens);
@@ -718,10 +686,9 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
         // AdaLN modulation
         var mod = block.AdaLN.Forward(timeEmbed);
-        var modSpan = mod.AsSpan();
-        var shift = ExtractMod(modSpan, 0, _hiddenSize);
-        var scaleArr = ExtractMod(modSpan, _hiddenSize, _hiddenSize);
-        var gate = ExtractMod(modSpan, _hiddenSize * 2, _hiddenSize);
+        var shift = ExtractMod(mod, 0, _hiddenSize);
+        var scaleArr = ExtractMod(mod, _hiddenSize, _hiddenSize);
+        var gate = ExtractMod(mod, _hiddenSize * 2, _hiddenSize);
 
         // Self-attention
         var normed = block.Norm.Forward(combined);
@@ -748,120 +715,39 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T> FinalLayer(Tensor<T> imageTokens, Tensor<T> timeEmbed)
     {
         var mod = _adalnModulation.Forward(timeEmbed);
-        var modSpan = mod.AsSpan();
-        var shift = ExtractMod(modSpan, 0, _hiddenSize);
-        var scaleArr = ExtractMod(modSpan, _hiddenSize, _hiddenSize);
-
-        var normed = _finalNorm.Forward(imageTokens);
-        normed = ApplyAdaLN(normed, scaleArr, shift);
-
-        var shape = normed._shape;
-        var batch = shape[0];
-        var numPatches = shape[1];
-        var patchDim = _inputChannels * _patchSize * _patchSize;
-
-        var output = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
-        var outputSpan = output.AsWritableSpan();
-        var normedSpan = normed.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                var hiddenVector = TensorAllocator.Rent<T>(new[] { 1, _hiddenSize });
-                var hvSpan = hiddenVector.AsWritableSpan();
-                for (int i = 0; i < _hiddenSize; i++)
-                {
-                    hvSpan[i] = normedSpan[b * numPatches * _hiddenSize + p * _hiddenSize + i];
-                }
-
-                var projected = _outputProj.Forward(hiddenVector);
-                var projSpan = projected.AsSpan();
-                for (int i = 0; i < patchDim; i++)
-                {
-                    outputSpan[b * numPatches * patchDim + p * patchDim + i] = projSpan[i];
-                }
-            }
-        }
-
-        return output;
+        var shift = ExtractMod(mod, 0, _hiddenSize);
+        var scale = ExtractMod(mod, _hiddenSize, _hiddenSize);
+        var normed = ApplyAdaLN(_finalNorm.Forward(imageTokens), scale, shift);
+        int batch = normed._shape[0], numPatches = normed._shape[1];
+        int patchDim = _inputChannels * _patchSize * _patchSize;
+        var rows = Engine.Reshape(normed, new[] { batch * numPatches, _hiddenSize });
+        return Engine.Reshape(_outputProj.Forward(rows), new[] { batch, numPatches, patchDim });
     }
 
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
-        var shape = patches._shape;
-        var batch = shape[0];
-        var patchDim = shape[2];
-        var numPatchesH = height / _patchSize;
-        var numPatchesW = width / _patchSize;
-
-        var output = TensorAllocator.Rent<T>(new[] { batch, _inputChannels, height, width });
-        var outputSpan = output.AsWritableSpan();
-        var patchSpan = patches.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < numPatchesH; ph++)
-            {
-                for (int pw = 0; pw < numPatchesW; pw++)
-                {
-                    int dimIdx = 0;
-                    for (int c = 0; c < _inputChannels; c++)
-                    {
-                        for (int py = 0; py < _patchSize; py++)
-                        {
-                            for (int px = 0; px < _patchSize; px++)
-                            {
-                                var ih = ph * _patchSize + py;
-                                var iw = pw * _patchSize + px;
-                                var dstIdx = b * _inputChannels * height * width + c * height * width + ih * width + iw;
-                                var srcIdx = b * numPatchesH * numPatchesW * patchDim + patchIdx * patchDim + dimIdx;
-                                outputSpan[dstIdx] = patchSpan[srcIdx];
-                                dimIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        return output;
+        int batch = patches._shape[0];
+        int patchRows = height / _patchSize, patchColumns = width / _patchSize;
+        var grid = Engine.Reshape(patches,
+            new[] { batch, patchRows, patchColumns, _inputChannels, _patchSize, _patchSize });
+        var image = Engine.TensorPermute(grid, new[] { 0, 3, 1, 4, 2, 5 });
+        return Engine.Reshape(image, new[] { batch, _inputChannels, height, width });
     }
 
     #endregion
 
     #region Tensor Utilities
 
-    private T[] ExtractMod(ReadOnlySpan<T> modSpan, int offset, int size)
+    private Tensor<T> ExtractMod(Tensor<T> modulation, int offset, int size)
     {
-        var result = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            result[i] = modSpan[offset + i];
-        }
-        return result;
+        var channels = Engine.TensorNarrow(modulation, modulation.Rank - 1, offset, size);
+        // Keep each sample's modulation row; only the token axis broadcasts.
+        return Engine.Reshape(channels, new[] { modulation._shape[0], 1, size });
     }
 
-    private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
+    private Tensor<T> ApplyAdaLN(Tensor<T> x, Tensor<T> scale, Tensor<T> shift)
     {
-        var hidden = x.Shape[^1];
-
-        // Create broadcastable tensors: [1, 1, hidden] that NumPy/PyTorch
-        // would auto-broadcast against x's [B, N, hidden]. The plain
-        // Engine.TensorAdd / TensorMultiply require exact shape match;
-        // use the BroadcastAdd / BroadcastMultiply variants which honour
-        // standard right-aligned broadcasting (Esser et al. 2024 §3 AdaLN-Zero
-        // is per-channel: scale + 1 and shift are broadcast across the N
-        // token positions).
-        // Channel h uses scale[h % scale.Length] + 1 and shift[h % shift.Length]
-        var broadcastShape = new[] { 1, 1, hidden };
-        var scaleTensor = Engine.Reshape(Engine.TensorAddScalar(TileTo(scale, hidden), NumOps.One), broadcastShape);
-        var shiftTensor = Engine.Reshape(TileTo(shift, hidden), broadcastShape);
-
-        var scaled = Engine.TensorMultiply(x, scaleTensor);
-        return Engine.TensorAdd(scaled, shiftTensor);
+        return Engine.TensorAdd(Engine.TensorMultiply(x, Engine.TensorAddScalar(scale, NumOps.One)), shift);
     }
 
     /// <summary>
@@ -878,21 +764,9 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         return Engine.TensorIndexSelect(source, new Tensor<int>(new[] { length }, new Vector<int>(index)), 0);
     }
 
-    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
+    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, Tensor<T> gate)
     {
-        var hidden = x.Shape[^1];
-
-        // Per-channel gate broadcast across the N token positions — see
-        // ApplyAdaLN for the broadcast rationale.
-        var gateTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var gateSpan = gateTensor.AsWritableSpan();
-        for (int h = 0; h < hidden; h++)
-        {
-            gateSpan[h] = gate[h % gate.Length];
-        }
-
-        var gated = Engine.TensorMultiply(residual, gateTensor);
-        return Engine.TensorAdd<T>(x, gated);
+        return Engine.TensorAdd(x, Engine.TensorMultiply(residual, gate));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -907,24 +781,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> ExtractImageTokens(Tensor<T> combined, int textLen, int imageLen)
     {
-        var shape = combined._shape;
-        var batch = shape[0];
-        var hidden = shape[2];
-
-        // Slice along sequence axis to extract image tokens
-        var output = TensorAllocator.Rent<T>(new[] { batch, imageLen, hidden });
-        var outSpan = output.AsWritableSpan();
-        var combinedSpan = combined.AsSpan();
-        var totalSeq = shape[1];
-
-        for (int b = 0; b < batch; b++)
-        {
-            var srcOffset = b * totalSeq * hidden + textLen * hidden;
-            var dstOffset = b * imageLen * hidden;
-            combinedSpan.Slice(srcOffset, imageLen * hidden).CopyTo(outSpan.Slice(dstOffset, imageLen * hidden));
-        }
-
-        return output;
+        return Engine.TensorNarrow(combined, 1, textLen, imageLen);
     }
 
     private Tensor<T> ScaledDotProductAttention(
@@ -950,8 +807,10 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
         // #2312: weights discarded. MMDiT's joint text+image sequence is the longest
         // attention in the diffusion stack, so this is where the score matrix cost most.
-        var attn4 = Engine.FlashAttention<T>(
-            q4, k4, v4, scale: scale, isCausal: false, out _, attentionBias: null);
+        var attn4 = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? Engine.ScaledDotProductAttention(q4, k4, v4, mask: null, scale: scale, out _)
+            : Engine.FlashAttention<T>(
+                q4, k4, v4, scale: scale, isCausal: false, out _, attentionBias: null);
 
         // [B, H, queryLen, D] -> [B, queryLen, H, D] -> [B, queryLen, hidden]
         var attnBshd = Engine.TensorPermute<T>(attn4, new[] { 0, 2, 1, 3 });

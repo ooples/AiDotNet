@@ -321,7 +321,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         int first = step * r, available = Math.Max(0, Math.Min(r, target.Shape[0] - first));
         if (available == 0) return new Tensor<T>(new[] { 1, mel * r });
         var rows = Engine.Reshape(Engine.TensorSlice(target, new[] { first, 0 }, new[] { available, mel }), new[] { 1, available * mel });
-        if (available == r) return rows.Clone();
+        if (available == r) return rows;
         return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, (r - available) * mel }) }, 1);
     }
 

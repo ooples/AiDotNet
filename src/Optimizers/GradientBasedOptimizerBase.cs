@@ -2534,6 +2534,146 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _adaptiveSchedulerStepsOnFitness = false;
         GradientOptions.LearningRateScheduler = scheduler;
         SetLearningRate(scheduler?.CurrentLearningRate ?? GradientOptions.InitialLearningRate);
+        RefreshPendingFusedPlanSchedules();
+    }
+
+    private const int FusedOptimizerStateMagic = 0x54504F41;
+    private const int FusedOptimizerStateVersion = 6;
+
+    private void RefreshPendingFusedPlanSchedules()
+    {
+        if (_pendingFusedPlanState is not { Length: > 8 })
+            return;
+        if (!TryGetFusedLrSchedule(out var freshSchedule))
+            return;
+
+        AiDotNet.Tensors.Engines.Compilation.FusedLrScheduleCheckpoint? freshCheckpoint = freshSchedule is null
+            ? new AiDotNet.Tensors.Engines.Compilation.FusedLrScheduleCheckpoint(
+                AiDotNet.Tensors.Engines.Compilation.FusedLrScheduleKind.Constant,
+                new[] { GetCurrentLearningRate() },
+                Array.Empty<int>())
+            : freshSchedule.TryCaptureCheckpoint();
+        if (freshCheckpoint is null)
+            return;
+
+        using var input = new MemoryStream(_pendingFusedPlanState, writable: false);
+        using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
+        if (reader.ReadInt32() != FusedOptimizerStateMagic)
+            return;
+        int version = reader.ReadInt32();
+        if (version < 3 || version > FusedOptimizerStateVersion)
+            return;
+
+        var checkpoint = AiDotNet.Tensors.Engines.Compilation.Serialization.FusedOptimizerCheckpointSerializer.Read(
+            reader,
+            doubleHyperparameters: version >= 4,
+            hasVelocityIncludesLearningRate: version >= 5,
+            hasEnrollmentMetadata: version >= FusedOptimizerStateVersion);
+        if (checkpoint is null || checkpoint.Schedules.Length == 0)
+            return;
+
+        for (int i = 0; i < checkpoint.Schedules.Length; i++)
+            checkpoint.Schedules[i] = freshCheckpoint;
+
+        using var output = new MemoryStream();
+        using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(FusedOptimizerStateMagic);
+            writer.Write(FusedOptimizerStateVersion);
+            AiDotNet.Tensors.Engines.Compilation.Serialization.FusedOptimizerCheckpointSerializer.Write(writer, checkpoint);
+        }
+
+        _pendingFusedPlanState = output.ToArray();
+    }
+
+    internal void MaterializePendingFusedOptimizerStateToEager(IReadOnlyList<Tensor<T>> canonicalParameters)
+    {
+        if (_pendingFusedPlanState is not { Length: > 8 } || canonicalParameters is null)
+            return;
+
+        var expectedLengths = new int[canonicalParameters.Count];
+        for (int i = 0; i < canonicalParameters.Count; i++)
+            expectedLengths[i] = canonicalParameters[i].Length;
+
+        using var input = new MemoryStream(_pendingFusedPlanState, writable: false);
+        using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
+        if (reader.ReadInt32() != FusedOptimizerStateMagic)
+            return;
+        int version = reader.ReadInt32();
+        if (version < 3 || version > FusedOptimizerStateVersion)
+            return;
+
+        var checkpoint = AiDotNet.Tensors.Engines.Compilation.Serialization.FusedOptimizerCheckpointSerializer.Read(
+            reader,
+            doubleHyperparameters: version >= 4,
+            hasVelocityIncludesLearningRate: version >= 5,
+            hasEnrollmentMetadata: version >= FusedOptimizerStateVersion,
+            expectedParameterLengths: expectedLengths);
+        if (checkpoint is null || checkpoint.Parameters.Length != canonicalParameters.Count)
+            return;
+
+        var stepField = EnumerateOptimizerFields()
+            .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int));
+        stepField?.SetValue(this, checkpoint.OptimizerStep);
+
+        var stateFields = EnumerateTapeTensorStateFields().ToList();
+        FieldInfo? firstMomentField = stateFields.FirstOrDefault(f =>
+            f.Name is "_tapeM" or "_tapeVelocity" or "_tapeMomentum");
+        FieldInfo? secondMomentField = stateFields.FirstOrDefault(f =>
+            f.Name is "_tapeV" or "_tapeMeanSquare" or "_tapeSquaredGrad");
+        FieldInfo? maxSecondMomentField = stateFields.FirstOrDefault(f =>
+            f.Name is "_tapeVMax");
+
+        lock (_tapeStateSync)
+        {
+            if (firstMomentField is not null)
+            {
+                var mMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
+                for (int i = 0; i < canonicalParameters.Count; i++)
+                {
+                    var pCkpt = checkpoint.Parameters[i];
+                    if (pCkpt.MFloat is { } mf)
+                        mMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])mf.Clone())).Cast<T>();
+                    else if (pCkpt.MDouble is { } md)
+                        mMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])md.Clone())).Cast<T>();
+                }
+                if (mMap.Count > 0)
+                    _pendingTapeTensorStates[firstMomentField.Name] = mMap;
+            }
+
+            if (secondMomentField is not null)
+            {
+                var vMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
+                for (int i = 0; i < canonicalParameters.Count; i++)
+                {
+                    var pCkpt = checkpoint.Parameters[i];
+                    if (pCkpt.VFloat is { } vf)
+                        vMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vf.Clone())).Cast<T>();
+                    else if (pCkpt.VDouble is { } vd)
+                        vMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vd.Clone())).Cast<T>();
+                }
+                if (vMap.Count > 0)
+                    _pendingTapeTensorStates[secondMomentField.Name] = vMap;
+            }
+
+            if (maxSecondMomentField is not null)
+            {
+                var vmaxMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
+                for (int i = 0; i < canonicalParameters.Count; i++)
+                {
+                    var pCkpt = checkpoint.Parameters[i];
+                    if (pCkpt.VMaxFloat is { } vmf)
+                        vmaxMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vmf.Clone())).Cast<T>();
+                    else if (pCkpt.VMaxDouble is { } vmd)
+                        vmaxMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vmd.Clone())).Cast<T>();
+                }
+                if (vmaxMap.Count > 0)
+                    _pendingTapeTensorStates[maxSecondMomentField.Name] = vmaxMap;
+            }
+        }
+
+        _pendingFusedPlanState = null;
+        _restoredEagerStateAwaitingEagerPath = true;
     }
 
     /// <summary>

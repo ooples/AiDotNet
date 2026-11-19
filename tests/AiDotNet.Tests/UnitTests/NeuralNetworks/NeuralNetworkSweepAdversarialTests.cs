@@ -406,8 +406,10 @@ public class NeuralNetworkSweepAdversarialTests
         int[][] stepShapes;
         using (var recording = AiDotNet.Training.CompiledStepRandom<double>.BeginRecording())
         {
+            using var capture = AiDotNet.Training.CompiledStepRandom<double>.CaptureDraws();
             _ = model.TrainStep(features, targets, 0.01, indices);
-            stepShapes = recording.Draws.Select(draw => draw.Tensor.Shape.ToArray()).ToArray();
+            Assert.Equal(recording.Draws.Count, capture.Draws.Count);
+            stepShapes = capture.Draws.Select(draw => Assert.IsType<Tensor<double>>(draw).Shape.ToArray()).ToArray();
         }
 
         int predictDraws;

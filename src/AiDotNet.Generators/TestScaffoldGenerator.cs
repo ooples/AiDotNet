@@ -758,7 +758,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     /// </remarks>
     private static readonly System.Collections.Generic.HashSet<string> MetaLearnersFrozenByDesign =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
-        { "CAMLAlgorithm", "SImPaAlgorithm" };
+        { "CAMLAlgorithm", "NTMAlgorithm", "SImPaAlgorithm" };
 
     /// <summary>Overridable surface of <c>DeepfakeDetectorTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
@@ -14596,7 +14596,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // DemucsNoise's finite-difference check completes in ~3-5 s on dedicated cores but twice
         // exhausted its 120 s gate in the parallel D-F shard. Keep all gradient samples and the
         // original timeout; serialization removes the machine-contention variable instead.
-        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former" or "DemucsNoise")
+        if (model.ClassName is "ISTFTNet" or "PartitionMCMCAlgorithm" or "VFIMamba" or "Mask2Former" or "DemucsNoise" or "FireRedTTS")
             sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
         if (heavyTimeout)
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
@@ -16376,7 +16376,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     const int DefaultTtsSmokeIterations = 2;
                     const int E2TtsMemorizationIterations = 15;
                     int ttsSmokeIterations = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" ? FastSpeechSmokeIterations
-                                           : model.ClassName is "FastSpeech2" or "PromptTTS" || naturalSpeechWarmup
+                                           : model.ClassName is "FastSpeech2" or "PromptTTS" or "NonAttentiveTacotron" || naturalSpeechWarmup
                                                ? PastWarmupTtsIterations : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
@@ -16390,13 +16390,13 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // (reference nn.init.zeros_), so its untrained denoiser predicts a constant whatever the condition.
                     if (model.ClassName is "E2TTS" or "F5TTS" or "ProDiff")
                         sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
-                    int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? E2TtsMemorizationIterations : naturalSpeechWarmup ? PastWarmupTtsIterations
-                        // VoiceFlow trains at its reference 5e-5 and fell 5.4866 -> 5.4382 (0.88 %) in one step.
-                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" or "VoiceFlow" ? 4
-                        // ForwardTacotron's and Non-Attentive Tacotron's objectives fall a fraction of a percent per step at
-                        // the fixtures' constant 1e-3 (Non-Attentive Tacotron measured 0.8098 -> 0.8071 in one step); six
-                        // steps clear the 1 % threshold, which is unchanged.
-                        : model.ClassName is "ForwardTacotron" or "NonAttentiveTacotron" ? 6 : DefaultTtsSmokeIterations;
+                    int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? E2TtsMemorizationIterations
+                        : naturalSpeechWarmup || model.ClassName == "NonAttentiveTacotron" ? PastWarmupTtsIterations
+                        // VoiceFlow trains at its reference 5e-5 and fell 5.4866 -> 5.4382 (0.88 %) in one step.
+                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" or "VoiceFlow" ? 4
+                        // ForwardTacotron's objective falls a fraction of a percent per step at the fixture's constant 1e-3;
+                        // six steps clear the 1 % threshold, which is unchanged.
+                        : model.ClassName == "ForwardTacotron" ? 6 : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int MemorizationTaskIterations => {memorizationSteps};");
                     if (naturalSpeechWarmup)
                     {
@@ -18799,6 +18799,15 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // below untrained by step 50. Finite differences agree with the analytic gradients of all three networks, and
         // the 100-step memorization probe passes; the invariant itself is unchanged.
         if (model.ClassName == "ABME" && model.TypeParameterCount == 1)
+        {
+            sb.AppendLine("    protected override int? MeasuredTransientRecoveryBudget => 50;");
+        }
+
+        // Non-Attentive Tacotron's fixture replaces the paper's 4000-step linear warm-up with constant 1e-3 Adam;
+        // step 1's un-warmed sign jump into the BatchNorm post-net spikes above untrained (2.9350) before descending
+        // monotonically (measured float32: step 6 3.1003, step 20 2.9548; 12-step memorization probe passes). Fifty
+        // steps (~1 s) clear the transient with margin while keeping the strict trained <= untrained invariant unchanged.
+        if (model.ClassName == "NonAttentiveTacotron" && model.TypeParameterCount == 1)
         {
             sb.AppendLine("    protected override int? MeasuredTransientRecoveryBudget => 50;");
         }

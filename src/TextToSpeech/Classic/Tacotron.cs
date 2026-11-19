@@ -266,7 +266,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
                 ? Engine.TensorSlice(teacher, new[] { step * r + r - 1, 0 }, new[] { 1, o.MelChannels })
                 : Engine.TensorSlice(frames, new[] { r - 1, 0 }, new[] { 1, o.MelChannels });
             if (teacher is null)
-                previous = new Tensor<T>(previous._shape, previous.ToVector());
+                previous = DetachTensor(previous);
         }
         return groups.Count == 1 ? groups[0] : Engine.TensorConcatenate(groups.ToArray(), 0);
     }

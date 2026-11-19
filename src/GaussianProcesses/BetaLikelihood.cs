@@ -143,6 +143,8 @@ public class BetaLikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have same length.");
 
+        // Evaluate in double so log-gamma (Gamma(10) = 362880 > Half.MaxValue = 65504) and boundary
+        // clamps (1 - 1e-10) retain full precision on Half and float inputs.
         var engine = AiDotNetEngine.Current;
         var (logY, logOneMinusY) = ClampedLogs(y);
         var (_, _, alpha, beta) = BetaParameters(f);
@@ -154,10 +156,10 @@ public class BetaLikelihood<T>
         var terms = engine.TensorAdd(
             logNormalizer,
             engine.TensorAdd(
-                engine.TensorMultiply(engine.TensorSubtractScalar(alpha, _numOps.One), logY),
-                engine.TensorMultiply(engine.TensorSubtractScalar(beta, _numOps.One), logOneMinusY)));
+                engine.TensorMultiply(engine.TensorSubtractScalar(alpha, 1.0), logY),
+                engine.TensorMultiply(engine.TensorSubtractScalar(beta, 1.0), logOneMinusY)));
 
-        return engine.TensorSum(terms);
+        return _numOps.FromDouble(engine.TensorSum(terms));
     }
 
     /// <summary>
@@ -189,7 +191,7 @@ public class BetaLikelihood<T>
         // ∂μ / ∂f = μ(1-μ)
         var dMu_dF = engine.TensorMultiply(mu, oneMinusMu);
 
-        return engine.TensorMultiply(dLogP_dMu, dMu_dF).ToVector();
+        return engine.TensorMultiply(dLogP_dMu, dMu_dF).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -214,13 +216,12 @@ public class BetaLikelihood<T>
         var engine = AiDotNetEngine.Current;
         var (logY, logOneMinusY) = ClampedLogs(y);
         var (mu, oneMinusMu, alpha, beta) = BetaParameters(f);
-        T one = _numOps.One;
 
         // Derivatives of sigmoid: μ = sigmoid(f)
         var dMu_dF = engine.TensorMultiply(mu, oneMinusMu); // ∂μ/∂f
-        var d2Mu_dF2 = engine.TensorMultiply(                                       // ∂²μ/∂f²
+        var d2Mu_dF2 = engine.TensorMultiply(               // ∂²μ/∂f²
             dMu_dF,
-            engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(mu, _numOps.FromDouble(2))));
+            engine.ScalarMinusTensor(1.0, engine.TensorMultiplyScalar(mu, 2.0)));
 
         // First derivative: ∂logP/∂μ (needed for chain rule)
         var dLogP_dMu = DLogPDMu(alpha, beta, logY, logOneMinusY);
@@ -228,13 +229,13 @@ public class BetaLikelihood<T>
         // Second derivative: ∂²logP/∂μ² (from trigamma functions)
         var d2LogP_dMu2 = engine.TensorMultiplyScalar(
             engine.TensorAdd(engine.TensorPolygamma(1, alpha), engine.TensorPolygamma(1, beta)),
-            _numOps.FromDouble(-_precision * _precision));
+            -_precision * _precision);
 
         // Full chain rule for second derivative:
         // ∂²logP/∂f² = (∂²logP/∂μ²)(∂μ/∂f)² + (∂logP/∂μ)(∂²μ/∂f²)
         return engine.TensorAdd(
             engine.TensorMultiply(d2LogP_dMu2, engine.TensorSquare(dMu_dF)),
-            engine.TensorMultiply(dLogP_dMu, d2Mu_dF2)).ToVector();
+            engine.TensorMultiply(dLogP_dMu, d2Mu_dF2)).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -342,16 +343,14 @@ public class BetaLikelihood<T>
     /// y and 1 - y are clamped separately: 1 - Epsilon rounds to exactly 1 in single (and half) precision,
     /// so clamping y alone would leave log(1 - y) = log(0) for y = 1.
     /// </remarks>
-    private (Tensor<T> LogY, Tensor<T> LogOneMinusY) ClampedLogs(Vector<T> y)
+    private (Tensor<double> LogY, Tensor<double> LogOneMinusY) ClampedLogs(Vector<T> y)
     {
         var engine = AiDotNetEngine.Current;
-
-        // Epsilon is 0 in half precision; the type-aware floor keeps log away from log(0) there too.
-        T low = NumericTolerance.Of<T>(Epsilon);
-        T high = _numOps.FromDouble(1 - Epsilon);
-        var values = Tensor<T>.FromVector(y);
+        const double low = Epsilon;
+        const double high = 1.0 - Epsilon;
+        var values = Tensor<T>.FromVector(y).Cast<double>();
         var clamped = engine.TensorClamp(values, low, high);
-        var clampedComplement = engine.TensorClamp(engine.ScalarMinusTensor(_numOps.One, values), low, high);
+        var clampedComplement = engine.TensorClamp(engine.ScalarMinusTensor(1.0, values), low, high);
         return (engine.TensorLog(clamped), engine.TensorLog(clampedComplement));
     }
 
@@ -363,30 +362,29 @@ public class BetaLikelihood<T>
     /// 1 - μ is taken as sigmoid(-f) rather than 1 - sigmoid(f): the latter cancels to exactly 0 once
     /// sigmoid(f) rounds to 1 (f ≳ 17 in single precision), which made β = 0 and the log-likelihood -∞.
     /// </remarks>
-    private (Tensor<T> Mu, Tensor<T> OneMinusMu, Tensor<T> Alpha, Tensor<T> Beta) BetaParameters(Vector<T> f)
+    private (Tensor<double> Mu, Tensor<double> OneMinusMu, Tensor<double> Alpha, Tensor<double> Beta) BetaParameters(Vector<T> f)
     {
         var engine = AiDotNetEngine.Current;
-        var latent = Tensor<T>.FromVector(f);
+        var latent = Tensor<T>.FromVector(f).Cast<double>();
         var mu = engine.TensorSigmoid(latent);
         var oneMinusMu = engine.TensorSigmoid(engine.TensorNegate(latent));
-        T low = NumericTolerance.Of<T>(Epsilon);
-        T high = _numOps.FromDouble(1 - Epsilon);
-        T precision = _numOps.FromDouble(_precision);
-        var alpha = engine.TensorMultiplyScalar(engine.TensorClamp(mu, low, high), precision);
-        var beta = engine.TensorMultiplyScalar(engine.TensorClamp(oneMinusMu, low, high), precision);
+        const double low = Epsilon;
+        const double high = 1.0 - Epsilon;
+        var alpha = engine.TensorMultiplyScalar(engine.TensorClamp(mu, low, high), _precision);
+        var beta = engine.TensorMultiplyScalar(engine.TensorClamp(oneMinusMu, low, high), _precision);
         return (mu, oneMinusMu, alpha, beta);
     }
 
     /// <summary>
     /// ∂log p / ∂μ = ν(ψ(β) - ψ(α)) + ν log(y) - ν log(1 - y).
     /// </summary>
-    private Tensor<T> DLogPDMu(Tensor<T> alpha, Tensor<T> beta, Tensor<T> logY, Tensor<T> logOneMinusY)
+    private Tensor<double> DLogPDMu(Tensor<double> alpha, Tensor<double> beta, Tensor<double> logY, Tensor<double> logOneMinusY)
     {
         var engine = AiDotNetEngine.Current;
         var sum = engine.TensorAdd(
             engine.TensorSubtract(engine.TensorDigamma(beta), engine.TensorDigamma(alpha)),
             engine.TensorSubtract(logY, logOneMinusY));
-        return engine.TensorMultiplyScalar(sum, _numOps.FromDouble(_precision));
+        return engine.TensorMultiplyScalar(sum, _precision);
     }
 
     /// <summary>

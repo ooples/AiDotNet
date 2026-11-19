@@ -37,6 +37,31 @@ internal sealed class WhisperRecognizer<T>
         return OpenAiWhisperTranscriber<T>.Window(mel, 0, frames);
     }
 
+    /// <summary>The log-mel window <c>[mels, 3000]</c> computed directly from a <see cref="Tensor{T}"/> waveform via engine ops.</summary>
+    public Tensor<T> WindowTensor(Tensor<T> audio)
+    {
+        int mels = Network.Dimensions.Mels;
+        int frames = OpenAiWhisperTranscriber<T>.ChunkFrames;
+        int chunkSamples = OpenAiWhisperTranscriber<T>.ChunkSamples;
+        var flat = _engine.Reshape(audio, new[] { audio.Length });
+        Tensor<T> paddedOrTrimmed;
+        if (flat.Length == chunkSamples)
+        {
+            paddedOrTrimmed = flat;
+        }
+        else if (flat.Length > chunkSamples)
+        {
+            paddedOrTrimmed = _engine.TensorSlice(flat, new[] { 0 }, new[] { chunkSamples });
+        }
+        else
+        {
+            paddedOrTrimmed = _engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { chunkSamples - flat.Length }) }, axis: 0);
+        }
+
+        var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(paddedOrTrimmed, mels);
+        return OpenAiWhisperTranscriber<T>.Window(mel, 0, frames);
+    }
+
     /// <summary>The decoder's start: start of transcript, language, transcribe, no timestamps.</summary>
     public int[] Prompt(string language) =>
         Transcriber.SotSequence(language).Concat(new[] { Transcriber.NoTimestamps }).ToArray();
@@ -57,8 +82,11 @@ internal sealed class WhisperRecognizer<T>
         var logits = Network.Logits(input, Network.Encode(window));
         int predicted = transcript.Count + 1, vocabulary = Network.Dimensions.Vocabulary;
         var targets = _engine.TensorSlice(logits, new[] { prompt.Length - 1, 0 }, new[] { predicted, vocabulary });
-        var weights = new Tensor<T>(new[] { predicted, vocabulary });
-        for (int i = 0; i < predicted; i++) weights[i, i < transcript.Count ? transcript[i] : Transcriber.Eot] = NumOps.FromDouble(-1.0 / predicted);
+        var wData = new T[predicted * vocabulary];
+        T negWeight = NumOps.FromDouble(-1.0 / predicted);
+        for (int i = 0; i < predicted; i++)
+            wData[i * vocabulary + (i < transcript.Count ? transcript[i] : Transcriber.Eot)] = negWeight;
+        var weights = new Tensor<T>(wData, new[] { predicted, vocabulary });
         return _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorLogSoftmax(targets, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
     }
 
@@ -69,25 +97,29 @@ internal sealed class WhisperRecognizer<T>
     public int[] TranscriptTokens(Tensor<T> target)
     {
         int vocabulary = Network.Dimensions.Vocabulary;
+        double[] values = target.Cast<double>().ToArray();
         if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
         {
             int rows = target.Length / vocabulary;
-            var span = target.Data.Span;
             var tokens = new int[rows];
             for (int r = 0; r < rows; r++)
             {
                 int best = 0;
+                int rowOffset = r * vocabulary;
                 for (int v = 1; v < vocabulary; v++)
-                    if (NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best])) best = v;
+                {
+                    if (values[rowOffset + v] > values[rowOffset + best])
+                        best = v;
+                }
                 tokens[r] = Math.Min(best, Transcriber.Eot - 1);
             }
             return tokens;
         }
-        var ids = new int[target.Length];
-        var values = target.Data.Span;
+
+        var ids = new int[values.Length];
         for (int i = 0; i < ids.Length; i++)
         {
-            double value = Math.Round(NumOps.ToDouble(values[i]));
+            double value = Math.Round(values[i]);
             if (value < 0 || value >= Transcriber.Eot)
                 throw new ArgumentException($"Transcript token {value} is not a text token (0 to {Transcriber.Eot - 1}).", nameof(target));
             ids[i] = (int)value;
@@ -120,5 +152,12 @@ internal sealed class WhisperRecognizer<T>
     {
         using var _ = new NoGradScope<T>();
         return Transcriber.DetectLanguage(Network.Encode(Window(audio)));
+    }
+
+    /// <summary>The language probabilities of a tensor waveform's first 30 seconds (<c>detect_language</c>).</summary>
+    public Dictionary<string, double> DetectLanguage(Tensor<T> audio)
+    {
+        using var _ = new NoGradScope<T>();
+        return Transcriber.DetectLanguage(Network.Encode(WindowTensor(audio)));
     }
 }

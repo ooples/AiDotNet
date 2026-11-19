@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -409,7 +409,7 @@ public class AudioProcessor<T>
         // Find current peak (NaN samples are ignored)
         var engine = AiDotNetEngine.Current;
         var wide = audio.Cast<double>();
-        var absolute = engine.TensorNanToNum(engine.TensorAbs(wide), 0.0, double.PositiveInfinity, double.NegativeInfinity);
+        var absolute = AiDotNet.Helpers.NanToNumHelper.Apply(engine, engine.TensorAbs(wide), 0.0, double.PositiveInfinity, double.NegativeInfinity);
         double peak = audio.Length == 0 ? 0 : engine.TensorMaxValue(absolute);
         if (peak < 1e-8)
             return audio;

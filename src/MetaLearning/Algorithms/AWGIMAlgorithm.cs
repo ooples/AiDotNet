@@ -187,15 +187,30 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>The objective's gradient for one episode: the feature encoder's and the generator's.</summary>
     private (T Loss, Vector<T> Body, Vector<T> Weights) EpisodeGradient(IMetaLearningTask<T, TInput, TOutput> task, Random random)
     {
-        var episode = Episode(task);
-        int supportRows = episode.SupportSelector.Shape[0];
-        var averager = ClassAverager(episode, supportRows);
-        var supportTarget = SupportTarget(episode, supportRows);
+        // Episode selectors, targets, embeddings and leaf tensors are read across ComputeGradients (which resets any
+        // enclosing step arena) and inside TapeGradients, so allocate them on the heap rather than an active arena.
+        PrototypeEpisode<T> episode;
+        int supportRows;
+        Tensor<T> averager;
+        Tensor<T> supportTarget;
+        AwgimNetwork<T>.Leaves frozen;
+        TInput stackedInput;
+        TOutput stackedTarget;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            episode = Episode(task);
+            supportRows = episode.SupportSelector.Shape[0];
+            averager = ClassAverager(episode, supportRows);
+            supportTarget = SupportTarget(episode, supportRows);
+            frozen = _network.CreateLeaves(_weights);
+            stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
+            stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
+        }
+
         int seed = random.Next();
 
         // The feature encoder's gradient: the objective rebuilt from its embeddings on the tape, the generator
         // weights held constant. The same seed replays the same dropout and weight noise in both passes.
-        var frozen = _network.CreateLeaves(_weights);
         var composed = new EmbeddingObjectiveLoss<T>(embeddings =>
         {
             var engine = AiDotNetEngine.Current;
@@ -203,13 +218,18 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             var q = engine.TensorMatMul(episode.QuerySelector, embeddings);
             return Objective(frozen, s, q, episode, averager, supportTarget, Training(seed));
         });
-        var stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
-        var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
         var bodyGradient = ComputeGradients(MetaModel, stackedInput, stackedTarget, composed);
 
         // The generator's gradient from fixed embeddings.
-        var (support, query) = Embed(task, episode);
-        var leaves = _network.CreateLeaves(_weights);
+        Tensor<T> support;
+        Tensor<T> query;
+        AwgimNetwork<T>.Leaves leaves;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            (support, query) = Embed(task, episode);
+            leaves = _network.CreateLeaves(_weights);
+        }
+
         T loss;
         Vector<T> weightGradient;
         weightGradient = new Vector<T>(_weights.Length);

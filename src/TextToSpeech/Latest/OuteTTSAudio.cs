@@ -184,6 +184,37 @@ internal static class OuteTTSAudio
     }
 }
 
+/// <summary>Owns the temporary scores of one generation, reusing them after each selected token.</summary>
+/// <remarks>Language-model logits and cache remain caller-owned. Only the selected token leaves the active scratch
+/// scope, so resetting it cannot recycle any state needed by the language model's next forward.</remarks>
+internal sealed class OuteTTSSamplingSession<T> : IDisposable
+{
+    private readonly AiDotNet.Tensors.Helpers.TensorArena _scratch = AiDotNet.Tensors.Helpers.TensorArena.CreateDetached();
+    private bool _disposed;
+
+    internal long PeakBackingBytes => _scratch.PeakBackingBytes;
+
+    internal int Select(Tensor<T> logits, IReadOnlyList<int> ids, OuteTTSOptions options, Random random)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(OuteTTSSamplingSession<T>));
+        using var activation = _scratch.Activate();
+        _scratch.Reset();
+        var scores = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(logits, new[] { logits.Length });
+        if (options.Temperature > 0)
+            return OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+                options.RepetitionRange, options.Temperature, options.TopK, options.TopP, options.MinP), random);
+        return OuteTTSSampler<T>.Greedy(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+            options.RepetitionRange, 1.0, 0, 1.0, 0));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _scratch.Dispose();
+        _disposed = true;
+    }
+}
+
 /// <summary>
 /// The sampling OuteTTS 1.0 generates with (Hugging Face <c>generate()</c> with the release's settings): its windowed
 /// repetition penalty (the last 64 tokens, ×1/1.1 on positive logits and ×1.1 on the others), then temperature, top-k,

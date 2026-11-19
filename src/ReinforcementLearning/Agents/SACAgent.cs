@@ -424,7 +424,10 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             // upper bound, throwing "Slice length 2*actionSize starting at
             // actionSize exceeds axis 1 size 2*actionSize").
             var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
-            var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]);
+            var logStds = Engine.TensorClamp(
+                Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]),
+                NumOps.FromDouble(-20.0),
+                NumOps.FromDouble(2.0));
 
             // Reparameterized sample: u = mu + sigma * eps, eps ~ N(0, I). The previous noise was
             // rng.NextDouble() * 2 - 1, which is UNIFORM on [-1, 1) rather than Gaussian, so neither the

@@ -145,14 +145,7 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     // MMS reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_stack is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _stack is null ? null : _options.MaxAudioLengthSeconds;
 
     private Tensor<T> Logits(Tensor<T> input, bool training)
     {
@@ -165,6 +158,16 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (_options.FreezeFeatureEncoder == false) return parameters;
+        var frozenLayers = Layers.Where((layer, index) => ResolveLayerParameterRole(index,
+            AiDotNet.Models.Parameters.ParameterSlotRole.Trainable) == AiDotNet.Models.Parameters.ParameterSlotRole.Frozen).ToList();
+        var frozen = new HashSet<Tensor<T>>(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(frozenLayers, -1),
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(parameter => frozen.Contains(parameter) == false).ToList();
+    }
 
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
         => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
@@ -183,9 +186,9 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, _options.MaxTextLength);
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
+    private static string TokensToText(List<int> tokens) => DecodeUnicodeTokens(tokens);
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) => BuildSingleUtteranceSegment(text, duration, confidence);
+    private string ClassifyLanguageFromTokens(List<int> tokens) => ClassifyCjkOrDefaultLanguage(tokens, SupportedLanguages, _options.Language);
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MMS<T>)); }
     /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }

@@ -166,24 +166,44 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
     internal (TInput SupportX, TOutput SupportY, TInput QueryX, TOutput QueryY)? BuildPseudoTask(
         TInput pool, Tensor<T> embeddings, IMetaLearningTask<T, TInput, TOutput> slot)
     {
+        const int MaxPartitionAttempts = 50;
         int n = embeddings.Shape[0];
         int shots = Math.Max(1, slot.NumShots);
         int queries = Math.Max(1, slot.NumQueryPerClass);
         int perCluster = shots + queries;
+        int ways = Math.Max(2, slot.NumWays);
+        if (n < ways * perCluster) return null;
+
         int k = _algoOptions.NumClusters > 0 ? _algoOptions.NumClusters : Math.Max(2, n / perCluster);
         k = Math.Min(k, n);
+        if (k < ways) return null;
 
-        var assignment = KMeans(embeddings, k, DrawDimensionScale(embeddings.Shape[1]));
-        var members = new List<int>[k];
-        for (int c = 0; c < k; c++) members[c] = new List<int>();
-        for (int i = 0; i < n; i++) members[assignment[i]].Add(i);
+        // CACTUs (Hsu et al. 2019, Sec. 2.3, P = 50 partitions): draw random dimension-scaled k-means partitions
+        // until one yields at least `ways` clusters with >= shots + queries members (attempt 0 is identical to a
+        // single draw when the first partition already qualifies).
+        List<int>[]? selectedMembers = null;
+        List<int>? selectedEligible = null;
+        for (int attempt = 0; attempt < MaxPartitionAttempts; attempt++)
+        {
+            var assignment = KMeans(embeddings, k, DrawDimensionScale(embeddings.Shape[1]));
+            var candidateMembers = new List<int>[k];
+            for (int c = 0; c < k; c++) candidateMembers[c] = new List<int>();
+            for (int i = 0; i < n; i++) candidateMembers[assignment[i]].Add(i);
 
-        var eligible = new List<int>();
-        for (int c = 0; c < k; c++) if (members[c].Count >= perCluster) eligible.Add(c);
-        // The slot's way count is what the pseudo-task must have; a partition with fewer large clusters is rejected
-        // rather than silently shrunk to a smaller task.
-        int ways = Math.Max(2, slot.NumWays);
-        if (eligible.Count < ways) return null;
+            var candidateEligible = new List<int>();
+            for (int c = 0; c < k; c++) if (candidateMembers[c].Count >= perCluster) candidateEligible.Add(c);
+            if (candidateEligible.Count >= ways)
+            {
+                selectedMembers = candidateMembers;
+                selectedEligible = candidateEligible;
+                break;
+            }
+        }
+
+        if (selectedMembers is null || selectedEligible is null) return null;
+
+        var members = selectedMembers;
+        var eligible = selectedEligible;
 
         Shuffle(eligible);
         var supportIdx = new int[ways * shots];

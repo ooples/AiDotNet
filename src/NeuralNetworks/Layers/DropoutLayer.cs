@@ -308,10 +308,12 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
 
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
-        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
+        var mask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
+        _dropoutMask = mask;
+        AiDotNet.Training.CompiledStepRandom<T>.RecordCustom(mask, RefreshMaskTensorInPlace, onDevice: true);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
-        return Engine.TensorMultiply(input, _dropoutMask);
+        return Engine.TensorMultiply(input, mask);
     }
 
     /// <summary>
@@ -330,20 +332,29 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         if (!IsTrainingMode || _dropoutMask is null || _dropoutMask.Length == 0)
             return;
 
+        RefreshMaskTensorInPlace(_dropoutMask);
+    }
+
+    private void RefreshMaskTensorInPlace(Tensor<T> targetMask)
+    {
+        if (!IsTrainingMode || targetMask.Length == 0)
+            return;
+
         ulong counter = AdvanceSeedCounter();
         int? perCallSeed = RandomSeed.HasValue
             ? DeriveSeed32(RandomSeed.Value, counter)
             : (int?)null;
 
         using var refreshedMask = Engine.TensorDropoutMask<T>(
-            _dropoutMask._shape, _dropoutRate, _scale, perCallSeed);
-        if (refreshedMask.Length != _dropoutMask.Length)
+            targetMask._shape, _dropoutRate, _scale, perCallSeed);
+        if (refreshedMask.Length != targetMask.Length)
             throw new InvalidOperationException(
-                $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
+                $"Compiled dropout mask length changed from {targetMask.Length} to {refreshedMask.Length}.");
 
-        // An engine copy: on a GPU engine the fresh mask stays on the device (a host span copy downloaded it, then the
-        // invalidation uploaded it again), and the copy itself makes the destination's device value current.
-        Engine.TensorCopy(refreshedMask, _dropoutMask);
+        // An engine copy: on a GPU engine the fresh mask stays on the device (a host span copy downloaded it, then an
+        // invalidation uploaded it again), and the copy itself makes the destination's device value current, so the
+        // callers bump no version (a bump would mark that copy stale and re-upload the old host values).
+        Engine.TensorCopy(refreshedMask, targetMask);
     }
 
     /// <summary>

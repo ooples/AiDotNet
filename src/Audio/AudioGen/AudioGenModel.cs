@@ -2,6 +2,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -603,6 +604,20 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
                 maxTextLength: _maxTextLength,
                 maxAudioTokens: maxAudioTokens,
                 dropoutRate: 0.1));
+
+            // AudioCraft LMModel._init_weights initializes the codebook output projection with
+            // zero bias and small normal weights rather than ReLU He (sqrt(2/fanIn)), keeping
+            // initial logits over LayerNorm-scaled hidden states well-conditioned (RMS ~ 0.5).
+            if (Layers.Count == 1 && Layers[0] is LayerBase<T> composite)
+            {
+                var subLayers = composite.GetSubLayers();
+                if (subLayers.Count > 0 && subLayers[subLayers.Count - 1] is DenseLayer<T> outputProjection)
+                {
+                    outputProjection.InitializationStrategy = new NormalInitializationStrategy<T>(
+                        mean: 0.0,
+                        standardDeviation: 0.5 / Math.Sqrt(Math.Max(1, _lmHiddenDim)));
+                }
+            }
 
             _textEncoderLayerStart = 0;
             _textEncoderLayerEnd = 0;

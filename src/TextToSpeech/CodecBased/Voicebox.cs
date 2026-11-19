@@ -386,7 +386,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         double maximum = Math.Log(1.0 + _options.MaximumPhoneDuration);
         // round(exp(clamp(v, 0, log(1 + max))) - 1), with a non-finite prediction read as 0.
         var logFrames = Engine.TensorClamp(
-            Engine.TensorNanToNum(Engine.Reshape(Engine.TensorSlice(prediction, new[] { 0, 0 }, new[] { phones.Count, 1 }), new[] { phones.Count }),
+            AiDotNet.Helpers.NanToNumHelper.Apply(Engine, Engine.Reshape(Engine.TensorSlice(prediction, new[] { 0, 0 }, new[] { phones.Count, 1 }), new[] { phones.Count }),
                 nan: 0.0, posinf: 0.0, neginf: 0.0),
             NumOps.Zero, NumOps.FromDouble(maximum));
         var predicted = RoundedIds(Engine.TensorAddScalar(Engine.TensorExp(logFrames), NumOps.FromDouble(-1.0)));

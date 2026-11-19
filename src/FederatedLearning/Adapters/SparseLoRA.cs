@@ -230,7 +230,7 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         // total NaN, so the all-finite case pays one reduction and no copy.)
         if (NumOps.IsNaN(Engine.TensorSum(magnitudes)))
         {
-            magnitudes = Engine.TensorNanToNum(magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+            magnitudes = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
         }
 
         // The k-th largest magnitude is the threshold.
