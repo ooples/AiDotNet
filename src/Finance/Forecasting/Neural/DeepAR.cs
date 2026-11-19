@@ -195,7 +195,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
         => UseNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
 
-    protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Accelerate(input, input => Forecast(input));
 
     public override ModelMetadata<T> GetModelMetadata()
     {

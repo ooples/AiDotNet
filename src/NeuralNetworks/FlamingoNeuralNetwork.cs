@@ -1030,7 +1030,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     {
 
         SetTrainingMode(false);
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var features = ExtractPerceiverFeatures(input);
             return features;

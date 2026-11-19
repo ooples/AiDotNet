@@ -380,7 +380,7 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// <returns>Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
+        return EnsureCompileHost().Predict(input, _compileStructureVersion, x => ForwardEager(x));
     }
 
     /// <summary>
@@ -428,7 +428,7 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         System.Threading.CancellationToken cancellationToken = default)
     {
         return EnsureCompileHost().PredictAsync(
-            input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
+            input, _compileStructureVersion, x => ForwardEager(x), cancellationToken);
     }
 
     /// <summary>

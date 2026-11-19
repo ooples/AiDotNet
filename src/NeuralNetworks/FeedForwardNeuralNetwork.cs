@@ -208,7 +208,7 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
             return fused;
         }
 
-        var predictions = Accelerate(input, () => Forward(input));
+        var predictions = Accelerate(input, input => Forward(input));
 
         IsTrainingMode = true;
 

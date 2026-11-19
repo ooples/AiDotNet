@@ -377,7 +377,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         SetAllLayersEvalMode();
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
-        return Accelerate(input, () => Forward(input));
+        return Accelerate(input, input => Forward(input));
     }
 
     /// <inheritdoc/>

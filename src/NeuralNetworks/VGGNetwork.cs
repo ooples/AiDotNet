@@ -364,7 +364,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         SetTrainingMode(false);
         // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
-        return Accelerate(input, () => Forward(input));
+        return Accelerate(input, input => Forward(input));
     }
 
     /// <inheritdoc/>

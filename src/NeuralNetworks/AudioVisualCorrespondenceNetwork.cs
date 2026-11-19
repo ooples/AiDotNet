@@ -1081,7 +1081,7 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             // VGG-style Dense encoder: simple sequential forward through all layers
             // per Arandjelovic & Zisserman 2017

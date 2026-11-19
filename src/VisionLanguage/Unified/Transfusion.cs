@@ -289,7 +289,7 @@ public partial class Transfusion<T>
             return OnnxModel.Run(input);
         return Accelerate(
             input,
-            () =>
+            input =>
             {
                 var c = input;
                 foreach (var l in Layers)

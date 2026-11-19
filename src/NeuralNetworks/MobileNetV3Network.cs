@@ -242,7 +242,7 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
         bool promoted = input.Rank == 3;
         var processed = promoted ? PromoteToBatchedTensor(input) : input;
         // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
-        var output = Accelerate(processed, () => Forward(processed));
+        var output = Accelerate(processed, processed => Forward(processed));
         if (promoted && output.Rank > 1 && output.Shape[0] == 1)
         {
             var squeezed = new int[output.Rank - 1];

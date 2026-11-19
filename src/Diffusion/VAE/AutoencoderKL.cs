@@ -193,7 +193,7 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     {
         RequireImage(latent, _latentChannels, nameof(latent));
         // Every denoising step decodes at the same latent shape, so later calls replay a compiled plan (#1272).
-        return DecodeCompiled(latent, () => _decoder.Forward(_postQuantConv.Forward(latent)));
+        return DecodeCompiled(latent, latent => _decoder.Forward(_postQuantConv.Forward(latent)));
     }
 
     /// <summary>

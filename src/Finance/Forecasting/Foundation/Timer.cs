@@ -509,7 +509,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? Forward(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => Forward(input)) : ForecastOnnx(input);
     }
 
     /// <summary>

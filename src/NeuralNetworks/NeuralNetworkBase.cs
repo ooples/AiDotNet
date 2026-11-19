@@ -10809,7 +10809,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             RefreshCompiledBindings();
-            return _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
+            return _compileHost.Predict(input, _layerStructureVersion, x => PredictEager(x));
         }
         finally
         {
@@ -10891,7 +10891,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var warmupOutput = _compileHost.Predict(
                 sampleInput,
                 _layerStructureVersion,
-                () => PredictEager(sampleInput));
+                x => PredictEager(x));
             if (warmupOutput is IDisposable disposableOutput)
                 disposableOutput.Dispose();
             return true;
@@ -10927,34 +10927,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private readonly VerifiedInferenceGate<T> _inferenceGate = new();
 
     /// <summary>
-    /// True when this model is foundation-scale and in inference mode, so
-    /// <see cref="Predict"/> routes through the verify-then-trust compiled path +
-    /// value memo instead of plain eager. Latched in <see cref="Predict"/> /
-    /// <see cref="SetTrainingMode"/> off <see cref="WeightStreamingAutoDetected"/>;
-    /// cleared when training is (re)enabled. Small models and training stay eager.
+    /// This model's own compiled-inference choice from <see cref="EnableInferenceAcceleration"/>: 0 follows the
+    /// process-wide setting (<see cref="s_autoCompiledInferenceEnabled"/>), 1 opts in, -1 opts out.
     /// </summary>
-    private volatile bool _inferenceAccelerationOptIn;
+    private volatile int _inferenceAccelerationChoice;
 
     /// <summary>
-    /// Process-wide OPT-IN for the verify-then-trust compiled-inference path (#1622), OFF by default.
+    /// Process-wide setting for the verify-then-trust compiled-inference path (#1622): ON unless
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=0</c>.
     /// </summary>
     /// <remarks>
-    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global scratch
-    /// buffers with the eager executor. The gate MUST execute a compiled plan once to compare it against
-    /// eager — and that single execution leaves the shared scratch in a state that makes every subsequent
-    /// eager forward for a REJECTED shape return the wrong value (the diffusion <c>NoisePredictorBase</c>
-    /// path, which has no value memo, shows this as a period-2 non-deterministic oscillation). Here the
-    /// single-input value memo returns a cached output for a confirmed-identical repeated input, so the
-    /// determinism symptom is masked — but a memo-MISS input (different data at a rejected shape, after a
-    /// compiled run) still reads the corrupted eager scratch and is numerically wrong. Until the package
-    /// isolates the two executors' scratch, the compiled-inference path is opt-in via
-    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c>. Training is unaffected either way (the compiled path is
-    /// inference-only). Mirrors <c>NoisePredictorBase.s_autoCompiledInferenceEnabled</c>.
+    /// It was opt-in while two package defects made it wrong. The compiled executor (AiDotNet.Tensors through
+    /// 0.101.7) shared scratch with the eager one, so one compiled run left later eager forwards wrong. And a plan
+    /// traced on a closure over the caller's tensor took that tensor as its input slot: Predict(B) wrote B into the
+    /// caller's A, and Predict(A) then returned B's output (45 model families). Plans are now traced on a host-owned
+    /// copy (<see cref="Accelerate(Tensor{T}, Func{Tensor{T}, Tensor{T}})"/>), and
+    /// <c>Predict_CompiledInference_MatchesEager_OnFreshInputs</c> pins both for every model family: compiled replays
+    /// on new inputs match eager, the caller's inputs are unchanged, and eager afterwards is bit-identical to eager
+    /// before. The default does not engage in training mode, and a forward under a recording tape always runs eager.
     /// </remarks>
     private static readonly bool s_autoCompiledInferenceDefault =
-        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+        !string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "0", StringComparison.Ordinal);
 
-    /// <summary>Per-flow override of the auto-compile opt-in, used by tests.</summary>
+    /// <summary>Per-flow override of the process-wide compiled-inference setting, used by tests.</summary>
     /// <remarks>
     /// ASYNC-LOCAL, not static. As a plain static this was process-wide, and a test that turned it
     /// on for its own duration turned it on for every model running CONCURRENTLY: xUnit runs test
@@ -10988,7 +10983,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DROP_GPU_ACT_CACHE_PER_STEP"), "1", StringComparison.Ordinal);
 
     /// <summary>
-    /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
+    /// Test/diagnostic hook: overrides the process-wide compiled-inference setting
     /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
     /// load. Returns the previous nullable override so a test can restore the exact prior state in
     /// teardown, including <c>null</c> (use the environment-derived default). Lets the verify-then-trust
@@ -11002,32 +10997,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model. Requires
-    /// the process-wide opt-in (<see cref="s_autoCompiledInferenceEnabled"/>, default off — see its remarks
-    /// for the package scratch-corruption bug) AND either an explicit per-model opt-in
-    /// (<see cref="EnableInferenceAcceleration"/>, any size) or a foundation-scale model in inference mode.
+    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model: always after the
+    /// model's own opt-in (<see cref="EnableInferenceAcceleration"/>), never after its opt-out, and otherwise in
+    /// inference mode when the process-wide setting (<see cref="s_autoCompiledInferenceEnabled"/>, on by default) is.
+    /// A forward under a recording gradient tape runs eager regardless (see <see cref="Accelerate(Tensor{T}, Func{Tensor{T}, Tensor{T}})"/>).
     /// </summary>
     private bool InferenceAccelerationEngaged =>
-        s_autoCompiledInferenceEnabled
-        && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
+        _inferenceAccelerationChoice > 0
+        || (_inferenceAccelerationChoice == 0 && s_autoCompiledInferenceEnabled && !IsTrainingMode);
 
     /// <summary>Whether the compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
     internal bool AutoCompiledInferenceEngaged => InferenceAccelerationEngaged;
 
     /// <summary>
-    /// Opts this model into the #1622 verify-then-trust compiled-inference path regardless of size, the
-    /// industry-standard explicit "compile this model" gesture (cf. <c>torch.compile</c>). Foundation-
-    /// scale models auto-engage without this; small/medium models that are served repeatedly (the case
-    /// where the one-time per-shape verification amortizes) call this once to opt in. Output stays
-    /// numerically identical to eager. Takes effect only when the process-wide opt-in
-    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> is set (default off — see
-    /// <see cref="s_autoCompiledInferenceEnabled"/> for the package scratch-corruption bug that gates it);
-    /// otherwise the model stays on the plain eager path.
+    /// Opts this model into or out of the #1622 verify-then-trust compiled-inference path, overriding the
+    /// process-wide setting (on by default; <c>AIDOTNET_ENABLE_AUTO_COMPILE=0</c> turns it off). The first
+    /// inference at each input shape runs eager and compiled and adopts the compiled plan only if they match;
+    /// later inferences at that shape replay it. Output stays within the verification tolerance of eager.
     /// </summary>
-    /// <param name="enabled">True to enable (default); false to opt back out.</param>
+    /// <param name="enabled">True to opt in (default); false to opt out and stay on the eager path.</param>
     public void EnableInferenceAcceleration(bool enabled = true)
     {
-        _inferenceAccelerationOptIn = enabled;
+        _inferenceAccelerationChoice = enabled ? 1 : -1;
         if (!enabled) _inferenceGate.Clear();
     }
 
@@ -11041,7 +11032,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Forces the verify-then-trust compiled inference path on/off for this model. Test hook —
     /// equivalent to <see cref="EnableInferenceAcceleration"/>.
     /// </summary>
-    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _inferenceAccelerationOptIn = enabled;
+    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _inferenceAccelerationChoice = enabled ? 1 : -1;
 
     /// <summary>
     /// Returns the current verify-then-trust verdict for an input shape at the live structure
@@ -11060,7 +11051,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <param name="input">The (already batch-normalized) inference input.</param>
     protected internal Tensor<T> PredictAccelerated(Tensor<T> input)
-        => Accelerate(input, () => PredictEager(input));
+        => Accelerate(input, input => PredictEager(input));
+    /// <summary>
+    /// Earlier form of <see cref="Accelerate(Tensor{T}, Func{Tensor{T}, Tensor{T}})"/> whose forward closes over the
+    /// input. A plan traced on such a forward would take the caller's tensor as its input slot and write later inputs
+    /// into it, so this form never replays a compiled plan: its trace never reads the host's own input slot, the
+    /// compile fails closed, and every call runs <paramref name="eagerForward"/>.
+    /// </summary>
+    /// <param name="input">The input tensor whose shape keys the compile cache.</param>
+    /// <param name="eagerForward">The model's eager forward.</param>
+    [Obsolete("Pass the forward as a function of its input (Accelerate(input, x => Forward(x))) so it can be compiled without writing into the caller's tensor.")]
+    protected Tensor<T> Accelerate(Tensor<T> input, Func<Tensor<T>> eagerForward)
+    {
+        if (eagerForward is null) throw new ArgumentNullException(nameof(eagerForward));
+        return Accelerate(input, _ => eagerForward());
+    }
+
 
     /// <summary>
     /// Opt a model's forward into the #1622 verify-then-trust compiled-inference acceleration with a
@@ -11092,25 +11098,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </para>
     /// </remarks>
     /// <param name="input">The input tensor whose shape keys the compile cache.</param>
-    /// <param name="eagerForward">The model's eager forward (verify reference + trace source + fallback).</param>
-    protected Tensor<T> Accelerate(Tensor<T> input, Func<Tensor<T>> eagerForward)
+    /// <param name="eagerForward">The model's forward, applied to the tensor it is given (verify reference + trace
+    /// source + fallback). It must read its input from that argument, not from <paramref name="input"/>: the compile
+    /// host traces it on a copy it owns, so a plan never writes into the caller's tensor.</param>
+    protected Tensor<T> Accelerate(Tensor<T> input, Func<Tensor<T>, Tensor<T>> eagerForward)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (eagerForward is null) throw new ArgumentNullException(nameof(eagerForward));
 
-        // Not engaged (small model with no opt-in, or training) → behave exactly like the plain eager
-        // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
-        // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
+        // Not engaged (opted out, AIDOTNET_ENABLE_AUTO_COMPILE=0, or training mode without an explicit opt-in) →
+        // behave exactly like the plain eager forward: no gate, no trace, no overhead. Engagement is computed each
+        // call (see InferenceAccelerationEngaged).
         // A forward being differentiated (PredictWithGradients, a PINN residual, an attribution) runs eager: a
         // compiled replay records as one opaque step, so higher derivatives through it would vanish.
         if (!InferenceAccelerationEngaged || AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
-            return eagerForward();
+            return eagerForward(input);
 
         RefreshCompiledBindings();
         return _inferenceGate.Run(
             input,
             _layerStructureVersion,
-            eager: eagerForward,
+            eager: () => eagerForward(input),
             compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));

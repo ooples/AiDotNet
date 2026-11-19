@@ -182,7 +182,7 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             Tensor<T> currentOutput = input;
             foreach (var layer in Layers)

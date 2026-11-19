@@ -237,9 +237,12 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         // same VaR estimate. Inference mode uses the running statistics instead.
         SetTrainingMode(false);
 
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
+        return Accelerate(input, input =>
+        {
+            var current = input;
+            foreach (var layer in Layers) current = layer.Forward(current);
+            return current;
+        });
     }
 
     /// <summary>

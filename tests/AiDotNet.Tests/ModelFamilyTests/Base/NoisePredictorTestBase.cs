@@ -92,6 +92,68 @@ public abstract class NoisePredictorTestBase
         Assert.Equal(0.0, MaxDifference(first, second));
     }
 
+    /// <summary>
+    /// The compiled-inference path verifies its plan against eager on the first call of a shape, then replays it for
+    /// every later call of that shape with new samples, timesteps and conditioning (a denoising loop). This pins that
+    /// each replay reads its own inputs and matches eager, and that eager inference afterwards is unchanged (the
+    /// compiled executor once shared scratch with eager and left later eager forwards oscillating).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task PredictNoise_Compiled_MatchesEager_OnFreshInputs()
+    {
+        await Task.Yield();
+        var predictor = CreatePredictor();
+        RandomizeParameters(predictor);
+        var shape = SampleShape(predictor);
+        var calls = new[]
+        {
+            (Random(shape, 11), 10, Condition(predictor, 12)),
+            (Random(shape, 13), 500, Condition(predictor, 14)),
+            (Random(shape, 15), 10, Condition(predictor, 16)),
+        };
+        var prior = AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase<double>.SetAutoCompiledInferenceEnabledForTesting(false);
+        try
+        {
+            var reference = new double[calls.Length][];
+            for (int i = 0; i < calls.Length; i++)
+                reference[i] = Values(predictor.PredictNoise(calls[i].Item1, calls[i].Item2, calls[i].Item3));
+
+            AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase<double>.SetAutoCompiledInferenceEnabledForTesting(true);
+            foreach (int i in new[] { 0, 1, 0, 2, 1 })
+            {
+                double d = MaxDifference(Values(predictor.PredictNoise(calls[i].Item1, calls[i].Item2, calls[i].Item3)), reference[i]);
+                Assert.True(d <= 2e-5,  // the gate's parity tolerance (abs 1e-5 + rel 1e-6) at these magnitudes
+                 $"compiled call {i} differs from eager by {d:R}");
+            }
+
+            AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase<double>.SetAutoCompiledInferenceEnabledForTesting(false);
+            foreach (int i in new[] { 2, 1 })
+            {
+                double d = MaxDifference(Values(predictor.PredictNoise(calls[i].Item1, calls[i].Item2, calls[i].Item3)), reference[i]);
+                Assert.True(d == 0, $"eager call {i} after the compiled runs differs from the first eager run by {d:R}");
+            }
+        }
+        finally
+        {
+            AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase<double>.SetAutoCompiledInferenceEnabledForTesting(prior);
+        }
+
+        static double[] Values(Tensor<double> t)
+        {
+            var v = new double[t.Length];
+            for (int i = 0; i < v.Length; i++) v[i] = t[i];
+            return v;
+        }
+
+        static double MaxDifference(double[] a, double[] b)
+        {
+            Assert.Equal(b.Length, a.Length);
+            double max = 0;
+            for (int i = 0; i < a.Length; i++) max = Math.Max(max, Math.Abs(a[i] - b[i]));
+            return max;
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task PredictNoise_DependsOnTheTimestep()
     {

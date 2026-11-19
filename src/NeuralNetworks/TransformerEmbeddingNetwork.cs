@@ -409,7 +409,7 @@ namespace AiDotNet.NeuralNetworks
         protected override Tensor<T> PredictCore(Tensor<T> input)
         {
 
-            return Accelerate(input, () =>
+            return Accelerate(input, input =>
             {
                 Tensor<T> current = input;
                 foreach (var layer in Layers)

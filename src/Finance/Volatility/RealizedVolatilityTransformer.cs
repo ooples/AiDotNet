@@ -236,12 +236,15 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var current = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, input =>
         {
-            current = layer.Forward(current);
-        }
-        return current;
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
+        });
     }
 
     /// <summary>

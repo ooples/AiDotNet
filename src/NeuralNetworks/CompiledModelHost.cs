@@ -222,6 +222,40 @@ internal sealed class CompiledModelHost<T> : IDisposable
     {
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
+        return PredictCore(input, structureVersion, eagerForward, forward: null);
+    }
+
+    /// <summary>
+    /// <see cref="Predict(Tensor{T}, int, Func{Tensor{T}})"/> for a forward that takes its input as an argument. The
+    /// plan is traced on a host-owned copy of <paramref name="input"/>, so the caller's tensors are only ever read.
+    /// </summary>
+    /// <remarks>
+    /// Prefer this overload. A forward closed over the caller's tensor is traced on that tensor, which then becomes the
+    /// plan's input slot: the next call with a different tensor copies its data into the caller's first tensor, and
+    /// passing the first tensor again replays the data copied in last (the copy into the slot is skipped when the
+    /// caller hands back the slot itself).
+    /// </remarks>
+    /// <param name="input">This call's input. Its shape keys the compile cache.</param>
+    /// <param name="structureVersion">Monotonic layer-graph version from the caller.</param>
+    /// <param name="forward">The forward pass, applied to the tensor it is given: <paramref name="input"/> when it runs
+    /// eagerly, the plan's own input slot when it is traced.</param>
+    /// <returns>The forward-pass output.</returns>
+    public Tensor<T> Predict(
+        Tensor<T> input,
+        int structureVersion,
+        Func<Tensor<T>, Tensor<T>> forward)
+    {
+        if (forward is null)
+            throw new ArgumentNullException(nameof(forward));
+        return PredictCore(input, structureVersion, () => forward(input), forward);
+    }
+
+    private Tensor<T> PredictCore(
+        Tensor<T> input,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward,
+        Func<Tensor<T>, Tensor<T>>? forward)
+    {
 
         // ---------- HOT-PATH: steady-state replay short-circuit ----------
         // After the first successful Predict for a given (shape, version),
@@ -379,9 +413,15 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // replay. Keep the expression-bodied lambda so the value threads
                 // through unchanged.
                 var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
-                var plan = symbolicShape is null
-                    ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
-                    : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
+                // A forward that takes its input is traced on a plan-owned copy (see the overload taking one); a
+                // closure over the caller's tensor can only be traced on that tensor.
+                var plan = forward is not null
+                    ? symbolicShape is null
+                        ? cache.GetOrCompileInference(input, forward)
+                        : cache.GetOrCompileInference(input, forward, symbolicShape)
+                    : symbolicShape is null
+                        ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
+                        : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
 
                 // Fire-and-forget disk save so subsequent cold starts skip the compile.
                 MaybeSavePlanToDisk(plan, concreteShape, structureVersion);
@@ -528,6 +568,34 @@ internal sealed class CompiledModelHost<T> : IDisposable
     {
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
+        return PredictMultiCore(inputs, structureVersion, eagerForward, forward: null);
+    }
+
+    /// <summary>
+    /// Multi-input <see cref="Predict(Tensor{T}, int, Func{Tensor{T}, Tensor{T}})"/>: the forward takes its inputs as
+    /// an argument and is traced on host-owned copies of <paramref name="inputs"/>, so the caller's tensors are only
+    /// ever read. Prefer it to the closure overload for the reason given there.
+    /// </summary>
+    /// <param name="inputs">This call's per-call-varying inputs, in the order <paramref name="forward"/> takes them.</param>
+    /// <param name="structureVersion">Monotonic layer-graph version from the caller.</param>
+    /// <param name="forward">The forward pass, applied to the tensors it is given.</param>
+    /// <returns>The forward-pass output.</returns>
+    public Tensor<T> Predict(
+        Tensor<T>[] inputs,
+        int structureVersion,
+        Func<Tensor<T>[], Tensor<T>> forward)
+    {
+        if (forward is null)
+            throw new ArgumentNullException(nameof(forward));
+        return PredictMultiCore(inputs, structureVersion, () => forward(inputs), forward);
+    }
+
+    private Tensor<T> PredictMultiCore(
+        Tensor<T>[] inputs,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward,
+        Func<Tensor<T>[], Tensor<T>>? forward)
+    {
         if (inputs is null || inputs.Length == 0)
             throw new ArgumentException("At least one input is required.", nameof(inputs));
 
@@ -582,7 +650,9 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // hit) — either way the plan reflects THIS call's input data, so Execute()
                 // replays the current step. A changing timestep embedding is re-bound, never
                 // baked, which is the whole point of the multi-input path.
-                var plan = cache.GetOrCompileInference(inputs, () => eagerForward());
+                var plan = forward is not null
+                    ? cache.GetOrCompileInference(inputs, forward)
+                    : cache.GetOrCompileInference(inputs, () => eagerForward());
                 _lastCompiledVersion = structureVersion;
                 var result = plan.Execute();
                 System.Threading.Interlocked.Increment(ref _multiInputReplays);
@@ -677,7 +747,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
     /// invalidate the cached plan; subsequent calls reuse it.
     /// </para>
     /// </remarks>
-    public async System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
+    public System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
         Tensor<T> input,
         int structureVersion,
         Func<Tensor<T>> eagerForward,
@@ -685,6 +755,37 @@ internal sealed class CompiledModelHost<T> : IDisposable
     {
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
+        return PredictAsyncCore(input, structureVersion, eagerForward, forward: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// <see cref="PredictAsync(Tensor{T}, int, Func{Tensor{T}}, System.Threading.CancellationToken)"/> for a forward
+    /// that takes its input as an argument: traced on a host-owned copy of <paramref name="input"/>, so the caller's
+    /// tensor is only ever read (see <see cref="Predict(Tensor{T}, int, Func{Tensor{T}, Tensor{T}})"/>).
+    /// </summary>
+    /// <param name="input">This call's input. Its shape keys the compile cache.</param>
+    /// <param name="structureVersion">Monotonic layer-graph version from the caller.</param>
+    /// <param name="forward">The forward pass, applied to the tensor it is given.</param>
+    /// <param name="cancellationToken">Cancels between plan steps.</param>
+    /// <returns>The forward-pass output.</returns>
+    public System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
+        Tensor<T> input,
+        int structureVersion,
+        Func<Tensor<T>, Tensor<T>> forward,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (forward is null)
+            throw new ArgumentNullException(nameof(forward));
+        return PredictAsyncCore(input, structureVersion, () => forward(input), forward, cancellationToken);
+    }
+
+    private async System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsyncCore(
+        Tensor<T> input,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward,
+        Func<Tensor<T>, Tensor<T>>? forward,
+        System.Threading.CancellationToken cancellationToken)
+    {
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -746,8 +847,12 @@ internal sealed class CompiledModelHost<T> : IDisposable
 
                 var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
                 var plan = symbolicShape is null
-                    ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
-                    : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
+                    ? forward is not null
+                        ? cache.GetOrCompileInference(input, forward)
+                        : cache.GetOrCompileInference(concreteShape, () => eagerForward())
+                    : forward is not null
+                        ? cache.GetOrCompileInference(input, forward, symbolicShape)
+                        : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
 
                 MaybeSavePlanToDisk(plan, concreteShape, structureVersion);
                 _lastCompiledVersion = structureVersion;

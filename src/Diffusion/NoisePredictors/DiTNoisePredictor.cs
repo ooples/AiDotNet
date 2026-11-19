@@ -612,7 +612,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
             ? new[] { noisySample, timeEmbed, conditioning }
             : new[] { noisySample, timeEmbed };
         return streaming.Complete(
-            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbed, conditioning)));
+            PredictCompiledMulti(inputs, x => Forward(x[0], x[1], x.Length > 2 ? x[2] : null)));
     }
 
     /// <inheritdoc />
@@ -646,7 +646,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
             ? new[] { noisySample, timeEmbedding, conditioning }
             : new[] { noisySample, timeEmbedding };
         return streaming.Complete(
-            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbedding, conditioning)));
+            PredictCompiledMulti(inputs, x => Forward(x[0], x[1], x.Length > 2 ? x[2] : null)));
     }
 
     /// <summary>

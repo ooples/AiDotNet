@@ -248,7 +248,7 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
             TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
                 nameof(OctonionNeuralNetwork<T>), "prediction");
 
-            return Accelerate(input, () => Forward(input));
+            return Accelerate(input, input => Forward(input));
         }
         finally
         {

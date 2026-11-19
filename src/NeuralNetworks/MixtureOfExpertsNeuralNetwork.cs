@@ -311,7 +311,7 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
             nameof(MixtureOfExpertsNeuralNetwork<T>), "prediction");
 
         // Perform forward pass
-        var predictions = Accelerate(input, () => Forward(input));
+        var predictions = Accelerate(input, input => Forward(input));
 
         IsTrainingMode = true;
 

@@ -96,36 +96,44 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
     /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
     /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
-    /// identical to eager (rejected/unverified shapes fall back to eager). Only consulted when the
-    /// compiled inference path is opted in (see <see cref="s_autoCompiledInferenceEnabled"/>); the
-    /// default-eager path never constructs a verdict.
+    /// identical to eager (rejected/unverified shapes fall back to eager). Only consulted while the
+    /// compiled inference path is enabled (see <see cref="s_autoCompiledInferenceEnabled"/>, on by default).
     /// </summary>
     private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
 
     /// <summary>
-    /// Auto-compiled inference replay (#1622) is OPT-IN for noise predictors and OFF by default.
+    /// Process-wide setting for auto-compiled inference replay (#1622) in noise predictors: ON unless
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=0</c>.
     /// </summary>
     /// <remarks>
-    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global
-    /// scratch buffers with the eager executor. The verify-then-trust gate MUST execute a compiled
-    /// plan once to compare it against eager — and that single compiled execution leaves the shared
-    /// scratch in a state that makes EVERY subsequent eager forward for a REJECTED shape oscillate
-    /// with period 2: non-deterministic across calls, and numerically wrong on half of them. Model
-    /// parameters and inputs are provably untouched (hashed identical across calls) and dropping the
-    /// cached plan does not help, so the corruption is in the package's global scratch, not anything
-    /// this layer owns. Diffusion noise predictors fall back to eager for any shape whose compiled
-    /// plan does not match (which is the common case for these architectures), so the previously
-    /// default-on path silently corrupted inference and broke <c>Predict_ShouldBeDeterministic</c>.
-    /// <para>
-    /// Until the package isolates the two executors' scratch buffers, the compiled inference replay
-    /// is opt-in via <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> (set only after verifying a given model's
-    /// compiled path is both correct and side-effect-free). This does NOT affect #1624 foundation-scale
-    /// TRAINING: <see cref="PredictCompiledMulti"/> runs eager whenever a gradient tape is active, so
-    /// training never touches the compiled inference path regardless of this flag.
-    /// </para>
+    /// It was opt-in while two package defects made it wrong. The compiled executor (AiDotNet.Tensors through
+    /// 0.101.7) shared scratch with the eager one, so a verify pass left later eager forwards for a rejected shape
+    /// oscillating. And a plan traced on a closure over the caller's tensors took them as its input slots, so feeding
+    /// it the next step's inputs wrote them into the previous step's tensors. Plans are now traced on host-owned
+    /// copies (<see cref="PredictCompiledMulti(Tensor{T}[], Func{Tensor{T}[], Tensor{T}})"/>), and
+    /// <c>PredictNoise_Compiled_MatchesEager_OnFreshInputs</c> pins both: compiled replays on new inputs match eager,
+    /// and eager afterwards is bit-identical to eager before. Training never takes this path:
+    /// <see cref="PredictCompiledMulti(Tensor{T}[], Func{Tensor{T}[], Tensor{T}})"/> runs eager whenever a gradient
+    /// tape is active.
     /// </remarks>
-    private static readonly bool s_autoCompiledInferenceEnabled =
-        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
+    private static readonly bool s_autoCompiledInferenceDefault =
+        !string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "0", System.StringComparison.Ordinal);
+
+    /// <summary>Per-flow override of <see cref="s_autoCompiledInferenceDefault"/>, used by tests (async-local for the
+    /// reason given on <c>NeuralNetworkBase.SetAutoCompiledInferenceEnabledForTesting</c>).</summary>
+    private static readonly System.Threading.AsyncLocal<bool?> s_autoCompiledInferenceOverride = new();
+
+    private static bool s_autoCompiledInferenceEnabled
+        => s_autoCompiledInferenceOverride.Value ?? s_autoCompiledInferenceDefault;
+
+    /// <summary>Test hook: overrides the process-wide compiled-inference setting for the calling flow. Returns the
+    /// previous override so the caller can restore it, including <c>null</c> (use the environment default).</summary>
+    internal static bool? SetAutoCompiledInferenceEnabledForTesting(bool? enabled)
+    {
+        var prev = s_autoCompiledInferenceOverride.Value;
+        s_autoCompiledInferenceOverride.Value = enabled;
+        return prev;
+    }
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -372,11 +380,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </summary>
     /// <param name="input">Shape key for the compile cache.</param>
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
+    [Obsolete("Pass the forward as a function of its input (PredictCompiled(input, x => Forward(x))) so it can be compiled without writing into the caller's tensor.")]
     protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
     {
-        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
-        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
-        // eager, which is correct and bit-identical across calls.
+        if (eagerFallback is null) throw new ArgumentNullException(nameof(eagerFallback));
+        return PredictCompiled(input, _ => eagerFallback());
+    }
+
+    /// <summary>
+    /// Runs <paramref name="forward"/> under the compile host: traced on a host-owned copy of
+    /// <paramref name="input"/> on the first call at each shape, then replayed. The caller's tensor is only ever read.
+    /// </summary>
+    /// <param name="input">Shape key for the compile cache; read, never written.</param>
+    /// <param name="forward">The forward pass, applied to the tensor it is given.</param>
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>, Tensor<T>> forward)
+    {
+        if (forward is null) throw new ArgumentNullException(nameof(forward));
+        Func<Tensor<T>> eagerFallback = () => forward(input);
+        // AIDOTNET_ENABLE_AUTO_COMPILE=0 (see s_autoCompiledInferenceEnabled) keeps inference eager.
         if (!s_autoCompiledInferenceEnabled)
             return RunEagerInference(new[] { input }, eagerFallback);
 
@@ -387,10 +408,25 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             input,
             _layerStructureVersion,
             eager: eagerFallback,
-            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, forward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason)));
     }
+    /// <summary>
+    /// Earlier form of <see cref="PredictCompiledMulti(Tensor{T}[], Func{Tensor{T}[], Tensor{T}})"/> whose forward
+    /// closes over its inputs. A plan traced on such a forward takes the caller's tensors as its input slots and writes
+    /// later inputs into them, so this form never replays a compiled plan: the trace never reads the host's own input
+    /// slots, the compile fails closed, and every call runs <paramref name="eagerFallback"/>.
+    /// </summary>
+    /// <param name="inputs">The per-step inputs.</param>
+    /// <param name="eagerFallback">The eager forward pass.</param>
+    [Obsolete("Pass the forward as a function of its inputs (PredictCompiledMulti(inputs, x => Forward(x[0], x[1], ...))) so it can be compiled without writing into the caller's tensors.")]
+    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    {
+        if (eagerFallback is null) throw new ArgumentNullException(nameof(eagerFallback));
+        return PredictCompiledMulti(inputs, _ => eagerFallback());
+    }
+
 
     /// <summary>
     /// Multi-input compiled replay for a forward that reads SEVERAL per-call-varying leaves —
@@ -405,9 +441,11 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </summary>
     /// <param name="inputs">The per-step mutable input leaves, in a stable order. Each must be a
     /// tensor the forward reads directly; otherwise compile fails closed and this falls back to eager.</param>
-    /// <param name="eagerFallback">The eager forward pass (traced, replayed, verified, or fallback).</param>
-    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    /// <param name="forward">The forward pass, applied to the tensors it is given: <paramref name="inputs"/> when it runs eagerly, plan-owned copies when it is traced.</param>
+    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>[], Tensor<T>> forward)
     {
+        if (forward is null) throw new ArgumentNullException(nameof(forward));
+        Func<Tensor<T>> eagerFallback = () => forward(inputs);
         // Under an active gradient tape (TRAINING), run eager directly. The compiled/lazy-graph
         // host is an INFERENCE replay optimization; building + realizing the lazy graph while a
         // tape is recording is pure overhead — measured ~14% of a foundation-scale diffusion
@@ -417,9 +455,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerFallback();
 
-        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
-        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
-        // eager, which is correct and bit-identical across the denoising loop and across calls.
+        // AIDOTNET_ENABLE_AUTO_COMPILE=0 (see s_autoCompiledInferenceEnabled) keeps inference eager.
         if (!s_autoCompiledInferenceEnabled)
             return RunEagerInference(inputs, eagerFallback);
 
@@ -427,7 +463,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             inputs,
             _layerStructureVersion,
             eager: eagerFallback,
-            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback),
+            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, forward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason)));
     }
@@ -664,11 +700,25 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </summary>
     protected System.Threading.Tasks.ValueTask<Tensor<T>> PredictCompiledAsync(
         Tensor<T> input,
-        Func<Tensor<T>> eagerFallback,
+        Func<Tensor<T>, Tensor<T>> forward,
         System.Threading.CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
-        return _compileHost.PredictAsync(input, _layerStructureVersion, eagerFallback, cancellationToken);
+        return _compileHost.PredictAsync(input, _layerStructureVersion, forward, cancellationToken);
+    }
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (PredictCompiledAsync(input, x => Forward(x))) so it can be compiled without writing into the caller's tensor.")]
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> PredictCompiledAsync(
+        Tensor<T> input,
+        Func<Tensor<T>> eagerFallback,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (eagerFallback is null) throw new ArgumentNullException(nameof(eagerFallback));
+        return PredictCompiledAsync(input, _ => eagerFallback(), cancellationToken);
     }
 
     /// <summary>
@@ -1840,7 +1890,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // do for the same args; the host's shape key is just `noisySample`.
         return PredictCompiledAsync(
             noisySample,
-            () => PredictNoise(noisySample, timestep, conditioning),
+            x => PredictNoise(x, timestep, conditioning),
             cancellationToken);
     }
 

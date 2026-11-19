@@ -1129,7 +1129,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     {
 
         SetTrainingMode(false);
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var features = ExtractVisualFeatures(input);
             return ProjectToLanguageSpace(features);

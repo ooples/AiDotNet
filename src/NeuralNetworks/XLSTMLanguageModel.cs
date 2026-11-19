@@ -133,7 +133,7 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var output = input;
             for (int i = 0; i < Layers.Count; i++)

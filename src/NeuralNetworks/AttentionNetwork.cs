@@ -374,7 +374,7 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
 
         // Support any sequence length by dynamically adapting (attention layers handle variable length
         // internally). Wrapped in the #1622 verify-then-trust compiled gate; no-op unless engaged.
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var current = input;
             foreach (var layer in Layers)

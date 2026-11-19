@@ -550,7 +550,7 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            return Accelerate(input, () => Forward(input));
+            return Accelerate(input, input => Forward(input));
         }
         finally
         {

@@ -1966,6 +1966,91 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             nnBase.SetTrainingMode(false);
     }
 
+    /// <summary>
+    /// The verify-then-trust compiled-inference path checks the compiled plan against eager on the FIRST input of a
+    /// shape only, then replays the plan for every later input of that shape. This pins that the replay reads each
+    /// call's own input (a plan that baked in the first input returns its output for every later one), that the value
+    /// memo never serves one input's output for another, and that eager inference afterwards is unchanged (the
+    /// compiled executor once shared scratch with the eager one and left later eager forwards wrong). Repeating one
+    /// input, as Predict_ShouldBeDeterministic does, cannot see either: the memo answers every repeat.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Predict_CompiledInference_MatchesEager_OnFreshInputs()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        SetEvalMode(network);
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)
+            return;
+        var a = CreateRandomTensor(EffectiveInputShape, rng);
+        var b = CreateRandomTensor(EffectiveInputShape, rng);
+        var c = CreateRandomTensor(EffectiveInputShape, rng);
+        var prior = AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.SetAutoCompiledInferenceEnabledForTesting(false);
+        try
+        {
+            double[] refA = Values(network.Predict(a)), refB = Values(network.Predict(b)), refC = Values(network.Predict(c));
+            double[] inA = Values(a), inB = Values(b), inC = Values(c);
+            // Eager must repeat exactly on its own, or the eager-after-compiled check below would prove nothing.
+            AssertMatches(Values(network.Predict(c)), refC, "eager C repeated before any compiled run", exact: true);
+
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.SetAutoCompiledInferenceEnabledForTesting(true);
+            foreach (var (input, expected, label) in new[]
+            {
+                (a, refA, "A (verifies the shape)"), (b, refB, "B"), (a, refA, "A again"), (c, refC, "C"), (b, refB, "B again"),
+            })
+            {
+                AssertMatches(Values(a), inA, $"input A before compiled call {label}", exact: true);
+                var got = Values(network.Predict(input));
+                AssertMatches(got, expected, label + $" (max distance to eager A={MaxDiff(got, refA):G3}, B={MaxDiff(got, refB):G3}, C={MaxDiff(got, refC):G3})", exact: false);
+            }
+
+            // Inference must never write into the caller's tensors.
+            AssertMatches(Values(a), inA, "input A after the compiled runs", exact: true);
+            AssertMatches(Values(b), inB, "input B after the compiled runs", exact: true);
+            AssertMatches(Values(c), inC, "input C after the compiled runs", exact: true);
+
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.SetAutoCompiledInferenceEnabledForTesting(false);
+            AssertMatches(Values(network.Predict(c)), refC, "eager C after the compiled runs", exact: true);
+            AssertMatches(Values(network.Predict(b)), refB, "eager B after the compiled runs", exact: true);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.SetAutoCompiledInferenceEnabledForTesting(prior);
+        }
+
+        static double[] Values(Tensor<T> t)
+        {
+            var v = new double[t.Length];
+            for (int i = 0; i < v.Length; i++) v[i] = ConvertToDouble(t[i]);
+            return v;
+        }
+
+        static double MaxDiff(double[] x, double[] y)
+        {
+            double m = 0;
+            for (int i = 0; i < Math.Min(x.Length, y.Length); i++) m = Math.Max(m, Math.Abs(x[i] - y[i]));
+            return m;
+        }
+
+        static void AssertMatches(double[] actual, double[] expected, string label, bool exact)
+        {
+            Assert.True(actual.Length == expected.Length, $"{label}: length {actual.Length} != eager {expected.Length}");
+            // The gate's own parity tolerance: compiled may reorder ops by a few ULP; eager against eager is exact.
+            double rel = exact ? 0 : (typeof(T) == typeof(float) ? 2e-3 : 1e-6), abs = exact ? 1e-12 : 1e-5;
+            int bad = 0, first = -1;
+            for (int i = 0; i < actual.Length; i++)
+            {
+                double x = actual[i], y = expected[i];
+                if (double.IsNaN(x) && double.IsNaN(y)) continue;
+                if (!(Math.Abs(x - y) <= abs + rel * Math.Max(Math.Abs(x), Math.Abs(y)))) { if (bad++ == 0) first = i; }
+            }
+            if (bad > 0)
+                Assert.Fail($"{label}: {bad}/{actual.Length} outputs differ from eager; first [{first}] = {actual[first]:R} vs {expected[first]:R}");
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Predict_ShouldBeDeterministic()
     {

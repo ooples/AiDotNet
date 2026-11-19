@@ -850,7 +850,7 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
 
         // Process input as a tensor through the network (wrapped in the #1622 verify-then-trust
         // compiled gate; no-op unless acceleration is engaged).
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var current = input;
             for (int i = 0; i < Layers.Count; i++)

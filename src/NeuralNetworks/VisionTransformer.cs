@@ -353,7 +353,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
         // #2384: the same engine-op forward as training. The element-by-element CLS/positional/slice loops this
         // replaced read every activation back to the host one indexer call at a time: half of a GPU b32 Predict.
-        return Accelerate(input, () => ForwardFromImages(input, batchSize));
+        return Accelerate(input, input => ForwardFromImages(input, batchSize));
     }
 
     /// <summary>

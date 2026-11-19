@@ -344,10 +344,13 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // No Vector round-trip: that would sever the tape and leave training with no gradient path
-        // from the loss back through the encoder.
-        var (fusedLast, _) = ForwardCore(input, out _);
-        return (_returnHead ?? throw new InvalidOperationException("_returnHead is null where it is required.")).Forward(fusedLast);
+        return Accelerate(input, input =>
+        {
+            // No Vector round-trip: that would sever the tape and leave training with no gradient path
+            // from the loss back through the encoder.
+            var (fusedLast, _) = ForwardCore(input, out _);
+            return (_returnHead ?? throw new InvalidOperationException("_returnHead is null where it is required.")).Forward(fusedLast);
+        });
     }
 
     /// <inheritdoc/>

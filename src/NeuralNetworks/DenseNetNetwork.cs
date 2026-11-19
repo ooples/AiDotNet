@@ -346,7 +346,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     {
         SetTrainingMode(false);
         // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
-        return Accelerate(input, () => Forward(input));
+        return Accelerate(input, input => Forward(input));
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

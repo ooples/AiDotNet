@@ -478,7 +478,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         // backbone is what dominates the encode forward — multi-second on
         // 512×512 input — so caching just the backbone captures the bulk of
         // the speedup. (#1272 W1.)
-        var x = EncodeCompiled(image, () =>
+        var x = EncodeCompiled(image, image =>
         {
             var y = _inputConv.Forward(image);
             foreach (var layer in _encoderLayers)
@@ -515,7 +515,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         // generation that decodes once at the end at the same
         // [B, latentChannels, H/8, W/8]) replays a cached compiled plan
         // instead of re-tracing the entire ResBlock + Conv stack. (#1272 W1.)
-        return DecodeCompiled(latent, () =>
+        return DecodeCompiled(latent, latent =>
         {
             // Post-quant convolution
             var x = _postQuantConv.Forward(latent);

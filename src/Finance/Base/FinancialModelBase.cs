@@ -976,7 +976,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return Forecast(input);
+        return Accelerate(input, input => Forecast(input));
     }
 
     /// <summary>

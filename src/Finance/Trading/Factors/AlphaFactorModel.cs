@@ -327,7 +327,10 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
+        return Accelerate(input, input =>
+        {
+            return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
+        });
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

@@ -257,7 +257,7 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
         _importanceBatch = TabularMetrics.KeptCopy(input);
 
         // CPU path: forward pass through each layer sequentially
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             Tensor<T> currentOutput = input;
             foreach (var layer in Layers)

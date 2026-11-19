@@ -468,7 +468,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForecastNative(input)) : ForecastOnnx(input);
     }
 
     /// <summary>

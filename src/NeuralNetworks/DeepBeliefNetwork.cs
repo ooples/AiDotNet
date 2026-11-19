@@ -446,7 +446,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var current = input;
             foreach (var layer in Layers)

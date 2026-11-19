@@ -356,7 +356,7 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
     }
 
     // Width of a training row: the teacher-forced sequence, then x_k and k per future step.

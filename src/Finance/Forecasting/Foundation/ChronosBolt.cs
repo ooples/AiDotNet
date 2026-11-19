@@ -292,7 +292,7 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         // return bit-identical outputs. Without this, Predict_ShouldBeDeterministic
         // fails because dropout masks are resampled per forward pass.
         SetTrainingMode(false);
-        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
     }
 
     /// <inheritdoc/>

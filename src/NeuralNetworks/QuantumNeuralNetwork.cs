@@ -212,7 +212,7 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             throw new ArgumentException($"Input has {inputElements} elements but expected {expectedElements} elements.");
         }
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             // Simulate quantum state preparation
             var quantumState = PrepareQuantumState(workingInput);

@@ -307,7 +307,7 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? Forward(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => Forward(input)) : ForecastOnnx(input);
     }
 
     /// <summary>

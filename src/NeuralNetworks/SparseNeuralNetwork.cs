@@ -195,7 +195,7 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "prediction");
 
-        var predictions = Accelerate(input, () => Forward(input));
+        var predictions = Accelerate(input, input => Forward(input));
 
         IsTrainingMode = true;
 

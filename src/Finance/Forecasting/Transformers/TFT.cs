@@ -482,7 +482,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForecastNative(input)) : ForecastOnnx(input);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

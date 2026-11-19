@@ -1486,7 +1486,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         SetTrainingMode(false);
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var frames = ParseInputToFrames(input);
             var embedding = GetVideoEmbedding(frames);

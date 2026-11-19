@@ -1508,9 +1508,9 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         SetTrainingMode(false);
         if (_useNativeMode)
-            return Accelerate(input, () => EncodeImageNativeTensor(input));
+            return Accelerate(input, input => EncodeImageNativeTensor(input));
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var embedding = EncodeImageOnnx(input);
             var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);

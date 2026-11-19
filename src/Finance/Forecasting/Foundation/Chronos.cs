@@ -262,7 +262,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input, quantiles: null);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Accelerate(input, input => Forecast(input, quantiles: null));
 
     /// <summary>
     /// The encoder states of the context's tokens (the official pipeline's <c>embed</c>): <c>[L + 1, d_model]</c> for

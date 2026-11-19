@@ -385,7 +385,7 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     /// <returns>Decoded image [batch, outputChannels, H*f, W*f] where f is upsample factor.</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
+        return EnsureCompileHost().Predict(input, _compileStructureVersion, x => ForwardEager(x));
     }
 
     /// <summary>
@@ -432,7 +432,7 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
         System.Threading.CancellationToken cancellationToken = default)
     {
         return EnsureCompileHost().PredictAsync(
-            input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
+            input, _compileStructureVersion, x => ForwardEager(x), cancellationToken);
     }
 
     /// <summary>

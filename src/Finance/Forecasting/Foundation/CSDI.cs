@@ -286,7 +286,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
 
     /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)

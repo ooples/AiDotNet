@@ -232,7 +232,7 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
             throw new InvalidOperationException("Encoder layers not initialized.");
 
         // Route the shared encoder backbone through the compile host (#1272 W1).
-        var x = EncodeCompiled(image, () =>
+        var x = EncodeCompiled(image, image =>
         {
             var y = _inputConv.Forward(image);
             foreach (var layer in _encoderLayers)
@@ -255,7 +255,7 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         // Route the full decoder body through the compile host. This is the
         // hot path for every SDXL generation — replays a cached compiled plan
         // on the second + Nth call at the same latent shape. (#1272 W1.)
-        return DecodeCompiled(latent, () =>
+        return DecodeCompiled(latent, latent =>
         {
             var x = _postQuantConv.Forward(latent);
             foreach (var layer in _decoderLayers)

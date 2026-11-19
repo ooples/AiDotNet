@@ -229,7 +229,7 @@ public partial class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM
             return OnnxModel.Run(input);
         return Accelerate(
             input,
-            () =>
+            input =>
             {
                 var c = input;
                 foreach (var l in Layers)

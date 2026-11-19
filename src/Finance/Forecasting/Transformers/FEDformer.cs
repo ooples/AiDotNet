@@ -511,7 +511,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return Forecast(input);
+        return Accelerate(input, input => Forecast(input));
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()

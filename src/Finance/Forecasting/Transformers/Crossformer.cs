@@ -444,7 +444,10 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return Forecast(input, null);
+        return Accelerate(input, input =>
+        {
+            return Forecast(input, null);
+        });
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

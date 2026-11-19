@@ -759,7 +759,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var inputs = conditioning is not null
                 ? new[] { sampleNoisy, timeEmbed, conditioning }
                 : new[] { sampleNoisy, timeEmbed };
-            _ = PredictCompiledMulti(inputs, () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
+            _ = PredictCompiledMulti(inputs, x => ForwardUNet(x[0], x[1], x.Length > 2 ? x[2] : null));
             return true;
         }
         catch (Exception ex) when (
@@ -792,7 +792,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var inputs = conditioning is not null
             ? new[] { noisySample, timeEmbed, conditioning }
             : new[] { noisySample, timeEmbed };
-        return PredictCompiledMulti(inputs, () => ForwardUNet(noisySample, timeEmbed, conditioning));
+        return PredictCompiledMulti(inputs, x => ForwardUNet(x[0], x[1], x.Length > 2 ? x[2] : null));
     }
 
     /// <inheritdoc />

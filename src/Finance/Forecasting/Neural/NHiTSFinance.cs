@@ -430,24 +430,27 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (input is null) throw new ArgumentNullException(nameof(input));
-
-        // N-HiTS (Challu et al. 2022 §3.2) is defined over rank-2 [B, T]
-        // (univariate lookback window). When a caller hands us a single-sample
-        // rank-1 [T], promote to [1, T] for the pooling tape (which slices on
-        // axis 1), then squeeze the unit batch axis off the [1, H] forecast
-        // back to rank-1 [H] so the per-sample inference contract holds.
-        // Mirror the MobileNetV3 / Mask2Former rank-promotion pattern.
-        bool promoted = input.Rank == 1;
-        var processed = promoted ? PromoteToBatchedTensor(input) : input;
-        var output = _useNativeMode ? ForecastNative(processed) : ForecastOnnx(processed);
-        if (promoted && output.Rank > 1 && output.Shape[0] == 1)
+        return Accelerate(input, input =>
         {
-            var squeezed = new int[output.Rank - 1];
-            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
-            output = output.Reshape(squeezed);
-        }
-        return output;
+            if (input is null) throw new ArgumentNullException(nameof(input));
+
+            // N-HiTS (Challu et al. 2022 §3.2) is defined over rank-2 [B, T]
+            // (univariate lookback window). When a caller hands us a single-sample
+            // rank-1 [T], promote to [1, T] for the pooling tape (which slices on
+            // axis 1), then squeeze the unit batch axis off the [1, H] forecast
+            // back to rank-1 [H] so the per-sample inference contract holds.
+            // Mirror the MobileNetV3 / Mask2Former rank-promotion pattern.
+            bool promoted = input.Rank == 1;
+            var processed = promoted ? PromoteToBatchedTensor(input) : input;
+            var output = _useNativeMode ? ForecastNative(processed) : ForecastOnnx(processed);
+            if (promoted && output.Rank > 1 && output.Shape[0] == 1)
+            {
+                var squeezed = new int[output.Rank - 1];
+                for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
+                output = output.Reshape(squeezed);
+            }
+            return output;
+        });
     }
 
     /// <inheritdoc/>

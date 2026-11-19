@@ -1494,7 +1494,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     {
 
         SetTrainingMode(false);
-        return Accelerate(input, () => ForwardImageEmbedding(input));
+        return Accelerate(input, input => ForwardImageEmbedding(input));
     }
 
     /// <inheritdoc/>

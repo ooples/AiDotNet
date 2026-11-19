@@ -131,7 +131,7 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
 
     /// <inheritdoc />
     public virtual Tensor<T> Encode(Tensor<T> input) =>
-        EncodeCompiled(input, () => RunLayerStack(input));
+        EncodeCompiled(input, x => RunLayerStack(x));
 
     /// <inheritdoc />
     public virtual Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null) =>
@@ -251,15 +251,36 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     /// host so the second + Nth call at the same input shape replays a cached
     /// compiled plan.
     /// </summary>
-    protected Tensor<T> EncodeCompiled(Tensor<T> input, System.Func<Tensor<T>> eagerEncode) =>
-        EnsureCompileHost().Predict(input, _compileStructureVersion, eagerEncode);
+    /// <param name="input">The input; read, never written.</param>
+    /// <param name="encode">The encoder forward, applied to the tensor it is given.</param>
+    protected Tensor<T> EncodeCompiled(Tensor<T> input, System.Func<Tensor<T>, Tensor<T>> encode) =>
+        EnsureCompileHost().Predict(input, _compileStructureVersion, encode);
 
-    /// <summary>Async overload of <see cref="EncodeCompiled"/>.</summary>
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (EncodeCompiled(input, x => Forward(x))) so it can be compiled without writing into the caller's tensor.")]
+    protected Tensor<T> EncodeCompiled(Tensor<T> input, System.Func<Tensor<T>> eagerEncode) =>
+        EncodeCompiled(input, _ => eagerEncode());
+
+    /// <summary>Async overload of <see cref="EncodeCompiled(Tensor{T}, System.Func{Tensor{T}, Tensor{T}})"/>.</summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
+        Tensor<T> input,
+        System.Func<Tensor<T>, Tensor<T>> encode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        EnsureCompileHost().PredictAsync(input, _compileStructureVersion, encode, cancellationToken);
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (EncodeCompiledAsync(input, x => Forward(x))) so it can be compiled without writing into the caller's tensor.")]
     protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
         Tensor<T> input,
         System.Func<Tensor<T>> eagerEncode,
         System.Threading.CancellationToken cancellationToken = default) =>
-        EnsureCompileHost().PredictAsync(input, _compileStructureVersion, eagerEncode, cancellationToken);
+        EncodeCompiledAsync(input, _ => eagerEncode(), cancellationToken);
 
     /// <summary>Invalidates any cached compiled plan after layer-graph mutations.</summary>
     protected void InvalidateConditionerCompiledPlans()

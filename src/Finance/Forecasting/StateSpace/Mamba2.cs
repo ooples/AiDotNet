@@ -244,7 +244,7 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? Forward(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => Forward(input)) : ForecastOnnx(input);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

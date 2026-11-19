@@ -291,7 +291,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
     }
 
     /// <inheritdoc/>

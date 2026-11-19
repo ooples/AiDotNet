@@ -1506,7 +1506,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var audioFeatures = EncodeAudio(input);
             return Tensor<T>.FromVector(audioFeatures);

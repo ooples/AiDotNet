@@ -1856,7 +1856,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             // For BLIP-2, prediction depends on the task
             // Default: return Q-Former features

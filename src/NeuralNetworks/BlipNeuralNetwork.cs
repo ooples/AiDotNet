@@ -1707,7 +1707,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             // Default prediction returns image embedding
             var embedding = GetImageEmbedding(input);

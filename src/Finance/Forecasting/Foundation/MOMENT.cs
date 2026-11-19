@@ -417,7 +417,7 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+        return _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

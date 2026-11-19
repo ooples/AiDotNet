@@ -144,10 +144,20 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// calls replay the compiled plan. Subclasses' <see cref="Encode"/>
     /// implementations should wrap their forward body with this helper.
     /// </summary>
-    protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
+    /// <param name="image">The image to encode; read, never written.</param>
+    /// <param name="encode">The encoder forward, applied to the tensor it is given (a host-owned copy when traced).</param>
+    protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>, Tensor<T>> encode) =>
         IsRecordingGradients
-            ? eagerEncode()
-            : DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode));
+            ? encode(image)
+            : DetachPlanOutput(_encoderCompileHost.Predict(image, _vaeStructureVersion, encode));
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (EncodeCompiled(x, y => Forward(y))) so it can be compiled without writing into the caller's tensor.")]
+    protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
+        EncodeCompiled(image, _ => eagerEncode());
 
     /// <summary>
     /// Whether a gradient tape is recording, in which case the eager forward must run on it.
@@ -165,10 +175,20 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
     /// </summary>
-    protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
+    /// <param name="latent">The latent to decode; read, never written.</param>
+    /// <param name="decode">The decoder forward, applied to the tensor it is given (a host-owned copy when traced).</param>
+    protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>, Tensor<T>> decode) =>
         IsRecordingGradients
-            ? eagerDecode()
-            : DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode));
+            ? decode(latent)
+            : DetachPlanOutput(_decoderCompileHost.Predict(latent, _vaeStructureVersion, decode));
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (DecodeCompiled(x, y => Forward(y))) so it can be compiled without writing into the caller's tensor.")]
+    protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
+        DecodeCompiled(latent, _ => eagerDecode());
 
     /// <summary>
     /// Returns a tensor the caller can safely RETAIN, copying when the compiled plan handed back its
@@ -202,18 +222,40 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// </summary>
     protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
         Tensor<T> image,
+        Func<Tensor<T>, Tensor<T>> encode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _encoderCompileHost.PredictAsync(image, _vaeStructureVersion, encode, cancellationToken);
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (EncodeCompiledAsync(x, y => Forward(y))) so it can be compiled without writing into the caller's tensor.")]
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
+        Tensor<T> image,
         Func<Tensor<T>> eagerEncode,
         System.Threading.CancellationToken cancellationToken = default) =>
-        _encoderCompileHost.PredictAsync(image, _vaeStructureVersion, eagerEncode, cancellationToken);
+        EncodeCompiledAsync(image, _ => eagerEncode(), cancellationToken);
 
     /// <summary>
     /// Async overload of <see cref="DecodeCompiled"/>.
     /// </summary>
     protected System.Threading.Tasks.ValueTask<Tensor<T>> DecodeCompiledAsync(
         Tensor<T> latent,
+        Func<Tensor<T>, Tensor<T>> decode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _decoderCompileHost.PredictAsync(latent, _vaeStructureVersion, decode, cancellationToken);
+
+    /// <summary>Earlier form of the overload taking <c>Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;</c>. Its forward closes over the
+    /// input, which a compiled plan would take as its input slot and write later inputs into, so this form never
+    /// replays a plan: the trace never reads the host's own input slot, the compile fails closed, and every call runs
+    /// the forward eagerly.</summary>
+    [Obsolete("Pass the forward as a function of its input (DecodeCompiledAsync(x, y => Forward(y))) so it can be compiled without writing into the caller's tensor.")]
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> DecodeCompiledAsync(
+        Tensor<T> latent,
         Func<Tensor<T>> eagerDecode,
         System.Threading.CancellationToken cancellationToken = default) =>
-        _decoderCompileHost.PredictAsync(latent, _vaeStructureVersion, eagerDecode, cancellationToken);
+        DecodeCompiledAsync(latent, _ => eagerDecode(), cancellationToken);
 
     /// <summary>
     /// Bump when the layer graph changes (tiling/slicing toggle, weight

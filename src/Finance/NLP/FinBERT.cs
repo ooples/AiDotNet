@@ -389,7 +389,10 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForwardNative(input) : ForwardOnnx(input);
+        return Accelerate(input, input =>
+        {
+            return _useNativeMode ? ForwardNative(input) : ForwardOnnx(input);
+        });
     }
 
     /// <summary>

@@ -103,6 +103,35 @@ public abstract class VAEModelTestBase
             Assert.Equal(first[i], second[i]);
     }
 
+    /// <summary>
+    /// Encode and Decode replay a compiled plan after the first call at a shape. This pins that the replay reads each
+    /// call's own input and never writes into it: a plan traced on the caller's first tensor took it as its input slot,
+    /// so encoding B wrote B into A, and encoding A again returned B's latent.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task EncodeAndDecode_OnFreshInputs_ReadOnlyTheirOwnInput()
+    {
+        await Task.Yield();
+        var vae = CreateVAE();
+        var a = CreateImage(vae, 31);
+        var b = CreateImage(vae, 32);
+        var imageA = a.ToArray();
+
+        var latentA = vae.Encode(a, sampleMode: false).ToArray();
+        var latentB = vae.Encode(b, sampleMode: false).ToArray();
+        Assert.Equal(imageA, a.ToArray());
+        var latentAAgain = vae.Encode(a, sampleMode: false).ToArray();
+        Assert.True(latentA.SequenceEqual(latentAAgain), "encoding A after B must return A's latent, not B's");
+        Assert.False(latentA.SequenceEqual(latentB), "distinct images must encode to distinct latents for this check to mean anything");
+
+        var za = new Tensor<double>(latentA, vae.Encode(a, sampleMode: false).Shape.ToArray());
+        var zb = new Tensor<double>(latentB, za.Shape.ToArray());
+        var decodedA = vae.Decode(za).ToArray();
+        vae.Decode(zb);
+        Assert.Equal(latentA, za.ToArray());
+        Assert.True(decodedA.SequenceEqual(vae.Decode(za).ToArray()), "decoding A after B must return A's image, not B's");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task UnscaleLatent_InvertsScaleLatent()
     {

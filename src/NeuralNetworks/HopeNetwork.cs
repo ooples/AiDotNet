@@ -497,7 +497,7 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
                 layer.SetTrainingMode(false);
             }
 
-            return Accelerate(input, () => Forward(input));
+            return Accelerate(input, input => Forward(input));
         }
         finally
         {

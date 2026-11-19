@@ -506,7 +506,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
-        => _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        => _useNativeMode ? Accelerate(input, input => ForecastNative(input)) : ForecastOnnx(input);
 
     /// <inheritdoc/>
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)

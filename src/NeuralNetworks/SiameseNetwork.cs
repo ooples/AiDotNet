@@ -470,7 +470,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
                     $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input._shape)}");
             }
 
-            return Accelerate(input, () =>
+            return Accelerate(input, input =>
             {
                 int batchSize = input.Shape[0];
                 var scores = new List<Tensor<T>>(batchSize);

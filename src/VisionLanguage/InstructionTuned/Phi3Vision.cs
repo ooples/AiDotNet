@@ -266,7 +266,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
         TryAutoEnableWeightStreaming();
         return Accelerate(
             input,
-            () =>
+            input =>
             {
                 var c = input;
                 foreach (var l in Layers)

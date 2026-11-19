@@ -211,7 +211,7 @@ public class AcceleratedInferenceTests : IDisposable
     {
         public HelperWrappedNet(NeuralNetworkArchitecture<float> arch) : base(arch) { }
         public override Tensor<float> Predict(Tensor<float> input)
-            => Accelerate(input, () => { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; });
+            => Accelerate(input, input => { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; });
     }
 
     [Fact]
@@ -267,14 +267,11 @@ public class AcceleratedInferenceTests : IDisposable
     }
 
     [Fact]
-    public void Default_OptInOff_ExplicitOptIn_StaysEager_GateNeverRuns()
+    public void ProcessSettingOff_StaysEager_UnlessTheModelOptsIn()
     {
-        // The compiled-inference path is opt-in (default OFF) because the AiDotNet.Tensors compiled and
-        // eager executors share process-global scratch: running a compiled plan once (as the verify gate
-        // must) corrupts the eager fallback for a rejected shape. With the process opt-in OFF, even an
-        // explicit EnableInferenceAcceleration() must NOT engage — every forward stays plain eager and the
-        // verify gate never runs. (Constructor enables it for the other tests; this asserts the shipped
-        // default by flipping it off locally and restoring.)
+        // AIDOTNET_ENABLE_AUTO_COMPILE=0 turns the compiled path off for every model that has not chosen for itself:
+        // each forward stays plain eager and the verify gate never runs. A model's own EnableInferenceAcceleration()
+        // overrides the process setting either way.
         var restore = NeuralNetworkBase<float>.SetAutoCompiledInferenceEnabledForTesting(false);
         try
         {
@@ -282,12 +279,37 @@ public class AcceleratedInferenceTests : IDisposable
             var input = MakeInput(7);
             var eager = Eager(net, input);
 
-            net.ForceAutoCompiledInferenceForTesting(true); // explicit opt-in...
+            net.SetTrainingMode(false);
             var outp = net.PredictAccelerated(input);
+            Assert.False(net.AutoCompiledInferenceEngaged, "with the process setting off and no model choice the path must stay off");
+            Assert.Equal(0, net.AcceleratedVerifyCount);   // gate never ran -> pure eager
+            AssertParity(eager, outp, "process-off stays eager");
 
-            Assert.False(net.AutoCompiledInferenceEngaged, "explicit opt-in must not engage while the process opt-in is off");
-            Assert.Equal(0, net.AcceleratedVerifyCount);   // gate never ran → pure eager
-            AssertParity(eager, outp, "default-off stays eager");
+            net.EnableInferenceAcceleration(true);
+            _ = net.PredictAccelerated(input);
+            Assert.True(net.AutoCompiledInferenceEngaged, "a model's explicit opt-in overrides the process setting");
+            Assert.True(net.AcceleratedVerifyCount >= 1);
+        }
+        finally
+        {
+            NeuralNetworkBase<float>.SetAutoCompiledInferenceEnabledForTesting(restore);
+        }
+    }
+
+    [Fact]
+    public void ByDefault_InferenceEngages_AndAModelCanOptOut()
+    {
+        var restore = NeuralNetworkBase<float>.SetAutoCompiledInferenceEnabledForTesting(null);
+        try
+        {
+            var net = BuildMlp();
+            net.SetTrainingMode(false);
+            Assert.True(net.AutoCompiledInferenceEngaged, "compiled inference is on by default in inference mode");
+            net.SetTrainingMode(true);
+            Assert.False(net.AutoCompiledInferenceEngaged, "the default does not engage in training mode");
+            net.SetTrainingMode(false);
+            net.EnableInferenceAcceleration(false);
+            Assert.False(net.AutoCompiledInferenceEngaged, "a model's explicit opt-out overrides the default");
         }
         finally
         {

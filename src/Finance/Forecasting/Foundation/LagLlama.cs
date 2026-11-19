@@ -511,18 +511,21 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (!_useNativeMode) return ForecastOnnx(input);
-        // Extract mu (point prediction) so Predict's output shape matches
-        // ForwardNativeForTraining — that override slices mu tape-aware via
-        // TensorSliceAxis, and the test harness pairs Train(input, Predict(input))
-        // for loss, so both paths need the same [..., horizon] contract. Raw
-        // distribution params [1, horizon, 3] would break the loss with
-        // "Tensor shapes must match. Got [1, 8] and [1, 8, 12]".
-        var distributionParams = ForecastNative(input);
-        int paramsAxis = distributionParams.Rank - 1;
-        var mu = Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
-        // RevIN reverse: restore mu to the input's per-instance level/scale.
-        return DenormalizeForecast(mu);
+        return Accelerate(input, input =>
+        {
+            if (!_useNativeMode) return ForecastOnnx(input);
+            // Extract mu (point prediction) so Predict's output shape matches
+            // ForwardNativeForTraining — that override slices mu tape-aware via
+            // TensorSliceAxis, and the test harness pairs Train(input, Predict(input))
+            // for loss, so both paths need the same [..., horizon] contract. Raw
+            // distribution params [1, horizon, 3] would break the loss with
+            // "Tensor shapes must match. Got [1, 8] and [1, 8, 12]".
+            var distributionParams = ForecastNative(input);
+            int paramsAxis = distributionParams.Rank - 1;
+            var mu = Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
+            // RevIN reverse: restore mu to the input's per-instance level/scale.
+            return DenormalizeForecast(mu);
+        });
     }
 
     /// <summary>

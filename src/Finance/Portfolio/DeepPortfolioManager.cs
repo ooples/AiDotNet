@@ -205,9 +205,12 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
+        return Accelerate(input, input =>
+        {
+            var current = input;
+            foreach (var layer in Layers) current = layer.Forward(current);
+            return current;
+        });
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

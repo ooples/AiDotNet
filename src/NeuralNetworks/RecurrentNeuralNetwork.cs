@@ -219,7 +219,7 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
         }
 
         // Forward pass through each layer in the network
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             Tensor<T> currentOutput = input;
             foreach (var layer in Layers)

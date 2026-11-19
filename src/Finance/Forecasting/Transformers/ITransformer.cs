@@ -581,7 +581,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return Forecast(input);
+        return Accelerate(input, input => Forecast(input));
     }
 
     /// <summary>

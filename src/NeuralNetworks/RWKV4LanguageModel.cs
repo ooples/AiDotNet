@@ -147,7 +147,7 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     {
         SetTrainingMode(false);
 
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var output = input;
             for (int i = 0; i < Layers.Count; i++)

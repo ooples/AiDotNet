@@ -346,7 +346,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // Simple layer-by-layer forward pass (wrapped in the #1622 verify-then-trust compiled gate;
         // no-op unless acceleration is engaged). Each layer (including LSTM layers) handles its own
         // time-stepping internally — matching the industry-standard approach used by GRU networks.
-        return Accelerate(input, () =>
+        return Accelerate(input, input =>
         {
             var current = input;
 

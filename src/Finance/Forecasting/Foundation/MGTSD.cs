@@ -437,7 +437,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
 
     /// <summary>
     /// Tape-aware training forward. Runs the existing Layers stack as a

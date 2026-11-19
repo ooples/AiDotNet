@@ -370,7 +370,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input, quantiles: null) : ForecastOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Accelerate(input, input => ForwardNative(input, quantiles: null)) : ForecastOnnx(input);
 
     /// <summary>
     /// One training step of paper Equation 6 (Equation 1 alone when ContrastiveWeight is 0).

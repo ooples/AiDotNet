@@ -251,7 +251,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Accelerate(input, input => ForwardNative(input)) : ForecastOnnx(input);
 
     /// <summary>
     /// One epsilon-prediction training step over the same denoiser graph the sampler runs.
