@@ -1,4 +1,4 @@
-import { test, expect, Route } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 
 // Coverage for the per-row Copy and Resend controls added to /admin/licenses
 // in PR #1256. Each test stubs the side-effecting boundary it cares about
