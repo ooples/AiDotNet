@@ -370,14 +370,17 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                 }
                 var nextU = Normalize(Engine.TensorMatMul(v, vT));
                 var nextV = Normalize(Engine.TensorMatMul(Engine.Reshape(nextU, new[] { 1, rows }), v));
-                if (CompiledStepRandom<T>.InNonStepForward || GraphMode.IsProbe)
+                if (CompiledStepRandom<T>.InNonStepForward)
                 {
-                    // A forward that only resolves shapes or probes the step must not advance the accepted state.
+                    // Shape-resolution forwards must not advance the accepted state.
                     uT = Engine.Reshape(nextU, new[] { 1, rows });
                     vT = Engine.Reshape(nextV, new[] { per, 1 });
                 }
                 else
                 {
+                    // A closure probe must record the same copies and snapshots as training. Its lazy scope
+                    // abandons these writes without executing them, preserving both state and node positions.
+
                     Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
                     Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
                     // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
