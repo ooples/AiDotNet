@@ -285,7 +285,18 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
             return;
         }
         var (mel, audio) = AlignedSegment(MelInput(input), expectedOutput, _trainingRandom);
-        TrainStep(mel, audio);
+        if (!_ownedTrainingInputLifetimes) { TrainStep(mel, audio); return; }
+        try
+        {
+            var stagedMel = StageTrainingInput("mel", mel);
+            var stagedAudio = StageTrainingInput("audio", audio);
+            TrainStep(stagedMel, stagedAudio);
+        }
+        finally
+        {
+            try { ReleaseOwnedTrainingInput(Engine, mel, input, expectedOutput); }
+            finally { ReleaseOwnedTrainingInput(Engine, audio, input, expectedOutput); }
+        }
     }
 
     /// <inheritdoc />
@@ -391,6 +402,8 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
             using (new NoGradScope<T>())
             {
                 generated = GenerateDetachedForDiscriminator(mel);
+                if (_ownedTrainingInputLifetimes)
+                    generated = StageDetachedTrainingInput(generated, mel, segment);
             }
         }
         TrainLayers(_discriminatorLayers, mel, segment, () => DiscriminatorLoss(segment, generated), "discriminator");
@@ -542,6 +555,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         if (_disposed)
             return;
         _disposed = true;
+        if (disposing) DisposeTrainingInputStages();
         base.Dispose(disposing);
     }
 }
