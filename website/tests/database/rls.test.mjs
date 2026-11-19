@@ -186,6 +186,8 @@ test('deployment prerequisite checks reject missing or nonunique entitlement ind
       `+guard), /RPC argument contract/);
   }
   sql(guard); // Failed transactions rolled back; function-only redeployment stays available.
+  assert.throws(() => sql('begin; drop table public.billing_checkout_bindings;\n'+guard), /verified billing ownership schema is missing/);
+  sql(guard); // Dropping the table was rolled back even though the string-bodied RPC survived.
 });
 
 test('owners can save names and revoke one of multiple API keys', () => {

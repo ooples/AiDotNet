@@ -234,8 +234,9 @@ jobs:
       - name: Sanitize credential-bearing report diagnostics
         id: report_safety
         if: always()
-        run: python3 scripts/sanitize-playwright-report.py playwright-report/deployed
+        run: python3 scripts/sanitize-playwright-report.py "$REPORT_DIRECTORY"
         env:
+          REPORT_DIRECTORY: ${{ inputs.preview && 'playwright-report/deployed' || 'playwright-report' }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}

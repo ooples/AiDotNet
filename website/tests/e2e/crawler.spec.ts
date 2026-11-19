@@ -91,6 +91,8 @@ test.describe('crawler regression checks', () => {
           ? '<button id="update" onclick="document.getElementById(\'secret\').checked=true">Update</button><div hidden><input type="checkbox" id="secret"></div>'
         : req.url === '/visible-style/'
           ? '<button id="update" onclick="fetch(\'/ping/\').then(()=>document.getElementById(\'swatch\').style.backgroundColor=\'blue\')">Update</button><div id="swatch" style="width:20px;height:20px;background:red"></div>'
+        : req.url === '/inert-style/'
+          ? '<style>button{background:red;transition:background-color 1s}button:hover,button:focus{background:blue}</style><button id="inert">Inert styled button</button>'
         : req.url === '/enable-at-limit/'
           ? '<button id="enable" onclick="document.getElementById(\'deep\').disabled=false">Enable</button><button id="deep" disabled onclick="alert(\'Deep\')">Deep</button>'
         : req.url === '/unrelated-abort/'
@@ -151,6 +153,11 @@ test.describe('crawler regression checks', () => {
     expect(hidden.findings).toEqual(expect.arrayContaining([expect.objectContaining({ control: expect.stringContaining('#update'), problem: expect.stringContaining('did nothing visible') })]));
     const visible = await crawl({ ...options(), page, request, seeds: [`${origin}/visible-style/`] });
     expect(visible.findings).toEqual([]);
+  });
+
+  test('hover and focus styling cannot give an inert button effect credit', async ({page,request}) => {
+    const report=await crawl({...options(),page,request,seeds:[`${origin}/inert-style/`]});
+    expect(report.findings).toEqual(expect.arrayContaining([expect.objectContaining({control:expect.stringContaining('#inert'),problem:expect.stringContaining('did nothing visible')})]));
   });
 
   test('requests that start while an action settles finish before its result is checked', async ({ page, request }) => {

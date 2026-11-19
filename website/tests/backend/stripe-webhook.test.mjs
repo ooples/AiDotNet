@@ -108,7 +108,7 @@ function fixture({ insertError, profileError, rpcError, withoutIntent = false, e
   });
   const session = { id: 'cs_fixture', created: 1700000000, client_reference_id: '11111111-1111-4111-8111-111111111111', customer: 'cus_fixture', subscription: 'sub_fixture', metadata: { tier: 'pro' }, payment_status: 'paid', customer_details: { email: 'preview@example.test' } };
   return {
-    writes, emails, licenses, profiles, retrievedIds, customers, bindings,
+    writes, emails, licenses, profiles, retrievedIds, customers, bindings, intents,
     setProfileError(value) { linkFailure=value; }, setMirrorError(value) { mirrorFailure=value; },
     setSubscription(nextStatus, nextTier = tier) { status = nextStatus; tier = nextTier; },
     setStripeError(value) { unavailable = value; },
@@ -230,6 +230,22 @@ for (const reference of ['user-id','22222222-2222-4222-8222-222222222222',null])
   assert.equal((await f.send('checkout.session.completed',{client_reference_id:reference})).status,500);
   assert.equal(f.licenses.length,0);
   assert.equal(f.writes.length,0);
+});
+
+for (const [name, created] of [
+  ['after the intent expires', Date.parse('2031-01-01') / 1000],
+  ['before the intent creation tolerance', Date.parse('2020-01-01') / 1000 - 2],
+]) test(`Checkout created ${name} cannot write an entitlement`, async () => {
+  const f = fixture();
+  assert.equal((await f.send('checkout.session.completed', { created })).status, 500);
+  assert.equal(f.writes.length, 0);
+});
+
+test('a stored Checkout binding rejects a different customer without writes', async () => {
+  const f = fixture();
+  f.bindings.push({session_id:'cs_fixture',user_id:'user-id',customer_id:'cus_other'});
+  assert.equal((await f.send()).status, 500);
+  assert.equal(f.writes.length, 0);
 });
 
 test('a customer already owned by another account cannot be rebound through Checkout', async () => {

@@ -293,12 +293,24 @@ test('a preview claim fulfills through the matching preview webhook',async()=>{
   assert.equal((await f.send({action:'claim_checkout',checkout_session_id:'cs_test_claim'})).status,200);
   assert.equal(f.deliveries.length,1);
 });
+test('a verified Checkout claim resolves an unowned legacy preference through the ownership ledger',async()=>{
+  const f=billingOwnershipFixture({preferred:'cus_claim'});
+  const before=await (await f.send({action:'summary'})).json();
+  assert.equal(before.ownership_resolution_required,true);
+  assert.equal(before.billing_account,false);
+  assert.equal((await f.send({action:'claim_checkout',checkout_session_id:'cs_test_claim'})).status,200);
+  assert.equal(f.bindings[0].user_id,'signed-in-user');
+  const after=await (await f.send({action:'summary'})).json();
+  assert.equal(after.ownership_resolution_required,false);
+  assert.equal(after.billing_account,true);
+});
 for(const scenario of [
   {name:'unverified email',user:{email_confirmed_at:null},status:403},
   {name:'another payer email',session:{customer_details:{email:'another@example.test'}},status:403},
   {name:'unpaid checkout',session:{payment_status:'unpaid'},status:409},
   {name:'unfinished checkout',session:{status:'open'},status:409},
   {name:'another bound account',bindings:[{session_id:'cs_test_claim',customer_id:'cus_claim',user_id:'another-user'}],status:403},
+  {name:'a customer owned by another account',preferred:'cus_claim',customers:[{customer_id:'cus_claim',user_id:'another-user'}],status:502},
 ]) test(`claim refuses ${scenario.name} without fulfillment`,async()=>{
   const f=billingOwnershipFixture(scenario);
   assert.equal((await f.send({action:'claim_checkout',checkout_session_id:'cs_test_claim'})).status,scenario.status);

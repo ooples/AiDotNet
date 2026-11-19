@@ -515,6 +515,13 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   }
 
   // Clicks one control and reports what it did. Returns 'nav' when the page changed.
+  async function clearPointerAndFocus() {
+    await page.mouse.move(-1, -1);
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }).catch(() => {}); // Navigation may have replaced the document.
+  }
+
   async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
     const loc = await page.locator(c.selector).first().elementHandle();
     const verified = loc && (await page.evaluate(ENUMERATE, { path: pg, target: loc })).controls.find(control => control.isTarget);
@@ -526,6 +533,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     current = { page: pg, control: c.key };
     if (c.inForm) await fillForm(loc);
     await loc.scrollIntoViewIfNeeded({ timeout: 3_000 }).catch(() => {});
+    await clearPointerAndFocus();
     // Two idle snapshots: a signal that moves on its own (animation, clock) cannot count as an effect.
     const idle = await snapshot();
     await page.waitForTimeout(300);
@@ -595,14 +603,20 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => {});
     await page.waitForTimeout(100);
     if (opened) await opened.close().catch(() => {});
+    // Compare the same pointer/focus state on both sides of the click. Hover/focus
+    // chrome alone is not an application result; also exclude styles still transitioning.
+    await clearPointerAndFocus();
+    const settling = (await snapshot()) ?? after;
+    await page.waitForTimeout(300);
     const final = (await snapshot()) ?? after;
+    const settledVisual = new Map(settling.visual);
     const effect = final.url !== before.url || after.url !== before.url || externalNavs.length > navsBefore
       || !!opened || !!dl || dialogs.length > dialogsBefore
       || final.clip > before.clip
       || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
       || (!noisy.count && final.visibleCount !== before.visibleCount)
       || (!noisy.state && final.stateHash !== before.stateHash)
-      || final.visual.some(([id, value]) => stableVisual.has(id) && stableVisual.get(id) !== value)
+      || final.visual.some(([id, value]) => stableVisual.has(id) && settledVisual.get(id) === value && stableVisual.get(id) !== value)
       || final.htmlClass !== before.htmlClass;
     if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);

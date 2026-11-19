@@ -13,6 +13,11 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
     </div>
 
     <div id="billing-error" role="alert" class="hidden p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-600 dark:text-red-400"></div>
+    <div id="billing-ownership-notice" role="status" class="hidden p-4 rounded-xl border text-sm">
+      <p id="billing-ownership-message"></p>
+      <a class="underline" href="/account/licenses/">Claim a completed checkout</a>
+      <a class="underline ml-4" href="mailto:support@aidotnet.dev">Contact billing support</a>
+    </div>
 
     <!-- Current plan -->
     <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
@@ -197,6 +202,8 @@ const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 
       if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return false; }
       // What follows is then only the profile's view; say so rather than show it as the whole truth.
       if (state.error) showError(state.error);
+      $('billing-ownership-message')!.textContent = state.ownershipMessage ?? '';
+      $('billing-ownership-notice')!.classList.toggle('hidden', !state.ownershipMessage);
 
       const sub = state.subscription;
       lastSubscription = sub;

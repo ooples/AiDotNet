@@ -4,6 +4,28 @@ import { approvedPreviewOrigin, authorizePreview } from '../../scripts/authorize
 import { hasExecutedCheck } from '../../scripts/verification-result.mjs';
 import { serverRequest } from '../../scripts/secure-backend-http.mjs';
 
+test('privileged status-only requests consume their body and permit repeated reads', async () => {
+  let consumed=false;
+  const response=await serverRequest('https://api.stripe.com/v1/customers',{},async()=>({
+    status:200,ok:true,url:'https://api.stripe.com/v1/customers',headers:new Headers(),
+    async arrayBuffer(){consumed=true;return new TextEncoder().encode('{"deleted":true}').buffer;},
+  }));
+  assert.equal(response.ok(),true);
+  assert.equal(consumed,true);
+  assert.deepEqual(await response.json(),{deleted:true});
+  assert.equal(await response.text(),'{"deleted":true}');
+  assert.deepEqual(await response.json(),{deleted:true});
+  const empty=await serverRequest('https://api.stripe.com/v1/customers',{},async()=>new Response(null,{status:204}));
+  assert.equal(await empty.text(),'');
+  await empty.dispose();
+});
+
+test('privileged body-read failures omit provider credentials', async () => {
+  await assert.rejects(serverRequest('https://api.stripe.com/v1/customers',{},async()=>({
+    status:200,async arrayBuffer(){throw new Error('private-provider-secret');},
+  })),error=>!String(error).includes('private-provider-secret')&&error.cause===undefined);
+});
+
 const commit = 'a'.repeat(40), secret = 'fixture-private-bypass';
 for (const origin of ['https://attacker.example','http://test.aidotnet.dev','https://test.aidotnet.dev.attacker.example','https://test.aidotnet.dev/path','https://user@test.aidotnet.dev']) {
   test(`reject an unsafe target before sending a credential: ${origin}`, async () => {

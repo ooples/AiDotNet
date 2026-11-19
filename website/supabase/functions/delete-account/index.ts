@@ -52,7 +52,11 @@ serve(async (req: Request) => {
     return json({ error: "profile_lookup_failed", message: "Could not check your billing account. Nothing was deleted; please try again." }, 503);
   }
   let customers: string[];
-  try { customers = await ownedBillingCustomers(admin, user.id, profile?.stripe_customer_id); }
+  try {
+    customers = await ownedBillingCustomers(admin, user.id);
+    // Even when other verified customers exist, an unresolved link can hide billing.
+    if (profile?.stripe_customer_id && !customers.includes(profile.stripe_customer_id)) throw new Error("Unresolved legacy billing account");
+  }
   catch { return json({ error: "billing_ownership_unverified", message: "Could not verify every billing account. Nothing was deleted; please contact support." }, 503); }
   if (customers.length) {
     const key = Deno.env.get("STRIPE_SECRET_KEY");

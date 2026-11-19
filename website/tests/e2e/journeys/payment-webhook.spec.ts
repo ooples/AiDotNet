@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { journeySkipReason, postSignedStripeEvent, restPatch, restSelect, restInsert } from '../helpers/backend';
 import { createPersona, disposePersona, type Persona } from '../helpers/personas';
 import { changeSubscriptionPrice, deleteCustomer, planPrice } from '../helpers/stripe';
+import { withCleanup } from '../helpers/cleanup';
 
 // Real deployed handler, database and current Stripe subscription. Events are
 // signed injections against a disposable card-free trial, never a settled payment.
@@ -11,7 +12,7 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
   test.skip(!!skip, skip);
   test.setTimeout(120_000);
   let persona: Persona | undefined;
-  try {
+  await withCleanup(async () => {
     persona = await createPersona(request, 'pro-stripe', { entitlement:false });
     const { customerId, subscriptionId } = persona.stripe!;
     const intent = await restInsert<{id:string}>(request,'billing_checkout_intents',{user_id:persona.id,tier:'pro',interval:'month'});
@@ -59,16 +60,16 @@ test('delayed payment fulfills once and a late success cannot undo cancellation'
     expect(await licenses(), 'current cancellation wins over the old paid snapshot').toEqual([
       { ...upgraded[0], status: 'expired' },
     ]);
-  } finally {
+  }, async () => {
     await disposePersona(request, persona);
-  }
+  });
 });
 
 test('late paid Checkout creates exactly one expired entitlement when cancellation arrived before any key', async ({request})=>{
   const skip=journeySkipReason(); test.skip(!!skip,skip);
   test.setTimeout(120_000);
   let persona:Persona|undefined;
-  try {
+  await withCleanup(async () => {
     persona=await createPersona(request,'pro-stripe',{entitlement:false});
     const {customerId,subscriptionId}=persona.stripe!;
     const intent=await restInsert<{id:string}>(request,'billing_checkout_intents',{user_id:persona.id,tier:'pro',interval:'month'});
@@ -82,5 +83,5 @@ test('late paid Checkout creates exactly one expired entitlement when cancellati
     }}});
     expect(response.status(),await response.text()).toBe(200);
     expect(await licenses()).toEqual([{status:'expired',stripe_subscription_id:subscriptionId}]);
-  } finally { await disposePersona(request,persona); }
+  }, async () => { await disposePersona(request,persona); });
 });

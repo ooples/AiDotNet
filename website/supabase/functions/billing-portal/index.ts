@@ -13,7 +13,8 @@ import { checkoutOwner, rememberCheckoutOwner, ownedBillingCustomers } from "../
 //                                   -> portal URL that opens straight on the plan-change confirm step
 //   POST { action: "cancel" }       -> portal URL that opens straight on the cancel step
 //
-// The customer is always the caller's own profiles.stripe_customer_id: the body never names one.
+// The selected customer must be in the service-owned billing_customers ledger.
+// A legacy profile preference is never ownership evidence.
 // Portal sessions use a configuration this function owns (found by metadata, created on first use)
 // so plan changes work without anyone hand-configuring the dashboard's default portal.
 
@@ -149,13 +150,16 @@ serve(async (req: Request) => {
     .from("profiles").select("stripe_customer_id, subscription_tier").eq("id", user.id).single();
   if (profileError || !profile) return json({ error: "profile_not_found" }, 404);
   try {
-    const customers = await ownedBillingCustomers(admin, user.id, action === "claim_checkout" ? null : profile.stripe_customer_id);
+    const customers = await ownedBillingCustomers(admin, user.id);
+    const unresolved = !!profile.stripe_customer_id && !customers.includes(profile.stripe_customer_id);
+    const ownershipMessage = "A legacy billing account needs ownership verification. Claim your completed checkout from Account → Licenses, or email support@aidotnet.dev. Your verified billing accounts remain available.";
     if (typeof body.customer_id === "string" && !customers.includes(body.customer_id)) {
       return json({ error: "not_your_billing_account" }, 403);
     }
     let selected: Stripe.Subscription | null = null;
     let ongoing = false;
-    let customer = typeof body.customer_id === "string" ? body.customer_id : profile.stripe_customer_id ?? customers[0] ?? null;
+    let customer = typeof body.customer_id === "string" ? body.customer_id
+      : !unresolved && profile.stripe_customer_id ? profile.stripe_customer_id : customers[0] ?? null;
     const s = customers.length || action === "claim_checkout" ? getStripe() : null;
     for (const id of customers) {
       const candidate = await liveSubscription(s!, id);
@@ -164,6 +168,7 @@ serve(async (req: Request) => {
       if (candidate && (!selected || candidate.created > selected.created)) { selected = candidate; customer = id; }
     }
     if (action === "checkout_reference") {
+      if (unresolved) return json({ error: "billing_ownership_unverified", message: ownershipMessage }, 409);
       if (body.tier !== "pro" && body.tier !== "enterprise") return json({ error: "invalid_tier" }, 400);
       if (body.interval !== "month" && body.interval !== "year") return json({ error: "invalid_interval" }, 400);
       if (ongoing) return json({ error: "existing_subscription", message: "Manage your existing subscription instead of starting another checkout." }, 409);
@@ -200,8 +205,10 @@ serve(async (req: Request) => {
       return json({ claimed:true });
     }
     if (action === "summary") {
-      return json({ billing_account: customers.length > 0, billing_accounts: customers.map(id=>({id,selected:id===customer})), ...summarize(selected) });
+      return json({ billing_account: customers.length > 0, billing_accounts: customers.map(id=>({id,selected:id===customer})),
+        ownership_resolution_required: unresolved, ownership_message: unresolved ? ownershipMessage : null, ...summarize(selected) });
     }
+    if (!customer && unresolved) return json({ error: "billing_ownership_unverified", message: ownershipMessage }, 409);
     if (!customer || !s) return json({ error: "no_billing_account", message: "There is no Stripe billing account to manage. Contact support@aidotnet.dev for team-granted plans." }, 409);
 
     if (action === "cancel_before_renewal") {

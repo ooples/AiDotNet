@@ -30,7 +30,8 @@ test('a verified customer claims a completed legacy checkout and replay keeps on
     await page.waitForURL(url=>url.origin===new URL(baseURL!).origin&&url.pathname==='/account/licenses/',{timeout:60_000});
     const bindings=()=>restSelect<Array<{user_id:string}>>(request,`billing_checkout_bindings?select=user_id&session_id=eq.${checkout.sessionId}`);
     expect(await bindings(),'legacy checkout has not yet established verified ownership').toEqual([]);
-    const licenses=()=>restSelect<Array<{id:string}>>(request,`license_keys?select=id&user_id=eq.${persona!.id}`);
+    const licenses=()=>restSelect<Array<{id:string;license_key:string}>>(request,`license_keys?select=id,license_key&user_id=eq.${persona!.id}`);
+    let firstEntitlement:{id:string;license_key:string}|undefined;
     for(let attempt=0;attempt<2;attempt++) {
       const details=page.locator('details').filter({has:page.locator('#claim-checkout-form')});
       await details.locator('summary').click();
@@ -49,6 +50,14 @@ test('a verified customer claims a completed legacy checkout and replay keeps on
       await expect.poll(bindings,{timeout:30_000}).toEqual([{user_id:persona!.id}]);
       await expect(page.locator('#licenses-loading')).toBeHidden();
       await expect(page.locator('#setup-section')).toBeVisible();
+      const issued=await licenses();
+      expect(issued).toHaveLength(1);
+      if(attempt===0) firstEntitlement=issued[0];
+      else {
+        // Boolean assertions keep the actual license key out of failure reports.
+        expect(issued[0].id===firstEntitlement!.id,'replay preserves the entitlement ID').toBe(true);
+        expect(issued[0].license_key===firstEntitlement!.license_key,'replay preserves the license key').toBe(true);
+      }
     }
     expect(await licenses()).toHaveLength(1);
   },async()=>{

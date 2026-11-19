@@ -23,6 +23,8 @@ async function installBackend(page: Page, options: {
   licenses?: Array<Record<string,unknown>>;
   admin?: boolean;
   claimSuccess?: boolean;
+  ownershipPending?: boolean;
+  portalSuccess?: boolean;
 } = {}) {
   const profile = {
     id: user.id, email: user.email, full_name: 'Preview Customer', role: options.admin ? 'admin' : 'user',
@@ -60,7 +62,9 @@ async function installBackend(page: Page, options: {
           await options.summaryAfterAction?.();
           if (options.summaryFailureAfterAction) return reply({ message: 'Refresh unavailable' }, 502);
         }
-        return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub });
+        return options.summaryFailure ? reply({ message: 'Stripe unavailable' }, 502) : reply({ subscription: currentSub,
+          ownership_resolution_required:options.ownershipPending,
+          ownership_message:options.ownershipPending?'A legacy billing account needs ownership verification. Your verified billing accounts remain available.':undefined });
       }
       if (body.action === 'cancel_before_renewal') {
         rescheduleAttempts++;
@@ -80,6 +84,7 @@ async function installBackend(page: Page, options: {
         currentSub={...currentSub,cancel_at:subscription.current_period_end+172800};
         return reply({error:'already_cancelling',message:'A cancellation was scheduled in another session.'},409);
       }
+      if (body.action === 'manage' && options.portalSuccess) return reply({url:'https://billing.stripe.com/review'});
       return reply({ message: 'Portal temporarily unavailable' }, 502);
     }
     // An unexpected request must fail the test instead of reaching any backend.
@@ -116,6 +121,19 @@ for (const state of [
     if (state.sub?.status === 'past_due') await expect(page.locator('#billing-badge')).toHaveText('past due');
   });
 }
+
+test('legacy ownership recovery stays visible while verified billing controls remain usable', async ({page}) => {
+  const calls=await installBackend(page,{tier:'pro',customer:true,sub:subscription,ownershipPending:true,portalSuccess:true});
+  await page.goto('/account/billing/');
+  await expect(page.locator('#billing-ownership-notice')).toBeVisible();
+  await expect(page.locator('#billing-ownership-notice a').first()).toHaveAttribute('href','/account/licenses/');
+  await expect(page.locator('#billing-ownership-notice a').last()).toHaveAttribute('href','mailto:support@aidotnet.dev');
+  await expect(page.locator('#billing-error')).toBeHidden();
+  await expect(page.locator('#portal-section')).toBeVisible();
+  await page.locator('#manage-subscription-btn').click();
+  await expect(page).toHaveURL(/^https:\/\/billing\.stripe\.com\//);
+  expect(calls.some(call=>call.action==='manage')).toBe(true);
+});
 
 test('a stale renewal confirmation refreshes the date before a second confirmation', async ({ page }) => {
   let release!: () => void, started!: () => void;

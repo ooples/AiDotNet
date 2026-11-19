@@ -40,6 +40,7 @@ do $$ begin
       and proargnames=array['p_user_id','p_license_key'])
     or to_regclass('public.billing_checkout_intents') is null
     or to_regclass('public.billing_customers') is null
+    or to_regclass('public.billing_checkout_bindings') is null
     or to_regprocedure('public.bind_aidotnet_checkout(uuid,text,text)') is null then
     raise exception 'RPC argument contract or verified billing ownership schema is missing. Run the reviewed migrations.';
   end if;

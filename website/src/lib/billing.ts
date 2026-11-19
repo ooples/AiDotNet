@@ -27,6 +27,7 @@ export interface BillingState {
   hasBillingAccount: boolean;
   subscription: SubscriptionSummary | null;
   billingAccounts?: Array<{ id: string; selected: boolean }>;
+  ownershipMessage?: string;
   /** Set when the profile or the subscription could not be read. The rest of the state is then a
    *  guess: callers must not treat it as "no subscription" (that would offer a second checkout). */
   error?: string;
@@ -80,12 +81,13 @@ export async function loadBillingState(): Promise<BillingState> {
     subscription: null,
   };
   {
-    const { data, error } = await invoke<{ subscription: SubscriptionSummary | null; billing_account?: boolean; billing_accounts?: Array<{id:string;selected:boolean}> }>({ action: 'summary' });
+    const { data, error } = await invoke<{ subscription: SubscriptionSummary | null; billing_account?: boolean; billing_accounts?: Array<{id:string;selected:boolean}>; ownership_resolution_required?: boolean; ownership_message?: string }>({ action: 'summary' });
     if (error) state.error = `Could not load your subscription from Stripe. ${error}`;
     else {
       state.subscription = data?.subscription ?? null;
       state.hasBillingAccount = data?.billing_account ?? state.hasBillingAccount;
       state.billingAccounts = data?.billing_accounts ?? [];
+      state.ownershipMessage = data?.ownership_resolution_required ? data.ownership_message : undefined;
     }
   }
   return state;

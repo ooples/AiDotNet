@@ -34,10 +34,13 @@ export async function rememberCheckoutOwner(client: SupabaseClient, userId: stri
   if (error) throw error;
 }
 
-export async function ownedBillingCustomers(client: SupabaseClient, userId: string, preferred?: string | null): Promise<string[]> {
+// Legacy profile links can be ambiguous. Only this service-owned ledger grants access;
+// a stale preference must not prevent access to the user's other verified customers.
+// Resolve an unowned legacy link through claim_checkout's verified Stripe session/email
+// and immutable binding RPC, or support review. Never infer ownership from the profile.
+export async function ownedBillingCustomers(client: SupabaseClient, userId: string): Promise<string[]> {
   const { data, error } = await client.from("billing_customers").select("customer_id").eq("user_id", userId);
   if (error) throw error;
   const customers = (data ?? []).map((row: { customer_id: string }) => row.customer_id);
-  if (preferred && !customers.includes(preferred)) throw new Error("The preferred billing account has no verified ownership record");
   return customers;
 }
