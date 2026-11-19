@@ -70,7 +70,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     private readonly int _numFeatures;
-    private int[]? _maxIndices; // Store indices of max values for backward pass
     private int _numPoints;
 
     /// <summary>
@@ -99,25 +98,14 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     {
         _numPoints = input.Shape[0];
 
-        // Use ReduceMax to select the discrete winning point per feature, then express the exact
-        // selected value as detached-mask * input followed by a tape-tracked sum. This preserves
-        // max-pooling forward semantics and avoids the package ReduceMax backward's incorrect
-        // routing for the point-cloud reduction shapes exercised by DGCNN finite differences.
-        _ = Engine.ReduceMax(input, [0], true, out int[] maxIndices);
-        _maxIndices = maxIndices;
-
-        int numFeatures = input.Shape[1];
-        var maxMask = new Tensor<T>([_numPoints, numFeatures]);
-        for (int feature = 0; feature < numFeatures; feature++)
-        {
-            // ReduceMax returns the winning element's flat index in the SOURCE
-            // [point, feature] tensor. Convert it back to a point coordinate;
-            // using it directly made every winner except the earliest features
-            // fail the bounds check and silently wrote an all-zero mask.
-            int selectedPoint = maxIndices[feature] / numFeatures;
-            if ((uint)selectedPoint < (uint)_numPoints)
-                maxMask[selectedPoint, feature] = NumOps.One;
-        }
+        // Select the discrete winning point per feature (the first of equal maxima, as ReduceMax's index does), then
+        // express the exact selected value as detached-mask * input followed by a tape-tracked sum. This preserves
+        // max-pooling forward semantics and avoids the package ReduceMax backward's incorrect routing for the
+        // point-cloud reduction shapes exercised by DGCNN finite differences. The mask is built from engine ops, so a
+        // compiled training step traces it; reading ReduceMax's indices on the host read a traced value.
+        var maxima = Engine.ReduceMax(input, [0], true, out _);
+        var hits = Engine.TensorEquals(input, Engine.TensorBroadcastTo(maxima, input._shape));
+        var maxMask = Engine.StopGradient(Engine.TensorMultiply(hits, Engine.TensorEquals(Engine.TensorCumSum(hits, 0), NumOps.One)));
 
         var pooledOutput = Engine.ReduceSum(
             Engine.TensorMultiply(input, maxMask), [0], keepDims: true);
@@ -134,7 +122,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _maxIndices = null;
         _numPoints = 0;
     }
 

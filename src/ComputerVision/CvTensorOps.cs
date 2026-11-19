@@ -68,12 +68,22 @@ internal static class CvTensorOps<T>
     /// replaces.
     /// </summary>
     public static Tensor<T> ResizeBilinearAsymmetric(Tensor<T> x, int targetH, int targetW)
+        => ResizeBilinear(x, targetH, targetW, halfPixel: false);
+
+    /// <summary>
+    /// Bilinear resize of an NCHW tensor with half-pixel centres, <c>src = (dst + 0.5) * in / out - 0.5</c> clamped
+    /// to the edge: the convention of <c>interpolate(mode="bilinear", align_corners=False)</c>.
+    /// </summary>
+    public static Tensor<T> ResizeBilinearHalfPixel(Tensor<T> x, int targetH, int targetW)
+        => ResizeBilinear(x, targetH, targetW, halfPixel: true);
+
+    private static Tensor<T> ResizeBilinear(Tensor<T> x, int targetH, int targetW, bool halfPixel)
     {
         int srcH = x.Shape[2];
         int srcW = x.Shape[3];
 
-        var (x0, x1, wx0, wx1) = BilinearTaps(srcW, targetW);
-        var (y0, y1, wy0, wy1) = BilinearTaps(srcH, targetH);
+        var (x0, x1, wx0, wx1) = BilinearTaps(srcW, targetW, halfPixel);
+        var (y0, y1, wy0, wy1) = BilinearTaps(srcH, targetH, halfPixel);
 
         // Along width: [N, C, srcH, targetW].
         var left = Select(x, x0, 3);
@@ -582,7 +592,7 @@ internal static class CvTensorOps<T>
         return result;
     }
 
-    private static (int[] Lo, int[] Hi, T[] WeightLo, T[] WeightHi) BilinearTaps(int src, int dst)
+    private static (int[] Lo, int[] Hi, T[] WeightLo, T[] WeightHi) BilinearTaps(int src, int dst, bool halfPixel)
     {
         var lo = new int[dst];
         var hi = new int[dst];
@@ -590,8 +600,8 @@ internal static class CvTensorOps<T>
         var wHi = new T[dst];
         for (int i = 0; i < dst; i++)
         {
-            double s = (double)i / dst * src;
-            int i0 = (int)Math.Floor(s);
+            double s = halfPixel ? Math.Max((i + 0.5) * src / dst - 0.5, 0.0) : (double)i / dst * src;
+            int i0 = Math.Min((int)Math.Floor(s), src - 1);
             lo[i] = i0;
             hi[i] = Math.Min(i0 + 1, src - 1);
             double frac = s - i0;

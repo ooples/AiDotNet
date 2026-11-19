@@ -203,7 +203,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithCustomLoss(image, _ =>
+            TrainWithCustomObjective(image, image, (_, _) =>
             {
                 var (logits, auxiliary) = network.Forward(image, training: true, _trainingRandom, withAuxiliary: true);
                 return Engine.TensorAdd(PixelCrossEntropy(Crop(logits, height, width), target),

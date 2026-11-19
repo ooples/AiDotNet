@@ -327,43 +327,42 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
         // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
         // stored u and v unchanged.
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
-        if (IsTrainingMode)
+        // All engine ops, and u and v updated in place (as a batch norm's running statistics), so a compiled training plan
+        // replays the iteration instead of reading the kernel on the host. A forward that is not a training step leaves
+        // them alone, or the step that follows would iterate twice.
+        if (IsTrainingMode && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
         {
-            var vHost = v.ToVector();
-            void Normalize(double[] a)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                double n = Math.Sqrt(a.Sum(x => x * x));
-                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+                var w = Engine.StopGradient(v);
+                var nextV = UnitNorm(Engine.TensorMatMul(Engine.Reshape(_u, new[] { 1, rows }), w));            // [1, per]
+                var nextU = UnitNorm(Engine.TensorMatMul(w, Engine.Reshape(nextV, new[] { per, 1 })));          // [rows, 1]
+                Assign(_v, Engine.Reshape(nextV, new[] { per }));
+                Assign(_u, Engine.Reshape(nextU, new[] { rows }));
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(vHost[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
             Engine.InvalidatePersistentTensor(_u);
             Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
+        var uT = Engine.StopGradient(Engine.Reshape(_u, new[] { 1, rows }));
+        var vT = Engine.StopGradient(Engine.Reshape(_v, new[] { per, 1 }));
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
         var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+    }
+
+    // x / max(‖x‖, 1e-12), as torch's normalize.
+    private Tensor<T> UnitNorm(Tensor<T> x)
+    {
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), Enumerable.Range(0, x.Rank).ToArray(), keepDims: true));
+        var floor = NumOps.FromDouble(1e-12);
+        var clamped = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(norm, NumOps.Negate(floor))), floor);
+        return Engine.TensorDivide(x, Engine.TensorBroadcastTo(clamped, x._shape));
+    }
+
+    private void Assign(Tensor<T> destination, Tensor<T> source)
+    {
+        Engine.TensorMultiplyScalarInPlace(destination, NumOps.Zero);
+        Engine.TensorAddInPlace(destination, source);
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)

@@ -49,6 +49,9 @@ internal static class OptionSensitivityFixtureSetup
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
             : network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> && option is "PostNetLearningRate" or "PostNetTemperature" ? "portaspeech-postnet"
+            // Trained on its own two-second recording (TryTrainOption), so its control must not be shared with the
+            // options the fixture input trains: whichever ran first would set the other's control.
+            : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "wav2vec2-lid-long-recording"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
@@ -554,6 +557,44 @@ internal static class OptionSensitivityFixtureSetup
             // The encoder attends within windows of WindowChunks one-second chunks; three seconds of audio span several
             // windows once the window is shorter than the clip.
             return observe(network, Waveform<T>(48000));
+        if (option == "MaxTextLength" && network is AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>
+                or AiDotNet.SpeechRecognition.Multilingual.Chirp3<T> or AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<T>
+                or AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>
+            && network is AiDotNet.Interfaces.ISpeechRecognizer<T> capped)
+        {
+            // The cap acts only when Transcribe decodes (the CTC greedy pass or the attention decoder's step budget);
+            // Predict returns logits. Four two-second tones give transcripts long enough for the shorter caps to cut.
+            var transcripts = new[] { 0.13, 0.29, 0.53, 0.87 }.Select(frequency =>
+                capped.Transcribe(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(
+                    SineRamp<T>(32000, frequency, 0.4), CosineRamp<T>(32000, 0.37, 0.2))).Text).ToList();
+            return OptionSensitivityHarness.Combine(observe(network, input), OptionSensitivityHarness.Fingerprint(
+                transcripts.SelectMany(text => text.Select(character => (double)character).Append(-text.Length - 1.0))));
+        }
+        if (option == "MaxTextLength" && network is AiDotNet.Audio.AudioGen.AudioGenModel<T> audioGen)
+        {
+            // The cap is the prompt's token budget: GenerateAudio tokenizes the prompt and pads or truncates it to
+            // MaxTextLength tokens for the text encoder. Predict takes the caller's ids, and the positional encoding grows
+            // to any length, so only generation can show it. A prompt longer than every tested cap, a fixed seed.
+            var audio = audioGen.GenerateAudio(
+                "a dog barks twice while rain falls on a tin roof and a distant train passes slowly by the old station",
+                durationSeconds: 0.1, guidanceScale: 1.0, seed: 11);
+            return OptionSensitivityHarness.Combine(observe(network, input), OptionSensitivityHarness.Fingerprint(
+                audio.ToArray().Select(v => AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(v))));
+        }
+        if (network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T> seacoDecode && option is "MaxTextLength" or "BiasMergeLambda")
+        {
+            // Both act only when Transcribe decodes; Predict returns the backbone's first-token logits. MaxTextLength caps
+            // the tokens the CIF integrates; BiasMergeLambda weighs the bias decoder against the ASR output, which happens
+            // only with hotwords. Four tones of a second each, decoded with eight code-point hotwords for the merge.
+            IReadOnlyList<string>? hotwords = option == "BiasMergeLambda"
+                ? new[] { 3, 4, 5, 6, 7, 8, 14, 15 }.Select(id => new string((char)id, 2)).ToList()
+                : null;
+            var transcripts = new[] { 0.13, 0.29, 0.53, 0.87 }.Select(frequency =>
+                seacoDecode.Transcribe(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(
+                    SineRamp<T>(16000, frequency, 0.4), CosineRamp<T>(16000, 0.37, 0.2)), hotwords).Text).ToList();
+            return OptionSensitivityHarness.Combine(observe(network, input), OptionSensitivityHarness.Fingerprint(
+                transcripts.SelectMany(text => text.Select(character => (double)character).Append(-text.Length - 1.0))));
+        }
         if (network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T> seacoFilter && option == "AttentionFilterTopK")
         {
             // The filter keeps the top-k hotwords by decoder attention only when the list is longer than k (section 2.3);
@@ -1183,6 +1224,16 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.Document.PixelToSequence.Pix2Struct<T> && option == "MaxPatches")
+        {
+            // The budget rescales the image to the largest patch grid that fits. A square image at the fixture's
+            // 2x2 grid gives the same grid for caps 4 to 8; a strip one patch high and sixteen wide gives 1 x cap.
+            var stripOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            const int stripH = 16, stripW = 256;
+            var strip = new T[3 * stripH * stripW];
+            for (int i = 0; i < strip.Length; i++) strip[i] = stripOps.FromDouble(0.5 + 0.4 * Math.Sin(0.037 * i));
+            return new Tensor<T>(new[] { 1, 3, stripH, stripW }, new Vector<T>(strip));
+        }
         if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
         {
             // Predict consumes SentencePiece IDs. Numeric ramp inputs can decode to repeated
@@ -1938,6 +1989,15 @@ internal static class OptionSensitivityFixtureSetup
             dove.AdaptationIterations = 0;
             // The frame-difference loss needs a clip; the image branch trains on one frame.
             if (option == "FrameDifferenceWeight") dove.ImageRatio = 0;
+        }
+        if (options is AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions sampler
+            && option is "HotwordBatchRatio" or "HotwordUtteranceRatio" or "HotwordMinLength" or "HotwordMaxLength")
+        {
+            // The hotword sampler draws the bias stage's training hotwords (section 2.2); the backbone stage samples none.
+            // The ratios not under test are 1, so every batch and utterance contributes and each option's own effect shows.
+            sampler.TrainingStage = AiDotNet.Enums.SeACoTrainingStage.Bias;
+            if (option != "HotwordBatchRatio") sampler.HotwordBatchRatio = 1;
+            if (option != "HotwordUtteranceRatio") sampler.HotwordUtteranceRatio = 1;
         }
         if (options is AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions seaco && option is "BiasLabelSmoothing" or "HotwordMaskTokenId")
             // The bias decoder's loss (its smoothing and its no-bias class) trains in the separate bias stage that follows

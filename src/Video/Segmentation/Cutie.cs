@@ -717,6 +717,8 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     {
         var score = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true), scale);
+        // A compiled training step traces the score and does not read it on the host, so the check runs eagerly only.
+        if (score.LazySource is { IsRealized: false }) return score;
         try
         {
             using var finiteMask = Engine.TensorIsFinite(score);

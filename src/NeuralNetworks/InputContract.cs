@@ -619,6 +619,11 @@ public static class InputContractValidator
             throw new InputContractBindingException(
                 $"{ownerName}.{portName} cannot execute because its value domain is {domain}.");
 
+        // A value a compiled-plan trace has not computed yet has no host values to check: reading them realizes the
+        // traced node, which refuses the plan (a closure objective that reads a traced value cannot be replayed), and
+        // the read would see only the trace's own values. Eager forwards check them; a compiled step, traced or replayed, does not.
+        if (input.LazySource is { IsRealized: false }) return;
+
         if (domain.Kind == LayerInputDomainKind.Custom)
         {
             InputDomainProviderRegistry.Require(domain.Detail)

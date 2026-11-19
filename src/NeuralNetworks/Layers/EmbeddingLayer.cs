@@ -671,6 +671,9 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     private void ValidateIndicesOrThrow(Tensor<T> input, int vocabularySize)
     {
+        // Indices a compiled-plan trace has not computed yet cannot be checked without realizing the traced node, which
+        // refuses the plan; the read would see only the trace's own values (see InputContractValidator.ValidateValues).
+        if (input.LazySource is { IsRealized: false }) return;
         for (int i = 0; i < input.Length; i++)
         {
             double val = NumOps.ToDouble(input.Data.Span[i]);

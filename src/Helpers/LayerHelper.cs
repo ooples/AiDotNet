@@ -23310,7 +23310,7 @@ public static partial class LayerHelper<T>
         // Conv1DLayer's (outputChannels, kernelSize, …) overload infers input channels on first
         // forward, so the actual mel-channel count is bound at runtime (it need not equal numMels).
         yield return new Conv1DLayer<T>(encoderDim, kernelSize: 5, dilation: 1, stride: 1, padding: 2, activation: identityActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>(encoderDim) { Layout = BatchNormDataLayout.ChannelsFirst }; // [B, C, T], as nn.BatchNorm1d
 
         // Body: residual mega-blocks. Kernel grows across the stack; THREE stride-2 subsampling points
         // (~1/4, ~1/2, ~3/4 through) give the paper's 8× (2³) temporal downsampling (Majumdar et al.
@@ -23337,7 +23337,7 @@ public static partial class LayerHelper<T>
         // make BN normalize already-clipped (non-negative) activations, the non-standard Conv->ReLU->BN
         // order (the rest of this file does Conv(identity)->BN->ActivationLayer for Conv->BN->ReLU).
         yield return new Conv1DLayer<T>(encoderDim, encoderDim, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identityActivation);
-        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new BatchNormalizationLayer<T>(encoderDim) { Layout = BatchNormDataLayout.ChannelsFirst }; // [B, C, T], as nn.BatchNorm1d
         yield return new ActivationLayer<T>(reluActivation);
 
         // CTC head: 1×1 pointwise conv to per-frame sub-word logits [B, vocabSize, T'].

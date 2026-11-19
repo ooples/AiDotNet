@@ -205,6 +205,46 @@ public class PixelToSequenceDocumentTests
         Assert.Equal("Pix2Struct", model.GetModelMetadata().Name);
     }
 
+    /// <summary>
+    /// Pix2Struct's variable-resolution input (Lee et al., 2023, section 2.2): the image is rescaled, aspect ratio kept, to
+    /// the largest patch grid within MaxPatches - <c>scale = sqrt(MaxPatches * P^2 / (H * W))</c>, rows and columns
+    /// <c>clamp(floor(scale * extent / P), 1, MaxPatches)</c> - and not to a fixed square.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(16, 256, 4, 16, 64)]    // one patch high: 1 x 4
+    [InlineData(64, 64, 4, 32, 32)]     // downscaled square: 2 x 2
+    [InlineData(32, 32, 64, 128, 128)]  // upscaled square: 8 x 8
+    [InlineData(48, 96, 6, 16, 48)]     // 1:2 aspect: 1 x 3
+    public async Task Pix2Struct_Preprocessing_RescalesToThePatchBudget(int height, int width, int maxPatches,
+        int expectedHeight, int expectedWidth)
+    {
+        using var model = new Pix2Struct<double>(CreateArchitecture(), options: new Pix2StructOptions
+        {
+            ImageSize = ImageSize, PatchSize = 16, MaxPatches = maxPatches, MaxSequenceLength = TestSequence,
+            HiddenDim = TestWidth, NumEncoderLayers = TestLayers, NumDecoderLayers = TestLayers,
+            NumHeads = TestHeads, VocabSize = TestVocab
+        });
+        // A horizontal ramp: pixel value = column / width, the same in every row and channel.
+        var pixels = new double[3 * height * width];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = (double)(i % width) / width;
+        var image = new Tensor<double>(new[] { 1, 3, height, width }, new Vector<double>(pixels));
+
+        var preprocess = typeof(Pix2Struct<double>).GetMethod("ApplyDefaultPreprocessing",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var output = (Tensor<double>)preprocess.Invoke(model, new object[] { image })!;
+
+        Assert.Equal(new[] { 1, 3, expectedHeight, expectedWidth }, output.Shape.ToArray());
+        // Channel 0, row 0: the half-pixel bilinear sample of the ramp at src = (x + 0.5) * width / outW - 0.5,
+        // clamped to [0, width - 1], then ImageNet-normalized with mean 0.485 and std 0.229.
+        var values = output.ToArray();
+        for (int x = 0; x < expectedWidth; x++)
+        {
+            double src = Math.Min(Math.Max((x + 0.5) * width / expectedWidth - 0.5, 0.0), width - 1);
+            double expected = (src / width - 0.485) / 0.229;
+            Assert.True(Math.Abs(values[x] - expected) < 1e-9, $"column {x}: {values[x]} != {expected}");
+        }
+    }
+
     #endregion
 
     #region Dessurt Tests

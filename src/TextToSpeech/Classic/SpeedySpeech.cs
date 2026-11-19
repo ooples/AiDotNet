@@ -369,9 +369,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var abs = Engine.TensorAbs(diff);
         var quadratic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(diff, diff), NumOps.FromDouble(0.5));
         var linear = Engine.TensorAddScalar(abs, NumOps.FromDouble(-0.5));
-        var mask = new Tensor<T>(diff._shape);
-        for (int i = 0; i < diff.Length; i++)
-            mask[i] = Math.Abs(NumOps.ToDouble(diff[i])) < 1.0 ? NumOps.One : NumOps.Zero;
+        var mask = Engine.TensorLessThan(abs, NumOps.One);
         var inverse = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, quadratic), Engine.TensorMultiply(inverse, linear));
     }

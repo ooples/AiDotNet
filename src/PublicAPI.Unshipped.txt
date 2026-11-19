@@ -23170,3 +23170,14 @@ AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Int
 AiDotNet.NeuralNetworks.Layers.GRULayer<T>.ResetAfter.get -> bool
 *REMOVED*override AiDotNet.NeuralNetworks.Layers.LSTMLayer<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.ReleasesInferenceIntermediates.get -> bool
+static AiDotNet.Training.CompiledStepRandom<T>.DrawIndices(int[]! shape, System.Action<AiDotNet.Tensors.LinearAlgebra.Tensor<int>!>! fill) -> AiDotNet.Tensors.LinearAlgebra.Tensor<int>!
+AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetStepState<T>
+AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetStepState<T>.BatchSize.get -> int
+AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetStepState<T>.Position.get -> int
+AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetLayer<T>.CreateStepState(int batchSize = 1) -> AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetStepState<T>!
+AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>
+AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.BatchSize.get -> int
+AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Position.get -> int
+AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.CreateStepState(int batchSize = 1) -> AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>!
+AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

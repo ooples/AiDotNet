@@ -394,9 +394,10 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         public Segments Segments { get; }
     }
 
-    private PickPass RunPick(Tensor<T> packed, Tensor<T>? pageImage)
+    private PickPass RunPick(Tensor<T> packed, Tensor<T>? pageImage) => RunPick(ParseSegments(packed), pageImage);
+
+    private PickPass RunPick(Segments segments, Tensor<T>? pageImage)
     {
-        var segments = ParseSegments(packed);
         int n = segments.Count, d = _hiddenDim;
         double pageWidth = ImageSize, pageHeight = ImageSize;
         var imageEmbeddings = pageImage is null ? null : ImageEmbeddings(pageImage, segments, out pageWidth, out pageHeight);
@@ -565,10 +566,12 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         }
 
         var crf = (ConditionalRandomFieldLayer<T>)Layers[_crfIndex];
-        TrainWithCustomObjective(segments, tags, (input, target) =>
+        // The packed segments and the tags are data: parsed before the step, so the traced objective holds only the network.
+        var parsed = ParseSegments(segments);
+        var labels = TokenLabels(parsed, tags);
+        TrainWithCustomObjective(segments, tags, (_, _) =>
         {
-            var pass = RunPick(input, pageImage);
-            var labels = TokenLabels(pass.Segments, target);
+            var pass = RunPick(parsed, pageImage);
             var nll = crf.ComputeNegativeLogLikelihood(pass.Emissions, labels);
             return Engine.TensorAdd(nll, Engine.TensorMultiplyScalar(pass.GraphLoss, NumOps.FromDouble(_options.GraphLossWeight)));
         }, _optimizer);

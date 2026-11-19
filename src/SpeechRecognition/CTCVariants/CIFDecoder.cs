@@ -236,7 +236,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var network = _network;
         if (network is null) return false;
         var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, labels));
+        TrainWithCustomObjective(input, input, (_, _) => BatchLoss(network, input, labels));
         return true;
     }
 

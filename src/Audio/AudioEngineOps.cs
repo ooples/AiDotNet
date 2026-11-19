@@ -551,29 +551,48 @@ internal static class AudioEngineOps
     /// </remarks>
     internal static Tensor<T> Standardize<T>(IEngine engine, Tensor<T> x, double floor)
     {
+        // Every step is an engine op on a [1] statistic (no value is read on the host), so a compiled training plan
+        // traces the normalization of its input. A NaN sample reaches the mean, so every deviation is NaN.
         if (x.Length == 0) return new Tensor<T>(x.Shape.ToArray());
         var numOps = MathHelper.GetNumericOperations<T>();
         var shape = x.Shape.ToArray();
-        if (engine.TensorCountNonzero(engine.TensorIsNan(x)) > 0)
-            return Tensor<T>.CreateDefault(shape, NaNOrZero<T>());
+        Tensor<T> Wide(Tensor<T> statistic) => engine.TensorBroadcastTo(engine.Reshape(statistic, Enumerable.Repeat(1, shape.Length).ToArray()), shape);
 
-        T scale = engine.TensorMaxValue(engine.TensorAbs(x));
-        if (!numOps.GreaterThan(scale, numOps.Zero))
-            return new Tensor<T>(shape); // all zero: every deviation is 0
+        var scale = engine.Reshape(engine.ReduceMax(engine.TensorAbs(x), Enumerable.Range(0, x.Rank).ToArray(), keepDims: false, out _), new[] { 1 });
+        // An all-zero clip divides by 1 instead: its unit samples and deviations are 0.
+        var safeScale = engine.TensorAdd(scale, engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorGreaterThan(scale, numOps.Zero), numOps.FromDouble(-1.0)), numOps.One));
+        var unit = engine.TensorDivide(x, Wide(safeScale));
+        var deviation = engine.TensorSubtract(unit, Wide(MeanOnEngine(engine, unit)));
+        var unitStd = engine.TensorSqrt(MeanOnEngine(engine, engine.TensorSquare(deviation)));
 
-        var unit = engine.TensorDivideScalar(x, scale);
-        var deviation = engine.TensorSubtractScalar(unit, Mean(engine, unit));
-        T unitStd = numOps.Sqrt(Mean(engine, engine.TensorSquare(deviation)));
+        // std = s * std_u, so in unit samples the divisor is max(std_u, floor / s). Zero deviations stay 0 even where that
+        // divisor is not representable in T.
+        var floorInUnits = engine.TensorDivide(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { numOps.FromDouble(floor) })), safeScale);
+        var standardized = engine.TensorDivide(deviation, Wide(engine.TensorMax(unitStd, floorInUnits)));
+        return engine.TensorWhere(engine.TensorEquals(deviation, numOps.Zero), new Tensor<T>(shape), standardized);
+    }
 
-        // std = scale * unitStd; below the floor the divisor is the floor itself, i.e. the unit
-        // deviations are multiplied by scale / floor. Zero deviations stay 0 even if that factor
-        // is not representable in T.
-        double std = numOps.ToDouble(scale) * numOps.ToDouble(unitStd);
-        if (!(std < floor))
-            return engine.TensorDivideScalar(deviation, unitStd);
-        var scaled = engine.TensorMultiplyScalar(deviation, numOps.FromDouble(numOps.ToDouble(scale) / floor));
-        return engine.TensorWhere(
-            engine.TensorEquals(deviation, numOps.Zero), new Tensor<T>(shape), scaled);
+    /// <summary>
+    /// <see cref="Mean"/> as a <c>[1]</c> tensor computed on the engine: the same blocks of <see cref="MeanBlock"/>
+    /// values pre-scaled by <c>1 / MeanBlock</c> and the same padding correction, so a narrow type averages more than its
+    /// largest finite count of samples, and nothing is read on the host.
+    /// </summary>
+    internal static Tensor<T> MeanOnEngine<T>(IEngine engine, Tensor<T> values)
+    {
+        int n = values.Length;
+        if (n == 0) throw new ArgumentException("Cannot average an empty tensor.", nameof(values));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var v = Flatten(engine, values);
+        if (n <= MeanBlock)
+            return engine.Reshape(engine.ReduceSum(engine.TensorMultiplyScalar(v, numOps.FromDouble(1.0 / n)), new[] { 0 }, keepDims: false), new[] { 1 });
+
+        int blocks = (n + MeanBlock - 1) / MeanBlock;
+        var padded = FitLength(engine, v, blocks * MeanBlock);
+        var blockMeans = engine.ReduceSum(
+            engine.TensorMultiplyScalar(engine.Reshape(padded, new[] { blocks, MeanBlock }), numOps.FromDouble(1.0 / MeanBlock)),
+            new[] { 1 }, keepDims: false);
+        return engine.TensorMultiplyScalar(MeanOnEngine(engine, blockMeans), numOps.FromDouble((double)blocks * MeanBlock / n));
     }
 
     /// <summary>

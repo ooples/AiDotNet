@@ -250,7 +250,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = new int[rows][];
         for (int r = 0; r < rows; r++) labels[r] = Labels(Row(target, rows, r));
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)

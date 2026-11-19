@@ -301,14 +301,16 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         var network = _network;
         if (network is null) return false;
-        var batch = Batch(input, target);
+        // The front end (log-mel and per-bin normalization) has no parameters: it runs before the step, so every
+        // utterance's features reach the objective as this step's data rather than as host work inside the traced loss.
+        var batch = Batch(input, target).Select(row => (Features: network.Features(row.Waveform), row.Labels)).ToArray();
         double sampling = CurrentSamplingProbability;
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
-            foreach (var (waveform, labels) in batch)
+            foreach (var (features, labels) in batch)
             {
-                var loss = network.Loss(network.Features(waveform), labels, sampling, _random);
+                var loss = network.Loss(features, labels, sampling, _random);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));

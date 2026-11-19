@@ -291,15 +291,24 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        double rms = ComputeRms(input);
-        if (rms <= 1e-12)
-            return base.ForwardForTraining(input);
+        if (input.Length == 0) return base.ForwardForTraining(input);
+        // The same RMS as ComputeRms, as a detached [1] tensor on the engine, so a compiled training step traces it. A
+        // silent input scales by 1, which is the inference path's unscaled walk.
+        int n = input.Length;
+        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
+        var rms = Engine.TensorSqrt(Engine.TensorDivideScalar(
+            Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(flat), new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n)));
+        var audible = Engine.TensorGreaterThan(rms, NumOps.FromDouble(1e-12));
+        var scale = Engine.StopGradient(Engine.TensorAdd(Engine.TensorMultiply(audible, rms),
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(audible, NumOps.FromDouble(-1.0)), NumOps.One)));
 
-        T scale = NumOps.FromDouble(rms);
-        var normalized = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / rms));
+        var normalized = Engine.TensorDivide(input, Wide(scale, input));
         var output = base.ForwardForTraining(normalized);
-        return Engine.TensorMultiplyScalar(output, scale);
+        return Engine.TensorMultiply(output, Wide(scale, output));
     }
+
+    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
+        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
 
     /// <summary>
     /// Root-mean-square magnitude of the input, used by both the inference (<see cref="PredictCore"/>)

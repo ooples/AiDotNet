@@ -31,16 +31,21 @@ public static class CompiledStepRandom<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    // One recorded draw: refills its tensor in place, bumps its version and drops any device copy. A draw of indices
+    // (Tensor<int>) and a draw of values share one list, so a replay refills them in the order the trace drew them and
+    // a fill that depends on an earlier one (distractors among the masked steps) sees that step's earlier draw.
     internal sealed class RecordedDraw
     {
-        public RecordedDraw(Tensor<T> tensor, Action<Tensor<T>> redraw)
-        {
-            Tensor = tensor;
-            Redraw = redraw;
-        }
+        public RecordedDraw(Action refill) => Refill = refill;
 
-        public Tensor<T> Tensor { get; }
-        public Action<Tensor<T>> Redraw { get; }
+        public Action Refill { get; }
+
+        public static RecordedDraw Of<TElement>(Tensor<TElement> tensor, Action<Tensor<TElement>> fill) => new(() =>
+        {
+            fill(tensor);
+            tensor.IncrementVersion();
+            AiDotNetEngine.Current.InvalidatePersistentTensor(tensor);
+        });
     }
 
     // The draws made while the current thread traces a plan; null when nothing is tracing.
@@ -103,7 +108,31 @@ public static class CompiledStepRandom<T>
         else
             fill(tensor);
         t_captured?.Draws.Add(tensor);
-        t_recording?.Add(new RecordedDraw(tensor, fill));
+        t_recording?.Add(RecordedDraw.Of(tensor, fill));
+        return tensor;
+    }
+
+    /// <summary>
+    /// A per-step random tensor of indices (a sampled position, a distractor's row), with the same contract as
+    /// <see cref="Draw"/>: an ordinary draw on the eager tape, refilled in place before every replay of a traced plan,
+    /// in order with the plan's other draws, and handed back by <see cref="ReplayDraws"/> like a value draw.
+    /// </summary>
+    /// <param name="shape">The tensor shape.</param>
+    /// <param name="fill">Writes one step's indices into the tensor, in place, from the model's own generator.</param>
+    public static Tensor<int> DrawIndices(int[] shape, Action<Tensor<int>> fill)
+    {
+        Guard.NotNull(shape);
+        Guard.NotNull(fill);
+        var tensor = new Tensor<int>(shape);
+        if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
+            return tensor;
+        if (t_replay is { } replay && t_replayIndexDrawIndex < replay.IndexDraws.Count
+            && SameShape(replay.IndexDraws[t_replayIndexDrawIndex]._shape, shape))
+            replay.IndexDraws[t_replayIndexDrawIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
+        else
+            fill(tensor);
+        t_captured?.IndexDraws.Add(tensor);
+        t_recording?.Add(RecordedDraw.Of(tensor, fill));
         return tensor;
     }
 
@@ -151,9 +180,13 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_replayCounterIndex;
 
-    private static bool SameShape(Tensor<T> tensor, int[] shape)
+    [ThreadStatic]
+    private static int t_replayIndexDrawIndex;
+
+    private static bool SameShape(Tensor<T> tensor, int[] shape) => SameShape(tensor._shape, shape);
+
+    private static bool SameShape(int[] own, int[] shape)
     {
-        var own = tensor._shape;
         if (own.Length != shape.Length)
             return false;
         for (int i = 0; i < shape.Length; i++)
@@ -191,6 +224,8 @@ public static class CompiledStepRandom<T>
 
         internal List<ulong> Counters { get; } = new List<ulong>();
 
+        internal List<Tensor<int>> IndexDraws { get; } = new List<Tensor<int>>();
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -205,6 +240,7 @@ public static class CompiledStepRandom<T>
         private readonly CaptureScope? _previous;
         private readonly int _previousIndex;
         private readonly int _previousCounterIndex;
+        private readonly int _previousIndexDrawIndex;
         private bool _disposed;
 
         internal ReplayScope(CaptureScope captured)
@@ -213,9 +249,11 @@ public static class CompiledStepRandom<T>
             _previous = t_replay;
             _previousIndex = t_replayIndex;
             _previousCounterIndex = t_replayCounterIndex;
+            _previousIndexDrawIndex = t_replayIndexDrawIndex;
             t_replay = captured;
             t_replayIndex = 0;
             t_replayCounterIndex = 0;
+            t_replayIndexDrawIndex = 0;
         }
 
         public void Dispose()
@@ -225,6 +263,7 @@ public static class CompiledStepRandom<T>
             t_replay = _previous;
             t_replayIndex = _previousIndex;
             t_replayCounterIndex = _previousCounterIndex;
+            t_replayIndexDrawIndex = _previousIndexDrawIndex;
         }
     }
 
@@ -302,13 +341,8 @@ public static class CompiledStepRandom<T>
     {
         if (plan is null || !DrawsByPlan.TryGetValue(plan, out var draws))
             return;
-        var engine = AiDotNetEngine.Current;
         foreach (var draw in draws)
-        {
-            draw.Redraw(draw.Tensor);
-            draw.Tensor.IncrementVersion();
-            engine.InvalidatePersistentTensor(draw.Tensor);
-        }
+            draw.Refill();
     }
 
     /// <summary>The draws of one plan trace; restores the enclosing recording when disposed.</summary>

@@ -543,7 +543,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         if (network?.Classifier is null || target.Shape[^1] != _options.NumTrainingSpeakers) return false;
         int speakers = _options.NumTrainingSpeakers;
         var weights = Engine.TensorMultiplyScalar(Engine.Reshape(target, new[] { target.Length / speakers, speakers }), NumOps.FromDouble(-1.0));
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             var logits = network.SpeakerLogits(network.Embed(NetworkFeatures(input), training: true));
             var loss = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);

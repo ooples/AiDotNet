@@ -204,7 +204,7 @@ public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
         if (_network is null) throw new NotSupportedException("Pre-training runs on the native GoogleSpeechV2 network.");
         // A caller's optimizer serves both phases; the paper states no pre-training optimizer.
         _pretrainingOptimizer ??= _suppliedOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        return TrainWithCustomObjective(audio, audio, (_, _) => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />

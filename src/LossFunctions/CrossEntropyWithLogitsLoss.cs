@@ -370,6 +370,7 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             : defaultAxis;
     }
 
+    [AiDotNet.Attributes.ScalarKernel("Chooses the class axis of a soft target from the step's data: a host decision about layout, never a traced value. Engine reductions here made every compiled training step decline.")]
     private T ProbabilityAxisScore(Tensor<T> target, int axis)
     {
         // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
@@ -384,10 +385,23 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (outer * inner == 0)
             return NumOps.MaxValue; // no slices: never preferred over a scored axis
 
-        // Mean over every slice along the axis of |Σ_axis target - 1|.
-        var axisSums = Engine.ReduceSum(target, new[] { axis }, keepDims: false);
-        var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
-        return Engine.TensorMean(deviation);
+        // Mean over every slice along the axis of |Σ_axis target - 1|, on the host: the target is the step's data, and
+        // the layout decision it feeds is not part of the traced loss.
+        var values = target.Data.Span;
+        double total = 0;
+        for (int o = 0; o < outer; o++)
+        {
+            for (int i = 0; i < inner; i++)
+            {
+                double sum = 0;
+                int start = o * axisSize * inner + i;
+                for (int a = 0; a < axisSize; a++)
+                    sum += NumOps.ToDouble(values[start + a * inner]);
+                total += Math.Abs(sum - 1.0);
+            }
+        }
+
+        return NumOps.FromDouble(total / ((double)outer * inner));
     }
 
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)

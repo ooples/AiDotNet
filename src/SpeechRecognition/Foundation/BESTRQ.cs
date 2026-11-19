@@ -212,7 +212,7 @@ public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        return TrainWithCustomObjective(audio, audio, (_, _) => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />
