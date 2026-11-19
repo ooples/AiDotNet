@@ -2,21 +2,21 @@
   "reviewed_on": "2026-11-18",
   "baseline_commit": "53c7c2c00f1424a9461526cac34813c31d25e6a5",
   "reviewed_application_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
-  "reviewed_workflow_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+  "reviewed_workflow_source": "402b186d6fca71345dae95e252ef583db820bb8a",
   "scope": "Existing preview frontend and shared Supabase project yfkqwpgjahoamlgckjib. Production frontend and canonical billing function cutover remain subject to PR review and merge.",
   "verification_results": {
     "preview_browser": {
-      "passed": 496,
+      "passed": 502,
       "failed": 0,
       "flaky": 0,
       "skipped": 8,
-      "total": 504,
+      "total": 510,
       "global_errors": 0,
-      "duration_ms": 396002,
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44449159252",
-      "source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
-      "report": "playwright-report/verification-8e13e514b/preview/index.html",
-      "scope": "Complete website CI fixture suite on desktop Chromium and Pixel 5 emulation; generated wiki omitted only from fixture CI and included in hosted preview."
+      "duration_ms": 377695,
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44458052343",
+      "source": "402b186d6fca71345dae95e252ef583db820bb8a",
+      "report": "playwright-report/verification-402b186d6/preview/index.html",
+      "scope": "Complete website CI fixture suite on desktop Chromium and Pixel 5 emulation; generated wiki omitted only from fixture CI and included in the frozen hosted preview."
     },
     "backend_handler_contracts": {
       "passed": 119,
@@ -43,9 +43,9 @@
       "target": "Preview function variants; existing shared ownership schema checked without reapplying migrations."
     },
     "current_hosted_browser_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44449152388",
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44458075554",
       "application_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
-      "harness_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+      "harness_source": "402b186d6fca71345dae95e252ef583db820bb8a",
       "preview_build_run": "44449152388",
       "preview_build_deploy_job": "135309383075",
       "preview_url": "https://test.aidotnet.dev",
@@ -62,10 +62,10 @@
           "skipped": 6,
           "total": 455,
           "did_not_run": 0,
-          "duration_ms": 640309,
+          "duration_ms": 608381,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/suite/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/suite/deployed/index.html"
         },
         "anon": {
           "passed": 2,
@@ -74,10 +74,10 @@
           "skipped": 0,
           "total": 2,
           "did_not_run": 0,
-          "duration_ms": 714117,
+          "duration_ms": 617822,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/anon/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/anon/deployed/index.html"
         },
         "free": {
           "passed": 2,
@@ -86,10 +86,10 @@
           "skipped": 0,
           "total": 2,
           "did_not_run": 0,
-          "duration_ms": 376542,
+          "duration_ms": 382851,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/free/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/free/deployed/index.html"
         },
         "pro-stripe": {
           "passed": 2,
@@ -98,10 +98,10 @@
           "skipped": 0,
           "total": 2,
           "did_not_run": 0,
-          "duration_ms": 390736,
+          "duration_ms": 401843,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/pro-stripe/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/pro-stripe/deployed/index.html"
         },
         "pro-granted": {
           "passed": 2,
@@ -110,10 +110,10 @@
           "skipped": 0,
           "total": 2,
           "did_not_run": 0,
-          "duration_ms": 351659,
+          "duration_ms": 350112,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/pro-granted/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/pro-granted/deployed/index.html"
         },
         "admin": {
           "passed": 2,
@@ -122,14 +122,14 @@
           "skipped": 0,
           "total": 2,
           "did_not_run": 0,
-          "duration_ms": 581595,
+          "duration_ms": 579920,
           "ok": true,
           "global_errors": 0,
-          "report": "playwright-report/verification-8e13e514b/admin/deployed/index.html"
+          "report": "playwright-report/verification-402b186d6/admin/deployed/index.html"
         }
       },
       "coverage": {
-        "scope": "Per-role union of desktop/phone crawl coverage; generated pages outside browser sampling checked over HTTP.",
+        "scope": "Per-role union of desktop/phone coverage; repeated CRUD actions use stable operation keys, not mutable customer payload. Generated pages outside browser sampling are checked over HTTP.",
         "anon": {
           "browser_pages": 58,
           "http_additional_pages": 12152,
@@ -157,15 +157,23 @@
         "admin": {
           "browser_pages": 11,
           "http_additional_pages": 0,
-          "controls": 94,
+          "controls": 88,
           "links": 28
         }
       }
     },
     "crawler_regression": {
-      "passed": 44,
+      "passed": 50,
       "failed": 0,
-      "scope": "22 checks on both desktop and phone; includes instant-scroll reveal coverage, inert hover/focus rejection with a one-second transition, and positive credit for handler-driven visible styling. Coverage thresholds retained."
+      "scope": "25 checks on desktop/phone. Passive native-event style baselines preserve dropdown children and deliberate focus; delayed incidental styles are rejected. Record action identity excludes mutable/customer payload while pinning the actual record ID and retaining distinct purchase-plan controls. Coverage minima unchanged.",
+      "focus_dropdown_reproduction": {
+        "expected_before_fix_failures": 4,
+        "final_focused_rerun_passed": 8
+      },
+      "mutable_record_reproduction": {
+        "expected_before_fix_failures": 2,
+        "final_focused_rerun_passed": 2
+      }
     },
     "superseded_preview_attempt": {
       "run": "https://github.com/ooples/AiDotNet/actions/runs/44364275044",
@@ -189,12 +197,11 @@
       "reason": "Browser installation rejected Ubuntu 26.04 before browser tests; fixed by pinning browser jobs to supported Ubuntu 24.04 in b56283f27."
     },
     "previous_complete_hosted_matrix": {
-      "run": "https://github.com/ooples/AiDotNet/actions/runs/44444716608",
-      "application_source": "b56283f27e1b7ae88aaa36d6c5fb4180fa00d9f7",
-      "harness_source": "b56283f27e1b7ae88aaa36d6c5fb4180fa00d9f7",
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44449152388",
+      "application_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+      "harness_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
       "status": "completed",
       "conclusion": "success",
-      "verified": true,
       "suite": {
         "passed": 449,
         "failed": 0,
@@ -202,10 +209,10 @@
         "skipped": 6,
         "total": 455,
         "did_not_run": 0,
-        "duration_ms": 512425,
+        "duration_ms": 640309,
         "ok": true,
         "global_errors": 0,
-        "report": "playwright-report/verification-b56283f27/suite/deployed/index.html"
+        "report": "playwright-report/verification-8e13e514b/suite/deployed/index.html"
       },
       "persona_crawls": {
         "passed": 10,
@@ -214,7 +221,7 @@
         "skipped": 0,
         "global_errors": 0
       },
-      "scope": "The full matrix before the final UI copy-selection correction also passed; the current matrix above validates that correction's source."
+      "scope": "Historical result before the two follow-up crawler measurement fixes; it does not validate the current coverage gate."
     },
     "billing_recovery_regression": {
       "passed": 57,
@@ -223,6 +230,22 @@
       "flaky": 0,
       "duration_ms": 34400,
       "scope": "Fresh local fixture build, complete billing-preview spec on desktop/phone. New unresolved-link copy regression failed in both viewports before the fix and passes after it; the one skip is the phone-only touch gesture on desktop."
+    },
+    "superseded_coverage_gate_attempt": {
+      "run": "https://github.com/ooples/AiDotNet/actions/runs/44455212323",
+      "application_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+      "harness_source": "0688bb4aaa66b76092af5c1b70f8c4838fedef27",
+      "conclusion": "failure",
+      "passed_parts": [
+        "suite",
+        "anon",
+        "free",
+        "pro-stripe",
+        "pro-granted"
+      ],
+      "failed_part": "admin",
+      "finding": "An Edit control key included a disposable customer's mutable name/role/tier payload; it disappeared after concurrent fixture changes/refetch. The repeated-record controller identity is now independent of that payload while actual record IDs remain pinned before clicking.",
+      "regression": "Reproduced on desktop/phone with persistent row tier/name changes. The correction keeps Pro/Enterprise purchase choices distinct and removes customer names from record action keys."
     }
   },
   "shared_backend_deployment": {
@@ -296,12 +319,12 @@
     "Generated document families are sampled in browsers and comprehensively checked over HTTP. Desktop Chromium and Pixel 5 emulation do not exhaust every browser or external-provider state.",
     "The admin crawler intercepts writes to shared customer records; dedicated mutation tests use disposable fixtures instead."
   ],
-  "reviewed_harness_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+  "reviewed_harness_source": "402b186d6fca71345dae95e252ef583db820bb8a",
   "review_threads": {
-    "total": 94,
+    "total": 96,
     "unresolved": 0,
-    "observed_at": "2026-11-19T03:41:34Z",
-    "scope": "Eight new follow-up threads addressed in 5916ea273, with evidence replies and resolution; no unresolved inline threads at observation."
+    "observed_at": "2026-11-19T04:48:31Z",
+    "scope": "Ten follow-up inline review threads addressed with code, regression evidence, replies and resolution; all current threads resolved at observation."
   },
   "follow_up_review_fixes": [
     "Choose the sanitizer report directory from the selected test configuration, preserving sanitizer-success upload gating.",
@@ -309,11 +332,12 @@
     "Use verified billing customers despite stale legacy preferences; expose claim/support recovery without granting ambiguous-customer access; block new checkout and deletion until ownership resolves.",
     "Reject deployment when billing_checkout_bindings is missing, with a rollback-scoped PostgreSQL regression.",
     "Test both Checkout intent time-window boundaries and stored customer-binding mismatches with zero-write assertions.",
-    "Normalize pointer/focus state and exclude still-transitioning styles from crawler effect credit; inert styling fails while handler-driven styling passes.",
+    "Observe native hover/focus styles passively before click handlers, retain interaction state for child exploration, and exclude pending/delayed CSS transitions from effect credit.",
     "Compare entitlement ID and license key after real Checkout claim replay without leaking keys into assertion diagnostics.",
     "Preserve primary payment-webhook verification failures when cleanup also fails.",
     "Pin browser runner images to Ubuntu 24.04 because Playwright 1.58.2 rejected ubuntu-latest's Ubuntu 26.04.",
-    "Keep unresolved legacy Stripe accounts distinct from team-granted plans in billing UI, and reset portal/cancellation controls on every refreshed billing state."
+    "Keep unresolved legacy Stripe accounts distinct from team-granted plans in billing UI, and reset portal/cancellation controls on every refreshed billing state.",
+    "Stabilize repeated record action keys across customer payload changes while retaining actual record-ID click checks and distinct pricing plan selectors."
   ],
   "preview_build": {
     "source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
@@ -324,6 +348,16 @@
     "alias": "https://test.aidotnet.dev",
     "deployment": "https://aidotnetwebsite-kuyte8ws4-franklins-projects-02a0b5a0.vercel.app",
     "alias_updated_at": "2026-11-19T03:22:53Z"
+  },
+  "harness_only_changes_since_preview": {
+    "application_source": "8e13e514bedb5ea401376c1d5902ae0233dea2e4",
+    "harness_source": "402b186d6fca71345dae95e252ef583db820bb8a",
+    "changed_paths": [
+      "website/tests/e2e/crawler.spec.ts",
+      "website/tests/e2e/helpers/crawler.ts",
+      "website/verification-review.json"
+    ],
+    "runtime_sources_unchanged": true
   }
 }
 
