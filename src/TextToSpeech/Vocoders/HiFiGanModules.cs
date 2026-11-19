@@ -21,6 +21,7 @@ internal sealed partial class HiFiGanGenerator<T>
 {
     private const double Slope = 0.1;
     private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
+    private readonly bool _gpuOwnedResidualsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_OWNED_RESIDUALS") == "1";
     private string? _gpuLifetimeDiagnosticState;
 
     private readonly IEngine _engine;
@@ -217,6 +218,17 @@ internal sealed partial class HiFiGanGenerator<T>
                     afterQueuedWork: true);
             }
         }
+        // A branch result is private to this invocation. Donate only its whole, resident FP32 storage; the
+        // stage input is shared by the other branches and every caller boundary remains protected.
+        bool CanReusePrivateResult(Tensor<T> value, Tensor<T> shared)
+            => _gpuOwnedResidualsEnabled && typeof(T) == typeof(float) && ReferenceEquals(_engine, gpu)
+                && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+                && value.IsContiguous && value._storageOffset == 0
+                && value.GraphVectorIdentity is Vector<T> vector && vector.Length == value.Length
+                && value.DataVector._deviceState is { DeviceValid: true, Buffer: { } buffer }
+                && buffer.Handle != IntPtr.Zero && buffer.Size >= value.Length
+                && !Aliases(value, features) && !Aliases(value, condition) && !Aliases(value, shared);
+
 
         Tensor<T> x;
         using (var pre = TensorScope.Begin())
@@ -268,15 +280,31 @@ internal sealed partial class HiFiGanGenerator<T>
                 else
                 {
                     var previousSum = sum;
-                    using (var combine = TensorScope.Begin())
+                    if (CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
+                    {
+                        _engine.TensorAddInPlace(previousSum, h);
+                        sum = previousSum;
+                    }
+                    else
+                    {
+                        using var combine = TensorScope.Begin();
                         sum = combine.Keep(_engine.TensorAdd(previousSum, h));
+                    }
                     ReleaseConsumed(previousSum, sum, stageInput);
                     ReleaseConsumed(h, sum, stageInput);
                 }
             }
             var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
-            using (var average = TensorScope.Begin())
+            if (CanReusePrivateResult(completedSum, stageInput))
+            {
+                _engine.TensorMultiplyScalarInPlace(completedSum, _residualAverageScale);
+                x = completedSum;
+            }
+            else
+            {
+                using var average = TensorScope.Begin();
                 x = average.Keep(_engine.TensorMultiplyScalar(completedSum, _residualAverageScale));
+            }
             ReleaseConsumed(completedSum, x);
             ReleaseConsumed(stageInput, x);
         }
