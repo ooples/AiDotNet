@@ -2,6 +2,12 @@ using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Tensors.Helpers;
+
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -28,6 +34,7 @@ internal sealed partial class HiFiGanGenerator<T>
     private readonly List<List<(List<NormedConv1DLayer<T>> First, List<NormedConv1DLayer<T>> Second)>> _blocks = new();
     private readonly NormedConv1DLayer<T> _post;
     private readonly bool _resblockType1;
+    private readonly T _residualAverageScale;
     private readonly bool _tanhOutput;
     private readonly int _outputReflectPad;
     private readonly (int Rate, int Offset)[] _upsampleGeometry;
@@ -64,6 +71,10 @@ internal sealed partial class HiFiGanGenerator<T>
         _upsampleGeometry = upsampleRates.Select((rate, i) =>
             (Rate: rate, Offset: upsampleKernels[i] - rate - 2 * ((upsampleKernels[i] - rate) / 2))).ToArray();
         _resblockType1 = resblockType1;
+        // Every upsampling stage has the same parallel residual branches. This is one architecture scalar,
+        // converted before the stage loops; an empty stage still fails at its existing missing-branch guard.
+        var scalarOps = MathHelper.GetNumericOperations<T>();
+        _residualAverageScale = resblockKernels.Length == 0 ? scalarOps.Zero : scalarOps.FromDouble(1.0 / resblockKernels.Length);
         _tanhOutput = tanhOutput;
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
@@ -332,6 +343,31 @@ internal sealed partial class HiFiGanGenerator<T>
         return forward.Keep(output);
     }
 
+
+    private void TraceGpuInferenceEligibility(Tensor<T> features, DirectGpuTensorEngine gpu)
+    {
+        int trainingLayers = _layers.Count(layer => layer.InTrainingMode);
+        int reasons = (gpu.ResidentStepActive ? 1 : 0)
+            | (gpu.InferenceCaptureActive ? 2 : 0)
+            | (AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive ? 4 : 0)
+            | (GradientTape<T>.Current is not null ? 8 : 0)
+            | (GraphMode.IsActive ? 16 : 0)
+            | (GraphCaptureCompatibility.IsActive ? 32 : 0)
+            | (AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ? 64 : 0)
+            | (trainingLayers > 0 ? 128 : 0);
+        string shape = string.Join(",", features.Shape.ToArray());
+        string signature = $"{reasons}:{shape}";
+        if (System.Threading.Interlocked.Exchange(ref _gpuLifetimeDiagnosticState, signature) == signature) return;
+        System.Diagnostics.Trace.TraceInformation($"[HIFI-GPU-LIFETIME] enabled={reasons == 0} reasons={reasons} shape=[{shape}] " +
+            $"resident={gpu.ResidentStepActive} inference_capture={gpu.InferenceCaptureActive} " +
+            $"release_deferred={AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive} " +
+            $"current_tape={GradientTape<T>.Current is not null} any_tape={AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()} " +
+            $"recording={GradientRecording.IsRecording<T>()} graph={GraphMode.IsActive} compatibility={GraphCaptureCompatibility.IsActive} " +
+            $"observer={AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null} " +
+            $"training_layers={trainingLayers}/{_layers.Count} outer_scope={TensorScope.Current is not null}");
+    }
+
+
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
         => ForwardCore(features, condition, allowDetachedTrainingRecycle: false);
 
@@ -434,12 +470,14 @@ internal sealed partial class HiFiGanGenerator<T>
             bool ownsStageSum = false;
             foreach (var (first, second) in _blocks[i])
             {
+                using var active = scratch?.Activate();
                 var h = x;
                 for (int n = 0; n < first.Count; n++)
                 {
                     var t = first[n].Forward(LeakyRelu(h, Slope));
                     if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
                     h = _engine.TensorAdd(t, h);
+                    if (scratch is not null) h = scratch.DetachBoundaryAndReset(h);
                 }
                 if (sum is null)
                 {
@@ -650,11 +688,7 @@ internal sealed class HiFiGanDiscriminators<T>
     }
 
     private Tensor<T> LeakyRelu(Tensor<T> x)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        return _engine.TensorAdd(_engine.TensorMultiplyScalar(x, ops.FromDouble(_slope)),
-            _engine.TensorMultiplyScalar(_engine.ReLU(x), ops.FromDouble(1 - _slope)));
-    }
+        => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(_slope));
 
     /// <summary>Every sub-discriminator's score and feature maps for <paramref name="audio"/> <c>[samples]</c>.</summary>
     public List<(Tensor<T> Score, List<Tensor<T>> Features)> Forward(Tensor<T> audio)

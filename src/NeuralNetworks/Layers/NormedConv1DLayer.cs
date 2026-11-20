@@ -1,6 +1,10 @@
 using System.Collections.Generic;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -333,27 +337,31 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
-        int rows = _direction.Shape[0], per = _direction.Length / rows;
         if (_normalization == ConvolutionNormalization.None) return _direction;
-        var v = Engine.Reshape(_direction, new[] { rows, per });
         if (_normalization == ConvolutionNormalization.Weight)
         {
-            var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
-                NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
-            var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
-            return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
+            // Eval reuses the same effective weights until their sources change. Keeping their owned storage also
+            // lets convolution backends retain a packed kernel instead of packing fresh normalization scratch.
+            if (!IsTrainingMode && !GraphMode.IsActive
+                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed))
+                return _inferenceWeightKernel.GetOrBuild(Engine,
+                    static (engine, sources) => WeightNormalizedKernel(engine, sources[0], sources[1]), _direction, _gain);
+            return WeightNormalizedKernel(Engine, _direction, _gain);
         }
+        int rows = _direction.Shape[0], per = _direction.Length / rows;
+        var v = Engine.Reshape(_direction, new[] { rows, per });
 
-        // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
-        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
-        // stored u and v unchanged.
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
-        if (IsTrainingMode)
+        // Match torch.nn.utils.parametrizations.spectral_norm: update u from the stored v FIRST, then v from the
+        // new u. The older spectral_norm hook used the opposite order; those orders disagree after a weight update.
+        // Both vectors are kept; σ = uᵀ V v with u and v held constant. Evaluation uses the stored state unchanged.
+        Tensor<T> uT, vT;
+        // Power iteration treats u/v as state, not differentiable functions of the weights. Keep the matrix and
+        // state updates on the engine: downloading V and walking its elements dominated GPU vocoder training.
+        using (new NoGradScope<T>())
         {
-            var vHost = v.ToVector();
-            void Normalize(double[] a)
+            uT = Engine.Reshape(_u, new[] { 1, rows });
+            vT = Engine.Reshape(_v, new[] { per, 1 });
+            if (IsTrainingMode)
             {
                 Tensor<T> Normalize(Tensor<T> x)
                 {
@@ -380,32 +388,51 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                     vT = Engine.Reshape(Engine.TensorAddScalar(_v, NumOps.Zero), new[] { per, 1 });
                 }
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(vHost[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
-            Engine.InvalidatePersistentTensor(_u);
-            Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
-        var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
+        var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+    }
+
+    // The published engine predates the fused operation. Bind it once so newer engines record
+    // a single weight-normalization operation for both forward and backward.
+    private static readonly Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? FusedWeightNorm =
+        BindWeightNorm();
+
+    private static Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? BindWeightNorm()
+    {
+        var operation = typeof(IEngine).GetMethod("TensorWeightNorm");
+        if (operation is null) return null;
+        try
+        {
+            return OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>>(
+                operation.MakeGenericMethod(typeof(T)));
+        }
+        catch (NotSupportedException) { return null; }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
+    {
+        const double epsilon = 1e-24;
+        Tensor<T> kernel;
+        if (FusedWeightNorm is { } normalize)
+        {
+            kernel = normalize(engine, direction, gain, epsilon);
+        }
+        else
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            int rows = direction.Shape[0], per = direction.Length / rows;
+            var matrix = engine.Reshape(direction, new[] { rows, per });
+            var normSquared = engine.ReduceSum(engine.TensorMultiply(matrix, matrix), new[] { 1 }, keepDims: true);
+            var inverseNorm = engine.TensorPow(engine.TensorAddScalar(normSquared, ops.FromDouble(epsilon)), ops.FromDouble(-0.5));
+            var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), inverseNorm);
+            kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
+        }
+        // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
+        engine.InvalidatePersistentTensor(kernel);
+        return kernel;
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)
