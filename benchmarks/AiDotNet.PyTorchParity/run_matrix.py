@@ -16,6 +16,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
@@ -51,6 +52,8 @@ UNSTABLE_SPREAD = 1.5
 BUSY_CPU_PERCENT = 20.0
 # GPU utilization (percent) sampled just before a CUDA launch above which that launch is flagged as contended.
 BUSY_GPU_PERCENT = 10.0
+# Longest wait for the machine to go idle before a launch.
+SETTLE_SECONDS = 10.0
 
 
 def now():
@@ -153,18 +156,36 @@ def condition_flags(before, after):
         flags.add("busy-cpu")
     if before.get("ciJobs") or after.get("ciJobs"):
         flags.add("ci-job")
-    try:
-        if float((before.get("gpu") or {}).get("utilization.gpu", 0)) > BUSY_GPU_PERCENT:
-            flags.add("busy-gpu")
-    except ValueError:
-        pass  # "[N/A]" on GPUs that do not report utilization
+    if gpu_busy(before):
+        flags.add("busy-gpu")
     return sorted(flags)
+
+
+def gpu_busy(state):
+    try:
+        return float((state.get("gpu") or {}).get("utilization.gpu", 0)) > BUSY_GPU_PERCENT
+    except ValueError:
+        return False  # "[N/A]" on GPUs that do not report utilization
+
+
+def settled_conditions(device):
+    """Wait up to SETTLE_SECONDS for the machine to go idle, then return its state.
+
+    The previous process has just exited: the GPU utilization counter still averages over its last moments and its
+    CPU teardown may still run. Waiting for idle gives every launch the same quiet start, so a flag left after the
+    wait means another program was busy, not this runner's previous process.
+    """
+    deadline = time.monotonic() + SETTLE_SECONDS
+    while True:
+        state = conditions(device)
+        if (state["cpuPercent"] <= BUSY_CPU_PERCENT and not gpu_busy(state)) or time.monotonic() >= deadline:
+            return state
 
 
 def run(cmd, stem, env, device=None, allow_battery=False):
     """Run one process with its output in STEM.log and a receipt in STEM.receipt.json. Return its condition flags."""
     print(stem.name, flush=True)
-    before = conditions(device)
+    before = settled_conditions(device)
     if before["externalPower"] is False and not allow_battery:
         raise SystemExit(f"Running on battery before {stem.name}. Connect external power or pass --allow-battery.")
     started = now()
