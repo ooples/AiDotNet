@@ -189,6 +189,7 @@ internal static class OuteTTSAudio
 /// scope, so resetting it cannot recycle any state needed by the language model's next forward.</remarks>
 internal sealed class OuteTTSSamplingSession<T> : IDisposable
 {
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly AiDotNet.Tensors.Helpers.TensorArena _scratch = AiDotNet.Tensors.Helpers.TensorArena.CreateDetached();
     private bool _disposed;
 
@@ -197,14 +198,78 @@ internal sealed class OuteTTSSamplingSession<T> : IDisposable
     internal int Select(Tensor<T> logits, IReadOnlyList<int> ids, OuteTTSOptions options, Random random)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(OuteTTSSamplingSession<T>));
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
         using var activation = _scratch.Activate();
         _scratch.Reset();
-        var scores = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(logits, new[] { logits.Length });
-        if (options.Temperature > 0)
-            return OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
-                options.RepetitionRange, options.Temperature, options.TopK, options.TopP, options.MinP), random);
-        return OuteTTSSampler<T>.Greedy(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
-            options.RepetitionRange, 1.0, 0, 1.0, 0));
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int n = logits.Length;
+        var scores = engine.Reshape(logits, new[] { n });
+        if (TtsSampling<T>.SumsInFloat || n == 0)
+        {
+            if (options.Temperature > 0)
+                return OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+                    options.RepetitionRange, options.Temperature, options.TopK, options.TopP, options.MinP), random);
+            return OuteTTSSampler<T>.Greedy(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+                options.RepetitionRange, 1.0, 0, 1.0, 0));
+        }
+
+        // Penalize only the distinct valid tokens in the repetition window (padded to a constant
+        // scratch shape so _scratch.PeakBackingBytes stays invariant across generation steps).
+        int repRange = options.RepetitionRange;
+        double repPenalty = options.RepetitionPenalty;
+        if (repRange > 0 && repPenalty != 1.0 && ids.Count > 0)
+        {
+            int wCap = Math.Min(n, repRange);
+            var distinct = new List<int>(wCap);
+            var seen = new HashSet<int>();
+            for (int i = Math.Max(0, ids.Count - repRange); i < ids.Count; i++)
+            {
+                int token = ids[i];
+                if (token >= 0 && token < n && seen.Add(token)) distinct.Add(token);
+            }
+            if (distinct.Count > 0)
+            {
+                var padded = new int[wCap];
+                int last = distinct[distinct.Count - 1];
+                for (int j = 0; j < wCap; j++) padded[j] = j < distinct.Count ? distinct[j] : last;
+                var idxTensor = new Tensor<int>(padded, new[] { wCap });
+                var sub = engine.TensorIndexSelect(scores, idxTensor, 0);
+                T penalty = Ops.FromDouble(repPenalty);
+                var penalized = engine.TensorWhere(engine.TensorGreaterThan(sub, Ops.Zero),
+                    engine.TensorDivideScalar(sub, penalty), engine.TensorMultiplyScalar(sub, penalty));
+                scores = engine.TensorScatter(scores, idxTensor, penalized, 0);
+            }
+        }
+
+        if (options.Temperature <= 0)
+            return OuteTTSSampler<T>.Greedy(scores);
+
+        if (options.Temperature != 1.0)
+            scores = engine.TensorDivideScalar(scores, Ops.FromDouble(options.Temperature));
+
+        int k = options.TopK;
+        if (k > 0 && k < n)
+        {
+            var largest = engine.TensorTopK(scores, k + 1, 0, out var topIndices);
+            var largestArr = largest.ToArray();
+            T kth = largestArr[k - 1];
+            T negativeInfinity = Ops.FromDouble(double.NegativeInfinity);
+            if (Ops.GreaterThan(kth, largestArr[k]) && !Ops.Equals(kth, negativeInfinity))
+            {
+                var topIdxArr = topIndices.ToArray();
+                var finite = new int[k];
+                Array.Copy(topIdxArr, 0, finite, 0, k);
+                Array.Sort(finite);
+                var finiteScores = engine.TensorIndexSelect(scores, new Tensor<int>(finite, new[] { k }), 0);
+                var compact = OuteTTSSampler<T>.Process(finiteScores, Array.Empty<int>(), 1.0, 0, 1.0, 0,
+                    options.TopP, options.MinP);
+                return finite[OuteTTSSampler<T>.Sample(compact, random)];
+            }
+        }
+
+        var processed = OuteTTSSampler<T>.Process(scores, Array.Empty<int>(), 1.0, 0, 1.0,
+            options.TopK, options.TopP, options.MinP);
+        return OuteTTSSampler<T>.Sample(processed, random);
     }
 
     public void Dispose()

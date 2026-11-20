@@ -137,7 +137,9 @@ function Invoke-FailoverApi {
     $token = if ($Token) { $Token } elseif ($env:GH_TOKEN) { $env:GH_TOKEN } else { $env:GITHUB_TOKEN }
     if (-not $token) { throw 'A GitHub API token is required.' }
     $headers = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
-    . "$PSScriptRoot/Invoke-GitHubApiWithRetry.ps1"
+    if (-not (Get-Command Invoke-GitHubApiWithRetry -ErrorAction SilentlyContinue)) {
+        . "$PSScriptRoot/Invoke-GitHubApiWithRetry.ps1"
+    }
     $items = @(); $page = 1
     do {
         $separator = if ($Path.Contains('?')) { '&' } else { '?' }
@@ -150,7 +152,7 @@ function Invoke-FailoverApi {
         $batch = @(if ($property) { $response.$property } elseif ($null -ne $response) { $response })
         $items += $batch; $page++
     } while ($batch.Count -eq 50)
-    return ,$items
+    return $items
 }
 
 function Assert-FailoverSourceArtifact {

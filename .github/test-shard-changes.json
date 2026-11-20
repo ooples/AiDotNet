@@ -11,6 +11,14 @@
       "baselineKey": "Conformance_VisionLanguage_offset_170",
       "currentKeys": [],
       "reason": "Two changes shrank the VisionLanguage conformance set from 173 to 166 models: #2136 moved EmuEdit, MGIE and SmartEdit onto LatentDiffusionModelBase (diffusion models do not implement IShapeContract; the diffusion test bases check them instead), and #2269 removed four duplicate VisionLanguage document models (Donut, LayoutLMv3, Nougat and Pix2Struct under src/VisionLanguage/Document; the document implementations elsewhere remain). Offset 165 now ends it and the offset 170 window selects none."
+    },
+    {
+      "baselineKey": "ModelFamily_Generated_Layers_N_O",
+      "currentKeys": [
+        "ModelFamily_Generated_Layers_N",
+        "ModelFamily_Generated_Layers_O"
+      ],
+      "reason": "ModelFamily - Generated Layers N-O (83 generated classes: 47 N + 36 O) exceeded the 60-minute runner timeout with zero test failures. Split gap-free and non-overlapping by first letter into ModelFamily - Generated Layers N and ModelFamily - Generated Layers O; their union is identical to the original N-O shard."
     }
   ]
 }

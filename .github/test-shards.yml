@@ -525,12 +525,20 @@ shard:
   # jobs (798 + 759 tests after ParaformerLarge rejoined the PR lane). The filters
   # are gap-free and non-overlapping over the generated P inventory; their union is
   # the original P shard.
-  - name: ModelFamily - Generated Layers N-O
+  # N-O hit the 60-min job timeout with 0 failures (47 N classes + 36 O classes = 83
+  # generated classes). Alongside OuteTTSSamplingSession candidate-restricted sampling and
+  # bounded OpenVoice/OpenVoiceV2 scaffold iterations, split N-O cleanly into N and O
+  # (~10 min and ~15 min wall-clock). Gap-free + non-overlapping: union == N-O.
+  - name: ModelFamily - Generated Layers N
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: >-
-      FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O)
+      FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.N
+  - name: ModelFamily - Generated Layers O
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.O
   - name: ModelFamily - Generated Layers P A,C,I,L,N,P
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0

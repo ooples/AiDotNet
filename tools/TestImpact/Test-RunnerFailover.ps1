@@ -638,6 +638,29 @@ try {
             Assert-FailoverPublishedProof @published
         } $true
     }
+    Assert-Case 'paginated Invoke-FailoverApi returns flat items under @(...) across pages' {
+        . "$PSScriptRoot/Invoke-GitHubApiWithRetry.ps1"
+        $priorRetry = (Get-Item Function:Invoke-GitHubApiWithRetry).ScriptBlock
+        try {
+            Set-Item Function:Invoke-GitHubApiWithRetry -Value {
+                param([string] $Uri, [hashtable] $Headers)
+                if ($Uri -match 'page=1$') {
+                    return [pscustomobject]@{ jobs = @(1..50 | ForEach-Object { [pscustomobject]@{ id = $_; name = "job-$_"; status = 'completed' } }) }
+                }
+                if ($Uri -match 'page=2$') {
+                    return [pscustomobject]@{ jobs = @(51..62 | ForEach-Object { [pscustomobject]@{ id = $_; name = "job-$_"; status = 'completed' } }) }
+                }
+                throw "Unexpected pagination URI '$Uri'."
+            }
+            $paged = @(& $originalApi -Path 'repos/ooples/AiDotNet/actions/runs/1/attempts/1/jobs' -Paginate -Token 'test-token')
+            if ($paged.Count -ne 62 -or $paged[0] -is [System.Array] -or $paged[0].name -cne 'job-1' -or $paged[61].name -cne 'job-62') {
+                throw "Expected 62 flat job objects; got count=$($paged.Count), firstType=$($paged[0].GetType().FullName)."
+            }
+        }
+        finally {
+            Set-Item Function:Invoke-GitHubApiWithRetry -Value $priorRetry
+        }
+    }
 }
 finally {
     Set-Item Function:Invoke-FailoverApi -Value $originalApi

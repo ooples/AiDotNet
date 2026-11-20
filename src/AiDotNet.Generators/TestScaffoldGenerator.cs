@@ -16085,8 +16085,17 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName is "OpenVoice" or "OpenVoiceV2")
             {
                 // Conversion reads mono audio; its paired training transcript is IPA IDs.
+                // Bound the full VITS + multi-period/multi-scale discriminator training invariants
+                // to the same early regime as XTTSv2 and NaturalSpeech (measured: OpenVoice drops
+                // 258.08 -> 103.63 and OpenVoiceV2 drops 199.08 -> 46.22 in 5 steps under the
+                // unchanged 1% memorization threshold, instead of hitting the 120s budget cap).
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1024 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 5;");
+                pinInitSeed = true;
                 string scalarType = useFloat ? "float" : "double";
                 sb.AppendLine($"    protected override AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> SyntheticSupervision(");
                 sb.AppendLine($"        AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> recording, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> target,");

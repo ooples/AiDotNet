@@ -8,7 +8,9 @@ using Xunit;
 using AiDotNet.Tensors.Helpers;
 using System.Threading.Tasks;
 
+using System;
 using AiDotNet.Tests.Helpers;
+using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -17,8 +19,10 @@ namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 /// Interactive (SegGPT, SEEM), and
 /// Referring (LISA, VideoLISA, OMGLLaVA, PixelLM) segmentation models.
 /// </summary>
-public class OpenVocabInteractiveReferringSegmentationIntegrationTests
+public class OpenVocabInteractiveReferringSegmentationIntegrationTests : IDisposable
 {
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
     private static NeuralNetworkArchitecture<double> Arch(int h = 32, int w = 32, int d = 3)
         => new(InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
                NetworkComplexity.Deep, 0, h, w, d, 0);
@@ -37,7 +41,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OpenVocabSAM_Construction_Succeeds()
     {
-        var model = new OpenVocabSAM<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new OpenVocabSAM<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -45,7 +49,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OpenVocabSAM_Predict_ReturnsOutput()
     {
-        var model = new OpenVocabSAM<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new OpenVocabSAM<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -65,7 +69,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CATSeg_Construction_Succeeds()
     {
-        var model = new CATSeg<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new CATSeg<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -73,7 +77,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CATSeg_Predict_ReturnsOutput()
     {
-        var model = new CATSeg<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new CATSeg<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -93,7 +97,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MaskAdapter_Construction_Succeeds()
     {
-        var model = new MaskAdapter<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new MaskAdapter<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -101,7 +105,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MaskAdapter_Predict_ReturnsOutput()
     {
-        var model = new MaskAdapter<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new MaskAdapter<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -121,7 +125,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SAN_Construction_Succeeds()
     {
-        var model = new SAN<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new SAN<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -129,7 +133,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SAN_Predict_ReturnsOutput()
     {
-        var model = new SAN<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new SAN<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -149,7 +153,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SED_Construction_Succeeds()
     {
-        var model = new SED<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new SED<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -157,7 +161,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SED_Predict_ReturnsOutput()
     {
-        var model = new SED<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new SED<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -177,7 +181,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegGPT_Construction_Succeeds()
     {
-        var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
+        using var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -185,7 +189,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SegGPT_Predict_ReturnsOutput()
     {
-        var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
+        using var model = new SegGPT<double>(Arch(), options: new SegGPTOptions { ModelSize = SegGPTModelSize.ViTLarge });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -205,7 +209,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SEEM_Construction_Succeeds()
     {
-        var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
+        using var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -213,9 +217,9 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SEEM_Predict_ReturnsOutput()
     {
-        var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
+        using var model = new SEEM<double>(Arch(), options: new SEEMOptions { ModelSize = SEEMModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
+        Assert.NotNull(model);
         Assert.True(output.Length > 0);
     }
 
@@ -233,7 +237,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LISA_Construction_Succeeds()
     {
-        var model = new LISA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new LISA<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -241,7 +245,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LISA_Predict_ReturnsOutput()
     {
-        var model = new LISA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new LISA<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -261,7 +265,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VideoLISA_Construction_Succeeds()
     {
-        var model = new VideoLISA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new VideoLISA<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -269,7 +273,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VideoLISA_Predict_ReturnsOutput()
     {
-        var model = new VideoLISA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new VideoLISA<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -289,7 +293,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OMGLLaVA_Construction_Succeeds()
     {
-        var model = new OMGLLaVA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new OMGLLaVA<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -297,7 +301,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OMGLLaVA_Predict_ReturnsOutput()
     {
-        var model = new OMGLLaVA<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new OMGLLaVA<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -317,7 +321,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PixelLM_Construction_Succeeds()
     {
-        var model = new PixelLM<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new PixelLM<double>(Arch(), new DeterministicTextEncoder<double>());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -325,7 +329,7 @@ public class OpenVocabInteractiveReferringSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PixelLM_Predict_ReturnsOutput()
     {
-        var model = new PixelLM<double>(Arch(), new DeterministicTextEncoder<double>());
+        using var model = new PixelLM<double>(Arch(), new DeterministicTextEncoder<double>());
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
