@@ -27,10 +27,11 @@ public sealed class ClosureObjectiveRecordedShapeTests
             var loss = Objective();
             var signature = ObjectiveSignature.Build(scope.Nodes, parameters, out var leaves, loss);
             Assert.True(signature.Signable, signature.UnsignableReason);
+            var shapes = scope.CompiledOpShapes.Snapshot();
             var plan = scope.CompileTraining(parameters, loss);
             var guard = ClosureObjectiveGuard<float>.TakeRecorded(out var reason);
             Assert.NotNull(guard);
-            var entry = new ClosureObjectiveState<float>.Entry(plan, guard, leaves);
+            var entry = new ClosureObjectiveState<float>.Entry(plan, guard, leaves, shapes);
             state.Add(entry, keepAlive: null);
             return entry;
         }

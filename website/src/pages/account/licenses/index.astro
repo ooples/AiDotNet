@@ -82,6 +82,17 @@ const base = import.meta.env.BASE_URL;
     <div id="licenses-container" class="hidden space-y-4">
     </div>
 
+    <details class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <summary class="cursor-pointer font-medium">Paid before signing in? Claim your checkout</summary>
+      <p class="mt-3 text-sm text-slate-500">Sign in with the verified email used for payment, then paste the Stripe checkout link from your browser history. Your payment must be complete.</p>
+      <form id="claim-checkout-form" class="mt-3 space-y-3">
+        <label for="claim-checkout-reference" class="block text-sm font-medium">Stripe checkout link or reference</label>
+        <input id="claim-checkout-reference" name="checkout" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-transparent" />
+        <button id="claim-checkout-btn" type="submit" class="px-4 py-2 rounded-lg bg-brand-blue text-white">Claim checkout</button>
+        <p id="claim-checkout-message" role="status" class="text-sm"></p>
+      </form>
+    </details>
+
     <!-- Setup instructions -->
     <div id="setup-section" class="hidden bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
       <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">Setup Instructions</h2>
@@ -106,6 +117,29 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
 
   <script>
     import { supabase } from '../../../lib/supabase';
+    import { claimCheckout } from '../../../lib/billing';
+
+    document.getElementById('claim-checkout-form')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const input = document.getElementById('claim-checkout-reference') as HTMLInputElement;
+      const button = document.getElementById('claim-checkout-btn') as HTMLButtonElement;
+      const message = document.getElementById('claim-checkout-message')!;
+      const reference = input.value.trim().match(/(?:^|\/)(cs_[A-Za-z0-9_]+)/)?.[1];
+      if (!reference) { message.textContent = 'Paste a Stripe checkout link or a reference beginning with cs_.'; return; }
+      button.disabled = true;
+      message.textContent = 'Verifying your checkout…';
+      try {
+        const { data, error } = await claimCheckout(reference);
+        if (error || !data?.claimed) { message.textContent = error ?? 'Checkout could not be claimed. Please try again.'; return; }
+        // Fulfillment is complete. Do not restart the post-Checkout count-growth
+        // poll against a key that already exists after this explicit claim.
+        const destination = new URL(window.location.href);
+        destination.searchParams.delete('new');
+        destination.searchParams.delete('session_id');
+        window.history.replaceState(window.history.state, '', destination.href);
+        window.location.reload();
+      } finally { button.disabled = false; }
+    });
 
     interface LicenseKey {
       id: string;
@@ -338,7 +372,13 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
 
       if (noLicensesEl) noLicensesEl.classList.add('hidden');
       if (containerEl) containerEl.classList.remove('hidden');
-      if (setupEl) setupEl.classList.remove('hidden');
+      // Setup instructions only with a key to set up: revoked or expired keys alone would show the
+      // "your-key-here" placeholder as if it were theirs.
+      const now = Date.now();
+      const activeKey = licenses.find((l) => l.status === 'active' && (!l.expires_at || new Date(l.expires_at).getTime() > now));
+      const envCode = document.getElementById('env-var-code');
+      if (envCode) envCode.textContent = activeKey ? `AIDOTNET_LICENSE_KEY=${activeKey.license_key}` : '';
+      if (setupEl) setupEl.classList.toggle('hidden', !activeKey);
 
       // Load activations for all licenses
       const licenseIds = licenses.map((l) => l.id);
@@ -366,11 +406,6 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
           .map((l) => renderLicenseCard(l, activationsByLicense.get(l.id) || []))
           .join('');
 
-        const activeKey = licenses.find((l) => l.status === 'active');
-        if (activeKey) {
-          const envCode = document.getElementById('env-var-code');
-          if (envCode) envCode.textContent = `AIDOTNET_LICENSE_KEY=${activeKey.license_key}`;
-        }
       }
     }
 
@@ -383,14 +418,15 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[tier] || colors.community}">${tier}</span>`;
     }
 
-    function statusBadge(status: string): string {
+    function statusBadge(status: string, expiresAt: string | null): string {
       const colors: Record<string, string> = {
         active: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
         suspended: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
         revoked: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
         expired: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
       };
-      return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
+      const usable = status === 'active' && (!expiresAt || new Date(expiresAt).getTime() > Date.now());
+      return `<span data-license-status="${status}" data-usable="${usable}" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
     }
 
     function renderLicenseCard(license: LicenseKey, activations: Activation[]): string {
@@ -420,7 +456,7 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
           <div class="flex items-start justify-between mb-4">
             <div class="flex items-center gap-3">
               ${tierBadge(license.tier)}
-              ${statusBadge(license.status)}
+              ${statusBadge(license.status, license.expires_at)}
             </div>
             <button class="copy-key-btn text-xs font-medium text-brand-blue hover:underline" data-key-id="${license.id}">
               Copy Key

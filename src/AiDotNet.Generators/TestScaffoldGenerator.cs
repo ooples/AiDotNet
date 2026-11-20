@@ -2067,6 +2067,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // precision-first mitigation before considering an iteration cap; production defaults
         // and public VinVLOptions remain unchanged.
         "VinVL",
+        // VisionMamba (Vim-Tiny four-stage bidirectional SSM) and VisionTS (MAE-Base visual time-series
+        // transformer) ran at fp64 in Vi-VM, spending 5m17s on VisionMamba alone and driving runner memory
+        // from 14.3 GB down to 3.5 GB before subsequent ViT-scale fixtures ran. Apply the standard fp32
+        // test precision mitigation while keeping model defaults and public options intact.
+        "VisionMamba", "VisionTS",
         // Generated A-C shard budget (PR #1789). The A-C matrix entry runs SERIALIZED (it is in CI's
         // $heavyShards) against the 45-minute job timeout, and a measured local run of the shard —
         // Release, serialized, Category!=HeavyTimeout, 16 GB heap cap, i.e. the runner configuration —
@@ -7002,7 +7007,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "UpsampleKernels = [4, 8], HopSize = 8, FftSize = 64, WindowLength = 64, WavePadding = 40, PromptFrames = 96, " +
                     "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
                     "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
-                    "SlmPositionalConvGroups = 2, SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
+                    "SlmPositionalConvGroups = 2, DiscriminatorWidthDivisor = 16, MaxTrainingFrames = 128, " +
+                    "SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
             }
             else if (model.ClassName == "EmotiVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))
@@ -18919,6 +18925,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 12;");
+            sb.AppendLine("    protected override int TargetDependenceRepeatCount => 1;");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 25;");
         }
 
         // Optical-flow fixtures whose MoreData window has to clear the optimizer warm-up

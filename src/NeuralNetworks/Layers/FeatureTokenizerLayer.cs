@@ -161,14 +161,8 @@ public partial class FeatureTokenizerLayer<T> : LayerBase<T>, IShapeContract
         // collapsing constant inputs of different magnitude (all-0.1 vs all-0.9) to identical
         // tokens. A learnable non-zero bias breaks that scale-invariance.
         double scale = 1.0 / Math.Sqrt(_embeddingDim);
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            for (int e = 0; e < _embeddingDim; e++)
-            {
-                _weights[f, e] = NumOps.FromDouble((rand.NextDouble() * 2.0 - 1.0) * scale);
-                _biases[f, e] = NumOps.FromDouble((rand.NextDouble() * 2.0 - 1.0) * scale);
-            }
-        }
+        Engine.TensorUniformInPlace(_weights, -scale, scale, rand.Next());
+        Engine.TensorUniformInPlace(_biases, -scale, scale, rand.Next());
     }
 
     /// <inheritdoc/>

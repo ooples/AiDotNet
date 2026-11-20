@@ -444,4 +444,107 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         }
         FinalLayerNorm.SetTrainingMode(isTraining);
     }
+
+    private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _sgd;
+    private double _sgdRate = double.NaN;
+    private double _sgdClipNorm = double.NaN;
+
+    /// <summary>Training steps run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
+
+    /// <summary>Training steps run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
+
+    /// <summary>
+    /// Collects all live trainable tensors in forward order: tokenizer, encoder layers, final LayerNorm, and subclass heads.
+    /// </summary>
+    private protected List<Tensor<T>> CollectAllTrainableTensors()
+    {
+        var trainable = new List<Tensor<T>>(Tokenizer.GetTrainableTensors());
+        var layers = new List<ILayer<T>>(EncoderLayers.Count + 2);
+        foreach (var encoderLayer in EncoderLayers)
+        {
+            layers.Add(encoderLayer);
+        }
+
+        layers.Add(FinalLayerNorm);
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null)
+            {
+                layers.Add(extra);
+            }
+        }
+
+        trainable.AddRange(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(layers));
+        return trainable;
+    }
+
+    /// <summary>
+    /// Executes one shared FT-Transformer SGD step (fused compiled plan for purely numerical batches, eager tape when
+    /// categorical indices are supplied), honoring <see cref="ModelHyperparameterOptions.MaxGradNorm"/> across subclasses.
+    /// </summary>
+    private protected T RunSharedTrainingStep(
+        Tensor<T> numericalFeatures,
+        Tensor<T> target,
+        T learningRate,
+        Matrix<int>? categoricalIndices,
+        Func<Tensor<T>, Matrix<int>?, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss)
+    {
+        var trainable = CollectAllTrainableTensors();
+        double rate = NumOps.ToDouble(learningRate);
+        double clipNorm = Options.MaxGradNorm > 0.0 ? Options.MaxGradNorm : 0.0;
+        var optimizer = SgdAt(rate, clipNorm);
+
+        T lossValue;
+        if (categoricalIndices is null)
+        {
+            var stepper = _tapeStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
+            lossValue = stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+            {
+                Layers = Array.Empty<ITrainableLayer<T>>(),
+                Input = numericalFeatures,
+                Target = target,
+                Forward = features => forward(features, null),
+                ComputeLoss = computeLoss,
+                Optimizer = optimizer,
+                ModelGradientClip = clipNorm,
+                ExtraParameters = trainable,
+            });
+        }
+        else
+        {
+            lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                trainable,
+                () => computeLoss(forward(numericalFeatures, categoricalIndices), target),
+                optimizer,
+                modelGradientClip: clipNorm);
+        }
+
+        ResetState();
+        return lossValue;
+    }
+
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> SgdAt(double rate, double clipNorm)
+    {
+        if (_sgd is null || !_sgdRate.Equals(rate) || !_sgdClipNorm.Equals(clipNorm))
+        {
+            _sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = rate,
+                    MinLearningRate = Math.Min(1e-6, rate),
+                    MaxLearningRate = Math.Max(1.0, rate),
+                    UseAdaptiveLearningRate = false,
+                    EnableGradientClipping = clipNorm > 0.0,
+                    MaxGradientNorm = clipNorm > 0.0 ? clipNorm : 1.0,
+                });
+            _sgdRate = rate;
+            _sgdClipNorm = clipNorm;
+        }
+
+        return _sgd;
+    }
 }

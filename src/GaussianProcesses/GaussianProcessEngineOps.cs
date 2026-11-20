@@ -187,4 +187,57 @@ internal static class GaussianProcessEngineOps
 
         return null;
     }
+
+    /// <summary>
+    /// Computes the lower Cholesky factor L of symmetric positive-definite <paramref name="A"/> = L Lᵀ
+    /// via whole-tensor <see cref="LinalgDispatch{T}.CholeskyEx"/> without throwing on non-SPD inputs.
+    /// </summary>
+    internal static bool TryCholeskyLower<T>(Matrix<T> A, out Matrix<T> lower)
+    {
+        if (A.Rows == 0)
+        {
+            lower = new Matrix<T>(0, 0);
+            return true;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(A), upper: false);
+        if (engine.TensorCountNonzero(info) == 0 && AllFinite(factor)
+            && numOps.GreaterThan(engine.TensorMinValue(engine.TensorDiagonal(factor)), numOps.Zero))
+        {
+            lower = factor.ToMatrix();
+            return true;
+        }
+
+        lower = Matrix<T>.Empty();
+        return false;
+    }
+
+    /// <summary>
+    /// Solves (L Lᵀ) X = <paramref name="rhs"/> for matrix right-hand sides via two triangular solves in O(m² k).
+    /// </summary>
+    internal static Matrix<T> SolveCholesky<T>(Matrix<T> lowerCholesky, Matrix<T> rhs)
+    {
+        var engine = AiDotNetEngine.Current;
+        var L = Tensor<T>.FromMatrix(lowerCholesky);
+        var y = LinalgDispatch<T>.SolveTriangular(L, Tensor<T>.FromMatrix(rhs), upper: false);
+        return LinalgDispatch<T>.SolveTriangular(engine.TensorTranspose(L), y, upper: true).ToMatrix();
+    }
+
+    /// <summary>
+    /// Solves (L Lᵀ) x = <paramref name="rhs"/> for a vector right-hand side via two triangular solves in O(m²).
+    /// </summary>
+    internal static Vector<T> SolveCholesky<T>(Matrix<T> lowerCholesky, Vector<T> rhs)
+    {
+        if (rhs.Length == 0)
+            return new Vector<T>(0);
+
+        var engine = AiDotNetEngine.Current;
+        var L = Tensor<T>.FromMatrix(lowerCholesky);
+        var b = Tensor<T>.FromVector(rhs).Reshape(rhs.Length, 1);
+        var y = LinalgDispatch<T>.SolveTriangular(L, b, upper: false);
+        var x = LinalgDispatch<T>.SolveTriangular(engine.TensorTranspose(L), y, upper: true);
+        return x.Reshape(rhs.Length).ToVector();
+    }
 }

@@ -222,6 +222,27 @@ test.describe('/auth/callback success paths', () => {
   });
 });
 
+for (const redirect of ['https://attacker.example/phish', '/\\attacker.example/phish', '/\t/attacker.example/phish', '//attacker.example/phish', '/a/..//attacker.example/phish']) {
+  for (const eventDriven of [false, true]) {
+    test(`callback rejects ${JSON.stringify(redirect)} with ${eventDriven ? 'auth event' : 'existing session'}`, async ({ page, baseURL }) => {
+      await installAuthStub(page, { getSession: eventDriven ? 'empty' : 'success', emitSignedIn: eventDriven });
+      await stubRedirectTargets(page);
+      // If a guard regresses, record the attempted departure without contacting the host.
+      const departures: string[] = [];
+      await page.route('**/*', async (route) => {
+        if (new URL(route.request().url()).hostname === 'attacker.example') {
+          departures.push(route.request().url());
+          return route.fulfill({ status: 200, body: 'Unsafe redirect' });
+        }
+        return route.fallback();
+      });
+      await page.goto(`/auth/callback/?redirect=${encodeURIComponent(redirect)}`);
+      await expect(page).toHaveURL(new URL('/account/', baseURL).href);
+      expect(departures).toEqual([]);
+    });
+  }
+}
+
 test.describe('/auth/callback non-URL failure paths', () => {
   // PR #1258 review #6/#7: every failure layer is supposed to leave a
   // console.error trace and surface the fatal-error UI. Previously the

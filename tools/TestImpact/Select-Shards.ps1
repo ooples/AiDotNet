@@ -192,9 +192,9 @@ $script:IndependentToolPaths = @(
 # (workflow_call), defining nothing the test jobs run, and producing neither the coverage map nor a selection
 # input. Each has its own triggers, so changing one cannot change what a shard executes. Read before listing:
 #   - deploys, release, website and docs: azure-functions-deploy, deploy-serving, deploy-website, docs, docs-wiki,
-#     release-please, samples, ci-website, website-alert, website-claims, website-e2e, website-health, and the three
-#     *.yml.disabled release files (GitHub does not load them at all; re-enabling one is a rename to a new path,
-#     which is unclassified until listed).
+#     release-please, samples, ci-website, website-alert, website-backend, website-claims, website-e2e, website-health,
+#     website-preview, and the three *.yml.disabled release files (GitHub does not load them at all; re-enabling one is a
+#     rename to a new path, which is unclassified until listed).
 #   - linting and review: codacy, commitlint, commitlint-fix, pr-title-lint, dotnet-format-autofix,
 #     copilot-review-gate.
 #   - code scanning: codeql.yml. It is not in this tree yet: #2585 moves both CodeQL jobs out of sonarcloud.yml
@@ -243,9 +243,11 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/test-attribution-canary.yml',
     '.github/workflows/tts-paper-contracts.yml',
     '.github/workflows/website-alert.yml',
+    '.github/workflows/website-backend.yml',
     '.github/workflows/website-claims.yml',
     '.github/workflows/website-e2e.yml',
-    '.github/workflows/website-health.yml'
+    '.github/workflows/website-health.yml',
+    '.github/workflows/website-preview.yml'
 )
 
 function Test-SelectionControl {

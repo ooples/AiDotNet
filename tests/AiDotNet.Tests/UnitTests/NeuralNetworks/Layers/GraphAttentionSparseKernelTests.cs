@@ -17,6 +17,25 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class GraphAttentionSparseKernelTests
 {
+    [Fact]
+    public void InstalledCsrOperationBindsAndAggregatesSelfEdges()
+    {
+        var operations = CsrAttentionOperations<float>.Available;
+        if (typeof(IEngine).GetMethod("GraphAttentionCsr") is null)
+        {
+            Assert.Null(operations);
+            return;
+        }
+        Assert.NotNull(operations);
+        var adjacency = new Tensor<float>(new[] { 1f, 0f, 0f, 1f }, new[] { 2, 2 });
+        var pattern = operations.CreatePattern(adjacency);
+        Assert.NotNull(pattern);
+        var features = new Tensor<float>(new[] { 2f, -3f }, new[] { 2, 1 });
+        var attention = new Tensor<float>(new[] { 0.1f, -0.4f }, new[] { 1, 2 });
+        using var output = operations.Aggregate(new CpuEngine(), features, attention, pattern, 0.2, 0, null);
+        Assert.Equal(features.ToArray(), output.ToArray());
+    }
+
     private const int Nodes = 9;
     private const int Features = 5;
 

@@ -389,7 +389,10 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             using var _ = new NoGradScope<T>();
             var style = StyleEncoderModule.Forward(MelsFirst(voice.Reference!));
-            var mel = SynthesizeMel(ToIds(input, nameof(input)), style);
+            var ids = ToIds(input, nameof(input));
+            if (_options.MaxTextLength > 0 && ids.Length > _options.MaxTextLength)
+                ids = ids.Take(_options.MaxTextLength).ToArray();
+            var mel = SynthesizeMel(ids, style);
             return Engine.TensorTranspose(Engine.Reshape(mel, new[] { _options.MelChannels, mel.Shape[2] }));
         }
         finally

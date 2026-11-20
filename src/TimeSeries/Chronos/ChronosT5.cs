@@ -252,16 +252,21 @@ internal sealed class ChronosT5<T>
     public Tensor<T> BatchLoss(IReadOnlyList<(double[] Context, double[] Future)> windows, bool training, Random random)
     {
         if (windows.Count == 0) throw new ArgumentException("The batch is empty.", nameof(windows));
-        var losses = new List<(Tensor<T> Loss, int Count)>(windows.Count);
-        int total = 0;
+        if (windows.Count == 1)
+            return Loss(windows[0].Context, windows[0].Future, training, random, out _);
+
+        var examples = new List<(int[] InputIds, bool[]? InputMask, int[] Labels)>(windows.Count);
         foreach (var (context, future) in windows)
         {
-            var term = Loss(context, future, training, random, out int counted);
-            losses.Add((term, counted));
-            total += counted;
+            var (ids, mask, scale) = Tokenizer.Context(context);
+            var (labelIds, labelMask) = Tokenizer.Label(future, scale);
+            for (int i = 0; i < labelIds.Length; i++)
+            {
+                if (!labelMask[i]) labelIds[i] = -100;
+            }
+            examples.Add((ids, mask, labelIds));
         }
-        return losses.Select(l => _engine.TensorMultiplyScalar(l.Loss, NumOps.FromDouble((double)l.Count / total)))
-            .Aggregate((a, b) => _engine.TensorAdd(a, b));
+        return Network.BatchLoss(examples, training, random);
     }
 
     /// <summary>
@@ -340,6 +345,7 @@ internal sealed class ChronosT5<T>
             Beta2 = 0.999,
             Epsilon = 1e-8,
             WeightDecay = settings.WeightDecay,
+            MaskParameters = parameters,
             WeightDecayMask = mask,
             UseAdaptiveLearningRate = false,
             UseAdaptiveBetas = false,

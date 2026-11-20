@@ -287,6 +287,17 @@ internal sealed class Wav2Vec2Pretraining<T>
                     else
                     {
                         hard = ComputeRowOneHot(soft, rows, v);
+                        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                        {
+                            var hv = hard.Cast<double>().ToArray();
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = 0;
+                                for (int j = 1; j < v; j++)
+                                    if (hv[r * v + j] > hv[r * v + best]) best = j;
+                                ids[r / length, r % length] += best * place;
+                            }
+                        }
                     }
                     probabilities = _engine.TensorAdd(soft, _engine.TensorSubtract(hard, _engine.StopGradient(soft)));
                     marginalSource = _engine.Softmax(group, axis: 1);
@@ -310,6 +321,17 @@ internal sealed class Wav2Vec2Pretraining<T>
                     else
                     {
                         hard = ComputeRowOneHot(group, rows, v);
+                        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                        {
+                            var hv = hard.Cast<double>().ToArray();
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = 0;
+                                for (int j = 1; j < v; j++)
+                                    if (hv[r * v + j] > hv[r * v + best]) best = j;
+                                ids[r / length, r % length] += best * place;
+                            }
+                        }
                     }
                     probabilities = hard;
                     marginalSource = hard;

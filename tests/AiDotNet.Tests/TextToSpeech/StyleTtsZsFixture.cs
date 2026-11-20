@@ -20,6 +20,7 @@ internal static class StyleTtsZsFixture
         BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64,
         SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8,
         SlmPositionalConvKernel = 16, SlmPositionalConvGroups = 2,
+        DiscriminatorWidthDivisor = 16, MaxTrainingFrames = 128,
         SpeakerChannels = 2, SpeakerBlocks = new[] { 1, 1, 1, 1 }, SpeakerEmbedding = 8,
     };
 

@@ -18,14 +18,16 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private const double Slope = 0.1;
     private readonly IEngine _engine;
+    private readonly int _spectrogramChannels;
     private readonly HiFiGanDiscriminators<T> _periods;
     private readonly List<SpectrogramDiscriminator> _spectrograms = new();
     private readonly List<LayerBase<T>> _layers = new();
 
     public CosyVoiceHiFTDiscriminators(IEngine engine, int[]? periods = null, (int Fft, int Hop, int Window)[]? resolutions = null,
-        int[]? periodChannels = null)
+        int[]? periodChannels = null, int spectrogramChannels = 32)
     {
         _engine = engine;
+        _spectrogramChannels = Math.Max(1, spectrogramChannels);
         _periods = new HiFiGanDiscriminators<T>(engine, periods ?? new[] { 2, 3, 5, 7, 11 }, scales: 0, useScaleDiscriminator: false,
             periodChannels: periodChannels);
         _layers.AddRange(_periods.Layers);
@@ -100,10 +102,11 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
                 owner._layers.Add(layer);
                 return layer;
             }
-            Convs.Add(Conv(1, 32, 3, 9, 1, 1, 1, 4));
-            for (int i = 0; i < 3; i++) Convs.Add(Conv(32, 32, 3, 9, 1, 2, 1, 4));
-            Convs.Add(Conv(32, 32, 3, 3, 1, 1, 1, 1));
-            Output = Conv(32, 1, 3, 3, 1, 1, 1, 1);
+            int sc = owner._spectrogramChannels;
+            Convs.Add(Conv(1, sc, 3, 9, 1, 1, 1, 4));
+            for (int i = 0; i < 3; i++) Convs.Add(Conv(sc, sc, 3, 9, 1, 2, 1, 4));
+            Convs.Add(Conv(sc, sc, 3, 3, 1, 1, 1, 1));
+            Output = Conv(sc, 1, 3, 3, 1, 1, 1, 1);
             // torch.hann_window(win) (periodic), zero-padded to the FFT size about the centre, as torch.stft pads it.
             var w = new double[fft];
             int offset = (fft - window) / 2;

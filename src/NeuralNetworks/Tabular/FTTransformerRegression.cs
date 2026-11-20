@@ -213,21 +213,27 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         T learningRate,
         Matrix<int>? categoricalIndices = null)
     {
-        // Forward pass
-        var predictions = Forward(numericalFeatures, categoricalIndices);
+        return RunSharedTrainingStep(
+            numericalFeatures,
+            targets,
+            learningRate,
+            categoricalIndices,
+            Forward,
+            MeanSquaredErrorLoss);
+    }
 
-        // Compute loss
-        var loss = ComputeMSELoss(predictions, targets);
+    private Tensor<T> MeanSquaredErrorLoss(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var diff = Engine.TensorSubtract(predictions, Engine.Reshape(targets, predictions._shape));
+        var sq = Engine.TensorMultiply(diff, diff);
+        int axesCount = sq.Rank;
+        var axes = new int[axesCount];
+        for (int i = 0; i < axesCount; i++)
+        {
+            axes[i] = i;
+        }
 
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        // Reset for next iteration
-        ResetState();
-
-        return loss;
+        return Engine.ReduceMean(sq, axes, keepDims: false);
     }
 
     /// <summary>

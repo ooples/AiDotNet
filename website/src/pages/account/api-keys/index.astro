@@ -163,13 +163,9 @@ const base = import.meta.env.BASE_URL;
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${created}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${lastUsed}</td>
               <td class="py-3 px-4 text-right">
-                <button
-                  class="revoke-btn text-xs font-medium ${key.is_active ? 'text-red-500 hover:text-red-600' : 'text-slate-400 cursor-not-allowed'}"
-                  data-key-id="${key.id}"
-                  ${!key.is_active ? 'disabled' : ''}
-                >
-                  ${key.is_active ? 'Revoke' : 'Revoked'}
-                </button>
+                ${key.is_active
+                  ? `<button class="revoke-btn text-xs font-medium text-red-500 hover:text-red-600" data-key-id="${key.id}">Revoke</button>`
+                  : '<span class="text-xs font-medium text-slate-400">Revoked</span>'}
               </td>
             </tr>`;
           }).join('');

@@ -47,20 +47,55 @@ public sealed class InformerSampledMeasurementTests
             }
     }
 
-    [Fact]
-    public void CompiledMeasurementReplaysCurrentKeysAndSampleIndices()
+    [Theory]
+    [InlineData(12, 4)]
+    [InlineData(37, 3)]
+    public void SampledMeasurementUsesTheSameDrawsOnEveryHead(int keys, int samples)
+    {
+        var net = Create(new CpuEngine());
+        const int heads = 2, queries = 5, width = 8;
+        var q = new Tensor<double>(new[] { heads, queries, width });
+        var k = new Tensor<double>(new[] { heads, keys, width });
+        for (int i = 0; i < q.Length; i++) q[i] = Math.Sin(0.21 * i);
+        for (int i = 0; i < k.Length; i++) k[i] = Math.Cos(0.37 * i);
+        var draws = new int[queries, samples];
+        for (int i = 0; i < queries; i++)
+            for (int s = 0; s < samples; s++) draws[i, s] = s < 2 ? keys - 1 : i;
+        net.KeySampler = (_, _, _) => draws;
+
+        var actual = net.SampledQueryMeasurement(q, k, samples, new Random(3));
+        for (int b = 0; b < heads; b++)
+            for (int i = 0; i < queries; i++)
+            {
+                double sum = 0, maximum = double.NegativeInfinity;
+                for (int s = 0; s < samples; s++)
+                {
+                    double dot = 0;
+                    for (int d = 0; d < width; d++) dot += q[b, i, d] * k[b, draws[i, s], d];
+                    sum += dot;
+                    maximum = Math.Max(maximum, dot);
+                }
+                Assert.InRange(Math.Abs(actual[b, i] - (maximum - sum / keys)), 0, 1e-12);
+            }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CompiledMeasurementReplaysCurrentKeysAndSampleIndices(bool scoreTable)
     {
         var engine = new CpuEngine();
         var net = Create(engine);
         var q = new Tensor<double>(new[] { 2.0, 1.0 }, new[] { 1, 2, 1 });
         var k = new Tensor<double>(new[] { 1.0, 3.0, -1.0 }, new[] { 1, 3, 1 });
-        var indices = new Tensor<int>(new[] { 0, 0, 1, 2 }, new[] { 1, 2, 2 });
+        int secondRow = scoreTable ? 3 : 0;
+        var indices = new Tensor<int>(new[] { 0, 0, secondRow + 1, secondRow + 2 }, new[] { 1, 2, 2 });
         var parameter = new Tensor<double>(new[] { 1.0, 1.0 }, new[] { 1, 2 });
         CompiledTrainingPlan<double> plan;
         Tensor<double> measurement;
         using (var scope = GraphMode.EnableTraining(new[] { parameter }))
         {
-            using (GradientTape<double>.NoGrad()) measurement = net.SampledQueryMeasurement(q, k, indices);
+            using (GradientTape<double>.NoGrad()) measurement = net.SampledQueryMeasurement(q, k, indices, scoreTable);
             var loss = engine.ReduceSum(engine.TensorMultiply(parameter, measurement), null, false);
             Assert.Null(scope.HostReadOp);
             plan = scope.CompileTraining(new[] { parameter }, loss);

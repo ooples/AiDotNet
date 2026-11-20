@@ -1855,7 +1855,7 @@ jobs:
             -JobIndex '${{ strategy.job-index }}'
 
       - name: Restore dependencies
-        run: dotnet restore ${{ matrix.shard.project }}
+        run: dotnet restore ${{ matrix.shard.project }} --disable-build-servers -m:2
 
       - name: Run tests (sharded) with coverage
         id: shard-tests
@@ -2879,7 +2879,7 @@ jobs:
           path: paper-fidelity-plan
 
       - name: Restore dependencies
-        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj --disable-build-servers -m:2
 
       - name: Run paper-fidelity slice
         shell: pwsh
@@ -3058,17 +3058,27 @@ jobs:
           $promotion = Get-ChildItem promoted-baseline-analysis -Recurse -Filter promotion.json |
             Select-Object -First 1
           if (-not $promotion) {
-            throw 'Promoted baseline artifact contains no promotion.json provenance.'
+            "promoted_valid=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+            Write-Warning "Artifact ci-test-analysis-${{ steps.baseline.outputs.baseline_sha }} is from an ordinary master run (no promotion.json) whose raw TRX artifacts are unavailable; skipping baseline diff."
+            if ($env:GITHUB_STEP_SUMMARY) {
+              @"
+          ## Regression baseline unavailable
+
+          ``ci-test-analysis-${{ steps.baseline.outputs.baseline_sha }}`` has no ``promotion.json`` (raw TRX artifacts expired or were not retained). Current shard inventory is still enforced.
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+            }
+            exit 0
           }
           $provenance = Get-Content -LiteralPath $promotion.FullName -Raw | ConvertFrom-Json
           if (-not $provenance.sourceRunId -or -not $provenance.testedSha) {
             throw 'promotion.json must contain sourceRunId and testedSha.'
           }
+          "promoted_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
           "source_run_id=$($provenance.sourceRunId)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
           "tested_sha=$($provenance.testedSha)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
 
       - name: Download promoted source TRX artifacts
-        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outcome == 'success'
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outputs.promoted_valid == 'true'
         id: promoted-trx-download
         continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
@@ -3199,21 +3209,24 @@ jobs:
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
           $measuredLedgerShards = 0
+          $ledgerReadable = $false
           $ledgerHasHoles = $false
           $ledgerHoleReason = ''
           if ($ledger) {
             try {
               $ledgerDoc = Get-Content -LiteralPath $ledger.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+              $ledgerReadable = $true
               if ($ledgerDoc.PSObject.Properties['missingExpectedShards']) {
                 [object[]]$holes = @($ledgerDoc.missingExpectedShards | Where-Object { $_ })
                 if ($holes.Count -gt 0) {
                   $ledgerHasHoles = $true
                   $ledgerHoleReason = "incomplete baseline ledger ($($holes.Count) missing shard(s): $($holes -join ', '))"
-                  Write-Warning "Downloaded baseline ledger '$($env:BASE_SHA)' is incomplete ($($holes.Count) dispatched shard(s) uploaded no artifact) and will not be used for regression enforcement."
+                  Write-Warning "Downloaded baseline ledger '$($env:BASE_SHA)' is incomplete ($($holes.Count) dispatched shard(s) uploaded no artifact): comparison report will be generated, but policy enforcement stays advisory."
                 }
               }
             }
             catch {
+              $ledgerReadable = $false
               $ledgerHasHoles = $true
               $ledgerHoleReason = "unreadable baseline ledger JSON ($($_.Exception.Message))"
               Write-Warning "Downloaded baseline ledger JSON could not be parsed: $($_.Exception.Message)"
@@ -3229,23 +3242,32 @@ jobs:
               Write-Warning "Downloaded baseline ledger has no readable shard inventory: $($_.Exception.Message)"
             }
             if ($measuredLedgerShards -eq 0) {
-              Write-Warning 'Downloaded baseline ledger contains zero measured shards and will not be used for regression enforcement.'
+              Write-Warning 'Downloaded baseline ledger contains zero measured shards and will not be used for regression comparison.'
             }
           }
           $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
-            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $measuredLedgerShards -gt 0 -and -not $ledgerHasHoles) -or
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $ledgerReadable -and $measuredLedgerShards -gt 0) -or
             ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
             ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
+          $baselineCertifiable = $baselineReady -and -not ($env:BASELINE_MODE -eq 'ledger' -and $ledgerHasHoles)
+          $verdictEnforced = $baselineCertifiable -and $env:EVIDENCE_VERIFIED -ceq 'true'
           if ($baselineReady) {
             $arguments.BaselineSha = $env:BASE_SHA
-            # The ordinary comparison remains useful after failures, but uncertified observations
-            # cannot enforce or mint a regression verdict. The unchanged gate still requires the
-            # failed shard verifier whenever verdict_enforced is false.
-            $arguments.FailOnPolicy = $env:EVIDENCE_VERIFIED -ceq 'true'
+            # Run the full Baseline vs Current diff whenever readable baseline measurements exist so
+            # every PR run shows Fixed / Regressed / Persistent progress, while enforcing the gate
+            # verdict only when both current evidence and the baseline ledger are complete.
+            $arguments.FailOnPolicy = $verdictEnforced
             if ($env:BASELINE_MODE -eq 'ledger') {
               $arguments.BaselineLedgerPath = $ledger.FullName
+              if ($ledgerHasHoles) {
+                $arguments.AllowIncompleteBaseline = $true
+                if ($env:GITHUB_STEP_SUMMARY) {
+                  "`n> [!NOTE]`n> Baseline ledger ``$($env:BASE_SHA)`` has $ledgerHoleReason; comparison deltas are shown below over its $measuredLedgerShards measured shard(s), while policy enforcement remains advisory.`n" |
+                    Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+                }
+              }
             } elseif ($env:BASELINE_MODE -eq 'promoted') {
               $arguments.BaselineResultsPath = 'promoted-baseline-test-results'
             } else {
@@ -3258,7 +3280,6 @@ jobs:
             "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
           }
-          $verdictEnforced = $baselineReady -and $env:EVIDENCE_VERIFIED -ceq 'true'
           "verdict_enforced=$($verdictEnforced.ToString().ToLowerInvariant())" |
             Add-Content -LiteralPath $env:GITHUB_OUTPUT
           ./.github/scripts/test-regression-analysis.ps1 @arguments

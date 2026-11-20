@@ -39,6 +39,7 @@ param(
     # are taken over whatever did arrive, and the run self-reports fully green. #2086.
     [string[]] $ExpectedShardNames = @(),
     [switch] $FailOnPolicy,
+    [switch] $AllowIncompleteBaseline,
     [string] $EvidenceProvenancePath
 )
 
@@ -613,11 +614,17 @@ if (($BaselineLedgerPath -or $BaselineResultsPath) -and
 # A baseline that was itself missing a dispatched shard has a hole in it. Comparing against it
 # would silently inherit that blind spot: the absent shard is in neither side, so its failures
 # can never be classified as new. Refuse it rather than launder the gap forward. #2086.
+$baselineIncompleteHoles = @()
 if ($baseline -and $baseline.PSObject.Properties['missingExpectedShards']) {
     $baselineHoles = @($baseline.missingExpectedShards | Where-Object { $_ })
     if ($baselineHoles.Count -gt 0) {
-        throw ("Resolved baseline '$BaselineSha' is incomplete: $($baselineHoles.Count) dispatched shard(s) " +
-            "uploaded no artifact ($($baselineHoles -join ', ')). Refusing to compare against a baseline with a hole in it.")
+        if (-not $AllowIncompleteBaseline -or $FailOnPolicy) {
+            throw ("Resolved baseline '$BaselineSha' is incomplete: $($baselineHoles.Count) dispatched shard(s) " +
+                "uploaded no artifact ($($baselineHoles -join ', ')). Refusing to compare against a baseline with a hole in it.")
+        }
+        $baselineIncompleteHoles = $baselineHoles
+        Write-Warning ("Resolved baseline '$BaselineSha' has $($baselineHoles.Count) missing shard(s) " +
+            "($($baselineHoles -join ', ')); generating advisory comparison report over its measured shards.")
     }
 }
 
@@ -827,7 +834,8 @@ if (-not $baseline) {
     $netImproved = $fixed.Count -ge $confirmedNew.Count
     $incompleteNotIncreased = $effectiveCurrentIncomplete.Count -le $baselineIncomplete.Count
     $allDispatchedShardsReported = $missingExpectedShards.Count -eq 0
-    $policyPassed = $evidenceVerified -and $netImproved -and $incompleteNotIncreased -and
+    $policyPassed = $evidenceVerified -and ($baselineIncompleteHoles.Count -eq 0) -and
+        $netImproved -and $incompleteNotIncreased -and
         $greenToRed.Count -eq 0 -and $touchedSurfaceClean -and $allDispatchedShardsReported
 
     $resolvedBaselineSha = [string] $baseline.sha
@@ -893,7 +901,15 @@ if (-not $baseline) {
     $comparison | Add-Member baselinePublishable ($evidenceVerified -and $missingExpectedShards.Count -eq 0) -Force
     Write-JsonFile $comparison $comparisonPath
 
-    $verdict = if (-not $evidenceVerified) { 'NOT CERTIFIED (diagnostic only)' } elseif ($policyPassed) { 'PASSED' } else { 'FAILED' }
+    $verdict = if (-not $evidenceVerified) {
+        'NOT CERTIFIED (diagnostic only)'
+    } elseif ($baselineIncompleteHoles.Count -gt 0) {
+        "ADVISORY (incomplete baseline: $($baselineIncompleteHoles.Count) missing baseline shard(s))"
+    } elseif ($policyPassed) {
+        'PASSED'
+    } else {
+        'FAILED'
+    }
     $lines.Add("## Policy $verdict")
     $lines.Add('')
     $lines.Add('| Metric | Baseline | Current | Delta |')

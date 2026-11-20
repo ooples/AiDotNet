@@ -31,7 +31,7 @@ $annotations = @(Get-FailoverAnnotations $primary[0] $Repository ([string]$run.h
 if (-not (Test-FailoverInfrastructureFailure $primary[0] $annotations)) { throw 'A non-infrastructure or successful primary cannot authorize replacement.' }
 $alternates = @($jobs | Where-Object { $_.name -ceq "Alternate attempt ($($shard.framework)) - $($shard.name)" })
 if ($alternates.Count -ne 1 -or $alternates[0].runner_name -cne $env:RUNNER_NAME) { throw 'Duplicate or differently assigned alternate attempt.' }
-$runners = if ($TrustedSameRepository -and $SelfHostedRunnerToken) { @(Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken) } else { @() }
+$runners = @(if ($TrustedSameRepository -and $SelfHostedRunnerToken) { Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken })
 $originalPool = Get-FailoverJobPool $primary[0] $runners
 $alternatePool = Get-FailoverJobPool $alternates[0] $runners
 if ($originalPool.pool -eq $alternatePool.pool -or $originalPool.os -cne $alternatePool.os -or $originalPool.arch -cne $alternatePool.arch -or

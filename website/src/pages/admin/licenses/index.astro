@@ -47,12 +47,12 @@ const productsJson = JSON.stringify(PRODUCTS);
 
 <AdminLayout title="License Management - AiDotNet Admin" description="Manage BSL license keys, view activations, and administer license tiers." activeTab="licenses">
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage BSL license keys, view activations, and administer tiers</p>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-4">
         <div class="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span><span id="active-count" class="font-semibold text-green-500">--</span> active</span>
           <span><span id="suspended-count" class="font-semibold text-yellow-500">--</span> suspended</span>
@@ -135,9 +135,9 @@ const productsJson = JSON.stringify(PRODUCTS);
     </div>
 
     <!-- Issue License Modal -->
-    <div id="issue-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm">
+    <div id="issue-modal" class="hidden fixed inset-0 z-50 w-screen flex items-center justify-center overflow-y-auto p-4 bg-black/50 backdrop-blur-sm">
       <!-- Capped to the viewport and scrollable: the form is taller than a laptop screen. -->
-      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-xl">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 min-w-0 w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-xl">
         <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">Issue New License</h2>
         <form id="issue-form" class="space-y-3">
           <div>

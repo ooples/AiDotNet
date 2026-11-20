@@ -394,11 +394,42 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
     }
 
+    // The published engine predates the fused operation. Bind it once so newer engines record
+    // a single weight-normalization operation for both forward and backward.
+    private static readonly Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? FusedWeightNorm =
+        BindWeightNorm();
+
+    private static Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? BindWeightNorm()
+    {
+        var operation = typeof(IEngine).GetMethod("TensorWeightNorm");
+        if (operation is null) return null;
+        try
+        {
+            return OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>>(
+                operation.MakeGenericMethod(typeof(T)));
+        }
+        catch (NotSupportedException) { return null; }
+        catch (ArgumentException) { return null; }
+    }
+
     private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
     {
-        // A single semantic operation preserves the per-first-dimension gain (also for transposed weights) without
-        // retaining a full squared-weight tensor and two full broadcast-gradient products in a compiled training plan.
-        var kernel = engine.TensorWeightNorm(direction, gain, epsilon: 1e-24);
+        const double epsilon = 1e-24;
+        Tensor<T> kernel;
+        if (FusedWeightNorm is { } normalize)
+        {
+            kernel = normalize(engine, direction, gain, epsilon);
+        }
+        else
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            int rows = direction.Shape[0], per = direction.Length / rows;
+            var matrix = engine.Reshape(direction, new[] { rows, per });
+            var normSquared = engine.ReduceSum(engine.TensorMultiply(matrix, matrix), new[] { 1 }, keepDims: true);
+            var inverseNorm = engine.TensorPow(engine.TensorAddScalar(normSquared, ops.FromDouble(epsilon)), ops.FromDouble(-0.5));
+            var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), inverseNorm);
+            kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
+        }
         // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
         engine.InvalidatePersistentTensor(kernel);
         return kernel;
