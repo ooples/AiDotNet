@@ -185,7 +185,7 @@ internal sealed class AiDotNetDcganModel : IBenchmarkModel
     private readonly Random _random;
     private Tensor<float> _noise = Tensor<float>.Empty();
     private Tensor<float> _real = Tensor<float>.Empty();
-    private double? _lastLoss;
+    private bool _trained;
 
     public AiDotNetDcganModel(int seed)
     {
@@ -228,9 +228,11 @@ internal sealed class AiDotNetDcganModel : IBenchmarkModel
 
     public void Backward()
     {
-        // TrainStep is the whole adversarial iteration: the discriminator update, then the generator update.
-        var (discriminatorLoss, _) = _model.TrainStep(_real, _noise);
-        _lastLoss = discriminatorLoss;
+        // Train is the whole adversarial iteration: the discriminator update, then the generator update. The loss
+        // stays on the device until LastLoss reads it, as the PyTorch twin returns discriminator_loss.detach();
+        // TrainStep would read both losses on the host every step.
+        _model.Train(_noise, _real);
+        _trained = true;
     }
 
     public void Step()
@@ -238,5 +240,5 @@ internal sealed class AiDotNetDcganModel : IBenchmarkModel
         // Both optimizer steps ran inside Backward's TrainStep call.
     }
 
-    public double? LastLoss => _lastLoss;
+    public double? LastLoss => _trained ? Convert.ToDouble(_model.Discriminator.GetLastLoss()) : null;
 }

@@ -573,7 +573,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // reference, so a read always sees the most recent step's loss.
     private Tensor<T>? _pendingLossTensor;
 
-    private void SetLastLossDeferred(Tensor<T> lossTensor)
+    private protected void SetLastLossDeferred(Tensor<T> lossTensor)
     {
         _pendingLossTensor = lossTensor;
         _lastLossRecorded = true;
@@ -14856,6 +14856,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer)
             ?? GetOrCreateBaseOptimizer();
 
+    /// <summary>
+    /// <c>TrainCustomTapeStep</c>
+    /// without reading the loss on the host. A compiled step returns its loss tensor, which the plan reuses (and
+    /// overwrites) every step, and <paramref name="loss"/> is then zero; an eager step returns its loss in
+    /// <paramref name="loss"/> and null.
+    /// </summary>
+    internal Tensor<T>? TrainCustomTapeStepDeferred(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> lossFunction,
+        out T loss)
+    {
+        var sink = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
+        loss = TrainCustomTapeStep(input, target, forward, lossFunction, optimizer: null, parameterProvider: null,
+            sessionPerOptimizer: false, deferredLoss: sink);
+        return sink.Value;
+    }
+
     protected internal T TrainCustomTapeStep(
         Tensor<T> input,
         Tensor<T> target,
@@ -14877,7 +14896,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool verifyReplayAgreement = false,
         System.Reflection.MethodInfo? warmupKey = null,
         Func<T>? eagerFallback = null,
-        bool clipCustomObjective = true)
+        bool clipCustomObjective = true,
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -14885,6 +14905,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(loss);
         ThrowIfCannotTrain();
         using var reentrancyGuard = AcquireTrainSentinel();
+        if (deferredLoss is not null) deferredLoss.Value = null;
 
         var resolvedOptimizer = ResolveCustomStepOptimizer(optimizer);
         var session = sessionPerOptimizer ? ObjectiveSession(resolvedOptimizer) : FusedSession;
@@ -14971,14 +14992,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
         MarkTrainMutationStarted();
         T lossValue = NumOps.Zero;
+        Tensor<T>? lossTensor = null;
         var outcome = parameters.Count == 0
             ? Training.FusedStepOutcome.Declined
-            : session.TryStep(request, out lossValue);
+            : session.TryStep(request, out lossValue, out lossTensor);
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
             if (session.LastStepRanOutsidePlan) CustomOutsidePlanStepCount++;
             else CustomFusedStepCount++;
             InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+            if (lossTensor is not null)
+            {
+                if (deferredLoss is not null)
+                {
+                    // The caller reads the loss when it needs it: reading it here would wait for the device to finish
+                    // this step before the host could prepare the next one.
+                    deferredLoss.Value = lossTensor;
+                    SetLastLossDeferred(lossTensor);
+                    return NumOps.Zero;
+                }
+                lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            }
         }
         else
         {
