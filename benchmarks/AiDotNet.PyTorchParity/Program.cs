@@ -152,6 +152,12 @@ if (hifiReferenceAt >= 0)
 
 
 var benchOptions = BenchmarkOptions.Parse(args);
+if (benchOptions.LstmNumerics is not null)
+{
+    var lstm = new AiDotNetLstmModel(benchOptions.Seed);
+    lstm.AttachFixture(benchOptions).WriteNumerics(lstm);
+    return 0;
+}
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
     // Step-1 equivalence (pytorch/export_reference.py writes the inputs): same weights, same batch, then
@@ -211,7 +217,10 @@ internal sealed record BenchmarkOptions(
     int[] InferenceBatchSizes,
     string? HifiGanFixture,
     bool RequireMatchedWorkload,
-    string? HifiGanWorkloadReceipt)
+    string? HifiGanWorkloadReceipt,
+    string? LstmFixture = null,
+    string? LstmWorkloadReceipt = null,
+    string? LstmNumerics = null)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -230,8 +239,13 @@ internal sealed record BenchmarkOptions(
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         string? fixturePath = map.GetValueOrDefault("hifigan-fixture");
         bool requireMatched = bool.Parse(map.GetValueOrDefault("require-matched-workload", "false"));
-        if (requireMatched && string.IsNullOrWhiteSpace(fixturePath))
-            throw new ArgumentException("Matched mode requires an explicit shared HiFi workload fixture.");
+        string? lstmFixture = map.GetValueOrDefault("lstm-fixture");
+        if (requireMatched && string.IsNullOrWhiteSpace(fixturePath) && string.IsNullOrWhiteSpace(lstmFixture))
+            throw new ArgumentException("Matched mode requires an explicit shared workload fixture.");
+        if (lstmFixture is not null && (fixturePath is not null || models.Length != 1 || models[0] != "lstm"))
+            throw new ArgumentException("The shared LSTM fixture requires only the LSTM row.");
+        if (lstmFixture is null && (map.ContainsKey("lstm-numerics") || map.ContainsKey("lstm-workload-receipt")))
+            throw new ArgumentException("LSTM evidence requires its explicit fixture.");
         if (fixturePath is not null && (models.Length != 1 || models[0] != "hifigan-v1"))
             throw new ArgumentException("The shared fixture requires the single full HiFi row.");
         if (fixturePath is null && map.ContainsKey("hifigan-workload-receipt"))
@@ -253,7 +267,8 @@ internal sealed record BenchmarkOptions(
                 // Empty entries are rejected, not dropped, so a mistyped list fails here as it does in benchmark.py.
                 .Split(',', StringSplitOptions.TrimEntries)
                 .Select(ParsePositiveBatch).ToArray(), fixturePath, requireMatched,
-            map.GetValueOrDefault("hifigan-workload-receipt"));
+            map.GetValueOrDefault("hifigan-workload-receipt"), lstmFixture, map.GetValueOrDefault("lstm-workload-receipt"),
+            map.GetValueOrDefault("lstm-numerics"));
     }
 
     private static int ParsePositiveBatch(string text)
@@ -290,6 +305,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                     options.HifiGanWorkloadReceipt ?? (options.OutputPath + ".workload.json"));
             var model = sharedFixture is null ? factory.Create(modelName)
                 : new AiDotNetTensorBackend(options.Seed, sharedFixture).Create(modelName);
+            var lstmFixture = options.LstmFixture is null ? null : ((AiDotNetLstmModel)model).AttachFixture(options);
             BenchmarkPhaseTelemetry.Mark(modelName, "construction-complete");
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
             TrainingReport? training = null;
@@ -305,6 +321,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
             }
             var inference = BenchmarkInference(model, modelName);
+            lstmFixture?.Complete();
             BenchmarkPhaseTelemetry.Mark(modelName, "complete");
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
@@ -893,7 +910,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var _ = Network.Predict(Input);
     }
 
-    public void Backward()
+    public virtual void Backward()
     {
         // PyTorch runs `loss = criterion(model(x), y); loss.backward()` then
         // optimizer.step(). AiDotNet's Train(input, expected) is the equivalent:
@@ -1043,7 +1060,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
     }
 }
 
-internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
+internal sealed partial class AiDotNetLstmModel : AiDotNetBenchmarkModel
 {
     public AiDotNetLstmModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };

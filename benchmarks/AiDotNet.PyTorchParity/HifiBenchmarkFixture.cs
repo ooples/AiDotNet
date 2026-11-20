@@ -10,17 +10,20 @@ using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.PyTorchParity;
 
-// Explicit benchmark sampling/state input control. The production model, objectives and optimizers are unchanged.
-internal sealed class HifiBenchmarkFixture
+internal static class ParityTensorStorage
 {
-    // Existing read-only storage access: no payload clone, version write or escape mark. The owner stays alive
-    // through each SHA operation; no span is stored in the fixture or returned to a benchmark caller.
-    private delegate ReadOnlySpan<float> TensorReadSpan(TensorBase<float> owner);
-    private static readonly TensorReadSpan s_readSpan = (typeof(TensorBase<float>)
+    // Keep the owning tensor alive through each observation. A read-only observer may not mark
+    // ownership escaped or clone input tensors into the benchmark's measured memory.
+    internal delegate ReadOnlySpan<float> TensorReadSpan(TensorBase<float> owner);
+    internal static readonly TensorReadSpan Read = (typeof(TensorBase<float>)
         .GetMethod("AsSpanUnmarked", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException("The validated read-only tensor storage contract changed."))
         .CreateDelegate<TensorReadSpan>();
+}
 
+// Explicit benchmark sampling/state input control. The production model, objectives and optimizers are unchanged.
+internal sealed class HifiBenchmarkFixture
+{
     private readonly string _directory, _receiptPath, _manifestHash;
     private readonly JObject _manifest;
     private readonly (Tensor<float> Input, Tensor<float> Label)[] _pool = new (Tensor<float>, Tensor<float>)[3];
@@ -97,7 +100,7 @@ internal sealed class HifiBenchmarkFixture
         foreach (var step in steps)
         {
             int pool = (int)step["pool_index"]!, start = (int)step["crop_start"]!;
-            ReadOnlySpan<float> mel = s_readSpan(_pool[pool].Input), audio = s_readSpan(_pool[pool].Label);
+            ReadOnlySpan<float> mel = ParityTensorStorage.Read(_pool[pool].Input), audio = ParityTensorStorage.Read(_pool[pool].Label);
             var melDescription = DescribeMelCrop(mel, start);
             var audioDescription = Describe(audio.Slice(start * 256, 8192), new[] { 1, 8192 });
             GC.KeepAlive(_pool[pool].Input);
@@ -129,7 +132,7 @@ internal sealed class HifiBenchmarkFixture
         foreach (var field in fields)
         {
             long version = field.Value.Version;
-            ReadOnlySpan<float> values = s_readSpan(field.Value);
+            ReadOnlySpan<float> values = ParityTensorStorage.Read(field.Value);
             int[] shape = field.Value.Shape.ToArray();
             var entry = Describe(values, shape);
             if (!JToken.DeepEquals(entry, Object(_manifest, "state")[field.Name]))
@@ -234,7 +237,7 @@ internal sealed class HifiBenchmarkFixture
                 int[] canonicalShape = role == "mel" ? new[] { 1, 80, 32 } : new[] { 1, 8192 };
                 if (!shape.SequenceEqual(role == "mel" ? canonicalShape : new[] { 8192 }))
                     throw new InvalidDataException("Actual raw reference crop geometry differs.");
-                var actual = Describe(s_readSpan(value), canonicalShape);
+                var actual = Describe(ParityTensorStorage.Read(value), canonicalShape);
                 GC.KeepAlive(value);
                 if (!JToken.DeepEquals(actual, steps[index]["cropped_" + role]))
                     throw new InvalidDataException("Actual raw reference input differs from the benchmark crop.");
@@ -304,7 +307,7 @@ internal sealed class HifiBenchmarkFixture
     };
     private static JObject CheckDescriptor(string name, Tensor<float> value, JToken expected)
     {
-        var actual = Describe(s_readSpan(value), value.Shape.ToArray());
+        var actual = Describe(ParityTensorStorage.Read(value), value.Shape.ToArray());
         GC.KeepAlive(value);
         if (!JToken.DeepEquals(actual, expected))
             throw new InvalidDataException("Actual loaded shared input differs: " + name);

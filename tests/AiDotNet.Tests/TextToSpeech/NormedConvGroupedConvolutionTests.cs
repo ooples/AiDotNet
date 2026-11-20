@@ -98,11 +98,41 @@ public sealed class NormedConvGroupedConvolutionTests
     public void Cpu_full_width_1x41_weightnorm_gradients_and_updates_match_split(bool compile)
         => Compare(new CpuEngine(), compile, 2e-5);
 
+    [Fact]
+    public void Grouped_filters_preserve_independent_outputs_and_input_gradients()
+    {
+        var previous = AiDotNetEngine.Current;
+        var cpu = new CpuEngine();
+        AiDotNetEngine.Current = cpu;
+        try
+        {
+            using var layer = new NormedConv1DLayer<float>(4, 4, 1, 1, 1, 2, 0, false,
+                ConvolutionNormalization.None, false);
+            layer.LoadTorchWeights(new double[] { 2, 1, -1, 3, 1, -2, .5, 4 }, null, new double[4]);
+            using var input = new Tensor<float>(new float[] { 1, 2, 3, 4, 5, 6, 7, 8 }, new[] { 1, 4, 2 });
+            using var tape = new GradientTape<float>();
+            var output = layer.Forward(input);
+            var gradients = tape.ComputeGradients(cpu.ReduceSum(output, null), new[] { input });
+
+            Assert.Equal(new float[] { 5, 8, 8, 10, -9, -10, 30.5f, 35 }, output.ToArray());
+            Assert.Equal(new float[] { 1, 1, 4, 4, 1.5f, 1.5f, 2, 2 }, gradients[input].ToArray());
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     [SkippableTheory] [InlineData(false)] [InlineData(true)]
     public void Cuda_full_width_1x41_weightnorm_gradients_and_updates_match_split(bool compile)
     {
-        using var engine = new DirectGpuTensorEngine();
-        Skip.IfNot(engine.IsGpuAvailable && engine.GetBackend() is CudaBackend, "CUDA unavailable.");
-        Compare(engine, compile, 2e-4);
+        string? previous = Environment.GetEnvironmentVariable("AIDOTNET_CONV_TF32");
+        try
+        {
+            // Native grouped and ordinary convolutions may choose different TF32 algorithms.
+            // Compare their raw gradients at the FP32 precision used by the numerical oracle.
+            Environment.SetEnvironmentVariable("AIDOTNET_CONV_TF32", "0");
+            using var engine = new DirectGpuTensorEngine();
+            Skip.IfNot(engine.IsGpuAvailable && engine.GetBackend() is CudaBackend, "CUDA unavailable.");
+            Compare(engine, compile, 2e-4);
+        }
+        finally { Environment.SetEnvironmentVariable("AIDOTNET_CONV_TF32", previous); }
     }
 }
