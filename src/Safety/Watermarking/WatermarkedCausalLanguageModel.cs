@@ -51,7 +51,7 @@ public class WatermarkedCausalLanguageModel<T> : ICausalLanguageModel<T>
     {
         if (logits is null) throw new InvalidOperationException("The inner model returned null logits.");
         var copy = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++) copy[i] = logits[i];
+        logits.AsSpan().CopyTo(copy.AsWritableSpan());
         Watermarker.BiasLogits(copy, context);
         return copy;
     }

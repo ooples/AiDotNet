@@ -172,14 +172,8 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Initialize matrix B with zeros (so LoKr has no effect initially)
-        for (int i = 0; i < _matrixB.Shape[0]; i++)
-        {
-            for (int j = 0; j < _matrixB.Shape[1]; j++)
-            {
-                _matrixB[i, j] = NumOps.Zero;
-            }
-        }
+        // Matrix B starts at zero (a fresh tensor is zero-filled), so LoKr has no effect initially
+
 
         // LoKr replaces the standard LoRA factors with its Kronecker factors.
         FreezeSubLayerParameters(_loraLayer);
@@ -234,22 +228,8 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         int p = b.Rows;
         int q = b.Columns;
 
-        Matrix<T> result = new Matrix<T>(m * p, n * q);
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                T aij = a[i, j];
-                for (int k = 0; k < p; k++)
-                {
-                    for (int l = 0; l < q; l++)
-                    {
-                        result[i * p + k, j * q + l] = NumOps.Multiply(aij, b[k, l]);
-                    }
-                }
-            }
-        }
+        // result[i * p + k, j * q + l] = a[i, j] * b[k, l]
+        Matrix<T> result = Engine.TensorKron(Tensor<T>.FromMatrix(a), Tensor<T>.FromMatrix(b)).ToMatrix();
 
         return result;
     }
@@ -293,58 +273,21 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
 
         int outputSize = m * p;
 
-        // Process each batch item
-        Matrix<T> deltaOutput = new Matrix<T>(batchSize, outputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Reshape input vector to matrix X [n, q]
-            Matrix<T> X = new Matrix<T>(n, q);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < q; j++)
-                {
-                    X[i, j] = input[b * inputSize + i * q + j];
-                }
-            }
+        // Delta weight is W = A ⊗ B ([p*m, q*n], the same layout MergeToOriginalLayer and the
+        // Kronecker gradients use), so per sample y = W x is Y = A * X * B^T with
+        // X = reshape(x, [q, n]) and y = vec_rowmajor(Y) ([p, m]). Batched:
+        //   X * B^T over all samples -> [batch, q, m] -> [q, batch * m]; A * that -> [p, batch, m].
+        Tensor<T> xb = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize * q, n]), Engine.TensorTranspose(_matrixB));
+        Tensor<T> xbByQ = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(xb, [batchSize, q, m]), [1, 0, 2]), [q, batchSize * m]);
+        Tensor<T> y = Engine.TensorMatMul(_matrixA, xbByQ);
+        Tensor<T> deltaOutput = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Engine.TensorPermute(Engine.Reshape(y, [p, batchSize, m]), [1, 0, 2]), [batchSize, outputSize]),
+            _scaling);
 
-            // Compute Y = A * X * B^T using vec-trick: (B ⊗ A) vec(X) = vec(Y)
-            Matrix<T> temp = _matrixA.ToMatrix().Multiply(X);  // [p, q] * [q, n] -> [p, n] (wait, dimensions wrong)
-            // Actually: A is [p, q], X is [n, q] - need to think about this more carefully
-            // For vec-trick: Y = A^T * X * B where Y is [m, p]
-            // Let me use the correct formulation
-
-            // Correct vec-trick: (B ⊗ A) vec(X) = vec(A * reshape(x, [q, n]) * B^T)
-            Matrix<T> X_reshaped = new Matrix<T>(q, n);
-            for (int i = 0; i < q; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    X_reshaped[i, j] = input[b * inputSize + j * q + i];
-                }
-            }
-
-            Matrix<T> Y = _matrixA.ToMatrix().Multiply(X_reshaped).Multiply(_matrixB.ToMatrix().Transpose());
-
-            // Vectorize Y [p, m] to output
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    deltaOutput[b, i * m + j] = NumOps.Multiply(Y[i, j], _scaling);
-                }
-            }
-        }
-
-        // Convert LoKr output to tensor and add to base output
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                int idx = i * outputSize + j;
-                result[idx] = NumOps.Add(baseOutput[idx], deltaOutput[i, j]);
-            }
-        }
+        // Add LoKr output to base output
+        Tensor<T> result = Engine.TensorAdd(baseOutput, Engine.Reshape(deltaOutput, baseOutput.Shape.ToArray()));
 
         return result;
     }
@@ -370,24 +313,12 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         var fullGrad = Engine.TensorMatMul(gradT, inputT); // [mA*pB, nA*qB]
 
         // Contract with B to get gradA: gradA[i,j] = sum_p,q(fullGrad[i*pB+p, j*qB+q] * B[p,q])
-        Matrix<T> gradA = new Matrix<T>(_dimsA.m, _dimsA.n);
-        for (int i = 0; i < _dimsA.m; i++)
-        {
-            for (int j = 0; j < _dimsA.n; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int p = 0; p < _dimsB.p; p++)
-                {
-                    for (int q = 0; q < _dimsB.q; q++)
-                    {
-                        int outIdx = i * _dimsB.p + p;
-                        int inIdx = j * _dimsB.q + q;
-                        sum = NumOps.Add(sum, NumOps.Multiply(fullGrad[outIdx, inIdx], matrixB[p, q]));
-                    }
-                }
-                gradA[i, j] = sum;
-            }
-        }
+        Tensor<T> blocks = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(fullGrad, [_dimsA.m, _dimsB.p, _dimsA.n, _dimsB.q]), [0, 2, 1, 3]),
+            [_dimsA.m * _dimsA.n, _dimsB.p * _dimsB.q]);
+        Matrix<T> gradA = Engine.Reshape(
+            Engine.TensorMatMul(blocks, Engine.Reshape(Tensor<T>.FromMatrix(matrixB), [_dimsB.p * _dimsB.q, 1])),
+            [_dimsA.m, _dimsA.n]).ToMatrix();
 
         return gradA;
     }
@@ -411,24 +342,12 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         var fullGrad = Engine.TensorMatMul(gradT, inputT); // [mA*pB, nA*qB]
 
         // Contract with A to get gradB: gradB[p,q] = sum_i,j(fullGrad[i*pB+p, j*qB+q] * A[i,j])
-        Matrix<T> gradB = new Matrix<T>(_dimsB.p, _dimsB.q);
-        for (int p = 0; p < _dimsB.p; p++)
-        {
-            for (int q = 0; q < _dimsB.q; q++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < _dimsA.m; i++)
-                {
-                    for (int j = 0; j < _dimsA.n; j++)
-                    {
-                        int outIdx = i * _dimsB.p + p;
-                        int inIdx = j * _dimsB.q + q;
-                        sum = NumOps.Add(sum, NumOps.Multiply(fullGrad[outIdx, inIdx], matrixA[i, j]));
-                    }
-                }
-                gradB[p, q] = sum;
-            }
-        }
+        Tensor<T> blocks = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(fullGrad, [_dimsA.m, _dimsB.p, _dimsA.n, _dimsB.q]), [1, 3, 0, 2]),
+            [_dimsB.p * _dimsB.q, _dimsA.m * _dimsA.n]);
+        Matrix<T> gradB = Engine.Reshape(
+            Engine.TensorMatMul(blocks, Engine.Reshape(Tensor<T>.FromMatrix(matrixA), [_dimsA.m * _dimsA.n, 1])),
+            [_dimsB.p, _dimsB.q]).ToMatrix();
 
         return gradB;
     }
@@ -463,25 +382,9 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update matrix A
-        for (int i = 0; i < _matrixA.Shape[0]; i++)
-        {
-            for (int j = 0; j < _matrixA.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_gradientA[i, j], learningRate);
-                _matrixA[i, j] = NumOps.Subtract(_matrixA[i, j], update);
-            }
-        }
-
-        // Update matrix B
-        for (int i = 0; i < _matrixB.Shape[0]; i++)
-        {
-            for (int j = 0; j < _matrixB.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_gradientB[i, j], learningRate);
-                _matrixB[i, j] = NumOps.Subtract(_matrixB[i, j], update);
-            }
-        }
+        // A -= learningRate * dA, B -= learningRate * dB
+        Engine.TensorSubtractInPlace(_matrixA, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_gradientA, learningRate)));
+        Engine.TensorSubtractInPlace(_matrixB, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_gradientB, learningRate)));
     }
 
     /// <summary>
@@ -522,22 +425,12 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights (kronWeights is outputSize × inputSize, same as base weights)
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], kronWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights (kronWeights is outputSize × inputSize). FullyConnectedLayer stores its weights
+        // output-major, DenseLayer input-major ([inputSize, outputSize]), so DenseLayer uses the
+        // transpose. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? kronWeights : kronWeights.Transpose(), weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

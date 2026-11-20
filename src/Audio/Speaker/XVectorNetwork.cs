@@ -63,6 +63,23 @@ internal sealed class XVectorNetwork<T>
     {
         var mel = _mel.Forward(waveform);
         int frames = mel.Shape[0], bins = mel.Shape[1], half = _normalizationWindow / 2;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            Tensor<T> windowWeights;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var w = new double[frames * frames];
+                for (int t = 0; t < frames; t++)
+                {
+                    int start = Math.Max(0, t - half), end = Math.Min(frames, t + half + 1);
+                    double inv = 1.0 / (end - start);
+                    int rowStart = t * frames;
+                    for (int s = start; s < end; s++) w[rowStart + s] = inv;
+                }
+                windowWeights = new Tensor<double>(w, new[] { frames, frames }).Cast<T>();
+            }
+            return _engine.TensorSubtract(mel, _engine.TensorMatMul(windowWeights, mel));
+        }
         var normalized = new Tensor<T>(new[] { frames, bins });
         var prefix = new double[frames + 1, bins];
         for (int t = 0; t < frames; t++)

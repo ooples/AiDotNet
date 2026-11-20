@@ -207,41 +207,12 @@ public abstract partial class VideoSuperResolutionBase<T> : VideoNeuralNetworkBa
         int outHeight = height * scale;
         int outWidth = width * scale;
 
-        var output = new Tensor<T>([channels, outHeight, outWidth]);
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int oh = 0; oh < outHeight; oh++)
-            {
-                for (int ow = 0; ow < outWidth; ow++)
-                {
-                    double srcH = (oh + 0.5) / scale - 0.5;
-                    double srcW = (ow + 0.5) / scale - 0.5;
-
-                    int h0 = Math.Max(0, Math.Min((int)Math.Floor(srcH), height - 1));
-                    int w0 = Math.Max(0, Math.Min((int)Math.Floor(srcW), width - 1));
-                    int h1 = Math.Max(0, Math.Min(h0 + 1, height - 1));
-                    int w1 = Math.Max(0, Math.Min(w0 + 1, width - 1));
-
-                    double hWeight = srcH - Math.Floor(srcH);
-                    double wWeight = srcW - Math.Floor(srcW);
-
-                    double v00 = NumOps.ToDouble(input.Data.Span[c * height * width + h0 * width + w0]);
-                    double v01 = NumOps.ToDouble(input.Data.Span[c * height * width + h0 * width + w1]);
-                    double v10 = NumOps.ToDouble(input.Data.Span[c * height * width + h1 * width + w0]);
-                    double v11 = NumOps.ToDouble(input.Data.Span[c * height * width + h1 * width + w1]);
-
-                    double val = v00 * (1 - hWeight) * (1 - wWeight)
-                               + v01 * (1 - hWeight) * wWeight
-                               + v10 * hWeight * (1 - wWeight)
-                               + v11 * hWeight * wWeight;
-
-                    output.Data.Span[c * outHeight * outWidth + oh * outWidth + ow] = NumOps.FromDouble(val);
-                }
-            }
-        }
-
-        return output;
+        // Half-pixel bilinear resampling with edge clamping: torch interpolate(mode="bilinear", align_corners=False)
+        var batched = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(input, [input.Length]), 0, 0, channels * height * width),
+            [1, channels, height, width]);
+        var output = Engine.Interpolate(batched, [outHeight, outWidth], InterpolateMode.Bilinear, false);
+        return Engine.Reshape(output, [channels, outHeight, outWidth]);
     }
 
     /// <inheritdoc />

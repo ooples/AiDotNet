@@ -218,7 +218,7 @@ public partial class LassoRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = w[0];
-            Coefficients = w.GetSubVector(1, p - 1);
+            Coefficients = RegressionEngineOps2.Slice(w, 1, p - 1);
         }
         else
         {

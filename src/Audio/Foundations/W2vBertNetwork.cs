@@ -63,10 +63,8 @@ internal sealed class W2vBertNetwork<T>
     /// <summary>One forward pass: the unmasked encoded features <c>[B, L, D]</c>, the contrastive module's context
     /// vectors, the masked-prediction module's output and logits, the output of every block (contrastive first), and
     /// the mask applied.</summary>
-    /// <remarks><paramref name="MaskValues"/> is the mask as a <c>[B, L]</c> tensor of 0 and 1, the per-step draw a
-    /// compiled plan refills when the caller drew the mask with <see cref="DrawStepMask"/>.</remarks>
     internal sealed record Output(Tensor<T> Features, Tensor<T> Context, Tensor<T> Final, Tensor<T> Logits,
-        IReadOnlyList<Tensor<T>> BlockStates, bool[,]? Mask, Tensor<T>? MaskValues = null);
+        IReadOnlyList<Tensor<T>> BlockStates, bool[,]? Mask);
 
     /// <summary>Log-mel features <c>[B, frames, bins]</c> of waveforms <c>[B, S]</c> or <c>[S]</c>.</summary>
     public Tensor<T> Features(Tensor<T> audio)
@@ -109,57 +107,98 @@ internal sealed class W2vBertNetwork<T>
         return mask;
     }
 
-    /// <summary>
-    /// <see cref="DrawMask"/> as a per-step draw: the <c>[B, L]</c> tensor of 0 and 1 a compiled plan refills before every
-    /// replay, with the returned host array refilled in place alongside it (the noise and distractor draws read it).
-    /// </summary>
-    public (bool[,] Mask, Tensor<T> Values) DrawStepMask(int batch, int length, double probability, Random random)
-    {
-        var holder = new bool[batch, length];
-        var values = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { batch, length }, t =>
-        {
-            var drawn = DrawMask(batch, length, probability, random);
-            var span = t.AsWritableSpan();
-            for (int b = 0; b < batch; b++)
-                for (int s = 0; s < length; s++)
-                {
-                    holder[b, s] = drawn[b, s];
-                    span[b * length + s] = drawn[b, s] ? NumOps.One : NumOps.Zero;
-                }
-        });
-        return (holder, values);
-    }
-
     /// <summary>The network on log-mel features <c>[B, frames, bins]</c>; masked steps of the encoded features are
     /// replaced by N(0, 1) vectors before the contrastive module (§3.2).</summary>
-    /// <param name="maskValues">The mask as a <c>[B, L]</c> tensor (from <see cref="DrawStepMask"/>); with it the
-    /// replacement noise is a per-step draw too, so a compiled plan replays the step. Without it the mask and noise are
-    /// constants of the step.</param>
-    public Output Forward(Tensor<T> mel, bool[,]? mask, bool training, Random random, Tensor<T>? maskValues = null)
+    public Output Forward(
+        Tensor<T> mel,
+        bool[,]? mask,
+        bool training,
+        Random random,
+        Tensor<T>? dynamicMaskFlat = null,
+        Tensor<T>? fixedMaskNoise = null)
     {
         var features = Encode(mel);
         int batch = features.Shape[0], length = features.Shape[1], d = _o.ModelDim;
         var input = features;
-        if (mask is not null)
+        if (dynamicMaskFlat is not null)
+        {
+            var drop = _engine.TensorTile(_engine.Reshape(dynamicMaskFlat, new[] { batch, length, 1 }), new[] { 1, 1, d });
+            var keep = _engine.ScalarMinusTensor(NumOps.One, drop);
+            var stdNormal = fixedMaskNoise ?? AiDotNet.Training.CompiledStepRandom<T>.StandardNormal(new[] { batch, length, d }, random);
+            input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), _engine.TensorMultiply(stdNormal, drop));
+        }
+        else if (mask is not null)
         {
             if (mask.GetLength(0) != batch || mask.GetLength(1) != length)
                 throw new ArgumentException($"The mask must be [{batch}, {length}].", nameof(mask));
-            var values = maskValues ?? Wav2Vec2Network<T>.MaskTensor(mask);
-            // N(0, 1) for every component of a masked step, drawn in step order (two uniforms each); zero elsewhere.
-            Action<Tensor<T>> fill = t => FillMaskNoise(t, mask, d, random);
-            Tensor<T> noise;
-            if (maskValues is not null)
+            int total = batch * length * d;
+            if (fixedMaskNoise is not null)
             {
-                noise = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { batch, length, d }, fill);
+                Tensor<T> keep;
+                using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                {
+                    var keepArr = new double[total];
+                    for (int b = 0; b < batch; b++)
+                        for (int t = 0; t < length; t++)
+                            if (!mask[b, t])
+                            {
+                                int rowOffset = (b * length + t) * d;
+                                for (int i = 0; i < d; i++) keepArr[rowOffset + i] = 1.0;
+                            }
+                    keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                }
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), fixedMaskNoise);
+            }
+            else if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                Tensor<T> keep;
+                Tensor<T> drop;
+                using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                {
+                    var keepArr = new double[total];
+                    var dropArr = new double[total];
+                    for (int b = 0; b < batch; b++)
+                        for (int t = 0; t < length; t++)
+                        {
+                            int rowOffset = (b * length + t) * d;
+                            if (!mask[b, t])
+                            {
+                                for (int i = 0; i < d; i++) keepArr[rowOffset + i] = 1.0;
+                            }
+                            else
+                            {
+                                for (int i = 0; i < d; i++) dropArr[rowOffset + i] = 1.0;
+                            }
+                        }
+                    keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                    drop = new Tensor<double>(dropArr, new[] { batch, length, d }).Cast<T>();
+                }
+                var stdNormal = AiDotNet.Training.CompiledStepRandom<T>.StandardNormal(new[] { batch, length, d }, random);
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), _engine.TensorMultiply(stdNormal, drop));
             }
             else
             {
-                noise = new Tensor<T>(new[] { batch, length, d });
-                fill(noise);
+                var keepArr = new double[total];
+                var noiseArr = new double[total];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                    {
+                        int rowOffset = (b * length + t) * d;
+                        for (int i = 0; i < d; i++)
+                        {
+                            if (!mask[b, t])
+                            {
+                                keepArr[rowOffset + i] = 1.0;
+                                continue;
+                            }
+                            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+                            noiseArr[rowOffset + i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+                        }
+                    }
+                var keep = new Tensor<double>(keepArr, new[] { batch, length, d }).Cast<T>();
+                var noise = new Tensor<double>(noiseArr, new[] { batch, length, d }).Cast<T>();
+                input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), noise);
             }
-            var masked = _engine.TensorBroadcastTo(_engine.Reshape(values, new[] { batch, length, 1 }), new[] { batch, length, d });
-            var keep = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(masked, NumOps.FromDouble(-1.0)), NumOps.One);
-            input = _engine.TensorAdd(_engine.TensorMultiply(features, keep), noise);
         }
         var states = new List<Tensor<T>>();
         var h = _engine.Reshape(ContrastiveProjection.Forward(_engine.Reshape(input, new[] { batch * length, d })), new[] { batch, length, d });
@@ -178,66 +217,50 @@ internal sealed class W2vBertNetwork<T>
         }
         var logits = _engine.Reshape(PredictionHead.Forward(_engine.Reshape(h, new[] { batch * length, d })),
             new[] { batch, length, _o.CodebookSize });
-        return new Output(features, context, h, logits, states, mask, mask is null ? null : maskValues ?? Wav2Vec2Network<T>.MaskTensor(mask));
-    }
-
-    // 0, 1, …, entries − 1 as [1, 1, entries].
-    [AiDotNet.Attributes.ScalarKernel("Builds a constant index row from host integers; no traced value is read.")]
-    private static Tensor<T> EntryIndices(int entries)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var values = new T[entries];
-        for (int j = 0; j < entries; j++) values[j] = ops.FromDouble(j);
-        return new Tensor<T>(new[] { 1, 1, entries }, new Vector<T>(values));
-    }
-
-    [AiDotNet.Attributes.ScalarKernel("Fills one step's replacement noise from the model's generator; no traced value is read.")]
-    private static void FillMaskNoise(Tensor<T> noise, bool[,] mask, int d, Random random)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        int batch = mask.GetLength(0), length = mask.GetLength(1);
-        var span = noise.AsWritableSpan();
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < length; t++)
-                for (int i = 0; i < d; i++)
-                {
-                    int at = (b * length + t) * d + i;
-                    if (!mask[b, t])
-                    {
-                        span[at] = ops.Zero;
-                        continue;
-                    }
-                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    span[at] = ops.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-                }
+        return new Output(features, context, h, logits, states, mask);
     }
 
     /// <summary>The masked-prediction loss (§3.2): the cross-entropy of each masked step's assigned codebook entry,
     /// summed over the masked steps.</summary>
-    public Tensor<T> MaskedPredictionLoss(Output output, Tensor<T> targets)
+    public Tensor<T> MaskedPredictionLoss(
+        Output output,
+        int[,] targets,
+        Tensor<T>? codeOneHot = null,
+        Tensor<T>? dynamicMaskFlat = null)
     {
-        // The targets [B, L] as a one-hot over the codebook, on the engine, kept on the masked steps.
-        var mask = output.MaskValues ?? (output.Mask is { } m ? Wav2Vec2Network<T>.MaskTensor(m)
-            : throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output)));
-        var shape = output.Logits._shape;
-        int batch = shape[0], length = shape[1], entries = shape[2];
-        var entry = _engine.TensorBroadcastTo(EntryIndices(entries), shape);
-        var oneHot = _engine.TensorEquals(_engine.TensorBroadcastTo(_engine.Reshape(targets, new[] { batch, length, 1 }), shape), entry);
-        var weights = _engine.StopGradient(_engine.TensorMultiplyScalar(
-            _engine.TensorMultiply(oneHot, _engine.TensorBroadcastTo(_engine.Reshape(mask, new[] { batch, length, 1 }), shape)), NumOps.FromDouble(-1.0)));
         var logProbabilities = _engine.TensorLogSoftmax(output.Logits, axis: -1);
-        return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, weights), new[] { 0, 1, 2 }, keepDims: false);
-    }
-
-    /// <summary>The masked-prediction loss of host targets <c>[B, L]</c>.</summary>
-    public Tensor<T> MaskedPredictionLoss(Output output, int[,] targets)
-    {
-        var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
-        var logProbabilities = _engine.TensorLogSoftmax(output.Logits, axis: -1);
-        var weights = new Tensor<T>(output.Logits._shape);
-        for (int b = 0; b < mask.GetLength(0); b++)
-            for (int t = 0; t < mask.GetLength(1); t++)
-                if (mask[b, t]) weights[b, t, targets[b, t]] = NumOps.FromDouble(-1.0);
+        Tensor<T> weights;
+        if (dynamicMaskFlat is not null && codeOneHot is not null)
+        {
+            int batch = output.Logits.Shape[0], length = output.Logits.Shape[1], vocab = output.Logits.Shape[2];
+            var maskScale = _engine.TensorMultiplyScalar(_engine.Reshape(dynamicMaskFlat, new[] { batch, length, 1 }), NumOps.FromDouble(-1.0));
+            weights = _engine.TensorMultiply(codeOneHot, _engine.TensorTile(maskScale, new[] { 1, 1, vocab }));
+        }
+        else if (codeOneHot is not null)
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
+            int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
+            Tensor<T> maskScale;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var maskScaleArr = new double[batch * length];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                        if (mask[b, t]) maskScaleArr[b * length + t] = -1.0;
+                maskScale = new Tensor<double>(maskScaleArr, new[] { batch, length, 1 }).Cast<T>();
+            }
+            weights = _engine.TensorMultiply(codeOneHot, _engine.TensorTile(maskScale, new[] { 1, 1, vocab }));
+        }
+        else
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Masked prediction needs the forward's mask.", nameof(output));
+            int batch = mask.GetLength(0), length = mask.GetLength(1), vocab = output.Logits.Shape[2];
+            var weightsArr = new double[batch * length * vocab];
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < length; t++)
+                    if (mask[b, t]) weightsArr[(b * length + t) * vocab + targets[b, t]] = -1.0;
+            weights = new Tensor<double>(weightsArr, output.Logits._shape).Cast<T>();
+        }
         return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, weights), new[] { 0, 1, 2 }, keepDims: false);
     }
 }

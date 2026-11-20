@@ -61,7 +61,7 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             value =>
             {
                 if (value.Length != _weights.Length) _weights = new Vector<T>(value.Length);
-                for (int i = 0; i < _weights.Length; i++) _weights[i] = value[i];
+                value.AsSpan().CopyTo(_weights.AsWritableSpan());
             }));
     }
     // NumOps inherited from ModelBase
@@ -199,13 +199,9 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var cloned = new RelationModule<T>(_hiddenDimension, _relationType)
         {
             _inputWidth = _inputWidth,
-            _weights = new Vector<T>(_weights.Length),
+            _weights = _weights.Clone(),
             _isTraining = _isTraining,
         };
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            cloned._weights[i] = _weights[i];
-        }
 
         return cloned;
     }
@@ -213,9 +209,9 @@ public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <summary><c>[pairWidth, width]</c>: picks the <paramref name="width"/> columns from <paramref name="start"/>.</summary>
     private Tensor<T> Half(int pairWidth, int width, int start)
     {
-        var select = new Tensor<T>(new[] { pairWidth, width });
-        for (int i = 0; i < width; i++) select[(start + i) * width + i] = NumOps.One;
-        return select;
+        // select[start + i, i] = 1: columns start .. start + width - 1 of the identity.
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSlice(engine.TensorEye<T>(pairWidth), new[] { 0, start }, new[] { pairWidth, width });
     }
 
     #region ModelBase Overrides

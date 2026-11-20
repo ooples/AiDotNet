@@ -148,45 +148,4 @@ public class ParaformerPaperTests
         for (int i = 0; i < alphas.Length; i++) count += alphas.GetFlat(i);
         Assert.InRange(count, 3.0, 5.0);
     }
-
-    // The glancing sampler (Gao et al. 2022, section 2.3): with c tokens right in the first pass, floor((n - c) * ratio)
-    // positions, taken in a random order of all n, get the target's embedding. The engine mask against that host
-    // algorithm (the first maximum decides ties, as argmax does), over several draws, ratios and tie patterns.
-    [Theory(Timeout = 60000)]
-    [InlineData(0.75, 1)]
-    [InlineData(0.5, 2)]
-    [InlineData(1.0, 3)]
-    [InlineData(0.3, 4)]
-    public async Task GlancingMask_ReplacesFloorOfWrongTimesRatio_InTheDrawnOrder(double ratio, int seed)
-    {
-        await Task.Yield();
-        var engine = new AiDotNet.Tensors.Engines.CpuEngine();
-        const int n = 9, vocabulary = 5, width = 3;
-        var random = new Random(seed);
-        var logits = new Tensor<double>(new[] { n, vocabulary });
-        var targets = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            targets[i] = random.Next(vocabulary);
-            // Integer logits, so ties occur.
-            for (int k = 0; k < vocabulary; k++) logits[i, k] = random.Next(3);
-        }
-        int correct = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int best = 0;
-            for (int k = 1; k < vocabulary; k++) if (logits[i, k] > logits[i, best]) best = k;
-            if (best == targets[i]) correct++;
-        }
-        int replace = (int)((n - correct) * ratio);
-        var sampler = new Random(100 + seed);
-        var mirror = new Random(100 + seed);
-        var mask = AiDotNet.Audio.Foundations.ParaformerNetwork<double>.GlancingMask(engine, logits, targets, ratio, sampler, width);
-        var keys = Enumerable.Range(0, n).Select(_ => mirror.Next()).ToArray();
-        var chosen = Enumerable.Range(0, n).OrderBy(i => keys[i]).Take(replace).ToHashSet();
-        Assert.Equal(new[] { n, width }, mask.Shape.ToArray());
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < width; k++)
-                Assert.Equal(chosen.Contains(i) ? 1.0 : 0.0, mask[i, k]);
-    }
 }

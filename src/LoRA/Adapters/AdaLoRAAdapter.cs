@@ -226,11 +226,8 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Initialize importance scores (start with uniform importance)
         _importanceScores = new Vector<T>(maxRank);
-        T initialScore = NumOps.One;
-        for (int i = 0; i < maxRank; i++)
-        {
-            _importanceScores[i] = initialScore;
-        }
+        _importanceScores.Fill(NumOps.One);
+
     }
 
     /// <summary>
@@ -330,34 +327,45 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         T oneMinusEma = NumOps.FromDouble(1.0 - _importanceScoreEMA);
         int bOffset = inputSize * _maxRank;
 
+        // Gradient magnitude per rank component r: sqrt(||column r of dA||^2 + ||row r of dB||^2)
+        Tensor<T> gradA = Engine.Reshape(
+            Tensor<T>.FromVector(loraGradients.GetSubVector(0, bOffset)), [inputSize, _maxRank]);
+        Tensor<T> gradB = Engine.Reshape(
+            Tensor<T>.FromVector(loraGradients.GetSubVector(bOffset, _maxRank * outputSize)), [_maxRank, outputSize]);
+        Tensor<T> gradMagnitude = Engine.TensorSqrt(Engine.TensorAdd(
+            Engine.ReduceSum(Engine.TensorMultiply(gradA, gradA), [0], false),
+            Engine.ReduceSum(Engine.TensorMultiply(gradB, gradB), [1], false)));
+
+        // EMA update for the active components only; inactive scores are kept.
+        Tensor<T> oldScores = Tensor<T>.FromVector(_importanceScores);
+        Tensor<T> newScores = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(oldScores, emaFactor),
+            Engine.TensorMultiplyScalar(gradMagnitude, oneMinusEma));
+        _importanceScores = Engine.TensorWhere(ActiveSlotMask(), newScores, oldScores).ToVector();
+    }
+
+    /// <summary>
+    /// Builds a mask over the physical rank slots that is true for the currently active components.
+    /// </summary>
+    private bool[] ActiveSlotMask()
+    {
+        bool[] active = new bool[_maxRank];
         foreach (int r in _activeIndices)
         {
-            T gradMagnitude = NumOps.Zero;
-
-            // Gradients from matrix A for column r
-            for (int i = 0; i < inputSize; i++)
-            {
-                T grad = loraGradients[i * _maxRank + r];
-                gradMagnitude = NumOps.Add(gradMagnitude, NumOps.Multiply(grad, grad));
-            }
-
-            // Gradients from matrix B for row r
-            for (int j = 0; j < outputSize; j++)
-            {
-                T grad = loraGradients[bOffset + r * outputSize + j];
-                gradMagnitude = NumOps.Add(gradMagnitude, NumOps.Multiply(grad, grad));
-            }
-
-            gradMagnitude = NumOps.Sqrt(gradMagnitude);
-
-            T oldScore = _importanceScores[r];
-            T newScore = NumOps.Add(
-                NumOps.Multiply(emaFactor, oldScore),
-                NumOps.Multiply(oneMinusEma, gradMagnitude)
-            );
-
-            _importanceScores[r] = newScore;
+            active[r] = true;
         }
+
+        return active;
+    }
+
+    /// <summary>
+    /// Returns the first flat index whose value is non-zero, or -1 when every value is zero.
+    /// </summary>
+    private int FirstNonZeroIndex(Tensor<T> flags)
+    {
+        // Coordinates of the non-zero entries, row-major, as ints (positions past 2048 are not exact in Half)
+        Tensor<int> nonZero = Engine.TensorNonzero(Engine.Reshape(flags, [flags.Length]));
+        return nonZero.Length == 0 ? -1 : nonZero.ToArray()[0];
     }
 
     /// <summary>
@@ -387,11 +395,14 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void PruneRank()
     {
-        // Sort active indices by their importance score (descending).
-        var sortedActive = _activeIndices
-            .Select(idx => (idx, score: Convert.ToDouble(_importanceScores[idx])))
-            .OrderByDescending(p => p.score)
-            .ToList();
+        // Sort active indices by their importance score (descending, ties keep the active-list
+        // order, as the stable LINQ OrderByDescending did). The stable order breaks ties on an int
+        // position, so no index or count is ever held in T.
+        int activeCount = _activeIndices.Count;
+        int[] activeArray = _activeIndices.ToArray();
+        Tensor<T> activeScores = Engine.TensorIndexSelect(
+            Tensor<T>.FromVector(_importanceScores), new Tensor<int>(activeArray, [activeCount]), 0);
+        int[] sortedPositions = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableOrder(activeScores, descending: true).ToArray();
 
         // Determine new rank (prune bottom threshold fraction). _minRank is a floor.
         int componentsToKeep = Math.Max(_minRank, (int)(_currentRank * (1.0 - _rankPruningThreshold)));
@@ -402,8 +413,9 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         var newActiveSet = new HashSet<int>();
         for (int i = 0; i < componentsToKeep; i++)
         {
-            newActive.Add(sortedActive[i].idx);
-            newActiveSet.Add(sortedActive[i].idx);
+            newActive.Add(activeArray[sortedPositions[i]]);
+            newActiveSet.Add(activeArray[sortedPositions[i]]);
+
         }
 
         // Zero out pruned components in LoRA matrices. Indices stay PHYSICAL — column r
@@ -412,19 +424,26 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> matrixA = _loraLayer.GetMatrixA();
         Matrix<T> matrixB = _loraLayer.GetMatrixB();
 
+        bool[] prunedSlots = new bool[_maxRank];
         foreach (int r in _activeIndices)
         {
-            if (newActiveSet.Contains(r)) continue;
-
-            for (int i = 0; i < matrixA.Rows; i++)
-                matrixA[i, r] = NumOps.Zero;
-            for (int j = 0; j < matrixB.Columns; j++)
-                matrixB[r, j] = NumOps.Zero;
-
-            // Also zero the importance score for pruned indices so a future expand
-            // that re-activates this slot starts from a clean baseline.
-            _importanceScores[r] = NumOps.Zero;
+            prunedSlots[r] = !newActiveSet.Contains(r);
         }
+
+        // Zero column r of A, row r of B and (so a future expand that re-activates this slot
+        // starts from a clean baseline) the importance score of every pruned slot r.
+        Tensor<T> prunedFlags = Engine.TensorWhere(
+            prunedSlots, Tensor<T>.CreateDefault([_maxRank], NumOps.One), new Tensor<T>([_maxRank]));
+        matrixA = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(Engine.Reshape(prunedFlags, [1, _maxRank]), [matrixA.Rows, matrixA.Columns]),
+            new Tensor<T>([matrixA.Rows, matrixA.Columns]),
+            Tensor<T>.FromMatrix(matrixA)).ToMatrix();
+        matrixB = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(Engine.Reshape(prunedFlags, [_maxRank, 1]), [matrixB.Rows, matrixB.Columns]),
+            new Tensor<T>([matrixB.Rows, matrixB.Columns]),
+            Tensor<T>.FromMatrix(matrixB)).ToMatrix();
+        _importanceScores = Engine.TensorWhere(
+            prunedSlots, new Tensor<T>([_maxRank]), Tensor<T>.FromVector(_importanceScores)).ToVector();
 
         SyncMatricesToParameters(matrixA, matrixB);
 
@@ -440,14 +459,15 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void SyncMatricesToParameters(Matrix<T> matrixA, Matrix<T> matrixB)
     {
-        Vector<T> loraParams = _loraLayer.GetParameters();
-        int idx = 0;
-        for (int i = 0; i < matrixA.Rows; i++)
-            for (int j = 0; j < matrixA.Columns; j++)
-                loraParams[idx++] = matrixA[i, j];
-        for (int i = 0; i < matrixB.Rows; i++)
-            for (int j = 0; j < matrixB.Columns; j++)
-                loraParams[idx++] = matrixB[i, j];
+        // [A row-major, B row-major, unchanged tail parameters]
+        Vector<T> currentParams = _loraLayer.GetParameters();
+        int matrixCount = matrixA.Rows * matrixA.Columns + matrixB.Rows * matrixB.Columns;
+        Vector<T> loraParams = currentParams.Length > matrixCount
+            ? Vector<T>.Concatenate(
+                matrixA.ToRowVector(), matrixB.ToRowVector(),
+                currentParams.GetSubVector(matrixCount, currentParams.Length - matrixCount))
+            : Vector<T>.Concatenate(matrixA.ToRowVector(), matrixB.ToRowVector());
+
         _loraLayer.SetParameters(loraParams);
     }
 
@@ -549,30 +569,38 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // silently merging stale weights from inactive slots.
         Matrix<T> loraA = _loraLayer.GetMatrixA();
         Matrix<T> loraB = _loraLayer.GetMatrixB();
-        var activeSet = new HashSet<int>(_activeIndices);
-        for (int r = 0; r < _maxRank; r++)
+        bool[] activeSlots = ActiveSlotMask();
+        Tensor<T> inactiveFlags = Engine.TensorWhere(
+            activeSlots, new Tensor<T>([_maxRank]), Tensor<T>.CreateDefault([_maxRank], NumOps.One));
+
+        // Non-zero cells of inactive slots: column r of A ([inputSize, rank]) and row r of B ([rank, outputSize]).
+        Tensor<T> badA = Engine.TensorMultiply(
+            Engine.TensorNotEquals(Tensor<T>.FromMatrix(loraA), NumOps.Zero),
+            Engine.TensorBroadcastTo(Engine.Reshape(inactiveFlags, [1, _maxRank]), [loraA.Rows, loraA.Columns]));
+        Tensor<T> badB = Engine.TensorMultiply(
+            Engine.TensorNotEquals(Tensor<T>.FromMatrix(loraB), NumOps.Zero),
+            Engine.TensorBroadcastTo(Engine.Reshape(inactiveFlags, [_maxRank, 1]), [loraB.Rows, loraB.Columns]));
+
+        // Report the first violation in slot order (matrix A before matrix B within a slot).
+        Tensor<T> slotFlags = Engine.TensorStack(
+            [Engine.ReduceSum(badA, [0], false), Engine.ReduceSum(badB, [1], false)], 1);
+        int firstViolation = FirstNonZeroIndex(slotFlags);
+        if (firstViolation >= 0)
         {
-            if (activeSet.Contains(r)) continue;
-            // Inactive rank slot: every cell of column-r-of-A and row-r-of-B must be zero.
-            for (int i = 0; i < loraA.Rows; i++)
+            int r = firstViolation / 2;
+            if (firstViolation % 2 == 0)
             {
-                if (!NumOps.Equals(loraA[i, r], NumOps.Zero))
-                {
-                    throw new InvalidOperationException(
-                        $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
-                        $"non-zero value in matrix A at row {i}. PruneRank must zero " +
-                        $"matrix entries for inactive components before merge.");
-                }
+                int i = FirstNonZeroIndex(Engine.TensorNarrow(badA, 1, r, 1));
+                throw new InvalidOperationException(
+                    $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
+                    $"non-zero value in matrix A at row {i}. PruneRank must zero " +
+                    $"matrix entries for inactive components before merge.");
             }
-            for (int j = 0; j < loraB.Columns; j++)
-            {
-                if (!NumOps.Equals(loraB[r, j], NumOps.Zero))
-                {
-                    throw new InvalidOperationException(
-                        $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
-                        $"non-zero value in matrix B at column {j}.");
-                }
-            }
+
+            int j = FirstNonZeroIndex(Engine.TensorNarrow(badB, 0, r, 1));
+            throw new InvalidOperationException(
+                $"AdaLoRA merge invariant broken: pruned rank slot r={r} has " +
+                $"non-zero value in matrix B at column {j}.");
         }
 
         // Compute the LoRA weight contribution. Because inactive slots are zeroed,
@@ -586,36 +614,12 @@ public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
-        // DenseLayer stores weights as [inputSize, outputSize] (input-major).
-        // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
+        // Merge weights. loraWeights is [inputSize, outputSize]; DenseLayer stores its weights
+        // input-major and FullyConnectedLayer output-major, so the latter uses the transpose.
+        // Biases are kept unchanged.
         bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row, col;
-            if (isOutputMajor)
-            {
-                int outputIdx = i / inputSize;
-                int inputIdx = i % inputSize;
-                row = inputIdx;
-                col = outputIdx;
-            }
-            else
-            {
-                row = i / outputSize;
-                col = i % outputSize;
-            }
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

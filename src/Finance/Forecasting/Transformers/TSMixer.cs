@@ -621,13 +621,17 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
-        // Apply RevIN normalization if enabled
+        // The native forward applies RevIN itself (normalize in, de-normalize out). Wrapping it again normalized twice:
+        // the inner pass overwrote the stored statistics with those of the already-normalized input, so the outer
+        // de-normalization restored the wrong scale. Only the ONNX graph needs RevIN around it here.
+        if (_useNativeMode)
+            return ForecastNative(historicalData, _predictionHorizon);
+
         if (_useRevIN)
             historicalData = ApplyRevIN(historicalData, normalize: true);
 
-        var forecast = _useNativeMode ? ForecastNative(historicalData, _predictionHorizon) : ForecastOnnx(historicalData);
+        var forecast = ForecastOnnx(historicalData);
 
-        // Apply RevIN de-normalization if enabled
         if (_useRevIN)
             forecast = ApplyRevIN(forecast, normalize: false);
 
@@ -871,16 +875,23 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         SetTrainingMode(false);
         var output = Forward(historicalData);
 
-        // Reshape output if needed
-        int totalSteps = Math.Min(horizon, _predictionHorizon);
-        var result = new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-
-        for (int i = 0; i < totalSteps * _numFeatures && i < output.Length; i++)
+        // [batch, steps, features], every instance kept: the forward forecasts each instance of the batch (and RevIN
+        // de-normalized each with its own statistics), so returning only the first dropped the rest.
+        int batch = historicalData.Rank >= 3 ? historicalData.Shape[0] : 1;
+        int perInstance = batch * _numFeatures;
+        if (perInstance <= 0 || output.Length % perInstance != 0)
         {
-            result.Data.Span[i] = output.Data.Span[i];
+            throw new InvalidOperationException(
+                $"TSMixer's forward produced {output.Length} values, which is not whole steps of {_numFeatures} " +
+                $"feature(s) for each of {batch} instance(s).");
         }
 
-        return result;
+        int steps = output.Length / perInstance;
+        var shaped = Engine.Reshape(output.Contiguous(), new[] { batch, steps, _numFeatures });
+        int totalSteps = Math.Min(Math.Min(horizon, _predictionHorizon), steps);
+        return totalSteps == steps
+            ? shaped
+            : Engine.TensorSlice(shaped, new[] { 0, 0, 0 }, new[] { batch, totalSteps, _numFeatures });
     }
 
     /// <summary>
@@ -919,50 +930,6 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     #region Model-Specific Processing
 
     /// <summary>
-    /// The instance mean and population standard deviation plus <paramref name="eps"/> as detached <c>[1]</c> tensors,
-    /// computed on the engine so a compiled training step traces them instead of reading the input on the host.
-    /// </summary>
-    private (Tensor<T> Mean, Tensor<T> Std) InstanceStatistics(Tensor<T> input, double eps)
-    {
-        int n = input.Length;
-        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
-        // The mean, not a sum divided afterwards: 1024 Half values of 100 sum to 102400, above Half.MaxValue, although
-        // their mean is 100. The reduction accumulates and divides a narrow element type in a wider one before rounding.
-        var mean = Engine.StopGradient(Engine.Reshape(Engine.ReduceMean(flat, new[] { 0 }, false), new[] { 1 }));
-        // Centre the halved values. |x - mean| is bounded by the instance's range, which for values near the Half limit
-        // (60000 and -60000) exceeds Half.MaxValue; half of it cannot. Halving is exact in a binary type.
-        var half = NumOps.FromDouble(0.5);
-        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(flat, half),
-            Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(mean, half), new[] { n }));
-        // std = 2 * s * sqrt(sum((c / s)^2 / n)) for the halved deviations c and any s > 0. With s = max|c| (plus the
-        // smallest normal Half, so a constant series divides by a positive number) every term is at most 1 / n and the
-        // sum at most 1, so a Half sum of squares cannot pass 65504 and make the std infinite, and the statistics stay
-        // on the engine (traced by a compiled step, no host read).
-        var scale = Engine.TensorAddScalar(
-            Engine.Reshape(Engine.ReduceMax(Engine.TensorAbs(centered), new[] { 0 }, keepDims: false), new[] { 1 }),
-            NumOps.FromDouble(6.103515625e-05));
-        var unit = Engine.TensorMultiplyScalar(
-            Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, new[] { n })), NumOps.FromDouble(1.0 / Math.Sqrt(n)));
-        var rms = Engine.TensorSqrt(Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(unit), new[] { 0 }, keepDims: false), new[] { 1 }));
-        // The factor of two restores the scale of the unhalved deviations, so the stored statistics are unchanged.
-        var std = Engine.StopGradient(Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorMultiply(rms, scale), NumOps.FromDouble(2.0)), NumOps.FromDouble(eps)));
-        return (mean, std);
-    }
-
-    /// <summary>(input − mean) / std, formed as (input/2 − mean/2) / (std/2) so the difference cannot overflow a narrow
-    /// element type whose instance range exceeds its largest value.</summary>
-    private Tensor<T> NormalizeByInstance(Tensor<T> input, Tensor<T> mean, Tensor<T> std)
-    {
-        var half = NumOps.FromDouble(0.5);
-        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(input, half), Wide(Engine.TensorMultiplyScalar(mean, half), input));
-        return Engine.TensorDivide(centered, Wide(Engine.TensorMultiplyScalar(std, half), input));
-    }
-
-    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
-        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
-
-    /// <summary>
     /// Applies RevIN (Reversible Instance Normalization).
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -974,21 +941,53 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// by subtracting mean and dividing by std. De-normalization reverses this
     /// to restore the original scale of predictions.
     /// </para>
+    /// <para>
+    /// The statistics are per instance and per channel, taken over the time axis, and detached from the
+    /// gradient, as in the RevIN reference (Kim et al. 2022) that TSMixer (Chen et al. 2023) applies. They stay
+    /// engine ops rather than scalars read out of the input, so a replayed training step recomputes them for
+    /// the batch it runs on; a scalar captured once is replayed as a constant, and the de-normalization then
+    /// scales every later batch by the statistics of the batch that was traced.
+    /// </para>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
         if (normalize)
         {
             if (input.Length == 0) return input;
-            // Detached statistics, as before: the stats are constants for the affine map below.
-            var (mean, std) = InstanceStatistics(input, 1e-5);
+            // Mean and std for this instance, detached as before: the stats are constants for the affine map below.
+            // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+            // freezing the traced input's values, and an inference trace does not have to cross to the host.
+            Tensor<T> mean;
+            Tensor<T> std;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+                if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+                {
+                    var wide = flat.Cast<double>();
+                    var wideMean = Engine.TensorDivideScalar(Engine.ReduceSum(wide, new[] { 0 }, keepDims: true), (double)input.Length);
+                    var variance = Engine.TensorDivideScalar(
+                        Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(wide, wideMean)), new[] { 0 }, keepDims: true), (double)input.Length);
+                    mean = wideMean.Cast<T>();
+                    std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), 1e-5).Cast<T>();
+                }
+                else
+                {
+                    // Keep supported compiled types on the tensor trace; Cast reads host storage.
+                    var count = NumOps.FromDouble(input.Length);
+                    mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+                    var variance = Engine.TensorDivideScalar(
+                        Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
+                    std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(1e-5));
+                }
+            }
 
             // Store for de-normalization
             _instanceMean = mean;
             _instanceStd = std;
 
             // Normalize: (input - mean) / std
-            return NormalizeByInstance(input, mean, std);
+            return Engine.TensorDivide(Engine.TensorSubtract(input, mean), std);
         }
         else
         {
@@ -998,9 +997,26 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 return input;
             }
 
-            // De-normalize: input * std + mean
-            return Engine.TensorAdd(Engine.TensorMultiply(input, Wide(_instanceStd, input)), Wide(_instanceMean, input));
+            // De-normalize: input * std + mean, the one-element statistics broadcast over the tensor.
+            return Engine.TensorAdd(Engine.TensorMultiply(input, _instanceStd), _instanceMean);
         }
+    }
+
+    /// <summary>RevIN's variance floor (the reference's eps).</summary>
+    private const double RevInEpsilon = 1e-5;
+
+    /// <summary>The [instances, steps, channels] view RevIN reduces over, the channel being the trailing axis.</summary>
+    private static int[] RevInShape(Tensor<T> input, int steps)
+    {
+        int channels = input.Rank >= 2 ? input.Shape[input.Rank - 1] : 1;
+        if (steps <= 0 || channels <= 0 || input.Length % (steps * channels) != 0)
+        {
+            throw new ArgumentException(
+                $"RevIN expects [..., steps, channels] input; got shape [{string.Join(", ", input._shape)}].",
+                nameof(input));
+        }
+
+        return new[] { input.Length / (steps * channels), steps, channels };
     }
 
     /// <summary>
@@ -1124,4 +1140,3 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
 
     #endregion
 }
-

@@ -81,20 +81,13 @@ public class DistributionPreservingSplitter<T> : DataSplitterBase<T>
             throw new ArgumentNullException(nameof(y), "Distribution-preserving split requires target values (y).");
         }
 
-        // Convert targets to double for binning
-        var values = new double[y.Length];
-        for (int i = 0; i < y.Length; i++)
-        {
-            values[i] = Convert.ToDouble(y[i]);
-        }
-
         // Calculate bin edges
-        double minVal = values.Min();
-        double maxVal = values.Max();
-        double binWidth = (maxVal - minVal) / _nBins;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(y);
+        bool allEqual = values.Length == 0 || NumOps.Equals(engine.TensorMinValue(values), engine.TensorMaxValue(values));
 
         // Handle edge case where all values are the same
-        if (binWidth == 0)
+        if (allEqual)
         {
             // Fall back to regular random split
             var indices = GetShuffledIndices(X.Rows);
@@ -105,9 +98,10 @@ public class DistributionPreservingSplitter<T> : DataSplitterBase<T>
 
         // Assign each sample to a bin
         var bins = new Dictionary<int, List<int>>();
+        var binOf = PreprocessingTensorOps.EqualWidthBlockIndex(values, _nBins);
         for (int i = 0; i < y.Length; i++)
         {
-            int bin = Math.Min(_nBins - 1, (int)((values[i] - minVal) / binWidth));
+            int bin = binOf[i];
             if (!bins.TryGetValue(bin, out var list))
             {
                 list = new List<int>();

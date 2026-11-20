@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.Imputers;
 
@@ -78,24 +79,16 @@ public class MissingIndicator<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             _featuresWithMissing = columnsToProcess;
         }
+        else if (data.Rows == 0 || _nInputFeatures == 0)
+        {
+            _featuresWithMissing = Array.Empty<int>();
+        }
         else
         {
-            // Find columns that actually have missing values
-            var withMissing = new List<int>();
-
-            foreach (int col in columnsToProcess)
-            {
-                for (int i = 0; i < data.Rows; i++)
-                {
-                    if (IsMissing(data[i, col]))
-                    {
-                        withMissing.Add(col);
-                        break;
-                    }
-                }
-            }
-
-            _featuresWithMissing = withMissing.ToArray();
+            // Find columns that actually have missing values (kept in the columnsToProcess order)
+            var hasMissing = Engine.ReduceMax(MissingMask(Tensor<T>.FromMatrix(data)), new[] { 0 }, false);
+            var flags = hasMissing.Cast<int>().AsSpan().ToArray();
+            _featuresWithMissing = columnsToProcess.Where(col => flags[col] != 0).ToArray();
         }
     }
 
@@ -113,28 +106,27 @@ public class MissingIndicator<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int numRows = data.Rows;
         int numOutputCols = _featuresWithMissing.Length;
-        var result = new T[numRows, numOutputCols];
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numOutputCols == 0)
         {
-            for (int j = 0; j < numOutputCols; j++)
-            {
-                int sourceCol = _featuresWithMissing[j];
-                result[i, j] = IsMissing(data[i, sourceCol]) ? NumOps.One : NumOps.Zero;
-            }
+            return new Matrix<T>(numRows, numOutputCols);
         }
 
-        return new Matrix<T>(result);
+        var indicators = MissingMask(Tensor<T>.FromMatrix(data)).ToMatrix();
+        return PreprocessingTensorOps.SelectColumns(indicators, _featuresWithMissing);
     }
 
-    private bool IsMissing(T value)
+    /// <summary>
+    /// 1 where an entry is missing: NaN when the missing value is NaN, otherwise an entry exactly equal to it
+    /// (scikit-learn compares with <c>X == missing_values</c>, no tolerance).
+    /// </summary>
+    private Tensor<T> MissingMask(Tensor<T> x)
     {
-        double val = NumOps.ToDouble(value);
         if (double.IsNaN(_missingValue))
         {
-            return double.IsNaN(val);
+            return ScalerTensorOps.NanMask(x);
         }
-        return Math.Abs(val - _missingValue) < 1e-10;
+
+        return Engine.TensorEquals(x, NumOps.FromDouble(_missingValue));
     }
 
     /// <summary>

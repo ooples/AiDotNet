@@ -24,11 +24,15 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
     private readonly double _beta2;
     private readonly double _epsilon;
 
-    private double[]? _m;
-    private double[]? _v;
-    private int _t;
+    // The moments are held in double: v accumulates g^2, which overflows Half (65504) once |g| passes 256, and an
+    // infinite v freezes every later step at zero.
+    private Tensor<double>? _m;
+    private Tensor<double>? _v;
 
-    public FedYogiServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
+    /// <summary>Creates a FedYogi optimizer with the direct-constructor defaults.</summary>
+    /// <remarks>The beta2=0.99 and epsilon=0.001 defaults apply only to direct construction.
+    /// Trainers using shared server optimizer options use the values supplied by those options.</remarks>
+    public FedYogiServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 1e-3)
     {
         if (learningRate <= 0.0)
         {
@@ -62,33 +66,31 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _m ??= new double[n];
-        _v ??= new double[n];
-        _t++;
-
-        double bias1 = 1.0 - Math.Pow(_beta1, _t);
-        double bias2 = 1.0 - Math.Pow(_beta2, _t);
-
-        var updated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        _m ??= new Tensor<double>(new[] { n });
+        if (_v is null)
         {
-            double current = NumOps.ToDouble(currentGlobalParameters[i]);
-            double target = NumOps.ToDouble(aggregatedTargetParameters[i]);
-            double g = target - current;
-
-            _m[i] = (_beta1 * _m[i]) + ((1.0 - _beta1) * g);
-
-            // Yogi second moment update: v = v + (1-beta2) * sign(g^2 - v) * g^2
-            _v[i] += (1.0 - _beta2) * Math.Sign((g * g) - _v[i]) * (g * g);
-
-            double mHat = _m[i] / bias1;
-            double vHat = _v[i] / bias2;
-
-            double step = _learningRate * mHat / (Math.Sqrt(vHat) + _epsilon);
-            updated[i] = NumOps.FromDouble(current + step);
+            // Reddi et al. 2021, Algorithm 2: v_{-1} >= tau^2.
+            _v = new Tensor<double>(new[] { n });
+            _v.Fill(_epsilon * _epsilon);
         }
 
-        return updated;
+        // Reddi et al. 2021, Algorithm 2 (FedYogi), no bias correction:
+        // m = b1 m + (1 - b1) g;  v = v + (1 - b2) sign(g^2 - v) g^2;  x = x + lr m / (sqrt(v) + tau).
+        // Keep the step and addition in double; only the completed parameters are rounded to T.
+        var current = currentGlobalParameters.AsTensor().Cast<double>();
+        var g = Engine.TensorSubtract(aggregatedTargetParameters.AsTensor().Cast<double>(), current);
+        var gSquared = Engine.TensorSquare(g);
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(_m, _beta1), Engine.TensorMultiplyScalar(g, 1.0 - _beta1));
+        var direction = Engine.TensorSign(Engine.TensorSubtract(gSquared, _v));
+        var v = Engine.TensorAdd(_v, Engine.TensorMultiplyScalar(Engine.TensorMultiply(direction, gSquared), 1.0 - _beta2));
+
+        // Kept across rounds, so copied out of the engine's buffers.
+        _m = new Tensor<double>(m.ToArray(), new[] { n });
+        _v = new Tensor<double>(v.ToArray(), new[] { n });
+
+        var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(_v), _epsilon);
+        var step = Engine.TensorMultiplyScalar(Engine.TensorDivide(_m, denominator), _learningRate);
+        return Engine.TensorAdd(current, step).Cast<T>().ToVector();
     }
 
     /// <inheritdoc />

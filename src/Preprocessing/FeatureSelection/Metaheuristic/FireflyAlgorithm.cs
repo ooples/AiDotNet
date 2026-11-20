@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -34,7 +35,7 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly double _gamma;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -42,7 +43,7 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int MaxIterations => _maxIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -89,128 +90,113 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize fireflies
-        var fireflies = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                fireflies[i, j] = random.NextDouble();
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+        Func<Tensor<T>, Tensor<T>> score = rows => PopulationSearchOps.ThresholdFitness(rows, correlations, targetCount, 0.1);
 
-        var intensity = new double[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            intensity[i] = EvaluateSolution(data, target, fireflies, i, p, n);
+        // Initialize fireflies
+        var fireflies = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var intensity = score(fireflies);
+
+        // The best position over every evaluation is retained: a firefly with no brighter peer moves randomly and
+        // can lose fitness, so the final population alone can miss the best solution found
+        int bestIndex = PopulationSearchOps.ArgMax(intensity);
+        var best = PopulationSearchOps.Row(fireflies, bestIndex);
+        var bestFitness = PopulationSearchOps.At(intensity, bestIndex);
+        Func<Tensor<T>, Tensor<T>> evaluate = rows =>
+        {
+            var result = score(rows);
+            int index = PopulationSearchOps.ArgMax(result);
+            var candidate = PopulationSearchOps.At(result, index);
+            if (PopulationSearchOps.Greater(candidate, bestFitness))
+            {
+                bestFitness = candidate;
+                best = PopulationSearchOps.Row(rows, index);
+            }
+
+            return result;
+        };
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            for (int i = 0; i < _populationSize; i++)
-            {
-                for (int j = 0; j < _populationSize; j++)
-                {
-                    if (intensity[j] > intensity[i])
-                    {
-                        // Move firefly i towards j
-                        double distance = ComputeDistance(fireflies, i, j, p);
-                        double beta = _beta0 * Math.Exp(-_gamma * distance * distance);
+            Generation(ref fireflies, ref intensity, evaluate, random, _alpha, _beta0, _gamma);
 
-                        for (int k = 0; k < p; k++)
-                        {
-                            double movement = beta * (fireflies[j, k] - fireflies[i, k])
-                                            + _alpha * (random.NextDouble() - 0.5);
-                            fireflies[i, k] = Math.Max(0, Math.Min(1, fireflies[i, k] + movement));
-                        }
-                    }
-                }
-
-                intensity[i] = EvaluateSolution(data, target, fireflies, i, p, n);
-            }
-        }
-
-        // Find best firefly
-        int bestIdx = 0;
-        double bestIntensity = intensity[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (intensity[i] > bestIntensity)
-            {
-                bestIntensity = intensity[i];
-                bestIdx = i;
-            }
-        }
-
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = fireflies[bestIdx, j];
+        _featureScores = best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(best, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeDistance(double[,] fireflies, int i, int j, int p)
+    /// <summary>
+    /// One generation of Yang (2009): every firefly i moves towards each brighter firefly j,
+    /// x_i = x_i + beta0 exp(-gamma r_ij^2) (x_j - x_i) + alpha (u - 1/2) with u ~ U[0, 1]^d, and its light
+    /// intensity is updated after each move; a firefly with no brighter one moves randomly,
+    /// x_i = x_i + alpha (u - 1/2). Positions are clamped to [0, 1].
+    /// </summary>
+    internal static void Generation(
+        ref Tensor<T> fireflies, ref Tensor<T> intensity, Func<Tensor<T>, Tensor<T>> evaluate, Random random,
+        double alpha, double beta0, double gamma)
     {
-        double sum = 0;
-        for (int k = 0; k < p; k++)
+        var engine = AiDotNetEngine.Current;
+        int m = fireflies.Shape[0];
+        int p = fireflies.Shape[1];
+        for (int i = 0; i < m; i++)
         {
-            double diff = fireflies[i, k] - fireflies[j, k];
-            sum += diff * diff;
+            // Firefly i's position and intensity are kept locally through its moves and written back once: replacing
+            // the row in the population after every pairwise move rewrote all m * p entries each time
+            var position = PopulationSearchOps.Row(fireflies, i);
+            var brightness = PopulationSearchOps.At(intensity, i);
+            bool moved = false;
+            for (int j = 0; j < m; j++)
+            {
+                if (j == i || !PopulationSearchOps.Greater(PopulationSearchOps.At(intensity, j), brightness))
+                    continue;
+
+                position = Attract(
+                    position, PopulationSearchOps.Row(fireflies, j), PopulationSearchOps.Uniform<T>(random, p), alpha, beta0, gamma);
+                brightness = evaluate(engine.Reshape(position, new[] { 1, p }));
+                moved = true;
+            }
+
+            if (!moved)
+            {
+                position = RandomMove(position, PopulationSearchOps.Uniform<T>(random, p), alpha);
+                brightness = evaluate(engine.Reshape(position, new[] { 1, p }));
+            }
+
+            fireflies = PopulationSearchOps.ReplaceRow(fireflies, i, position);
+            intensity = PopulationSearchOps.ReplaceAt(intensity, i, brightness);
         }
-        return Math.Sqrt(sum);
     }
 
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
+    /// <summary>
+    /// The move of firefly i towards j: x_i + beta0 exp(-gamma |x_i - x_j|^2) (x_j - x_i) + alpha (u - 1/2),
+    /// clamped to [0, 1].
+    /// </summary>
+    internal static Tensor<T> Attract(Tensor<T> xi, Tensor<T> xj, Tensor<T> u, double alpha, double beta0, double gamma)
     {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
-
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var difference = engine.TensorSubtract(xj, xi);
+        var squaredDistance = engine.ReduceSum(engine.TensorSquare(difference), new[] { 0 }, true); // [1]
+        var attractiveness = engine.TensorMultiplyScalar(
+            engine.TensorExp(engine.TensorMultiplyScalar(squaredDistance, ops.FromDouble(-gamma))), ops.FromDouble(beta0));
+        var step = engine.TensorAdd(
+            PopulationSearchOps.Scale(difference, attractiveness), PopulationSearchOps.Affine(u, alpha, -alpha / 2));
+        return PopulationSearchOps.Clamp01(engine.TensorAdd(xi, step));
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-    }
+    /// <summary>The random move of a firefly with no brighter one: x + alpha (u - 1/2), clamped to [0, 1].</summary>
+    internal static Tensor<T> RandomMove(Tensor<T> x, Tensor<T> u, double alpha) =>
+        PopulationSearchOps.Clamp01(AiDotNetEngine.Current.TensorAdd(x, PopulationSearchOps.Affine(u, alpha, -alpha / 2)));
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -225,15 +211,7 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("FireflyAlgorithm has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

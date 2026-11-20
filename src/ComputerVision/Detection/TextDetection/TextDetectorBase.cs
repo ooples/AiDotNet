@@ -576,10 +576,12 @@ public abstract partial class TextDetectorBase<T> : VisionTaskModelBase<T>, AiDo
     /// </summary>
     protected Tensor<T> WeightedMean(Tensor<T> values, Tensor<T> weights)
     {
-        double total = 0;
-        for (int i = 0; i < weights.Length; i++) total += NumOps.ToDouble(weights[i]);
         var sum = Engine.ReduceSum(Engine.TensorMultiply(values, weights), null);
-        return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(total > 0 ? 1.0 / total : 0.0));
+        var total = Engine.ReduceSum(weights, null);
+        var positive = Engine.TensorGreaterThan(total, NumOps.Zero);
+        var eps = NumOps.FromDouble(1e-12);
+        var safeDenom = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorSubtractScalar(total, eps)), eps);
+        return Engine.TensorMultiply(Engine.TensorDivide(sum, safeDenom), positive);
     }
 
     /// <summary>Dice loss <c>1 - 2 sum(p y m) / (sum(p m) + sum(y m) + eps)</c> over the masked pixels.</summary>

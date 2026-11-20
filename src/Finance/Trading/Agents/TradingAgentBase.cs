@@ -532,40 +532,44 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// We annualize assuming 252 trading days per year.
     /// </para>
     /// </remarks>
-    protected virtual T CalculateSharpeRatio()
+    protected virtual T CalculateSharpeRatio() => ComputeSharpeRatio(PortfolioHistory, TradingOptions.RiskFreeRate);
+
+    /// <summary>
+    /// Annualized Sharpe ratio of the simple returns of <paramref name="history"/> over steps whose previous value is
+    /// positive: <c>(mean - riskFreeRate / 252) / std * sqrt(252)</c> with the sample (n - 1) standard deviation;
+    /// zero with fewer than two valid returns or a degenerate standard deviation.
+    /// </summary>
+    /// <remarks>
+    /// The number of valid returns is counted in <c>int</c>: a 0/1 sum in Half stops growing at 2048, which would
+    /// skew the mean and the variance of any longer history.
+    /// </remarks>
+    internal static T ComputeSharpeRatio(IReadOnlyList<T> history, double riskFreeRate)
     {
-        if (PortfolioHistory.Count < 2) return NumOps.Zero;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (history.Count < 2) return ops.Zero;
 
-        // Calculate returns
-        var returns = new List<T>();
-        for (int i = 1; i < PortfolioHistory.Count; i++)
-        {
-            T prevValue = PortfolioHistory[i - 1];
-            T currValue = PortfolioHistory[i];
-            if (NumOps.GreaterThan(prevValue, NumOps.Zero))
-            {
-                T ret = NumOps.Divide(NumOps.Subtract(currValue, prevValue), prevValue);
-                returns.Add(ret);
-            }
-        }
+        // Simple returns over steps whose previous value is positive.
+        var engine = AiDotNetEngine.Current;
+        int steps = history.Count - 1;
+        var values = new Tensor<T>(history.ToArray(), new[] { history.Count });
+        var prev = engine.TensorSlice(values, new[] { 0 }, new[] { steps });
+        var curr = engine.TensorSlice(values, new[] { 1 }, new[] { steps });
+        var valid = engine.TensorGreaterThan(prev, ops.Zero);
+        int count = (int)engine.TensorCountNonzero(valid);
+        if (count < 2) return ops.Zero;
 
-        if (returns.Count < 2) return NumOps.Zero;
+        var zeros = new Tensor<T>(new[] { steps });
+        var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, ops.One));
+        var returns = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorSubtract(curr, prev), safePrev), zeros);
 
-        // Mean return and sample standard deviation, in double and rounded once: in Half the sum of squared
-        // deviations passes 65504 long before the standard deviation does, and the infinite std made the ratio 0.
-        int count = returns.Count;
-        var (meanReturn, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(
-            AiDotNetEngine.Current, new Tensor<T>(new[] { count }, new Vector<T>(returns.ToArray())));
-        double stdDev = Math.Sqrt(variance * count / (count - 1));
-
-        if (stdDev < 1e-10) return NumOps.Zero;
-
-        // Calculate Sharpe ratio (annualized)
-        double riskFreeRate = TradingOptions.RiskFreeRate / 252.0; // Daily rate
-        double sharpe = (meanReturn - riskFreeRate) / stdDev;
-
-        // Annualize
-        return NumOps.FromDouble(sharpe * Math.Sqrt(252));
+        // Widen returns before centering and reducing; the count remains an integer even for Half histories.
+        var wideReturns = returns.Cast<double>();
+        double meanReturn = engine.TensorSum(wideReturns) / count;
+        var deviations = engine.TensorWhere(valid.Cast<double>(), engine.TensorSubtractScalar(wideReturns, meanReturn),
+            new Tensor<double>(new[] { steps }));
+        double stdDev = Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, deviations) / (count - 1));
+        return stdDev < 1e-10 ? ops.Zero
+            : ops.FromDouble((meanReturn - riskFreeRate / 252.0) / stdDev * Math.Sqrt(252));
     }
 
     /// <summary>
@@ -582,27 +586,16 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     {
         if (PortfolioHistory.Count < 2) return NumOps.Zero;
 
-        T maxDrawdown = NumOps.Zero;
-        T peak = PortfolioHistory[0];
-
-        foreach (var value in PortfolioHistory)
-        {
-            if (NumOps.GreaterThan(value, peak))
-            {
-                peak = value;
-            }
-
-            if (NumOps.GreaterThan(peak, NumOps.Zero))
-            {
-                T drawdown = NumOps.Divide(NumOps.Subtract(peak, value), peak);
-                if (NumOps.GreaterThan(drawdown, maxDrawdown))
-                {
-                    maxDrawdown = drawdown;
-                }
-            }
-        }
-
-        return maxDrawdown;
+        // Running peak (cumulative max), drawdown (peak - value) / peak where the peak is positive.
+        var engine = AiDotNetEngine.Current;
+        var history = new Tensor<T>(PortfolioHistory.ToArray(), new[] { PortfolioHistory.Count });
+        var peak = engine.TensorCumMax(history, 0);
+        var positive = engine.TensorGreaterThan(peak, NumOps.Zero);
+        var safePeak = engine.TensorWhere(positive, peak, engine.TensorAddScalar(new Tensor<T>(new[] { history.Length }), NumOps.One));
+        var drawdown = engine.TensorWhere(
+            positive, engine.TensorDivide(engine.TensorSubtract(peak, history), safePeak), new Tensor<T>(new[] { history.Length }));
+        T maxDrawdown = engine.TensorMaxValue(drawdown);
+        return NumOps.GreaterThan(maxDrawdown, NumOps.Zero) ? maxDrawdown : NumOps.Zero;
     }
 
     /// <summary>
@@ -695,13 +688,15 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// </summary>
     protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, double standardDeviation)
     {
-        var noisy = new Vector<T>(action.Length);
+        // The noise sigma * z, one standard-normal draw per component in master's order, each formed in double and
+        // rounded to T once (rounding z and sigma to T first would add two roundings); then action + noise.
+        var noise = new Tensor<T>(new[] { action.Length });
         for (int i = 0; i < action.Length; i++)
         {
-            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviation * NextStandardNormal()));
+            noise[i] = NumOps.FromDouble(standardDeviation * NextStandardNormal());
         }
 
-        return noisy;
+        return AiDotNetEngine.Current.TensorAdd(Tensor<T>.FromVector(action), noise).ToVector();
     }
 
     /// <summary>
@@ -712,24 +707,23 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// The per-component overload exists for agents whose exploration width is itself learned (the SAC
     /// actor's state-independent log-std), where a single scalar sigma would throw that parameter away.
     /// </remarks>
-    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, IReadOnlyList<double> standardDeviations)
+    protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, Vector<T> standardDeviations)
     {
         if (action is null) throw new ArgumentNullException(nameof(action));
         if (standardDeviations is null) throw new ArgumentNullException(nameof(standardDeviations));
-        if (standardDeviations.Count != action.Length)
+        if (standardDeviations.Length != action.Length)
         {
             throw new ArgumentException(
-                $"Expected {action.Length} standard deviations, got {standardDeviations.Count}.",
+                $"Expected {action.Length} standard deviations, got {standardDeviations.Length}.",
                 nameof(standardDeviations));
         }
 
-        var noisy = new Vector<T>(action.Length);
-        for (int i = 0; i < action.Length; i++)
-        {
-            noisy[i] = NumOps.Add(action[i], NumOps.FromDouble(standardDeviations[i] * NextStandardNormal()));
-        }
-
-        return noisy;
+        // Unit-variance noise from the scalar overload (one standard-normal draw per component, in order),
+        // then action + sigma_i * z_i on the whole vector.
+        var draws = Tensor<T>.FromVector(AddGaussianExplorationNoise(new Vector<T>(action.Length), 1.0));
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAdd(
+            Tensor<T>.FromVector(action), engine.TensorMultiply(draws, Tensor<T>.FromVector(standardDeviations))).ToVector();
     }
 
     /// <summary>
@@ -740,26 +734,30 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// <para>
     /// This is the log-probability of the behaviour policy an agent with a deterministic actor head plus
     /// Gaussian exploration actually follows, which is exactly the <c>log pi(a|s)</c> the SAC soft value
-    /// target needs. Computed in double precision so a float agent does not lose the tail.
+    /// target needs. Computed with engine operations in double and rounded to <typeparamref name="T"/> once: in
+    /// Half <c>exp(logStd)</c> underflows to zero below about -17.3 (inside SAC's [-20, 2] log-std range), and
+    /// dividing by it gave NaN or infinity where the density is finite (about 19.08 at logStd = -20).
     /// </para>
     /// </remarks>
-    protected double GaussianLogProbability(Vector<T> action, Vector<T> mean, IReadOnlyList<double> logStds)
+    protected T GaussianLogProbability(Vector<T> action, Vector<T> mean, Vector<T> logStds)
+        => GaussianLogDensity(action, mean, logStds);
+
+    /// <summary>The computation behind <see cref="GaussianLogProbability"/>, which holds no agent state.</summary>
+    internal static T GaussianLogDensity(Vector<T> action, Vector<T> mean, Vector<T> logStds)
     {
         if (action is null) throw new ArgumentNullException(nameof(action));
         if (mean is null) throw new ArgumentNullException(nameof(mean));
         if (logStds is null) throw new ArgumentNullException(nameof(logStds));
 
-        double total = 0.0;
-        for (int i = 0; i < action.Length; i++)
-        {
-            double logStd = logStds[i];
-            double std = Math.Exp(logStd);
-            double diff = NumOps.ToDouble(action[i]) - NumOps.ToDouble(mean[i]);
-            double z = diff / std;
-            total += (-0.5 * z * z) - logStd - (0.5 * Math.Log(2.0 * Math.PI));
-        }
-
-        return total;
+        // sum_i -0.5 * z_i^2 - logStd_i - 0.5 * log(2 pi), z = (a - mu) / exp(logStd).
+        var engine = AiDotNetEngine.Current;
+        var logStd = Tensor<T>.FromVector(logStds).Cast<double>();
+        var z = engine.TensorMultiply(
+            engine.TensorSubtract(Tensor<T>.FromVector(action).Cast<double>(), Tensor<T>.FromVector(mean).Cast<double>()),
+            engine.TensorExp(engine.TensorNegate(logStd)));
+        double quadratic = -0.5 * engine.TensorSum(engine.TensorMultiply(z, z));
+        double normalizer = 0.5 * Math.Log(2.0 * Math.PI) * action.Length;
+        return MathHelper.GetNumericOperations<T>().FromDouble(quadratic - engine.TensorSum(logStd) - normalizer);
     }
 
     /// <summary>
@@ -815,13 +813,10 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
 
         T tauT = NumOps.FromDouble(tau);
         T oneMinusTau = NumOps.FromDouble(1.0 - tau);
-        var blended = new Vector<T>(targetParameters.Length);
-        for (int i = 0; i < blended.Length; i++)
-        {
-            blended[i] = NumOps.Add(
-                NumOps.Multiply(tauT, sourceParameters[i]),
-                NumOps.Multiply(oneMinusTau, targetParameters[i]));
-        }
+        var engine = AiDotNetEngine.Current;
+        var blended = engine.TensorAdd(
+            engine.TensorMultiplyScalar(Tensor<T>.FromVector(sourceParameters), tauT),
+            engine.TensorMultiplyScalar(Tensor<T>.FromVector(targetParameters), oneMinusTau)).ToVector();
 
         target.UpdateParameters(blended);
     }
@@ -915,33 +910,17 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     {
         // Default implementation: scale positions if they exceed risk budget
         T maxPositionSize = TradingOptions.MaxPositionSize;
-        var constrainedAction = new Vector<T>(action.Length);
+        // Clip each position to [-max, max] (|v| > max -> sign(v) * max), then scale by min(riskBudget, 1).
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(action);
+        var tooLarge = engine.TensorGreaterThan(engine.TensorAbs(values), maxPositionSize);
+        var negative = engine.TensorLessThan(values, NumOps.Zero);
+        var cap = engine.TensorAddScalar(new Tensor<T>(new[] { action.Length }), maxPositionSize);
+        var signedCap = engine.TensorWhere(negative, engine.TensorNegate(cap), cap);
+        var clipped = engine.TensorWhere(tooLarge, signedCap, values);
 
-        for (int i = 0; i < action.Length; i++)
-        {
-            T value = action[i];
-            T absValue = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(value)));
-
-            if (NumOps.GreaterThan(absValue, maxPositionSize))
-            {
-                // Scale down to max position size
-                T sign = !NumOps.LessThan(value, NumOps.Zero) ? NumOps.One : NumOps.FromDouble(-1);
-                constrainedAction[i] = NumOps.Multiply(sign, maxPositionSize);
-            }
-            else
-            {
-                constrainedAction[i] = value;
-            }
-        }
-
-        // Further scale based on risk budget if needed
         T riskMultiplier = NumOps.LessThan(riskBudget, NumOps.One) ? riskBudget : NumOps.One;
-        for (int i = 0; i < constrainedAction.Length; i++)
-        {
-            constrainedAction[i] = NumOps.Multiply(constrainedAction[i], riskMultiplier);
-        }
-
-        return constrainedAction;
+        return engine.TensorMultiplyScalar(clipped, riskMultiplier).ToVector();
     }
 
     /// <summary>

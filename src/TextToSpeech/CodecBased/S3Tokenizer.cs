@@ -141,67 +141,64 @@ internal sealed class S3Tokenizer<T>
     {
         int half = channels / 2;
         double increment = Math.Log(10000.0) / (half - 1);
-        var table = new Tensor<T>(new[] { length, channels });
+        // A fixed table of constants, built in double and cast once.
+        var table = new double[length, channels];
         for (int t = 0; t < length; t++)
             for (int k = 0; k < half; k++)
             {
                 double scaled = t * Math.Exp(-increment * k);
-                table[t, k] = NumOps.FromDouble(Math.Sin(scaled));
-                table[t, half + k] = NumOps.FromDouble(Math.Cos(scaled));
+                table[t, k] = Math.Sin(scaled);
+                table[t, half + k] = Math.Cos(scaled);
             }
-        return table;
+        return EngineStft<T>.Table(table);
     }
 
     /// <summary>Whisper's 128-band log-mel <c>[128, frames]</c> of 16 kHz audio (<c>log_mel_spectrogram</c>): a centred,
     /// reflect-padded 400-point STFT with hop 160 and a periodic Hann window, the last frame dropped, power through
     /// librosa's Slaney filters, <c>log10(max(x, 1e-10))</c> floored at 8 below its maximum, then <c>(x + 4) / 4</c>.</summary>
-    public static double[,] LogMel(IReadOnlyList<double> audio, int mels = 128)
+    /// <remarks>The frames are scaled by 2<sup>−9</sup> before the DFT and the power's 2<sup>−18</sup> is added back as
+    /// 18 log₁₀ 2 after the log, so a half-precision power (up to ~400² per bin) cannot overflow.</remarks>
+    public static Tensor<T> LogMel(Tensor<T> audio, int mels = 128)
     {
-        if (audio.Count <= FftSize / 2) throw new ArgumentException("Reflect padding needs more than 200 samples.", nameof(audio));
-        int bins = FftSize / 2 + 1, frames = audio.Count / Hop, pad = FftSize / 2;
-        var filters = MelFilterbanks.Slaney(SampleRate, FftSize, mels, 0, SampleRate / 2.0);
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        int count = audio.Length;
+        if (count <= FftSize / 2) throw new ArgumentException("Reflect padding needs more than 200 samples.", nameof(audio));
+        var engine = AiDotNetEngine.Current;
+        int bins = FftSize / 2 + 1, frames = count / Hop, pad = FftSize / 2;
+        const int Shift = 9;
+        // Fixed tables: the scaled periodic Hann window and the DFT kernels cos/sin(2π (k n mod N) / N), [N, bins].
         var window = new double[FftSize];
-        for (int n = 0; n < FftSize; n++) window[n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / FftSize);
-        var cos = new double[FftSize];
-        var sin = new double[FftSize];
-        for (int n = 0; n < FftSize; n++) { cos[n] = Math.Cos(2 * Math.PI * n / FftSize); sin[n] = Math.Sin(2 * Math.PI * n / FftSize); }
-        double Sample(int i)
-        {
-            int j = i - pad;
-            if (j < 0) j = -j;
-            if (j >= audio.Count) j = 2 * (audio.Count - 1) - j;
-            return audio[j];
-        }
-        var log = new double[mels, frames];
-        var frame = new double[FftSize];
-        var power = new double[bins];
-        double max = double.NegativeInfinity;
-        for (int f = 0; f < frames; f++)
-        {
-            for (int n = 0; n < FftSize; n++) frame[n] = Sample(f * Hop + n) * window[n];
+        for (int n = 0; n < FftSize; n++) window[n] = (0.5 - 0.5 * Math.Cos(2 * Math.PI * n / FftSize)) / (1 << Shift);
+        var cos = new double[FftSize, bins];
+        var sin = new double[FftSize, bins];
+        for (int n = 0; n < FftSize; n++)
             for (int k = 0; k < bins; k++)
             {
-                double re = 0, im = 0;
-                for (int n = 0; n < FftSize; n++)
-                {
-                    int index = k * n % FftSize;
-                    re += frame[n] * cos[index];
-                    im -= frame[n] * sin[index];
-                }
-                power[k] = re * re + im * im;
+                int index = k * n % FftSize;
+                cos[n, k] = Math.Cos(2 * Math.PI * index / FftSize);
+                sin[n, k] = Math.Sin(2 * Math.PI * index / FftSize);
             }
-            for (int m = 0; m < mels; m++)
-            {
-                double sum = 0;
-                for (int k = 0; k < bins; k++) sum += filters[m, k] * power[k];
-                double value = Math.Log10(Math.Max(sum, 1e-10));
-                log[m, f] = value;
-                if (value > max) max = value;
-            }
-        }
-        for (int m = 0; m < mels; m++)
-            for (int f = 0; f < frames; f++) log[m, f] = (Math.Max(log[m, f], max - 8.0) + 4.0) / 4.0;
-        return log;
+        var positions = new int[frames * FftSize];
+        for (int f = 0; f < frames; f++)
+            for (int n = 0; n < FftSize; n++) positions[f * FftSize + n] = f * Hop + n;
+
+        var padded = engine.PadNd(engine.Reshape(audio, new[] { count }), new[] { pad, pad }, AiDotNet.Tensors.Engines.PadMode.Reflect, NumOps.Zero);
+        var framed = engine.Reshape(engine.TensorIndexSelect(padded, new Tensor<int>(positions, new[] { frames * FftSize }), 0), new[] { frames, FftSize });
+        var windowed = engine.TensorMultiply(framed, engine.TensorBroadcastTo(
+            new Tensor<double>(window, new[] { 1, FftSize }).Cast<T>(), new[] { frames, FftSize }));
+        var re = engine.TensorMatMul(windowed, EngineStft<T>.Table(cos));
+        var im = engine.TensorMatMul(windowed, EngineStft<T>.Table(sin));
+        var power = engine.TensorAdd(engine.TensorMultiply(re, re), engine.TensorMultiply(im, im));                 // [frames, bins]
+        var filters = EngineStft<T>.Table(MelFilterbanks.Slaney(SampleRate, FftSize, mels, 0, SampleRate / 2.0));     // [mels, bins]
+        var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));                                        // [mels, frames]
+        // log10(max(mel·4^Shift, 1e-10)) = max(log10(mel) + 2·Shift·log10 2, −10): the floor is applied in the log
+        // domain, where it is representable in any T (1e-10 / 2^(2·Shift) underflows to zero in half precision, and
+        // silence then gave log10(0) = −∞ everywhere, which the max-relative floor cannot recover).
+        var log = engine.TensorMax(
+            engine.TensorAddScalar(engine.TensorLog10(mel), NumOps.FromDouble(2 * Shift * Math.Log10(2.0))),
+            NumOps.FromDouble(-10.0));
+        T lowest = NumOps.Subtract(engine.TensorMaxValue(log), NumOps.FromDouble(8.0));
+        return engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorMax(log, lowest), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.25));
     }
 
     /// <summary>The encoder states <c>[frames', State]</c> of a log-mel <c>[Mels, frames]</c> (<c>AudioEncoder</c>).</summary>
@@ -219,15 +216,17 @@ internal sealed class S3Tokenizer<T>
         {
             if (length > 2048) throw new ArgumentException("At most 2,048 positions fit v2's rotary table.", nameof(mel));
             // precompute_freqs_cis(64, 2048): angle t · 10000^(−2k/64), the 32 frequencies repeated for both halves.
-            cos = new Tensor<T>(new[] { 1, length, dk });
-            sin = new Tensor<T>(new[] { 1, length, dk });
+            var cosTable = new double[length, dk];
+            var sinTable = new double[length, dk];
             for (int t = 0; t < length; t++)
                 for (int k = 0; k < dk / 2; k++)
                 {
                     double angle = t * (1.0 / Math.Pow(10000.0, 2.0 * k / dk));
-                    cos[0, t, k] = cos[0, t, k + dk / 2] = NumOps.FromDouble(Math.Cos(angle));
-                    sin[0, t, k] = sin[0, t, k + dk / 2] = NumOps.FromDouble(Math.Sin(angle));
+                    cosTable[t, k] = cosTable[t, k + dk / 2] = Math.Cos(angle);
+                    sinTable[t, k] = sinTable[t, k + dk / 2] = Math.Sin(angle);
                 }
+            cos = _engine.Reshape(EngineStft<T>.Table(cosTable), new[] { 1, length, dk });
+            sin = _engine.Reshape(EngineStft<T>.Table(sinTable), new[] { 1, length, dk });
         }
         else
         {
@@ -277,34 +276,23 @@ internal sealed class S3Tokenizer<T>
     {
         if (ProjectDown is not null) return QuantizeFsq(hidden);
         int rows = hidden.Shape[0], d = Configuration.State, size = Configuration.CodebookSize;
-        var squared = new double[size];
-        for (int e = 0; e < size; e++)
-        {
-            double s = 0;
-            for (int j = 0; j < d; j++) { double v = NumOps.ToDouble(_codebook[e, j]); s += v * v; }
-            squared[e] = s;
-        }
-        var codes = new int[rows];
-        var x = new double[d];
-        for (int r = 0; r < rows; r++)
-        {
-            double norm = 0;
-            for (int j = 0; j < d; j++) { x[j] = NumOps.ToDouble(hidden[r, j]); norm += x[j] * x[j]; }
-            norm = Math.Max(Math.Sqrt(norm), 1e-12);
-            double xx = 0;
-            for (int j = 0; j < d; j++) { x[j] /= norm; xx += x[j] * x[j]; }
-            double best = double.NegativeInfinity;
-            for (int e = 0; e < size; e++)
-            {
-                double dot = 0;
-                for (int j = 0; j < d; j++) dot += x[j] * NumOps.ToDouble(_codebook[e, j]);
-                double score = -(xx - 2 * dot + squared[e]);
-                // torch's max returns the first index of the maximum.
-                if (score > best) { best = score; codes[r] = e; }
-            }
-        }
-        return codes;
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var squared = _engine.Reshape(_engine.ReduceSum(_engine.TensorMultiply(_codebook, _codebook), new[] { 1 }, false), new[] { 1, size });
+        // F.normalize: x / max(‖x‖, ε), ε = 1e-12 (raised to the smallest normal value where 1e-12 underflows T).
+        var x = _engine.Reshape(hidden, new[] { rows, d });
+        var norm = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, true));
+        x = _engine.TensorDivide(x, _engine.TensorBroadcastTo(_engine.TensorMax(norm, Epsilon(1e-12)), new[] { rows, d }));
+        var xx = _engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, true);                                 // [rows, 1]
+        var dot = _engine.TensorMatMul(x, _engine.TensorTranspose(_codebook));                                     // [rows, size]
+        // −(‖x‖² − 2 x·e + ‖e‖²); torch's max returns the first index of the maximum.
+        var score = _engine.TensorNegate(_engine.TensorAdd(_engine.TensorSubtract(_engine.TensorBroadcastTo(xx, new[] { rows, size }),
+            _engine.TensorMultiplyScalar(dot, NumOps.FromDouble(2.0))), _engine.TensorBroadcastTo(squared, new[] { rows, size })));
+        return _engine.TensorArgMax(score, 1).ToArray();
     }
+
+    // A positive guard ε, raised to the smallest normal half-precision value where ε itself underflows T.
+    private static T Epsilon(double value)
+        => NumOps.ToDouble(NumOps.FromDouble(value)) == 0 ? NumOps.FromDouble(6.103515625e-05) : NumOps.FromDouble(value);
 
     /// <summary>v2's finite scalar quantization (<c>FSQCodebook.encode</c>): the 8 projected values through tanh, scaled by
     /// 0.999, rounded half to even into {−1, 0, 1}, shifted to {0, 1, 2} and read as base-3 digits, least significant
@@ -313,18 +301,12 @@ internal sealed class S3Tokenizer<T>
     {
         var projected = (ProjectDown ?? throw new InvalidOperationException("v2 has an FSQ projection.")).Forward(hidden);
         int rows = projected.Shape[0];
+        // round(tanh(x) · 0.999) + 1 ∈ {0, 1, 2}, read in integers.
+        var digits = _engine.TensorAddScalar(_engine.TensorRound(_engine.TensorMultiplyScalar(_engine.TensorTanh(projected),
+            NumOps.FromDouble(0.9990000128746033))), NumOps.One).Cast<int>().ToArray();
         var codes = new int[rows];
         for (int r = 0; r < rows; r++)
-        {
-            double code = 0, power = 1;
-            for (int j = 0; j < 8; j++)
-            {
-                double digit = Math.Round(Math.Tanh(NumOps.ToDouble(projected[r, j])) * 0.9990000128746033) + 1;
-                code += digit * power;
-                power *= 3;
-            }
-            codes[r] = (int)code;
-        }
+            for (int j = 7; j >= 0; j--) codes[r] = 3 * codes[r] + digits[r * 8 + j];
         return codes;
     }
 

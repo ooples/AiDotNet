@@ -175,7 +175,7 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         // Candidates are the finite, non-zero off-diagonal weights; they are inserted strongest
         // first (ties in (from, to) order), skipping any edge that would close a directed cycle.
         var w = Tensor<T>.FromMatrix(weights);
-        var finite = Engine.TensorWhere(Engine.TensorIsFinite(w), w, Engine.TensorZerosLike(w));
+        var finite = Engine.TensorWhere(AiDotNet.Helpers.TensorFiniteness.FiniteMask(Engine, w), w, Engine.TensorZerosLike(w));
         return ProjectToAcyclic(finite.ToMatrix());
     }
 

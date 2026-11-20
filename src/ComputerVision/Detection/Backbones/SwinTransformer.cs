@@ -737,13 +737,8 @@ internal class SwinLayerNorm<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         _dim = dim;
         _eps = eps;
-        _gamma = new Tensor<T>(new[] { dim });
-        _beta = new Tensor<T>(new[] { dim });
-        for (int i = 0; i < dim; i++)
-        {
-            _gamma[i] = _numOps.FromDouble(1.0);
-            _beta[i] = _numOps.FromDouble(0.0);
-        }
+        _gamma = CvTensorOps<T>.Fill(new[] { dim }, 1.0);
+        _beta = CvTensorOps<T>.Fill(new[] { dim }, 0.0);
     }
 
     public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);

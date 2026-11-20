@@ -308,8 +308,12 @@ internal sealed class VoiceboxTransformer<T>
                 attentionDropout, activationDropout));
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         for (int i = 0; i < layers / 2; i++)
-            _skipProjections.Add(VoiceboxOps<T>.Own(owner,
-                new DenseLayer<T>(dim, identity, biasMode: BiasMode.Always)));
+        {
+            var projection = VoiceboxOps<T>.Own(owner, new DenseLayer<T>(dim, identity, biasMode: BiasMode.Always));
+            // Sized now from [x, skip] (see the audio model's input projection).
+            projection.ResolveFromShape(new[] { 1, 2 * dim });
+            _skipProjections.Add(projection);
+        }
         _finalNorm = VoiceboxOps<T>.Own(owner, new LayerNormalizationLayer<T>(dim));
     }
 
@@ -351,6 +355,9 @@ internal sealed class VoiceboxAudioModel<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         _phones = VoiceboxOps<T>.Own(owner, new EmbeddingLayer<T>(options.PhoneVocabularySize, options.PhoneEmbeddingDim));
         _input = VoiceboxOps<T>.Own(owner, new DenseLayer<T>(options.AudioModelDim, identity, biasMode: BiasMode.Always));
+        // Sized now from [state, context, phone embedding]: a first training forward that resized it would copy the
+        // old weights on the host inside a compiled trace.
+        _input.ResolveFromShape(new[] { 1, 2 * options.MelChannels + options.PhoneEmbeddingDim });
         _transformer = new VoiceboxTransformer<T>(engine, owner, options.AudioModelDim, options.AudioHeads,
             options.AudioFeedForwardDim, options.AudioLayers, options.AudioConvPositionWidth,
             options.AudioConvPositionGroups, options.AudioConvPositionDepth, options.AudioAttentionDropout,
@@ -402,6 +409,8 @@ internal sealed class VoiceboxDurationModel<T>
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         _phones = VoiceboxOps<T>.Own(owner, new EmbeddingLayer<T>(options.PhoneVocabularySize, options.PhoneEmbeddingDim));
         _input = VoiceboxOps<T>.Own(owner, new DenseLayer<T>(options.DurationModelDim, identity, biasMode: BiasMode.Always));
+        // Sized now from [duration context, phone embedding] (see the audio model).
+        _input.ResolveFromShape(new[] { 1, 1 + options.PhoneEmbeddingDim });
         _transformer = new VoiceboxTransformer<T>(engine, owner, options.DurationModelDim, options.DurationHeads,
             options.DurationFeedForwardDim, options.DurationLayers, options.DurationConvPositionWidth,
             options.DurationConvPositionGroups, options.DurationConvPositionDepth, options.DurationAttentionDropout,

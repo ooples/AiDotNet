@@ -381,16 +381,14 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize parameters with small positive values
+        // Initialize omega (constant term) to a small positive value
         _omega[0] = NumOps.FromDouble(0.01);
-        for (int i = 0; i < _alpha.Length; i++)
-        {
-            _alpha[i] = NumOps.FromDouble(0.05);
-        }
-        for (int i = 0; i < _beta.Length; i++)
-        {
-            _beta[i] = NumOps.FromDouble(0.85);
-        }
+
+        // Initialize alpha (ARCH) coefficients to small positive values
+        Engine.Fill(_alpha.Length, NumOps.FromDouble(0.05)).CopyTo(_alpha.AsWritableSpan());
+
+        // Initialize beta (GARCH) coefficients to larger positive values
+        Engine.Fill(_beta.Length, NumOps.FromDouble(0.85)).CopyTo(_beta.AsWritableSpan());
     }
 
     /// <summary>
@@ -418,222 +416,414 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// when the terrain gets tricky.
     /// </para>
     /// </remarks>
+    private T VarianceFloor => NumOps.FromDouble(typeof(T) == typeof(Half) ? 1e-5 : 1e-8);
+
+    private double VarianceFloorDouble => NumOps.ToDouble(VarianceFloor);
+
     private void EstimateParameters(Vector<T> y)
     {
-        int maxIterations = 10000;
-        T initialLearningRate = NumOps.FromDouble(0.01);
-        T minLearningRate = NumOps.FromDouble(1e-6);
-        T convergenceThreshold = NumOps.FromDouble(1e-6);
-        T momentumFactor = NumOps.FromDouble(0.9);
+        var yDoubleVector = y.AsTensor().Cast<double>().ToVector();
+        double[] yDouble = yDoubleVector.ToArray();
+        for (int i = 0; i < yDouble.Length; i++)
+        {
+            if (double.IsNaN(yDouble[i]) || double.IsInfinity(yDouble[i]))
+            {
+                throw new InvalidOperationException("Cannot estimate GARCH parameters from non-finite residuals.");
+            }
+        }
 
-        Vector<T> previousOmega = _omega.Clone();
-        Vector<T> previousAlpha = _alpha.Clone();
-        Vector<T> previousBeta = _beta.Clone();
+        double minOmega = VarianceFloorDouble;
+        double unconditionalVariance = yDoubleVector.Length > 1
+            ? StatisticsHelper<double>.CalculateVariance(yDoubleVector)
+            : minOmega;
+        if (double.IsNaN(unconditionalVariance) || double.IsInfinity(unconditionalVariance))
+        {
+            throw new InvalidOperationException("GARCH unconditional variance is non-finite.");
+        }
 
-        Vector<T> velocityOmega = new Vector<T>(_omega.Length);
-        Vector<T> velocityAlpha = new Vector<T>(_alpha.Length);
-        Vector<T> velocityBeta = new Vector<T>(_beta.Length);
+        if (!(unconditionalVariance > minOmega))
+        {
+            unconditionalVariance = minOmega;
+        }
 
-        T previousLogLikelihood = CalculateLogLikelihood(y);
-        T currentLearningRate = initialLearningRate;
+        double omega = NumOps.ToDouble(_omega[0]);
+        double[] alpha = _alpha.AsTensor().Cast<double>().ToArray();
+        double[] beta = _beta.AsTensor().Cast<double>().ToArray();
+        ConstrainParametersDouble(ref omega, alpha, beta, minOmega);
+
+        double initialLogLikelihood = CalculateLogLikelihoodDouble(
+            yDouble, unconditionalVariance, omega, alpha, beta, minOmega);
+        if (double.IsNaN(initialLogLikelihood) || double.IsInfinity(initialLogLikelihood))
+        {
+            throw new InvalidOperationException("Initial GARCH Gaussian log-likelihood is non-finite.");
+        }
+
+        const int maxIterations = 10000;
+        var state = new MomentumState(
+            learningRate: 0.01,
+            minLearningRate: 1e-6,
+            convergenceThreshold: 1e-6,
+            momentumFactor: 0.9,
+            previousLogLikelihood: initialLogLikelihood,
+            omega: omega,
+            alpha: alpha,
+            beta: beta);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            Vector<T> gradientOmega = CalculateGradient(y, GradientType.Omega);
-            Vector<T> gradientAlpha = CalculateGradient(y, GradientType.Alpha);
-            Vector<T> gradientBeta = CalculateGradient(y, GradientType.Beta);
-
-            // Update velocities (momentum)
-            var momentumVecOmega = new Vector<T>(velocityOmega.Length);
-            for (int i = 0; i < momentumVecOmega.Length; i++) momentumVecOmega[i] = momentumFactor;
-            var lrVecOmega = new Vector<T>(gradientOmega.Length);
-            for (int i = 0; i < lrVecOmega.Length; i++) lrVecOmega[i] = currentLearningRate;
-            velocityOmega = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityOmega, momentumVecOmega),
-                                                  (Vector<T>)Engine.Multiply(gradientOmega, lrVecOmega));
-
-            var momentumVecAlpha = new Vector<T>(velocityAlpha.Length);
-            for (int i = 0; i < momentumVecAlpha.Length; i++) momentumVecAlpha[i] = momentumFactor;
-            var lrVecAlpha = new Vector<T>(gradientAlpha.Length);
-            for (int i = 0; i < lrVecAlpha.Length; i++) lrVecAlpha[i] = currentLearningRate;
-            velocityAlpha = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityAlpha, momentumVecAlpha),
-                                                  (Vector<T>)Engine.Multiply(gradientAlpha, lrVecAlpha));
-
-            var momentumVecBeta = new Vector<T>(velocityBeta.Length);
-            for (int i = 0; i < momentumVecBeta.Length; i++) momentumVecBeta[i] = momentumFactor;
-            var lrVecBeta = new Vector<T>(gradientBeta.Length);
-            for (int i = 0; i < lrVecBeta.Length; i++) lrVecBeta[i] = currentLearningRate;
-            velocityBeta = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityBeta, momentumVecBeta),
-                                                 (Vector<T>)Engine.Multiply(gradientBeta, lrVecBeta));
-
-            // Update parameters
-            _omega = (Vector<T>)Engine.Subtract(_omega, velocityOmega);
-            _alpha = (Vector<T>)Engine.Subtract(_alpha, velocityAlpha);
-            _beta = (Vector<T>)Engine.Subtract(_beta, velocityBeta);
-
-            // Ensure parameters stay within valid ranges
-            ConstrainParameters();
-
-            // Check for convergence
-            T currentLogLikelihood = CalculateLogLikelihood(y);
-            T improvement = NumOps.Subtract(currentLogLikelihood, previousLogLikelihood);
-
-            if (NumOps.LessThan(NumOps.Abs(improvement), convergenceThreshold))
+            if (!MomentumStep(yDouble, unconditionalVariance, minOmega, ref omega, alpha, beta, state))
             {
                 break;
             }
+        }
 
-            // Adaptive learning rate
-            if (NumOps.GreaterThan(improvement, NumOps.Zero))
-            {
-                currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(1.05)); // Increase learning rate
-                previousOmega = _omega.Clone();
-                previousAlpha = _alpha.Clone();
-                previousBeta = _beta.Clone();
-                previousLogLikelihood = currentLogLikelihood;
-            }
-            else
-            {
-                currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
-                _omega = previousOmega.Clone();
-                _alpha = previousAlpha.Clone();
-                _beta = previousBeta.Clone();
+        _omega[0] = NumOps.FromDouble(omega);
+        new Vector<double>(alpha).AsTensor().Cast<T>().AsVector().CopyTo(_alpha.AsWritableSpan());
+        new Vector<double>(beta).AsTensor().Cast<T>().AsVector().CopyTo(_beta.AsWritableSpan());
+        ConstrainParameters();
+    }
 
-                if (NumOps.LessThan(currentLearningRate, minLearningRate))
-                {
-                    break; // Stop if learning rate becomes too small
-                }
+    /// <summary>Mutable double-precision state of the momentum gradient search in <see cref="EstimateParameters"/>.</summary>
+    private sealed class MomentumState
+    {
+        public MomentumState(
+            double learningRate,
+            double minLearningRate,
+            double convergenceThreshold,
+            double momentumFactor,
+            double previousLogLikelihood,
+            double omega,
+            double[] alpha,
+            double[] beta)
+        {
+            LearningRate = learningRate;
+            MinLearningRate = minLearningRate;
+            ConvergenceThreshold = convergenceThreshold;
+            MomentumFactor = momentumFactor;
+            PreviousLogLikelihood = previousLogLikelihood;
+            PreviousOmega = omega;
+            PreviousAlpha = (double[])alpha.Clone();
+            PreviousBeta = (double[])beta.Clone();
+            VelocityOmega = 0.0;
+            VelocityAlpha = new double[alpha.Length];
+            VelocityBeta = new double[beta.Length];
+        }
+
+        public double MinLearningRate { get; }
+        public double ConvergenceThreshold { get; }
+        public double MomentumFactor { get; }
+        public double LearningRate { get; set; }
+        public double PreviousLogLikelihood { get; set; }
+        public double PreviousOmega { get; set; }
+        public double[] PreviousAlpha { get; set; }
+        public double[] PreviousBeta { get; set; }
+        public double VelocityOmega { get; set; }
+        public double[] VelocityAlpha { get; set; }
+        public double[] VelocityBeta { get; set; }
+    }
+
+    /// <summary>
+    /// One double-precision momentum ascent step on the Gaussian log-likelihood:
+    /// v ← μ·v + lr·∇, θ ← θ + v, constrain, then accept (grow lr) or roll back (shrink lr).
+    /// Returns false when the search has converged or the step size falls below the minimum.
+    /// </summary>
+    private bool MomentumStep(
+        double[] y,
+        double unconditionalVariance,
+        double minOmega,
+        ref double omega,
+        double[] alpha,
+        double[] beta,
+        MomentumState state)
+    {
+        ComputeGradientsDouble(
+            y, unconditionalVariance, minOmega, omega, alpha, beta,
+            out double gradOmega, out double[] gradAlpha, out double[] gradBeta);
+
+        state.VelocityOmega = state.MomentumFactor * state.VelocityOmega + state.LearningRate * gradOmega;
+        omega += state.VelocityOmega;
+
+        for (int i = 0; i < alpha.Length; i++)
+        {
+            state.VelocityAlpha[i] = state.MomentumFactor * state.VelocityAlpha[i] + state.LearningRate * gradAlpha[i];
+            alpha[i] += state.VelocityAlpha[i];
+        }
+
+        for (int i = 0; i < beta.Length; i++)
+        {
+            state.VelocityBeta[i] = state.MomentumFactor * state.VelocityBeta[i] + state.LearningRate * gradBeta[i];
+            beta[i] += state.VelocityBeta[i];
+        }
+
+        ConstrainParametersDouble(ref omega, alpha, beta, minOmega);
+
+        double currentLogLikelihood = CalculateLogLikelihoodDouble(
+            y, unconditionalVariance, omega, alpha, beta, minOmega);
+        if (!double.IsNaN(currentLogLikelihood) && !double.IsInfinity(currentLogLikelihood))
+        {
+            double improvement = currentLogLikelihood - state.PreviousLogLikelihood;
+            if (improvement > 0.0)
+            {
+                state.LearningRate *= 1.05;
+                state.PreviousOmega = omega;
+                Array.Copy(alpha, state.PreviousAlpha, alpha.Length);
+                Array.Copy(beta, state.PreviousBeta, beta.Length);
+                state.PreviousLogLikelihood = currentLogLikelihood;
+                return improvement >= state.ConvergenceThreshold;
             }
+        }
+
+        state.LearningRate *= 0.5;
+        state.VelocityOmega = 0.0;
+        Array.Clear(state.VelocityAlpha, 0, state.VelocityAlpha.Length);
+        Array.Clear(state.VelocityBeta, 0, state.VelocityBeta.Length);
+        omega = state.PreviousOmega;
+        Array.Copy(state.PreviousAlpha, alpha, alpha.Length);
+        Array.Copy(state.PreviousBeta, beta, beta.Length);
+
+        return state.LearningRate >= state.MinLearningRate;
+    }
+
+    /// <summary>
+    /// Computes double-precision central-difference gradients of the Gaussian log-likelihood with
+    /// scale-aware representable probe steps (no arbitrary denominator floor).
+    /// </summary>
+    private void ComputeGradientsDouble(
+        double[] y,
+        double unconditionalVariance,
+        double minOmega,
+        double omega,
+        double[] alpha,
+        double[] beta,
+        out double gradOmega,
+        out double[] gradAlpha,
+        out double[] gradBeta)
+    {
+        double omegaStep = 1e-6 * Math.Max(1.0, Math.Abs(omega));
+        double plusOmega = omega + omegaStep;
+        double candidateMinusOmega = omega - omegaStep;
+        double minusOmega = candidateMinusOmega > minOmega ? candidateMinusOmega : minOmega;
+        double omegaSpan = plusOmega - minusOmega;
+        if (!(omegaSpan > 0.0) || double.IsNaN(omegaSpan) || double.IsInfinity(omegaSpan))
+        {
+            throw new InvalidOperationException("Non-positive or non-finite omega finite-difference probe span.");
+        }
+
+        double llPlusOmega = CalculateLogLikelihoodDouble(y, unconditionalVariance, plusOmega, alpha, beta, minOmega);
+        double llMinusOmega = CalculateLogLikelihoodDouble(y, unconditionalVariance, minusOmega, alpha, beta, minOmega);
+        gradOmega = (llPlusOmega - llMinusOmega) / omegaSpan;
+        if (double.IsNaN(gradOmega) || double.IsInfinity(gradOmega))
+        {
+            throw new InvalidOperationException("Non-finite omega gradient encountered during GARCH estimation.");
+        }
+
+        int archCount = Math.Min(_garchOptions.ARCHOrder, alpha.Length);
+        gradAlpha = new double[alpha.Length];
+        for (int i = 0; i < archCount; i++)
+        {
+            double original = alpha[i];
+            double step = 1e-6 * Math.Max(1.0, Math.Abs(original));
+            double plus = original + step;
+            double minus = original - step > 0.0 ? original - step : 0.0;
+            double span = plus - minus;
+            if (!(span > 0.0) || double.IsNaN(span) || double.IsInfinity(span))
+            {
+                throw new InvalidOperationException("Non-positive or non-finite alpha finite-difference probe span.");
+            }
+
+            alpha[i] = plus;
+            double llPlus = CalculateLogLikelihoodDouble(y, unconditionalVariance, omega, alpha, beta, minOmega);
+            alpha[i] = minus;
+            double llMinus = CalculateLogLikelihoodDouble(y, unconditionalVariance, omega, alpha, beta, minOmega);
+            alpha[i] = original;
+
+            double g = (llPlus - llMinus) / span;
+            if (double.IsNaN(g) || double.IsInfinity(g))
+            {
+                throw new InvalidOperationException("Non-finite alpha gradient encountered during GARCH estimation.");
+            }
+
+            gradAlpha[i] = g;
+        }
+
+        int garchCount = Math.Min(_garchOptions.GARCHOrder, beta.Length);
+        gradBeta = new double[beta.Length];
+        for (int i = 0; i < garchCount; i++)
+        {
+            double original = beta[i];
+            double step = 1e-6 * Math.Max(1.0, Math.Abs(original));
+            double plus = original + step;
+            double minus = original - step > 0.0 ? original - step : 0.0;
+            double span = plus - minus;
+            if (!(span > 0.0) || double.IsNaN(span) || double.IsInfinity(span))
+            {
+                throw new InvalidOperationException("Non-positive or non-finite beta finite-difference probe span.");
+            }
+
+            beta[i] = plus;
+            double llPlus = CalculateLogLikelihoodDouble(y, unconditionalVariance, omega, alpha, beta, minOmega);
+            beta[i] = minus;
+            double llMinus = CalculateLogLikelihoodDouble(y, unconditionalVariance, omega, alpha, beta, minOmega);
+            beta[i] = original;
+
+            double g = (llPlus - llMinus) / span;
+            if (double.IsNaN(g) || double.IsInfinity(g))
+            {
+                throw new InvalidOperationException("Non-finite beta gradient encountered during GARCH estimation.");
+            }
+
+            gradBeta[i] = g;
         }
     }
 
     /// <summary>
-    /// Calculates the gradient of the log-likelihood function with respect to the model parameters.
+    /// Evaluates the Gaussian log-likelihood <c>-0.5 · Σ (log σ²_t + y_t² / σ²_t)</c> in double precision
+    /// without clamping non-finite values to the variance floor.
     /// </summary>
-    /// <param name="y">The residuals from the mean model.</param>
-    /// <param name="gradientType">The type of parameter to calculate the gradient for (Omega, Alpha, or Beta).</param>
-    /// <returns>A vector containing the gradient values.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the gradient of the log-likelihood function with respect to the specified parameter type
-    /// using numerical differentiation. The gradient indicates the direction and magnitude of the steepest increase
-    /// in the log-likelihood, which guides the parameter updates during optimization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how to adjust the parameters to better fit the data.
-    /// 
-    /// The gradient is like a compass that shows:
-    /// - Which direction to move each parameter
-    /// - How big of a step to take in that direction
-    /// 
-    /// The method:
-    /// - Slightly increases each parameter and checks if the model fits better
-    /// - Slightly decreases each parameter and checks if the model fits better
-    /// - Uses these tests to figure out which way and how far to move
-    /// 
-    /// This process is called "numerical differentiation" and it's like testing the waters
-    /// in different directions to see which way leads to improvement.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateGradient(Vector<T> y, GradientType gradientType)
+    private double CalculateLogLikelihoodDouble(
+        double[] y,
+        double unconditionalVariance,
+        double omega,
+        double[] alpha,
+        double[] beta,
+        double minVariance)
     {
-        T epsilon = NumOps.FromDouble(1e-6); // Small value for numerical differentiation
-        T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2));
-        T logLikelihood = CalculateLogLikelihood(y);
-
-        if (gradientType == GradientType.Omega)
+        if (double.IsNaN(omega) || double.IsInfinity(omega))
         {
-            Vector<T> gradient = new Vector<T>(1);
-            T originalOmega = _omega[0];
-
-            _omega[0] = NumOps.Add(originalOmega, epsilon);
-            T logLikelihoodPlus = CalculateLogLikelihood(y);
-
-            _omega[0] = NumOps.Subtract(originalOmega, epsilon);
-            T logLikelihoodMinus = CalculateLogLikelihood(y);
-
-            gradient[0] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
-            _omega[0] = originalOmega; // Restore original value
-
-            return gradient;
+            return double.NaN;
         }
-        else if (gradientType == GradientType.Alpha)
+
+        int n = y.Length;
+        int p = _garchOptions.ARCHOrder;
+        int q = _garchOptions.GARCHOrder;
+        int start = Math.Max(p, q);
+        if (n <= start)
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.ARCHOrder);
-            for (int i = 0; i < _garchOptions.ARCHOrder; i++)
-            {
-                T originalAlpha = _alpha[i];
-
-                _alpha[i] = NumOps.Add(originalAlpha, epsilon);
-                T logLikelihoodPlus = CalculateLogLikelihood(y);
-
-                _alpha[i] = NumOps.Subtract(originalAlpha, epsilon);
-                T logLikelihoodMinus = CalculateLogLikelihood(y);
-
-                gradient[i] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
-                _alpha[i] = originalAlpha; // Restore original value
-            }
-            return gradient;
+            return 0.0;
         }
-        else // beta
+
+        var sigma2 = new double[n];
+        for (int t = 0; t < start; t++)
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.GARCHOrder);
-            for (int i = 0; i < _garchOptions.GARCHOrder; i++)
+            sigma2[t] = unconditionalVariance;
+        }
+
+        for (int t = start; t < n; t++)
+        {
+            double variance = omega;
+            for (int i = 0; i < p; i++)
             {
-                T originalBeta = _beta[i];
-
-                _beta[i] = NumOps.Add(originalBeta, epsilon);
-                T logLikelihoodPlus = CalculateLogLikelihood(y);
-
-                _beta[i] = NumOps.Subtract(originalBeta, epsilon);
-                T logLikelihoodMinus = CalculateLogLikelihood(y);
-
-                gradient[i] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
-                _beta[i] = originalBeta; // Restore original value
+                double r = y[t - i - 1];
+                variance += alpha[i] * (r * r);
             }
-            return gradient;
+
+            for (int i = 0; i < q; i++)
+            {
+                variance += beta[i] * sigma2[t - i - 1];
+            }
+
+            if (double.IsNaN(variance) || double.IsInfinity(variance))
+            {
+                return double.NaN;
+            }
+
+            sigma2[t] = variance < minVariance ? minVariance : variance;
+        }
+
+        double sum = 0.0;
+        for (int t = start; t < n; t++)
+        {
+            double v = sigma2[t];
+            double r = y[t];
+            sum += Math.Log(v) + (r * r) / v;
+        }
+
+        return -0.5 * sum;
+    }
+
+    private void ConstrainParametersDouble(ref double omega, double[] alpha, double[] beta, double minOmega)
+    {
+        if (double.IsNaN(omega) || double.IsInfinity(omega))
+        {
+            throw new InvalidOperationException("GARCH parameter 'omega' became non-finite.");
+        }
+
+        if (omega < minOmega)
+        {
+            omega = minOmega;
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < alpha.Length; i++)
+        {
+            if (double.IsNaN(alpha[i]) || double.IsInfinity(alpha[i]))
+            {
+                throw new InvalidOperationException("GARCH parameter 'alpha' became non-finite.");
+            }
+
+            if (alpha[i] < 0.0)
+            {
+                alpha[i] = 0.0;
+            }
+
+            sum += alpha[i];
+        }
+
+        for (int i = 0; i < beta.Length; i++)
+        {
+            if (double.IsNaN(beta[i]) || double.IsInfinity(beta[i]))
+            {
+                throw new InvalidOperationException("GARCH parameter 'beta' became non-finite.");
+            }
+
+            if (beta[i] < 0.0)
+            {
+                beta[i] = 0.0;
+            }
+
+            sum += beta[i];
+        }
+
+        double stationarityLimit = typeof(T) == typeof(Half) ? 0.999 : 1.0;
+        if (sum >= stationarityLimit)
+        {
+            double scale = 0.99 / sum;
+            for (int i = 0; i < alpha.Length; i++)
+            {
+                alpha[i] *= scale;
+            }
+
+            for (int i = 0; i < beta.Length; i++)
+            {
+                beta[i] *= scale;
+            }
         }
     }
 
     /// <summary>
     /// Calculates the log-likelihood of the data given the current model parameters.
     /// </summary>
-    /// <param name="y">The residuals from the mean model.</param>
-    /// <returns>The log-likelihood value.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the log-likelihood of the observed data given the current model parameters. The log-likelihood
-    /// is a measure of how well the model fits the data, with higher values indicating a better fit. It is used as the
-    /// objective function during parameter optimization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This measures how well the current model settings fit the data.
-    /// 
-    /// Log-likelihood:
-    /// - Is a mathematical way to measure how well a model fits data
-    /// - Higher values mean better fit (unlike error measures where lower is better)
-    /// - Takes into account both the prediction error and the expected volatility
-    /// 
-    /// For example:
-    /// - A large error during a high-volatility period might be acceptable
-    /// - The same error during a low-volatility period would be penalized more heavily
-    /// 
-    /// This measure helps the model properly account for changing volatility over time,
-    /// rather than treating all errors equally.
-    /// </para>
-    /// </remarks>
     private T CalculateLogLikelihood(Vector<T> y)
     {
-        T logLikelihood = NumOps.Zero;
-        int n = y.Length;
-        Vector<T> conditionalVariances = CalculateConditionalVariances(y);
-
-        for (int t = Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t < n; t++)
+        var yDoubleVector = y.AsTensor().Cast<double>().ToVector();
+        double[] yDouble = yDoubleVector.ToArray();
+        double minOmega = VarianceFloorDouble;
+        double unconditionalVariance = yDoubleVector.Length > 1
+            ? StatisticsHelper<double>.CalculateVariance(yDoubleVector)
+            : minOmega;
+        if (!(unconditionalVariance > minOmega) && !double.IsNaN(unconditionalVariance) && !double.IsInfinity(unconditionalVariance))
         {
-            T variance = conditionalVariances[t];
-            T residual = y[t]; // Assuming zero mean for simplicity
-            T term = NumOps.Add(NumOps.Log(variance), NumOps.Divide(NumOps.Multiply(residual, residual), variance));
-            logLikelihood = NumOps.Add(logLikelihood, term);
+            unconditionalVariance = minOmega;
         }
 
-        return NumOps.Multiply(NumOps.FromDouble(-0.5), logLikelihood);
+        double ll = CalculateLogLikelihoodDouble(
+            yDouble,
+            unconditionalVariance,
+            NumOps.ToDouble(_omega[0]),
+            _alpha.AsTensor().Cast<double>().ToArray(),
+            _beta.AsTensor().Cast<double>().ToArray(),
+            minOmega);
+        return NumOps.FromDouble(ll);
     }
 
     /// <summary>
@@ -667,7 +857,12 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         Vector<T> conditionalVariances = new Vector<T>(n);
+        T minVariance = VarianceFloor;
         T unconditionalVariance = CalculateUnconditionalVariance(y);
+        if (!NumOps.GreaterThan(unconditionalVariance, minVariance))
+        {
+            unconditionalVariance = minVariance;
+        }
 
         // Initialize with unconditional variance
         for (int t = 0; t < Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t++)
@@ -690,7 +885,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             conditionalVariances[t] = variance;
         }
 
-        return conditionalVariances;
+        return ClampMinimum(conditionalVariances, minVariance);
     }
 
     /// <summary>
@@ -719,32 +914,67 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void ConstrainParameters()
     {
-        // Ensure all parameters are non-negative
-        _omega[0] = MathHelper.Max(_omega[0], NumOps.Zero);
-        for (int i = 0; i < _alpha.Length; i++)
-        {
-            _alpha[i] = MathHelper.Max(_alpha[i], NumOps.Zero);
-        }
-        for (int i = 0; i < _beta.Length; i++)
-        {
-            _beta[i] = MathHelper.Max(_beta[i], NumOps.Zero);
-        }
+        EnsureFiniteVector(_omega, nameof(_omega));
+        EnsureFiniteVector(_alpha, nameof(_alpha));
+        EnsureFiniteVector(_beta, nameof(_beta));
 
-        // Ensure the sum of ARCH and GARCH coefficients is less than 1 for stationarity
+        // Bollerslev (1986) eq. (2): omega > 0 (strictly positive variance floor), alpha >= 0, beta >= 0
+        _omega = ClampMinimum(_omega, VarianceFloor);
+        _alpha = PositivePart(_alpha);
+        _beta = PositivePart(_beta);
+
+        // Ensure sum of alpha and beta is less than 1 for stationarity
         T alphaSum = Engine.Sum(_alpha);
         T betaSum = Engine.Sum(_beta);
         T sum = NumOps.Add(alphaSum, betaSum);
-        if (NumOps.GreaterThan(sum, NumOps.One))
+
+        if (!NumOps.LessThan(sum, NumOps.One))
         {
             T scaleFactor = NumOps.Divide(NumOps.FromDouble(0.99), sum);
-            var scaleVecAlpha = new Vector<T>(_alpha.Length);
-            for (int i = 0; i < scaleVecAlpha.Length; i++) scaleVecAlpha[i] = scaleFactor;
-            _alpha = (Vector<T>)Engine.Multiply(_alpha, scaleVecAlpha);
-
-            var scaleVecBeta = new Vector<T>(_beta.Length);
-            for (int i = 0; i < scaleVecBeta.Length; i++) scaleVecBeta[i] = scaleFactor;
-            _beta = (Vector<T>)Engine.Multiply(_beta, scaleVecBeta);
+            _alpha = Engine.Multiply(_alpha, scaleFactor);
+            _beta = Engine.Multiply(_beta, scaleFactor);
         }
+
+        EnsureFiniteVector(_omega, nameof(_omega));
+        EnsureFiniteVector(_alpha, nameof(_alpha));
+        EnsureFiniteVector(_beta, nameof(_beta));
+    }
+
+    private void EnsureFiniteVector(Vector<T> v, string name)
+    {
+        if (v.Length == 0)
+        {
+            return;
+        }
+
+        if (Engine.TensorCountNonzero(Helpers.TensorFiniteness.NonFiniteMask(Tensor<T>.FromVector(v))) > 0)
+        {
+            throw new InvalidOperationException($"GARCH parameter '{name}' became non-finite.");
+        }
+    }
+
+    /// <summary><c>v &lt; min ? min : v</c> element-wise (preserving NaN instead of masking it as <paramref name="minimum"/>).</summary>
+    private Vector<T> ClampMinimum(Vector<T> v, T minimum)
+    {
+        if (v.Length == 0)
+        {
+            return v;
+        }
+
+        var t = Tensor<T>.FromVector(v);
+        return Engine.TensorWhere(Engine.TensorLessThan(t, minimum), Engine.TensorFullLike(t, minimum), t).ToVector();
+    }
+
+    /// <summary><c>v &lt; 0 ? 0 : v</c> element-wise (preserving NaN instead of masking it as zero).</summary>
+    private Vector<T> PositivePart(Vector<T> v)
+    {
+        if (v.Length == 0)
+        {
+            return v;
+        }
+
+        var t = Tensor<T>.FromVector(v);
+        return Engine.TensorWhere(Engine.TensorLessThan(t, NumOps.Zero), Engine.TensorZerosLike(t), t).ToVector();
     }
 
     /// <summary>
@@ -774,9 +1004,14 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         int n = residuals.Length;
         _conditionalVariances = new Vector<T>(n);
+        T minVariance = VarianceFloor;
 
         // Initialize with unconditional variance
         T unconditionalVariance = CalculateUnconditionalVariance(residuals);
+        if (!NumOps.GreaterThan(unconditionalVariance, minVariance))
+        {
+            unconditionalVariance = minVariance;
+        }
         for (int t = 0; t < Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t++)
         {
             _conditionalVariances[t] = unconditionalVariance;
@@ -796,6 +1031,8 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             }
             _conditionalVariances[t] = variance;
         }
+
+        _conditionalVariances = ClampMinimum(_conditionalVariances, minVariance);
     }
 
     /// <summary>
@@ -1077,15 +1314,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
 
         // Store learned GARCH parameters as ModelParameters for GetParameters() / serialization
         // Layout: [omega_0, alpha_0..alpha_p, beta_0..beta_q]
-        int totalParams = _omega.Length + _alpha.Length + _beta.Length;
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        for (int i = 0; i < _omega.Length; i++)
-            ModelParameters[idx++] = _omega[i];
-        for (int i = 0; i < _alpha.Length; i++)
-            ModelParameters[idx++] = _alpha[i];
-        for (int i = 0; i < _beta.Length; i++)
-            ModelParameters[idx++] = _beta[i];
+        ModelParameters = Vector<T>.Concatenate(_omega, _alpha, _beta);
     }
 
     /// <summary>
@@ -1116,13 +1345,6 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Create a matrix with a single row for the prediction
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
-
         // Make sure we have some volatility estimate to work with
         if (_conditionalVariances.Length == 0)
         {

@@ -55,4 +55,10 @@ public class DocBankOptions : DocumentNeuralNetworkOptions
     /// when you want the model to take larger or smaller steps than the paper's.</para>
     /// </remarks>
     public double? LearningRate { get; set; }
+
+    /// <summary>
+    /// Gets or sets the configuration of the LayoutLM token classifier DocBank's baselines use (Li et al. 2020,
+    /// Sec. 4). Default: <c>null</c> (LayoutLM-base). Its class count is always DocBank's twelve token labels.
+    /// </summary>
+    public LayoutLMOptions? TokenClassifierOptions { get; set; }
 }

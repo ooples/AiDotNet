@@ -757,7 +757,7 @@ const totalModels = categories.reduce((sum, cat) => {
           if (!content) return;
 
           const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
-          const chevron = toggle.querySelector('.category-chevron');
+          const chevron = toggle.querySelector<SVGElement>('.category-chevron');
 
           if (isExpanded) {
             content.classList.add('hidden');

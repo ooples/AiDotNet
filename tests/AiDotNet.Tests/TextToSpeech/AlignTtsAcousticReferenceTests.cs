@@ -118,9 +118,14 @@ public sealed class AlignTtsAcousticReferenceTests
         Close(hidden, Values(reference.GetProperty("hidden")), "encoder");
         var likelihood = (Tensor<double>)Invoke("GaussianLogLikelihood", hidden, target);
         Close(likelihood, Values(reference.GetProperty("likelihood")), "density likelihood");
-        var durations = (int[])Invoke("ViterbiDurations", likelihood);
+        var path = (Tensor<double>)Invoke("ViterbiPath", likelihood);
+        int frames = path.Shape[1];
+        var durations = Enumerable.Range(0, path.Shape[0])
+            .Select(token => (int)Enumerable.Range(0, frames).Sum(frame => path[token, frame])).ToArray();
         Assert.Equal(reference.GetProperty("durations").EnumerateArray().Select(x => x.GetInt32()).ToArray(), durations);
-        Close((Tensor<double>)Invoke("RunDecoder", LengthRegulator.Expand(hidden, durations)), Values(reference.GetProperty("mel")), "mel decoder");
+        var expanded = (Tensor<double>)Invoke("ExpandByPath", hidden, path);
+        Assert.Equal(LengthRegulator.Expand(hidden, durations).ToArray(), expanded.ToArray());
+        Close((Tensor<double>)Invoke("RunDecoder", expanded), Values(reference.GetProperty("mel")), "mel decoder");
         Close((Tensor<double>)Invoke("RunDurationPredictor", tokens), Values(reference.GetProperty("log_duration")), "duration graph");
         using var tape = new GradientTape<double>();
         var loss = (Tensor<double>)Invoke("PhaseObjective", tokens, target);

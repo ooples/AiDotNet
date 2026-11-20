@@ -141,17 +141,12 @@ public static class TensorExtensions
         if (!a._shape.SequenceEqual(b._shape))
             return false;
 
-        // Use spans for vectorized comparison
-        ReadOnlySpan<T> spanA = a.AsSpan();
-        ReadOnlySpan<T> spanB = b.AsSpan();
+        if (a.Length == 0)
+            return true;
 
-        for (int i = 0; i < spanA.Length; i++)
-        {
-            if (!numOps.Equals(spanA[i], spanB[i]))
-                return false;
-        }
-
-        return true;
+        // Element-wise equality mask (1 where equal); equal iff every entry is 1.
+        var equal = AiDotNetEngine.Current.TensorEquals(a, b);
+        return numOps.GreaterThanOrEquals(AiDotNetEngine.Current.TensorMinValue(equal), numOps.One);
     }
 
     /// <summary>
@@ -268,15 +263,45 @@ public static class TensorExtensions
     /// helping the network learn faster and more reliably.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> or <paramref name="random"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative, or the element count exceeds
+    /// <see cref="int.MaxValue"/>.</exception>
     public static Tensor<T> CreateXavierInitializedTensor<T>(int[] shape, double stddev, Random random)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
+        if (shape is null)
         {
-            tensor[i] = numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            throw new ArgumentNullException(nameof(shape));
         }
-        return tensor;
+
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        // The shape is validated before anything is allocated: a negative dimension, or a product that wraps
+        // around int, used to size the draw buffer from a meaningless length.
+        long length = 1;
+        foreach (int dimension in shape)
+        {
+            if (dimension < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(shape), dimension, "Tensor dimensions must be non-negative.");
+            }
+
+            length *= dimension;
+            if (length > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(shape), "The tensor has more than int.MaxValue elements.");
+            }
+        }
+
+        var draws = new double[length];
+        for (int i = 0; i < length; i++)
+        {
+            draws[i] = (random.NextDouble() * 2 - 1) * stddev;
+        }
+
+        return new Tensor<double>(draws, shape).Cast<T>();
     }
 
     /// <summary>

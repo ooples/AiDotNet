@@ -370,7 +370,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             : defaultAxis;
     }
 
-    [AiDotNet.Attributes.ScalarKernel("Chooses the class axis of a soft target from the step's data: a host decision about layout, never a traced value. Engine reductions here made every compiled training step decline.")]
     private T ProbabilityAxisScore(Tensor<T> target, int axis)
     {
         // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
@@ -385,23 +384,24 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (outer * inner == 0)
             return NumOps.MaxValue; // no slices: never preferred over a scored axis
 
-        // Mean over every slice along the axis of |Σ_axis target - 1|, on the host: the target is the step's data, and
-        // the layout decision it feeds is not part of the traced loss.
-        var values = target.Data.Span;
-        double total = 0;
-        for (int o = 0; o < outer; o++)
+        // Mean over every slice along the axis of |Σ_axis target - 1|.
+        // Suspend GraphMode when scoring an untraced supervision target so TensorMean does not cross a host
+        // scalar boundary inside a training graph trace.
+        T ComputeAxisDeviationMean(Tensor<T> source)
         {
-            for (int i = 0; i < inner; i++)
-            {
-                double sum = 0;
-                int start = o * axisSize * inner + i;
-                for (int a = 0; a < axisSize; a++)
-                    sum += NumOps.ToDouble(values[start + a * inner]);
-                total += Math.Abs(sum - 1.0);
-            }
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var axisSums = Engine.ReduceSum(source, new[] { axis }, keepDims: false);
+            var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
+            return Engine.TensorMean(deviation);
         }
 
-        return NumOps.FromDouble(total / ((double)outer * inner));
+        if (target.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                return ComputeAxisDeviationMean(target);
+        }
+
+        return ComputeAxisDeviationMean(target);
     }
 
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)
@@ -429,6 +429,13 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         var oneHotLast = Engine.TensorEquals(
             Engine.TensorBroadcastTo(roundedIndices, lastAxisShape),
             Engine.TensorBroadcastTo(classIds, lastAxisShape));
-        return Engine.TensorMoveDim(oneHotLast, indicesShape.Length, classAxis).Contiguous();
+        int rank = lastAxisShape.Length;
+        if (classAxis == rank - 1)
+            return oneHotLast.Contiguous();
+        var perm = new int[rank];
+        int src = 0;
+        for (int dst = 0; dst < rank; dst++)
+            perm[dst] = dst == classAxis ? rank - 1 : src++;
+        return Engine.TensorPermute(oneHotLast, perm).Contiguous();
     }
 }

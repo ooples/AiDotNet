@@ -24,12 +24,29 @@
 
 .PARAMETER OutFile
     Where to write the digest JSON.
+
+.PARAMETER MeasuredSha
+    The commit the instrumented tree was built from: the commit this digest's line numbers are in. With
+    RunId, RunAttempt, ShardDefinitionJson and ManifestBlob it lets a digest be used on its own, apart from
+    the run-wide map it was uploaded for (RollingShardMap.ps1). All five are optional and recorded only
+    when well formed; a digest without them is exactly the digest this script always wrote.
+
+.PARAMETER ShardDefinitionJson
+    The matrix entry the job ran, as JSON. Its hash is recorded (Get-ShardDefinitionHash), not the text.
+
+.PARAMETER ManifestBlob
+    Git object id of .github/test-shards.yml in the job's checkout.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $CoverageXml,
     [Parameter(Mandatory)] [string] $Shard,
-    [Parameter(Mandatory)] [string] $OutFile
+    [Parameter(Mandatory)] [string] $OutFile,
+    [string] $MeasuredSha,
+    [string] $RunId,
+    [string] $RunAttempt,
+    [string] $ShardDefinitionJson,
+    [string] $ManifestBlob
 )
 
 Set-StrictMode -Version Latest
@@ -131,6 +148,26 @@ $digest = [ordered]@{
     generatedUtc  = [DateTimeOffset]::UtcNow.ToString('o')
     fileCount     = $files.Count
     files         = $files
+}
+
+# Where and how this digest was measured. Never a reason to lose the digest: the weekly map needs none of
+# it, so anything malformed is left out and the digest is written as before.
+try {
+    $provenance = [ordered]@{}
+    if ($MeasuredSha -cmatch '^[0-9a-f]{40}$') { $provenance.measuredSha = $MeasuredSha }
+    if ($RunId -cmatch '^[1-9][0-9]*$') { $provenance.runId = [long] $RunId }
+    if ($RunAttempt -cmatch '^[1-9][0-9]*$') { $provenance.runAttempt = [int] $RunAttempt }
+    if ($ManifestBlob -cmatch '^[0-9a-f]{40}$') { $provenance.manifestBlob = $ManifestBlob }
+    if (-not [string]::IsNullOrWhiteSpace($ShardDefinitionJson)) {
+        . "$PSScriptRoot/RollingShardMap.ps1"
+        $definition = $ShardDefinitionJson | ConvertFrom-Json
+        if ([string] $definition.name -cne $Shard) { throw "the shard definition is for '$($definition.name)'" }
+        $provenance.definitionHash = Get-ShardDefinitionHash -Shard $definition
+    }
+    foreach ($key in $provenance.Keys) { $digest[$key] = $provenance[$key] }
+}
+catch {
+    Write-Host "::warning::digest provenance not recorded for '$Shard' ($($_.Exception.Message)); the digest itself is unaffected"
 }
 
 $dir = Split-Path -Parent $OutFile

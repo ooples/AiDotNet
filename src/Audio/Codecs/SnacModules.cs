@@ -209,7 +209,7 @@ internal sealed class SnacDecoder<T>
 
     /// <summary>The waveform <c>[1, 1, samples]</c> of a latent <c>[1, latent, frames]</c>; <paramref name="noise"/> gives each
     /// noise block's draw of the given length, in order.</summary>
-    public Tensor<T> Forward(Tensor<T> z, Func<int, double[]> noise)
+    public Tensor<T> Forward(Tensor<T> z, Func<int, Tensor<T>> noise)
     {
         var x = z;
         foreach (var conv in _input) x = conv.Forward(x);
@@ -221,7 +221,7 @@ internal sealed class SnacDecoder<T>
                 int length = x.Shape[2];
                 var draw = noise(length);
                 if (draw.Length != length) throw new InvalidOperationException($"A noise draw has {draw.Length} values; the block needs {length}.");
-                var values = new Tensor<T>(new[] { 1, 1, length }, new Vector<T>(draw.Select(v => MathHelper.GetNumericOperations<T>().FromDouble(v)).ToArray()));
+                var values = _engine.Reshape(draw, new[] { 1, 1, length });
                 var h = noiseConv.Forward(x);
                 x = _engine.TensorAdd(x, _engine.TensorMultiply(_engine.TensorBroadcastTo(values, h._shape), h));
             }
@@ -264,15 +264,16 @@ internal sealed class Snac<T>
 
     /// <summary>The codes of a waveform, one row per codebook (coarse to fine). The audio is right-padded with zeros to
     /// whole <see cref="SamplesPerFrame"/> windows first (<c>SNAC.preprocess</c>).</summary>
-    public int[][] Encode(double[] audio)
+    public int[][] Encode(Tensor<T> audio)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         using var _ = new NoGradScope<T>();
         foreach (var layer in _layers) layer.SetTrainingMode(false);
         int window = SamplesPerFrame;
         int padded = Math.Max(1, (audio.Length + window - 1) / window) * window;
-        var input = new Tensor<T>(new[] { 1, 1, padded });
-        for (int i = 0; i < audio.Length; i++) input[0, 0, i] = Ops.FromDouble(audio[i]);
+        var flat = _engine.Reshape(audio, new[] { audio.Length });
+        if (padded > audio.Length) flat = _engine.PadNd(flat, new[] { 0, padded - audio.Length }, AiDotNet.Tensors.Engines.PadMode.Constant, Ops.Zero);
+        var input = _engine.Reshape(flat, new[] { 1, 1, padded });
         var residual = _encoder.Forward(input);
         var codes = new int[_quantizers.Length][];
         for (int q = 0; q < _quantizers.Length; q++)
@@ -314,18 +315,17 @@ internal sealed class Snac<T>
 
     /// <summary>The waveform of codes (<c>SNAC.decode</c>), one row per codebook; <paramref name="noise"/> supplies each noise
     /// block's N(0, 1) draw of the given length.</summary>
-    public double[] Decode(IReadOnlyList<int[]> codes, Func<int, double[]> noise)
+    public Tensor<T> Decode(IReadOnlyList<int[]> codes, Func<int, Tensor<T>> noise)
     {
         using var _ = new NoGradScope<T>();
         foreach (var layer in _layers) layer.SetTrainingMode(false);
         var audio = _decoder.Forward(FromCodes(codes), noise);
-        var result = new double[audio.Shape[2]];
-        for (int i = 0; i < result.Length; i++) result[i] = Ops.ToDouble(audio[0, 0, i]);
-        return result;
+        return _engine.Reshape(audio, new[] { audio.Shape[2] });
     }
 
-    /// <summary>A noise source of standard normal draws from <paramref name="random"/> (Box–Muller).</summary>
-    public static Func<int, double[]> GaussianNoise(Random random) => length =>
+    /// <summary>A noise source of standard normal draws from <paramref name="random"/> (Box–Muller), drawn in the
+    /// generator's order and cast to <typeparamref name="T"/> once per block.</summary>
+    public static Func<int, Tensor<T>> GaussianNoise(Random random) => length =>
     {
         var values = new double[length];
         for (int i = 0; i < length; i++)
@@ -333,7 +333,7 @@ internal sealed class Snac<T>
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
             values[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
         }
-        return values;
+        return new Tensor<double>(new[] { length }, new Vector<double>(values)).Cast<T>();
     };
 
     // avg_pool1d(z, s, s) over [1, D, T] (T a multiple of s).

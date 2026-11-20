@@ -262,6 +262,108 @@ public class ClapArchitectureTests
 
         Assert.Equal(Trained(), Trained());
     }
+
+    /// <summary>
+    /// The fused-training break does not depend on the regularization options. With drop-path, text dropout,
+    /// SpecAugment and feature fusion all off, the break used to be lifted. The fused plan then froze the STFT front end
+    /// at the traced step's spectra, because AiDotNet.Tensors 0.150.0 does not record it in training traces (#2592,
+    /// ooples/AiDotNet.Tensors#1750). Every step has to train on the eager tape, and two seeded models trained on
+    /// different batches must match.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Training_StaysEager_AndReproducible_WithEveryHostDrawDisabled()
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            var options = ClapReferenceTests.TinyOptions(fusion: false);
+            options.AudioDropPathRate = 0;
+            options.TextDropoutRate = 0;
+            options.SpecAugmentTimeStripes = 0;
+            options.SpecAugmentFreqStripes = 0;
+            using var model = new CLAPModel<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Embedding, inputSize: 8192, outputSize: 12), options);
+            var captions = Captions();
+            for (int step = 0; step < 3; step++)
+            {
+                // A different batch each step, so a plan that kept the traced step's spectra trains on stale input.
+                var audio = Audio(2, 6000);
+                var span = audio.AsWritableSpan();
+                for (int i = 0; i < span.Length; i++) span[i] *= 1.0 + 0.5 * step;
+                model.Train(audio, captions);
+            }
+
+            var stepper = AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(model);
+            Assert.Equal(0, stepper.FusedStepCount);
+            Assert.True(stepper.EagerStepCount > 0, "CLAP's training steps did not run through the shared stepper.");
+            return model.GetParameters().ToArray();
+        }
+
+        Assert.Equal(Trained(), Trained());
+    }
+
+    /// <summary>
+    /// No fused entry point runs CLAP's front end through a compiled plan. The contrastive step carried its own
+    /// break reason, but the base class's custom and declared-objective steps build their own request around
+    /// ForwardForTraining and consult only SupportsFusedCompiledTraining, which CLAP left on (#2592). Each must
+    /// train on the eager tape and reach the weights the eager custom-loss step reaches from the same seed.
+    /// </summary>
+    [Fact(Timeout = 180000)]
+    public async Task EveryFusedEntryPoint_TrainsEagerly_AndMatchesTheEagerStep()
+    {
+        await Task.Yield();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var goal = new Tensor<double>(new[] { 2, 12 });
+        for (int i = 0; i < goal.Length; i++) goal[i] = 0.05 * (i % 7) - 0.1;
+        Tensor<double> Loss(Tensor<double> embedding)
+        {
+            var difference = engine.TensorSubtract(embedding, goal);
+            return engine.TensorMultiplyScalar(
+                engine.ReduceSum(engine.TensorMultiply(difference, difference), null), 1.0 / difference.Length);
+        }
+
+        const int steps = 3;
+        double[] Trained(Action<CLAPModel<double>, Tensor<double>> step, int? customSteps)
+        {
+            using var model = ClapReferenceTests.Build(fusion: false);
+            for (int s = 0; s < steps; s++)
+            {
+                // A different batch each step, so a plan that kept the traced step's spectra trains on stale input.
+                var audio = Audio(2, 6000);
+                var span = audio.AsWritableSpan();
+                for (int i = 0; i < span.Length; i++) span[i] *= 1.0 + 0.5 * s;
+                step(model, audio);
+            }
+
+            Assert.Equal(0, model.CustomFusedStepCount);
+            if (customSteps is { } expectedEagerSteps) Assert.Equal(expectedEagerSteps, model.CustomEagerStepCount);
+            Assert.Equal(0, AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(model).FusedStepCount);
+            return model.GetParameters().ToArray();
+        }
+
+        // The reference step. It may itself offer the step to the compiled session first (closure objectives do since
+        // #2573), so its eager count is not pinned; that it never ran fused is asserted like the others.
+        var eager = Trained((model, audio) => model.TrainWithCustomLoss(audio, Loss), customSteps: null);
+        var customLoss = Trained((model, audio) => model.TrainWithCustomLossFused(audio, (_, embedding) => Loss(embedding)), steps);
+        var objective = Trained((model, audio) =>
+        {
+            model.SetTrainingMode(true);
+            try
+            {
+                model.TrainObjectiveFused(audio, input => Loss(model.ForwardForTraining(input)));
+            }
+            finally
+            {
+                model.SetTrainingMode(false);
+            }
+        }, steps);
+
+        using var untrained = ClapReferenceTests.Build(fusion: false);
+        Assert.Contains(eager.Zip(untrained.GetParameters().ToArray(), (a, b) => a != b), moved => moved);
+        Assert.Equal(eager, customLoss);
+        Assert.Equal(eager, objective);
+    }
+
     private static Tensor<double> Audio(int batch, int samples)
     {
         var audio = new Tensor<double>(new[] { batch, samples });

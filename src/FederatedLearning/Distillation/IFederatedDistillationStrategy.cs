@@ -41,7 +41,9 @@ public interface IFederatedDistillationStrategy<T>
     /// <param name="localModelParameters">The client's current model parameters.</param>
     /// <param name="globalKnowledge">The aggregated global knowledge from the server.</param>
     /// <param name="publicData">Optional public dataset used for distillation.</param>
-    /// <param name="temperature">Softmax temperature for soft label generation.</param>
+    /// <param name="temperature">Softmax temperature for soft label generation, for strategies that take it per
+    /// call. A strategy whose knowledge is extracted at its configured temperature, or whose objective has no
+    /// temperature, documents that it ignores this value.</param>
     /// <returns>The updated local model parameters.</returns>
     Vector<T> ApplyKnowledge(Vector<T> localModelParameters, Matrix<T> globalKnowledge, Matrix<T>? publicData, double temperature);
 }

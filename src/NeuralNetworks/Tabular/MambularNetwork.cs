@@ -198,6 +198,7 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
                 { "StateDimension", _options.StateDimension },
                 { "NumLayers", _options.NumLayers },
                 { "ExpansionFactor", _options.ExpansionFactor },
+                { "InnerDimension", _options.InnerDimension },
                 { "UseBidirectional", _options.UseBidirectional },
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }

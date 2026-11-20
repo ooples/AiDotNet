@@ -61,17 +61,9 @@ public class GradientBoundednessProof<T> : FederatedLearningComponentBase<T>, IV
         int totalElements = ComputeTotalElements(gradient);
 
         // Check that all elements are within bounds
-        double maxViolation = 0.0;
-        for (int i = 0; i < totalElements; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(gradient[i]));
-            if (val > _elementBound)
-            {
-                maxViolation = Math.Max(maxViolation, val);
-            }
-        }
-
-        if (maxViolation > 0)
+        var flat = gradient.Reshape(new[] { totalElements });
+        var violations = Engine.TensorGreaterThan(Engine.TensorAbs(flat), NumOps.FromDouble(_elementBound));
+        if (Engine.TensorSum(violations.Cast<int>()) > 0)
         {
             return null; // Cannot prove — elements exceed bound
         }

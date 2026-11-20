@@ -103,7 +103,6 @@ public class GaussianClassificationMetaDataset<T, TInput, TOutput> : MetaDataset
                     double val = mean[d] + SampleGaussian() * _clusterStdDev;
                     supportX[sIdx, d] = NumOps.FromDouble(val);
                 }
-                supportY[sIdx] = NumOps.FromDouble(w);
                 sIdx++;
             }
 
@@ -115,10 +114,15 @@ public class GaussianClassificationMetaDataset<T, TInput, TOutput> : MetaDataset
                     double val = mean[d] + SampleGaussian() * _clusterStdDev;
                     queryX[qIdx, d] = NumOps.FromDouble(val);
                 }
-                queryY[qIdx] = NumOps.FromDouble(w);
                 qIdx++;
             }
         }
+
+        // Labels are the way index, numShots (numQueryPerClass) times each, in way order.
+        var engine = AiDotNetEngine.Current;
+        var wayIds = engine.TensorArange<T>(0, numWays, 1);
+        engine.TensorRepeatInterleave(wayIds, numShots, 0).AsSpan().CopyTo(supportY.AsWritableSpan());
+        engine.TensorRepeatInterleave(wayIds, numQueryPerClass, 0).AsSpan().CopyTo(queryY.AsWritableSpan());
 
         return new MetaLearningTask<T, TInput, TOutput>
         {

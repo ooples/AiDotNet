@@ -95,20 +95,24 @@ public abstract partial class EnsembleClassifierBase<T> : ProbabilisticClassifie
         }
 
         // Average the probabilities
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T sum = NumOps.Zero;
-                foreach (var pred in allPredictions)
-                {
-                    sum = NumOps.Add(sum, pred[i, c]);
-                }
-                aggregatedProbs[i, c] = NumOps.Divide(sum, NumOps.FromDouble(allPredictions.Count));
-            }
+            return aggregatedProbs;
         }
 
-        return aggregatedProbs;
+        var engine = Engine;
+        Tensor<T>? sum = null;
+        foreach (var pred in allPredictions)
+        {
+            var classColumns = Tensor<T>.FromMatrix(pred.Columns == NumClasses
+                ? pred
+                : pred.GetSubMatrix(0, 0, input.Rows, NumClasses));
+            sum = sum is null ? classColumns : engine.TensorAdd(sum, classColumns);
+        }
+
+        return sum is null
+            ? aggregatedProbs
+            : engine.TensorDivideScalar(sum, NumOps.FromDouble(allPredictions.Count)).ToMatrix();
     }
 
     /// <summary>
@@ -116,30 +120,26 @@ public abstract partial class EnsembleClassifierBase<T> : ProbabilisticClassifie
     /// </summary>
     protected void AggregateFeatureImportances()
     {
-        FeatureImportances = new Vector<T>(NumFeatures);
+        var engine = Engine;
+        var importances = new Vector<T>(NumFeatures);
 
         int treeCount = 0;
         foreach (var estimator in Estimators)
         {
             if (estimator is ITreeBasedClassifier<T> treeClassifier && treeClassifier.FeatureImportances != null)
             {
-                for (int i = 0; i < NumFeatures; i++)
-                {
-                    FeatureImportances[i] = NumOps.Add(FeatureImportances[i], treeClassifier.FeatureImportances[i]);
-                }
+                importances = engine.Add(importances, FitToLength(treeClassifier.FeatureImportances, NumFeatures));
                 treeCount++;
             }
         }
 
         // Average the importances
-        if (treeCount > 0)
+        if (treeCount > 0 && NumFeatures > 0)
         {
-            T count = NumOps.FromDouble(treeCount);
-            for (int i = 0; i < NumFeatures; i++)
-            {
-                FeatureImportances[i] = NumOps.Divide(FeatureImportances[i], count);
-            }
+            importances = engine.Divide(importances, NumOps.FromDouble(treeCount));
         }
+
+        FeatureImportances = importances;
     }
 
     /// <inheritdoc/>

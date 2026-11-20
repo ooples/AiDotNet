@@ -50,6 +50,7 @@ namespace AiDotNet.ContinualLearning;
 public class OnlineEWC<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private Vector<T> _fisherDiagonal;         // Running Fisher estimate
     private Vector<T> _optimalParameters;      // Running optimal parameters
     private double _lambda;
@@ -124,9 +125,7 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
 
         // Compute Fisher diagonal via tape-based gradients
         var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
-        var newFisher = new Vector<T>(grads.Length);
-        for (int i = 0; i < grads.Length; i++)
-            newFisher[i] = _numOps.Multiply(grads[i], grads[i]);
+        var newFisher = Engine.Multiply(grads, grads);
 
         if (_taskCount == 0)
         {
@@ -154,16 +153,12 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
         }
 
         var currentParams = network.GetParameters();
-        var loss = _numOps.Zero;
+        int n = currentParams.Length;
 
         // Online EWC loss: λ/2 * Σ F̃_i * (θ_i - θ̃*_i)²
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams[i], _optimalParameters[i]);
-            var squaredDiff = _numOps.Multiply(diff, diff);
-            var penalty = _numOps.Multiply(_fisherDiagonal[i], squaredDiff);
-            loss = _numOps.Add(loss, penalty);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), Head(_optimalParameters, n));
+        var penalty = Engine.TensorMultiply(Head(_fisherDiagonal, n), Engine.TensorMultiply(diff, diff));
+        var loss = Engine.TensorSum(penalty);
 
         var halfLambda = _numOps.FromDouble(_lambda / 2.0);
         return _numOps.Multiply(halfLambda, loss);
@@ -183,14 +178,12 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         var lambdaT = _numOps.FromDouble(_lambda);
 
-        // Add Online EWC gradient: λ * F̃_i * (θ_i - θ̃*_i)
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var diff = _numOps.Subtract(currentParams[i], _optimalParameters[i]);
-            var ewcGrad = _numOps.Multiply(_fisherDiagonal[i], diff);
-            ewcGrad = _numOps.Multiply(lambdaT, ewcGrad);
-            gradients[i] = _numOps.Add(gradients[i], ewcGrad);
-        }
+        int n = gradients.Length;
+
+        // Add Online EWC gradient: λ * F̃_i * (θ_i - θ̃*_i), in place like master
+        var diff = Engine.TensorSubtract(Head(currentParams, n), Head(_optimalParameters, n));
+        var ewcGrad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Head(_fisherDiagonal, n), diff), lambdaT);
+        Engine.TensorAdd(gradients.AsTensor(), ewcGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }
@@ -209,25 +202,26 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
     private void MergeFisherAndParameters(Vector<T> newParams, Vector<T> newFisher)
     {
         var gammaT = _numOps.FromDouble(_gamma);
+        var epsilon = _numOps.FromDouble(1e-10);
+        int n = _fisherDiagonal.Length;
+        var fNew = Head(newFisher, n);
 
-        for (int i = 0; i < _fisherDiagonal.Length; i++)
-        {
-            // F̃ = γ * F_old + F_new
-            var scaledOldFisher = _numOps.Multiply(gammaT, _fisherDiagonal[i]);
-            var combinedFisher = _numOps.Add(scaledOldFisher, newFisher[i]);
+        // F̃ = γ * F_old + F_new
+        var scaledOldFisher = Engine.TensorMultiplyScalar(_fisherDiagonal.AsTensor(), gammaT);
+        var combinedFisher = Engine.TensorAdd(scaledOldFisher, fNew);
 
-            // θ̃* = (γ * F_old * θ*_old + F_new * θ_new) / (γ * F_old + F_new)
-            var oldContrib = _numOps.Multiply(scaledOldFisher, _optimalParameters[i]);
-            var newContrib = _numOps.Multiply(newFisher[i], newParams[i]);
-            var totalContrib = _numOps.Add(oldContrib, newContrib);
+        // θ̃* = (γ * F_old * θ*_old + F_new * θ_new) / (γ * F_old + F_new)
+        var oldContrib = Engine.TensorMultiply(scaledOldFisher, Head(_optimalParameters, n));
+        var newContrib = Engine.TensorMultiply(fNew, Head(newParams, n));
+        var totalContrib = Engine.TensorAdd(oldContrib, newContrib);
 
-            // Avoid division by zero
-            var epsilon = _numOps.FromDouble(1e-10);
-            var denominator = _numOps.Add(combinedFisher, epsilon);
+        // Avoid division by zero
+        var denominator = Engine.TensorAddScalar(combinedFisher, epsilon);
+        var merged = Engine.TensorDivide(totalContrib, denominator);
 
-            _optimalParameters[i] = _numOps.Divide(totalContrib, denominator);
-            _fisherDiagonal[i] = combinedFisher;
-        }
+        // Write back in place, like master
+        merged.AsSpan().CopyTo(_optimalParameters.AsWritableSpan());
+        combinedFisher.AsSpan().CopyTo(_fisherDiagonal.AsWritableSpan());
     }
 
     /// <summary>
@@ -250,12 +244,19 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
 
         var data = new Vector<T>(sampleSize);
         var startIdx = index * sampleSize;
-        for (int i = 0; i < sampleSize; i++)
-        {
-            data[i] = batch[startIdx + i];
-        }
+        batch.Contiguous().AsSpan().Slice(startIdx, sampleSize).CopyTo(data.AsWritableSpan());
 
         return new Tensor<T>(newShape, data);
+    }
+
+    /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector.
+    /// </summary>
+    private static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 
     /// <summary>
@@ -263,11 +264,6 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
     /// </summary>
     private Tensor<T> ComputeLogLikelihoodGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradData = new Vector<T>(output.Length);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradData[i] = _numOps.Subtract(output[i], target[i]);
-        }
-        return new Tensor<T>(output._shape, gradData);
+        return Engine.TensorSubtract(output, target.Reshape(output._shape));
     }
 }

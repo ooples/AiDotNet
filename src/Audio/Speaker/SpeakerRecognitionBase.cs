@@ -80,18 +80,9 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        T dotProduct = Engine.DotProduct(embedding1, embedding2);
-        T norm1 = Engine.DotProduct(embedding1, embedding1);
-        T norm2 = Engine.DotProduct(embedding2, embedding2);
-
-        T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
-
-        if (NumOps.Equals(normProduct, NumOps.Zero))
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dotProduct, normProduct);
+        // Computed in double and rounded to T once (in [-1, 1]): each vector is divided by its largest magnitude
+        // before it is squared, and the dot product is taken between the unit vectors.
+        return SpeakerScoring.Cosine(Engine, embedding1.AsTensor(), embedding2.AsTensor(), out _);
     }
 
     /// <summary>
@@ -121,31 +112,10 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
     /// </remarks>
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
-        var data = embedding.ToArray();
-        var dataVec = new Vector<T>(data);
-        T sumSquares = Engine.DotProduct(dataVec, dataVec);
-
-        T norm = NumOps.Sqrt(sumSquares);
-
-        if (NumOps.Equals(norm, NumOps.Zero))
-        {
-            // Return a defensive copy to avoid aliasing issues
-            var copy = new Tensor<T>(embedding._shape);
-            for (int i = 0; i < data.Length; i++)
-            {
-                copy[i] = data[i];
-            }
-            return copy;
-        }
-
-        // Create new tensor with same shape and copy normalized values
-        var result = new Tensor<T>(embedding._shape);
-        for (int i = 0; i < data.Length; i++)
-        {
-            result[i] = NumOps.Divide(data[i], norm);
-        }
-
-        return result;
+        // A new tensor with the same shape (a defensive copy when the norm is zero). The norm is taken in double
+        // after dividing by the largest magnitude, so it neither overflows T (Half: above 65504) nor carries T's
+        // rounding of every addition.
+        return SpeakerScoring.L2Normalize(Engine, embedding);
     }
 
     /// <summary>
@@ -185,37 +155,16 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             }
         }
 
-        T[] sum = new T[totalSize];
-
-        // Initialize with zeros
-        for (int i = 0; i < totalSize; i++)
+        // Sum all embeddings (flattened, since only the lengths are required to match)
+        var sum = new Tensor<T>(embeddings[0].ToArray(), [totalSize]);
+        for (int e = 1; e < embeddings.Count; e++)
         {
-            sum[i] = NumOps.Zero;
+            sum = Engine.TensorAdd(sum, new Tensor<T>(embeddings[e].ToArray(), [totalSize]));
         }
 
-        // Sum all embeddings
-        foreach (var embedding in embeddings)
-        {
-            var data = embedding.ToArray();
-            for (int i = 0; i < totalSize; i++)
-            {
-                sum[i] = NumOps.Add(sum[i], data[i]);
-            }
-        }
-
-        // Compute mean
-        T count = NumOps.FromDouble(embeddings.Count);
-        for (int i = 0; i < totalSize; i++)
-        {
-            sum[i] = NumOps.Divide(sum[i], count);
-        }
-
-        // Create tensor and copy mean values
-        var meanTensor = new Tensor<T>(firstShape);
-        for (int i = 0; i < totalSize; i++)
-        {
-            meanTensor[i] = sum[i];
-        }
+        // Compute mean and restore the first embedding's shape
+        var mean = Engine.TensorDivideScalar(sum, NumOps.FromDouble(embeddings.Count));
+        var meanTensor = new Tensor<T>(mean.ToArray(), firstShape);
 
         return NormalizeEmbedding(meanTensor);
     }

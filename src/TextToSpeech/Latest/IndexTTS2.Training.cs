@@ -194,7 +194,7 @@ public partial class IndexTTS2<T>
     /// (<c>(1 + λ)·sg(x) − λ·x</c>).</summary>
     private Tensor<T> ReverseGradient(Tensor<T> x, double lambda)
     {
-        var constant = new Tensor<T>(x.Shape.ToArray(), x.ToVector());
+        var constant = DetachTensor(x);
         return Engine.TensorSubtract(Engine.TensorMultiplyScalar(constant, Ops.FromDouble(1 + lambda)), Engine.TensorMultiplyScalar(x, Ops.FromDouble(lambda)));
     }
 

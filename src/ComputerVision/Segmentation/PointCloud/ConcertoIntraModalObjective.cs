@@ -112,58 +112,35 @@ public static class ConcertoIntraModalObjective<T>
         if (teacherTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(teacherTemperature));
 
         int numPoints = studentLogits.Shape[0];
-        int numPrototypes = studentLogits.Shape[^1];
+        if (numPoints == 0) return NumOps.Zero;
 
-        double total = 0;
+        // A reported value, not a training signal: evaluated off the gradient tape.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = Engine;
 
-        for (int p = 0; p < numPoints; p++)
-        {
-            // Teacher: center, sharpen, softmax. This is the TARGET, so it is treated as a
-            // constant — the teacher receives no gradient by construction.
-            var teacherProbabilities = new double[numPrototypes];
-            double teacherMax = double.NegativeInfinity;
-            for (int k = 0; k < numPrototypes; k++)
-            {
-                double logit = NumOps.ToDouble(teacherLogits[p, k]);
-                if (center is not null) logit -= NumOps.ToDouble(center[k]);
-                logit /= teacherTemperature;
-                teacherProbabilities[k] = logit;
-                if (logit > teacherMax) teacherMax = logit;
-            }
+        // Teacher: center, sharpen, softmax. This is the TARGET, so it is treated as a constant.
+        var teacherCentered = center is null ? teacherLogits : engine.TensorSubtract(teacherLogits, center);
+        var teacherProbabilities = engine.TensorSoftmax(
+            engine.TensorDivideScalar(teacherCentered, NumOps.FromDouble(teacherTemperature)), axis: -1);
 
-            double teacherSum = 0;
-            for (int k = 0; k < numPrototypes; k++)
-            {
-                teacherProbabilities[k] = Math.Exp(teacherProbabilities[k] - teacherMax);
-                teacherSum += teacherProbabilities[k];
-            }
+        // Student: log-softmax at its own, higher temperature.
+        var logStudent = engine.TensorLogSoftmax(
+            engine.TensorDivideScalar(studentLogits, NumOps.FromDouble(studentTemperature)), axis: -1);
 
-            // Student: log-softmax at its own, higher temperature.
-            double studentMax = double.NegativeInfinity;
-            var studentScaled = new double[numPrototypes];
-            for (int k = 0; k < numPrototypes; k++)
-            {
-                double logit = NumOps.ToDouble(studentLogits[p, k]) / studentTemperature;
-                studentScaled[k] = logit;
-                if (logit > studentMax) studentMax = logit;
-            }
+        // H(teacher, student) = -sum_k teacher_k * log student_k; prototypes the teacher gives zero
+        // probability contribute nothing (so 0 * -inf never turns the loss into NaN). The skip is
+        // "teacher_k <= 0", not "not teacher_k > 0": a NaN teacher probability is not skipped and
+        // makes the loss NaN, as the scalar reference does.
+        var terms = engine.TensorWhere(
+            engine.TensorLessEqual(teacherProbabilities, engine.TensorFullLike(teacherProbabilities, NumOps.Zero)),
+            engine.TensorFullLike(teacherProbabilities, NumOps.Zero),
+            engine.TensorMultiply(teacherProbabilities, logStudent));
 
-            double studentSum = 0;
-            for (int k = 0; k < numPrototypes; k++)
-                studentSum += Math.Exp(studentScaled[k] - studentMax);
-
-            double logStudentSum = Math.Log(studentSum) + studentMax;
-
-            // H(teacher, student) = -sum_k teacher_k * log student_k
-            for (int k = 0; k < numPrototypes; k++)
-            {
-                double teacherProbability = teacherProbabilities[k] / teacherSum;
-                if (teacherProbability <= 0) continue;
-                total -= teacherProbability * (studentScaled[k] - logStudentSum);
-            }
-        }
-
-        return numPoints > 0 ? NumOps.FromDouble(total / numPoints) : NumOps.Zero;
+        // Mean over points of the per-point cross-entropy, accumulated in double for a narrow T and rounded once:
+        // summing in Half overflows once numPoints * H passes 65504 (about 6600 points at H = 10), and pre-scaling
+        // by 1 / sqrt(numPoints) only moves the limit (10000 points at H = 700 still sum to 70000).
+        var perPoint = engine.ReduceSum(terms, new[] { terms.Shape.Length - 1 }, false);
+        return NumOps.Negate(engine.TensorSum(ConcertoWideAccumulation<T>.MeanOverRows(perPoint)));
     }
 
     /// <summary>
@@ -189,12 +166,9 @@ public static class ConcertoIntraModalObjective<T>
         if (momentum is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(momentum), momentum, "Momentum must be in [0, 1].");
 
-        for (int i = 0; i < teacher.Length; i++)
-        {
-            double t = NumOps.ToDouble(teacher[i]);
-            double s = NumOps.ToDouble(student[i]);
-            teacher[i] = NumOps.FromDouble((momentum * t) + ((1.0 - momentum) * s));
-        }
+        // teacher = m * teacher + (1 - m) * student = student + m * (teacher - student), written back in place.
+        var updated = Engine.Lerp(student, teacher, NumOps.FromDouble(momentum));
+        updated.AsSpan().CopyTo(teacher.AsWritableSpan());
     }
 
     /// <summary>
@@ -209,18 +183,12 @@ public static class ConcertoIntraModalObjective<T>
         if (teacherLogits is null) throw new ArgumentNullException(nameof(teacherLogits));
 
         int numPoints = teacherLogits.Shape[0];
-        int numPrototypes = teacherLogits.Shape[^1];
         if (numPoints == 0) return;
 
-        for (int k = 0; k < numPrototypes; k++)
-        {
-            double batchMean = 0;
-            for (int p = 0; p < numPoints; p++)
-                batchMean += NumOps.ToDouble(teacherLogits[p, k]);
-            batchMean /= numPoints;
-
-            double current = NumOps.ToDouble(center[k]);
-            center[k] = NumOps.FromDouble((momentum * current) + ((1.0 - momentum) * batchMean));
-        }
+        // center = m * center + (1 - m) * mean over points of the teacher logits, written back in place. The mean
+        // accumulates in double for Half, whose own running sum stalls past 2048 points and overflows past 65504.
+        var batchMean = ConcertoWideAccumulation<T>.MeanOverRows(teacherLogits);
+        var updated = Engine.TensorLerp(batchMean, center, NumOps.FromDouble(momentum));
+        updated.AsSpan().CopyTo(center.AsWritableSpan());
     }
 }

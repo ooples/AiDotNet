@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.Engines;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -271,31 +273,29 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
         int numCat = NumCategoricalFeatures;
         int embDim = Options.EmbeddingDimension;
 
-        var embedded = new Tensor<T>([batchSize, numCat, embDim]);
-
-        for (int b = 0; b < batchSize; b++)
+        if (numCat == 0)
         {
-            for (int c = 0; c < numCat; c++)
-            {
-                int catIdx = categoricalIndices[b, c];
-                var embTable = _categoricalEmbeddings[c];
-
-                for (int d = 0; d < embDim; d++)
-                {
-                    var value = embTable[catIdx * embDim + d];
-
-                    // Add column embedding if enabled
-                    if (_columnEmbeddings != null)
-                    {
-                        value = NumOps.Add(value, _columnEmbeddings[c * embDim + d]);
-                    }
-
-                    embedded[b * numCat * embDim + c * embDim + d] = value;
-                }
-            }
+            return new Tensor<T>([batchSize, numCat, embDim]);
         }
 
-        return embedded;
+        var columns = new Tensor<T>[numCat];
+        var columnEmbeddings = _columnEmbeddings?.Reshape(numCat, embDim);
+        for (int c = 0; c < numCat; c++)
+        {
+            // Look up every sample's category in this column's table: [batch, embedding_dim]
+            var indices = Tensor<int>.FromVector(categoricalIndices.GetColumn(c));
+            var value = Engine.TensorIndexSelect(_categoricalEmbeddings[c], indices, 0);
+
+            // Add column embedding if enabled
+            if (columnEmbeddings != null)
+            {
+                value = Engine.TensorAdd(value, Engine.TensorNarrow(columnEmbeddings, 0, c, 1));
+            }
+
+            columns[c] = value.Reshape(batchSize, 1, embDim);
+        }
+
+        return Engine.TensorConcatenate(columns, 1);
     }
 
     /// <summary>
@@ -333,21 +333,9 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
             var flattenedCat = transformedCat.Reshape(batchSize, flatCatDim);
 
             // Step 5: Concatenate with numerical features
-            combinedFeatures = new Tensor<T>([batchSize, CombinedDimension]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Copy flattened categorical embeddings
-                for (int i = 0; i < flatCatDim; i++)
-                {
-                    combinedFeatures[b * CombinedDimension + i] = flattenedCat[b * flatCatDim + i];
-                }
-                // Copy numerical features
-                for (int i = 0; i < NumNumericalFeatures; i++)
-                {
-                    combinedFeatures[b * CombinedDimension + flatCatDim + i] =
-                        numericalFeatures[b * NumNumericalFeatures + i];
-                }
-            }
+            var numerical = TabularMetrics.Flat(numericalFeatures, batchSize * NumNumericalFeatures)
+                .Reshape(batchSize, NumNumericalFeatures);
+            combinedFeatures = Engine.TensorConcatenate(new[] { flattenedCat, numerical }, 1);
         }
         else
         {
@@ -400,6 +388,38 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
         foreach (var layer in _mlpLayers)
         {
             layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the categorical and column embeddings, the transformer encoder layers, the final norm, the MLP and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>(_categoricalEmbeddings);
+        if (_columnEmbeddings != null) tensors.Add(_columnEmbeddings);
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_encoderLayers);
+        if (_finalLayerNorm != null) layers.Add(_finalLayerNorm);
+        layers.AddRange(_mlpLayers);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
         }
     }
 

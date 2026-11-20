@@ -49,6 +49,8 @@ public static class StopGradient<T>
     public static Tensor<T> Detach(Tensor<T> tensor)
     {
         if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            return AiDotNetEngine.Current.StopGradient(tensor);
 
         // Create a copy of the tensor data
         var dataCopy = new T[tensor.Length];
@@ -84,13 +86,10 @@ public static class StopGradient<T>
     {
         if (vector is null) throw new ArgumentNullException(nameof(vector));
 
-        var dataCopy = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            dataCopy[i] = vector[i];
-        }
+        var copy = new Vector<T>(vector.Length);
+        vector.AsSpan().CopyTo(copy.AsWritableSpan());
 
-        return new Vector<T>(dataCopy);
+        return copy;
     }
 
     /// <summary>

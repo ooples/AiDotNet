@@ -33,25 +33,21 @@ public sealed class VariationalRFScheduler<T> : NoiseSchedulerBase<T>
     /// <inheritdoc />
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
-        double t = (double)timestep / TrainTimesteps;
-        double dt = 1.0 / Math.Max(1, Timesteps.Length);
-        var dtT = NumOps.FromDouble(dt);
+        // Euler step x_{t - dt} = x_t - dt * v of the rectified flow over the gap to the next scheduled time.
+        double t = SchedulerTensorOps.FlowTime(timestep, TrainTimesteps);
+        double dt = SchedulerTensorOps.FlowStepSize(Timesteps, timestep, TrainTimesteps, 1.0 / Math.Max(1, Timesteps.Length));
+        var result = Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(dt)));
+        if (noise is null || !NumOps.GreaterThan(eta, NumOps.Zero) || t <= 0.0)
+            return result;
 
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-        {
-            var stepped = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-            // Add variational noise scaled by time and eta
-            if (noise != null && NumOps.GreaterThan(eta, NumOps.Zero))
-            {
-                double noiseLevel = _noiseScale * t * NumOps.ToDouble(eta);
-                stepped = NumOps.Add(stepped, NumOps.Multiply(NumOps.FromDouble(noiseLevel), noise[i]));
-            }
-
-            result[i] = stepped;
-        }
-
-        return result;
+        // Noise injection as a discretised SDE, so the amount of noise does not grow with the step count and the
+        // marginals of the flow are kept: diffusion g(t) = noiseScale * eta * t gives the Brownian increment
+        // g * sqrt(dt) * z and, with the score -eps_hat / t (eps_hat = x_t + (1 - t) v), the drift correction
+        // -(g^2 dt / 2t) * eps_hat.
+        T g = NumOps.Multiply(eta, NumOps.FromDouble(_noiseScale * t));
+        var epsilon = Engine.Add(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(1.0 - t)));
+        T scoreScale = NumOps.Multiply(NumOps.Multiply(g, g), NumOps.FromDouble(dt / (2.0 * t)));
+        result = Engine.Subtract(result, Engine.Multiply(epsilon, scoreScale));
+        return Engine.Add(result, Engine.Multiply(noise, NumOps.Multiply(g, NumOps.FromDouble(Math.Sqrt(dt)))));
     }
 }

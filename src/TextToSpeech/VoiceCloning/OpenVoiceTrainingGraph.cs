@@ -129,8 +129,8 @@ internal sealed class OpenVoiceTrainingGraph<T>
     {
         var posterior = _native.TrainingForward(data.Spectrum, data.ReferenceSpectrum, draw.Noise, draw.SegmentStart, data.SegmentFrames);
         var prior = _prior.Forward(data.Tokens, training, DropoutMasksForAudit);
-        int[] durations = Align(posterior.Prior, prior.Mean, prior.LogScale);
-        var alignedMean = Expand(prior.Mean, durations); var alignedLogs = Expand(prior.LogScale, durations);
+        var path = AlignmentPath(posterior.Prior, prior.Mean, prior.LogScale);
+        var alignedMean = Expand(prior.Mean, path); var alignedLogs = Expand(prior.LogScale, path);
         var mask = new Tensor<T>(new[] { 1, 1, data.Frames });
         for (int i = 0; i < data.Frames; i++) mask[i] = Numeric.One;
         var kl = OpenVoiceTrainingLoss<T>.AlignedKl(_engine, posterior.Prior, posterior.LogScale, alignedMean, alignedLogs, mask);
@@ -154,33 +154,51 @@ internal sealed class OpenVoiceTrainingGraph<T>
         return _engine.TensorAdd(result, _engine.TensorAdd(gan, Scale(Sum(featureLosses), _options.FeatureMatchingWeight)));
     }
 
-    private int[] Align(Tensor<T> transformed, Tensor<T> mean, Tensor<T> logs)
+    // MAS is a discrete, detached choice, as in the paper's permitted VITS alternative. It is returned as the 0/1 path
+    // [tokens, frames] (token t covers its frames), one node that a compiled training plan reruns on every replay from
+    // that step's posterior and prior.
+    private static Tensor<T> AlignmentPath(Tensor<T> transformed, Tensor<T> mean, Tensor<T> logs)
     {
-        // MAS is a discrete, detached choice, as in the paper's permitted VITS alternative.
-        int tokens = mean.Shape[2], frames = transformed.Shape[2], channels = transformed.Shape[1];
+        int tokens = mean.Shape[2], frames = transformed.Shape[2];
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute("OpenVoiceMonotonicAlignmentPath",
+            new[] { transformed, mean, logs }, new[] { tokens, frames }, FillAlignmentPath);
+    }
+
+    private static void FillAlignmentPath(Tensor<T>[] inputs, Tensor<T> path)
+    {
+        int tokens = inputs[1].Shape[2], frames = inputs[0].Shape[2], channels = inputs[0].Shape[1];
+        // [1, channels, n] row-major: element (channel, i) at channel * n + i.
+        var transformed = inputs[0].ToArray().Select(Numeric.ToDouble).ToArray();
+        var mean = inputs[1].ToArray().Select(Numeric.ToDouble).ToArray();
+        var logs = inputs[2].ToArray().Select(Numeric.ToDouble).ToArray();
         var scores = new double[tokens, frames];
         for (int token = 0; token < tokens; token++) for (int frame = 0; frame < frames; frame++)
         {
             double score = 0;
             for (int channel = 0; channel < channels; channel++)
             {
-                double log = Numeric.ToDouble(logs[0, channel, token]);
-                double delta = Numeric.ToDouble(transformed[0, channel, frame]) - Numeric.ToDouble(mean[0, channel, token]);
+                double log = logs[channel * tokens + token];
+                double delta = transformed[channel * frames + frame] - mean[channel * tokens + token];
                 score += -.5 * Math.Log(2 * Math.PI) - log - .5 * delta * delta * Math.Exp(-2 * log);
             }
             scores[token, frame] = score;
         }
-        return MonotonicAlignment.MaximumPath(scores);
-    }
-
-    private Tensor<T> Expand(Tensor<T> value, int[] durations)
-    {
-        var frames = new List<Tensor<T>>();
+        var durations = MonotonicAlignment.MaximumPath(scores);
+        var values = path.AsWritableSpan();
+        values.Clear();
+        int start = 0;
         for (int token = 0; token < durations.Length; token++)
         {
-            var row = _engine.TensorSlice(value, new[] { 0, 0, token }, new[] { 1, value.Shape[1], 1 });
-            frames.Add(_engine.TensorTile(row, new[] { 1, 1, durations[token] }));
+            values.Slice(token * frames + start, durations[token]).Fill(Numeric.One);
+            start += durations[token];
         }
-        return _engine.TensorConcatenate(frames.ToArray(), 2);
+    }
+
+    // Each frame takes its token's column: value [1, channels, tokens] times path [tokens, frames].
+    private Tensor<T> Expand(Tensor<T> value, Tensor<T> path)
+    {
+        int channels = value.Shape[1], tokens = value.Shape[2], frames = path.Shape[1];
+        var expanded = _engine.TensorMatMul(_engine.Reshape(value, new[] { channels, tokens }), path);
+        return _engine.Reshape(expanded, new[] { 1, channels, frames });
     }
 }

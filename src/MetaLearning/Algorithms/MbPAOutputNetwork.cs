@@ -25,6 +25,20 @@ internal static class MbPAOutputNetwork<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// The head's weights <c>W</c> [outputDim, featureDim] and biases <c>b</c> [outputDim] read from the flat
+    /// layout. Entries past the end of a short <paramref name="parameters"/> read as zero.
+    /// </summary>
+    internal static (Tensor<T> Weights, Tensor<T> Bias) Split(Vector<T> parameters, int featureDim, int outputDim)
+    {
+        int weightCount = outputDim * featureDim;
+        var flat = MbPAConversions<T>.ResizeTo(parameters, weightCount + outputDim);
+        var weights = Engine.Reshape(Tensor<T>.FromVector(flat.GetSubVector(0, weightCount)), new[] { outputDim, featureDim });
+        return (weights, Tensor<T>.FromVector(flat.GetSubVector(weightCount, outputDim)));
+    }
+
     /// <summary>
     /// Evaluates <c>g_theta(h)</c>: a linear map, followed by a softmax for a categorical output.
     /// </summary>
@@ -32,35 +46,32 @@ internal static class MbPAOutputNetwork<T>
         Vector<T> parameters, Vector<T> key, int featureDim, int outputDim,
         MbPAOutputDistribution distribution)
     {
-        var logits = new double[outputDim];
-        int biasOffset = outputDim * featureDim;
-
-        for (int o = 0; o < outputDim; o++)
-        {
-            double sum = biasOffset + o < parameters.Length ? Ops.ToDouble(parameters[biasOffset + o]) : 0.0;
-            int rowStart = o * featureDim;
-            int len = Math.Min(featureDim, key.Length);
-            for (int f = 0; f < len; f++)
-            {
-                int idx = rowStart + f;
-                if (idx < parameters.Length) sum += Ops.ToDouble(parameters[idx]) * Ops.ToDouble(key[f]);
-            }
-            logits[o] = sum;
-        }
+        var (weights, bias) = Split(parameters, featureDim, outputDim);
+        var logits = Logits(weights, bias, key, featureDim);
 
         if (distribution == MbPAOutputDistribution.Categorical)
         {
-            double max = logits[0];
-            for (int o = 1; o < outputDim; o++) if (logits[o] > max) max = logits[o];
-            double total = 0.0;
-            for (int o = 0; o < outputDim; o++) { logits[o] = Math.Exp(logits[o] - max); total += logits[o]; }
-            if (total > 0.0) for (int o = 0; o < outputDim; o++) logits[o] /= total;
+            // Max-shifted softmax; a non-positive total (NaN logits) leaves the exponentials unnormalized.
+            var exps = Engine.TensorExp(Engine.TensorAddScalar(logits, Ops.Negate(Engine.TensorMaxValue(logits))));
+            T total = Engine.TensorSum(exps);
+            logits = Ops.GreaterThan(total, Ops.Zero) ? Engine.TensorDivideScalar(exps, total) : exps;
         }
 
-        var result = new Vector<T>(outputDim);
-        for (int o = 0; o < outputDim; o++) result[o] = Ops.FromDouble(logits[o]);
-        return result;
+        return logits.ToVector();
     }
+
+    /// <summary><c>W h + b</c> for the first <paramref name="featureDim"/> entries of the key (zero-padded).</summary>
+    private static Tensor<T> Logits(Tensor<T> weights, Tensor<T> bias, Vector<T> key, int featureDim)
+    {
+        var h = Tensor<T>.FromVector(MbPAConversions<T>.ResizeTo(key, featureDim), new[] { featureDim, 1 });
+        return Engine.TensorAdd(Engine.Reshape(Engine.TensorMatMul(weights, h), new[] { bias.Length }), bias);
+    }
+
+    /// <summary>The residual <c>w (prediction - target)</c> with the target zero-padded to the output width.</summary>
+    private static Tensor<T> Residual(Vector<T> prediction, Vector<T> target, double weight, int outputDim)
+        => Engine.TensorMultiplyScalar(
+            Tensor<T>.FromVector(Engine.Subtract(prediction, MbPAConversions<T>.ResizeTo(target, outputDim))),
+            Ops.FromDouble(weight));
 
     /// <summary>
     /// The exact gradient of <c>-w * log p(v | h, theta)</c> with respect to the head's parameters.
@@ -77,23 +88,13 @@ internal static class MbPAOutputNetwork<T>
         int featureDim, int outputDim, MbPAOutputDistribution distribution)
     {
         var prediction = Forward(parameters, key, featureDim, outputDim, distribution);
-        var gradient = new Vector<T>(parameters.Length);
-        int biasOffset = outputDim * featureDim;
+        var residual = Residual(prediction, target, weight, outputDim);
 
-        for (int o = 0; o < outputDim; o++)
-        {
-            double residual = weight *
-                (Ops.ToDouble(prediction[o]) - (o < target.Length ? Ops.ToDouble(target[o]) : 0.0));
-            int rowStart = o * featureDim;
-            int len = Math.Min(featureDim, key.Length);
-            for (int f = 0; f < len; f++)
-            {
-                int idx = rowStart + f;
-                if (idx < gradient.Length) gradient[idx] = Ops.FromDouble(residual * Ops.ToDouble(key[f]));
-            }
-            if (biasOffset + o < gradient.Length) gradient[biasOffset + o] = Ops.FromDouble(residual);
-        }
-        return gradient;
+        // [r (x) h | r], laid out like the parameters and cut or zero-padded to their length.
+        var h = Tensor<T>.FromVector(MbPAConversions<T>.ResizeTo(key, featureDim));
+        var weightGradient = Engine.Reshape(Engine.TensorOuter(residual, h), new[] { outputDim * featureDim });
+        var gradient = Engine.TensorConcatenate(new[] { weightGradient, residual }, 0).ToVector();
+        return MbPAConversions<T>.ResizeTo(gradient, parameters.Length);
     }
 
     /// <summary>
@@ -117,30 +118,31 @@ internal static class MbPAOutputNetwork<T>
     /// embedding of some other length has already been resized to it by the caller.
     /// </para>
     /// </remarks>
-    internal static Vector<T> InputGradient(
-        Vector<T> parameters, Vector<T> key, Vector<T> target, double weight,
+    /// <param name="parameters">theta, at least <c>(featureDim + 1) * outputDim</c> long.</param>
+    /// <param name="embeddings">The head inputs, [batch, featureDim].</param>
+    /// <param name="targets">The targets, [batch, outputDim].</param>
+    /// <param name="weight">w, the per-example likelihood weight.</param>
+    /// <param name="featureDim">Embedding width.</param>
+    /// <param name="outputDim">Output width.</param>
+    /// <param name="distribution">Which log-likelihood is being maximized.</param>
+    /// <returns>The [batch, featureDim] input gradients <c>R W</c> for the residual rows <c>R</c>.</returns>
+    internal static Tensor<T> InputGradient(
+        Vector<T> parameters, Tensor<T> embeddings, Tensor<T> targets, double weight,
         int featureDim, int outputDim, MbPAOutputDistribution distribution)
     {
-        var prediction = Forward(parameters, key, featureDim, outputDim, distribution);
-        var gradient = new double[featureDim];
+        var (weights, _) = Split(parameters, featureDim, outputDim);
+        var logits = BatchLogits(parameters, embeddings, featureDim, outputDim);
+        var prediction = distribution == MbPAOutputDistribution.Categorical ? Engine.Softmax(logits, 1) : logits;
+        var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(prediction, targets), Ops.FromDouble(weight));
+        return Engine.TensorMatMul(residual, weights);
+    }
 
-        for (int o = 0; o < outputDim; o++)
-        {
-            double residual = weight *
-                (Ops.ToDouble(prediction[o]) - (o < target.Length ? Ops.ToDouble(target[o]) : 0.0));
-            if (residual == 0.0) continue;
-
-            int rowStart = o * featureDim;
-            for (int f = 0; f < featureDim; f++)
-            {
-                int idx = rowStart + f;
-                if (idx < parameters.Length) gradient[f] += residual * Ops.ToDouble(parameters[idx]);
-            }
-        }
-
-        var result = new Vector<T>(featureDim);
-        for (int f = 0; f < featureDim; f++) result[f] = Ops.FromDouble(gradient[f]);
-        return result;
+    /// <summary>Row-wise <c>E W^T + b</c> for embeddings <c>E</c> [batch, featureDim].</summary>
+    private static Tensor<T> BatchLogits(Vector<T> parameters, Tensor<T> embeddings, int featureDim, int outputDim)
+    {
+        var (weights, bias) = Split(parameters, featureDim, outputDim);
+        var linear = Engine.TensorMatMulTransposed(embeddings, weights);
+        return Engine.TensorAdd(linear, Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, outputDim }), linear.Shape.ToArray()));
     }
 
     /// <summary>
@@ -152,39 +154,35 @@ internal static class MbPAOutputNetwork<T>
     /// the loss one way and the gradient another is how a training loop comes to look convergent while
     /// optimizing something else.
     /// </remarks>
-    internal static double Loss(
-        Vector<T> parameters, Vector<T> key, Vector<T> target, double weight,
+    /// <param name="parameters">theta, at least <c>(featureDim + 1) * outputDim</c> long.</param>
+    /// <param name="embeddings">The head inputs, [batch, featureDim].</param>
+    /// <param name="targets">The targets, [batch, outputDim].</param>
+    /// <param name="weight">w, the per-example likelihood weight.</param>
+    /// <param name="featureDim">Embedding width.</param>
+    /// <param name="outputDim">Output width.</param>
+    /// <param name="distribution">Which log-likelihood is being maximized.</param>
+    /// <returns>The loss summed over the batch.</returns>
+    internal static T Loss(
+        Vector<T> parameters, Tensor<T> embeddings, Tensor<T> targets, double weight,
         int featureDim, int outputDim, MbPAOutputDistribution distribution)
     {
         // Evaluate categorical likelihood in logit space so underflow does not clip the objective.
-        var prediction = Forward(parameters, key, featureDim, outputDim, MbPAOutputDistribution.Gaussian);
-        double max = double.NegativeInfinity;
-        double logSum = 0.0;
+        var logits = BatchLogits(parameters, embeddings, featureDim, outputDim);
+        Tensor<T> perEntry;
         if (distribution == MbPAOutputDistribution.Categorical)
         {
-            for (int o = 0; o < outputDim; o++) max = Math.Max(max, Ops.ToDouble(prediction[o]));
-            double sum = 0.0;
-            for (int o = 0; o < outputDim; o++) sum += Math.Exp(Ops.ToDouble(prediction[o]) - max);
-            logSum = Math.Log(sum);
+            // v_o * (logsumexp(z) - z_o)
+            var logSum = Engine.TensorLogSumExp(logits, 1, true);
+            perEntry = Engine.TensorMultiply(targets,
+                Engine.TensorSubtract(Engine.TensorBroadcastTo(logSum, logits.Shape.ToArray()), logits));
         }
-        double total = 0.0;
-
-        for (int o = 0; o < outputDim; o++)
+        else
         {
-            double v = o < target.Length ? Ops.ToDouble(target[o]) : 0.0;
-            double p = Ops.ToDouble(prediction[o]);
-            if (distribution == MbPAOutputDistribution.Categorical)
-            {
-                total += v * ((max - p) + logSum);
-            }
-            else
-            {
-                double d = p - v;
-                total += 0.5 * d * d;
-            }
+            var diff = Engine.TensorSubtract(logits, targets);
+            perEntry = Engine.TensorMultiplyScalar(Engine.TensorMultiply(diff, diff), Ops.FromDouble(0.5));
         }
 
-        return weight * total;
+        return Ops.Multiply(Ops.FromDouble(weight), Engine.TensorSum(perEntry));
     }
 
 
@@ -223,27 +221,23 @@ internal static class MbPAOutputNetwork<T>
         var adapted = trainedParameters.Clone();
         if (neighbors.Count == 0) return adapted;
 
+        T learningRate = Ops.FromDouble(localLearningRate);
+        T prior = Ops.FromDouble(beta);
         for (int step = 0; step < steps; step++)
         {
-            var accumulated = new double[adapted.Length];
-
             // sum_k w_k grad L_k, evaluated at the CURRENT theta_x.
+            var accumulated = new Vector<T>(adapted.Length);
             for (int k = 0; k < neighbors.Count; k++)
             {
                 var (key, value, weight) = neighbors[k];
-                var grad = Gradient(adapted, key, value, weight, featureDim, outputDim, distribution);
-                for (int d = 0; d < accumulated.Length; d++)
-                {
-                    accumulated[d] += Ops.ToDouble(grad[d]);
-                }
+                accumulated = Engine.Add(accumulated,
+                    Gradient(adapted, key, value, weight, featureDim, outputDim, distribution));
             }
 
-            for (int d = 0; d < adapted.Length; d++)
-            {
-                double drift = Ops.ToDouble(adapted[d]) - Ops.ToDouble(trainedParameters[d]);
-                adapted[d] = Ops.FromDouble(
-                    Ops.ToDouble(adapted[d]) - localLearningRate * accumulated[d] - beta * drift);
-            }
+            // theta_x - alpha_M * sum - beta * (theta_x - theta)
+            var drift = Engine.Subtract(adapted, trainedParameters);
+            adapted = Engine.Subtract(adapted,
+                Engine.Add(Engine.Multiply(accumulated, learningRate), Engine.Multiply(drift, prior)));
         }
 
         return adapted;

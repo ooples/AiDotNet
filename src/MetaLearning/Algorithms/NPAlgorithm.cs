@@ -50,6 +50,13 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _latentEncoderParams;
 
+    // Relative step of the feature-path perturbation: probe = FeaturePathProbeScale (1 + |theta|) / sqrt(n).
+    private const double FeaturePathProbeScale = 1e-3;
+
+    // Seed of the posterior draws shared by every loss evaluation of one SPSA step, so the paired losses differ by
+    // the perturbation alone and not by Monte Carlo noise; null outside an SPSA step.
+    private int? _spsaDrawSeed;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.NP;
 
@@ -67,6 +74,14 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Garnelo et al. (2018), Eq. 4: each task minimises the negative ELBO
+    /// -E_{q(z|C,T)}[log p(y_T | z, x_T)] + KL(q(z|C,T) || q(z|C)). The expectation is a Monte Carlo average over
+    /// <see cref="NPOptions{T, TInput, TOutput}.NumLatentSamples"/> reparameterised posterior draws; the decoder
+    /// (backbone) gradient covers both of its roles: the decoder path exactly and the feature path (through both
+    /// latent distributions and the KL term) by a paired perturbation over the same draws. The encoders are trained
+    /// on the full negative ELBO, with every evaluation of one SPSA step replaying the same draws.
+    /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var losses = new List<T>();
@@ -76,55 +91,25 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
         foreach (var task in taskBatch.Tasks)
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
-
-            // Encode context (support)
-            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
-            var supportLabels = ConvertToVector(task.SupportOutput);
-            var contextRep = AggregateRepresentations(BuildContextRepresentations(supportFeatures, supportLabels));
-
-            // Compute latent distribution from context
-            var (priorMean, priorLogVar) = ComputeLatentDistribution(contextRep);
-
-            // Encode full set (context + target) for posterior
-            var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
-            var queryLabels = ConvertToVector(task.QueryOutput);
-            var fullRep = AggregateRepresentations(BuildContextRepresentations(
-                ConcatVectors(supportFeatures, queryFeatures),
-                ConcatVectors(supportLabels, queryLabels)));
-            var (postMean, postLogVar) = ComputeLatentDistribution(fullRep);
-
-            // Sample z from posterior and modulate backbone
-            var z = ReparameterizeSample(postMean, postLogVar);
-            ModulateParameters(initParams, ComputeModScale(z));
-
-            // Compute reconstruction loss + KL
-            double reconLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            double klLoss = KLDivergenceGaussian(postMean, postLogVar, priorMean, priorLogVar);
-            double totalLoss = reconLoss + _npOptions.KLWeight * klLoss;
-
-            losses.Add(NumOps.FromDouble(totalLoss));
-
-            // Compute task gradient from reconstruction loss
-            var reconGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
-
-            // Approximate KL gradient contribution via finite differences on the latent modulation
-            // The KL term regularizes the posterior toward the prior; its gradient w.r.t. parameters
-            // is propagated by scaling the reconstruction gradient proportionally
-            double klScale = _npOptions.KLWeight * klLoss / (reconLoss + 1e-10);
-            var metaGrad = new Vector<T>(reconGrad.Length);
-            for (int d = 0; d < reconGrad.Length; d++)
-            {
-                double rg = NumOps.ToDouble(reconGrad[d]);
-                metaGrad[d] = NumOps.FromDouble(rg * (1.0 + klScale));
-            }
-            metaGradients.Add(metaGrad);
+            var (loss, gradient) = NegativeElbo(task, initParams, withGradient: true, RandomGenerator.Next());
+            losses.Add(loss);
+            if (gradient is not null) metaGradients.Add(gradient);
         }
 
         ApplyOuterUpdate(initParams, metaGradients, _npOptions.OuterLearningRate);
 
         // Update auxiliary params
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _latentEncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+        _spsaDrawSeed = RandomGenerator.Next();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+            _spsaDrawSeed = RandomGenerator.Next();
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _latentEncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
+        }
+        finally
+        {
+            _spsaDrawSeed = null;
+        }
 
         return ComputeMean(losses);
     }
@@ -145,53 +130,153 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
         return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, ComputeModScale(z)), contextRep);
     }
 
+    /// <summary>
+    /// The task's negative ELBO and, when requested, its gradient with respect to the backbone parameters, each
+    /// averaged over <see cref="NPOptions{T, TInput, TOutput}.NumLatentSamples"/> posterior draws taken from
+    /// <paramref name="drawSeed"/>.
+    /// </summary>
+    /// <remarks>
+    /// The backbone is both the decoder and the feature extractor of both latent distributions. The decoder path is
+    /// differentiated exactly (the installed parameters are scale * initParams, so each draw's gradient carries its
+    /// scale). The feature path, through the posterior draw, the modulation scale and the KL term, has no tape here;
+    /// a two-sided simultaneous-perturbation estimate over the same draws (Spall 1992) supplies it, with the decoder
+    /// held at <paramref name="initParams"/>.
+    /// </remarks>
+    private (T Loss, Vector<T>? Gradient) NegativeElbo(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, bool withGradient, int drawSeed)
+    {
+        var (loss, decoderGradient) = SampledObjective(task, initParams, initParams, drawSeed, withGradient);
+        if (!withGradient || decoderGradient is null) return (loss, null);
+
+        int n = initParams.Length;
+        var signs = Enumerable.Range(0, n).Select(_ => RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0).ToArray();
+        var direction = TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(signs, new[] { n })).ToVector();
+        double probe = FeaturePathProbeScale * (1.0 + NumOps.ToDouble(Engine.Norm(initParams))) / Math.Sqrt(Math.Max(n, 1));
+        var step = Engine.Multiply(direction, NumOps.FromDouble(probe));
+        T plus = SampledObjective(task, Engine.Add(initParams, step), initParams, drawSeed, false).Loss;
+        T minus = SampledObjective(task, Engine.Subtract(initParams, step), initParams, drawSeed, false).Loss;
+        double slope = (NumOps.ToDouble(plus) - NumOps.ToDouble(minus)) / (2.0 * probe);
+        var featureGradient = Engine.Multiply(direction, NumOps.FromDouble(slope));
+
+        ParamModel.SetParameters(initParams);
+        return (loss, ClipGradients(Engine.Add(decoderGradient, featureGradient)));
+    }
+
+    /// <summary>
+    /// The negative ELBO with the latent distributions encoded by <paramref name="featureParams"/> and the targets
+    /// decoded by <paramref name="decoderParams"/> modulated by each draw, and (when requested) the gradient of its
+    /// reconstruction term with respect to <paramref name="decoderParams"/>.
+    /// </summary>
+    private (T Loss, Vector<T>? Gradient) SampledObjective(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> featureParams, Vector<T> decoderParams, int drawSeed,
+        bool withGradient)
+    {
+        ParamModel.SetParameters(featureParams);
+
+        // Encode context (support)
+        var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+        var supportLabels = ConvertToVector(task.SupportOutput);
+        var contextRep = AggregateRepresentations(BuildContextRepresentations(supportFeatures, supportLabels));
+
+        // Prior q(z | C) from the context alone
+        var (priorMean, priorLogVar) = ComputeLatentDistribution(contextRep);
+
+        // Posterior q(z | C, T) from context and targets
+        var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
+        var queryLabels = ConvertToVector(task.QueryOutput);
+        var fullRep = AggregateRepresentations(BuildContextRepresentations(
+            ConcatVectors(supportFeatures, queryFeatures),
+            ConcatVectors(supportLabels, queryLabels)));
+        var (postMean, postLogVar) = ComputeLatentDistribution(fullRep);
+
+        var draws = RandomHelper.CreateSeededRandom(drawSeed);
+        var location = Tensor<T>.FromVector(postMean);
+        var spread = Tensor<T>.FromVector(Engine.Exp(Engine.Multiply(postLogVar, NumOps.FromDouble(0.5))));
+        int samples = Math.Max(1, _npOptions.NumLatentSamples);
+        var reconstruction = new List<T>(samples);
+        var gradients = new List<Vector<T>>(samples);
+        for (int s = 0; s < samples; s++)
+        {
+            // z ~ q(z | C, T) by reparameterisation, then decode the targets with it
+            var z = Engine.TensorNormal(location, spread, draws.Next()).ToVector();
+            double scale = ComputeModScale(z);
+            ModulateParameters(decoderParams, scale);
+            reconstruction.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            if (withGradient)
+                gradients.Add(ScaleVector(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), scale));
+        }
+
+        var kl = GaussianKL(postMean, postLogVar, priorMean, priorLogVar);
+        var loss = NumOps.Add(ComputeMean(reconstruction), NumOps.Multiply(NumOps.FromDouble(_npOptions.KLWeight), kl));
+        return (loss, withGradient ? AverageVectors(gradients) : null);
+    }
+
+    /// <summary>
+    /// KL(N(mean1, exp(logvar1)) || N(mean2, exp(logvar2))) for diagonal Gaussians:
+    /// 0.5 * sum(logvar2 - logvar1 + (exp(logvar1) + (mean1 - mean2)^2) / exp(logvar2) - 1).
+    /// </summary>
+    internal static T GaussianKL(Vector<T> mean1, Vector<T> logvar1, Vector<T> mean2, Vector<T> logvar2)
+    {
+        var engine = AiDotNetEngine.Current;
+        var difference = engine.Subtract(mean1, mean2);
+        var ratio = engine.Divide(
+            engine.Add(engine.Exp(logvar1), engine.Multiply(difference, difference)), engine.Exp(logvar2));
+        var terms = engine.Add(engine.Subtract(logvar2, logvar1), ratio);
+        return NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Subtract(engine.Sum(terms), NumOps.FromDouble(mean1.Length)));
+    }
+
+    /// <summary>
+    /// The latent encoder: mean = tanh(W_mu r) and log-variance = clamp(W_sigma r, -4, 2), with both weight blocks
+    /// read cyclically from the latent encoder parameters.
+    /// </summary>
     private (Vector<T> mean, Vector<T> logvar) ComputeLatentDistribution(Vector<T> representation)
     {
         int latentDim = _npOptions.LatentDim;
-        var mean = new Vector<T>(latentDim);
-        var logvar = new Vector<T>(latentDim);
-
-        for (int i = 0; i < latentDim; i++)
+        int width = Math.Min(representation.Length, RepresentationDim);
+        if (width == 0)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
-            {
-                int paramIdx = (i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sum = NumOps.Add(sum, NumOps.Multiply(representation[j], _latentEncoderParams[paramIdx]));
-            }
-            mean[i] = sum;
-
-            double sumVar = 0;
-            for (int j = 0; j < Math.Min(representation.Length, RepresentationDim); j++)
-            {
-                int paramIdx = (latentDim * RepresentationDim + i * RepresentationDim + j) % _latentEncoderParams.Length;
-                sumVar += NumOps.ToDouble(representation[j]) * NumOps.ToDouble(_latentEncoderParams[paramIdx]);
-            }
-            logvar[i] = NumOps.FromDouble(Math.Max(-4, Math.Min(2, sumVar)));
+            // No representation: both linear maps are zero, so mean = tanh(0) = 0 and log-variance = 0.
+            return (new Vector<T>(latentDim), new Vector<T>(latentDim));
         }
 
-        mean = VectorTanh(mean);
-        return (mean, logvar);
+        var input = representation.GetSubVector(0, width);
+        var mean = Engine.MatrixVectorMultiply(EncoderBlock(0, latentDim, width), input);
+        var logvar = Engine.Clamp(
+            Engine.MatrixVectorMultiply(EncoderBlock(latentDim * RepresentationDim, latentDim, width), input),
+            NumOps.FromDouble(-4), NumOps.FromDouble(2));
+
+        return (VectorTanh(mean), logvar);
+    }
+
+    /// <summary>
+    /// The rows x cols weight block whose (i, j) entry is the latent encoder parameter at
+    /// (offset + i * RepresentationDim + j) modulo the parameter count.
+    /// </summary>
+    private Matrix<T> EncoderBlock(int offset, int rows, int cols)
+    {
+        int length = _latentEncoderParams.Length;
+        int stride = RepresentationDim;
+        var indices = Enumerable.Range(0, rows * cols)
+            .Select(k => (int)((offset + (long)(k / cols) * stride + k % cols) % length))
+            .ToArray();
+        using var indexTensor = new Tensor<int>(indices, new[] { indices.Length });
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(_latentEncoderParams), indexTensor, 0)
+            .Reshape(rows, cols).ToMatrix();
     }
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>();
+        int drawSeed = _spsaDrawSeed ?? RandomGenerator.Next();
 
         foreach (var task in taskBatch.Tasks)
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
-            var sf = ConvertToVector(MetaModel.Predict(task.SupportInput));
-            var sl = ConvertToVector(task.SupportOutput);
-            var cr = AggregateRepresentations(BuildContextRepresentations(sf, sl));
-            var (mean, logvar) = ComputeLatentDistribution(cr);
-            var z = ReparameterizeSample(mean, logvar);
-            ModulateParameters(initParams, ComputeModScale(z));
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(NegativeElbo(task, initParams, withGradient: false, drawSeed).Loss);
         }
 
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        return losses.Count == 0 ? 0.0 : NumOps.ToDouble(ComputeMean(losses));
     }
 }

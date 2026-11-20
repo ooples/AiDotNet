@@ -212,9 +212,13 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
         var result = new Dictionary<string, T[]>();
         var template = clientUpdates.Values.First();
 
+
         foreach (var (layerName, layerParams) in template)
         {
-            var merged = new double[layerParams.Length];
+            // The clients holding this layer and their total weight, in double. Each weight is divided by the total
+            // before it touches the parameters: in T the products w * x overflow (Half: above 65504) and a small
+            // weight (an old client's decayed entropy) rounds to zero, which then divides 0 by 0.
+            var holders = new List<(T[] Layer, double Weight)>();
             double layerWeight = 0;
 
             foreach (var (clientId, update) in clientUpdates)
@@ -227,23 +231,22 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
                             $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
-                    double w = weights[clientId];
-                    layerWeight += w;
-
-                    for (int i = 0; i < clientLayer.Length; i++)
-                    {
-                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
-                    }
+                    layerWeight += weights[clientId];
+                    holders.Add((clientLayer, weights[clientId]));
                 }
             }
 
-            var mergedT = new T[layerParams.Length];
-            for (int i = 0; i < mergedT.Length; i++)
+            var merged = new Tensor<double>([layerParams.Length]);
+            if (layerWeight > 0)
             {
-                mergedT[i] = NumOps.FromDouble(layerWeight > 0 ? merged[i] / layerWeight : 0);
+                foreach (var (clientLayer, w) in holders)
+                {
+                    var term = Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]).Cast<double>(), w / layerWeight);
+                    merged = Engine.TensorAdd(merged, term);
+                }
             }
 
-            result[layerName] = mergedT;
+            result[layerName] = merged.Cast<T>().ToArray();
         }
 
         return result;

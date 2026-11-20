@@ -14,8 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: website-deploy
-  cancel-in-progress: true
+  group: website-preview-verification
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   migrate-database:
@@ -27,6 +28,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
 
       - name: Install Supabase CLI
         uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v1
@@ -42,18 +47,32 @@ jobs:
       # 20260921 files, which were still pending when 20261027 was applied) must still be pushed. Without it
       # db push refuses to insert a migration before the newest remote version.
       - name: Apply Supabase migrations
-        run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
+        run: |
+          set -euo pipefail
+          psql "$(cat supabase/.temp/pooler-url)" -X -v ON_ERROR_STOP=1 -f supabase/require-existing-entitlement-history.sql
+          supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       # Edge functions used to be deployed by hand, so production drifted from the repo (the admin
       # resend-license-email function was never deployed at all). Deploy every function on each run;
       # per-function verify_jwt comes from supabase/config.toml.
       - name: Deploy Supabase edge functions
-        run: supabase functions deploy --project-ref yfkqwpgjahoamlgckjib
+        run: |
+          for directory in supabase/functions/*; do
+            name=$(basename "$directory")
+            case "$name" in _shared|*-preview) continue ;; esac
+            supabase functions deploy "$name" --project-ref yfkqwpgjahoamlgckjib
+          done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # Preserve separately managed function credentials during source deployment.
+      # The post-deployment license-email journey detects invalid installed keys.
+      # scripts/sync-function-mail-key.mjs is available for explicit key rotation
+      # with a token that has edge_functions_secrets_read/write permissions.
 
   configure-auth-email:
     name: Configure Auth Email
@@ -84,6 +103,7 @@ jobs:
 
   build-and-deploy:
     name: Build & Deploy Website
+    needs: migrate-database
     runs-on: ubuntu-latest
     defaults:
       run:

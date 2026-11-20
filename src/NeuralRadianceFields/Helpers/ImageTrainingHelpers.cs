@@ -107,35 +107,24 @@ internal static class ImageTrainingHelpers
         // Mean color across the hallucination [H, W, 3] → per-channel scalar. Cheap +
         // stable proxy for the "prior signal at this view" when we don't have the per-ray
         // pixel index. Callers with a rays→pixels index map can extend this helper.
-        double meanR = 0, meanG = 0, meanB = 0;
         int H = view.Height, W = view.Width;
-        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++)
-        {
-            meanR += numOps.ToDouble(hallucination[y, x, 0]);
-            meanG += numOps.ToDouble(hallucination[y, x, 1]);
-            meanB += numOps.ToDouble(hallucination[y, x, 2]);
-        }
-        double count = (double)H * W;
-        meanR /= count; meanG /= count; meanB /= count;
+        int nRays = rayTargets.Shape[0];
+        int channels = rayTargets.Shape.Length > 1 ? rayTargets.Shape[1] : 3;
+        int colorChannels = Math.Min(channels, 3);
+        var colorPlanes = engine.TensorSlice(hallucination, new[] { 0, 0, 0 }, new[] { H, W, colorChannels });
+        var means = engine.TensorDivideScalar(
+            engine.ReduceSum(colorPlanes, new[] { 0, 1 }, false), numOps.FromDouble((double)H * W));
 
         // Weighted blend: target = (1 - c) * photo_sample + c * prior_mean_color.
         // Uses engine ops so the blend stays tape-recorded — future backprop through the
         // blended target works without a manual scalar-op replay.
         double invC = 1.0 - confidence;
-        int nRays = rayTargets.Shape[0];
-        int channels = rayTargets.Shape.Length > 1 ? rayTargets.Shape[1] : 3;
 
-        var priorArr = new T[nRays * channels];
-        for (int i = 0; i < nRays; i++)
-        {
-            priorArr[i * channels + 0] = numOps.FromDouble(meanR);
-            if (channels > 1) priorArr[i * channels + 1] = numOps.FromDouble(meanG);
-            if (channels > 2) priorArr[i * channels + 2] = numOps.FromDouble(meanB);
-            // 4th channel (density) if present: leave at 0 — the prior doesn't touch density.
-        }
-        var shape = new int[rayTargets.Shape.Length];
-        for (int s = 0; s < shape.Length; s++) shape[s] = rayTargets.Shape[s];
-        var priorTensor = new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(priorArr));
+        // 4th channel (density) if present: leave at 0 — the prior doesn't touch density.
+        var priorRow = channels > colorChannels
+            ? engine.TensorConcatenate(new[] { means, new Tensor<T>(new[] { channels - colorChannels }) }, 0)
+            : means;
+        var priorTensor = engine.TensorBroadcastTo(priorRow.Reshape(1, channels), new[] { nRays, channels });
         var invCT = numOps.FromDouble(invC);
         var cT = numOps.FromDouble(confidence);
         var photoScaled = engine.TensorMultiplyScalar(rayTargets, invCT);
@@ -153,5 +142,60 @@ internal static class ImageTrainingHelpers
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (pixels is null) throw new ArgumentNullException(nameof(pixels));
         return engine.TensorConcatenate(new[] { pixels.RayOrigins, pixels.RayDirections }, axis: 1);
+    }
+
+    /// <summary>
+    /// Generates one unit-length pinhole ray per pixel, row-major ([height * width, 3] origins and directions):
+    /// the camera-space direction ((x - cx) / f, (y - cy) / f, 1) with cx = (width - 1) / 2, cy = (height - 1) / 2,
+    /// rotated by the camera rotation and normalized (zero-length directions are left as they are).
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="focalLength"/> is zero, negative, infinite or NaN: every ray would be NaN or degenerate.
+    /// </exception>
+    internal static (Tensor<T> origins, Tensor<T> directions) GeneratePinholeRays<T>(
+        IEngine engine,
+        Vector<T> cameraPosition,
+        Matrix<T> cameraRotation,
+        int width,
+        int height,
+        T focalLength)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (!numOps.GreaterThan(focalLength, numOps.Zero) || numOps.IsInfinity(focalLength))
+        {
+            // NaN fails the greater-than test as well.
+            throw new ArgumentOutOfRangeException(nameof(focalLength), "The focal length must be positive and finite.");
+        }
+
+        int numRays = width * height;
+        if (numRays == 0)
+        {
+            return (new Tensor<T>(new[] { 0, 3 }), new Tensor<T>(new[] { 0, 3 }));
+        }
+
+        var gridShape = new[] { height, width };
+        var xs = engine.TensorBroadcastTo(engine.TensorArange<T>(0, width, 1).Reshape(1, width), gridShape);
+        var ys = engine.TensorBroadcastTo(engine.TensorArange<T>(0, height, 1).Reshape(height, 1), gridShape);
+        var px = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(xs, numOps.FromDouble((width - 1) * 0.5)), focalLength).Reshape(numRays);
+        var py = engine.TensorDivideScalar(
+            engine.TensorSubtractScalar(ys, numOps.FromDouble((height - 1) * 0.5)), focalLength).Reshape(numRays);
+        var cameraDirs = engine.TensorStack(new[] { px, py, engine.TensorOnesLike(px) }, 1);
+
+        var rotation = engine.TensorSlice(Tensor<T>.FromMatrix(cameraRotation), new[] { 0, 0 }, new[] { 3, 3 });
+        var directions = engine.TensorMatMul(cameraDirs, engine.TensorTranspose(rotation));
+
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(directions), new[] { 1 }, true));
+        var hasLength = engine.TensorGreaterThan(norm, numOps.Zero);
+
+        // Zero-length rows divide by one instead (decimal throws on division by zero) and keep their direction.
+        var safeNorm = engine.TensorWhere(hasLength, norm, engine.TensorOnesLike(norm));
+        var normalized = engine.TensorDivide(directions, engine.TensorBroadcastTo(safeNorm, directions.Shape.ToArray()));
+        var positive = engine.TensorBroadcastTo(hasLength, directions.Shape.ToArray());
+        directions = engine.TensorWhere(positive, normalized, directions);
+
+        var position = Tensor<T>.FromVector(cameraPosition.GetSubVector(0, 3)).Reshape(1, 3);
+        var origins = engine.TensorBroadcastTo(position, new[] { numRays, 3 }).Contiguous();
+        return (origins, directions);
     }
 }

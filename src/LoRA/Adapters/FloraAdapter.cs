@@ -91,52 +91,29 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
 
         _compressedMomentum ??= new Matrix<T>(_rank, outputSize);
 
-        Matrix<T> gradB = new Matrix<T>(_rank, outputSize);
         int bOffset = inputSize * _rank;
-
-        for (int i = 0; i < _rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradB[i, j] = loraGradients[bOffset + i * outputSize + j];
-            }
-        }
+        Tensor<T> gradB = Engine.Reshape(
+            Tensor<T>.FromVector(loraGradients.GetSubVector(bOffset, _rank * outputSize)), [_rank, outputSize]);
 
         T beta1 = NumOps.FromDouble(_momentumDecay);
         T oneMinusBeta1 = NumOps.FromDouble(1.0 - _momentumDecay);
 
-        for (int i = 0; i < _rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                T oldMomentum = (_compressedMomentum ?? throw new InvalidOperationException("_compressedMomentum has not been initialized."))[i, j];
-                T newMomentum = NumOps.Add(
-                    NumOps.Multiply(beta1, oldMomentum),
-                    NumOps.Multiply(oneMinusBeta1, gradB[i, j])
-                );
-                _compressedMomentum[i, j] = newMomentum;
-            }
-        }
+        // m = beta1 * m + (1 - beta1) * g
+        _compressedMomentum = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(_compressedMomentum), beta1),
+            Engine.TensorMultiplyScalar(gradB, oneMinusBeta1)).ToMatrix();
 
         if (_useAdaptiveLearningRate)
         {
             T beta2 = NumOps.FromDouble(_secondMomentDecay);
             T oneMinusBeta2 = NumOps.FromDouble(1.0 - _secondMomentDecay);
 
-            for (int i = 0; i < _rank; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    T grad = gradB[i, j];
-                    T gradSquared = NumOps.Multiply(grad, grad);
-                    T oldSecondMoment = (_compressedSecondMoment ?? throw new InvalidOperationException("_compressedSecondMoment has not been initialized."))[i, j];
-                    T newSecondMoment = NumOps.Add(
-                        NumOps.Multiply(beta2, oldSecondMoment),
-                        NumOps.Multiply(oneMinusBeta2, gradSquared)
-                    );
-                    _compressedSecondMoment[i, j] = newSecondMoment;
-                }
-            }
+            // v = beta2 * v + (1 - beta2) * g^2
+            Matrix<T> oldSecondMoment = _compressedSecondMoment
+                ?? throw new InvalidOperationException("_compressedSecondMoment has not been initialized.");
+            _compressedSecondMoment = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(oldSecondMoment), beta2),
+                Engine.TensorMultiplyScalar(Engine.TensorMultiply(gradB, gradB), oneMinusBeta2)).ToMatrix();
         }
 
         _loraLayer.UpdateParameters(learningRate);
@@ -155,14 +132,10 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        Matrix<T> oldA = new Matrix<T>(inputSize, _rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < _rank; j++)
-            {
-                oldA[i, j] = currentParams[i * _rank + j];
-            }
-        }
+        int bOffset = inputSize * _rank;
+        Matrix<T> oldA = Engine.Reshape(
+            Tensor<T>.FromVector(currentParams.GetSubVector(0, bOffset)), [inputSize, _rank]).ToMatrix();
+
 
         Matrix<T> newA = new Matrix<T>(inputSize, _rank);
         double stddev = 1.0 / Math.Sqrt(_rank);
@@ -186,21 +159,10 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
             _compressedSecondMoment = newSecondMoment;
         }
 
-        Vector<T> newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < _rank; j++)
-            {
-                newParams[i * _rank + j] = newA[i, j];
-            }
-        }
-
-        int bOffset = inputSize * _rank;
-        for (int i = bOffset; i < currentParams.Length; i++)
-        {
-            newParams[i] = currentParams[i];
-        }
+        // New A (row-major) followed by the unchanged B parameters
+        Vector<T> newParams = currentParams.Length > bOffset
+            ? Vector<T>.Concatenate(newA.ToRowVector(), currentParams.GetSubVector(bOffset, currentParams.Length - bOffset))
+            : newA.ToRowVector();
 
         _loraLayer.SetParameters(newParams);
     }
@@ -253,22 +215,12 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights: baseWeight + loraWeight
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged (Flora/LoRA doesn't modify biases)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. loraWeights is [inputSize, outputSize]; DenseLayer stores its weights
+        // input-major and FullyConnectedLayer output-major, so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
@@ -290,21 +242,11 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
 
     private void SyncParametersFromLayers()
     {
-        int idx = 0;
-
-        if (!_freezeBaseLayer)
-        {
-            Vector<T> baseParams = _baseLayer.GetParameters();
-            for (int i = 0; i < baseParams.Length; i++)
-            {
-                Parameters[idx++] = baseParams[i];
-            }
-        }
-
+        // [base parameters (when trainable)..., LoRA parameters...] written into Parameters in one bulk copy
         Vector<T> loraParams = _loraLayer.GetParameters();
-        for (int i = 0; i < loraParams.Length; i++)
-        {
-            Parameters[idx++] = loraParams[i];
-        }
+        Vector<T> combined = _freezeBaseLayer
+            ? loraParams
+            : Vector<T>.Concatenate(_baseLayer.GetParameters(), loraParams);
+        combined.AsSpan().CopyTo(Parameters.AsWritableSpan());
     }
 }

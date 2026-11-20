@@ -379,7 +379,8 @@ public class LoRADeepMathIntegrationTests
         // magnitude[0] = ||[3,4]|| = 5
         // magnitude[1] = ||[0,5]|| = 5
         var baseLayer = new DenseLayer<double>(2);
-        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
+        // Dense stores [input, output], so pack the transpose of the output-neuron rows above.
+        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 0, 4, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var parameters = adapter.GetParameters();
@@ -418,7 +419,8 @@ public class LoRADeepMathIntegrationTests
         // Only first output neuron has [3,4] → magnitude = 5
         // Second: [5,12] → magnitude = 13
         var baseLayer = new DenseLayer<double>(2);
-        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 5, 12, 0, 0 }));
+        // Dense's input-major rows are [3,5] and [4,12].
+        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 5, 4, 12, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var parameters = adapter.GetParameters();
@@ -450,7 +452,7 @@ public class LoRADeepMathIntegrationTests
         // W = [[3,4],[0,5]], input = [1, 2]
         // output = [1*3+2*4, 1*0+2*5] = [11, 10]
         var baseLayer = new DenseLayer<double>(2);
-        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
+        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 0, 4, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var input = MakeTensor(1, 2, [1.0, 2.0]);
@@ -483,7 +485,7 @@ public class LoRADeepMathIntegrationTests
         // input1 = [1, 0] → [3, 0]
         // input2 = [0, 1] → [4, 5]
         var baseLayer = new DenseLayer<double>(2);
-        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 4, 0, 5, 0, 0 }));
+        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 0, 4, 5, 0, 0 }));
 
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
         var input = MakeTensor(2, 2, [1.0, 0.0, 0.0, 1.0]);
@@ -496,6 +498,35 @@ public class LoRADeepMathIntegrationTests
     }
 
     #endregion
+
+    [Fact(Timeout = 120000)]
+    public async Task DoRA_RectangularInputMajorWeights_PreserveMagnitudesAndIndependentForward()
+    {
+        await Task.Yield();
+        // Output-neuron vectors [3,4,0] and [0,5,12] have lengths 5 and 13.
+        // Dense stores the transpose: [input=3, output=2], followed by two zero biases.
+        var baseLayer = new DenseLayer<double>(2,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+        baseLayer.ResolveFromShape(new[] { 3 });
+        baseLayer.SetParameters(new Vector<double>(new double[] { 3, 0, 4, 5, 0, 12, 0, 0 }));
+        var adapter = new DoRAAdapter<double>(baseLayer, rank: 1, alpha: 1.0);
+        var parameters = adapter.GetParameters();
+        Assert.Equal(5.0, parameters[0], 1e-6);
+        Assert.Equal(13.0, parameters[1], 1e-6);
+
+        var input = MakeTensor(2, 3, [1.0, 2.0, -1.0, 0.0, 1.0, 0.0]);
+        // Hand multiplication: [3+8, 10-12] and [4,5]. Check both the base
+        // fixture and its zero-delta adapter against these independent values.
+        double[] expected = [11.0, -2.0, 4.0, 5.0];
+        var original = baseLayer.Forward(input);
+        var adapted = adapter.Forward(input);
+        Assert.Equal(new[] { 2, 2 }, adapted.Shape.ToArray());
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], original[i], 1e-6);
+            Assert.Equal(expected[i], adapted[i], 1e-6);
+        }
+    }
 
     #region StandardLoRA Adapter Math
 

@@ -700,8 +700,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         // with SetSlice would detach the output from the recurrence and stop
         // gradients reaching the conv-gate weights.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
-        var hiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
-        var cellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
+        var hiddenState = new Tensor<T>([batchSize, height, width, _filters]);
+        var cellState = new Tensor<T>([batchSize, height, width, _filters]);
 
         var packedInput = Engine.TensorConcatenate(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 3);
         var packedHidden = Engine.TensorConcatenate(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 3);
@@ -1197,10 +1197,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private static void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int startIndex)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            vector[startIndex++] = tensor[i];
-        }
+        tensor.CopyTo(vector.AsWritableSpan().Slice(startIndex, tensor.Length));
+        startIndex += tensor.Length;
     }
 
     /// <inheritdoc />
@@ -1235,10 +1233,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private static void CopyVectorToTensor(Vector<T> vector, Tensor<T> tensor, ref int startIndex)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = vector[startIndex++];
-        }
+        vector.AsSpan().Slice(startIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
+        startIndex += tensor.Length;
     }
 
     /// <summary>

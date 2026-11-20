@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -306,18 +307,14 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
         Vector<T> originalPred,
         Vector<T> counterfactualPred)
     {
-        var featureChanges = new Dictionary<int, T>();
-
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            double origVal = NumOps.ToDouble(original[i]);
-            double cfVal = NumOps.ToDouble(counterfactual[i]);
-
-            if (Math.Abs(origVal - cfVal) > 1e-6)
-            {
-                featureChanges[i] = NumOps.FromDouble(cfVal - origVal);
-            }
-        }
+        // Features whose value moved by more than 1e-6, with the signed change.
+        var engine = AiDotNetEngine.Current;
+        var changes = engine.Subtract(counterfactual.GetSubVector(0, _numFeatures), original.GetSubVector(0, _numFeatures));
+        var changed = engine.TensorGreaterThan(engine.Abs(changes).AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6)).ToVector()
+            .NonZeroIndices().ToList();
+        var featureChanges = changed
+            .Zip(changes.GetElements(changed), (index, change) => (index, change))
+            .ToDictionary(entry => entry.index, entry => entry.change);
 
         return new CounterfactualExplanation<T>
         {
@@ -326,7 +323,7 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
             OriginalPrediction = Tensor<T>.FromVector(originalPred, new[] { originalPred.Length }),
             CounterfactualPrediction = Tensor<T>.FromVector(counterfactualPred, new[] { counterfactualPred.Length }),
             FeatureChanges = featureChanges,
-            Distance = NumOps.FromDouble(ComputeDistance(original, counterfactual)),
+            Distance = VectorHelper.EuclideanDistance(original, counterfactual),
             MaxChanges = _maxChanges
         };
     }
@@ -334,8 +331,7 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
     private Matrix<T> CreateSingleRowMatrix(Vector<T> row)
     {
         var matrix = new Matrix<T>(1, row.Length);
-        for (int j = 0; j < row.Length; j++)
-            matrix[0, j] = row[j];
+        AiDotNetEngine.Current.SetRow(matrix, 0, row);
         return matrix;
     }
 }

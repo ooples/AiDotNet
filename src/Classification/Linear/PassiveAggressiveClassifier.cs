@@ -101,14 +101,7 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
         }
 
         // Convert labels to +1/-1 for binary classification
-        T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        var yBinary = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0
-                ? NumOps.One
-                : NumOps.Negate(NumOps.One);
-        }
+        var yBinary = SignedBinaryTargets(y).ToArray();
 
         T c = NumOps.FromDouble(Options.C);
 
@@ -120,51 +113,10 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
 
             foreach (int i in indices)
             {
-                // Extract sample
-                var sample = new Vector<T>(NumFeatures);
-                T squaredNorm = NumOps.Zero;
-                for (int j = 0; j < NumFeatures; j++)
+                // Hinge-loss violators update w = w + tau * y * x
+                if (PassiveAggressiveStep(GetSample(x, i), yBinary[i], c))
                 {
-                    sample[j] = x[i, j];
-                    squaredNorm = NumOps.Add(squaredNorm, NumOps.Multiply(sample[j], sample[j]));
-                }
-
-                // Include bias in norm if fitting intercept
-                if (Options.FitIntercept)
-                {
-                    squaredNorm = NumOps.Add(squaredNorm, NumOps.One);
-                }
-
-                // Compute prediction and margin
-                T prediction = DecisionFunction(sample);
-                T target = yBinary[i];
-                T margin = NumOps.Multiply(target, prediction);
-
-                // Hinge loss: max(0, 1 - margin)
-                T loss = NumOps.Subtract(NumOps.One, margin);
-                if (NumOps.Compare(loss, NumOps.Zero) <= 0)
-                {
-                    // Correct classification with sufficient margin
-                    continue;
-                }
-
-                anyUpdate = true;
-
-                // Compute update step (depends on PA variant)
-                T tau = ComputeTau(loss, squaredNorm, c);
-
-                // Update weights: w = w + tau * y * x
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    T update = NumOps.Multiply(tau, NumOps.Multiply(target, sample[j]));
-                    Weights[j] = NumOps.Add(Weights[j], update);
-                }
-
-                // Update intercept
-                if (Options.FitIntercept)
-                {
-                    T interceptUpdate = NumOps.Multiply(tau, target);
-                    Intercept = NumOps.Add(Intercept, interceptUpdate);
+                    anyUpdate = true;
                 }
             }
 
@@ -182,9 +134,9 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
     private T ComputeTau(T loss, T squaredNorm, T c)
     {
         // Avoid division by zero
-        if (NumOps.Compare(squaredNorm, NumOps.FromDouble(1e-12)) < 0)
+        if (NumOps.Compare(squaredNorm, Tolerance(1e-12)) < 0)
         {
-            squaredNorm = NumOps.FromDouble(1e-12);
+            squaredNorm = Tolerance(1e-12);
         }
 
         T tau;
@@ -223,6 +175,39 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
         metadata.AdditionalInfo["C"] = Options.C;
         metadata.AdditionalInfo["PAType"] = Options.PAType.ToString();
         return metadata;
+    }
+
+    /// <summary>
+    /// One passive-aggressive update on a single sample; returns true when the weights changed.
+    /// </summary>
+    private bool PassiveAggressiveStep(Vector<T> sample, T target, T c)
+    {
+        // Include bias in norm if fitting intercept
+        T squaredNorm = Engine.DotProduct(sample, sample);
+        if (Options.FitIntercept)
+        {
+            squaredNorm = NumOps.Add(squaredNorm, NumOps.One);
+        }
+
+        // Hinge loss: max(0, 1 - margin)
+        T margin = NumOps.Multiply(target, DecisionFunction(sample));
+        T loss = NumOps.Subtract(NumOps.One, margin);
+        if (NumOps.Compare(loss, NumOps.Zero) <= 0)
+        {
+            // Correct classification with sufficient margin
+            return false;
+        }
+
+        // Compute update step (depends on PA variant)
+        T tau = ComputeTau(loss, squaredNorm, c);
+        T scale = NumOps.Multiply(tau, target);
+        AddScaledSample(sample, scale);
+        if (Options.FitIntercept)
+        {
+            Intercept = NumOps.Add(Intercept, scale);
+        }
+
+        return true;
     }
 }
 

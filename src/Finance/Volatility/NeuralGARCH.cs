@@ -347,20 +347,7 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// </remarks>
     public Tensor<T> ComputeCorrelationMatrix(Tensor<T> returns)
     {
-        // From the covariance in double: in Half a variance past 65504 (a std past 256) made the denominator
-        // infinite, so the correlation was 0.
-        var covariance = CovarianceAsDouble(returns, out int assets);
-        var data = new double[assets * assets];
-        for (int i = 0; i < assets; i++)
-        {
-            for (int j = 0; j < assets; j++)
-            {
-                data[(i * assets) + j] = covariance[(i * assets) + j]
-                    / (Math.Sqrt(covariance[(i * assets) + i]) * Math.Sqrt(covariance[(j * assets) + j]));
-            }
-        }
-
-        return new Tensor<double>(new[] { assets, assets }, new Vector<double>(data)).Cast<T>();
+        return VolatilityStatistics<T>.Correlation(returns);
     }
 
     /// <summary>
@@ -371,49 +358,7 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// </remarks>
     public Tensor<T> ComputeCovarianceMatrix(Tensor<T> returns)
     {
-        var covariance = CovarianceAsDouble(returns, out int assets);
-        return new Tensor<double>(new[] { assets, assets }, new Vector<double>(covariance)).Cast<T>();
-    }
-
-    /// <summary>
-    /// The sample covariance matrix of the returns, row-major [assets, assets], in double.
-    /// </summary>
-    /// <remarks>
-    /// Every sum is taken in double: in Half the sum of squared deviations of 40 returns near 0.1 apart is fine, but
-    /// of price-scale series (or 40 values of 50) it passes 65504 long before the covariance does, and the infinite
-    /// sum made the covariance infinite. Each asset's mean is <c>SumAsDouble</c> / samples, the deviations are taken
-    /// in T (they fit wherever the returns do), and each entry is <c>DotAsDouble</c> of two deviation columns.
-    /// </remarks>
-    private double[] CovarianceAsDouble(Tensor<T> returns, out int assets)
-    {
-        GetReturnMatrixShape(returns, out int samples, out assets);
-        var engine = Engine;
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var matrix = engine.Reshape(returns.Contiguous(), new[] { samples, assets });
-        var means = new double[assets];
-        for (int a = 0; a < assets; a++)
-            means[a] = TensorReductionHelper.SumAsDouble(engine, Column(engine, matrix, a, samples)) / samples;
-
-        var meanRow = new Tensor<double>(new[] { 1, assets }, new Vector<double>(means)).Cast<T>();
-        var centered = engine.TensorSubtract(matrix, engine.TensorBroadcastTo(meanRow, new[] { samples, assets }));
-        var deviations = new Tensor<T>[assets];
-        for (int a = 0; a < assets; a++)
-            deviations[a] = Column(engine, centered, a, samples);
-
-        var covariance = new double[assets * assets];
-        double denom = Math.Max(1, samples - 1);
-        for (int i = 0; i < assets; i++)
-        {
-            covariance[(i * assets) + i] = TensorReductionHelper.SumOfSquaresAsDouble(engine, deviations[i]) / denom;
-            for (int j = i + 1; j < assets; j++)
-            {
-                double value = TensorReductionHelper.DotAsDouble(engine, deviations[i], deviations[j]) / denom;
-                covariance[(i * assets) + j] = value;
-                covariance[(j * assets) + i] = value;
-            }
-        }
-
-        return covariance;
+        return VolatilityStatistics<T>.Covariance(returns);
     }
 
     /// <summary>Column <paramref name="index"/> of a [samples, assets] matrix, as a contiguous rank-1 tensor.</summary>
@@ -428,19 +373,7 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// </remarks>
     public Tensor<T> CalculateRealizedVolatility(Tensor<T> highFrequencyReturns)
     {
-        // sqrt(mean of squared returns) per asset, the sum of squares in double: in Half it passes 65504 long before
-        // the volatility does, and the infinite sum made the volatility infinite.
-        GetReturnMatrixShape(highFrequencyReturns, out int samples, out int assets);
-        var engine = Engine;
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var matrix = engine.Reshape(highFrequencyReturns.Contiguous(), new[] { samples, assets });
-        var data = new double[assets];
-        for (int a = 0; a < assets; a++)
-        {
-            data[a] = Math.Sqrt(TensorReductionHelper.SumOfSquaresAsDouble(engine, Column(engine, matrix, a, samples)) / samples);
-        }
-
-        return new Tensor<double>(new[] { assets }, new Vector<double>(data)).Cast<T>();
+        return VolatilityStatistics<T>.RealizedVolatility(highFrequencyReturns);
     }
 
     /// <summary>
@@ -486,49 +419,8 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// </remarks>
     private Tensor<T> EnsureHorizonShape(Tensor<T> forecast, int horizon)
     {
-        if (forecast.Rank == 2 && forecast.Shape[0] == horizon && forecast.Shape[1] == _numAssets)
-            return forecast;
-
-        var vector = forecast.ToVector();
-        var data = new T[horizon * _numAssets];
-        int count = Math.Min(_numAssets, vector.Length);
-
-        for (int h = 0; h < horizon; h++)
-        {
-            for (int a = 0; a < _numAssets; a++)
-            {
-                data[(h * _numAssets) + a] = vector[a % count];
-            }
-        }
-
-        return new Tensor<T>(new[] { horizon, _numAssets }, new Vector<T>(data));
+        return VolatilityStatistics<T>.TileToHorizon(forecast, horizon, _numAssets);
     }
-
-    /// <summary>
-    /// Gets the sample and asset dimensions for return tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This converts 3D batches into a simple list of samples.</para>
-    /// </remarks>
-    private static void GetReturnMatrixShape(Tensor<T> returns, out int samples, out int assets)
-    {
-        if (returns.Rank == 2)
-        {
-            samples = returns.Shape[0];
-            assets = returns.Shape[1];
-            return;
-        }
-
-        if (returns.Rank == 3)
-        {
-            samples = returns.Shape[0] * returns.Shape[1];
-            assets = returns.Shape[2];
-            return;
-        }
-
-        throw new ArgumentException("Returns tensor must be 2D or 3D.");
-    }
-
 
     #endregion
 }

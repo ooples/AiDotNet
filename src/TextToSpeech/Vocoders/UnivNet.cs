@@ -81,6 +81,9 @@ public partial class UnivNet<T> : GanVocoderBase<T>
     protected override bool DiscriminatorStepFirst => false;
 
     /// <inheritdoc />
+    protected override bool RequiresRetainedGeneration => true;
+
+    /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;

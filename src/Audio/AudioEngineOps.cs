@@ -166,10 +166,8 @@ internal static class AudioEngineOps
     internal static double SpectralCentroidBins<T>(IEngine engine, Tensor<T> spec)
     {
         if (spec.Shape[0] == 0 || spec.Shape[1] == 0) return 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var (weighted, total) = BinMoment(engine, spec);
-        double totalSum = numOps.ToDouble(total);
-        return totalSum > 0 ? numOps.ToDouble(weighted) / totalSum : 0;
+        var (weighted, total) = BinMoment(engine, spec.Cast<double>());
+        return total > 0 ? weighted / total : 0;
     }
 
     /// <summary>
@@ -180,10 +178,9 @@ internal static class AudioEngineOps
     {
         int count = spec.Shape[0] * spec.Shape[1];
         if (count == 0) return 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var mag = engine.TensorMax(spec, numOps.FromDouble(1e-10));
-        double logSum = numOps.ToDouble(engine.TensorSum(engine.TensorLog(mag)));
-        double sum = numOps.ToDouble(engine.TensorSum(mag));
+        var mag = engine.TensorMax(spec.Cast<double>(), 1e-10);
+        double logSum = engine.TensorSum(engine.TensorLog(mag));
+        double sum = engine.TensorSum(mag);
         double geometricMean = Math.Exp(logSum / count);
         double arithmeticMean = sum / count;
         return arithmeticMean > 0 ? geometricMean / arithmeticMean : 0;
@@ -194,10 +191,11 @@ internal static class AudioEngineOps
     /// </summary>
     internal static (Tensor<T> Mean, Tensor<T> Std) ColumnMeanStd<T>(IEngine engine, Tensor<T> x)
     {
-        var mean = engine.ReduceMean(x, new[] { 0 }, keepDims: true);
-        var deviation = engine.TensorSubtract(x, engine.TensorBroadcastTo(mean, x.Shape.ToArray()));
+        var wide = x.Cast<double>();
+        var mean = engine.ReduceMean(wide, new[] { 0 }, keepDims: true);
+        var deviation = engine.TensorSubtract(wide, engine.TensorBroadcastTo(mean, x.Shape.ToArray()));
         var variance = engine.ReduceMean(engine.TensorSquare(deviation), new[] { 0 }, keepDims: false);
-        return (engine.Reshape(mean, new[] { x.Shape[1] }), engine.TensorSqrt(variance));
+        return (engine.Reshape(mean, new[] { x.Shape[1] }).Cast<T>(), engine.TensorSqrt(variance).Cast<T>());
     }
 
     /// <summary>
@@ -328,15 +326,14 @@ internal static class AudioEngineOps
     }
 
     /// <summary>
-    /// The symmetric Hann window <c>0.5 * (1 - cos(2 pi i / (size - 1)))</c>; a one-sample window
-    /// evaluates 0/0 like the closed form and is NaN.
+    /// The symmetric Hann window, using the standard value one for a one-sample window.
     /// </summary>
     internal static Tensor<T> SymmetricHannWindow<T>(IEngine engine, int size)
     {
-        if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().FromDouble(double.NaN));
-        if (size < 0) throw new OverflowException("Window size must be non-negative.");
+        if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().One);
+        if (size < 0) throw new ArgumentOutOfRangeException(nameof(size), "Window size must be non-negative.");
         if (size == 0) return new Tensor<T>(new[] { 0 });
-        return engine.TensorHannWindow<T>(size, periodic: false);
+        return engine.TensorHannWindow<double>(size, periodic: false).Cast<T>();
     }
 
     /// <summary>
@@ -421,11 +418,11 @@ internal static class AudioEngineOps
     internal static T[] L2NormalizedData<T>(IEngine engine, Tensor<T> embedding)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var numOps = MathHelper.GetNumericOperations<T>();
         if (embedding.Length == 0) return new T[0];
-        T norm = numOps.Sqrt(engine.TensorSum(engine.TensorSquare(embedding)));
-        return numOps.GreaterThan(norm, numOps.Zero)
-            ? engine.TensorDivideScalar(embedding, norm).ToArray()
+        var wide = embedding.Cast<double>();
+        double norm = Math.Sqrt(engine.TensorSum(engine.TensorSquare(wide)));
+        return norm > 0
+            ? engine.TensorDivideScalar(wide, norm).Cast<T>().ToArray()
             : embedding.ToArray();
     }
 
@@ -538,61 +535,75 @@ internal static class AudioEngineOps
     }
 
     /// <summary>
-    /// <c>(x - mean) / max(std, floor)</c> with the population standard deviation, as a fresh tensor.
+    /// The mean of <paramref name="values"/> as a one-element tensor, by the same blocking as <see cref="Mean"/>, so
+    /// no sample count or sum has to fit in <typeparamref name="T"/>. Nothing is read back to the host: a compiled
+    /// training plan recomputes it from each step's samples instead of freezing the traced step's value.
     /// </summary>
-    /// <remarks>
-    /// The samples are first divided by their largest magnitude <c>s</c>, so every intermediate (the
-    /// unit samples, their mean through <see cref="Mean"/>, the deviations, at most 2 in magnitude,
-    /// and their squares) stays small; neither the sample count, a sum, nor a deviation of the raw
-    /// samples has to fit in <typeparamref name="T"/>. Since the standardized value is scale-free,
-    /// <c>(x - mean) / std = (u - mean_u) / std_u</c>; the floor is applied as <c>std = s * std_u</c>.
-    /// Any NaN sample makes every result NaN, as the direct formula does; an empty input gives an
-    /// empty result.
-    /// </remarks>
-    internal static Tensor<T> Standardize<T>(IEngine engine, Tensor<T> x, double floor)
-    {
-        // Every step is an engine op on a [1] statistic (no value is read on the host), so a compiled training plan
-        // traces the normalization of its input. A NaN sample reaches the mean, so every deviation is NaN.
-        if (x.Length == 0) return new Tensor<T>(x.Shape.ToArray());
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = x.Shape.ToArray();
-        Tensor<T> Wide(Tensor<T> statistic) => engine.TensorBroadcastTo(engine.Reshape(statistic, Enumerable.Repeat(1, shape.Length).ToArray()), shape);
-
-        var scale = engine.Reshape(engine.ReduceMax(engine.TensorAbs(x), Enumerable.Range(0, x.Rank).ToArray(), keepDims: false, out _), new[] { 1 });
-        // An all-zero clip divides by 1 instead: its unit samples and deviations are 0.
-        var safeScale = engine.TensorAdd(scale, engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(engine.TensorGreaterThan(scale, numOps.Zero), numOps.FromDouble(-1.0)), numOps.One));
-        var unit = engine.TensorDivide(x, Wide(safeScale));
-        var deviation = engine.TensorSubtract(unit, Wide(MeanOnEngine(engine, unit)));
-        var unitStd = engine.TensorSqrt(MeanOnEngine(engine, engine.TensorSquare(deviation)));
-
-        // std = s * std_u, so in unit samples the divisor is max(std_u, floor / s). Zero deviations stay 0 even where that
-        // divisor is not representable in T.
-        var floorInUnits = engine.TensorDivide(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { numOps.FromDouble(floor) })), safeScale);
-        var standardized = engine.TensorDivide(deviation, Wide(engine.TensorMax(unitStd, floorInUnits)));
-        return engine.TensorWhere(engine.TensorEquals(deviation, numOps.Zero), new Tensor<T>(shape), standardized);
-    }
-
-    /// <summary>
-    /// <see cref="Mean"/> as a <c>[1]</c> tensor computed on the engine: the same blocks of <see cref="MeanBlock"/>
-    /// values pre-scaled by <c>1 / MeanBlock</c> and the same padding correction, so a narrow type averages more than its
-    /// largest finite count of samples, and nothing is read on the host.
-    /// </summary>
-    internal static Tensor<T> MeanOnEngine<T>(IEngine engine, Tensor<T> values)
+    internal static Tensor<T> MeanTensor<T>(IEngine engine, Tensor<T> values)
     {
         int n = values.Length;
         if (n == 0) throw new ArgumentException("Cannot average an empty tensor.", nameof(values));
         var numOps = MathHelper.GetNumericOperations<T>();
         var v = Flatten(engine, values);
         if (n <= MeanBlock)
-            return engine.Reshape(engine.ReduceSum(engine.TensorMultiplyScalar(v, numOps.FromDouble(1.0 / n)), new[] { 0 }, keepDims: false), new[] { 1 });
+            return engine.ReduceSum(engine.TensorMultiplyScalar(v, numOps.FromDouble(1.0 / n)), new[] { 0 }, keepDims: true);
 
         int blocks = (n + MeanBlock - 1) / MeanBlock;
         var padded = FitLength(engine, v, blocks * MeanBlock);
         var blockMeans = engine.ReduceSum(
             engine.TensorMultiplyScalar(engine.Reshape(padded, new[] { blocks, MeanBlock }), numOps.FromDouble(1.0 / MeanBlock)),
             new[] { 1 }, keepDims: false);
-        return engine.TensorMultiplyScalar(MeanOnEngine(engine, blockMeans), numOps.FromDouble((double)blocks * MeanBlock / n));
+        return engine.TensorMultiplyScalar(MeanTensor(engine, blockMeans), numOps.FromDouble((double)blocks * MeanBlock / n));
+    }
+
+    /// <summary>
+    /// <c>(x - mean) / max(std, floor)</c> with the population standard deviation, as a fresh tensor.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The samples are first divided by their largest magnitude <c>s</c>, so every intermediate (the
+    /// unit samples, their mean through <see cref="MeanTensor"/>, the deviations, at most 2 in magnitude,
+    /// and their squares) stays small; neither the sample count, a sum, nor a deviation of the raw
+    /// samples has to fit in <typeparamref name="T"/>. Since the standardized value is scale-free,
+    /// <c>(x - mean) / std = (u - mean_u) / std_u</c>; the floor is applied as <c>std = s * std_u</c>.
+    /// Any NaN sample makes every result NaN, as the direct formula does; an all-zero input gives
+    /// zeros and an empty input an empty result.
+    /// </para>
+    /// <para>
+    /// Every statistic stays a tensor and every branch is a selection, so the whole standardization is
+    /// graph ops: a compiled training plan recomputes the statistics from each step's samples. Reading
+    /// them back to the host would freeze the traced step's scale, mean and spread into the plan.
+    /// </para>
+    /// </remarks>
+    internal static Tensor<T> Standardize<T>(IEngine engine, Tensor<T> x, double floor)
+    {
+        if (x.Length == 0) return new Tensor<T>(x.Shape.ToArray());
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = x.Shape.ToArray();
+        var flat = Flatten(engine, x);
+        int n = flat.Length;
+
+        // The largest magnitude, or 1 for an all-zero input, whose deviations are then all 0. A NaN
+        // sample makes the unit samples' mean NaN and so every deviation NaN, whatever the maximum is.
+        var magnitude = engine.ReduceMax(engine.TensorAbs(flat), new[] { 0 }, keepDims: true);
+        var one = Tensor<T>.CreateDefault(new[] { 1 }, numOps.One);
+        var scale = engine.TensorWhere(engine.TensorEquals(magnitude, numOps.Zero), one, magnitude);
+
+        var unit = engine.TensorDivide(flat, scale);
+        var deviation = engine.TensorSubtract(unit, MeanTensor(engine, unit));
+        var unitStd = engine.TensorSqrt(MeanTensor(engine, engine.TensorSquare(deviation)));
+
+        // std = scale * unitStd; below the floor the divisor is the floor itself, i.e. the unit
+        // deviations are multiplied by scale / floor. Zero deviations stay 0 in either branch, even
+        // where the other branch's factor is not representable in T.
+        T floorValue = numOps.FromDouble(floor);
+        var belowFloor = engine.TensorBroadcastTo(
+            engine.TensorLessThan(engine.TensorMultiply(scale, unitStd), floorValue), new[] { n });
+        var standardized = engine.TensorWhere(belowFloor,
+            engine.TensorMultiply(deviation, engine.TensorDivideScalar(scale, floorValue)),
+            engine.TensorDivide(deviation, unitStd));
+        var result = engine.TensorWhere(engine.TensorEquals(deviation, numOps.Zero), new Tensor<T>(new[] { n }), standardized);
+        return engine.Reshape(result, shape);
     }
 
     /// <summary>
@@ -695,15 +706,14 @@ internal static class AudioEngineOps
         int cols = matrix.Shape[1];
         if (rows == 0) return new int[0];
         if (cols == 0) return new int[rows];
-        var numOps = MathHelper.GetNumericOperations<T>();
         var shape = new[] { rows, cols };
         var ranked = engine.TensorWhere(
             engine.TensorIsNan(matrix), Tensor<T>.CreateDefault(shape, NegativeInfinityOrMin<T>()), matrix);
         var best = engine.TensorBroadcastTo(engine.ReduceMax(ranked, new[] { 1 }, keepDims: true), shape);
-        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, cols, 1), new[] { 1, cols }), shape);
+        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, cols, 1), new[] { 1, cols }), shape);
         var firstBest = engine.TensorWhere(
-            engine.TensorEquals(ranked, best), column, Tensor<T>.CreateDefault(shape, numOps.FromDouble(cols)));
-        return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).Cast<int>().ToArray();
+            engine.TensorEquals(ranked, best).Cast<int>(), column, Tensor<int>.CreateDefault(shape, cols));
+        return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).ToArray();
     }
 
     /// <summary>

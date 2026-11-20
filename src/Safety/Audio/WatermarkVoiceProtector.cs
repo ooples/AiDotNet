@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -45,7 +47,6 @@ public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
 
     private readonly T _watermarkStrength;
     private readonly int _watermarkKey;
-    private readonly FastFourierTransform<T> _fft;
 
     /// <inheritdoc />
     public override string ModuleName => "WatermarkVoiceProtector";
@@ -65,83 +66,118 @@ public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
     {
         _watermarkStrength = NumOps.FromDouble(watermarkStrength);
         _watermarkKey = watermarkKey;
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <summary>
     /// Embeds a watermark into the audio and returns the watermarked audio.
     /// </summary>
     public Vector<T> EmbedWatermark(Vector<T> audioSamples, int sampleRate)
+        => EmbedWatermark(audioSamples, sampleRate, FrameBatch);
+
+    /// <summary>
+    /// The number of frames transformed per tensor batch, so the spectra of a long recording are never held at once.
+    /// </summary>
+    internal const int FrameBatch = 1024;
+
+    /// <summary>
+    /// <see cref="EmbedWatermark(Vector{T}, int)"/> with <paramref name="frameBatch"/> frames transformed at a time.
+    /// Batches overlap-add into one output, and the chip sequence is indexed by the global frame, so the result does
+    /// not depend on the batch size.
+    /// </summary>
+    internal Vector<T> EmbedWatermark(Vector<T> audioSamples, int sampleRate, int frameBatch)
     {
+        if (frameBatch < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frameBatch), "At least one frame must be processed per batch.");
+        }
+
         if (audioSamples.Length < 512)
         {
             return audioSamples;
         }
 
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
         int frameSize = 512;
         int hopSize = 256;
-        double strength = NumOps.ToDouble(_watermarkStrength);
+        int length = audioSamples.Length;
+        int numFrames = (length - frameSize) / hopSize + 1;
+        var audio = SafetyTensorOps<T>.AsTensor(audioSamples);
 
-        var result = new Vector<T>(audioSamples.Length);
-        var windowSum = new Vector<T>(audioSamples.Length);
+        var window = SafetyTensorOps<T>.SymmetricHann(frameSize);
+        int halfLen = frameSize / 2;
 
-        for (int start = 0; start + frameSize <= audioSamples.Length; start += hopSize)
+        // Embed spread-spectrum watermark in mid-frequency band (1kHz - 6kHz)
+        int lowBin = (int)(1000.0 * frameSize / sampleRate);
+        int highBin = Math.Min((int)(6000.0 * frameSize / sampleRate), halfLen - 1);
+
+        // Frames are transformed in bounded batches. Batch frames [first, first + count) cover samples
+        // [first * hop, (first + count + 1) * hop); only the last hop of them is shared with the next batch, so the
+        // rest is final and the shared hop is carried over.
+        var resultParts = new List<Tensor<T>>();
+        var weightParts = new List<Tensor<T>>();
+        Tensor<T>? carry = null;
+        Tensor<T>? carryWeight = null;
+        for (int first = 0; first < numFrames; first += frameBatch)
         {
-            var frame = new Vector<T>(frameSize);
-            for (int i = 0; i < frameSize; i++)
+            int count = Math.Min(frameBatch, numFrames - first);
+            int segmentLength = (count + 1) * hopSize;
+            var segment = engine.TensorNarrow(audio, 0, first * hopSize, segmentLength);
+
+            // Hann-windowed frames: [count, frameSize]
+            var frames = engine.TensorMultiply(SafetyTensorOps<T>.Frames(segment, frameSize, hopSize, count), window);
+            SafetyTensorOps<T>.Dft(frames, out var real, out var imag);
+
+            if (highBin >= lowBin)
             {
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-                frame[i] = NumOps.Multiply(audioSamples[start + i], NumOps.FromDouble(w));
+                int bins = highBin - lowBin + 1;
+
+                // Pseudo-random watermark chip based on key, bin and global frame index
+                var chipValue = ChipValues(_watermarkKey, lowBin, bins, count, first);
+                var bandReal = engine.TensorNarrow(real, 1, lowBin, bins);
+                var bandImag = engine.TensorNarrow(imag, 1, lowBin, bins);
+                var magnitude = engine.TensorSqrt(engine.TensorAdd(engine.TensorSquare(bandReal), engine.TensorSquare(bandImag)));
+                var delta = engine.TensorMultiply(engine.TensorMultiplyScalar(magnitude, _watermarkStrength), chipValue);
+
+                real = engine.TensorAdd(real, engine.TensorConcatenate(new[]
+                {
+                    Tensor<T>.CreateZeros(count, lowBin), delta,
+                    Tensor<T>.CreateZeros(count, frameSize - lowBin - bins)
+                }, 1));
             }
 
-            var spectrum = _fft.Forward(frame);
-            int halfLen = spectrum.Length / 2;
+            engine.IFFT(real, imag, out var watermarkedFrames, out _);
 
-            // Embed spread-spectrum watermark in mid-frequency band (1kHz - 6kHz)
-            int lowBin = (int)(1000.0 * frameSize / sampleRate);
-            int highBin = Math.Min((int)(6000.0 * frameSize / sampleRate), halfLen - 1);
-
-            for (int k = lowBin; k <= highBin; k++)
-            {
-                // Pseudo-random watermark chip based on key and bin index
-                int chip = GenerateChip(_watermarkKey, k, start / hopSize);
-                double chipValue = chip == 1 ? 1.0 : -1.0;
-
-                T magnitude = spectrum[k].Magnitude;
-                double magD = NumOps.ToDouble(magnitude);
-                double delta = magD * strength * chipValue;
-
-                T newReal = NumOps.Add(spectrum[k].Real, NumOps.FromDouble(delta));
-                spectrum[k] = new Complex<T>(newReal, spectrum[k].Imaginary);
-            }
-
-            var watermarkedFrame = _fft.Inverse(spectrum);
-
-            // Overlap-add
-            for (int i = 0; i < frameSize; i++)
-            {
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-                T windowed = NumOps.Multiply(watermarkedFrame[i], NumOps.FromDouble(w));
-                result[start + i] = NumOps.Add(result[start + i], windowed);
-                windowSum[start + i] = NumOps.Add(windowSum[start + i], NumOps.FromDouble(w * w));
-            }
+            // Overlap-add within the batch
+            var weighted = engine.TensorMultiply(watermarkedFrames, window);
+            var windowEnergy = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorSquare(window), new[] { 1, frameSize }), new[] { count, frameSize });
+            var (current, previous) = SafetyTensorOps<T>.HalfOverlapParts(weighted, segmentLength);
+            var (currentWeight, previousWeight) = SafetyTensorOps<T>.HalfOverlapParts(windowEnergy, segmentLength);
+            carry = AppendFinal(resultParts, engine.TensorAdd(previous, current), carry, hopSize);
+            carryWeight = AppendFinal(weightParts, engine.TensorAdd(previousWeight, currentWeight), carryWeight, hopSize);
         }
+
+        int coveredLength = (numFrames + 1) * hopSize;
+        if (carry is not null && carryWeight is not null)
+        {
+            resultParts.Add(carry);
+            weightParts.Add(carryWeight);
+        }
+
+        if (length > coveredLength)
+        {
+            resultParts.Add(Tensor<T>.CreateZeros(length - coveredLength));
+            weightParts.Add(Tensor<T>.CreateZeros(length - coveredLength));
+        }
+
+        var result = engine.TensorConcatenate(resultParts.ToArray(), 0);
+        var windowSum = engine.TensorConcatenate(weightParts.ToArray(), 0);
 
         // Normalize by window sum
-        for (int i = 0; i < result.Length; i++)
-        {
-            double ws = NumOps.ToDouble(windowSum[i]);
-            if (ws > 1e-10)
-            {
-                result[i] = NumOps.Divide(result[i], windowSum[i]);
-            }
-            else
-            {
-                result[i] = audioSamples[i];
-            }
-        }
-
-        return result;
+        var covered = SafetyTensorOps<T>.Gt(windowSum, 1e-10);
+        var normalized = engine.TensorDivide(result, SafetyTensorOps<T>.Where(covered, windowSum, 1.0));
+        return SafetyTensorOps<T>.Where(covered, normalized, audio).ToVector();
     }
 
     /// <inheritdoc />
@@ -152,10 +188,11 @@ public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
 
         if (audioSamples.Length < 512) return findings;
 
-        double detectionScore = DetectWatermark(audioSamples, sampleRate);
+        T detectionScoreT = DetectWatermark(audioSamples, sampleRate);
 
-        if (detectionScore >= 0.5)
+        if (NumOps.GreaterThanOrEquals(detectionScoreT, NumOps.FromDouble(0.5)))
         {
+            double detectionScore = NumOps.ToDouble(detectionScoreT);
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.Watermarked,
@@ -171,67 +208,88 @@ public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
         return findings;
     }
 
-    private double DetectWatermark(Vector<T> audio, int sampleRate)
+    private T DetectWatermark(Vector<T> audio, int sampleRate)
     {
         int frameSize = 512;
         int hopSize = 256;
         int numFrames = Math.Min(8, (audio.Length - frameSize) / hopSize + 1);
-        if (numFrames < 1) return 0;
+        if (numFrames < 1) return NumOps.Zero;
 
-        double correlationSum = 0;
-        int correlationCount = 0;
+        int halfLen = frameSize / 2;
+        int lowBin = (int)(1000.0 * frameSize / sampleRate);
+        int highBin = Math.Min((int)(6000.0 * frameSize / sampleRate), halfLen - 1);
+        if (highBin < lowBin) return NumOps.Zero;
+        int bins = highBin - lowBin + 1;
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * hopSize;
-            if (start + frameSize > audio.Length) break;
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
+        var frames = engine.TensorMultiply(
+            SafetyTensorOps<T>.Frames(SafetyTensorOps<T>.AsTensor(audio), frameSize, hopSize, numFrames),
+            SafetyTensorOps<T>.SymmetricHann(frameSize));
+        SafetyTensorOps<T>.Dft(frames, out var real, out _);
 
-            var frame = new Vector<T>(frameSize);
-            for (int i = 0; i < frameSize; i++)
-            {
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-                frame[i] = NumOps.Multiply(audio[start + i], NumOps.FromDouble(w));
-            }
+        // Correlate spectrum with expected watermark pattern
+        var chipValue = ChipValues(_watermarkKey, lowBin, bins, numFrames);
+        var corr = engine.ReduceSum(
+            engine.TensorMultiply(engine.TensorNarrow(real, 1, lowBin, bins), chipValue), new[] { 1 }, false);
+        T correlationSum = engine.TensorSum(engine.TensorDivideScalar(corr, NumOps.FromDouble(bins)));
 
-            var spectrum = _fft.Forward(frame);
-            int halfLen = spectrum.Length / 2;
-
-            int lowBin = (int)(1000.0 * frameSize / sampleRate);
-            int highBin = Math.Min((int)(6000.0 * frameSize / sampleRate), halfLen - 1);
-
-            // Correlate spectrum with expected watermark pattern
-            double corr = 0;
-            int bins = 0;
-            for (int k = lowBin; k <= highBin; k++)
-            {
-                int chip = GenerateChip(_watermarkKey, k, f);
-                double chipValue = chip == 1 ? 1.0 : -1.0;
-                double realVal = NumOps.ToDouble(spectrum[k].Real);
-                corr += realVal * chipValue;
-                bins++;
-            }
-
-            if (bins > 0)
-            {
-                correlationSum += corr / bins;
-                correlationCount++;
-            }
-        }
-
-        if (correlationCount == 0) return 0;
-
-        double avgCorrelation = correlationSum / correlationCount;
-        return Math.Min(1.0, Math.Max(0, avgCorrelation * 10));
+        T avgCorrelation = NumOps.Divide(correlationSum, NumOps.FromDouble(numFrames));
+        return SafetyTensorOps<T>.ClampUnit(NumOps.Multiply(avgCorrelation, NumOps.FromDouble(10)));
     }
 
-    private static int GenerateChip(int key, int bin, int frame)
+    /// <summary>
+    /// Adds the carried overlap to the start of a batch's overlap-added segment, appends every sample no later batch
+    /// reaches to <paramref name="parts"/>, and returns the last <paramref name="hop"/> samples as the new carry.
+    /// </summary>
+    private static Tensor<T> AppendFinal(List<Tensor<T>> parts, Tensor<T> segment, Tensor<T>? carry, int hop)
     {
+        var engine = SafetyTensorOps<T>.Engine;
+        int length = segment.Shape[0];
+        if (carry is not null)
+        {
+            segment = engine.TensorConcatenate(new[]
+            {
+                engine.TensorAdd(engine.TensorNarrow(segment, 0, 0, hop), carry),
+                engine.TensorNarrow(segment, 0, hop, length - hop)
+            }, 0);
+        }
+
+        parts.Add(engine.TensorNarrow(segment, 0, 0, length - hop).Contiguous());
+        return engine.TensorNarrow(segment, 0, length - hop, hop).Contiguous();
+    }
+
+    /// <summary>
+    /// The +1/-1 watermark chip of every (frame, bin) pair, <c>[frames, bins]</c> for bins
+    /// <c>lowBin .. lowBin + bins - 1</c>: the low bit of the key/bin/frame hash
+    /// (<c>key * 2654435761 + bin * 2246822519 + frame * 3266489917</c>, wrapping, then one
+    /// finalizer round) maps 1 to +1 and 0 to -1.
+    /// </summary>
+    private static Tensor<T> ChipValues(int key, int lowBin, int bins, int frames, int firstFrame = 0)
+    {
+        var engine = SafetyTensorOps<T>.Engine;
+        var grid = new[] { frames, bins };
+        int keyTerm;
         unchecked
         {
-            int hash = key * (int)2654435761 + bin * (int)2246822519 + frame * (int)3266489917;
-            hash = ((hash >> 16) ^ hash) * 0x45d9f3b;
-            hash = (hash >> 16) ^ hash;
-            return (hash & 1);
+            keyTerm = key * (int)2654435761;
         }
+
+        var binTerm = engine.Reshape(
+            engine.TensorMultiplyScalar(engine.TensorArange<int>(lowBin, lowBin + bins, 1), unchecked((int)2246822519)),
+            new[] { 1, bins });
+        var frameTerm = engine.Reshape(
+            engine.TensorMultiplyScalar(engine.TensorArange<int>(firstFrame, firstFrame + frames, 1), unchecked((int)3266489917)),
+            new[] { frames, 1 });
+        var hash = engine.TensorAddScalar(
+            engine.TensorAdd(engine.TensorBroadcastTo(binTerm, grid), engine.TensorBroadcastTo(frameTerm, grid)),
+            keyTerm);
+        var sixteen = Tensor<int>.CreateDefault(grid, 16);
+        hash = engine.TensorMultiplyScalar(
+            engine.TensorBitwiseXor(engine.TensorBitwiseRightShift(hash, sixteen), hash), 0x45d9f3b);
+        hash = engine.TensorBitwiseXor(engine.TensorBitwiseRightShift(hash, sixteen), hash);
+        var chip = engine.TensorTake(SafetyTensorOps<T>.Range(2),
+            engine.TensorBitwiseAnd(hash, Tensor<int>.CreateDefault(grid, 1)));
+        return SafetyTensorOps<T>.Affine(chip, 2.0, -1.0);
     }
 }

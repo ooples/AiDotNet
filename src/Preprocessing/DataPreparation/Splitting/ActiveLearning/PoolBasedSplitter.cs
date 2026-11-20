@@ -160,54 +160,62 @@ public class PoolBasedSplitter<T> : DataSplitterBase<T>
     private (int[] labeled, int[] unlabeled) SelectDiverse(Matrix<T> X, int nSamples, int labeledSize)
     {
         // Simple diverse selection using max-min distance
-        var labeled = new List<int>();
-        var unlabeled = new HashSet<int>(Enumerable.Range(0, nSamples));
+        var points = Tensor<T>.FromMatrix(X);
 
         // Start with a random sample
         int first = _random.Next(nSamples);
-        labeled.Add(first);
-        unlabeled.Remove(first);
 
-        // Greedily select farthest points
-        while (labeled.Count < labeledSize && unlabeled.Count > 0)
-        {
-            int bestCandidate = -1;
-            double bestDistance = -1;
-
-            foreach (int candidate in unlabeled)
-            {
-                double minDist = double.MaxValue;
-                foreach (int selected in labeled)
-                {
-                    double dist = ComputeDistance(X, candidate, selected);
-                    minDist = Math.Min(minDist, dist);
-                }
-
-                if (minDist > bestDistance)
-                {
-                    bestDistance = minDist;
-                    bestCandidate = candidate;
-                }
-            }
-
-            if (bestCandidate >= 0)
-            {
-                labeled.Add(bestCandidate);
-                unlabeled.Remove(bestCandidate);
-            }
-        }
-
+        // Half and BFloat16 coordinates are compared in float: the difference of two finite Half coordinates
+        // (60000 - -60000) overflows to inf, and inf / inf distances are NaN, which rank below every selected row
+        var labeled = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? SelectFarthest(points.Cast<float>(), first, labeledSize)
+            : SelectFarthest(points, first, labeledSize);
+        var unlabeled = new HashSet<int>(Enumerable.Range(0, nSamples));
+        unlabeled.ExceptWith(labeled);
         return (labeled.ToArray(), unlabeled.ToArray());
     }
 
-    private double ComputeDistance(Matrix<T> X, int i, int j)
+    /// <summary>
+    /// Greedy max-min selection starting from <paramref name="first"/>: each step takes the unselected row farthest
+    /// from its nearest selected row (ties go to the lowest index) until <paramref name="labeledSize"/> are selected.
+    /// </summary>
+    private static List<int> SelectFarthest<TC>(Tensor<TC> points, int first, int labeledSize)
     {
-        double sum = 0;
-        for (int k = 0; k < X.Columns; k++)
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int nSamples = points.Shape[0];
+        var labeled = new List<int> { first };
+
+        // Distance from every sample to its nearest selected sample; selected samples are marked -1
+        var minDistance = DistancesTo(engine, points, first);
+        var isLabeled = new int[nSamples];
+        isLabeled[first] = 1;
+        var minusOne = PreprocessingTensorOps.Filled(new[] { nSamples }, ops.Negate(ops.One));
+
+        // Greedily select farthest points (ties go to the lowest index)
+        while (labeled.Count < labeledSize && labeled.Count < nSamples)
         {
-            double diff = Convert.ToDouble(X[i, k]) - Convert.ToDouble(X[j, k]);
-            sum += diff * diff;
+            var labeledMask = new Tensor<int>(isLabeled, new[] { nSamples }).Cast<TC>();
+            var candidates = engine.TensorWhere(labeledMask, minusOne, minDistance);
+            int bestCandidate = PreprocessingTensorOps.FirstArgMax(candidates);
+
+            labeled.Add(bestCandidate);
+            isLabeled[bestCandidate] = 1;
+            minDistance = engine.TensorMin(minDistance, DistancesTo(engine, points, bestCandidate));
         }
-        return Math.Sqrt(sum);
+
+        return labeled;
+    }
+
+    /// <summary>
+    /// The Euclidean distance from every row of <paramref name="points"/> to row <paramref name="row"/>, scaled so the
+    /// squared differences cannot overflow (master summed them in double).
+    /// </summary>
+    private static Tensor<TC> DistancesTo<TC>(AiDotNet.Tensors.Engines.IEngine engine, Tensor<TC> points, int row)
+    {
+        int n = points.Shape[0];
+        int p = points.Shape[1];
+        var reference = engine.TensorBroadcastTo(PreprocessingTensorOps.RowVector(points, row), new[] { n, p });
+        return PreprocessingTensorOps.RowNorms(engine.TensorSubtract(points, reference));
     }
 }

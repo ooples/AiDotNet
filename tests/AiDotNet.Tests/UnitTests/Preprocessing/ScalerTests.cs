@@ -186,10 +186,10 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             // Act
             var result = scaler.FitTransform(data);
 
-            // Assert - should map to middle of range (0.5 for [0, 1])
-            Assert.True(Math.Abs(result[0, 0] - 0.5) < 0.0001);
-            Assert.True(Math.Abs(result[1, 0] - 0.5) < 0.0001);
-            Assert.True(Math.Abs(result[2, 0] - 0.5) < 0.0001);
+            // Assert - scikit-learn MinMaxScaler treats a zero data range as 1 (_handle_zeros_in_scale), so a constant column maps to the feature-range minimum (0 for [0, 1])
+            Assert.True(Math.Abs(result[0, 0] - 0.0) < 0.0001);
+            Assert.True(Math.Abs(result[1, 0] - 0.0) < 0.0001);
+            Assert.True(Math.Abs(result[2, 0] - 0.0) < 0.0001);
         }
 
         [Fact(Timeout = 60000)]

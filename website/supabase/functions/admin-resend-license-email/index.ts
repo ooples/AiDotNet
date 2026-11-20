@@ -1,4 +1,6 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve as serveHttp } from "https://deno.land/std@0.177.0/http/server.ts";
+import { withCors } from "../_shared/cors.ts";
+const serve = (handler: (req: Request) => Response | Promise<Response>) => serveHttp(withCors(handler));
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
 import { isProductSlug } from "../_shared/products.ts";

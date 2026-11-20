@@ -29,20 +29,23 @@ internal static class RationalQuadraticSpline
         int n = inputs.Length, k = unnormalizedWidths.Shape[1];
         T C(double v) => ops.FromDouble(v);
 
-        // Inside mask (constant) and a safe input for the elements outside, whose spline value is discarded.
-        var inside = new Tensor<T>(new[] { n });
-        for (int i = 0; i < n; i++)
-        {
-            double x = ops.ToDouble(inputs[i]);
-            inside[i] = x >= -tailBound && x <= tailBound ? ops.One : ops.Zero;
-        }
+        // Replay the discrete tail decision without differentiating through the comparisons.
+        // Account for a bound rounded to T: the original comparison promoted the input to double.
+        T lower = C(-tailBound), upperBound = C(tailBound);
+        var aboveLower = engine.TensorGreaterThan(inputs, lower);
+        if (ops.ToDouble(lower) >= -tailBound)
+            aboveLower = engine.TensorAdd(aboveLower, engine.TensorEquals(inputs, lower));
+        var belowUpper = engine.TensorLessThan(inputs, upperBound);
+        if (ops.ToDouble(upperBound) <= tailBound)
+            belowUpper = engine.TensorAdd(belowUpper, engine.TensorEquals(inputs, upperBound));
+        var inside = engine.TensorMultiply(aboveLower, belowUpper);
         var outside = engine.TensorAddScalar(engine.TensorNegate(inside), ops.One);
         var safe = engine.TensorMultiply(inputs, inside);
 
         // Linear tails: the outer derivatives are the constant whose softplus is 1 − min_derivative.
         double tailDerivative = Math.Log(Math.Exp(1 - MinDerivative) - 1);
         var edge = new Tensor<T>(new[] { n, 1 });
-        for (int i = 0; i < n; i++) edge[i, 0] = C(tailDerivative);
+        edge.AsWritableSpan().Fill(C(tailDerivative));
         var derivatives = engine.TensorAddScalar(engine.Softplus(engine.TensorConcatenate(new[] { edge, unnormalizedDerivatives, edge }, 1)), C(MinDerivative));
 
         Tensor<T> Knots(Tensor<T> unnormalized, double floor)
@@ -50,26 +53,35 @@ internal static class RationalQuadraticSpline
             var sizes = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorSoftmax(unnormalized, axis: 1), C(1 - floor * k)), C(floor));
             // cumsum with a leading zero: sizes · U, U[j, i] = 1 for j < i, of shape [K, K + 1]
             var upper = new Tensor<T>(new[] { k, k + 1 });
+            var upperValues = upper.AsWritableSpan();
+            upperValues.Clear();
             for (int j = 0; j < k; j++)
-                for (int i = j + 1; i <= k; i++) upper[j, i] = ops.One;
+                upperValues.Slice(j * (k + 1) + j + 1, k - j).Fill(ops.One);
             return engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorMatMul(sizes, upper), C(2 * tailBound)), C(-tailBound));
         }
         var cumWidths = Knots(unnormalizedWidths, MinBinWidth);                 // [N, K + 1]
         var cumHeights = Knots(unnormalizedHeights, MinBinHeight);
 
-        // Bin search over the current knots (searchsorted with the last knot nudged up).
-        var search = inverse ? cumHeights : cumWidths;
-        var oneHot = new Tensor<T>(new[] { n, k });
-        for (int i = 0; i < n; i++)
+        // Inclusive interior-knot comparisons choose the right bin at a tie. Differencing the
+        // monotone prefix gives one hot bin, retaining gradients through the selected quantities.
+        // The original final-knot epsilon cannot change its bin after clamping to K - 1.
+        var ones = new Tensor<T>(new[] { n, 1 });
+        ones.AsWritableSpan().Fill(ops.One);
+        Tensor<T> oneHot;
+        if (k == 1)
         {
-            double x = ops.ToDouble(safe[i]);
-            int bin = 0;
-            for (int j = 0; j <= k; j++)
-            {
-                double knot = ops.ToDouble(search[i, j]) + (j == k ? 1e-6 : 0);
-                if (x >= knot) bin = j;
-            }
-            oneHot[i, Math.Min(bin, k - 1)] = ops.One;
+            oneHot = ones;
+        }
+        else
+        {
+            var search = inverse ? cumHeights : cumWidths;
+            var interior = engine.TensorSlice(search, new[] { 0, 1 }, new[] { n, k - 1 });
+            var repeatedInput = engine.TensorBroadcastTo(engine.Reshape(safe, new[] { n, 1 }), new[] { n, k - 1 });
+            var atOrAbove = engine.TensorAdd(engine.TensorGreaterThan(repeatedInput, interior),
+                engine.TensorEquals(repeatedInput, interior));
+            var zeros = new Tensor<T>(new[] { n, 1 });
+            oneHot = engine.TensorSubtract(engine.TensorConcatenate(new[] { ones, atOrAbove }, 1),
+                engine.TensorConcatenate(new[] { atOrAbove, zeros }, 1));
         }
         Tensor<T> Pick(Tensor<T> values, int from) =>
             engine.ReduceSum(engine.TensorMultiply(engine.TensorSlice(values, new[] { 0, from }, new[] { n, k }), oneHot), new[] { 1 }, keepDims: false);

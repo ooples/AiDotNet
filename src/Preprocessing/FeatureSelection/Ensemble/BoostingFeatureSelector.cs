@@ -28,14 +28,14 @@ public class BoostingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nRounds;
     private readonly double _learningRate;
 
-    private double[]? _boostingScores;
+    private Vector<T>? _boostingScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NRounds => _nRounds;
-    public double[]? BoostingScores => _boostingScores;
+    public Vector<T>? BoostingScores => _boostingScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,111 +73,76 @@ public class BoostingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var shape = new[] { n, p };
+        var yColumn = engine.TensorBroadcastTo(engine.Reshape(y, new[] { n, 1 }), shape);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        T learningRate = NumOps.FromDouble(_learningRate);
+        T offset = NumOps.FromDouble(0.01);
+        T zero = NumOps.Zero;
+        var ones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
         // Initialize sample weights uniformly
-        var weights = new double[n];
-        for (int i = 0; i < n; i++)
-            weights[i] = 1.0 / n;
+        var weights = PreprocessingTensorOps.Filled(new[] { n }, NumOps.FromDouble(1.0 / n));
 
-        _boostingScores = new double[p];
-        var predictions = new double[n];
+        // Round r adds 1 / (nRounds - r) to its best feature
+        var increments = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { _nRounds }, NumOps.One),
+            engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { _nRounds }, NumOps.FromDouble(_nRounds)),
+                PreprocessingTensorOps.Range<T>(_nRounds)));
+        var bestFeatures = new List<int>();
+        var bestIncrements = new List<Tensor<T>>();
+        var predictions = new Tensor<T>(new[] { n });
 
-        for (int round = 0; round < _nRounds; round++)
+        for (int round = 0; round < _nRounds && p > 0; round++)
         {
-            // Find best feature for this round (weighted correlation)
-            int bestFeature = -1;
-            double bestScore = double.MinValue;
-            double[] bestPred = new double[n];
+            // Weighted single-feature regression of y on every feature
+            var w = engine.TensorBroadcastTo(engine.Reshape(weights, new[] { n, 1 }), shape);
+            T wSum = engine.TensorSum(weights);
+            var xMean = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(w, X), new[] { 0 }, true), wSum);
+            var yMean = engine.TensorBroadcastTo(engine.Reshape(engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(weights, y), new[] { 0 }, true), wSum), new[] { 1, 1 }), shape);
+            var xd = engine.TensorSubtract(X, engine.TensorBroadcastTo(xMean, shape));
+            var yd = engine.TensorSubtract(yColumn, yMean);
+            var sxy = engine.ReduceSum(engine.TensorMultiply(engine.TensorMultiply(w, xd), yd), new[] { 0 }, false);
+            var sxx = engine.ReduceSum(engine.TensorMultiply(engine.TensorMultiply(w, xd), xd), new[] { 0 }, false);
+            var usable = engine.TensorGreaterThan(sxx, floor);
+            var beta = engine.TensorWhere(usable,
+                engine.TensorDivide(sxy, engine.TensorWhere(usable, sxx, ones)),
+                new Tensor<T>(new[] { p }));
 
-            for (int j = 0; j < p; j++)
+            // Predictions and weighted squared error per feature; the smallest error (first on ties) wins
+            var pred = engine.TensorAdd(engine.TensorMultiply(engine.TensorBroadcastTo(
+                engine.Reshape(beta, new[] { 1, p }), shape), xd), yMean);
+            var weightedError = engine.ReduceSum(engine.TensorMultiply(w, engine.TensorSquare(engine.TensorSubtract(yColumn, pred))),
+                new[] { 0 }, false);
+            int bestFeature = PreprocessingTensorOps.FirstArgMax(engine.TensorNegate(weightedError));
+
+            bestFeatures.Add(bestFeature);
+            bestIncrements.Add(engine.TensorSlice(increments, new[] { round }, new[] { 1 }));
+
+            // Update predictions
+            var bestPred = PreprocessingTensorOps.ColumnVector(pred, bestFeature);
+            predictions = engine.TensorAdd(predictions,
+                engine.TensorMultiplyScalar(engine.TensorSubtract(bestPred, predictions), learningRate));
+
+            // Update weights based on residuals
+            var residuals = engine.TensorAbs(engine.TensorSubtract(y, predictions));
+            T maxResidual = PreprocessingTensorOps.ScalarMax(zero, engine.TensorMaxValue(residuals));
+
+            if (PreprocessingTensorOps.IsAbove(maxResidual, floor))
             {
-                // Weighted mean
-                double wxSum = 0, wySum = 0, wSum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    wxSum += weights[i] * X[i, j];
-                    wySum += weights[i] * y[i];
-                    wSum += weights[i];
-                }
-                double xMean = wxSum / wSum;
-                double yMean = wySum / wSum;
-
-                // Weighted regression coefficient
-                double sxy = 0, sxx = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double xd = X[i, j] - xMean;
-                    double yd = y[i] - yMean;
-                    sxy += weights[i] * xd * yd;
-                    sxx += weights[i] * xd * xd;
-                }
-
-                double beta = sxx > 1e-10 ? sxy / sxx : 0;
-
-                // Compute predictions and weighted error
-                var pred = new double[n];
-                double weightedError = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    pred[i] = yMean + beta * (X[i, j] - xMean);
-                    double err = (y[i] - pred[i]) * (y[i] - pred[i]);
-                    weightedError += weights[i] * err;
-                }
-
-                double score = -weightedError;
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                    bestPred = pred;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                _boostingScores[bestFeature] += 1.0 / (_nRounds - round);
-
-                // Update predictions
-                for (int i = 0; i < n; i++)
-                    predictions[i] += _learningRate * (bestPred[i] - predictions[i]);
-
-                // Update weights based on residuals
-                double maxResidual = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = Math.Abs(y[i] - predictions[i]);
-                    maxResidual = Math.Max(maxResidual, residual);
-                }
-
-                if (maxResidual > 1e-10)
-                {
-                    double weightSum = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        double residual = Math.Abs(y[i] - predictions[i]);
-                        weights[i] = residual / maxResidual + 0.01;
-                        weightSum += weights[i];
-                    }
-                    for (int i = 0; i < n; i++)
-                        weights[i] /= weightSum;
-                }
+                weights = engine.TensorAddScalar(engine.TensorDivideScalar(residuals, maxResidual), offset);
+                weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
             }
         }
 
+        var boostingScores = FeatureScoringTensorOps.ScatterAdd(bestFeatures, bestIncrements, p);
+        _boostingScores = boostingScores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _boostingScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(boostingScores, numToSelect);
 
         IsFitted = true;
     }
@@ -195,15 +160,7 @@ public class BoostingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("BoostingFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -96,6 +96,35 @@ public class ParameterGradientPublicationTests
         for (int i = rawOffset; i < flat.Length; i++) Assert.Equal(11, flat[i]);
     }
 
+    // A tape step's device gradients are published as a snapshot: the optimizer that runs after publication scales
+    // them in place (AdamOptimizer's own global-norm clip), and the surface must keep the values that were published,
+    // as the CPU path's copy does.
+    [SkippableFact]
+    public void DevicePublication_IsASnapshot_NotAnAliasOfGradientsScaledInPlaceAfterwards()
+    {
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+        if (System.Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpu;
+        try
+        {
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            using var network = new PublicationNetwork();
+            var parameters = network.TrainableTensors;
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<float>();
+            var grads = parameters.ToDictionary(p => p, p => engine.TensorMultiplyScalar(FilledLike(p, 1), 7f));
+            network.Publish(grads);
+            foreach (var g in grads.Values) engine.TensorMultiplyScalarInPlace(g, 0.5f);
+            var flat = network.GetParameterGradients();
+            int rawOffset = flat.Length - parameters[^1].Length;
+            Assert.True(rawOffset > 0);
+            for (int i = 0; i < rawOffset; i++) Assert.Equal(7f, flat[i]);
+        }
+        finally { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = previous; }
+    }
+
     [Fact]
     public void Publication_ZeroesAReusedLayerSliceThatGetsNoGradientThisStep()
     {
@@ -146,6 +175,183 @@ public class ParameterGradientPublicationTests
         Assert.All(network.ExtraLayerTensors, parameter =>
             Assert.DoesNotContain(clipped, candidate => ReferenceEquals(candidate, parameter)));
         Assert.DoesNotContain(clipped, candidate => ReferenceEquals(candidate, network.RawParameter));
+    }
+
+    [Fact]
+    public void StreamingRetention_MidStepReadOnUnreadSurface_DoesNotMixSteps()
+    {
+        var probe = new MidStepGradientProbeRegularization();
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        arch.RandomSeed = 19;
+
+        var sgdProbe = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+                Regularization = probe,
+            });
+        var sgdTwin = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+            });
+
+        using var net = new FeedForwardNeuralNetwork<float>(arch, sgdProbe);
+        using var twin = new FeedForwardNeuralNetwork<float>(arch, sgdTwin);
+        net.StreamingTraining = StreamingTrainingMode.ForceOn;
+        twin.StreamingTraining = StreamingTrainingMode.ForceOn;
+        var initial = net.GetParameters();
+        twin.UpdateParameters(initial);
+        probe.Target = net;
+
+        var x = new Tensor<float>(new[] { 2, 4 });
+        var y1 = new Tensor<float>(new[] { 2, 2 });
+        var y2 = new Tensor<float>(new[] { 2, 2 });
+        for (int i = 0; i < x.Length; i++) x[i] = (i + 1) * 0.25f;
+        for (int i = 0; i < y1.Length; i++) { y1[i] = 1.5f * (i + 1); y2[i] = -3.0f * (i + 1); }
+
+        // Step 1: leave net's published surface unread so its layers hold references to the published snapshot bank.
+        net.Train(x, y1);
+        twin.Train(x, y1);
+        float[] expectedStep1 = twin.GetParameterGradients().ToArray();
+
+        // Step 2: probe reads net.GetParameterGradients() right after the first parameter's RetainStreamingGradient
+        // runs in backward, before other parameters or EndStreamingGradientRetention have run.
+        probe.CaptureNextCall = true;
+        net.Train(x, y2);
+        twin.Train(x, y2);
+        float[] expectedStep2 = twin.GetParameterGradients().ToArray();
+
+        Assert.NotNull(probe.CapturedMidStep);
+        if (probe.CapturedMidStep is { } midStep)
+        {
+            Assert.Equal(expectedStep1.Length, midStep.Length);
+            bool stepsDiffer = false;
+            for (int i = 0; i < expectedStep1.Length; i++)
+            {
+                if (System.Math.Abs(expectedStep1[i] - expectedStep2[i]) > 1e-4f) stepsDiffer = true;
+                Assert.Equal(expectedStep1[i], midStep[i], 5);
+            }
+            Assert.True(stepsDiffer, "Step 1 and Step 2 gradients were identical, making the mid-step check vacuous.");
+        }
+
+        float[] actualStep2 = net.GetParameterGradients().ToArray();
+        for (int i = 0; i < expectedStep2.Length; i++)
+            Assert.Equal(expectedStep2[i], actualStep2[i], 5);
+    }
+
+    private sealed class MidStepGradientProbeRegularization : IRegularization<float, Tensor<float>, Tensor<float>>
+    {
+        public FeedForwardNeuralNetwork<float>? Target { get; set; }
+        public bool CaptureNextCall { get; set; }
+        public float[]? CapturedMidStep { get; private set; }
+
+        public Matrix<float> Regularize(Matrix<float> data) => data;
+        public Vector<float> Regularize(Vector<float> data) => data;
+
+        public Tensor<float> Regularize(Tensor<float> gradient, Tensor<float> coefficients)
+        {
+            if (CaptureNextCall && Target is { } target)
+            {
+                CaptureNextCall = false;
+                CapturedMidStep = target.GetParameterGradients().ToArray();
+            }
+            return gradient;
+        }
+
+        public RegularizationOptions GetOptions()
+            => new RegularizationOptions { Type = RegularizationType.None, Strength = 0.0 };
+    }
+
+    [Fact]
+    public void Layer_PublicationThatFailsPartWay_DoesNotExposeAMixOfTwoSteps()
+    {
+        // The CPU publish refills the buffer that backs the current (unread) surface. When the refill threw after the
+        // weights but before the bias, the old surface still pointed at that buffer: new weight gradients next to the
+        // previous step's bias gradients, a vector no backward pass ever produced.
+        var layer = new DenseLayer<float>(2);
+        _ = layer.Forward(new Tensor<float>(new[] { 1, 3 }));
+        var parameters = layer.GetTrainableParameters();
+        Assert.Equal(2, parameters.Count);
+        var weights = parameters[0];
+        var bias = parameters[1];
+
+        var first = new Dictionary<Tensor<float>, Tensor<float>>
+        {
+            [weights] = FilledLike(weights, 1f),
+            [bias] = FilledLike(bias, 1f),
+        };
+        Assert.True(layer.ScatterParameterGradients(first) > 0);
+
+        var second = new PoisonedGradients(
+            new Dictionary<Tensor<float>, Tensor<float>>
+            {
+                [weights] = FilledLike(weights, 2f),
+                [bias] = FilledLike(bias, 2f),
+            },
+            poisoned: bias);
+        var thrown = Record.Exception(() => layer.ScatterParameterGradients(second));
+        Assert.IsType<System.InvalidOperationException>(thrown);
+
+        var surface = layer.GetParameterGradients().ToArray();
+        Assert.True(surface.Length == 0,
+            $"A failed publication left a surface of [{string.Join(", ", surface)}] instead of withdrawing it.");
+    }
+
+    /// <summary>Delegates to a dictionary but throws when the publish looks up <c>poisoned</c>.</summary>
+    private sealed class PoisonedGradients : IReadOnlyDictionary<Tensor<float>, Tensor<float>>
+    {
+        private readonly Dictionary<Tensor<float>, Tensor<float>> _inner;
+        private readonly Tensor<float> _poisoned;
+
+        public PoisonedGradients(Dictionary<Tensor<float>, Tensor<float>> inner, Tensor<float> poisoned)
+        {
+            _inner = inner;
+            _poisoned = poisoned;
+        }
+
+        private void ThrowIfPoisoned(Tensor<float> key)
+        {
+            if (ReferenceEquals(key, _poisoned))
+                throw new System.InvalidOperationException("Simulated failure while reading a gradient.");
+        }
+
+        public Tensor<float> this[Tensor<float> key]
+        {
+            get
+            {
+                ThrowIfPoisoned(key);
+                return _inner[key];
+            }
+        }
+
+        public IEnumerable<Tensor<float>> Keys => _inner.Keys;
+
+        public IEnumerable<Tensor<float>> Values => _inner.Values;
+
+        public int Count => _inner.Count;
+
+        public bool ContainsKey(Tensor<float> key) => _inner.ContainsKey(key);
+
+        public bool TryGetValue(Tensor<float> key, out Tensor<float> value)
+        {
+            ThrowIfPoisoned(key);
+            return _inner.TryGetValue(key, out value);
+        }
+
+        public IEnumerator<KeyValuePair<Tensor<float>, Tensor<float>>> GetEnumerator() => _inner.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private static Tensor<float> FilledLike(Tensor<float> parameter, float value)

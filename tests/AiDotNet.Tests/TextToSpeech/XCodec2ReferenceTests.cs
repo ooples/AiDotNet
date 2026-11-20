@@ -106,7 +106,8 @@ public class XCodec2ReferenceTests
 
         foreach (var c in reference.GetProperty("cases").EnumerateArray())
         {
-            var audio = Doubles(c.GetProperty("audio"));
+            var samples = Doubles(c.GetProperty("audio"));
+            var audio = new Tensor<double>(new[] { samples.Length }, new Vector<double>(samples));
             var padded = codec.PadForEncoding(audio);
             Assert.Equal(0, padded.Length % 320);
 

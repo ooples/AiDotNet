@@ -23,7 +23,8 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
         HiddenDimension = other.HiddenDimension;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
-        DerivativeStep = other.DerivativeStep;
+        SymplecticSolverMaxIterations = other.SymplecticSolverMaxIterations;
+        SymplecticSolverTolerance = other.SymplecticSolverTolerance;
     }
 
     /// <summary>Gets or sets the number of tanh hidden layers.</summary>
@@ -56,15 +57,26 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
     /// </remarks>
     public double WeightDecay { get; set; } = 1e-4;
 
-    /// <summary>Gets or sets the central-difference displacement used for input derivatives.</summary>
-    /// <value>The positive displacement. The default is 0.001.</value>
+    /// <summary>Gets or sets the most fixed-point iterations of the implicit momentum update in Simulate.</summary>
+    /// <value>The iteration cap. The default is 100.</value>
     /// <remarks>
-    /// AiDotNet's first-order tape does not retain the higher-order graph required to differentiate
-    /// an input gradient with respect to network parameters. A centered input difference preserves
-    /// the paper's symplectic derivative objective while remaining differentiable with respect to
-    /// every model parameter. The default is large enough to remain resolvable in single precision.
+    /// <para>Symplectic Euler for a general (non-separable) Hamiltonian evaluates the force at the new momentum,
+    /// <c>p_new = p - dt * dH/dq(q, p_new)</c>, which is solved by fixed-point iteration. A separable Hamiltonian
+    /// converges after one correction.</para>
+    /// <para><b>For Beginners:</b> Each simulation step refines its momentum estimate until it stops changing; this caps
+    /// how many refinements one step may take.</para>
     /// </remarks>
-    public double DerivativeStep { get; set; } = 1e-3;
+    public int SymplecticSolverMaxIterations { get; set; } = 100;
+
+    /// <summary>Gets or sets the convergence tolerance of the implicit momentum update in Simulate.</summary>
+    /// <value>The relative tolerance. The default is 1e-10.</value>
+    /// <remarks>
+    /// <para>Iteration stops when the largest momentum change is at most <c>tolerance * (1 + max |p|)</c>, or when it
+    /// no longer decreases (the precision of the numeric type is reached).</para>
+    /// <para><b>For Beginners:</b> Smaller values solve each step more exactly at the cost of more network
+    /// evaluations.</para>
+    /// </remarks>
+    public double SymplecticSolverTolerance { get; set; } = 1e-10;
 
     /// <summary>Validates the paper training recipe and architecture.</summary>
     public void Validate()
@@ -77,7 +89,9 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
             throw new ArgumentOutOfRangeException(nameof(LearningRate), "LearningRate must be finite and positive.");
         if (double.IsNaN(WeightDecay) || double.IsInfinity(WeightDecay) || WeightDecay < 0.0)
             throw new ArgumentOutOfRangeException(nameof(WeightDecay), "WeightDecay must be finite and nonnegative.");
-        if (double.IsNaN(DerivativeStep) || double.IsInfinity(DerivativeStep) || DerivativeStep <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(DerivativeStep), "DerivativeStep must be finite and positive.");
+        if (SymplecticSolverMaxIterations <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SymplecticSolverMaxIterations), "SymplecticSolverMaxIterations must be positive.");
+        if (double.IsNaN(SymplecticSolverTolerance) || double.IsInfinity(SymplecticSolverTolerance) || SymplecticSolverTolerance <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(SymplecticSolverTolerance), "SymplecticSolverTolerance must be finite and positive.");
     }
 }

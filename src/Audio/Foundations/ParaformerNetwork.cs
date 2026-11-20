@@ -80,8 +80,12 @@ internal sealed record ParaformerConfiguration
 /// between the target length and Σα, plus the encoder's CTC loss when weighted (Equation 6 without MWER, which the release
 /// does not train either).</para>
 /// </remarks>
-internal sealed class ParaformerNetwork<T>
+internal sealed class ParaformerNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly ParaformerConfiguration _o;
@@ -285,9 +289,42 @@ internal sealed class ParaformerNetwork<T>
             var inputs = acoustic;
             if (sample && _o.SamplingRatio > 0)
             {
-                var mask = GlancingMask(encoded, acoustic, targets, random);                                     // [n, width]
-                var keep = _engine.TensorAddScalar(_engine.TensorNegate(mask), NumOps.One);
-                inputs = _engine.TensorAdd(_engine.TensorMultiply(acoustic, keep), _engine.TensorMultiply(TargetEmbeddings(targets), mask));
+                if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                {
+                    int width = _o.Width, vocab = _o.VocabSize;
+                    double samplingRatio = _o.SamplingRatio;
+                    var first = Decode(encoded, acoustic);
+                    Tensor<T> targetTensor;
+                    using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                    {
+                        var targetDoubles = new double[n];
+                        for (int i = 0; i < n; i++) targetDoubles[i] = targets[i];
+                        targetTensor = new Tensor<double>(targetDoubles, new[] { n }).Cast<T>();
+                    }
+                    var uniformDraws = AiDotNet.Training.CompiledStepRandom<T>.Uniform(new[] { n }, random);
+                    var mask = ComputeTracedGlancingMask(first, targetTensor, uniformDraws, n, vocab, width, samplingRatio);
+                    var keep = _engine.TensorAddScalar(_engine.TensorNegate(mask), NumOps.One);
+                    inputs = _engine.TensorAdd(_engine.TensorMultiply(acoustic, keep), _engine.TensorMultiply(TargetEmbeddings(targets), mask));
+                }
+                else
+                {
+                    int correct = 0;
+                    using (new Tensors.Engines.Autodiff.NoGradScope<T>())
+                    {
+                        var first = Decode(encoded, acoustic);
+                        for (int i = 0; i < n; i++) if (ArgMax(first, i) == targets[i]) correct++;
+                    }
+                    int replace = (int)((n - correct) * _o.SamplingRatio);
+                    if (replace > 0)
+                    {
+                        var chosen = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(replace).ToArray();
+                        var mask = new Tensor<T>(new[] { n, _o.Width });
+                        var keep = new Tensor<T>(new[] { n, _o.Width });
+                        for (int i = 0; i < n; i++) for (int k = 0; k < _o.Width; k++) keep[i, k] = NumOps.One;
+                        foreach (int i in chosen) for (int k = 0; k < _o.Width; k++) { mask[i, k] = NumOps.One; keep[i, k] = NumOps.Zero; }
+                        inputs = _engine.TensorAdd(_engine.TensorMultiply(acoustic, keep), _engine.TensorMultiply(TargetEmbeddings(targets), mask));
+                    }
+                }
             }
             var logProbabilities = _engine.TensorLogSoftmax(Decode(encoded, inputs), axis: -1);
             var attention = LabelSmoothedLoss(_engine, logProbabilities, targets, _o.LabelSmoothing, normalizer);
@@ -299,52 +336,46 @@ internal sealed class ParaformerNetwork<T>
         return _engine.Reshape(total, new[] { 1 });
     }
 
-    /// <summary>
-    /// The glancing sampler's mask <c>[n, width]</c> (1 on the positions whose decoder input becomes the target's
-    /// embedding): with c the tokens a first decoder pass gets right, ⌊(n − c)·ratio⌋ positions taken in a random order.
-    /// </summary>
-    /// <remarks>Everything stays on the engine, so a compiled training plan replays the sampler. A position is right when
-    /// its first maximum (the host argmax's choice among ties) is the target. The order is a random rank per position,
-    /// drawn each step through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>, and a position is replaced when its
-    /// rank is below the count.</remarks>
-    private Tensor<T> GlancingMask(Tensor<T> encoded, Tensor<T> acoustic, int[] targets, Random random)
+    private static Tensor<T> ComputeTracedGlancingMask(
+        Tensor<T> first, Tensor<T> targetTensor, Tensor<T> uniformDraws, int n, int vocab, int width, double samplingRatio)
     {
-        Tensor<T> first;
-        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
-            first = _engine.StopGradient(Decode(encoded, acoustic));                                            // [n, V]
-        return GlancingMask(_engine, first, targets, _o.SamplingRatio, random, _o.Width);
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "ParaformerGlancingMask",
+            new[] { first, targetTensor, uniformDraws },
+            new[] { n, width },
+            (inputs2, destination) => FillGlancingMask(inputs2[0], inputs2[1], inputs2[2], destination, n, vocab, width, samplingRatio));
     }
 
-    /// <summary>The glancing mask <c>[n, width]</c> of a first pass's logits <c>[n, V]</c> (see the instance overload).</summary>
-    [AiDotNet.Attributes.ScalarKernel("Fills n random ranks per step inside the recorded draw; the mask itself is engine ops.")]
-    internal static Tensor<T> GlancingMask(IEngine engine, Tensor<T> first, int[] targets, double ratio, Random random, int width)
+    private static void FillGlancingMask(
+        Tensor<T> logits, Tensor<T> targetIds, Tensor<T> uniformDraws, Tensor<T> destination, int n, int vocab, int width, double samplingRatio)
     {
-        int n = targets.Length, vocabulary = first.Shape[1];
-        Tensor<T> wrong;
-        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
+        var logitValues = logits.Cast<double>().ToArray();
+        var targetValues = targetIds.Cast<double>().ToArray();
+        var drawValues = uniformDraws.Cast<double>().ToArray();
+        int correct = 0;
+        for (int i = 0; i < n; i++)
         {
-            var best = engine.TensorBroadcastTo(engine.ReduceMax(first, new[] { 1 }, keepDims: true), first._shape);
-            var hits = engine.TensorEquals(first, best);
-            var firstHit = engine.TensorMultiply(hits, engine.TensorEquals(engine.TensorCumSum(hits, 1), NumOps.One));
-            var target = new Tensor<T>(new[] { n, vocabulary });
-            var targetSpan = target.AsWritableSpan();
-            for (int i = 0; i < n; i++) targetSpan[i * vocabulary + targets[i]] = NumOps.One;
-            var correct = engine.ReduceSum(engine.TensorMultiply(firstHit, target), new[] { 0, 1 }, keepDims: false);    // [1]
-            wrong = engine.TensorAddScalar(engine.TensorNegate(correct), NumOps.FromDouble(n));
+            int best = 0;
+            int rowStart = i * vocab;
+            for (int v = 1; v < vocab; v++)
+            {
+                if (logitValues[rowStart + v] > logitValues[rowStart + best]) best = v;
+            }
+            if (best == (int)Math.Round(targetValues[i])) correct++;
         }
-        var replace = engine.TensorFloor(engine.TensorMultiplyScalar(wrong, NumOps.FromDouble(ratio)));                // [1]
-        // rank[i]: position i's place in a random order of the n positions (a stable sort by random keys).
-        var rank = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { n }, ranks =>
+
+        int replace = (int)((n - correct) * samplingRatio);
+        var span = destination.AsWritableSpan();
+        span.Clear();
+        if (replace > 0)
         {
-            var keys = new int[n];
-            for (int i = 0; i < n; i++) keys[i] = random.Next();
-            var order = Enumerable.Range(0, n).OrderBy(i => keys[i]).ToArray();
-            var span = ranks.AsWritableSpan();
-            for (int place = 0; place < n; place++) span[order[place]] = NumOps.FromDouble(place);
-            ranks.IncrementVersion();
-        });
-        var chosen = engine.TensorLessThan(rank, engine.TensorBroadcastTo(replace, new[] { n }));                       // [n]
-        return engine.TensorBroadcastTo(engine.Reshape(chosen, new[] { n, 1 }), new[] { n, width });
+            T one = NumOps.One;
+            var chosen = Enumerable.Range(0, n).OrderBy(idx => drawValues[idx]).Take(replace);
+            foreach (int i in chosen)
+            {
+                span.Slice(i * width, width).Fill(one);
+            }
+        }
     }
 
     /// <summary>The decoder's targets: the labels, followed by the end token when it is appended.</summary>

@@ -44,8 +44,8 @@ internal static class MeloOps
     public static Tensor<T> Channels<T>(IEngine engine, Tensor<T> x, int start, int count) =>
         engine.TensorSlice(x, new[] { 0, start, 0 }, new[] { 1, count, x.Shape[2] });
 
-    /// <summary>A stop-gradient copy (<c>torch.detach</c>).</summary>
-    public static Tensor<T> Detach<T>(Tensor<T> x) => new(x._shape, x.ToVector());
+    /// <summary>A stop-gradient view (<c>torch.detach</c>).</summary>
+    public static Tensor<T> Detach<T>(Tensor<T> x) => AiDotNetEngine.Current.StopGradient(x);
 
     /// <summary><c>torch.flip(x, [1])</c> over the channels.</summary>
     public static Tensor<T> Flip<T>(IEngine engine, Tensor<T> x)

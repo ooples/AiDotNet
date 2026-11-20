@@ -66,13 +66,19 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
 {
     /// <inheritdoc />
-    /// <remarks>Registration order is serialization order, and matches the
-    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    /// <remarks>The predictor and VAE retain their checkpoint ownership; each adapter then
+    /// contributes its live factors and frozen initialization in a stable component order.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(_predictor);
         RegisterParameterComponent(_vae);
+        if (_adapters is not null)
+            for (int i = 0; i < _adapters.Count; i++)
+                RegisterParameterComponent($"adapter/{AiDotNet.Models.Parameters.ParameterStableId.IndexSegment(i)}", _adapters[i].Adapter);
     }
+
+    /// <summary>Only LoRA factors train; the underlying denoiser and VAE remain frozen.</summary>
+    protected override object TrainingParameterRoot => _adapters.Select(adapter => adapter.Adapter);
 
     /// <summary>
     /// The latent channel count used when the caller does not specify one: the Stable-Diffusion
@@ -98,6 +104,7 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
 
     private readonly int _latentChannels;
     private readonly int _adapterRank;
+    [ParameterAlias(nameof(_predictor))]
     private readonly IReadOnlyList<TLoRAAttentionAdapter<T>> _adapters;
 
     private UNetNoisePredictor<T> _predictor;
@@ -248,6 +255,7 @@ public partial class TLoRAModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Gets the injected adapters, one per wrapped attention block.
     /// </summary>
+    [ParameterAlias(nameof(_predictor))]
     public IReadOnlyList<TLoRAAttentionAdapter<T>> Adapters => _adapters;
 
     [MemberNotNull(nameof(_predictor), nameof(_vae))]

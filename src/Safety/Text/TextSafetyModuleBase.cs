@@ -42,13 +42,6 @@ public abstract class TextSafetyModuleBase<T> : SafetyModuleBase<T>, ITextSafety
 
         // Convert numeric vector to string representation for text analysis.
         // Subclasses that work on embeddings directly should override this.
-        var chars = new char[content.Length];
-        for (int i = 0; i < content.Length; i++)
-        {
-            int code = (int)Math.Round(NumOps.ToDouble(content[i]));
-            chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
-        }
-
-        return EvaluateText(new string(chars));
+        return EvaluateText(SafetyTensorOps<T>.DecodeCharCodes(content));
     }
 }

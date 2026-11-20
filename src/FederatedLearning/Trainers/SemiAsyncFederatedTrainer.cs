@@ -143,12 +143,10 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                             $"Client {pending.ClientId} layer '{layerName}' length {delta.Length} differs from expected {globalLayer.Length}.");
                     }
 
-                    for (int i = 0; i < delta.Length; i++)
-                    {
-                        double g = NumOps.ToDouble(globalLayer[i]);
-                        double d = NumOps.ToDouble(delta[i]);
-                        globalLayer[i] = NumOps.FromDouble(g + effectiveLR * d);
-                    }
+                    // global += lr * delta, written back into the copied layer
+                    Engine.TensorAdd(new Tensor<T>(globalLayer, [globalLayer.Length]).Cast<double>(),
+                        Engine.TensorMultiplyScalar(new Tensor<T>(delta, [delta.Length]).Cast<double>(), effectiveLR))
+                        .Cast<T>().AsSpan().CopyTo(globalLayer);
                 }
             }
         }
@@ -186,15 +184,15 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         }
 
         // FedAvg-style weighted average at the barrier using client sample counts.
-        double totalSamples = clientSampleCounts.Values.Sum();
+        double totalSamples = clientSampleCounts.Values.Sum(count => (double)count);
         if (totalSamples <= 0) totalSamples = clientModels.Count;
         var result = new Dictionary<string, T[]>();
 
         foreach (var (layerName, layerParams) in updated)
         {
-            var merged = new double[layerParams.Length];
-
-            // Weight each client's contribution by its sample count.
+            // Weight each client's contribution by its sample count. The weights are normalized before they
+            // touch the parameters: sample counts times parameters overflow T (Half: above 65504).
+            var contributors = new List<(T[] Layer, double Weight)>();
             double effectiveTotalWeight = 0;
 
             foreach (var (clientId, model) in clientModels)
@@ -209,11 +207,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
                     double w = clientSampleCounts.TryGetValue(clientId, out var sc) ? sc : 1.0;
                     effectiveTotalWeight += w;
-
-                    for (int i = 0; i < clientLayer.Length; i++)
-                    {
-                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
-                    }
+                    contributors.Add((clientLayer, w));
                 }
             }
 
@@ -223,15 +217,14 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                 : 1.0;
             effectiveTotalWeight += globalWeight;
 
-            var mergedT = new T[layerParams.Length];
             double invTotal = effectiveTotalWeight > 0 ? 1.0 / effectiveTotalWeight : 0;
-            for (int i = 0; i < mergedT.Length; i++)
+            var merged = Engine.TensorMultiplyScalar(new Tensor<T>(layerParams, [layerParams.Length]).Cast<double>(), globalWeight * invTotal);
+            foreach (var (clientLayer, w) in contributors)
             {
-                mergedT[i] = NumOps.FromDouble(
-                    (merged[i] + globalWeight * NumOps.ToDouble(layerParams[i])) * invTotal);
+                merged = Engine.TensorAdd(merged, Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]).Cast<double>(), w * invTotal));
             }
 
-            result[layerName] = mergedT;
+            result[layerName] = merged.Cast<T>().ToArray();
         }
 
         return result;

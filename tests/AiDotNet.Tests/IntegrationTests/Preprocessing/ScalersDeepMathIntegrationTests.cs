@@ -25,15 +25,15 @@ public class ScalersDeepMathIntegrationTests
     {
         // x = {2, 4, 4, 4, 5, 5, 7, 9}
         // mean = 40/8 = 5
-        // variance = sum((x-5)^2) / (8-1) = (9+1+1+1+0+0+4+16)/7 = 32/7
-        // std = sqrt(32/7) ≈ 2.13809
+        // variance (scikit-learn, ddof=0) = sum((x-5)^2) / 8 = (9+1+1+1+0+0+4+16)/8 = 4
+        // std = 2
         // z-scores: (x-5)/std
         var scaler = new StandardScaler<double>();
         var data = CreateMatrix(new double[,] { { 2 }, { 4 }, { 4 }, { 4 }, { 5 }, { 5 }, { 7 }, { 9 } });
         var transformed = scaler.FitTransform(data);
 
         double mean = 5.0;
-        double std = Math.Sqrt(32.0 / 7.0);
+        double std = 2.0;
 
         Assert.Equal((2.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((4.0 - mean) / std, transformed[1, 0], MediumTolerance);
@@ -65,14 +65,14 @@ public class ScalersDeepMathIntegrationTests
         var data = CreateMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 }, { 6 }, { 7 }, { 8 } });
         var transformed = scaler.FitTransform(data);
 
-        // Calculate sample std of transformed data
+        // Calculate population std (ddof=0, as scikit-learn scales by) of transformed data
         double mean = 0;
         for (int i = 0; i < 8; i++) mean += transformed[i, 0];
         mean /= 8;
         double sumSq = 0;
         for (int i = 0; i < 8; i++)
             sumSq += (transformed[i, 0] - mean) * (transformed[i, 0] - mean);
-        double std = Math.Sqrt(sumSq / 7);
+        double std = Math.Sqrt(sumSq / 8);
 
         Assert.Equal(1.0, std, MediumTolerance);
     }
@@ -101,9 +101,9 @@ public class ScalersDeepMathIntegrationTests
         scaler.Fit(data);
         var transformed = scaler.Transform(data);
 
-        // mean=4, std=sqrt(((2-4)^2+(4-4)^2+(6-4)^2)/2) = sqrt(4) = 2
-        // Without centering: values/std = {1, 2, 3}
-        double std = 2.0;
+        // mean=4, population variance=((2-4)^2+(4-4)^2+(6-4)^2)/3=8/3
+        // Without centering: values/std = [2, 4, 6] / sqrt(8/3)
+        double std = Math.Sqrt(8.0 / 3.0);
         Assert.Equal(2.0 / std, transformed[0, 0], MediumTolerance);
         Assert.Equal(4.0 / std, transformed[1, 0], MediumTolerance);
         Assert.Equal(6.0 / std, transformed[2, 0], MediumTolerance);
@@ -145,12 +145,12 @@ public class ScalersDeepMathIntegrationTests
         var train = CreateMatrix(new double[,] { { 0 }, { 10 } });
         scaler.Fit(train);
 
-        // mean=5, std=sqrt((25+25)/1)=sqrt(50)=5*sqrt(2)
+        // mean=5, population variance=(25+25)/2=25, std=5
         var test = CreateMatrix(new double[,] { { 5 }, { 15 }, { -5 } });
         var transformed = scaler.Transform(test);
 
         double mean = 5.0;
-        double std = Math.Sqrt(50.0);
+        double std = 5.0;
         Assert.Equal((5.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((15.0 - mean) / std, transformed[1, 0], MediumTolerance);
         Assert.Equal((-5.0 - mean) / std, transformed[2, 0], MediumTolerance);
@@ -166,7 +166,7 @@ public class ScalersDeepMathIntegrationTests
 
         // Column 0 should be standardized
         double mean0 = 2.0;
-        double std0 = 1.0; // sqrt(((1-2)^2+(2-2)^2+(3-2)^2)/2) = sqrt(1) = 1
+        double std0 = Math.Sqrt(2.0 / 3.0); // population variance=((1-2)^2+(2-2)^2+(3-2)^2)/3=2/3
         Assert.Equal((1.0 - mean0) / std0, transformed[0, 0], MediumTolerance);
 
         // Column 1 should be untouched
@@ -226,16 +226,16 @@ public class ScalersDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MinMaxScaler_ConstantColumn_ScalesToMidpoint()
+    public async Task MinMaxScaler_ConstantColumn_ScalesToFeatureRangeMin()
     {
-        // When min == max, should map to midpoint of feature range
+        // When min == max: scikit-learn MinMaxScaler treats a zero data range as 1 (_handle_zeros_in_scale), so a constant column maps to the feature-range minimum
         var scaler = new MinMaxScaler<double>();
         var data = CreateMatrix(new double[,] { { 7 }, { 7 }, { 7 } });
         var transformed = scaler.FitTransform(data);
 
-        // Default range [0,1], midpoint = 0.5
+        // Default range [0,1], minimum = 0
         for (int i = 0; i < 3; i++)
-            Assert.Equal(0.5, transformed[i, 0], Tolerance);
+            Assert.Equal(0.0, transformed[i, 0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -757,13 +757,13 @@ public class ScalersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_TwoSamples_VarianceCalculation()
     {
-        // With only 2 samples: mean = 1.5, variance = (0.25+0.25)/1 = 0.5, std = sqrt(0.5)
+        // With 2 samples: mean=1.5, population variance=(0.25+0.25)/2=0.25, std=0.5
         var scaler = new StandardScaler<double>();
         var data = CreateMatrix(new double[,] { { 1 }, { 2 } });
         var transformed = scaler.FitTransform(data);
 
         double mean = 1.5;
-        double std = Math.Sqrt(0.5);
+        double std = 0.5;
         Assert.Equal((1.0 - mean) / std, transformed[0, 0], MediumTolerance);
         Assert.Equal((2.0 - mean) / std, transformed[1, 0], MediumTolerance);
     }

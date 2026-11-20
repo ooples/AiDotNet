@@ -224,14 +224,14 @@ public class GraphFederatedLearningTests
             { 0, CreateTensor(1.0, 2.0, 3.0, 4.0) },
             { 1, CreateTensor(5.0, 6.0, 7.0, 8.0) }
         };
-        proto.RegisterClientPrototypes(clientId: 0, clientPrototypes);
+        proto.RegisterClientPrototypes(clientId: 0, clientPrototypes, new Dictionary<int, int> { { 0, 1 }, { 1, 1 } });
 
         var client2Prototypes = new Dictionary<int, Tensor<double>>
         {
             { 0, CreateTensor(2.0, 3.0, 4.0, 5.0) },
             { 1, CreateTensor(6.0, 7.0, 8.0, 9.0) }
         };
-        proto.RegisterClientPrototypes(clientId: 1, client2Prototypes);
+        proto.RegisterClientPrototypes(clientId: 1, client2Prototypes, new Dictionary<int, int> { { 0, 1 }, { 1, 1 } });
 
         var globalPrototypes = proto.AggregatePrototypes();
 

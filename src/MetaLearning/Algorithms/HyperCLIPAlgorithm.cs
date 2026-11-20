@@ -113,8 +113,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             taskEmbeddings[i] = ProjectTask(gradFeatures);
 
             // Standard MAML adaptation
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -135,29 +134,24 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         }
 
         // InfoNCE contrastive loss
-        double contrastiveLoss = ComputeInfoNCE(taskEmbeddings, paramEmbeddings, numTasks, projDim);
-
-        // Add contrastive loss to all task losses
-        if (numTasks > 1)
-        {
-            var contrastiveT = NumOps.FromDouble(_algoOptions.ContrastiveWeight * contrastiveLoss);
-            for (int i = 0; i < losses.Count; i++)
-                losses[i] = NumOps.Add(losses[i], contrastiveT);
-        }
+        T contrastiveLoss = ComputeInfoNCE(taskEmbeddings, paramEmbeddings, numTasks, projDim);
 
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionWeights, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeCLIPLoss);
 
-        return ComputeMean(losses);
+        // The contrastive loss is added to every task loss, so it adds once to their mean
+        var meanLoss = ComputeMean(losses);
+        return numTasks > 1
+            ? NumOps.Add(meanLoss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.ContrastiveWeight), contrastiveLoss))
+            : meanLoss;
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -170,84 +164,71 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
+    /// <summary>
+    /// tanh of the bucket means of theta' - theta: bucket e sums the delta over [e * b, e * b + b) within the
+    /// parameters and divides by the full bucket size b = max(1, paramDim / targetDim).
+    /// </summary>
     private Vector<T> CompressParamDelta(Vector<T> initParams, Vector<T> adaptedParams, int targetDim)
     {
-        var result = new Vector<T>(targetDim);
         int bucketSize = Math.Max(1, _paramDim / targetDim);
-        for (int e = 0; e < targetDim; e++)
-        {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < _paramDim; d++)
-                sum += NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-            result[e] = ScalarTanh(NumOps.FromDouble(sum / bucketSize));
-        }
-        return result;
+        int covered = targetDim * bucketSize;
+        var delta = Engine.Subtract(adaptedParams.GetSubVector(0, _paramDim), initParams.GetSubVector(0, _paramDim));
+        var padded = covered <= _paramDim
+            ? delta.GetSubVector(0, covered)
+            : Vector<T>.Concatenate(delta, new Vector<T>(covered - _paramDim));
+        var sums = Engine.ReduceSum(Tensor<T>.FromVector(padded, new[] { targetDim, bucketSize }), new[] { 1 }, keepDims: false);
+        return Engine.Tanh(Engine.Divide(sums.ToVector(), NumOps.FromDouble(bucketSize)));
     }
 
-    private Vector<T> ProjectTask(Vector<T> features)
+    /// <summary>L2-normalized W f for the projection block starting at <paramref name="offset"/>.</summary>
+    private Vector<T> Project(Vector<T> features, int offset)
     {
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
-        var projected = new Vector<T>(projDim);
-        // Task projection: first embDim * projDim weights
-        for (int p = 0; p < projDim; p++)
-        {
-            double sum = 0;
-            for (int e = 0; e < embDim; e++)
-                sum += NumOps.ToDouble(_projectionWeights[p * embDim + e]) * NumOps.ToDouble(features[e]);
-            projected[p] = NumOps.FromDouble(sum);
-        }
-        return L2Normalize(projected);
+        var weights = Tensor<T>.FromVector(_projectionWeights.GetSubVector(offset, embDim * projDim), new[] { projDim, embDim });
+        var input = Tensor<T>.FromVector(features.Length == embDim ? features : features.GetSubVector(0, embDim), new[] { embDim, 1 });
+        return L2Normalize(Engine.TensorMatMul(weights, input).ToVector());
     }
 
+    // Task projection: first embDim * projDim weights
+    private Vector<T> ProjectTask(Vector<T> features) => Project(features, 0);
+
+    // Param projection: the block after the task projection weights
     private Vector<T> ProjectParam(Vector<T> features)
-    {
-        int embDim = _algoOptions.EmbeddingDim;
-        int projDim = _algoOptions.ProjectionDim;
-        int offset = embDim * projDim; // After task projection weights
-        var projected = new Vector<T>(projDim);
-        for (int p = 0; p < projDim; p++)
-        {
-            double sum = 0;
-            for (int e = 0; e < embDim; e++)
-                sum += NumOps.ToDouble(_projectionWeights[offset + p * embDim + e]) * NumOps.ToDouble(features[e]);
-            projected[p] = NumOps.FromDouble(sum);
-        }
-        return L2Normalize(projected);
-    }
+        => Project(features, _algoOptions.EmbeddingDim * _algoOptions.ProjectionDim);
 
-    private double ComputeInfoNCE(Vector<T>[] taskEmb, Vector<T>[] paramEmb, int n, int dim)
+    /// <summary>
+    /// Mean over tasks i of -(s_ii - max_j s_ij - log(sum_j exp(s_ij - max_j s_ij) + 1e-10)) with
+    /// s_ij = &lt;t_i, p_j&gt; / tau.
+    /// </summary>
+    private T ComputeInfoNCE(Vector<T>[] taskEmb, Vector<T>[] paramEmb, int n, int dim)
     {
-        if (n <= 1) return 0;
-        double tau = _algoOptions.ContrastiveTemperature;
-        double loss = 0;
+        if (n <= 1) return NumOps.Zero;
 
+        var taskRows = new Tensor<T>[n];
+        var paramRows = new Tensor<T>[n];
         for (int i = 0; i < n; i++)
         {
-            // Compute similarities: sim(t_i, p_j) for all j
-            double maxSim = double.NegativeInfinity;
-            var sims = new double[n];
-            for (int j = 0; j < n; j++)
-            {
-                double dot = 0;
-                for (int d = 0; d < dim; d++) dot += NumOps.ToDouble(taskEmb[i][d]) * NumOps.ToDouble(paramEmb[j][d]);
-                sims[j] = dot / tau;
-                if (sims[j] > maxSim) maxSim = sims[j];
-            }
-
-            // Log-sum-exp for numerical stability
-            double sumExp = 0;
-            for (int j = 0; j < n; j++) sumExp += Math.Exp(sims[j] - maxSim);
-            loss += -(sims[i] - maxSim - Math.Log(sumExp + 1e-10));
+            taskRows[i] = Tensor<T>.FromVector(taskEmb[i].GetSubVector(0, dim));
+            paramRows[i] = Tensor<T>.FromVector(paramEmb[i].GetSubVector(0, dim));
         }
 
-        return loss / n;
+        var square = new[] { n, n };
+        var sims = Engine.TensorDivideScalar(
+            Engine.TensorMatMulTransposed(Engine.TensorStack(taskRows, 0), Engine.TensorStack(paramRows, 0)),
+            NumOps.FromDouble(_algoOptions.ContrastiveTemperature));
+        var shifted = Engine.TensorSubtract(sims, Engine.TensorBroadcastTo(Engine.ReduceMax(sims, new[] { 1 }, keepDims: true), square));
+
+        // Log-sum-exp for numerical stability
+        var logSum = Engine.TensorLog(Engine.TensorAddScalar(
+            Engine.ReduceSum(Engine.TensorExp(shifted), new[] { 1 }, keepDims: false), NumOps.FromDouble(1e-10)));
+        var positive = Engine.ReduceSum(Engine.TensorMultiply(shifted, Engine.TensorEye<T>(n)), new[] { 1 }, keepDims: false);
+        return Engine.TensorMean(Engine.TensorSubtract(logSum, positive));
     }
 
     private double ComputeCLIPLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
@@ -266,8 +247,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             taskEmbs[i] = ProjectTask(CompressVector(supportGrad, embDim));
 
             // Adapt
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
+            var ap = initParams.Clone();
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 ParamModel.SetParameters(ap);
@@ -279,14 +259,16 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             paramEmbs[i] = ProjectParam(CompressParamDelta(initParams, ap, embDim));
 
             ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        // Include contrastive loss so projections are optimized for alignment
-        double contrastive = ComputeInfoNCE(taskEmbs, paramEmbs, numTasks, projDim);
-        totalLoss += _algoOptions.ContrastiveWeight * contrastive * numTasks;
+        // Include contrastive loss so projections are optimized for alignment: (sum + w * c * n) / n
+        T contrastive = ComputeInfoNCE(taskEmbs, paramEmbs, numTasks, projDim);
 
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(numTasks, 1);
+
+        // The SPSA callback contract is a double; the objective is reduced in T and converted once.
+        return NumOps.ToDouble(NumOps.Add(ComputeMean(losses),
+            NumOps.Multiply(NumOps.FromDouble(_algoOptions.ContrastiveWeight), contrastive)));
     }
 }

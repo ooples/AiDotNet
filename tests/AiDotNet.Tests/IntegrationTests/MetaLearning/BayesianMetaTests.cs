@@ -197,4 +197,15 @@ public class BayesianMetaTests
         }
         Assert.True(finiteCount >= 4, $"Only {finiteCount}/5 BMAML steps produced finite loss");
     }
+
+    /// <summary>NaN fails both one-sided comparisons, so Delta is checked for it explicitly.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task PACOH_And_MetaPACOH_RejectNaNDelta()
+    {
+        await Task.Yield();
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PACOHAlgorithm<double, Matrix<double>, Vector<double>>(
+            new PACOHOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { Delta = double.NaN }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MetaPACOHAlgorithm<double, Matrix<double>, Vector<double>>(
+            new MetaPACOHOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { Delta = double.NaN }));
+    }
 }

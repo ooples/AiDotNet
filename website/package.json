@@ -6,10 +6,14 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "postbuild": "npx --yes pagefind@1.5.2 --site dist",
+    "postbuild": "pagefind --site dist && node scripts/build-route-inventory.mjs && node scripts/write-build-identity.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test:e2e": "npx playwright test",
+    "test:preview": "node scripts/test-preview.mjs",
+    "test:backend": "node --test tests/backend/*.test.mjs",
+    "test:rls": "node --test tests/database/*.test.mjs",
+    "test:deployed": "node scripts/test-deployed.mjs",
     "astro": "astro",
     "gen:wiki": "dotnet build ../src/AiDotNet.csproj -c Debug -f net8.0 && dotnet run --project ../tools/WikiGenerator -c Debug -- ../src/bin/Debug/net8.0/AiDotNet.xml src/content/docs/reference/wiki"
   },
@@ -24,10 +28,13 @@
     "gsap": "^3.12.7"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.12",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.27",
+    "pagefind": "1.5.2",
     "postcss": "^8.5.25",
-    "tailwindcss": "^3.4.19"
+    "tailwindcss": "^3.4.19",
+    "typescript": "^6.0.3"
   }
 }

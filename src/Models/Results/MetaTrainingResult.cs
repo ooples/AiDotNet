@@ -254,20 +254,11 @@ public class MetaTrainingResult<T>
     /// </remarks>
     public (T BestLoss, int Iteration) FindBestLoss()
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T bestLoss = LossHistory[0];
-        int bestIteration = 0;
-
-        for (int i = 1; i < LossHistory.Length; i++)
-        {
-            if (Convert.ToDouble(LossHistory[i]) < Convert.ToDouble(bestLoss))
-            {
-                bestLoss = LossHistory[i];
-                bestIteration = i;
-            }
-        }
-
-        return (bestLoss, bestIteration);
+        // An empty history throws from the indexer, as before; the scan is one engine argmin
+        // (first index of the smallest loss).
+        _ = LossHistory[0];
+        int bestIteration = AiDotNetEngine.Current.TensorArgMin(LossHistory.AsTensor(), 0).Data.Span[0];
+        return (LossHistory[bestIteration], bestIteration);
     }
 
     /// <summary>
@@ -276,20 +267,11 @@ public class MetaTrainingResult<T>
     /// <returns>A tuple containing the best accuracy value and the iteration it occurred at.</returns>
     public (T BestAccuracy, int Iteration) FindBestAccuracy()
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T bestAccuracy = AccuracyHistory[0];
-        int bestIteration = 0;
-
-        for (int i = 1; i < AccuracyHistory.Length; i++)
-        {
-            if (Convert.ToDouble(AccuracyHistory[i]) > Convert.ToDouble(bestAccuracy))
-            {
-                bestAccuracy = AccuracyHistory[i];
-                bestIteration = i;
-            }
-        }
-
-        return (bestAccuracy, bestIteration);
+        // An empty history throws from the indexer, as before; the scan is one engine argmax
+        // (first index of the highest accuracy).
+        _ = AccuracyHistory[0];
+        int bestIteration = AiDotNetEngine.Current.TensorArgMax(AccuracyHistory.AsTensor(), 0).Data.Span[0];
+        return (AccuracyHistory[bestIteration], bestIteration);
     }
 
     /// <summary>

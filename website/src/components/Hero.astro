@@ -123,7 +123,7 @@ const torch = cpuBenchmarks.results.find((r) => r.library === 'TorchSharp');
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Copy install command
-    var copyBtn = document.getElementById('copy-install');
+    const copyBtn = document.getElementById('copy-install');
     if (copyBtn) {
       copyBtn.addEventListener('click', function() {
         var originalIcon = copyBtn.innerHTML;

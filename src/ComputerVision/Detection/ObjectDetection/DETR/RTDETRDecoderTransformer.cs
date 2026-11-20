@@ -144,40 +144,32 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         var encoderBoxAll = engine.TensorAdd(_encoderBox.Forward(outputMemory), new Tensor<T>(anchors, new[] { batch, tokens, 4 }));
 
         int k = Math.Min(_numQueries, tokens);
-        var classValues = encoderClassAll.ToArray();
-        var rows = new int[batch * k];
-        for (int b = 0; b < batch; b++)
-        {
-            var best = new double[tokens];
-            for (int t = 0; t < tokens; t++)
-            {
-                double m = double.NegativeInfinity;
-                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, _numOps.ToDouble(classValues[(((b * tokens) + t) * _numClasses) + c]));
-                best[t] = m;
-            }
-            var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
-            for (int i = 0; i < k; i++) rows[(b * k) + i] = (b * tokens) + order[i];
-        }
-        var referenceUndetached = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderBoxAll, new[] { batch * tokens, 4 }), rows, 0), new[] { batch, k, 4 });
+        int numClasses = _numClasses;
+        var rows = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "RtdetrQuerySelection",
+            new[] { encoderClassAll },
+            new[] { batch * k },
+            (inputs, dst) => SelectTopKQueries(inputs[0], batch, tokens, numClasses, k, dst));
+        var referenceUndetached = engine.Reshape(
+            engine.TensorEmbeddingLookupFromFloatIndices(engine.Reshape(encoderBoxAll, new[] { batch * tokens, 4 }), rows),
+            new[] { batch, k, 4 });
         var pass = new DetrPass<T>
         {
-            EncoderClasses = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderClassAll, new[] { batch * tokens, _numClasses }), rows, 0), new[] { batch, k, _numClasses }),
+            EncoderClasses = engine.Reshape(
+                engine.TensorEmbeddingLookupFromFloatIndices(engine.Reshape(encoderClassAll, new[] { batch * tokens, _numClasses }), rows),
+                new[] { batch, k, _numClasses }),
             EncoderBoxes = engine.Sigmoid(referenceUndetached),
             EncoderBoxLogits = referenceUndetached,
             Denoising = denoising
         };
 
         // Content queries: the selected encoder features, detached (learnt_init_query = False).
-        var contentValues = CvTensorOps<T>.Select(engine.Reshape(outputMemory, new[] { batch * tokens, _d }), rows, 0).ToArray();
-        var content = new Tensor<T>(contentValues, new[] { batch, k, _d });
+        var content = engine.StopGradient(engine.Reshape(
+            engine.TensorEmbeddingLookupFromFloatIndices(engine.Reshape(outputMemory, new[] { batch * tokens, _d }), rows),
+            new[] { batch, k, _d }));
         int pad = denoising?.PadSize ?? 0;
         int total = pad + k;
-        var anchorValues = referenceUndetached.ToArray();
-        var referenceSigmoid = new double[batch * total * 4];
-        for (int b = 0; b < batch; b++)
-            for (int q = 0; q < k; q++)
-                for (int c = 0; c < 4; c++)
-                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(_numOps.ToDouble(anchorValues[(((b * k) + q) * 4) + c]));
+        var referenceSigmoidTensor = engine.StopGradient(engine.Sigmoid(referenceUndetached));
         var target = content;
         Tensor<bool>? mask = null;
         if (denoising is not null)
@@ -194,10 +186,11 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
                 engine.Reshape(CvTensorOps<T>.Select(_labelEmbed, labelRows, 0), new[] { batch, pad, _d }),
                 new Tensor<T>(occupied, new[] { batch, pad, _d }));
             target = engine.TensorConcatenate(new[] { labelQueries, content }, 1);
-            for (int b = 0; b < batch; b++)
-                for (int s = 0; s < pad; s++)
-                    for (int c = 0; c < 4; c++)
-                        referenceSigmoid[(((b * total) + s) * 4) + c] = Sigmoid(denoising.UnsigmoidBoxes[(((b * pad) + s) * 4) + c]);
+            var dnSigmoid = new double[batch * pad * 4];
+            for (int idx = 0; idx < dnSigmoid.Length; idx++)
+                dnSigmoid[idx] = Sigmoid(denoising.UnsigmoidBoxes[idx]);
+            referenceSigmoidTensor = engine.TensorConcatenate(
+                new[] { new Tensor<double>(dnSigmoid, new[] { batch, pad, 4 }).Cast<T>(), referenceSigmoidTensor }, 1);
             mask = ContrastiveDenoising<T>.AttendMask(batch, _numHeads, total, denoising);
         }
 
@@ -205,22 +198,18 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         Tensor<T>? previous = null;
         for (int i = 0; i < _layers.Count; i++)
         {
-            var referenceBoxes = new T[batch * total * _numLevels * 4];
-            var referenceFlat = new T[batch * total * 4];
-            for (int q = 0; q < batch * total; q++)
-                for (int c = 0; c < 4; c++)
-                {
-                    referenceFlat[(q * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
-                    for (int l = 0; l < _numLevels; l++) referenceBoxes[(((q * _numLevels) + l) * 4) + c] = referenceFlat[(q * 4) + c];
-                }
-            var queryPosition = _queryPosHead.Forward(new Tensor<T>(referenceFlat, new[] { batch, total, 4 }));
-            output = _layers[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
+            var referenceBoxes = engine.TensorBroadcastTo(
+                engine.Reshape(referenceSigmoidTensor, new[] { batch, total, 1, 4 }),
+                new[] { batch, total, _numLevels, 4 });
+            var queryPosition = _queryPosHead.Forward(referenceSigmoidTensor);
+            output = _layers[i].Forward(output, queryPosition, referenceBoxes,
                 memory, shapes, starts, mask);
 
             var delta = _boxHeads[i].Forward(output);
-            var inter = engine.Sigmoid(engine.TensorAdd(delta, DetrHeads<T>.InverseSigmoidConstant(referenceSigmoid, batch, total)));
+            var detachedInvSigmoid = DetrHeads<T>.InverseSigmoid(referenceSigmoidTensor);
+            var inter = engine.Sigmoid(engine.TensorAdd(delta, detachedInvSigmoid));
             var boxLogits = previous is null
-                ? engine.TensorAdd(delta, DetrHeads<T>.InverseSigmoidConstant(referenceSigmoid, batch, total))
+                ? engine.TensorAdd(delta, detachedInvSigmoid)
                 : engine.TensorAdd(delta, DetrHeads<T>.InverseSigmoid(previous));
             var classes = _scoreHeads[i].Forward(output);
 
@@ -236,11 +225,32 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
             if (i == _layers.Count - 1) pass.FinalBoxLogits = matchingBoxLogits;
 
             previous = inter;
-            var interValues = inter.ToArray();
-            for (int j = 0; j < referenceSigmoid.Length; j++) referenceSigmoid[j] = _numOps.ToDouble(interValues[j]);
+            referenceSigmoidTensor = engine.StopGradient(inter);
         }
 
         return pass;
+    }
+
+    private static void SelectTopKQueries(Tensor<T> encoderClassAll, int batch, int tokens, int numClasses, int k, Tensor<T> dst)
+    {
+        var classValues = encoderClassAll.Contiguous().Cast<double>().ToArray();
+        var rows = new double[batch * k];
+        for (int b = 0; b < batch; b++)
+        {
+            var best = new double[tokens];
+            for (int t = 0; t < tokens; t++)
+            {
+                double m = double.NegativeInfinity;
+                for (int c = 0; c < numClasses; c++)
+                    m = Math.Max(m, classValues[(((b * tokens) + t) * numClasses) + c]);
+                best[t] = m;
+            }
+            var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
+            for (int i = 0; i < k; i++)
+                rows[(b * k) + i] = (b * tokens) + order[i];
+        }
+        var typed = new Tensor<double>(dst._shape, new Vector<double>(rows)).Cast<T>();
+        typed.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 
     public void SetTrainingMode(bool training)

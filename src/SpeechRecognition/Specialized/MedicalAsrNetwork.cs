@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -137,6 +138,33 @@ internal sealed class MedicalAsrNetwork<T>
         return features;
     }
 
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        if (waveform.Length < WindowSamples)
+        {
+            var pad = new Tensor<T>(new[] { WindowSamples - waveform.Length });
+            waveform = _engine.TensorConcatenate(new[] { _engine.Reshape(waveform, new[] { waveform.Length }), pad }, 0);
+        }
+        var mel = _mel.Forward(_engine.Reshape(waveform, new[] { waveform.Length }));
+        int frames = mel.Shape[0], bins = mel.Shape[1], stack = Math.Max(1, _o.StackedFrames);
+        var normMel = ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+        int steps = (frames + stack - 1) / stack;
+        int needed = steps * stack - frames;
+        Tensor<T> padded;
+        if (needed > 0)
+        {
+            var lastFrame = _engine.TensorSlice(normMel, new[] { frames - 1, 0 }, new[] { 1, bins });
+            var pieces = new List<Tensor<T>> { normMel };
+            for (int i = 0; i < needed; i++) pieces.Add(lastFrame);
+            padded = _engine.TensorConcatenate(pieces.ToArray(), 0);
+        }
+        else
+        {
+            padded = normMel;
+        }
+        return _engine.Reshape(padded, new[] { steps, stack * bins });
+    }
+
     /// <summary>The encoder output <c>[steps, units]</c>. The unidirectional model with an output delay of D reads its
     /// input with the last step repeated D times and drops its first D outputs (section 4.1).</summary>
     public Tensor<T> Encode(Tensor<T> features)
@@ -194,10 +222,45 @@ internal sealed class MedicalAsrNetwork<T>
 
     private Tensor<T> Embed(int id)
     {
-        var ids = new Tensor<T>(new[] { 1, 1 });
-        ids[0, 0] = NumOps.FromDouble(id);
+        Tensor<T> ids;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            ids = new Tensor<T>(new[] { 1, 1 });
+            ids[0, 0] = NumOps.FromDouble(id);
+        }
+        return EmbedTensor(ids);
+    }
+
+    private Tensor<T> EmbedTensor(Tensor<T> ids)
+    {
         var embedding = Embedding ?? throw new InvalidOperationException("Only the LAS model embeds graphemes.");
         return _engine.Reshape(embedding.Forward(ids), new[] { 1, _o.DecoderUnits });
+    }
+
+    private static Tensor<T> ComputeScheduledSampleId(
+        Tensor<T> prevRow, Tensor<T> uniformDraw, int groundTruthId, int vocabSize, double samplingProbability)
+    {
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "MedicalAsrScheduledSample",
+            new[] { prevRow, uniformDraw },
+            new[] { 1, 1 },
+            (inputs, destination) =>
+            {
+                double u = NumOps.ToDouble(inputs[1].Data.Span[0]);
+                int chosen = groundTruthId;
+                if (u < samplingProbability)
+                {
+                    var logitVals = inputs[0].Cast<double>().ToArray();
+                    int best = 0;
+                    for (int k = 1; k < vocabSize; k++)
+                    {
+                        if (logitVals[k] > logitVals[best])
+                            best = k;
+                    }
+                    chosen = best;
+                }
+                destination.AsWritableSpan()[0] = NumOps.FromDouble(chosen);
+            });
     }
 
     /// <summary>
@@ -209,9 +272,17 @@ internal sealed class MedicalAsrNetwork<T>
     {
         var state = new DecoderState(this, encoded);
         var rows = new List<Tensor<T>>();
+        bool tracedSampling = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && samplingProbability > 0 && random is not null;
         int previous = Boundary;
         for (int i = 0; i <= labels.Count; i++)
         {
+            if (i > 0 && tracedSampling && random is not null)
+            {
+                var u = AiDotNet.Training.CompiledStepRandom<T>.Uniform(new[] { 1 }, random);
+                var idTensor = ComputeScheduledSampleId(rows[i - 1], u, labels[i - 1], _o.VocabSize, samplingProbability);
+                rows.Add(state.NextTensor(idTensor));
+                continue;
+            }
             if (i > 0)
             {
                 previous = labels[i - 1];
@@ -291,10 +362,14 @@ internal sealed class MedicalAsrNetwork<T>
             _context = new Tensor<T>(new[] { 1, u });
         }
 
-        public Tensor<T> Next(int previous)
+        public Tensor<T> Next(int previous) => NextWithEmbedded(_n.Embed(previous));
+
+        public Tensor<T> NextTensor(Tensor<T> idTensor) => NextWithEmbedded(_n.EmbedTensor(idTensor));
+
+        private Tensor<T> NextWithEmbedded(Tensor<T> embedded)
         {
             var e = _n._engine;
-            var input = e.TensorConcatenate(new[] { _n.Embed(previous), _context }, 1);
+            var input = e.TensorConcatenate(new[] { embedded, _context }, 1);
             for (int l = 0; l < _h.Length; l++)
             {
                 (_h[l], _c[l]) = _n.Step(_n.DecoderCells[l], input, _h[l], _c[l]);

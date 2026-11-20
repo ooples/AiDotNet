@@ -710,7 +710,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             }
 
             return engine.Divide(
-                engine.Add(uniqueValues.GetSubVector(0, count), uniqueValues.GetSubVector(1, count)),
+                engine.Add(uniqueValues.GetSubVector(0, count), RegressionEngineOps2.Slice(uniqueValues, 1, count)),
                 NumOps.FromDouble(2.0));
         }
 
@@ -1029,17 +1029,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     }
 
     /// <summary>
-    /// Replaces exact zeros with one, so a split side whose curvature is zero (and whose squared gradient
-    /// is therefore zero) contributes 0 to the gain instead of failing the division.
-    /// </summary>
-    private static Vector<T> NonzeroDenominator(Vector<T> denominator)
-    {
-        var engine = AiDotNetEngine.Current;
-        var values = Tensor<T>.FromVector(denominator);
-        return engine.TensorAdd(values, engine.TensorEquals(values, MathHelper.GetNumericOperations<T>().Zero)).ToVector();
-    }
-
-    /// <summary>
     /// Finds the best split point within a histogram.
     /// </summary>
     /// <remarks>
@@ -1090,11 +1079,9 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         // gain = 0.5 * (leftGrad^2/(leftHess+lambda) + rightGrad^2/(rightHess+lambda) - totalGrad^2/(totalHess+lambda))
         T lambda = NumOps.FromDouble(_options.L2Regularization);
         var lambdas = engine.Fill(candidates, lambda);
-        // A side with no curvature (no samples on it, with the default lambda of 0) carries no gradient
-        // either, so its term is 0. Dividing there threw DivideByZeroException for every candidate whose
-        // right side was empty (the bins past a feature's largest value), so no tree ever trained.
-        var leftTerm = engine.Divide(engine.Multiply(leftGrad, leftGrad), NonzeroDenominator(engine.Add(leftHess, lambdas)));
-        var rightTerm = engine.Divide(engine.Multiply(rightGrad, rightGrad), NonzeroDenominator(engine.Add(rightHess, lambdas)));
+        // An empty side has zero hessian (and zero gradient): with the default lambda of 0 its term is 0, not 0/0.
+        var leftTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(leftGrad, leftGrad), engine.Add(leftHess, lambdas));
+        var rightTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(rightGrad, rightGrad), engine.Add(rightHess, lambdas));
         T totalDenominator = NumOps.Add(totalHess, lambda);
         T totalTerm = NumOps.Equals(totalDenominator, NumOps.Zero)
             ? NumOps.Zero
