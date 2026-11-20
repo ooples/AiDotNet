@@ -442,4 +442,16 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         return metadata;
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int cIn = _inputChannels > 0 ? _inputChannels : Math.Max(1, inputChannelsOrFeatures);
+        int cOut = Math.Max(0, _outputChannels);
+        int k = Math.Max(1, _kernelSize);
+        int groups = Math.Max(1, _groups);
+        long cInPerGroup = Math.Max(1, cIn / groups);
+        outputChannelsOrFeatures = cOut > 0 ? cOut : inputChannelsOrFeatures;
+        return cInPerGroup * cOut * k + cOut;
+    }
 }

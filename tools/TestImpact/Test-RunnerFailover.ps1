@@ -152,6 +152,7 @@ try {
     }
     Assert-Case 'multiple API annotations remain separate evidence records' {
         $e = Initialize-CheckFixture
+        $e.primaryJob.labels = @('ubuntu-latest')
         $script:apiFixture.annotations += [pscustomobject]@{
             annotation_level = 'failure'; path = 'test.cs'; start_line = 9; message = 'Assert.Equal() Failure'
         }
@@ -186,32 +187,34 @@ try {
         if (-not (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations)) { throw 'Expected shutdown authorization.' }
     }
     foreach ($conclusion in @('cancelled', 'timed_out', 'startup_failure', 'success', 'neutral', 'unknown')) {
-        Assert-Case "job conclusion $conclusion never authorizes alternate" {
-            $e = New-Evidence; $e.primaryJob.conclusion = $conclusion
+        Assert-Case "hosted job conclusion $conclusion never authorizes alternate" {
+            $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.primaryJob.conclusion = $conclusion
             if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'Unexpected authorization.' }
         }
     }
     foreach ($message in @('Assert.Equal() Failure', 'Compiler error CS1002', 'Analyzer gate AIDN001 failed',
         'Process terminated: out of memory', 'OOM', 'Test hang timed out', 'Workflow manually cancelled', 'Run superseded')) {
-        Assert-Case "runner annotation cannot hide $message" {
-            $e = New-Evidence
+        Assert-Case "hosted runner annotation cannot hide $message" {
+            $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest')
+            $e.annotations[0].message = 'The hosted runner encountered an error running your job.'
             $e.annotations += [pscustomobject]@{ annotation_level = 'failure'; path = 'test.cs'; start_line = 4; message = $message }
             if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'Product or cancellation evidence was hidden.' }
         }
     }
     foreach ($stepConclusion in @('failure', 'timed_out')) {
-        Assert-Case "failed step $stepConclusion cannot be reclassified as runner loss" {
-            $e = New-Evidence; $e.primaryJob.steps[1].conclusion = $stepConclusion
+        Assert-Case "hosted failed step $stepConclusion cannot be reclassified as runner loss" {
+            $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.primaryJob.steps[1].conclusion = $stepConclusion
+            $e.annotations[0].message = 'The hosted runner encountered an error running your job.'
             if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'Failed test/compiler/analyzer step was hidden.' }
         }
     }
-    Assert-Case 'missing API annotations fail closed' {
-        $e = New-Evidence
+    Assert-Case 'hosted missing API annotations fail closed' {
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest')
         if (Test-FailoverInfrastructureFailure $e.primaryJob @()) { throw 'Missing evidence authorized recovery.' }
     }
     foreach ($field in @('message', 'path', 'start_line', 'annotation_level')) {
-        Assert-Case "unproven annotation $field fails closed" {
-            $e = New-Evidence
+        Assert-Case "hosted unproven annotation $field fails closed" {
+            $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest')
             $e.annotations[0].$field = switch ($field) {
                 message { 'runner offline (unverified local log)' }
                 path { 'tests/Example.cs' }
@@ -219,6 +222,23 @@ try {
                 annotation_level { 'warning' }
             }
             if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'Unproven annotation authorized recovery.' }
+        }
+    }
+    foreach ($selfHostedConclusion in @('failure', 'timed_out', 'startup_failure', 'abandoned', 'stale')) {
+        Assert-Case "self-hosted $selfHostedConclusion falls back to hosted runner regardless of step or annotation state" {
+            $e = New-Evidence
+            $e.primaryJob.conclusion = $selfHostedConclusion
+            $e.primaryJob.steps[0].conclusion = 'failure'
+            if (-not (Test-FailoverInfrastructureFailure $e.primaryJob @())) { throw "Expected self-hosted $selfHostedConclusion fallback." }
+            $alt = New-FailoverAlternateShard $e.shard $e.primaryJob @() $true
+            if ($alt.runner -cne 'ubuntu-latest') { throw 'Self-hosted fallback must target ubuntu-latest.' }
+        }
+    }
+    foreach ($cancelMessage in @('Workflow manually cancelled', 'Run superseded')) {
+        Assert-Case "self-hosted manual cancellation '$cancelMessage' never authorizes fallback" {
+            $e = New-Evidence
+            $e.annotations = @([pscustomobject]@{ annotation_level = 'failure'; path = '.github'; start_line = 1; message = $cancelMessage })
+            if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'Manual cancellation authorized fallback.' }
         }
     }
 
@@ -232,7 +252,11 @@ try {
             Get-FailoverJobPool $e.primaryJob $e.runners
         } $true
     }
-    Assert-Case 'missing runner identity' { $e = New-Evidence; Get-FailoverJobPool $e.primaryJob @() } $true
+    Assert-Case 'deregistered or unacquired self-hosted runner still resolves pool from job labels for hosted fallback' {
+        $e = New-Evidence; $e.primaryJob.runner_id = 0
+        $pool = Get-FailoverJobPool $e.primaryJob @()
+        if ($pool.pool -ne 'self-hosted' -or $pool.os -ne 'Linux' -or $pool.arch -ne 'X64') { throw 'Expected label-based self-hosted pool.' }
+    }
     Assert-Case 'duplicate runner identity' { $e = New-Evidence; Get-FailoverJobPool $e.primaryJob @($e.runners[0], $e.runners[0]) } $true
 
     Assert-Case 'self-hosted runner loss chooses hosted alternate with unchanged semantics' {
@@ -393,11 +417,19 @@ try {
         $resolved = Assert-FailoverResolvedShard @resolution
         if ($resolved.attempt -ne 'alternate') { throw 'Alternate was not resolved.' }
     }
-    Assert-Case 'real primary assertion failure plus passing alternate remains failure' {
+    Assert-Case 'real hosted primary assertion failure plus passing alternate remains failure' {
         $resolution = New-Resolution 'assertion-plus-alternate' -Alternate
+        $resolution.PrimaryJob.labels = @('ubuntu-latest')
         $resolution.PrimaryJob.steps[1].conclusion = 'failure'
         Assert-FailoverResolvedShard @resolution
     } $true
+    Assert-Case 'self-hosted step failure resolves cleanly when ubuntu-latest fallback passes' {
+        $resolution = New-Resolution 'self-hosted-step-fail-hosted-pass' -Alternate
+        $resolution.PrimaryJob.steps[1].conclusion = 'failure'
+        $resolution.PrimaryAnnotations = @()
+        $resolved = Assert-FailoverResolvedShard @resolution
+        if ($resolved.attempt -ne 'alternate') { throw 'Self-hosted failure did not resolve via ubuntu-latest fallback.' }
+    }
     Assert-Case 'successful primary cannot be overwritten by alternate' {
         $resolution = New-Resolution 'overwrite-primary'
         $alternate = Copy-Evidence $resolution.PrimaryJob; $alternate.id = 9002

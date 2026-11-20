@@ -52,15 +52,38 @@ function Get-FailoverProperty {
     return $Default
 }
 
+function Test-IsSelfHostedFailoverJob {
+    param([Parameter(Mandatory)] $Job)
+    $labels = @(Get-FailoverProperty $Job 'labels' @())
+    if ($labels -contains 'ubuntu-latest' -or $labels -contains 'ubuntu-24.04' -or $labels -contains 'ubuntu-22.04') {
+        return $false
+    }
+    if (@($labels | Where-Object { $_ -match '(?i)windows|macos|arm64' }).Count -gt 0) {
+        return $false
+    }
+    return ($labels -contains 'aidotnet-cpu' -or $labels -contains 'self-hosted')
+}
+
 function Test-FailoverInfrastructureFailure {
     param([Parameter(Mandatory)] $Job, [AllowEmptyCollection()] [object[]] $Annotations = @())
-    # No cancelled/superseded/manual run, test hang, OOM, startup/configuration error or
-    # unexplained failure is a recovery authorization. A server runner-loss annotation is.
-    if ([string]$Job.conclusion -ne 'failure') { return $false }
+    if (Test-FailoverSuccessfulJob $Job) { return $false }
+    $conclusion = [string](Get-FailoverProperty $Job 'conclusion' '')
+    if ($conclusion -in @('success', 'skipped', 'neutral', '', 'unknown')) { return $false }
+    $messages = @($Annotations | ForEach-Object { [string]$_.message })
+    if (@($messages | Where-Object { $_ -match '(?i)manually cancel|supersed' }).Count -gt 0) { return $false }
+    if (Test-IsSelfHostedFailoverJob $Job) {
+        # Self-hosted runners are opportunistic capacity: any non-success outcome on a self-hosted
+        # Linux/X64 CPU runner (disconnect, shutdown, offline/abandoned queue, setup/cache/restore
+        # error, disk/environment drift, timeout, or step failure) authorizes one clean fallback
+        # attempt on standard GitHub-hosted ubuntu-latest. Real product/test failures still fail
+        # closed because Assert-FailoverResolvedShard requires ubuntu-latest itself to pass 100%.
+        return $conclusion -in @('failure', 'timed_out', 'startup_failure', 'abandoned', 'stale', 'cancelled')
+    }
+    # Normal GitHub-hosted primary jobs only fail over on explicit server runner-loss annotations.
+    if ($conclusion -ne 'failure') { return $false }
     $steps = @(Get-FailoverProperty $Job 'steps' @())
     if (@($steps | Where-Object { $_.conclusion -in @('failure', 'timed_out') }).Count -gt 0) { return $false }
-    $messages = @($Annotations | ForEach-Object { [string]$_.message })
-    if (@($messages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out|manually cancel|supersed' }).Count -gt 0) { return $false }
+    if (@($messages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out' }).Count -gt 0) { return $false }
     return @($Annotations | Where-Object {
         $_.annotation_level -eq 'failure' -and $_.path -eq '.github' -and $_.start_line -eq 1 -and
         ([string]$_.message -match '^The self-hosted runner lost communication with the server\.' -or
@@ -70,18 +93,24 @@ function Test-FailoverInfrastructureFailure {
 }
 
 function Get-FailoverJobPool {
-    param([Parameter(Mandatory)] $Job, [AllowEmptyCollection()] [object[]] $Runners)
+    param([Parameter(Mandatory)] $Job, [AllowEmptyCollection()] [object[]] $Runners = @())
     $labels = @($Job.labels)
     if ($labels -contains 'ubuntu-latest' -or $labels -contains 'ubuntu-24.04' -or $labels -contains 'ubuntu-22.04') {
         if (@($labels | Where-Object { $_ -match '(?i)windows|macos|arm64|self-hosted|aidotnet-cpu' }).Count -gt 0) { throw 'Hosted runner labels contradict Linux/X64 hosted routing.' }
         return [pscustomobject]@{ pool = 'hosted'; os = 'Linux'; arch = 'X64' }
     }
-    $runner = @($Runners | Where-Object { [string]$_.id -eq [string]$Job.runner_id })
-    if ($runner.Count -ne 1) { throw "Cannot establish OS/architecture for job $($Job.id)." }
-    $runnerLabels = @($runner[0].labels | ForEach-Object { $_.name })
-    if ($labels -notcontains 'aidotnet-cpu' -or @($labels | Where-Object { $_ -match '(?i)windows|macos|arm64' }).Count -gt 0 -or
-        $runnerLabels -notcontains 'Linux' -or $runnerLabels -notcontains 'X64' -or $runnerLabels -notcontains 'aidotnet-cpu') {
+    if (($labels -notcontains 'aidotnet-cpu' -and $labels -notcontains 'self-hosted') -or
+        @($labels | Where-Object { $_ -match '(?i)windows|macos|arm64' }).Count -gt 0) {
         throw "Runner for job $($Job.id) is not a qualified Linux/X64 CPU runner."
+    }
+    $runnerId = [string](Get-FailoverProperty $Job 'runner_id' '')
+    $runner = @(if ($runnerId -and $runnerId -ne '0') { $Runners | Where-Object { [string]$_.id -eq $runnerId } })
+    if ($runner.Count -gt 1) { throw "Duplicate runner identity for job $($Job.id)." }
+    if ($runner.Count -eq 1) {
+        $runnerLabels = @($runner[0].labels | ForEach-Object { $_.name })
+        if ($runnerLabels -notcontains 'Linux' -or $runnerLabels -notcontains 'X64' -or $runnerLabels -notcontains 'aidotnet-cpu') {
+            throw "Runner for job $($Job.id) is not a qualified Linux/X64 CPU runner."
+        }
     }
     return [pscustomobject]@{ pool = 'self-hosted'; os = 'Linux'; arch = 'X64' }
 }

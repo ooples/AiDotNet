@@ -726,4 +726,14 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         metadata["Padding"] = Padding.ToString();
         return metadata;
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long cIn = InputDepth > 0 ? InputDepth : Math.Max(1, inputChannelsOrFeatures);
+        long cOut = Math.Max(0, OutputDepth);
+        long k = Math.Max(1, KernelSize);
+        outputChannelsOrFeatures = OutputDepth > 0 ? OutputDepth : inputChannelsOrFeatures;
+        return cIn * cOut * k * k + cOut;
+    }
 }

@@ -9880,6 +9880,51 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => _registeredSubLayers;
 
     /// <summary>
+    /// Allocation-free structural parameter estimate given the incoming channel or feature width,
+    /// propagating <paramref name="outputChannelsOrFeatures"/> to the next sequential layer so
+    /// <see cref="NeuralNetworkBase{T}"/> can engage weight streaming before <see cref="OnFirstForward"/>
+    /// materializes deferred weights on the heap.
+    /// </summary>
+    internal virtual long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        outputChannelsOrFeatures = inputChannelsOrFeatures;
+        long ownResolved = 0L;
+        if (this is AiDotNet.Models.Parameters.IParameterLayoutSource layoutSource)
+        {
+            var slots = layoutSource.GetParameterLayout();
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var slot = slots[i];
+                if (slot.ParameterCount is long resolvedCount && resolvedCount > 0)
+                    ownResolved += resolvedCount;
+            }
+        }
+
+        long subTotal = 0L;
+        int curWidth = inputChannelsOrFeatures;
+        var subs = GetSubLayers();
+        for (int i = 0; i < subs.Count; i++)
+        {
+            if (subs[i] is LayerBase<T> subBase)
+            {
+                subTotal += subBase.EstimateStructuralParameterCount(curWidth, out curWidth);
+            }
+        }
+
+        if (subs.Count > 0)
+        {
+            outputChannelsOrFeatures = curWidth;
+        }
+        else if (OutputShape is { Length: > 0 } outShape)
+        {
+            int candidate = outShape.Length >= 3 ? outShape[0] : outShape[outShape.Length - 1];
+            if (candidate > 0) outputChannelsOrFeatures = candidate;
+        }
+
+        return Math.Max(ownResolved, subTotal);
+    }
+
+    /// <summary>
     /// Tells the engine a trainable parameter tensor was changed outside it, so any cached (for example
     /// device-resident) copy is refreshed before its next use.
     /// </summary>

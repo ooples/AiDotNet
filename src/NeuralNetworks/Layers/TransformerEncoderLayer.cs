@@ -948,4 +948,13 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return diagnostics;
     }
 
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int dim = _embeddingSize > 0 ? _embeddingSize : Math.Max(1, inputChannelsOrFeatures);
+        long d = dim;
+        long ff = _feedForwardDim > 0 ? _feedForwardDim : 4L * d;
+        outputChannelsOrFeatures = dim;
+        return 4L * d * d + d + 2L * d * ff + d + ff + 4L * d;
+    }
 }

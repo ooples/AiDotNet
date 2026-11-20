@@ -13,6 +13,9 @@ internal enum AbmeInit
     /// <summary>The motion networks' re-initialization: <c>kaiming_normal(mode='fan_in')</c> with a zero bias.</summary>
     KaimingFanIn,
 
+    /// <summary>Linear flow/mask output head initialization: fan-in normal (gain 1.0) with a zero bias.</summary>
+    KaimingLinear,
+
     /// <summary>torch's default, which the synthesis network keeps: uniform in ±1/√fan_in.</summary>
     TorchDefault,
 }
@@ -33,7 +36,8 @@ internal sealed class AbmeConv2d<T> : LazyWeightModule<T>
         _dilation = dilation;
         _leaky = leaky;
         int fanIn = inChannels * kernel * kernel;
-        _weight = AbmeOps.Weight<T>(new[] { outChannels, inChannels, kernel, kernel }, fanIn, init);
+        var effectiveInit = init == AbmeInit.KaimingFanIn && !leaky ? AbmeInit.KaimingLinear : init;
+        _weight = AbmeOps.Weight<T>(new[] { outChannels, inChannels, kernel, kernel }, fanIn, effectiveInit);
         if (bias) _bias = init == AbmeInit.TorchDefault ? LazyWeight<T>.Uniform(new[] { outChannels }, fanIn) : LazyWeight<T>.Constant(new[] { outChannels }, 0.0);
     }
 
@@ -98,9 +102,10 @@ internal static class AbmeOps
     {
         if (init == AbmeInit.TorchDefault) return LazyWeight<T>.Uniform(shape, fanIn);
         var ops = MathHelper.GetNumericOperations<T>();
+        double gainSquared = init == AbmeInit.KaimingLinear ? 1.0 : 2.0 / 1.01;
         return new LazyWeight<T>(shape, (tensor, random) =>
         {
-            double std = Math.Sqrt(2.0 / fanIn);
+            double std = Math.Sqrt(gainSquared / fanIn);
             for (int i = 0; i < tensor.Length; i++)
             {
                 double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();

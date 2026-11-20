@@ -2136,4 +2136,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ResetState();
         }
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int dim = _embeddingDimension > 0 ? _embeddingDimension : Math.Max(1, inputChannelsOrFeatures);
+        long d = dim;
+        outputChannelsOrFeatures = dim;
+        return 4L * d * d + d + (_useQueryBias ? d : 0L) + (_useValueBias ? d : 0L);
+    }
 }

@@ -27,7 +27,9 @@ if ($planned.Count -ne 1 -or (Get-FailoverDefinitionHash $planned[0]) -cne (Get-
 $jobs = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/attempts/$RunAttempt/jobs" -Paginate)
 $primary = @($jobs | Where-Object { [string]$_.id -ceq [string]$shard.failoverOriginalJobId })
 if ($primary.Count -ne 1 -or $primary[0].name -cne "Tests ($($shard.framework)) - $($shard.name)" -or $primary[0].status -ne 'completed') { throw 'Original attempt job binding is invalid.' }
-$annotations = @(Get-FailoverAnnotations $primary[0] $Repository ([string]$run.head_sha))
+$annotations = @(if (Get-FailoverProperty $primary[0] 'check_run_url' '') {
+    Get-FailoverAnnotations $primary[0] $Repository ([string]$run.head_sha)
+})
 if (-not (Test-FailoverInfrastructureFailure $primary[0] $annotations)) { throw 'A non-infrastructure or successful primary cannot authorize replacement.' }
 $alternates = @($jobs | Where-Object { $_.name -ceq "Alternate attempt ($($shard.framework)) - $($shard.name)" })
 if ($alternates.Count -ne 1 -or $alternates[0].runner_name -cne $env:RUNNER_NAME) { throw 'Duplicate or differently assigned alternate attempt.' }

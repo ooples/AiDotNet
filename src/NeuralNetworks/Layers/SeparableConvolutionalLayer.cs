@@ -929,4 +929,14 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     }
 
     #endregion
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long cIn = _inputDepth > 0 ? _inputDepth : Math.Max(1, inputChannelsOrFeatures);
+        long cOut = Math.Max(0, _outputDepth);
+        long k = Math.Max(1, _kernelSize);
+        outputChannelsOrFeatures = _outputDepth > 0 ? _outputDepth : inputChannelsOrFeatures;
+        return cIn * k * k + cIn * cOut + cOut;
+    }
 }

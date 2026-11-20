@@ -1885,4 +1885,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     #endregion
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long fIn = InputShape is { Length: > 0 } && InputShape[0] > 0 ? InputShape[0] : Math.Max(1, inputChannelsOrFeatures);
+        long fOut = Math.Max(0, _outputSize);
+        outputChannelsOrFeatures = _outputSize > 0 ? _outputSize : inputChannelsOrFeatures;
+        return fIn * fOut + (UseBias ? fOut : 0L);
+    }
 }

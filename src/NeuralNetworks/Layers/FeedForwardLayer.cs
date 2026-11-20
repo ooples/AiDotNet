@@ -854,4 +854,13 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = Tensor<T>.Empty();
         _gpuInputShape = [];
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long fIn = _inputSize > 0 ? _inputSize : Math.Max(1, inputChannelsOrFeatures);
+        long fOut = Math.Max(0, _outputSize);
+        outputChannelsOrFeatures = _outputSize > 0 ? _outputSize : inputChannelsOrFeatures;
+        return fIn * fOut + fOut;
+    }
 }

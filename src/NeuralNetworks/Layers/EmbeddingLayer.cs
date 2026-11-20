@@ -941,4 +941,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         _lastInputGpu?.Dispose();
         _lastInputGpu = null;
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        outputChannelsOrFeatures = _embeddingDimension > 0 ? _embeddingDimension : inputChannelsOrFeatures;
+        return (long)Math.Max(0, _vocabularySize) * Math.Max(0, _embeddingDimension);
+    }
 }

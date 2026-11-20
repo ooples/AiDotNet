@@ -1476,4 +1476,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     #endregion
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int width = InputShape is { Length: > 0 } && InputShape[0] > 0 ? InputShape[0] : Math.Max(0, inputChannelsOrFeatures);
+        outputChannelsOrFeatures = width > 0 ? width : inputChannelsOrFeatures;
+        return 2L * width;
+    }
 }

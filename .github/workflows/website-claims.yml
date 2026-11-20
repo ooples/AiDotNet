@@ -1,13 +1,6 @@
 name: Website Performance Claims
 
-# Every speed number on the website must come from published AiDotNet.Tensors benchmarks. The site once advertised
-# "up to 500x faster than PyTorch" and four GPU speedup cards that no benchmark backed. The check verifies
-# website/src/data/tensors-cpu-benchmarks.json against the Tensors README's summary table (fetched from GitHub
-# main) and fails on any other multiplier, "faster than", "fastest", "outperform" or "speedup" in website/src
-# that website/performance-claims-allowlist.json does not explain.
-#
-# No path filter, so it can be a required check. The daily run catches a new Tensors benchmark run, which changes
-# the numbers the site must show without a pull request here.
+# Every speed number on the website must come from published AiDotNet.Tensors benchmarks.
 
 on:
   pull_request:
@@ -26,13 +19,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  claims:
+  select-runner:
     if: ${{ github.event.pull_request.draft != true }}
-    name: Website performance claims
-    # Same-repo PRs run on the self-hosted aidotnet-cpu pool to relieve the hosted queue; fork PRs
-    # stay on GitHub-hosted runners so untrusted code never runs on a self-hosted machine.
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "aidotnet-cpu"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      use_self_hosted: ${{ steps.probe.outputs.use_self_hosted }}
+    steps:
+      - name: Probe online idle self-hosted CPU runner
+        id: probe
+        shell: pwsh
+        env:
+          TRUSTED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          RUNNER_TOKEN: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
+          REPO: ${{ github.repository }}
+        run: |
+          $use = 'false'
+          if ($env:TRUSTED -ceq 'true' -and -not [string]::IsNullOrWhiteSpace($env:RUNNER_TOKEN)) {
+            try {
+              $headers = @{ Authorization = "Bearer $($env:RUNNER_TOKEN)"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+              $resp = Invoke-RestMethod -Uri "https://api.github.com/repos/$($env:REPO)/actions/runners?per_page=100" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+              $idle = @($resp.runners | Where-Object { $_.status -eq 'online' -and -not $_.busy -and @($_.labels.name) -contains 'aidotnet-cpu' })
+              if ($idle.Count -gt 0) { $use = 'true' }
+            } catch {
+              Write-Host "Self-hosted runner probe fell back to ubuntu-latest: $($_.Exception.Message)"
+            }
+          }
+          "use_self_hosted=$use" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+  claims-self-hosted:
+    needs: [select-runner]
+    if: ${{ needs.select-runner.outputs.use_self_hosted == 'true' }}
+    name: Website performance claims (self-hosted attempt)
+    runs-on: [self-hosted, aidotnet-cpu]
+    continue-on-error: true
     timeout-minutes: 5
+    outputs:
+      passed: ${{ steps.mark.outputs.passed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,4 +66,35 @@ jobs:
           node-version: 22
 
       - name: Check website performance claims against the AiDotNet.Tensors benchmarks
+        id: check
+        run: node website/scripts/check-performance-claims.mjs
+
+      - name: Record self-hosted success
+        id: mark
+        if: steps.check.outcome == 'success'
+        run: echo "passed=true" >> "$GITHUB_OUTPUT"
+
+  claims:
+    needs: [select-runner, claims-self-hosted]
+    if: ${{ always() && !cancelled() && (github.event.pull_request.draft != true) }}
+    name: Website performance claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Skip hosted fallback when self-hosted succeeded
+        if: needs.claims-self-hosted.outputs.passed == 'true'
+        run: echo "Website performance claims already passed on self-hosted runner."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.claims-self-hosted.outputs.passed != 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.claims-self-hosted.outputs.passed != 'true'
+        with:
+          node-version: 22
+
+      - name: Check website performance claims against the AiDotNet.Tensors benchmarks (ubuntu-latest fallback)
+        if: needs.claims-self-hosted.outputs.passed != 'true'
         run: node website/scripts/check-performance-claims.mjs

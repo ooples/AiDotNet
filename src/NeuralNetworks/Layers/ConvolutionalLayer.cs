@@ -1983,4 +1983,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         base.Dispose(disposing);
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int cIn = InputDepth > 0 ? InputDepth : Math.Max(1, inputChannelsOrFeatures);
+        int cOut = Math.Max(0, OutputDepth);
+        int k = Math.Max(1, KernelSize);
+        int groups = Math.Max(1, Groups);
+        long cInPerGroup = Math.Max(1, cIn / groups);
+        outputChannelsOrFeatures = cOut > 0 ? cOut : inputChannelsOrFeatures;
+        return cInPerGroup * cOut * k * k + cOut;
+    }
 }

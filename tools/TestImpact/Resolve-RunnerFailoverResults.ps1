@@ -61,7 +61,9 @@ foreach ($physical in $matrix) {
             [string]$entries[0].primaryJob.id -cne [string]$primary.id) { throw 'Plan does not identify the immutable original shard/job.' }
         $alternateJobs = @($jobs | Where-Object { $_.name -ceq "Alternate attempt ($($physical.framework)) - $($physical.name)" })
         if ($alternateJobs.Count -gt 1) { throw 'More than one alternate attempt exists.' }
-        $annotations = @(if ($primary.conclusion -eq 'failure') { Get-FailoverAnnotations $primary $Repository ([string]$run.head_sha) })
+        $annotations = @(if (-not (Test-FailoverSuccessfulJob $primary) -and (Get-FailoverProperty $primary 'check_run_url' '')) {
+            Get-FailoverAnnotations $primary $Repository ([string]$run.head_sha)
+        })
         $attempt = 'primary'; $alternate = $null
         if (-not (Test-FailoverSuccessfulJob $primary)) {
             if (-not (Test-FailoverInfrastructureFailure $primary $annotations)) { throw 'Primary test/compiler/unknown failure cannot be recovered.' }

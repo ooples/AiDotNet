@@ -249,36 +249,6 @@ public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    // Coarse structural estimate of the lazy RN50x16 encoder + SAM2CLIP neck + CLIP2SAM decoder
-    // (~1.12B params at default [384,768,1536,3072] / [6,8,18,8] widths) so TryAutoEnableWeightStreaming
-    // engages WeightRegistry streaming and TransparentAutoEviction before OnFirstForward materializes
-    // every layer onto the pinned heap at once.
-    /// <inheritdoc />
-    protected override long EstimateStructuralParameterCount()
-    {
-        if (!_useNativeMode || (Architecture.Layers != null && Architecture.Layers.Count > 0))
-            return 0L;
-        long total = 0L;
-        long inC = _channels > 0 ? _channels : 3;
-        for (int stage = 0; stage < _channelDims.Length; stage++)
-        {
-            long outC = _channelDims[stage];
-            long kernel = stage == 0 ? 7L : 3L;
-            total += inC * outC * kernel * kernel + outC + 2L * outC;
-            int depth = stage < _depths.Length ? _depths[stage] : 1;
-            for (int d = 1; d < depth; d++)
-                total += outC * outC * 9L + outC + 2L * outC;
-            inC = outC;
-        }
-        long neck = _neckEmbeddingDim;
-        long dec = _decoderDim;
-        long classes = Math.Max(1, TextEmbeddingDimension);
-        total += inC * neck + neck;
-        total += neck * dec + dec;
-        total += dec * dec * 9L + dec;
-        total += dec * classes + classes;
-        return total;
-    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.

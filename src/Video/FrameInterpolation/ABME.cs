@@ -394,10 +394,9 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     };
 
     // Park et al. 2021 Sec. 4.1 tunes Adam's 1e-4 rate at batch 24/16/6. When a run trains on fewer
-    // pairs per step, scale the active MultiStep base rate by sqrt(B / B_ref) per Malladi et al.
-    // 2022 (Theorem 1, Adam SDE scaling rule; exact 1.0x at B >= B_ref) and enable AMSGrad (Reddi,
-    // Kale & Kumar 2018 Sec. 4) so hard-masked ValidMask warps and 7x7 CensusLoss zero-crossings
-    // cannot trigger post-decay v_t sign-jump oscillations while InitialLearningRate stays exact.
+    // pairs per step from cold-start weights, prepend PaperOptimizerFactory's small-batch linear
+    // warmup to the paper's 1e-4 MultiStep schedule and enable AMSGrad so second moments calibrate
+    // before full-rate steps apply while full-batch runs and InitialLearningRate stay exact.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> StageOptimizer(AbmeTrainingStage stage, int batchSize)
     {
         if (_customOptimizer is not null) return _customOptimizer;
@@ -405,8 +404,8 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
         int effectiveBatch = Math.Min(Math.Max(1, batchSize), referenceBatch);
         int cacheKey = ((int)stage * 64) + effectiveBatch;
         if (_optimizers.TryGetValue(cacheKey, out var existing)) return existing;
-        double effectiveLr = _options.LearningRate * Math.Sqrt(effectiveBatch / (double)referenceBatch);
-        var scheduler = new MultiStepLRScheduler(effectiveLr, Milestones(stage).ToArray(), _options.DecayRate);
+        var scheduler = PaperOptimizerFactory.BuildMultiStepWithSmallBatchWarmup(
+            _options.LearningRate, Milestones(stage), _options.DecayRate, effectiveBatch, referenceBatch);
         // The paper states no betas, so Adam keeps PyTorch's (0.9, 0.999) and epsilon 1e-8.
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {

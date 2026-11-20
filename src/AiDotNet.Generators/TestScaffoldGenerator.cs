@@ -5865,11 +5865,13 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // deterministic construction path as the other init-sensitive families; model authors do
         // not need fixture overrides and production initialization remains unchanged outside this
         // ThreadStatic scope.
-        bool pinInitSeed = model.ClassName is
-            "TemplateNER" or
-            "WavLMSER" or
-            "SeACo" or
-            "SAM2";
+        // Generator-wide deterministic construction scope: every generated zero-argument fixture factory
+        // pins LayerInitializationSeedScope.AmbientFallbackSeed (preserving any outer harness seed/scope)
+        // so initial layer weights, LazyWeight draws, and CreateComponentRandom streams never depend on
+        // how many sibling test classes ran earlier on the same xUnit worker thread. Explicit architecture
+        // RandomSeed, DefaultRandomSeedOverride (1234 on NeuralNetworkModelTestBase), and ModelOptions.Seed
+        // still take precedence; production code outside generated test factories is completely unaffected.
+        bool pinInitSeed = true;
         const string smokeAdamWOptimizer =
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
@@ -19353,16 +19355,25 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (pinInitSeed)
         {
-            // Init-sensitive models: pin a deterministic per-layer init seed around
-            // construction so weight init does NOT depend on how many sibling tests
-            // advanced the process-shared RandomHelper.ThreadSafeRandom on this xUnit
-            // worker first. Cleared in finally so the scope leaks to no other test.
-            // (LayerInitializationSeedScope falls back to AmbientFallbackSeed only when
-            // the architecture has no explicit seed — production behaviour is unchanged.)
+            // Generator-wide deterministic construction scope: preserve any outer harness seed/scope
+            // (e.g. OptionSensitivityHarness.Seeded, DiffusionModelTestBase, ReinforcementLearningTestBase)
+            // while guaranteeing unseeded construction and argument-built layers never depend on sibling
+            // test execution order on the current xUnit worker thread.
+            string factoryExpr = factoryBody.StartsWith("        => ", System.StringComparison.Ordinal)
+                && factoryBody.EndsWith(";", System.StringComparison.Ordinal)
+                ? factoryBody.Substring("        => ".Length, factoryBody.Length - "        => ".Length - 1)
+                : constructorExpr;
             sb.AppendLine("    {");
-            sb.AppendLine("        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;");
-            sb.AppendLine($"        try {{ return {constructorExpr}; }}");
-            sb.AppendLine("        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null; }");
+            sb.AppendLine("        int? _prevSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;");
+            sb.AppendLine("        var _prevScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();");
+            sb.AppendLine("        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed ?? 1337;");
+            sb.AppendLine("        if (_prevSeed is null) AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(null);");
+            sb.AppendLine($"        try {{ return {factoryExpr}; }}");
+            sb.AppendLine("        finally");
+            sb.AppendLine("        {");
+            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed;");
+            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(_prevScope);");
+            sb.AppendLine("        }");
             sb.AppendLine("    }");
         }
         else

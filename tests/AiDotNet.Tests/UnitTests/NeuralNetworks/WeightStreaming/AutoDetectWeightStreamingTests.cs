@@ -29,8 +29,18 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.WeightStreaming;
 /// stub network exposes the protected base-class internal so the tests
 /// can drive it.
 /// </summary>
-public class AutoDetectWeightStreamingTests
+[Collection("WeightStreaming-Singleton")]
+public class AutoDetectWeightStreamingTests : IDisposable
 {
+    public AutoDetectWeightStreamingTests()
+    {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+    }
+
+    public void Dispose()
+    {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+    }
     /// <summary>
     /// Stub network that lets the test set ParameterCount directly AND
     /// counts how many times the property's getter has been read. The
@@ -356,5 +366,79 @@ public class AutoDetectWeightStreamingTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
         protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
             new StructuralEstimateNetwork();
+    }
+
+    [Fact]
+    public void LazyLayerChain_WithoutModelOverride_InfersStructuralCountPreForward()
+    {
+        var net = new LazyConvolutionalBackboneNetwork();
+        long materializedParams = 0L;
+        foreach (var layer in net.Layers)
+        {
+            materializedParams += layer.ParameterCount;
+        }
+
+        Assert.True(materializedParams < 10_000L);
+        net.SetThresholdForTest(10_000_000L);
+
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
+
+        Assert.True(net.WeightStreamingAutoDetected,
+            "Deferred Conv + BatchNorm + PatchEmbed + Transformer + Dense chain (>10M structural params) " +
+            "must engage weight streaming pre-forward from NeuralNetworkBase layer structural inference alone.");
+        Assert.True(net.IsWeightStreamingActive);
+        Assert.Equal(0L, net.ParameterCountReadCount);
+    }
+
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels,
+        AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
+    [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
+        Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
+    private sealed class LazyConvolutionalBackboneNetwork : NeuralNetworkBase<float>
+    {
+        private long _parameterCountReads;
+
+        public LazyConvolutionalBackboneNetwork()
+            : base(
+                new NeuralNetworkArchitecture<float>(
+                    AiDotNet.Enums.InputType.ThreeDimensional,
+                    AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+                    inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 16),
+                new MeanSquaredErrorLoss<float>(),
+                maxGradNorm: 1.0)
+        {
+            InitializeLayers();
+        }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                Interlocked.Increment(ref _parameterCountReads);
+                return base.ParameterCount;
+            }
+        }
+
+        public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
+
+        public void SetThresholdForTest(long thresholdParams) =>
+            ApplyAutoDetectThresholdOverride(thresholdParams);
+        protected override void InitializeLayers()
+        {
+            Layers.Add(new ConvolutionalLayer<float>(outputDepth: 512, kernelSize: 3, stride: 1, padding: 1));
+            Layers.Add(new BatchNormalizationLayer<float>());
+            Layers.Add(new ConvolutionalLayer<float>(outputDepth: 1024, kernelSize: 3, stride: 1, padding: 1));
+            Layers.Add(new PatchEmbeddingLayer<float>(patchSize: 1, embeddingDim: 1024));
+            Layers.Add(new TransformerEncoderLayer<float>(numHeads: 8, feedForwardDim: 4096));
+            Layers.Add(new DenseLayer<float>(outputSize: 16));
+        }
+
+        public override void UpdateParameters(Vector<float> parameters) { }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "LazyConvolutionalBackbone" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance() =>
+            new LazyConvolutionalBackboneNetwork();
     }
 }

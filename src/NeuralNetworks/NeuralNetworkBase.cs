@@ -13121,7 +13121,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             long est = EstimateStructuralParameterCount();
-            return est > 0 ? est : 0L;
+            long inferred = InferStructuralParameterCountFromLayers();
+            long best = Math.Max(est, inferred);
+            return best > 0 ? best : 0L;
         }
         catch (Exception ex) when (
             ex is InvalidOperationException ||
@@ -13134,6 +13136,40 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"{ex.GetType().Name}: {ex.Message}; treating as no estimate.");
             return 0L;
         }
+    }
+
+    private long InferStructuralParameterCountFromLayers()
+    {
+        if (_layers is null || _layers.Count == 0)
+            return 0L;
+
+        int curWidth;
+        if (Architecture is { InputType: Enums.InputType.ThreeDimensional, InputDepth: > 0 })
+        {
+            curWidth = Architecture.InputDepth;
+        }
+        else if (Architecture is { InputType: Enums.InputType.TwoDimensional, InputWidth: > 0 })
+        {
+            curWidth = Architecture.InputWidth;
+        }
+        else if (Architecture is { InputSize: > 0 })
+        {
+            curWidth = Architecture.InputSize;
+        }
+        else
+        {
+            curWidth = 3;
+        }
+        long total = 0L;
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            if (_layers[i] is Layers.LayerBase<T> layerBase)
+            {
+                total += layerBase.EstimateStructuralParameterCount(curWidth, out curWidth);
+            }
+        }
+
+        return total > 0 ? total : 0L;
     }
 
     /// <summary>

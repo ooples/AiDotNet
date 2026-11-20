@@ -771,4 +771,13 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override Tensor<T>? GetBiases() => UseBias ? _biases : null;
 
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long fIn = InputShape is { Length: > 0 } && InputShape[0] > 0 ? InputShape[0] : Math.Max(1, inputChannelsOrFeatures);
+        int outDim = OutputShape is { Length: > 0 } && OutputShape[0] > 0 ? OutputShape[0] : 0;
+        long fOut = Math.Max(0, outDim);
+        outputChannelsOrFeatures = outDim > 0 ? outDim : inputChannelsOrFeatures;
+        return fIn * fOut + (UseBias ? fOut : 0L);
+    }
 }

@@ -653,4 +653,14 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, 
         _gammaGradient = null;
         _betaGradient = null;
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int width = OutputShape is { Length: > 0 } && OutputShape[0] > 0
+            ? OutputShape[0]
+            : Math.Max(0, inputChannelsOrFeatures);
+        outputChannelsOrFeatures = width > 0 ? width : inputChannelsOrFeatures;
+        return 2L * width;
+    }
 }

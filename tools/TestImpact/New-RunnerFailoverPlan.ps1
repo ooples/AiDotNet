@@ -32,14 +32,16 @@ foreach ($shard in $matrix) {
     $matches = @($jobs | Where-Object { $_.name -ceq $name })
     if ($matches.Count -ne 1 -or $matches[0].status -ne 'completed') { throw "Missing, duplicate or unfinished primary job '$name'." }
     $job = $matches[0]
-    $annotations = @(if ($job.conclusion -eq 'failure') { Get-FailoverAnnotations $job $Repository ([string]$run.head_sha) })
+    $annotations = @(if (-not (Test-FailoverSuccessfulJob $job) -and (Get-FailoverProperty $job 'check_run_url' '')) {
+        Get-FailoverAnnotations $job $Repository ([string]$run.head_sha)
+    })
     $entry = [ordered]@{ shard = $shard; primaryJob = $job; annotations = $annotations; recoveryAuthorized = $false; reason = 'Primary must independently prove success.' }
-    if (Test-FailoverInfrastructureFailure $job $annotations) {
+    if (-not (Test-FailoverSuccessfulJob $job) -and (Test-FailoverInfrastructureFailure $job $annotations)) {
         try {
             $copy = New-FailoverAlternateShard $shard $job $runners $TrustedSameRepository
             $alternate.Add($copy)
             $entry.recoveryAuthorized = $true
-            $entry.reason = "Explicit terminal runner infrastructure failure; one alternate $($copy.runner) attempt."
+            $entry.reason = "Recoverable runner failure ($($job.conclusion)); one alternate $($copy.runner) attempt."
         } catch { $entry.reason = $_.Exception.Message }
     }
     $attempts.Add([pscustomobject]$entry)
