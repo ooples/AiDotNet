@@ -86,12 +86,12 @@ class LstmFixtureTests(unittest.TestCase):
             SimpleNamespace(op="call_function", target=torch.lstm)]))
         compiler = ExecutedInductor()
         with patch("torch._dynamo.backends.registry.lookup_backend", return_value=lambda g, args: (lambda x: x)):
-            run = compiler(graph, [])
+            guarded = [compiler(graph, []) for _ in range(4)]
         self.assertEqual({}, compiler.signatures)
         with strict_lstm_settings():
-            run(torch.zeros(64, 32, 32))
+            guarded[0](torch.zeros(64, 32, 32))
             with torch.inference_mode():
-                for b in (1, 8, 16):
+                for run, b in zip(guarded[1:], (1, 8, 16)):
                     run(torch.zeros(b, 32, 32))
             receipt = compiler.evidence()
             self.assertEqual(4, len(receipt["signatures"]))

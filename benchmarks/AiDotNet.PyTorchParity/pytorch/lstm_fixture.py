@@ -98,20 +98,23 @@ class ExecutedInductor:
             raise RuntimeError("Full Inductor graph did not capture the LSTM call")
         compiled = lookup_backend("inductor")(graph, examples)
         digest = hashlib.sha256(graph.code.encode()).hexdigest()
+        record = None
 
         def execute(*arguments):
-            # The model has exactly one rank-3 sequence input. Bind to the real invocation,
-            # not to an externally supplied batch number or a successful compilation alone.
-            sequence, = [x for x in arguments if isinstance(x, torch.Tensor) and x.ndim == 3
-                         and tuple(x.shape[1:]) == (32, 32)]
-            batch = sequence.shape[0]
-            signature = "train-b64" if torch.is_grad_enabled() and batch == 64 else f"inference-b{batch}"
+            nonlocal record
             result = compiled(*arguments)
-            item = self.signatures.setdefault(signature, {"graph_sha256": digest, "recurrent_nodes": len(nodes),
-                                                         "recurrent_targets": nodes, "executions": 0})
-            if item["graph_sha256"] != digest:
-                raise RuntimeError("Unexpected multiple compiled graphs for " + signature)
-            item["executions"] += 1
+            if record is None:
+                # Fullgraph + dynamic=False guards this callable by its static batch size and grad mode.
+                # Bind its first successful execution to the real input. Later calls only increment a counter.
+                sequence, = [x for x in arguments if isinstance(x, torch.Tensor) and x.ndim == 3
+                             and tuple(x.shape[1:]) == (32, 32)]
+                batch = sequence.shape[0]
+                signature = "train-b64" if torch.is_grad_enabled() and batch == 64 else f"inference-b{batch}"
+                record = self.signatures.setdefault(signature, {"graph_sha256": digest, "recurrent_nodes": len(nodes),
+                                                               "recurrent_targets": nodes, "executions": 0})
+                if record["graph_sha256"] != digest:
+                    raise RuntimeError("Unexpected multiple compiled graphs for " + signature)
+            record["executions"] += 1
             return result
         return execute
 
