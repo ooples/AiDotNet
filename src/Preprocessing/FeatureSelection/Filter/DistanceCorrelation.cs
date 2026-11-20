@@ -28,13 +28,13 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _distanceCorrelations;
+    private Vector<T>? _distanceCorrelations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceCorrelations => _distanceCorrelations;
+    public Vector<T>? DistanceCorrelations => _distanceCorrelations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,120 +70,42 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        // Compute distance matrix for target
-        var targetValues = new double[n];
-        for (int i = 0; i < n; i++)
-            targetValues[i] = NumOps.ToDouble(target[i]);
+        var engine = Engine;
 
-        var targetDistMatrix = ComputeDistanceMatrix(targetValues);
-        var targetCentered = CenterDistanceMatrix(targetDistMatrix, n);
-
-        _distanceCorrelations = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract feature column
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = NumOps.ToDouble(data[i, j]);
-
-            var featureDistMatrix = ComputeDistanceMatrix(featureValues);
-            var featureCentered = CenterDistanceMatrix(featureDistMatrix, n);
-
-            // Compute distance covariance and variances
-            double dCov = ComputeDistanceCovariance(featureCentered, targetCentered, n);
-            double dVarX = ComputeDistanceCovariance(featureCentered, featureCentered, n);
-            double dVarY = ComputeDistanceCovariance(targetCentered, targetCentered, n);
-
-            // Distance correlation
-            double denominator = Math.Sqrt(dVarX * dVarY);
-            _distanceCorrelations[j] = denominator > 1e-10 ? dCov / denominator : 0;
-        }
+        // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))) (Szekely, Rizzo and Bakirov 2007),
+        // 0 when the denominator is not above 1e-10. The statistics are computed and normalized in double and only
+        // the correlations cast to T: in Half, x = y = [0, 1024, 0, 1024] has dCov^2 = dVar^2 = 262144, which
+        // overflowed to inf / inf = NaN instead of 1.
+        var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
+            Tensor<T>.FromMatrix(data).Cast<double>(), Tensor<T>.FromVector(target).Cast<double>(),
+            out var xVariances, out double yVariance);
+        var zeros = new Tensor<double>(new[] { p });
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), Math.Sqrt(yVariance));
+        var usable = engine.TensorGreaterThan(denominators, 1e-10);
+        var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, 1.0));
+        var distanceCorrelations = engine.TensorWhere(usable,
+            engine.TensorSqrt(engine.TensorMax(engine.TensorDivide(dcov2, safe), 0.0)), zeros).Cast<T>();
+        _distanceCorrelations = distanceCorrelations.ToVector();
 
         // Select features above threshold or top by distance correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_distanceCorrelations[j] >= _minCorrelation)
-                candidates.Add(j);
+        var candidates = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(distanceCorrelations, NumOps.FromDouble(_minCorrelation))));
 
         if (candidates.Count >= _nFeaturesToSelect)
         {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _distanceCorrelations[j])
+            _selectedIndices = PreprocessingTensorOps.StableOrder(distanceCorrelations, descending: true)
+                .Where(j => candidates.Contains(j))
                 .Take(_nFeaturesToSelect)
                 .OrderBy(x => x)
                 .ToArray();
         }
         else
         {
-            _selectedIndices = _distanceCorrelations
-                .Select((dc, idx) => (DC: dc, Index: idx))
-                .OrderByDescending(x => x.DC)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(distanceCorrelations, Math.Min(_nFeaturesToSelect, p));
         }
 
         IsFitted = true;
     }
-
-    private double[,] ComputeDistanceMatrix(double[] values)
-    {
-        int n = values.Length;
-        var dist = new double[n, n];
-
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < n; k++)
-                dist[i, k] = Math.Abs(values[i] - values[k]);
-
-        return dist;
-    }
-
-    private double[,] CenterDistanceMatrix(double[,] dist, int n)
-    {
-        var centered = new double[n, n];
-
-        // Compute row means, column means, and grand mean
-        var rowMeans = new double[n];
-        var colMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int k = 0; k < n; k++)
-            {
-                rowMeans[i] += dist[i, k];
-                colMeans[k] += dist[i, k];
-                grandMean += dist[i, k];
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            rowMeans[i] /= n;
-            colMeans[i] /= n;
-        }
-        grandMean /= ((double)n * n);
-
-        // Double centering
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < n; k++)
-                centered[i, k] = dist[i, k] - rowMeans[i] - colMeans[k] + grandMean;
-
-        return centered;
-    }
-
-    private double ComputeDistanceCovariance(double[,] a, double[,] b, int n)
-    {
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < n; k++)
-                sum += a[i, k] * b[i, k];
-
-        return sum / ((double)n * n);
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -197,15 +119,7 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("DistanceCorrelation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

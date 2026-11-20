@@ -197,11 +197,11 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
             double m = _momentumEncoder.Momentum;
             var online = _projector.GetParameters();
             var target = _momentumProjector.GetParameters();
-            var updated = new Vector<T>(target.Length);
-            for (int i = 0; i < target.Length; i++)
-                updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
-                    NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
-            _momentumProjector.SetParameters(updated);
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var updated = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(target.AsTensor(), NumOps.FromDouble(m)),
+                Engine.TensorMultiplyScalar(online.AsTensor(), NumOps.FromDouble(1.0 - m)));
+            _momentumProjector.SetParameters(updated.AsVector());
         }
 
         if (_pendingKeys is { } keys)

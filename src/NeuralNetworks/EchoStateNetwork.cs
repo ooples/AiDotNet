@@ -707,16 +707,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         double scaleFactor = targetRadius / currentRadius;
 
         // Create a new scaled matrix
-        Matrix<T> scaledMatrix = new Matrix<T>(matrix.Rows, matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                scaledMatrix[i, j] = NumOps.Multiply(matrix[i, j], NumOps.FromDouble(scaleFactor));
-            }
-        }
-
-        return scaledMatrix;
+        return Engine.MatrixMultiplyScalar(matrix, NumOps.FromDouble(scaleFactor));
     }
 
     /// <summary>
@@ -832,8 +823,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     private void SettleReservoirState(Vector<T> input)
     {
-        for (int i = 0; i < _reservoirSize; i++)
-            _currentState[i] = NumOps.Zero;
+        _currentState.AsWritableSpan().Fill(NumOps.Zero);
 
         const int maxSettleSteps = 200;
         int minSteps = Math.Max(1, _warmupPeriod);
@@ -846,12 +836,13 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
 
             if (step + 1 < minSteps) continue;
 
-            T maxDelta = NumOps.Zero;
-            for (int i = 0; i < _reservoirSize; i++)
-            {
-                T delta = NumOps.Abs(NumOps.Subtract(_currentState[i], previousState[i]));
-                if (NumOps.GreaterThan(delta, maxDelta)) maxDelta = delta;
-            }
+            // The largest |change| (from zero, so NaN changes are never taken)
+            var delta = Engine.TensorAbs(Engine.TensorSubtract(
+                Tensor<T>.FromVector(_currentState), Tensor<T>.FromVector(previousState)));
+            var zeros = new Tensor<T>(new[] { _reservoirSize });
+            T maxDelta = _reservoirSize == 0
+                ? NumOps.Zero
+                : Engine.TensorMaxValue(Engine.TensorWhere(Engine.TensorIsNan(delta), zeros, delta));
             if (NumOps.LessThan(maxDelta, convergenceTol)) break;
         }
     }
@@ -870,10 +861,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         var stateRow = new Tensor<T>([1, _reservoirSize], _currentState);
         var linearRow = Engine.TensorMatMul(stateRow, _outputWeights);
         Vector<T> linearOutput = new Vector<T>(_outputSize);
-        for (int j = 0; j < _outputSize; j++)
-        {
-            linearOutput[j] = linearRow[0, j];
-        }
+        linearRow.AsSpan().Slice(0, _outputSize).CopyTo(linearOutput.AsWritableSpan());
         Vector<T> preActivation = Engine.Add(linearOutput, _outputBias);
 
         // Apply output activation if specified
@@ -906,14 +894,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// </summary>
     public void ResetReservoirState()
     {
-        // Vectorized reset using Engine tensor fill
-        var stateTensor = new Tensor<T>(_currentState.ToArray(), [_reservoirSize]);
-        Engine.TensorFill(stateTensor, NumOps.Zero);
-        var zeroArray = stateTensor.ToArray();
-        for (int i = 0; i < _reservoirSize; i++)
-        {
-            _currentState[i] = zeroArray[i];
-        }
+        _currentState.AsWritableSpan().Slice(0, _reservoirSize).Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -1519,99 +1500,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Computes the inverse of a matrix using Gaussian elimination.
-    /// </summary>
-    /// <param name="matrix">The matrix to invert.</param>
-    /// <returns>The inverse of the matrix.</returns>
-    private Matrix<T> ComputeInverse(Matrix<T> matrix)
-    {
-        // For simplicity, we'll assume the matrix is invertible and not ill-conditioned
-        // A more robust implementation would use SVD or other techniques
-
-        int n = matrix.Rows;
-        if (n != matrix.Columns)
-        {
-            throw new ArgumentException("Matrix must be square.");
-        }
-
-        // Create augmented matrix [A|I]
-        Matrix<T> augmented = new Matrix<T>(n, 2 * n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-            }
-
-            // Identity matrix on the right
-            augmented[i, i + n] = NumOps.One;
-        }
-
-        // Gaussian elimination
-        for (int i = 0; i < n; i++)
-        {
-            // Find pivot
-            T pivot = augmented[i, i];
-            int pivotRow = i;
-
-            // Find the row with the largest absolute value in this column
-            for (int j = i + 1; j < n; j++)
-            {
-                if (Math.Abs(Convert.ToDouble(augmented[j, i])) > Math.Abs(Convert.ToDouble(pivot)))
-                {
-                    pivot = augmented[j, i];
-                    pivotRow = j;
-                }
-            }
-
-            // Swap rows if needed
-            if (pivotRow != i)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    T temp = augmented[i, j];
-                    augmented[i, j] = augmented[pivotRow, j];
-                    augmented[pivotRow, j] = temp;
-                }
-            }
-
-            // Scale the pivot row
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[i, j] = NumOps.Divide(augmented[i, j], pivot);
-            }
-
-            // Eliminate other rows
-            for (int j = 0; j < n; j++)
-            {
-                if (j != i)
-                {
-                    T factor = augmented[j, i];
-                    for (int k = 0; k < 2 * n; k++)
-                    {
-                        augmented[j, k] = NumOps.Subtract(
-                            augmented[j, k],
-                            NumOps.Multiply(factor, augmented[i, k])
-                        );
-                    }
-                }
-            }
-        }
-
-        // Extract the inverse
-        Matrix<T> inverse = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inverse[i, j] = augmented[i, j + n];
-            }
-        }
-
-        return inverse;
-    }
-
-    /// <summary>
     /// Gets metadata about the Echo State Network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
@@ -1690,12 +1578,9 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         writer.Write(tensor.Shape[0]);
         writer.Write(tensor.Shape[1]);
 
-        for (int i = 0; i < tensor.Shape[0]; i++)
+        foreach (var value in tensor.AsSpan().Slice(0, tensor.Shape[0] * tensor.Shape[1]))
         {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                writer.Write(Convert.ToDouble(tensor[i, j]));
-            }
+            writer.Write(Convert.ToDouble(value));
         }
     }
 
@@ -1723,12 +1608,9 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         writer.Write(matrix.Rows);
         writer.Write(matrix.Columns);
 
-        for (int i = 0; i < matrix.Rows; i++)
+        foreach (var value in matrix.AsSpan().Slice(0, matrix.Rows * matrix.Columns))
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                writer.Write(Convert.ToDouble(matrix[i, j]));
-            }
+            writer.Write(Convert.ToDouble(value));
         }
     }
 
@@ -1741,9 +1623,9 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     {
         writer.Write(vector.Length);
 
-        for (int i = 0; i < vector.Length; i++)
+        foreach (var value in vector.AsSpan())
         {
-            writer.Write(Convert.ToDouble(vector[i]));
+            writer.Write(Convert.ToDouble(value));
         }
     }
 

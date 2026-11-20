@@ -432,11 +432,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
@@ -451,11 +447,8 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -725,13 +718,15 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
                 // The tensor reduction keeps the common finite path on-device. Locate the offending
                 // element only after failure so the established exception type and indexed diagnostic
                 // remain unchanged without downloading every healthy score in GPU execution.
-                for (int i = 0; i < score.Length; i++)
+                var flatScore = Engine.Reshape(score, [score.Length]);
+                var nonFinite = Engine.TensorWhere(
+                    Engine.TensorIsFinite(flatScore), Engine.TensorZerosLike(flatScore), Engine.TensorOnesLike(flatScore));
+                var offending = Engine.TensorNonzero(nonFinite);
+                if (offending.Length > 0)
                 {
-                    if (NumOps.IsNaN(score[i]) || NumOps.IsInfinity(score[i]))
-                    {
-                        throw new ArithmeticException(
-                            $"Memory attention score[{i}] is non-finite; query/key magnitudes overflowed the dot product.");
-                    }
+                    int first = offending[0, 0];
+                    throw new ArithmeticException(
+                        $"Memory attention score[{first}] is non-finite; query/key magnitudes overflowed the dot product.");
                 }
 
                 throw new ArithmeticException(
@@ -777,49 +772,34 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
     }
 
     private Tensor<T> DownsampleMask(Tensor<T> mask, int targetH, int targetW)
-    {
-        int batchSize = mask.Shape[0];
-        int srcH = mask.Shape[2];
-        int srcW = mask.Shape[3];
-
-        var downsampled = new Tensor<T>([batchSize, 1, targetH, targetW]);
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
-
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < targetH; h++)
-                for (int w = 0; w < targetW; w++)
-                {
-                    int srcY = Math.Min((int)(h * scaleH), srcH - 1);
-                    int srcX = Math.Min((int)(w * scaleW), srcW - 1);
-                    downsampled[b, 0, h, w] = mask[b, 0, srcY, srcX];
-                }
-
-        return downsampled;
-    }
+        => NearestResizeFirstChannel(mask, targetH, targetW);
 
     private Tensor<T> UpsampleMask(Tensor<T> mask, int targetH, int targetW)
+        => NearestResizeFirstChannel(mask, targetH, targetW);
+
+    /// <summary>
+    /// Nearest-neighbour resize of channel 0 to <c>[batch, 1, targetH, targetW]</c>: output pixel (h, w) reads
+    /// source pixel <c>(min(floor(h * srcH / targetH), srcH - 1), min(floor(w * srcW / targetW), srcW - 1))</c>,
+    /// with the scale computed as <c>srcH / targetH</c> first, as before.
+    /// </summary>
+    private Tensor<T> NearestResizeFirstChannel(Tensor<T> mask, int targetH, int targetW)
     {
-        int batchSize = mask.Shape[0];
-        int srcH = mask.Shape[2];
-        int srcW = mask.Shape[3];
+        var rows = NearestSourceIndices(mask.Shape[2], targetH);
+        var cols = NearestSourceIndices(mask.Shape[3], targetW);
+        var firstChannel = Engine.TensorNarrow(mask, 1, 0, 1);
+        return Engine.TensorIndexSelect(Engine.TensorIndexSelect(firstChannel, rows, 2), cols, 3);
+    }
 
-        var upsampled = new Tensor<T>([batchSize, 1, targetH, targetW]);
-        double scaleH = (double)srcH / targetH;
-        double scaleW = (double)srcW / targetW;
+    private static Tensor<int> NearestSourceIndices(int source, int target)
+    {
+        double scale = (double)source / target;
+        var indices = new int[target];
+        for (int i = 0; i < target; i++)
+        {
+            indices[i] = Math.Max(0, Math.Min((int)(i * scale), source - 1));
+        }
 
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < targetH; h++)
-                for (int w = 0; w < targetW; w++)
-                {
-                    double srcY = h * scaleH;
-                    double srcX = w * scaleW;
-                    int y0 = Math.Max(0, Math.Min((int)srcY, srcH - 1));
-                    int x0 = Math.Max(0, Math.Min((int)srcX, srcW - 1));
-                    upsampled[b, 0, h, w] = mask[b, 0, y0, x0];
-                }
-
-        return upsampled;
+        return new Tensor<int>(indices, [target]);
     }
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)

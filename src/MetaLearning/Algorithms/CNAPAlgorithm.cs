@@ -253,14 +253,8 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Average and apply gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedEncoderGradients.Length; i++)
-        {
-            accumulatedEncoderGradients[i] = NumOps.Divide(accumulatedEncoderGradients[i], batchSizeT);
-        }
-        for (int i = 0; i < accumulatedAdaptationGradients.Length; i++)
-        {
-            accumulatedAdaptationGradients[i] = NumOps.Divide(accumulatedAdaptationGradients[i], batchSizeT);
-        }
+        accumulatedEncoderGradients = Engine.Divide(accumulatedEncoderGradients, batchSizeT);
+        accumulatedAdaptationGradients = Engine.Divide(accumulatedAdaptationGradients, batchSizeT);
 
         // Clip gradients if configured
         if (_cnapOptions.GradientClipThreshold.HasValue && _cnapOptions.GradientClipThreshold.Value > 0)
@@ -378,22 +372,22 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (predictionVector != null && targetVector != null)
         {
             int minLen = Math.Min(Math.Min(predictionVector.Length, targetVector.Length), _cnapOptions.RepresentationDimension);
+            int representationDim = _cnapOptions.RepresentationDimension;
 
-            for (int i = 0; i < minLen; i++)
-            {
-                // Encode difference between prediction and target
-                T diff = NumOps.Subtract(targetVector[i], predictionVector[i]);
-                representation[i] = diff;
-            }
+            // Encode difference between prediction and target
+            var diff = minLen > 0
+                ? Engine.Subtract(targetVector.GetSubVector(0, minLen), predictionVector.GetSubVector(0, minLen))
+                : new Vector<T>(0);
 
             // Fill remaining dimensions with aggregated statistics
-            if (minLen < _cnapOptions.RepresentationDimension)
+            if (minLen < representationDim)
             {
-                T mean = ComputeMeanPartial(representation, minLen);
-                for (int i = minLen; i < _cnapOptions.RepresentationDimension; i++)
-                {
-                    representation[i] = mean;
-                }
+                var fill = Engine.Fill(representationDim - minLen, ComputeMeanPartial(diff, minLen));
+                representation = minLen > 0 ? Vector<T>.Concatenate(diff, fill) : fill;
+            }
+            else
+            {
+                representation = diff;
             }
         }
 
@@ -411,41 +405,43 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T> GenerateFastWeights(Vector<T> taskRepresentation)
     {
         int numModelParams = ParamModel.GetParameters().Length;
-        var fastWeights = new Vector<T>(numModelParams);
 
         // Apply adaptation network to generate fast weights
-        // Simplified: linear projection with learned weights
+        // Simplified: linear projection with learned weights. Parameter i reads the weights
+        // W[(i * R + j) mod |W|] for j < min(R, |rep|), the cyclic [numModelParams, R] table.
         int weightsPerParam = _cnapOptions.RepresentationDimension;
-
-        for (int i = 0; i < numModelParams; i++)
+        int used = Math.Min(weightsPerParam, taskRepresentation.Length);
+        var fastWeights = new Vector<T>(numModelParams);
+        if (used > 0 && numModelParams > 0)
         {
-            T sum = NumOps.Zero;
+            var table = ParameterModulation.Table(Engine, _adaptationNetworkWeights, numModelParams, weightsPerParam);
+            if (used < weightsPerParam) table = ParameterModulation.Columns(Engine, table, 0, used);
+            var representation = Tensor<T>.FromVector(
+                taskRepresentation.Length == used ? taskRepresentation : taskRepresentation.GetSubVector(0, used), new[] { used, 1 });
+            fastWeights = Engine.TensorMatMul(table, representation).ToVector();
+        }
 
-            // Compute weighted sum of representation dimensions
-            int startIdx = (i * weightsPerParam) % _adaptationNetworkWeights.Length;
-            for (int j = 0; j < Math.Min(weightsPerParam, taskRepresentation.Length); j++)
-            {
-                int weightIdx = (startIdx + j) % _adaptationNetworkWeights.Length;
-                sum = NumOps.Add(sum, NumOps.Multiply(_adaptationNetworkWeights[weightIdx], taskRepresentation[j]));
-            }
+        // Apply scaling based on fast weight mode
+        switch (_cnapOptions.FastWeightMode)
+        {
+            case FastWeightApplicationMode.Additive:
+                fastWeights = Engine.Multiply(fastWeights, NumOps.FromDouble(_cnapOptions.FastWeightScale));
+                break;
 
-            // Apply scaling based on fast weight mode
-            switch (_cnapOptions.FastWeightMode)
-            {
-                case FastWeightApplicationMode.Additive:
-                    fastWeights[i] = NumOps.Multiply(NumOps.FromDouble(_cnapOptions.FastWeightScale), sum);
-                    break;
+            case FastWeightApplicationMode.Multiplicative:
+                // Generate scaling factors around 1.0
+                fastWeights = Engine.Add(Engine.Fill(numModelParams, NumOps.One),
+                    Engine.Multiply(fastWeights, NumOps.FromDouble(_cnapOptions.FastWeightScale * 0.1)));
+                break;
 
-                case FastWeightApplicationMode.Multiplicative:
-                    // Generate scaling factors around 1.0
-                    fastWeights[i] = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(_cnapOptions.FastWeightScale * 0.1), sum));
-                    break;
+            case FastWeightApplicationMode.FiLM:
+                // FiLM style: will be interpreted as (gamma, beta) pairs
+                break;
 
-                case FastWeightApplicationMode.FiLM:
-                    // FiLM style: will be interpreted as (gamma, beta) pairs
-                    fastWeights[i] = sum;
-                    break;
-            }
+            default:
+                // Master left the entries at zero for an unrecognised mode.
+                fastWeights = new Vector<T>(numModelParams);
+                break;
         }
 
         // Normalize fast weights if configured
@@ -486,20 +482,7 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             case FastWeightApplicationMode.FiLM:
                 // For FiLM, interpret fast weights as alternating (gamma, beta)
-                for (int i = 0; i < currentParams.Length; i++)
-                {
-                    if (i % 2 == 0)
-                    {
-                        // Gamma (scaling)
-                        T gamma = NumOps.Add(NumOps.One, fastWeights[i]);
-                        modifiedParams[i] = NumOps.Multiply(currentParams[i], gamma);
-                    }
-                    else
-                    {
-                        // Beta (shift)
-                        modifiedParams[i] = NumOps.Add(currentParams[i], fastWeights[i]);
-                    }
-                }
+                modifiedParams = ApplyFiLM(currentParams, fastWeights);
                 break;
         }
 
@@ -509,6 +492,32 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <summary>
     /// Normalizes fast weights to prevent explosion.
     /// </summary>
+    /// <summary>
+    /// Even entries p * (1 + gamma), odd entries p + beta, read as [n / 2, 2] (gamma, beta) pairs.
+    /// </summary>
+    private Vector<T> ApplyFiLM(Vector<T> parameters, Vector<T> fastWeights)
+    {
+        int n = parameters.Length;
+        if (n == 0) return new Vector<T>(0);
+
+        int pairs = (n + 1) / 2;
+        var p = n == 2 * pairs ? parameters : Vector<T>.Concatenate(parameters, new Vector<T>(1));
+        var f = n == 2 * pairs ? fastWeights.GetSubVector(0, n) : Vector<T>.Concatenate(fastWeights.GetSubVector(0, n), new Vector<T>(1));
+        var pTable = Tensor<T>.FromVector(p, new[] { pairs, 2 });
+        var fTable = Tensor<T>.FromVector(f, new[] { pairs, 2 });
+
+        // Gamma (scaling)
+        var scaled = Engine.TensorMultiply(
+            ParameterModulation.Columns(Engine, pTable, 0, 1),
+            Engine.TensorAddScalar(ParameterModulation.Columns(Engine, fTable, 0, 1), NumOps.One));
+
+        // Beta (shift)
+        var shifted = Engine.TensorAdd(ParameterModulation.Columns(Engine, pTable, 1, 1), ParameterModulation.Columns(Engine, fTable, 1, 1));
+
+        var merged = Engine.Reshape(Engine.TensorConcatenate(new[] { scaled, shifted }, 1), new[] { 2 * pairs }).ToVector();
+        return merged.Length == n ? merged : merged.GetSubVector(0, n);
+    }
+
     private Vector<T> NormalizeFastWeights(Vector<T> weights)
     {
         // Compute L2 norm
@@ -561,8 +570,7 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             T perturbedLoss = ComputeLossFromOutput(perturbedPred, task.QueryOutput);
 
             // Compute gradient with scale factor
-            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(currentLoss)) / epsilon;
-            encoderGradients[idx] = NumOps.FromDouble(grad * encoderScaleFactor);
+            encoderGradients[idx] = FiniteDifference(perturbedLoss, currentLoss, epsilon, encoderScaleFactor);
 
             // Restore
             _encoderWeights[idx] = original;
@@ -588,8 +596,7 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             T perturbedLoss = ComputeLossFromOutput(perturbedPred, task.QueryOutput);
 
             // Compute gradient with scale factor
-            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(currentLoss)) / epsilon;
-            adaptationGradients[idx] = NumOps.FromDouble(grad * adaptScaleFactor);
+            adaptationGradients[idx] = FiniteDifference(perturbedLoss, currentLoss, epsilon, adaptScaleFactor);
 
             // Restore
             _adaptationNetworkWeights[idx] = original;
@@ -601,6 +608,12 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <summary>
     /// Computes gradients for the base model parameters.
     /// </summary>
+    /// <summary>((perturbed - current) / epsilon) * scale.</summary>
+    private T FiniteDifference(T perturbedLoss, T currentLoss, double epsilon, double scale)
+        => NumOps.Multiply(
+            NumOps.Divide(NumOps.Subtract(perturbedLoss, currentLoss), NumOps.FromDouble(epsilon)),
+            NumOps.FromDouble(scale));
+
     private Vector<T>? ComputeBaseModelGradients(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         Vector<T>? accumulatedGradients = null;
@@ -640,12 +653,8 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T> ApplyEncoderTransform(Vector<T> input)
     {
         // Element-wise multiply with cyclic weights, then SIMD tanh
-        var preActivation = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            int weightIdx = i % _encoderWeights.Length;
-            preActivation[i] = NumOps.Multiply(input[i], _encoderWeights[weightIdx]);
-        }
+        if (input.Length == 0) return new Vector<T>(0);
+        var preActivation = ParameterModulation.Apply(Engine, input, _encoderWeights);
 
         return VectorTanh(preActivation);
     }
@@ -682,16 +691,14 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </summary>
     private Vector<T> ResizeFastWeights(Vector<T> fastWeights, int targetSize)
     {
-        var resized = new Vector<T>(targetSize);
+        if (targetSize == 0) return new Vector<T>(0);
 
-        for (int i = 0; i < targetSize; i++)
-        {
-            // Interpolate or repeat
-            int srcIdx = (i * fastWeights.Length) / targetSize;
-            resized[i] = fastWeights[srcIdx];
-        }
-
-        return resized;
+        // Interpolate or repeat: entry i reads floor(i * |w| / targetSize). The products stay far below 2^53,
+        // so the double quotient floors to the integer quotient exactly.
+        var positions = Engine.TensorFloor(Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<double>(0, targetSize, 1), (double)fastWeights.Length),
+            (double)targetSize));
+        return Engine.TensorTake(Tensor<T>.FromVector(fastWeights), positions.Cast<int>()).ToVector();
     }
 
     /// <summary>
@@ -701,12 +708,7 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         if (n <= 0) return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            sum = NumOps.Add(sum, vec[i]);
-        }
-
+        T sum = Engine.Sum(vec.Length == n ? vec : vec.GetSubVector(0, n));
         return NumOps.Divide(sum, NumOps.FromDouble(n));
     }
 }

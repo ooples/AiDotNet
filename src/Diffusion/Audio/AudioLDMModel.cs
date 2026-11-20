@@ -488,6 +488,7 @@ public partial class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         var baseLatent = _audioVAE.Encode(inputMel, sampleMode: false);
         baseLatent = _audioVAE.ScaleLatent(baseLatent);
 
+        var strength = NumOps.FromDouble(variationStrength);
         for (int i = 0; i < numVariations; i++)
         {
             var variationSeed = baseSeed + i;
@@ -495,17 +496,7 @@ public partial class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 
             // Add controlled noise
             var noise = SampleNoiseTensor(baseLatent._shape, rng);
-            var noisyLatent = new Tensor<T>(baseLatent._shape);
-            var noisySpan = noisyLatent.AsWritableSpan();
-            var baseSpan = baseLatent.AsSpan();
-            var noiseSpan = noise.AsSpan();
-
-            for (int j = 0; j < noisySpan.Length; j++)
-            {
-                var baseVal = NumOps.ToDouble(baseSpan[j]);
-                var noiseVal = NumOps.ToDouble(noiseSpan[j]);
-                noisySpan[j] = NumOps.FromDouble(baseVal + variationStrength * noiseVal);
-            }
+            var noisyLatent = Engine.TensorAdd(baseLatent, Engine.TensorMultiplyScalar(noise, strength));
 
             // Decode variation
             var unscaled = _audioVAE.UnscaleLatent(noisyLatent);

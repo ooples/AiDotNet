@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -31,7 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 [PipelineStage(PipelineStage.Retrieval)]
 public class LinkPredictor<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly IKnowledgeGraphEmbedding<T> _embedding;
 
@@ -68,15 +69,11 @@ public class LinkPredictor<T>
                 .Select(e => e.TargetId))
             : new HashSet<string>();
 
-        var candidates = new List<(string tailId, double score)>();
-        foreach (var node in graph.GetAllNodes())
-        {
-            if (node.Id == headId) continue;
-            if (filterExisting && existingTails.Contains(node.Id)) continue;
-
-            var score = _embedding.ScoreTriple(headId, relationType, node.Id);
-            candidates.Add((node.Id, NumOps.ToDouble(score)));
-        }
+        var candidateIds = graph.GetAllNodes()
+            .Select(node => node.Id)
+            .Where(id => id != headId && !(filterExisting && existingTails.Contains(id)))
+            .ToList();
+        var candidates = ScoreCandidates(candidateIds, id => _embedding.ScoreTriple(headId, relationType, id));
 
         // Distance-based: lower=better → sort ascending. Semantic: higher=better → sort descending.
         if (_embedding.IsDistanceBased)
@@ -88,7 +85,7 @@ public class LinkPredictor<T>
         {
             HeadId = headId,
             RelationType = relationType,
-            TailId = c.tailId,
+            TailId = c.id,
             Score = c.score,
             Confidence = ComputeConfidence(c.score, candidates)
         }).ToList();
@@ -115,15 +112,11 @@ public class LinkPredictor<T>
                 .Select(e => e.SourceId))
             : new HashSet<string>();
 
-        var candidates = new List<(string headId, double score)>();
-        foreach (var node in graph.GetAllNodes())
-        {
-            if (node.Id == tailId) continue;
-            if (filterExisting && existingHeads.Contains(node.Id)) continue;
-
-            var score = _embedding.ScoreTriple(node.Id, relationType, tailId);
-            candidates.Add((node.Id, NumOps.ToDouble(score)));
-        }
+        var candidateIds = graph.GetAllNodes()
+            .Select(node => node.Id)
+            .Where(id => id != tailId && !(filterExisting && existingHeads.Contains(id)))
+            .ToList();
+        var candidates = ScoreCandidates(candidateIds, id => _embedding.ScoreTriple(id, relationType, tailId));
 
         if (_embedding.IsDistanceBased)
             candidates.Sort((a, b) => a.score.CompareTo(b.score));
@@ -132,7 +125,7 @@ public class LinkPredictor<T>
 
         return candidates.Take(topK).Select(c => new PredictedTriple
         {
-            HeadId = c.headId,
+            HeadId = c.id,
             RelationType = relationType,
             TailId = tailId,
             Score = c.score,
@@ -226,38 +219,44 @@ public class LinkPredictor<T>
         string headId, string relationType, string tailId,
         HashSet<(string headId, string relationType, string tailId)> existingTriples,
         bool isTailPrediction)
-    {
-        string targetId = isTailPrediction ? tailId : headId;
-        double targetScore = NumOps.ToDouble(_embedding.ScoreTriple(headId, relationType, tailId));
-
-        int rank = 1;
-        foreach (var node in allNodes)
         {
-            string candidateId = node.Id;
-            if (candidateId == targetId) continue;
+        string targetId = isTailPrediction ? tailId : headId;
+        T targetScore = _embedding.ScoreTriple(headId, relationType, tailId);
 
-            // Filtered setting: skip existing true triples (except the test triple itself)
-            var tripleKey = isTailPrediction
+        // Filtered setting: skip the target and existing true triples (except the test triple itself)
+        var candidateScores = allNodes
+            .Select(node => node.Id)
+            .Where(candidateId => candidateId != targetId && !existingTriples.Contains(isTailPrediction
                 ? (headId, relationType, candidateId)
-                : (candidateId, relationType, tailId);
+                : (candidateId, relationType, tailId)))
+            .Select(candidateId => isTailPrediction
+                ? _embedding.ScoreTriple(headId, relationType, candidateId)
+                : _embedding.ScoreTriple(candidateId, relationType, tailId))
+            .ToArray();
+        if (candidateScores.Length == 0) return 1;
 
-            if (existingTriples.Contains(tripleKey)) continue;
+        // Distance-based: candidate ranks higher if its score is LOWER
+        // Semantic: candidate ranks higher if its score is HIGHER
+        var scores = new Tensor<T>(candidateScores, [candidateScores.Length]);
+        var ranksHigher = _embedding.IsDistanceBased
+            ? Engine.TensorLessThan(scores, targetScore)
+            : Engine.TensorGreaterThan(scores, targetScore);
 
-            double candidateScore = isTailPrediction
-                ? NumOps.ToDouble(_embedding.ScoreTriple(headId, relationType, candidateId))
-                : NumOps.ToDouble(_embedding.ScoreTriple(candidateId, relationType, tailId));
+        return 1 + Engine.TensorCountNonzero(ranksHigher);
+    }
 
-            // Distance-based: candidate ranks higher if its score is LOWER
-            // Semantic: candidate ranks higher if its score is HIGHER
-            bool candidateRanksHigher = _embedding.IsDistanceBased
-                ? candidateScore < targetScore
-                : candidateScore > targetScore;
+    /// <summary>
+    /// Scores each candidate with the embedding model and converts the scores to double in one pass
+    /// (<see cref="PredictedTriple.Score"/> is double).
+    /// </summary>
+    private static List<(string id, double score)> ScoreCandidates(List<string> candidateIds, Func<string, T> score)
+    {
+        var candidates = new List<(string id, double score)>(candidateIds.Count);
+        if (candidateIds.Count == 0) return candidates;
 
-            if (candidateRanksHigher)
-                rank++;
-        }
-
-        return rank;
+        var scores = new Tensor<T>(candidateIds.Select(score).ToArray(), [candidateIds.Count]).Cast<double>().ToArray();
+        candidates.AddRange(candidateIds.Zip(scores, (id, value) => (id, value)));
+        return candidates;
     }
 
     private double ComputeConfidence(double score, List<(string id, double score)> sortedCandidates)

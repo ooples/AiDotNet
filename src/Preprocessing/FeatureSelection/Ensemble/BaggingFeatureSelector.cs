@@ -29,14 +29,14 @@ public class BaggingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly double _subsampleRatio;
     private readonly int? _randomState;
 
-    private double[]? _aggregatedScores;
+    private Vector<T>? _aggregatedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NEstimators => _nEstimators;
-    public double[]? AggregatedScores => _aggregatedScores;
+    public Vector<T>? AggregatedScores => _aggregatedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -81,17 +81,10 @@ public class BaggingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _aggregatedScores = new double[p];
-        var scoreCounts = new int[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var aggregatedScores = new Tensor<T>(new[] { p });
 
         for (int est = 0; est < _nEstimators; est++)
         {
@@ -99,47 +92,24 @@ public class BaggingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var indices = Enumerable.Range(0, n)
                 .OrderBy(_ => rand.Next())
                 .Take(subsampleSize)
-                .ToList();
+                .ToArray();
 
-            // Compute correlation-based importance on subsample
-            for (int j = 0; j < p; j++)
+            // Compute correlation-based importance on subsample (0 for an empty subsample or a constant column)
+            if (indices.Length > 0)
             {
-                double xMean = 0, yMean = 0;
-                foreach (int i in indices)
-                {
-                    xMean += X[i, j];
-                    yMean += y[i];
-                }
-                xMean /= indices.Count;
-                yMean /= indices.Count;
-
-                double sxy = 0, sxx = 0, syy = 0;
-                foreach (int i in indices)
-                {
-                    double xd = X[i, j] - xMean;
-                    double yd = y[i] - yMean;
-                    sxy += xd * yd;
-                    sxx += xd * xd;
-                    syy += yd * yd;
-                }
-
-                double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-                _aggregatedScores[j] += corr;
-                scoreCounts[j]++;
+                var rows = new Tensor<int>(indices, new[] { indices.Length });
+                aggregatedScores = engine.TensorAdd(aggregatedScores, engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                    engine.TensorIndexSelect(X, rows, 0), engine.TensorIndexSelect(y, rows, 0))));
             }
         }
 
         // Average the scores
-        for (int j = 0; j < p; j++)
-            if (scoreCounts[j] > 0)
-                _aggregatedScores[j] /= scoreCounts[j];
+        if (_nEstimators > 0)
+            aggregatedScores = engine.TensorDivideScalar(aggregatedScores, NumOps.FromDouble(_nEstimators));
+        _aggregatedScores = aggregatedScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _aggregatedScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(aggregatedScores, numToSelect);
 
         IsFitted = true;
     }
@@ -157,15 +127,7 @@ public class BaggingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("BaggingFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -32,6 +32,8 @@ public class EmotiVoicePaperTests
 
     private static double[] Values(JToken token) => token.Select(v => (double)v).ToArray();
 
+    private static Tensor<double> Vec(double[] values) => new(new[] { values.Length }, new Vector<double>(values));
+
     private static int[] Ints(JToken token) => token.Select(v => (int)v).ToArray();
 
     private static void Close(double[] expected, double[] actual, string what)
@@ -114,7 +116,7 @@ public class EmotiVoicePaperTests
         var step = new EmotiVoice<double>.Step
         {
             Phonemes = Ints(f["phonemes"]!), Speaker = (int)f["speaker"]!, Style = Row(Values(f["style"]!)), Content = Row(Values(f["content"]!)),
-            Mel = target, Pitch = Values(f["pitch_frames"]!), Energy = Values(f["energy_frames"]!), Start = start,
+            Mel = target, Pitch = Vec(Values(f["pitch_frames"]!)), Energy = Vec(Values(f["energy_frames"]!)), Start = start,
             Wave = new Tensor<double>(new[] { real.Length }, new Vector<double>(real)),
         };
         var pass = model.Generate(step, training: false, withLosses: true, adversarialTerms: false);
@@ -176,12 +178,9 @@ public class EmotiVoicePaperTests
         await Task.Yield();
         var (model, f) = Model();
         int sr = (int)f["sr"]!, fft = (int)f["fft"]!, hop = (int)f["hop"]!, mels = (int)f["config"]!["n_mels"]!;
-        var voice = Values(f["voice"]!);
-        var mel = new TacotronSpectrogram(sr, fft, hop, fft, mels, 0, 8000).LogMel(voice);
-        var flat = new double[mel.Length];
-        for (int t = 0; t < mel.GetLength(0); t++)
-            for (int m = 0; m < mels; m++) flat[t * mels + m] = mel[t, m];
-        Close(Values(f["target_mel"]!), flat, "target mel");
+        var voice = Vec(Values(f["voice"]!));
+        var mel = new TacotronSpectrogram(sr, fft, hop, fft, mels, 0, 8000).LogMel(voice);   // [frames, mels], row-major
+        Close(Values(f["target_mel"]!), mel, "target mel");
         var f0 = new WorldPitchDetector<double>(sr).EstimateF0(voice, 1000.0 * hop / sr).F0;
         Close(Values(f["pitch"]!), EmotiVoice<double>.ContinuousPitch(f0), "pitch");
         Close(Values(f["energy"]!), model.FrameEnergy(voice), "energy");

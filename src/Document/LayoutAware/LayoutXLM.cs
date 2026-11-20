@@ -206,7 +206,6 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -249,24 +248,6 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
             numClasses: _numClasses));
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region ILayoutDetector Implementation
@@ -297,34 +278,15 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
 
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
-        int numDetections = output.Shape[0];
         int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-
-        for (int i = 0; i < numDetections; i++)
+        var (rows, classes, scores) = DocumentTensorOps.ForegroundRows(Engine, output, numClasses, NumOps.FromDouble(threshold));
+        return rows.Select((i, k) => new LayoutRegion<T>
         {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = Vector<T>.Empty()
-                });
-            }
-        }
-
-        return regions;
+            ElementType = (LayoutElementType)Math.Min(classes[k], (int)LayoutElementType.Other),
+            Confidence = scores[k],
+            Index = i,
+            BoundingBox = Vector<T>.Empty()
+        }).ToList();
     }
 
     #endregion
@@ -338,6 +300,10 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Extractive: the answer is the best start/end span (BERT-style decoding), which involves no sampling, so
+    /// <paramref name="temperature"/> does not apply. <paramref name="maxAnswerLength"/> bounds the span.
+    /// </remarks>
     public DocumentQAResult<T> AnswerQuestion(Tensor<T> documentImage, string question, int maxAnswerLength, double temperature = 0.0)
     {
         ValidateImageShape(documentImage);
@@ -352,8 +318,7 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -366,58 +331,12 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// LayoutXLM outputs token-level predictions. For QA, we find the span
     /// with highest start and end logits within the max answer length.
     /// </remarks>
-    private (string answer, double confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength)
+    private (string answer, T confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength)
     {
-        int seqLen = output.Shape[0];
+        // The first and second hidden values are the start/end logits; the span's greedy tokens are the answer.
         int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _hiddenDim;
-
-        // Find best start and end positions
-        double bestStartScore = double.MinValue;
-        double bestEndScore = double.MinValue;
-        int bestStart = 0;
-        int bestEnd = 0;
-
-        // Interpret first and last values in hidden dimension as start/end logits
-        for (int i = 0; i < seqLen; i++)
-        {
-            double startScore = NumOps.ToDouble(output[i, 0]);
-            if (startScore > bestStartScore)
-            {
-                bestStartScore = startScore;
-                bestStart = i;
-            }
-        }
-
-        // Find best end position after start within max answer length
-        int endSearchLimit = Math.Min(seqLen, bestStart + maxAnswerLength);
-        for (int i = bestStart; i < endSearchLimit; i++)
-        {
-            double endScore = NumOps.ToDouble(output[i, Math.Min(1, hiddenDim - 1)]);
-            if (endScore > bestEndScore)
-            {
-                bestEndScore = endScore;
-                bestEnd = i;
-            }
-        }
-
-        // Extract token sequence and convert to text
-        var tokens = new List<int>();
-        for (int i = bestStart; i <= bestEnd && i < seqLen; i++)
-        {
-            // Extract argmax token at this position
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-            for (int j = 0; j < Math.Min(hiddenDim, _vocabSize); j++)
-            {
-                double val = NumOps.ToDouble(output[i, j]);
-                if (val > maxVal) { maxVal = val; maxIdx = j; }
-            }
-            if (maxIdx > 0) tokens.Add(maxIdx);
-        }
-
+        var (tokens, confidence) = DocumentTensorOps.SpanAnswer(Engine, output, hiddenDim, _vocabSize, maxAnswerLength);
         string answer = DecodeTokensToText(tokens);
-        double confidence = Math.Max(0, Math.Min(1, (bestStartScore + bestEndScore) / 2.0));
-
         return (string.IsNullOrEmpty(answer) ? "[No answer found]" : answer, confidence);
     }
 
@@ -515,35 +434,8 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// LayoutXLM (Microsoft paper) is the multilingual version of LayoutLMv2, using same ImageNet normalization.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies LayoutXLM's industry-standard postprocessing: pass-through (multilingual outputs are already final).

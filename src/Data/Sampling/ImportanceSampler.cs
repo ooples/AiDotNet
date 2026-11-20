@@ -42,7 +42,9 @@ public class ImportanceSampler<T> : DataSamplerBase
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T[] _importanceScores;
-    private readonly double[] _cumulativeProbabilities;
+    // Kept in double whatever T is: in single or half precision the running sum of probabilities drifts or
+    // saturates and skews the draws toward the last index.
+    private Tensor<double> _cumulativeProbabilities;
     private readonly double _smoothingFactor;
     private readonly bool _stabilize;
     private bool _needsUpdate = true;
@@ -67,7 +69,7 @@ public class ImportanceSampler<T> : DataSamplerBase
         }
 
         _importanceScores = new T[datasetSize];
-        _cumulativeProbabilities = new double[datasetSize];
+        _cumulativeProbabilities = new Tensor<double>(new[] { datasetSize });
 
         // Initialize with uniform importance
         T initialImportance = NumOps.FromDouble(1.0 / datasetSize);
@@ -145,53 +147,41 @@ public class ImportanceSampler<T> : DataSamplerBase
         if (!_needsUpdate) return;
 
         int n = _importanceScores.Length;
-        double[] rawScores = new double[n];
+        var engine = AiDotNetEngine.Current;
 
-        // Convert to doubles
-        for (int i = 0; i < n; i++)
-        {
-            rawScores[i] = Math.Max(0.0, NumOps.ToDouble(_importanceScores[i]));
-        }
+        // Clamp negative scores to zero. The distribution is built in double (one cast of the scores), as the
+        // scalar code was: in T the squared deviations overflow half precision and the running sum drifts.
+        var rawScores = engine.TensorClampMin(
+            new Tensor<T>((T[])_importanceScores.Clone(), new[] { n }).Cast<double>(), 0.0);
 
         // Stabilization: clip extreme values
         if (_stabilize)
         {
-            double mean = rawScores.Average();
-            double stdDev = Math.Sqrt(rawScores.Average(x => Math.Pow(x - mean, 2)));
+            double mean = engine.TensorMean(rawScores);
+            var centered = engine.TensorSubtractScalar(rawScores, mean);
+            double stdDev = Math.Sqrt(engine.TensorMean(engine.TensorMultiply(centered, centered)));
             double maxAllowed = mean + 3 * stdDev;
 
-            for (int i = 0; i < n; i++)
-            {
-                rawScores[i] = Math.Min(rawScores[i], maxAllowed);
-            }
+            rawScores = engine.TensorClampMax(rawScores, maxAllowed);
         }
 
         // Add smoothing: blend with uniform distribution
         double uniformProb = 1.0 / n;
-        for (int i = 0; i < n; i++)
-        {
-            rawScores[i] = (1.0 - _smoothingFactor) * rawScores[i] + _smoothingFactor * uniformProb;
-        }
+        rawScores = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(rawScores, 1.0 - _smoothingFactor), _smoothingFactor * uniformProb);
 
-        // Normalize
-        double sum = rawScores.Sum();
+        // Normalize: the left-to-right running sum's last entry is the total
+        double sum = engine.TensorCumSum(rawScores, 0).AsSpan()[n - 1];
         if (sum <= 0)
         {
             // Fallback to uniform
-            for (int i = 0; i < n; i++)
-            {
-                rawScores[i] = uniformProb;
-            }
+            rawScores = new Tensor<double>(new[] { n });
+            rawScores.Fill(uniformProb);
             sum = 1.0;
         }
 
         // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < n; i++)
-        {
-            cumulative += rawScores[i] / sum;
-            _cumulativeProbabilities[i] = cumulative;
-        }
+        _cumulativeProbabilities = engine.TensorCumSum(engine.TensorDivideScalar(rawScores, sum), 0);
         _cumulativeProbabilities[n - 1] = 1.0; // Ensure exactly 1.0
 
         _needsUpdate = false;
@@ -247,26 +237,8 @@ public class ImportanceSampler<T> : DataSamplerBase
 
     private int SampleOne()
     {
-        double u = Random.NextDouble();
-
-        // Binary search
-        int left = 0;
-        int right = _cumulativeProbabilities.Length - 1;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (_cumulativeProbabilities[mid] < u)
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid;
-            }
-        }
-
-        return left;
+        // First entry with u <= cumulative, capped at the last index like the former binary search.
+        return CumulativeSearch.FirstAtOrAbove<double>(_cumulativeProbabilities.AsSpan(), Random.NextDouble());
     }
 
     /// <summary>

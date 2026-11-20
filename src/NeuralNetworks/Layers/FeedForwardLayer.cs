@@ -745,14 +745,16 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     {
         int existingInputSize = _weights.Shape[0];
         int outputSize = _weights.Shape[1];
+        // A plain heap tensor, as before; the overlapping rows are copied in row-major order.
         var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        for (int i = 0; i < sharedInputSize; i++)
+        if (sharedInputSize > 0)
         {
-            for (int o = 0; o < outputSize; o++)
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
             {
-                resizedWeights[i, o] = _weights[i, o];
+                Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+                    .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
             }
         }
 
@@ -776,13 +778,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
             var newRows = new Tensor<T>([newRowCount, outputSize]);
             InitializeLayerWeights(newRows, actualInputSize, outputSize);
 
-            for (int i = 0; i < newRowCount; i++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    resizedWeights[sharedInputSize + i, o] = newRows[i, o];
-                }
-            }
+            newRows.CopyTo(resizedWeights.AsWritableSpan().Slice(sharedInputSize * outputSize, newRowCount * outputSize));
         }
 
         _weights = resizedWeights;
@@ -857,5 +853,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _weightsGradient = Tensor<T>.Empty();
         _biasesGradient = Tensor<T>.Empty();
         _gpuInputShape = [];
+    }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long fIn = _inputSize > 0 ? _inputSize : Math.Max(1, inputChannelsOrFeatures);
+        long fOut = Math.Max(0, _outputSize);
+        outputChannelsOrFeatures = _outputSize > 0 ? _outputSize : inputChannelsOrFeatures;
+        return fIn * fOut + fOut;
     }
 }

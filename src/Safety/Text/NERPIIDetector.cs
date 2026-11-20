@@ -69,6 +69,31 @@ public class NERPIIDetector<T> : TextSafetyModuleBase<T>
         "organization", "inc.", "llc", "ltd", "group", "institute"
     };
 
+    private readonly bool _detectNames;
+    private readonly bool _detectLocations;
+    private readonly bool _detectOrganizations;
+
+    /// <summary>
+    /// Initializes a detector for person names, locations/addresses and organizations.
+    /// </summary>
+    public NERPIIDetector()
+        : this(new[] { PiiType.PersonName, PiiType.Address, PiiType.Organization })
+    {
+    }
+
+    /// <summary>
+    /// Initializes a detector for the named-entity kinds among <paramref name="types"/>
+    /// (<see cref="PiiType.PersonName"/>, <see cref="PiiType.Address"/>, <see cref="PiiType.Organization"/>).
+    /// </summary>
+    /// <param name="types">The kinds of PII to detect; pattern-shaped kinds are ignored here.</param>
+    public NERPIIDetector(IReadOnlyCollection<PiiType> types)
+    {
+        if (types is null) throw new ArgumentNullException(nameof(types));
+        _detectNames = types.Contains(PiiType.PersonName);
+        _detectLocations = types.Contains(PiiType.Address);
+        _detectOrganizations = types.Contains(PiiType.Organization);
+    }
+
     /// <inheritdoc />
     public override string ModuleName => "NERPIIDetector";
 
@@ -87,13 +112,13 @@ public class NERPIIDetector<T> : TextSafetyModuleBase<T>
             StringSplitOptions.RemoveEmptyEntries);
 
         // Detect person names via context clues + capitalization
-        DetectPersonNames(text, lower, words, findings);
+        if (_detectNames) DetectPersonNames(text, lower, words, findings);
 
         // Detect locations via context clues
-        DetectLocations(text, lower, words, findings);
+        if (_detectLocations) DetectLocations(text, lower, words, findings);
 
         // Detect organizations via context clues
-        DetectOrganizations(text, lower, words, findings);
+        if (_detectOrganizations) DetectOrganizations(text, lower, words, findings);
 
         return findings;
     }

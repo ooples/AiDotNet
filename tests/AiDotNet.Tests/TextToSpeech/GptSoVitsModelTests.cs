@@ -21,7 +21,7 @@ public class GptSoVitsModelTests
 {
     private static GPTSoVITSOptions Tiny(GptSoVitsVersion version, GptSoVitsStage stage) => new()
     {
-        Version = version, CurrentStage = stage,
+        Version = version, CurrentStage = stage, DiscriminatorWidthDivisor = 16,
         HiddenDim = 16, NumHeads = 2, T2SLayers = 1, SemanticCodebookSize = 32,
         InterChannels = 8, SynthesizerHidden = 16, SynthesizerFilter = 32, SynthesizerHeads = 2, SynthesizerLayers = 2,
         StyleChannels = 16, MrteChannels = 16, StyleHidden = 16, UpsampleInitialChannels = 32,
@@ -65,7 +65,7 @@ public class GptSoVitsModelTests
     {
         await Task.Yield();
         bool flow = version >= GptSoVitsVersion.V3;
-        var model = Model(Tiny(version, GptSoVitsStage.TextToSemantic));
+        using var model = Model(Tiny(version, GptSoVitsStage.TextToSemantic));
         int rate = model.SampleRate;
         model.Voice = model.CreateVoice(Tone(32000, 32000, 180, 1), 32000, "Hello there, how are you today?");
         AssertSpeech(model.Synthesize("Good morning to you."));
@@ -75,7 +75,7 @@ public class GptSoVitsModelTests
             Tokens = new Tensor<double>(new[] { 1 }), Text = "Hello world, this is a test.", Audio = Tone(rate * 2 / 5, rate, 220, 2),
         };
         Assert.False(double.IsNaN(model.Train(sample)));
-        var staged = Model(Tiny(version, flow ? GptSoVitsStage.FlowMatching : GptSoVitsStage.SoVits));
+        using var staged = Model(Tiny(version, flow ? GptSoVitsStage.FlowMatching : GptSoVitsStage.SoVits));
         Assert.False(double.IsNaN(staged.Train(sample)));
         double before = staged.EvaluateTrainingObjective(sample);
         Assert.False(double.IsNaN(before));

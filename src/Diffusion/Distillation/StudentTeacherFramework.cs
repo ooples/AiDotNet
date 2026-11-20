@@ -84,18 +84,13 @@ public class StudentTeacherFramework<T>
     /// <returns>MSE distillation loss.</returns>
     public T ComputeDistillationLoss(Vector<T> studentOutput, Vector<T> teacherOutput)
     {
-        var loss = NumOps.Zero;
+        // mean over the common prefix of (student / temperature - teacher / temperature)^2
+        var engine = AiDotNetEngine.Current;
         var temp = NumOps.FromDouble(_temperatureScale);
         int len = Math.Min(studentOutput.Length, teacherOutput.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            var scaledStudent = NumOps.Divide(studentOutput[i], temp);
-            var scaledTeacher = NumOps.Divide(teacherOutput[i], temp);
-            var diff = NumOps.Subtract(scaledStudent, scaledTeacher);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
-
+        var scaledStudent = engine.Divide(DiffusionVectorOps.Fit(studentOutput, len), temp);
+        var scaledTeacher = engine.Divide(DiffusionVectorOps.Fit(teacherOutput, len), temp);
+        var loss = DiffusionVectorOps.SquaredDistance(scaledStudent, scaledTeacher);
         return NumOps.Divide(loss, NumOps.FromDouble(len));
     }
 
@@ -108,22 +103,19 @@ public class StudentTeacherFramework<T>
     {
         if (_emaParameters == null)
         {
-            _emaParameters = new Vector<T>(studentParams.Length);
-            for (int i = 0; i < studentParams.Length; i++)
-                _emaParameters[i] = studentParams[i];
+            _emaParameters = studentParams.Clone();
             return _emaParameters;
         }
 
+        // ema = decay * ema + (1 - decay) * student over the common prefix, updated in place
+        var engine = AiDotNetEngine.Current;
         var decay = NumOps.FromDouble(_emaDecay);
         var oneMinusDecay = NumOps.Subtract(NumOps.One, decay);
-
-        for (int i = 0; i < _emaParameters.Length && i < studentParams.Length; i++)
-        {
-            _emaParameters[i] = NumOps.Add(
-                NumOps.Multiply(decay, _emaParameters[i]),
-                NumOps.Multiply(oneMinusDecay, studentParams[i]));
-        }
-
+        int len = Math.Min(_emaParameters.Length, studentParams.Length);
+        var updated = engine.Add(
+            engine.Multiply(DiffusionVectorOps.Fit(_emaParameters, len), decay),
+            engine.Multiply(DiffusionVectorOps.Fit(studentParams, len), oneMinusDecay));
+        updated.AsSpan().CopyTo(_emaParameters.AsWritableSpan());
         return _emaParameters;
     }
 

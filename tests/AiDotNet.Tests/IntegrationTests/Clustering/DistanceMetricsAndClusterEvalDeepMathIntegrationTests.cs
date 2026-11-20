@@ -705,7 +705,7 @@ public class DistanceMetricsAndClusterEvalDeepMathIntegrationTests
         var labels = new Vector<double>(new double[] { 0, 0, 1, 1 });
 
         double overallScore = silhouette.Compute(data, labels);
-        double[] sampleScores = silhouette.ComputeSampleScores(data, labels);
+        var sampleScores = silhouette.ComputeSampleScores(data, labels);
 
         double avgSampleScore = sampleScores.Average();
         Assert.Equal(overallScore, avgSampleScore, LooseTolerance);

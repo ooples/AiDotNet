@@ -878,62 +878,13 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
-    {
-        int inputLength = input.Data.Length;
-        int predLength = Math.Min(prediction.Data.Length, inputLength);
-
-        var shifted = new Tensor<T>(input._shape);
-
-        // Copy shifted values (skip first predLength values)
-        for (int i = predLength; i < inputLength; i++)
-        {
-            shifted.Data.Span[i - predLength] = input.Data.Span[i];
-        }
-
-        // Append prediction values at the end
-        for (int i = 0; i < predLength; i++)
-        {
-            shifted.Data.Span[inputLength - predLength + i] = prediction.Data.Span[i];
-        }
-
-        return shifted;
-    }
+        => ShiftFlatWindow(input, prediction, prediction.Length, preserveInputShape: true);
 
     /// <summary>
     /// Concatenates multiple prediction tensors into a single tensor.
     /// </summary>
-    /// <param name="predictions">List of prediction tensors.</param>
-    /// <returns>Concatenated tensor containing all predictions.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After autoregressive forecasting produces multiple
-    /// prediction tensors, this combines them into a single tensor.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 0 });
-
-        int totalLength = 0;
-        foreach (var pred in predictions)
-        {
-            totalLength += pred.Data.Length;
-        }
-
-        var result = new Tensor<T>(new[] { totalLength });
-        int offset = 0;
-
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Data.Length; i++)
-            {
-                result.Data.Span[offset + i] = pred.Data.Span[i];
-            }
-            offset += pred.Data.Length;
-        }
-
-        return result;
-    }
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        => ConcatenateFlatPredictions(predictions);
 
     #endregion
 

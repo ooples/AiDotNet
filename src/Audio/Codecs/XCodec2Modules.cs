@@ -541,41 +541,39 @@ internal sealed class XCodec2<T>
     }
 
     /// <summary>The padded waveform <c>encode_code</c> encodes: <c>320 − (samples mod 320)</c> zeros appended.</summary>
-    public double[] PadForEncoding(IReadOnlyList<double> audio)
+    public Tensor<T> PadForEncoding(Tensor<T> audio)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         int hop = HopLength;
-        var padded = new double[audio.Count + (hop - audio.Count % hop)];
-        for (int i = 0; i < audio.Count; i++) padded[i] = audio[i];
-        return padded;
+        var flat = _engine.Reshape(audio, new[] { audio.Length });
+        return _engine.PadNd(flat, new[] { 0, hop - audio.Length % hop }, AiDotNet.Tensors.Engines.PadMode.Constant, Ops.Zero);
     }
 
     /// <summary>The semantic features <c>encode_code</c> reads for a padded waveform: the w2v-BERT features of the
     /// waveform with half a hop of zeros at each end.</summary>
-    public Tensor<T> Features(IReadOnlyList<double> padded)
+    public Tensor<T> Features(Tensor<T> padded)
     {
         int half = HopLength / 2;
-        var framed = new double[padded.Count + 2 * half];
-        for (int i = 0; i < padded.Count; i++) framed[half + i] = padded[i];
-        return _features.Forward(framed);
+        var flat = _engine.Reshape(padded, new[] { padded.Length });
+        return _features.Forward(_engine.PadNd(flat, new[] { half, half }, AiDotNet.Tensors.Engines.PadMode.Constant, Ops.Zero));
     }
 
     /// <summary>The codes of a 16 kHz waveform (<c>encode_code</c>).</summary>
-    public int[] Encode(IReadOnlyList<double> audio)
+    public int[] Encode(Tensor<T> audio)
     {
         var padded = PadForEncoding(audio);
         return Encode(padded, Features(padded));
     }
 
-    /// <summary>The codes of an already padded waveform given its w2v-BERT features <c>[rows, 160]</c>.</summary>
-    public int[] Encode(IReadOnlyList<double> padded, Tensor<T> features)
+    /// <summary>The codes of an already padded waveform given its w2v-BERT features <c>[rows, 160]</c>: FSQ's
+    /// <c>round(bound(bound(z)))</c> per dimension (half to even, as torch.round), each level + 2 a base-4 digit.</summary>
+    public int[] Encode(Tensor<T> padded, Tensor<T> features)
     {
         using var _ = new NoGradScope<T>();
         foreach (var layer in _layers) layer.SetTrainingMode(false);
         var hidden = Semantic.HiddenStates(features)[Configuration.SemanticLayer];                         // [rows, hs]
         var semantic = _semanticEncoder.Forward(_engine.Reshape(_engine.TensorTranspose(hidden), new[] { 1, hidden.Shape[1], hidden.Shape[0] }));
-        var wave = new Tensor<T>(new[] { 1, 1, padded.Count });
-        for (int i = 0; i < padded.Count; i++) wave[0, 0, i] = Ops.FromDouble(padded[i]);
+        var wave = _engine.Reshape(padded, new[] { 1, 1, padded.Length });
         var acoustic = _acoustic.Forward(wave);
         int frames = acoustic.Shape[2];
         if (semantic.Shape[2] != frames)
@@ -583,23 +581,21 @@ internal sealed class XCodec2<T>
         var fused = _engine.TensorConcatenate(new[] { semantic, acoustic }, 1);
         var z = _projectIn.Forward(_prior.Forward(_engine.TensorTranspose(_engine.Reshape(fused, new[] { Configuration.FusedDim, frames }))));
         int dims = Configuration.FsqLevels.Length;
+        var levels = _engine.TensorRound(Bound(Bound(z))).Cast<int>().ToArray();                          // [frames, dims]
+        // The digits combine as integers: a base-4 index above 2048 is not exact in a 16-bit T.
         var codes = new int[frames];
         for (int t = 0; t < frames; t++)
         {
             int index = 0, basis = 1;
-            for (int d = 0; d < dims; d++)
-            {
-                double bounded = Bound(Bound(Ops.ToDouble(z[t, d])));
-                int level = (int)Math.Round(bounded, MidpointRounding.ToEven) + 2;
-                index += level * basis;
-                basis *= 4;
-            }
+            for (int d = 0; d < dims; d++, basis *= 4) index += (levels[t * dims + d] + 2) * basis;
             codes[t] = index;
         }
         return codes;
     }
 
-    private double Bound(double z) => Math.Tanh(z + _shift) * _halfLevel - 0.5;
+    private Tensor<T> Bound(Tensor<T> z) =>
+        _engine.TensorAddScalar(_engine.TensorMultiplyScalar(_engine.TensorTanh(_engine.TensorAddScalar(z, Ops.FromDouble(_shift))),
+            Ops.FromDouble(_halfLevel)), Ops.FromDouble(-0.5));
 
     /// <summary>The decoder's input <c>[frames, decoder]</c> for codes (<c>get_output_from_indices</c>, then
     /// <c>fc_post_a</c>).</summary>
@@ -607,26 +603,25 @@ internal sealed class XCodec2<T>
     {
         if (codes is null || codes.Count == 0) throw new ArgumentException("There are no codes.", nameof(codes));
         int dims = Configuration.FsqLevels.Length;
-        var values = new Tensor<T>(new[] { codes.Count, dims });
+        var digits = new int[codes.Count * dims];
         for (int t = 0; t < codes.Count; t++)
         {
             int code = codes[t];
             if (code < 0 || code >= Configuration.CodebookSize)
                 throw new ArgumentOutOfRangeException(nameof(codes), code, $"Codes lie in [0, {Configuration.CodebookSize}).");
-            for (int d = 0; d < dims; d++, code /= 4) values[t, d] = Ops.FromDouble((code % 4 - 2) / 2.0);
+            for (int d = 0; d < dims; d++, code /= 4) digits[t * dims + d] = code % 4 - 2;
         }
+        var values = _engine.TensorMultiplyScalar(new Tensor<int>(digits, new[] { codes.Count, dims }).Cast<T>(), Ops.FromDouble(0.5));
         return _post.Forward(_projectOut.Forward(values));
     }
 
-    /// <summary>The 16 kHz waveform of codes (<c>decode_code</c>), <c>codes · hop</c> samples.</summary>
-    public double[] Decode(IReadOnlyList<int> codes)
+    /// <summary>The 16 kHz waveform <c>[codes · hop]</c> of codes (<c>decode_code</c>).</summary>
+    public Tensor<T> Decode(IReadOnlyList<int> codes)
     {
         using var _ = new NoGradScope<T>();
         foreach (var layer in _layers) layer.SetTrainingMode(false);
         var audio = _decoder.Forward(Embed(codes));
-        var result = new double[audio.Length];
-        for (int i = 0; i < result.Length; i++) result[i] = Ops.ToDouble(audio[i]);
-        return result;
+        return _engine.Reshape(audio, new[] { audio.Length });
     }
 
     /// <summary>Every module outside the semantic network under the checkpoint's names.</summary>

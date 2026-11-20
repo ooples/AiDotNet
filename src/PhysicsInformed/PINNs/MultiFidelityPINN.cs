@@ -42,17 +42,17 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 /// 3. Learn the correlation between fidelity levels
 /// 4. Enforce physics constraints at all fidelity levels
 ///
-/// Mathematical Model:
-/// u_HF(x) = rho(x) * u_LF(x) + delta(x)
+/// Mathematical Model (Meng and Karniadakis 2020, Eq. 6-7):
+/// u_HF(x) = F_l(x, u_LF(x)) + F_nl(x, u_LF(x))
 ///
 /// Where:
-/// - u_LF(x): Low-fidelity prediction
-/// - u_HF(x): High-fidelity prediction
-/// - rho(x): Scaling factor (learned)
-/// - delta(x): Correction/bias term (learned)
+/// - u_LF(x): Low-fidelity network NN_L
+/// - F_l: a linear network (no activation) that captures a linear cross-fidelity correlation
+/// - F_nl: a nonlinear network (this model's own layers) for the nonlinear part
 ///
-/// This implementation uses a nonlinear correlation model where a neural network
-/// learns the relationship between fidelity levels.
+/// Both correlation networks read the coordinates AND the low-fidelity prediction, so the model
+/// learns how the fidelities relate rather than an additive correction. The joint loss is
+/// MSE_LF + MSE_HF + MSE_f (Eq. 8), with the PDE residual of the composite solution.
 ///
 /// References:
 /// - Meng, X., and Karniadakis, G.E. "A composite neural network that learns from
@@ -85,26 +85,53 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     private readonly MultiFidelityPINNOptions _options;
 
     /// <summary>
-    /// The multi-fidelity solution: the low-fidelity network's output plus this network's learned
-    /// correction, u_HF(x) = u_LF(x) + delta(x).
+    /// The multi-fidelity solution u_HF(x) = F_l(x, u_LF(x)) + F_nl(x, u_LF(x)) (Meng and Karniadakis 2020).
     /// </summary>
     /// <remarks>
-    /// Predict, GetSolution, the PDE residual and training all evaluate this. Predict used to return the
-    /// correction alone while GetHighFidelitySolution returned the sum, and SolveMultiFidelity's joint
-    /// stage fit the correction by itself to the high-fidelity targets. While the low-fidelity network is
-    /// frozen its output is detached from the gradient tape, so joint training updates only the
-    /// correction - the freeze flag used to be set and never read.
+    /// Predict, GetSolution, the PDE residual and training all evaluate this. The correlation networks used to see
+    /// only x and add a correction to u_LF; the paper's composite network feeds u_LF(x) to both of them, so the
+    /// cross-fidelity correlation itself is learned. u_LF(x) stays on the gradient tape even while the low-fidelity
+    /// network is frozen: the PDE derivatives of u_HF with respect to x pass through it (for u_LF(x) = x^2 the
+    /// chain rule needs its 2x). Freezing excludes the low-fidelity parameters from the update instead (see
+    /// <see cref="SelectTrainableParametersForTraining"/>); detaching the output dropped every derivative term
+    /// through u_LF from the residual.
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var lowFidelity = _lowFidelityNetwork.Forward(input);
-        if (_lowFidelityFrozen)
+        if (input is null)
         {
-            lowFidelity = Engine.StopGradient(lowFidelity);
+            throw new ArgumentNullException(nameof(input));
         }
 
-        return Engine.TensorAdd(lowFidelity, base.Forward(input));
+        bool singlePoint = input.Rank == 1;
+        var rows = singlePoint ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
+        if (rows.Rank != 2)
+        {
+            throw new ArgumentException("Input must be [inputDim] or [batch, inputDim].", nameof(input));
+        }
+
+        var lowFidelity = _lowFidelityNetwork.Forward(rows);
+        var correlationInput = Engine.TensorConcatenate(new[] { rows, lowFidelity }, 1);
+        var output = Engine.TensorAdd(_linearCorrelation.Forward(correlationInput), base.Forward(correlationInput));
+        return singlePoint ? Engine.Reshape(output, new[] { output.Shape[1] }) : output;
     }
+
+    /// <inheritdoc />
+    /// <remarks>While the low-fidelity network is frozen, joint training updates only the correlation networks: its
+    /// parameters are left out of the step, although its output stays on the tape.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!_lowFidelityFrozen) return parameters;
+        var frozen = new HashSet<Tensor<T>>(
+            AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(_lowFidelityNetwork.Layers, -1),
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(parameter => !frozen.Contains(parameter)).ToList();
+    }
+
+    /// <summary>
+    /// The linear correlation network F_l: one dense layer without activation over [x, u_LF(x)].
+    /// </summary>
+    private AiDotNet.NeuralNetworks.Layers.DenseLayer<T> _linearCorrelation;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -201,6 +228,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                    NumCollocationPoints = options.NumCollocationPoints,
                    PdeWeight = options.PdeWeight,
                    BoundaryWeight = options.BoundaryWeight,
+                   Seed = options.Seed,
                })
     {
         options.Validate();
@@ -212,6 +240,16 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         _correlationWeight = options.CorrelationWeight;
         _freezeLowFidelityAfterPretraining = options.FreezeLowFidelityAfterPretraining;
         _lowFidelityFrozen = false;
+        using var _ = TensorArena.Suspend();
+        int correlationInputDim = pdeSpecification.InputDimension + pdeSpecification.OutputDimension;
+        _linearCorrelation = new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
+            pdeSpecification.OutputDimension,
+            (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+        _linearCorrelation.ResolveFromShape(new[] { correlationInputDim });
+        if (architecture.Layers is null || architecture.Layers.Count == 0)
+        {
+            ResolveLayerChainShapes(Layers, new[] { correlationInputDim });
+        }
 
         // Create or use provided low-fidelity network
         if (lowFidelityNetwork != null)
@@ -230,13 +268,29 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 options: new PhysicsInformedNeuralNetworkOptions
                 {
                     NumCollocationPoints = options.NumCollocationPoints / 2, // Fewer for LF
-                    PdeWeight = options.PdeWeight * 0.5,                     // Lower physics weight for LF
+                    PdeWeight = 0.0,  // NN_L is a fit to the low-fidelity data (Meng and Karniadakis 2020, Sec. 2.2)
                     BoundaryWeight = options.BoundaryWeight,
+                    Seed = options.Seed.HasValue ? unchecked(options.Seed.Value + 1) : null,
                 });
+            ResolveLayerChainShapes(_lowFidelityNetwork.Layers, new[] { pdeSpecification.InputDimension });
         }
 
         // Create optimizer for this network
         _multiFidelityOptimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    private static void ResolveLayerChainShapes(IList<ILayer<T>> layers, int[] inputShape)
+    {
+        int[] running = inputShape;
+        foreach (var layer in layers)
+        {
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(running);
+            }
+
+            running = layer.GetOutputShape();
+        }
     }
 
     /// <summary>
@@ -246,12 +300,23 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         NeuralNetworkArchitecture<T> hfArchitecture,
         IPDESpecification<T> pdeSpec)
     {
-        // Low-fidelity network typically has fewer layers/neurons
+        // Low-fidelity network uses a smaller smooth Tanh MLP (Meng and Karniadakis 2020, Sec. 2.2)
+        var tanh = (IActivationFunction<T>)new AiDotNet.ActivationFunctions.TanhActivation<T>();
+        var identity = (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>();
+        const int hiddenWidth = 20;
+        var layers = new List<ILayer<T>>
+        {
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(hiddenWidth, tanh),
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(hiddenWidth, tanh),
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(pdeSpec.OutputDimension, identity),
+        };
+
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: pdeSpec.InputDimension,
-            outputSize: pdeSpec.OutputDimension);
+            outputSize: pdeSpec.OutputDimension,
+            layers: layers);
     }
 
     /// <summary>
@@ -336,7 +401,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Stage 1: Pretrain low-fidelity network
         if (verbose)
         {
-            Console.WriteLine("Stage 1: Pretraining low-fidelity network...");
+            System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN stage 1: pretraining the low-fidelity network.");
         }
 
         // Train low-fidelity network using tape-based training
@@ -361,14 +426,14 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
             _lowFidelityFrozen = true;
             if (verbose)
             {
-                Console.WriteLine("Low-fidelity network frozen.");
+                System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN: low-fidelity network frozen.");
             }
         }
 
         // Stage 2: Joint training
         if (verbose)
         {
-            Console.WriteLine("Stage 2: Joint multi-fidelity training...");
+            System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN stage 2: joint multi-fidelity training.");
         }
 
         // Configure optimizer
@@ -404,19 +469,13 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                     highFidelityLoss = LossFunction.CalculateLoss(hfPred.ToVector(), hfOut.ToVector());
                 }
 
-                T correlationLoss = NumOps.Zero;
-                T physicsLoss = NumOps.Zero;
-                T totalLoss = NumOps.Add(lowFidelityLoss, highFidelityLoss);
-
-                history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, correlationLoss, physicsLoss);
+                T totalLoss = RecordJointEpoch(history, lowFidelityLoss, highFidelityLoss);
 
                 if (verbose && epoch % 100 == 0)
                 {
-                    Console.WriteLine(
-                        $"Epoch {actualPretrainingEpochs + epoch}/{epochs}, " +
-                        $"Total: {totalLoss}, " +
-                        $"LF: {lowFidelityLoss}, " +
-                        $"HF: {highFidelityLoss}");
+                    System.Diagnostics.Trace.TraceInformation(
+                        "MultiFidelityPINN epoch {0}/{1}: total loss {2}, low-fidelity loss {3}, high-fidelity loss {4}",
+                        actualPretrainingEpochs + epoch, epochs, totalLoss, lowFidelityLoss, highFidelityLoss);
                 }
             }
         }
@@ -433,117 +492,51 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         return history;
     }
 
-    private T ComputeMSE(Tensor<T> prediction, Tensor<T> target)
-    {
-        T sum = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < prediction.Shape[0]; i++)
-        {
-            for (int j = 0; j < prediction.Shape[1]; j++)
-            {
-                T diff = NumOps.Subtract(prediction[i, j], target[i, j]);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-                count++;
-            }
-        }
-
-        return count > 0 ? NumOps.Divide(sum, NumOps.FromDouble(count)) : NumOps.Zero;
-    }
-
-    private Tensor<T> ComputeMSEGradient(Tensor<T> prediction, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(prediction._shape);
-        int count = prediction.Shape[0] * prediction.Shape[1];
-        T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(count));
-
-        for (int i = 0; i < prediction.Shape[0]; i++)
-        {
-            for (int j = 0; j < prediction.Shape[1]; j++)
-            {
-                T diff = NumOps.Subtract(prediction[i, j], target[i, j]);
-                gradient[i, j] = NumOps.Multiply(scale, diff);
-            }
-        }
-
-        return gradient;
-    }
-
     /// <summary>
-    /// Computes the physics loss by evaluating PDE residual at collocation points.
-    /// Uses a sample of high-fidelity data points as collocation points for efficiency.
+    /// Records one joint-training epoch: the total is the training objective of the step just taken (the weighted
+    /// fidelity terms plus the physics term), and the physics term is the weighted PDE residual of the composite
+    /// solution at the collocation points after that step. The correlation networks have no separate loss of their
+    /// own. Returns the total.
     /// </summary>
-    /// <returns>Mean squared PDE residual as the physics loss.</returns>
-    private T ComputePhysicsLossAtPoints()
+    /// <remarks>
+    /// The physics entry was a constant zero and the total left out the weights and the physics term, so a run with a
+    /// nonzero residual reported no physics error. The residual is evaluated here, outside the training step, rather
+    /// than read back from inside the objective, where a host read would be frozen into a compiled plan.
+    /// </remarks>
+    private T RecordJointEpoch(MultiFidelityTrainingHistory<T> history, T lowFidelityLoss, T highFidelityLoss)
     {
-        // Use high-fidelity data points as collocation points for physics constraint
-        if (_highFidelityInputs == null || _highFidelityInputs.Shape[0] == 0)
+        T totalLoss = GetLastLoss();
+        T physicsLoss = ComputePdeLossAt(CollocationPoints).GetFlat(0);
+        history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, NumOps.Zero, physicsLoss);
+        return totalLoss;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The joint loss of Meng and Karniadakis (2020), Eq. 8: HighFidelityWeight * MSE_HF on the training data,
+    /// plus LowFidelityWeight * MSE_LF on the low-fidelity data while the low-fidelity network is trained jointly
+    /// (not frozen), plus the PDE residual of the composite solution at the collocation points.
+    /// </remarks>
+    protected override Tensor<T> ComputeTrainingLoss(Tensor<T> dataInputs, Tensor<T> dataTargets, Tensor<T> collocationPoints)
+    {
+        var loss = Engine.TensorMultiplyScalar(
+            MeanSquaredError(Forward(dataInputs), dataTargets), NumOps.FromDouble(_highFidelityWeight));
+
+        if (!_lowFidelityFrozen && _lowFidelityInputs is { } lfInputs && _lowFidelityOutputs is { } lfOutputs)
         {
-            return NumOps.Zero;
+            var lowFidelityLoss = MeanSquaredError(_lowFidelityNetwork.Forward(lfInputs), lfOutputs);
+            loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(lowFidelityLoss, NumOps.FromDouble(_lowFidelityWeight)));
         }
 
-        int numPoints = _highFidelityInputs.Shape[0];
-        int inputDim = _highFidelityInputs.Shape[1];
+        var outputs = PinnAutodiff<T>.Evaluate(Forward, collocationPoints, PdeDerivativeOrder, out var derivatives);
+        return Engine.TensorAdd(loss, PhysicsLoss.ComputeTapePdeLoss(collocationPoints, outputs, derivatives));
+    }
 
-        // Sample a batch of points for efficiency (max 256 points per epoch)
-        int batchSize = Math.Min(256, numPoints);
-        var random = RandomHelper.Shared;
-
-        T loss = NumOps.Zero;
-        int validPoints = 0;
-        int skippedPoints = 0;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            int idx = random.Next(numPoints);
-
-            // Extract point coordinates
-            T[] point = new T[inputDim];
-            for (int d = 0; d < inputDim; d++)
-            {
-                point[d] = _highFidelityInputs[idx, d];
-            }
-
-            try
-            {
-                // Compute PDE residual on the combined high-fidelity solution (LF + correction)
-                // The combined solution's derivatives are: d(HF)/dx = d(LF)/dx + d(correction)/dx
-                T[] hfOutput = GetHighFidelitySolution(point);
-
-                // This model's Forward IS u_LF + delta, and ComputeDerivatives evaluates through Predict,
-                // so these are already the combined derivatives. Adding the LF derivatives on top (as
-                // when Forward was the correction alone) would count them twice.
-                var combinedDerivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                    this,
-                    point,
-                    _pdeSpecification.OutputDimension);
-
-                // Compute PDE residual using the combined solution and derivatives
-                T residual = _pdeSpecification.ComputeResidual(new Vector<T>(point), new Vector<T>(hfOutput), combinedDerivatives);
-
-                // Accumulate squared residual
-                loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
-                validPoints++;
-            }
-            catch (Exception ex)
-            {
-                // Skip points where residual computation fails (e.g., at boundaries or numerical issues)
-                skippedPoints++;
-                System.Diagnostics.Debug.WriteLine($"Physics loss computation failed at point {idx}: {ex.Message}");
-                continue;
-            }
-        }
-
-        // Log if too many points are being skipped
-        if (skippedPoints > batchSize / 2)
-        {
-            System.Diagnostics.Debug.WriteLine($"Warning: {skippedPoints}/{batchSize} points skipped in physics loss computation");
-        }
-
-        // Return mean squared residual
-        return validPoints > 0
-            ? NumOps.Divide(loss, NumOps.FromDouble(validPoints))
-            : NumOps.Zero;
+    private Tensor<T> MeanSquaredError(Tensor<T> prediction, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(prediction, target);
+        var axes = Enumerable.Range(0, diff.Rank).ToArray();
+        return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), axes, keepDims: false);
     }
 
     /// <summary>
@@ -551,59 +544,26 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// </summary>
     /// <param name="point">Input coordinates.</param>
     /// <returns>High-fidelity solution estimate.</returns>
-    public T[] GetHighFidelitySolution(T[] point)
-    {
-        var inputTensor = new Tensor<T>(new int[] { 1, point.Length });
-        for (int i = 0; i < point.Length; i++)
-        {
-            inputTensor[0, i] = point[i];
-        }
-
-        // Forward IS the multi-fidelity solution, u_LF + delta.
-        var solution = Forward(inputTensor);
-
-        T[] result = new T[solution.Shape[1]];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = solution[0, i];
-        }
-
-        return result;
-    }
+    public Vector<T> GetHighFidelitySolution(Vector<T> point) => GetSolution(point);
 
     /// <summary>
     /// Gets the low-fidelity prediction at a point.
     /// </summary>
     /// <param name="point">Input coordinates.</param>
     /// <returns>Low-fidelity solution estimate.</returns>
-    public T[] GetLowFidelitySolution(T[] point)
+    public Vector<T> GetLowFidelitySolution(Vector<T> point)
     {
         return _lowFidelityNetwork.GetSolution(point);
     }
 
     /// <summary>
-    /// Gets the correction (difference between fidelity levels) at a point.
+    /// Gets the correction (difference between fidelity levels) at a point: u_HF(x) - u_LF(x).
     /// </summary>
     /// <param name="point">Input coordinates.</param>
     /// <returns>Fidelity correction values.</returns>
-    public T[] GetFidelityCorrection(T[] point)
+    public Vector<T> GetFidelityCorrection(Vector<T> point)
     {
-        var inputTensor = new Tensor<T>(new int[] { 1, point.Length });
-        for (int i = 0; i < point.Length; i++)
-        {
-            inputTensor[0, i] = point[i];
-        }
-
-        // The correction alone: this network's own layers, without the low-fidelity term. GetSolution
-        // now returns the full multi-fidelity solution.
-        var correction = base.Forward(inputTensor);
-        T[] result = new T[correction.Shape[1]];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = correction[0, i];
-        }
-
-        return result;
+        return (Vector<T>)Engine.Subtract(GetSolution(point), _lowFidelityNetwork.GetSolution(point));
     }
 
     /// <summary>
@@ -623,14 +583,5 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     public void SetLowFidelityFrozen(bool frozen)
     {
         _lowFidelityFrozen = frozen;
-    }
-
-    private struct MultiFidelityEpochMetrics
-    {
-        public T TotalLoss;
-        public T LowFidelityLoss;
-        public T HighFidelityLoss;
-        public T CorrelationLoss;
-        public T PhysicsLoss;
     }
 }

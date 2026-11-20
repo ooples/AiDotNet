@@ -129,7 +129,7 @@ internal sealed class IndexTtsEcapa<T>
             : _engine.ReduceSum(_engine.TensorMultiply(weights, v), new[] { 2 }, keepDims: true);
         var mean = Weighted(x);
         var centered = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, full));
-        var variance = _engine.TensorMax(Weighted(_engine.TensorMultiply(centered, centered)), NumOps.FromDouble(1e-12));
+        var variance = _engine.TensorClampMin(Weighted(_engine.TensorMultiply(centered, centered)), NumOps.FromDouble(1e-12));
         return (mean, _engine.TensorSqrt(variance));
     }
 

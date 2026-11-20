@@ -75,8 +75,22 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         "DAMVSR", "DualXVSR", "RealBasicVSR", "RealBasicVSRSharp", "RealESRGANVideo", "RealViformer",
         // - diffusion and flow-matching steps that draw their timesteps, sigmas, noise and rollouts per step;
         "FlashVSR", "MGLDVSR", "RealisVSR", "SeedVR", "StreamDiffVSR",
-        // - an agent whose choice reads host-side quality scores.
+        // - an agent whose choice reads host-side quality scores:
         "Upscale4KAgent",
+
+        // - physics-informed and geometric-mechanics models whose training step differentiates the network once or
+        //   twice with respect to its inputs via a nested backward pass (PinnAutodiff / createGraph), which a
+        //   compile-once forward-backward plan cannot replay:
+        "DeepRitzMethod", "HamiltonianNeuralNetwork", "LagrangianNeuralNetwork", "PhysicsInformedNeuralNetwork",
+        "VariationalPINN",
+
+        // - point-cloud transformers whose space-filling-curve serialization and octree pooling indices are
+        //   data-dependent per point cloud:
+        "PointTransformerV3", "Sonata",
+
+        // - audio models with temporary (#2592) opt-outs for unrecorded log-mel / host-drawn feature-fusion crops
+        //   (CLAPModel) and host-side short-clip receptive-field padding (Wav2Vec2LanguageIdentifier):
+        "CLAPModel", "Wav2Vec2LanguageIdentifier",
     };
 
     [Fact]

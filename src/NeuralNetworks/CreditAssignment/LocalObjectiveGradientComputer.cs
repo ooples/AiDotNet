@@ -9,11 +9,25 @@ using AiDotNet.Tensors.Engines.Autodiff;
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
 /// <summary>Result of one local-objective gradient computation.</summary>
-internal sealed class LocalObjectiveGradients<T>
+internal sealed class LocalObjectiveGradients<T> : IDisposable
 {
-    public LocalObjectiveGradients(Dictionary<Tensor<T>, Tensor<T>> gradients, Tensor<T> outputLoss, Tensor<T> prediction, int hiddenLayers, int localObjectives)
+    private readonly HashSet<Tensor<T>>? _protectedTensors;
+    private bool _disposed;
+
+    public LocalObjectiveGradients(
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        Tensor<T> outputLoss,
+        Tensor<T> prediction,
+        int hiddenLayers,
+        int localObjectives,
+        HashSet<Tensor<T>>? protectedTensors = null)
     {
-        Gradients = gradients; OutputLoss = outputLoss; Prediction = prediction; HiddenLayers = hiddenLayers; LocalObjectives = localObjectives;
+        Gradients = gradients;
+        OutputLoss = outputLoss;
+        Prediction = prediction;
+        HiddenLayers = hiddenLayers;
+        LocalObjectives = localObjectives;
+        _protectedTensors = protectedTensors;
     }
 
     /// <summary>Gradient of every network parameter that received one (keyed by parameter tensor reference).</summary>
@@ -30,6 +44,33 @@ internal sealed class LocalObjectiveGradients<T>
 
     /// <summary>Hidden layers whose rule actually returned a local objective.</summary>
     public int LocalObjectives { get; }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        var seen = _protectedTensors is not null
+            ? new HashSet<Tensor<T>>(_protectedTensors, TensorReferenceComparer<Tensor<T>>.Instance)
+            : new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+
+        // Where is lazy, so a tensor that appears under two keys is skipped once the first visit has added it.
+        foreach (var grad in Gradients.Values.Where(g => g is not null && !seen.Contains(g)))
+        {
+            seen.Add(grad);
+            grad.Dispose();
+        }
+
+        if (OutputLoss is not null && seen.Add(OutputLoss))
+        {
+            OutputLoss.Dispose();
+        }
+
+        if (Prediction is not null && seen.Add(Prediction))
+        {
+            Prediction.Dispose();
+        }
+    }
 }
 
 /// <summary>
@@ -42,7 +83,34 @@ internal sealed class LocalObjectiveGradients<T>
 /// </summary>
 internal static class LocalObjectiveGradientComputer<T>
 {
+    /// <summary>
+    /// Test seam: when set on the current thread, receives each detached next-block input the sequential block path
+    /// creates, so a test can check the tensor is released on every exit path. Null outside tests.
+    /// </summary>
+    [ThreadStatic]
+    internal static Action<Tensor<T>>? BlockInputDetachedObserver;
+
+    /// <summary>
+    /// Test seam: when set on the current thread, receives each result <see cref="Compute"/> returns, so a test can
+    /// check that the caller releases the gradients the result owns. Null outside tests.
+    /// </summary>
+    [ThreadStatic]
+    internal static Action<LocalObjectiveGradients<T>>? ResultObserver;
+
     public static LocalObjectiveGradients<T> Compute(
+        NeuralNetworkBase<T> network,
+        Tensor<T> input,
+        Tensor<T> target,
+        ILocalObjectiveCreditRule<T> rule,
+        LossFunctionBase<T> loss,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> alignTarget)
+    {
+        var result = ComputeCore(network, input, target, rule, loss, alignTarget);
+        ResultObserver?.Invoke(result);
+        return result;
+    }
+
+    private static LocalObjectiveGradients<T> ComputeCore(
         NeuralNetworkBase<T> network,
         Tensor<T> input,
         Tensor<T> target,
@@ -603,12 +671,19 @@ internal static class LocalObjectiveGradientComputer<T>
             }
             rule.ApplyAuxiliaryGradients(auxGrads);
 
+            var protectedTensors = new HashSet<Tensor<T>>(seen, TensorReferenceComparer<Tensor<T>>.Instance)
+            {
+                input,
+                target,
+                alignedTarget,
+            };
+
             // The output objective and prediction outlive this tape (the caller reads the loss value and the
             // prediction's shape). Only the loss handed to ComputeGradients is kept automatically; on a GPU engine the
             // rest are released with the tape, so reading the loss threw "GPU intermediate of a finished GradientTape".
             tape.Retain(outputObjective);
             tape.Retain(prediction);
-            return new LocalObjectiveGradients<T>(grads, outputObjective, prediction, hiddenIdx.Count, locals);
+            return new LocalObjectiveGradients<T>(grads, outputObjective, prediction, hiddenIdx.Count, locals, protectedTensors);
         }
         finally
         {
@@ -758,23 +833,29 @@ internal static class LocalObjectiveGradientComputer<T>
                 {
                     using var suspend = TensorScope.Suspend();
                     using var noGrad = new NoGradScope<T>();
-                    targetMap[kv.Key] = engine.TensorAdd(existing, kv.Value);
+                    engine.TensorAddInPlace(existing, kv.Value);
                 }
             }
         }
 
         Tensor<T> blockInput = input;
+        Tensor<T>? ownedBlockInput = null;
+        // The detached input of the next block lives here from the moment it is created until it becomes
+        // ownedBlockInput, so the finally below releases it when the rest of its block throws.
+        Tensor<T>? nextOwnedBlockInput = null;
         Tensor<T>? finalOutputObjective = null;
         Tensor<T>? finalPrediction = null;
         int totalLocals = 0;
 
+        try
+        {
         for (int b = 0; b < blocks.Count; b++)
         {
             var block = blocks[b];
             bool isTerminalBlock = b == blocks.Count - 1;
 
-            using var blockScope = TensorScope.Begin();
             using var blockTape = new GradientTape<T>();
+            using var blockScope = TensorScope.Begin();
 
             var hiddenOut = new Tensor<T>?[layers.Count];
             var current = blockInput;
@@ -917,6 +998,10 @@ internal static class LocalObjectiveGradientComputer<T>
                 if (cachedCandidateIds is null || cachedRemappedIds is null
                     || cachedCandidateMax != maxCandidates || cachedCandidateSeed != stepSeed)
                 {
+                    cachedCandidateIds?.Dispose();
+                    cachedRemappedIds?.Dispose();
+                    cachedDetachedSampledWeight?.Dispose();
+                    cachedDetachedSampledBias?.Dispose();
                     using (TensorScope.Suspend())
                     {
                         BuildSampledCandidates(preparedIds, preparedVocabSize, maxCandidates, stepSeed,
@@ -928,7 +1013,12 @@ internal static class LocalObjectiveGradientComputer<T>
                     }
                 }
 
-                int u = cachedCandidateIds!.Length;
+                if (cachedCandidateIds is not { } candidateIds || cachedRemappedIds is not { } remappedIds)
+                {
+                    return null;
+                }
+
+                int u = candidateIds.Length;
                 Tensor<T> sampledWeight;
                 Tensor<T> sampledBias;
 
@@ -936,22 +1026,32 @@ internal static class LocalObjectiveGradientComputer<T>
                 {
                     if (cachedDetachedSampledWeight is null || cachedDetachedSampledBias is null)
                     {
-                        using (TensorScope.Suspend())
+                        cachedDetachedSampledWeight?.Dispose();
+                        cachedDetachedSampledBias?.Dispose();
                         using (new NoGradScope<T>())
                         {
+                            Tensor<T> selectedWeight;
                             if (vocabRowsAreInputMajor)
                             {
-                                cachedDetachedSampledWeight = engine.StopGradient(
-                                    engine.TensorIndexSelect(vocabRows, cachedCandidateIds, axis: 1));
+                                selectedWeight = engine.TensorIndexSelect(vocabRows, candidateIds, axis: 1);
                             }
                             else
                             {
-                                var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, cachedCandidateIds);
-                                cachedDetachedSampledWeight = engine.StopGradient(engine.TensorTranspose(pickedRows));
+                                var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, candidateIds);
+                                selectedWeight = engine.TensorTranspose(pickedRows);
                             }
-                            cachedDetachedSampledBias = headBias is not null
-                                ? engine.StopGradient(engine.TensorIndexSelect(headBias, cachedCandidateIds, axis: 0))
-                                : new Tensor<T>(new[] { u });
+
+                            Tensor<T>? selectedBias = headBias is not null
+                                ? engine.TensorIndexSelect(headBias, candidateIds, axis: 0)
+                                : null;
+
+                            using (TensorScope.Suspend())
+                            {
+                                cachedDetachedSampledWeight = engine.StopGradient(selectedWeight);
+                                cachedDetachedSampledBias = selectedBias is not null
+                                    ? engine.StopGradient(selectedBias)
+                                    : new Tensor<T>(new[] { u });
+                            }
                         }
                     }
                     sampledWeight = cachedDetachedSampledWeight;
@@ -961,19 +1061,19 @@ internal static class LocalObjectiveGradientComputer<T>
                 {
                     if (vocabRowsAreInputMajor)
                     {
-                        sampledWeight = engine.TensorIndexSelect(vocabRows, cachedCandidateIds, axis: 1);
+                        sampledWeight = engine.TensorIndexSelect(vocabRows, candidateIds, axis: 1);
                     }
                     else
                     {
-                        var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, cachedCandidateIds);
+                        var pickedRows = engine.TensorEmbeddingLookup<T, int>(vocabRows, candidateIds);
                         sampledWeight = engine.TensorTranspose(pickedRows);
                     }
                     sampledBias = headBias is not null
-                        ? engine.TensorIndexSelect(headBias, cachedCandidateIds, axis: 0)
+                        ? engine.TensorIndexSelect(headBias, candidateIds, axis: 0)
                         : new Tensor<T>(new[] { u });
                 }
 
-                int rows = cachedRemappedIds!.Length;
+                int rows = remappedIds.Length;
                 int inputDim = sampledWeight.Shape[0];
 
                 if (detachParams && !preHeadAllDetachable)
@@ -995,7 +1095,7 @@ internal static class LocalObjectiveGradientComputer<T>
                             innerLossVal = ReduceToScalar(
                                 engine,
                                 engine.FusedLinearCrossEntropyWithLogits(
-                                    flatInner, sampledWeight, sampledBias, cachedRemappedIds));
+                                    flatInner, sampledWeight, sampledBias, remappedIds));
                             var innerGrads = innerTape.ComputeGradients(innerLossVal, sources: new[] { hDetached });
                             innerTape.Retain(innerLossVal);
                             if (innerGrads.TryGetValue(hDetached, out var gh))
@@ -1023,7 +1123,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 var flatHidden = preHead.Rank == 2 ? preHead : engine.Reshape(preHead, new[] { rows, inputDim });
                 DenseLayer<T>.CountFusedReadoutLoss();
                 var sampledLoss = engine.FusedLinearCrossEntropyWithLogits(
-                    flatHidden, sampledWeight, sampledBias, cachedRemappedIds);
+                    flatHidden, sampledWeight, sampledBias, remappedIds);
                 return ReduceToScalar(engine, sampledLoss);
             }
 
@@ -1065,9 +1165,11 @@ internal static class LocalObjectiveGradientComputer<T>
             }
             else
             {
-                var nextInput = engine.StopGradient(current);
-                blockScope.Keep(nextInput);
-                blockInput = nextInput;
+                using (TensorScope.Suspend())
+                {
+                    nextOwnedBlockInput = engine.StopGradient(current);
+                }
+                BlockInputDetachedObserver?.Invoke(nextOwnedBlockInput);
             }
 
             for (int k = block.StartHiddenK; k <= block.EndHiddenK; k++)
@@ -1096,20 +1198,113 @@ internal static class LocalObjectiveGradientComputer<T>
 
             if (isTerminalBlock)
             {
-                blockTape.Retain(finalOutputObjective!);
-                blockScope.Keep(finalOutputObjective!);
-                blockTape.Retain(finalPrediction!);
-                blockScope.Keep(finalPrediction!);
+                if (finalOutputObjective is { } termObj)
+                {
+                    blockTape.Retain(termObj);
+                    blockScope.Keep(termObj);
+                }
+                if (finalPrediction is { } termPred)
+                {
+                    blockTape.Retain(termPred);
+                    blockScope.Keep(termPred);
+                }
             }
+
+            if (ownedBlockInput is { } prevBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(prevBlockInput, input))
+            {
+                prevBlockInput.Dispose();
+            }
+            ownedBlockInput = nextOwnedBlockInput;
+            if (nextOwnedBlockInput is not null)
+                blockInput = nextOwnedBlockInput;
+            nextOwnedBlockInput = null;
+        }
+        }
+        catch
+        {
+            var protectedOnError = new HashSet<Tensor<T>>(allModelSeen, TensorReferenceComparer<Tensor<T>>.Instance)
+            {
+                input,
+                target,
+                alignedTarget,
+            };
+            foreach (var g in grads.Values)
+            {
+                DisposeIfUnprotected(g, protectedOnError);
+            }
+            foreach (var ag in auxGrads.Values)
+            {
+                DisposeIfUnprotected(ag, protectedOnError);
+            }
+            DisposeIfUnprotected(finalOutputObjective, protectedOnError);
+            DisposeIfUnprotected(finalPrediction, protectedOnError);
+            throw;
+        }
+        finally
+        {
+            if (ownedBlockInput is { } remainingBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(remainingBlockInput, input))
+            {
+                remainingBlockInput.Dispose();
+            }
+            if (nextOwnedBlockInput is { } pendingBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(pendingBlockInput, input))
+            {
+                pendingBlockInput.Dispose();
+            }
+            cachedDetachedSampledWeight?.Dispose();
+            cachedDetachedSampledBias?.Dispose();
+            cachedCandidateIds?.Dispose();
+            cachedRemappedIds?.Dispose();
+            preparedIds?.Dispose();
         }
 
-        rule.ApplyAuxiliaryGradients(auxGrads);
+        var protectedTensors = new HashSet<Tensor<T>>(allModelSeen, TensorReferenceComparer<Tensor<T>>.Instance)
+        {
+            input,
+            target,
+            alignedTarget,
+        };
+        try
+        {
+            rule.ApplyAuxiliaryGradients(auxGrads);
+            var auxDisposed = new HashSet<Tensor<T>>(protectedTensors, TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var ag in auxGrads.Values)
+            {
+                DisposeIfUnprotected(ag, auxDisposed);
+            }
+        }
+        catch
+        {
+            foreach (var ag in auxGrads.Values)
+            {
+                DisposeIfUnprotected(ag, protectedTensors);
+            }
+            foreach (var g in grads.Values)
+            {
+                DisposeIfUnprotected(g, protectedTensors);
+            }
+            DisposeIfUnprotected(finalOutputObjective, protectedTensors);
+            DisposeIfUnprotected(finalPrediction, protectedTensors);
+            throw;
+        }
+
         return new LocalObjectiveGradients<T>(
             grads,
             finalOutputObjective ?? throw new InvalidOperationException("Terminal block did not produce an output objective."),
             finalPrediction ?? throw new InvalidOperationException("Terminal block did not produce a prediction."),
             hiddenCount,
-            totalLocals);
+            totalLocals,
+            protectedTensors);
+    }
+
+    private static void DisposeIfUnprotected(Tensor<T>? candidate, HashSet<Tensor<T>> seen)
+    {
+        if (candidate is { } tensor && seen.Add(tensor))
+        {
+            tensor.Dispose();
+        }
     }
 
     internal static void BuildSampledCandidates(

@@ -232,13 +232,8 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     /// </summary>
     private void InitializeNormal(Tensor<T> tensor, double scale, Random random)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = NumOps.FromDouble(normal * scale);
-        }
+        // N(0, scale^2) for every element in one engine call, seeded from the caller's (secure) Random.
+        Engine.TensorNormalInPlace(tensor, 0.0, scale, random.Next());
     }
 
     /// <summary>
@@ -279,75 +274,62 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
         int numLeaves = Options.NumLeaves;
         int depth = Options.TreeDepth;
 
+        if (depth == 0)
+        {
+            // A stump has one leaf that every row reaches with probability 1.
+            var certain = new Tensor<T>(new[] { batchSize, numLeaves });
+            certain.Fill(NumOps.One);
+            return certain;
+        }
+
         var splitWeights = _treeSplitWeights[treeIndex];
         var splitBiases = _treeSplitBiases[treeIndex];
         var temperature = NumOps.FromDouble(Options.Temperature);
 
         // Compute split decisions for all internal nodes
         // Split decision = sigmoid((x @ w + b) / temperature)
-        var splitDecisions = new Tensor<T>([batchSize, numInternalNodes]);
+        var logits = Engine.TensorMatMul(
+            Engine.Reshape(gatedFeatures, new[] { batchSize, NumFeatures }),
+            Engine.TensorTranspose(Engine.Reshape(splitWeights, new[] { numInternalNodes, NumFeatures })));
+        logits = Engine.TensorAdd(logits, Engine.TensorBroadcastTo(
+            Engine.Reshape(splitBiases, new[] { 1, numInternalNodes }), new[] { batchSize, numInternalNodes }));
+        var splitDecisions = Engine.TensorSigmoid(Engine.TensorDivideScalar(logits, temperature));
 
-        for (int b = 0; b < batchSize; b++)
+        // Soft routing: the probability of reaching a leaf is the product, over the root-to-leaf
+        // path, of p (right branch) or 1 - p (left branch). The path is fixed by the tree shape,
+        // so per depth we gather each leaf's node and form c0 + p * c1 with (c0, c1) = (0, 1)
+        // for right and (1, -1) for left.
+        var pathNodes = new int[depth * numLeaves];
+        var offsetTerms = new int[depth * numLeaves];
+        var slopeTerms = new int[depth * numLeaves];
+        for (int leaf = 0; leaf < numLeaves; leaf++)
         {
-            for (int n = 0; n < numInternalNodes; n++)
+            int nodeIdx = 0;
+            for (int d = 0; d < depth; d++)
             {
-                // Compute weighted sum
-                var sum = splitBiases[n];
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    sum = NumOps.Add(sum,
-                        NumOps.Multiply(gatedFeatures[b * NumFeatures + f],
-                                       splitWeights[n * NumFeatures + f]));
-                }
-
-                // Apply temperature scaling and sigmoid
-                var scaled = NumOps.Divide(sum, temperature);
-                var negScaled = NumOps.Negate(scaled);
-                var expNeg = NumOps.Exp(negScaled);
-                splitDecisions[b * numInternalNodes + n] =
-                    NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNeg));
+                bool goRight = ((leaf >> (depth - d - 1)) & 1) == 1;
+                pathNodes[d * numLeaves + leaf] = nodeIdx;
+                offsetTerms[d * numLeaves + leaf] = goRight ? 0 : 1;
+                slopeTerms[d * numLeaves + leaf] = goRight ? 1 : -1;
+                nodeIdx = goRight ? 2 * nodeIdx + 2 : 2 * nodeIdx + 1;
             }
         }
 
-        // Compute leaf probabilities through soft routing
-        // For each leaf, compute the probability of reaching it
-        var leafProbs = new Tensor<T>([batchSize, numLeaves]);
+        var pathShape = new[] { depth, numLeaves };
+        var gathered = Engine.Reshape(
+            Engine.TensorIndexSelect(splitDecisions, Tensor<int>.FromVector(new Vector<int>(pathNodes)), 1),
+            new[] { batchSize, depth, numLeaves });
+        var factors = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(Tensor<int>.FromVector(new Vector<int>(offsetTerms), pathShape).Cast<T>(), new[] { batchSize, depth, numLeaves }),
+            Engine.TensorMultiply(gathered,
+                Engine.TensorBroadcastTo(Tensor<int>.FromVector(new Vector<int>(slopeTerms), pathShape).Cast<T>(), new[] { batchSize, depth, numLeaves })));
 
-        for (int b = 0; b < batchSize; b++)
+        var leafProbs = Engine.Reshape(
+            Engine.TensorSlice(factors, new[] { 0, 0, 0 }, new[] { batchSize, 1, numLeaves }), new[] { batchSize, numLeaves });
+        for (int d = 1; d < depth; d++)
         {
-            for (int leaf = 0; leaf < numLeaves; leaf++)
-            {
-                // Trace path from root to leaf
-                var prob = NumOps.One;
-                int nodeIdx = 0;
-
-                for (int d = 0; d < depth; d++)
-                {
-                    var splitProb = splitDecisions[b * numInternalNodes + nodeIdx];
-
-                    // Check which branch this leaf is on at this depth
-                    int levelSize = 1 << d;
-                    int posInLevel = leaf >> (depth - d - 1);
-                    bool goRight = (posInLevel & 1) == 1;
-
-                    if (goRight)
-                    {
-                        prob = NumOps.Multiply(prob, splitProb);
-                        nodeIdx = 2 * nodeIdx + 2;  // Right child
-                    }
-                    else
-                    {
-                        prob = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, splitProb));
-                        nodeIdx = 2 * nodeIdx + 1;  // Left child
-                    }
-
-                    // Fix node index to be within bounds
-                    if (nodeIdx >= numInternalNodes)
-                        break;
-                }
-
-                leafProbs[b * numLeaves + leaf] = prob;
-            }
+            leafProbs = Engine.TensorMultiply(leafProbs, Engine.Reshape(
+                Engine.TensorSlice(factors, new[] { 0, d, 0 }, new[] { batchSize, 1, numLeaves }), new[] { batchSize, numLeaves }));
         }
 
         return leafProbs;
@@ -364,26 +346,12 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
         int batchSize = leafProbs.Shape[0];
         int numLeaves = Options.NumLeaves;
         int leafDim = Options.LeafDimension;
-
         var leafValues = _treeLeafValues[treeIndex];
-        var output = new Tensor<T>([batchSize, leafDim]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < leafDim; d++)
-            {
-                var sum = NumOps.Zero;
-                for (int leaf = 0; leaf < numLeaves; leaf++)
-                {
-                    sum = NumOps.Add(sum,
-                        NumOps.Multiply(leafProbs[b * numLeaves + leaf],
-                                       leafValues[leaf * leafDim + d]));
-                }
-                output[b * leafDim + d] = sum;
-            }
-        }
-
-        return output;
+        // output[b, d] = sum_leaf leafProbs[b, leaf] * leafValues[leaf, d]
+        return Engine.TensorMatMul(
+            Engine.Reshape(leafProbs, new[] { batchSize, numLeaves }),
+            Engine.Reshape(leafValues, new[] { numLeaves, leafDim }));
     }
 
     /// <summary>
@@ -417,6 +385,44 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
         }
 
         return aggregatedOutput;
+    }
+
+    /// <summary>
+    /// Computes the scalar objective's gradients on the tape and applies one SGD step to every
+    /// trainable tensor: gating layers, gating output, each tree's split weights, split biases
+    /// and leaf values, and the subclass head.
+    /// </summary>
+    /// <param name="objective">Computes the batch-averaged scalar loss through differentiable engine operations.</param>
+    /// <param name="learningRate">Step size applied to the computed gradients.</param>
+    /// <returns>The loss before updating the model.</returns>
+    private protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        List<Tensor<T>> CollectParameters()
+        {
+            var parameters = new List<Tensor<T>>();
+            foreach (var layer in _gatingLayers) parameters.AddRange(layer.GetTrainableParameters());
+            parameters.AddRange(_gatingOutput.GetTrainableParameters());
+            parameters.AddRange(_treeSplitWeights);
+            parameters.AddRange(_treeSplitBiases);
+            parameters.AddRange(_treeLeafValues);
+            foreach (var layer in GetExtraTrainableLayers().OfType<ITrainableLayer<T>>())
+                parameters.AddRange(layer.GetTrainableParameters());
+            return parameters;
+        }
+
+        List<Tensor<T>>? collected = null;
+        try
+        {
+            // The objective already averages over the batch; do not divide its gradients again.
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                () => collected = CollectParameters(), objective, learningRate);
+        }
+        finally
+        {
+            foreach (var parameter in (collected ?? CollectParameters()).Distinct())
+                Engine.InvalidatePersistentTensor(parameter);
+            ResetState();
+        }
     }
 
     /// <summary>
@@ -501,25 +507,15 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
         if (_gatingWeightsCache == null)
         {
             var uniform = new Vector<T>(NumFeatures);
-            var val = NumOps.FromDouble(1.0 / NumFeatures);
-            for (int i = 0; i < NumFeatures; i++)
-                uniform[i] = val;
+            uniform.Fill(NumOps.FromDouble(1.0 / NumFeatures));
             return uniform;
         }
 
         int batchSize = _gatingWeightsCache.Shape[0];
-        var importance = new Vector<T>(NumFeatures);
 
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            var sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, _gatingWeightsCache[b * NumFeatures + f]);
-            }
-            importance[f] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-        }
-
-        return importance;
+        // Mean gating weight per feature over the batch.
+        var summed = Engine.ReduceSum(
+            Engine.Reshape(_gatingWeightsCache, new[] { batchSize, NumFeatures }), new[] { 0 }, false);
+        return Engine.TensorDivideScalar(summed, NumOps.FromDouble(batchSize)).ToVector();
     }
 }

@@ -173,6 +173,42 @@ internal static class PaperOptimizerFactory
         return ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps: 0);
     }
 
+    /// <summary>
+    /// Builds a paper-faithful multi-step schedule that prepends a brief linear cold-start warmup
+    /// from the Goyal batch-scaled rate up to <paramref name="baseRate"/> whenever the active
+    /// <paramref name="batchSize"/> is smaller than <paramref name="referenceBatchSize"/>, leaving
+    /// full-batch runs identical to <see cref="MultiStepLRScheduler"/>.
+    /// </summary>
+    internal static ILearningRateScheduler BuildMultiStepWithSmallBatchWarmup(
+        double baseRate,
+        IReadOnlyList<int> milestones,
+        double decayRate,
+        int batchSize,
+        int referenceBatchSize,
+        int coldStartWarmupSteps = 10)
+    {
+        var milestoneArray = milestones.ToArray();
+        int effectiveBatch = Math.Min(Math.Max(1, batchSize), Math.Max(1, referenceBatchSize));
+        int firstMilestone = milestoneArray.Length > 0 ? milestoneArray.Min() : int.MaxValue;
+        if (effectiveBatch >= referenceBatchSize || coldStartWarmupSteps <= 0 || firstMilestone <= coldStartWarmupSteps)
+        {
+            return new MultiStepLRScheduler(baseRate, milestoneArray, decayRate);
+        }
+
+        double initLr = baseRate * effectiveBatch / Math.Max(1, referenceBatchSize);
+        var warmup = new LinearWarmupScheduler(
+            baseRate,
+            coldStartWarmupSteps,
+            totalSteps: 0,
+            warmupInitLr: initLr,
+            decayMode: LinearWarmupScheduler.DecayMode.Constant);
+        var postWarmup = new MultiStepLRScheduler(
+            baseRate,
+            milestoneArray.Select(m => m - coldStartWarmupSteps).ToArray(),
+            decayRate);
+        return new SequentialLRScheduler(new ILearningRateScheduler[] { warmup, postWarmup }, new[] { coldStartWarmupSteps });
+    }
+
     /// <summary>Constructs the declared optimizer, or <c>null</c> when this library has none for it.</summary>
     private static IGradientBasedOptimizer<T, TInput, TOutput>? Build<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,

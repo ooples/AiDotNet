@@ -131,7 +131,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; T primaryValue = NumOps.FromDouble(primaryProb); T otherValue = NumOps.FromDouble(otherProb); foreach (var lang in SupportedLanguages) result[lang] = lang == detected ? primaryValue : otherValue; return result; }
     /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("SPIRAL does not support streaming.");
 
@@ -153,45 +153,20 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Layers.AddRange(layers);
     }
 
-    // SPIRAL reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private double[] Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new double[count];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
-        return samples;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        if (input.Rank == 1) return Ctc(Samples(input, 0, input.Length), training);
-        int rows = input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = Ctc(Samples(input, r * samples, samples), training);
-        return Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (_, wave) => Ctc(wave, training));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
-    private Tensor<T> Ctc(double[] waveform, bool training)
+    private Tensor<T> Ctc(Tensor<T> waveform, bool training)
     {
         var network = _network ?? throw new InvalidOperationException("The native SPIRAL network is not initialized.");
-        return network.CtcLogits(network.Encode(network.ToTensor(network.Features(waveform)), training, _random), training, _random);
+        return network.CtcLogits(network.Encode(network.FeatureTensor(waveform), training, _random), training, _random);
     }
 
     /// <summary>
@@ -215,7 +190,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
-            var features = network.Features(Samples(audio, r * samples, samples));
+            var features = network.Features(ExtractHostAudioSamples(audio, r * samples, samples));
             var teacherOutput = TeacherOutput(features, training, random);
             var student = network.Predictor(network.Project(network.Encode(network.ToTensor(Perturb(features, random)), training, random)), training);
             var loss = network.ContrastiveLoss(student, teacherOutput, _options.Negatives, _options.Temperature, random);
@@ -231,11 +206,13 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native SPIRAL network.");
         var teacher = EnsureTeacher(features);
         int frames = features.GetLength(0), bins = features.GetLength(1), stride = network.TotalStride;
-        int most = Math.Max(0, Math.Min(_options.MaxTeacherPaddingUnits, frames / 2 / stride));
-        int left = random.Next(most + 1), right = random.Next(most + 1);
+        var (left, right) = TeacherPadding(random);
+        // The padded frames hold the mask embedding, as the reference's RandomShift fills them.
+        var embedding = MaskEmbedding(bins);
         var padded = new double[frames + (left + right) * stride, bins];
-        for (int t = 0; t < frames; t++)
-            for (int b = 0; b < bins; b++) padded[left * stride + t, b] = features[t, b];
+        for (int t = 0; t < padded.GetLength(0); t++)
+            for (int b = 0; b < bins; b++)
+                padded[t, b] = t >= left * stride && t < left * stride + frames ? features[t - left * stride, b] : embedding[b];
         using var _ = new NoGradScope<T>();
         var projected = teacher.Project(teacher.Encode(teacher.ToTensor(padded), training, random));
         int length = network.EncodedLength(frames);
@@ -244,23 +221,51 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return new Tensor<T>(kept._shape, new Vector<T>(kept.ToArray()));
     }
 
+    // The padding units drawn for each end of the teacher's input: uniform on [0, MaxTeacherPaddingUnits] at each end,
+    // whatever the utterance's length. The reference's RandomShift (dist 'uniform', truncate False) applies max_ratio only
+    // to negative shifts, which SPIRAL never draws, so a short utterance can be padded by more than half its length.
+    internal (int Left, int Right) TeacherPadding(Random random)
+    {
+        int most = Math.Max(0, _options.MaxTeacherPaddingUnits);
+        return (random.Next(most + 1), random.Next(most + 1));
+    }
+
     // Adaptive SpecAugment (section 3.3): a proportion of the time steps start masks of TimeMaskLength frames filled with
-    // N(0, 1) noise, and a proportion of the bins start masks of FrequencyMaskLength bins filled with zeros.
+    // the Gaussian mask embedding, and a proportion of the bins start masks of FrequencyMaskLength bins filled with zeros.
     private double[,] Perturb(double[,] features, Random random)
     {
         int frames = features.GetLength(0), bins = features.GetLength(1);
         var perturbed = (double[,])features.Clone();
+        var embedding = MaskEmbedding(bins);
         foreach (int start in Starts(frames, _options.TimeMaskProbability, random))
             for (int t = start; t < Math.Min(frames, start + _options.TimeMaskLength); t++)
-                for (int b = 0; b < bins; b++)
-                {
-                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    perturbed[t, b] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                }
+                for (int b = 0; b < bins; b++) perturbed[t, b] = embedding[b];
         foreach (int start in Starts(bins, _options.FrequencyMaskProbability, random))
             for (int b = start; b < Math.Min(bins, start + _options.FrequencyMaskLength); b++)
                 for (int t = 0; t < frames; t++) perturbed[t, b] = 0.0;
         return perturbed;
+    }
+
+    // The "Gaussian noise" a time mask is filled with (section 3.3): in the reference (mask_emb_type 'gaussian') one fixed
+    // vector of per-bin N(0, 0.01²) values, the same for every masked frame and every step, which keeps a masked frame
+    // from being exactly constant for the layer norms while carrying almost no energy. Filling the frames with fresh
+    // N(0, 1) samples instead put noise as loud as the standardized speech into every masked frame. Drawn once from a
+    // fixed seed, as the reference's vector is a constant independent of the model's seed.
+    private const double MaskEmbeddingStd = 0.01;
+    private double[]? _maskEmbedding;
+
+    private double[] MaskEmbedding(int bins)
+    {
+        if (_maskEmbedding is not null && _maskEmbedding.Length == bins) return _maskEmbedding;
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+        var embedding = new double[bins];
+        for (int b = 0; b < bins; b++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            embedding[b] = MaskEmbeddingStd * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+        }
+        _maskEmbedding = embedding;
+        return embedding;
     }
 
     // ⌊p·n + U(0, 1)⌋ distinct start indices drawn uniformly from n: a proportion p of the steps, rounded at random.
@@ -319,12 +324,61 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public T Pretrain(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        if (_network is null) throw new NotSupportedException("Pre-training runs on the native SPIRAL network.");
+        var network = _network ?? throw new NotSupportedException("Pre-training runs on the native SPIRAL network.");
         // A caller's optimizer serves both phases; otherwise the paper's pre-training recipe (section 4.2).
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var loss = TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+
+        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
+        if (rows == 0) throw new ArgumentException("No audio.", nameof(audio));
+        var teacherCandidates = new Tensor<T>[rows];
+        var perturbedInputs = new Tensor<T>[rows];
+        using (new NoGradScope<T>())
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                var wave = SliceBatchAudioRow(audio, r, rows, samples);
+                var features = network.Features(ExtractHostAudioSamples(wave));
+                var teacherOut = TeacherOutput(features, training: true, _random);
+                perturbedInputs[r] = network.ToTensor(Perturb(features, _random));
+                teacherCandidates[r] = network.SampleTeacherCandidates(teacherOut, _options.Negatives, _random);
+            }
+        }
+
+        Tensor<T> lossValue;
+        if (rows == 1)
+        {
+            lossValue = new Tensor<T>(new[] { 1 });
+            lossValue[0] = TrainWithCustomObjective(perturbedInputs[0], teacherCandidates[0], (stepPerturbed, stepCandidates) =>
+            {
+                var student = network.Predictor(network.Project(network.Encode(stepPerturbed, training: true, _random)), training: true);
+                return network.ContrastiveLossFromCandidates(student, stepCandidates, _options.Temperature);
+            }, _pretrainingOptimizer);
+        }
+        else
+        {
+            var stackedPerturbed = Engine.TensorStack(perturbedInputs, 0);
+            var stackedCandidates = Engine.TensorStack(teacherCandidates, 0);
+            int frames = perturbedInputs[0].Shape[0], bins = perturbedInputs[0].Shape[1];
+            int encLen = teacherCandidates[0].Shape[0], kPlusOne = teacherCandidates[0].Shape[1], projDim = teacherCandidates[0].Shape[2];
+            lossValue = new Tensor<T>(new[] { 1 });
+            lossValue[0] = TrainWithCustomObjective(stackedPerturbed, stackedCandidates, (stepPerturbed, stepCandidates) =>
+            {
+                Tensor<T>? total = null;
+                for (int r = 0; r < rows; r++)
+                {
+                    var pRow = Engine.Reshape(Engine.TensorSlice(stepPerturbed, new[] { r, 0, 0 }, new[] { 1, frames, bins }), new[] { frames, bins });
+                    var cRow = Engine.Reshape(Engine.TensorSlice(stepCandidates, new[] { r, 0, 0, 0 }, new[] { 1, encLen, kPlusOne, projDim }), new[] { encLen, kPlusOne, projDim });
+                    var student = network.Predictor(network.Project(network.Encode(pRow, training: true, _random)), training: true);
+                    var stepLoss = network.ContrastiveLossFromCandidates(student, cRow, _options.Temperature);
+                    total = total is null ? stepLoss : Engine.TensorAdd(total, stepLoss);
+                }
+                return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(audio)), NumOps.FromDouble(1.0 / rows));
+            }, _pretrainingOptimizer);
+        }
+        var loss = lossValue[0];
+
         double progress = Math.Min(1.0, (double)_pretrainingStep++ / Math.Max(1, _options.PretrainingSteps));
         double alpha = _options.TeacherMomentumEnd
             - (_options.TeacherMomentumEnd - _options.TeacherMomentumStart) * (Math.Cos(Math.PI * progress) + 1) / 2;
@@ -343,7 +397,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
 
 
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) => CtcGreedyDecoding.Decode(logits, _options.MaxTextLength);
     private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }

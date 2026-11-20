@@ -42,7 +42,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask R-CNN", "https://arxiv.org/abs/1703.06870", Year = 2017, Authors = "Kaiming He, Georgia Gkioxari, Piotr Dollár, Ross Girshick")]
-public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
+public partial class MaskRCNN<T> : InstanceSegmenterBase<T>, IHostProposalVisionModel
 {
     // He et al. 2017 with FPN (Lin et al. 2017), as in detectron2's R50-FPN configuration.
     private const int BoxRoiSize = 7;

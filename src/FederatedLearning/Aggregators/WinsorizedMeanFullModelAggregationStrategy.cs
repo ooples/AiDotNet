@@ -50,38 +50,19 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
             throw new InvalidOperationException($"Winsorize fraction {_winsorizeFraction:0.###} is too large for {n} clients.");
         }
 
-        var aggregated = new Vector<T>(parameterCount);
-        var buffer = new double[n];
-
-        for (int i = 0; i < parameterCount; i++)
+        // After sorting each coordinate, every order statistic below lowerIndex clamps to row lowerIndex and every
+        // one above upperIndex clamps to row upperIndex, so the winsorized mean weights row lowerIndex by
+        // (lowerIndex + 1) / n, row upperIndex by (n - upperIndex) / n and every row between by 1 / n.
+        var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
+        var rowWeights = new double[n];
+        for (int r = lowerIndex; r <= upperIndex; r++)
         {
-            for (int j = 0; j < n; j++)
-            {
-                buffer[j] = NumOps.ToDouble(clientParameters[clientIds[j]][i]);
-            }
-
-            Array.Sort(buffer);
-
-            double lower = buffer[lowerIndex];
-            double upper = buffer[upperIndex];
-            double sum = 0.0;
-            for (int j = 0; j < n; j++)
-            {
-                double v = buffer[j];
-                if (v < lower)
-                {
-                    v = lower;
-                }
-                else if (v > upper)
-                {
-                    v = upper;
-                }
-
-                sum += v;
-            }
-
-            aggregated[i] = NumOps.FromDouble(sum / n);
+            rowWeights[r] = 1.0 / n;
         }
+
+        rowWeights[lowerIndex] += (double)lowerIndex / n;
+        rowWeights[upperIndex] += (double)(n - 1 - upperIndex) / n;
+        var aggregated = CombineOrderStatisticRows(sorted, rowWeights);
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

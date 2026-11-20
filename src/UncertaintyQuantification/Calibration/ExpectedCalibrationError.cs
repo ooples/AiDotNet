@@ -69,133 +69,93 @@ public class ExpectedCalibrationError<T>
         if (probabilities.Length != predictions.Length || probabilities.Length != trueLabels.Length)
             throw new ArgumentException("All input vectors must have the same length");
 
-        var bins = CreateBins(probabilities, predictions, trueLabels);
-        var ece = _numOps.Zero;
-        var totalSamples = _numOps.FromDouble(probabilities.Length);
+        if (probabilities.Length == 0)
+            return _numOps.Zero;
 
-        foreach (var bin in bins.Where(b => b.Count != 0))
-        {
-            // Compute average confidence in this bin
-            var avgConfidence = _numOps.Divide(bin.SumConfidence, _numOps.FromDouble(bin.Count));
+        var engine = AiDotNetEngine.Current;
+        var (_, correctCounts, sumConfidence) = ComputeBinStatistics(probabilities, predictions, trueLabels);
 
-            // Compute accuracy in this bin
-            var accuracy = _numOps.Divide(_numOps.FromDouble(bin.CorrectCount), _numOps.FromDouble(bin.Count));
-
-            // |accuracy - confidence|
-            var diff = _numOps.Abs(_numOps.Subtract(accuracy, avgConfidence));
-
-            // Weight by proportion of samples in this bin
-            var weight = _numOps.Divide(_numOps.FromDouble(bin.Count), totalSamples);
-
-            // Add weighted difference to ECE
-            ece = _numOps.Add(ece, _numOps.Multiply(weight, diff));
-        }
-
-        return ece;
+        // ECE = sum_m (n_m / n) |acc_m - conf_m| = sum_m |correct_m - sumConfidence_m| / n.
+        // Empty bins contribute zero on their own.
+        var gap = engine.TensorAbs(engine.TensorSubtract(correctCounts.Cast<T>(), sumConfidence));
+        return _numOps.Divide(engine.TensorSum(gap), _numOps.FromDouble(probabilities.Length));
     }
 
     /// <summary>
-    /// Computes a reliability diagram showing calibration across bins.
+    /// Gets reliability diagram data for visualization.
     /// </summary>
     /// <param name="probabilities">Predicted probabilities.</param>
     /// <param name="predictions">Predicted class labels.</param>
     /// <param name="trueLabels">True class labels.</param>
-    /// <returns>A list of (confidence, accuracy, count) tuples for each bin.</returns>
+    /// <returns>One entry per non-empty bin, in bin order: (average confidence, accuracy, sample count).</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> This returns data for plotting a reliability diagram,
-    /// which visualizes how well-calibrated your model is across different confidence levels.
-    /// In a perfect model, the points would lie on a diagonal line (confidence = accuracy).
+    /// <b>For Beginners:</b> A reliability diagram plots confidence vs accuracy.
+    /// Perfect calibration would show all points on the diagonal line (confidence = accuracy).
+    /// Points below the diagonal indicate overconfidence; points above indicate underconfidence.
     /// </remarks>
-    public List<(double confidence, double accuracy, int count)> GetReliabilityDiagram(
+    public List<(T confidence, T accuracy, int count)> GetReliabilityDiagram(
         Vector<T> probabilities, Vector<int> predictions, Vector<int> trueLabels)
     {
-        var bins = CreateBins(probabilities, predictions, trueLabels);
-        var diagram = new List<(double confidence, double accuracy, int count)>();
+        if (probabilities.Length != predictions.Length || probabilities.Length != trueLabels.Length)
+            throw new ArgumentException("All input vectors must have the same length");
 
-        foreach (var bin in bins.Where(b => b.Count != 0))
-        {
-            var avgConfidence = Convert.ToDouble(bin.SumConfidence) / bin.Count;
-            var accuracy = (double)bin.CorrectCount / bin.Count;
+        if (probabilities.Length == 0)
+            return new List<(T confidence, T accuracy, int count)>();
 
-            diagram.Add((avgConfidence, accuracy, bin.Count));
-        }
+        var engine = AiDotNetEngine.Current;
+        var (counts, correctCounts, sumConfidence) = ComputeBinStatistics(probabilities, predictions, trueLabels);
 
-        return diagram;
+        // Keep the non-empty bins; dividing by max(count, 1) leaves the empty ones finite before they are dropped.
+        var occupied = engine.TensorEqScalar(engine.TensorGreaterThan(counts, 0), 1);
+        var countsT = engine.TensorClampMin(counts, 1).Cast<T>();
+        var confidence = engine.TensorMaskedSelect(engine.TensorDivide(sumConfidence, countsT), occupied).ToArray();
+        var accuracy = engine.TensorMaskedSelect(engine.TensorDivide(correctCounts.Cast<T>(), countsT), occupied).ToArray();
+        var binCounts = engine.TensorMaskedSelect(counts, occupied).ToArray();
+
+        return confidence
+            .Zip(accuracy, (c, a) => (c, a))
+            .Zip(binCounts, (ca, n) => (confidence: ca.c, accuracy: ca.a, count: n))
+            .ToList();
     }
 
     /// <summary>
-    /// Creates bins for grouping predictions by confidence level.
+    /// Per-bin sample counts, correct counts and confidence sums.
     /// </summary>
-    private List<CalibrationBin<T>> CreateBins(Vector<T> probabilities, Vector<int> predictions, Vector<int> trueLabels)
+    /// <remarks>
+    /// Bin m (1-based) holds confidences in ((m-1)/M, m/M] (Naeini et al. 2015; Guo et al. 2017, Sec. 2),
+    /// i.e. index ceil(p M) - 1, clamped to [0, M-1] so p = 0 joins the first bin. The product p M rounds
+    /// (0.07 * 100 = 7.000000000000001 in double, whose ceiling is 8), so the candidate index is then checked
+    /// against the boundaries k / M themselves, the values np.linspace(0, 1, M + 1) holds, and moved one bin
+    /// down where p &lt;= its lower boundary or up where p &gt; its upper one.
+    /// The per-bin sums are segmented sums over the bin index, so memory is linear in the samples plus the
+    /// bins, with no [samples x bins] membership. Counts stay int so they are exact for every T.
+    /// </remarks>
+    private (Tensor<int> Counts, Tensor<int> CorrectCounts, Tensor<T> SumConfidence) ComputeBinStatistics(
+        Vector<T> probabilities, Vector<int> predictions, Vector<int> trueLabels)
     {
-        var bins = new List<CalibrationBin<T>>();
-        for (int i = 0; i < _numBins; i++)
-        {
-            bins.Add(new CalibrationBin<T>(_numOps));
-        }
+        var engine = AiDotNetEngine.Current;
+        int n = probabilities.Length;
+        var binCount = _numOps.FromDouble(_numBins);
+        var lastBin = _numOps.FromDouble(_numBins - 1);
 
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var prob = probabilities[i];
-            var probDouble = Convert.ToDouble(prob);
+        var confidence = Tensor<T>.FromVector(probabilities, new[] { n });
+        var candidate = engine.TensorClamp(
+            engine.TensorSubtractScalar(engine.TensorCeiling(engine.TensorMultiplyScalar(confidence, binCount)), _numOps.One),
+            _numOps.Zero, lastBin);
+        var lower = engine.TensorDivideScalar(candidate, binCount);
+        var upper = engine.TensorDivideScalar(engine.TensorAddScalar(candidate, _numOps.One), binCount);
+        var atOrBelowLower = engine.ScalarMinusTensor(_numOps.One, engine.TensorGreaterThan(confidence, lower));
+        var aboveUpper = engine.TensorGreaterThan(confidence, upper);
+        var binIndex = engine.TensorClamp(
+            engine.TensorAdd(engine.TensorSubtract(candidate, atOrBelowLower), aboveUpper), _numOps.Zero, lastBin);
+        var bins = binIndex.Cast<int>();
 
-            // Determine which bin this prediction belongs to
-            int binIndex = (int)(probDouble * _numBins);
-            if (binIndex >= _numBins) binIndex = _numBins - 1; // Handle prob = 1.0
-            if (binIndex < 0) binIndex = 0; // Handle prob = 0.0
+        var counts = engine.TensorBinCount(bins, _numBins);                                          // [M]
+        var correct = engine.TensorEquals(
+            Tensor<int>.FromVector(predictions, new[] { n }), Tensor<int>.FromVector(trueLabels, new[] { n }));
+        var correctCounts = engine.ScatterAdd(correct, bins, 0, _numBins);                           // [M]
+        var sumConfidence = engine.ScatterAdd(confidence, bins, 0, _numBins);                        // [M]
 
-            // Add to bin
-            var isCorrect = predictions[i] == trueLabels[i];
-            bins[binIndex].Add(prob, isCorrect);
-        }
-
-        return bins;
-    }
-}
-
-/// <summary>
-/// Represents a bin for calibration analysis.
-/// </summary>
-internal class CalibrationBin<T>
-{
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
-    /// Sum of the confidence values added to this bin.
-    /// </summary>
-    public T SumConfidence { get; private set; }
-
-    /// <summary>
-    /// Number of samples added to this bin.
-    /// </summary>
-    public int Count { get; private set; }
-
-    /// <summary>
-    /// Number of correctly predicted samples in this bin.
-    /// </summary>
-    public int CorrectCount { get; private set; }
-
-    /// <summary>
-    /// Initializes a new calibration bin.
-    /// </summary>
-    /// <param name="numOps">Numeric operations implementation for <typeparamref name="T"/>.</param>
-    public CalibrationBin(INumericOperations<T> numOps)
-    {
-        _numOps = numOps;
-        SumConfidence = numOps.Zero;
-        Count = 0;
-        CorrectCount = 0;
-    }
-
-    /// <summary>
-    /// Adds a prediction outcome to the bin.
-    /// </summary>
-    /// <param name="confidence">The predicted confidence.</param>
-    /// <param name="isCorrect">Whether the prediction was correct.</param>
-    public void Add(T confidence, bool isCorrect)
-    {
-        SumConfidence = _numOps.Add(SumConfidence, confidence);
-        Count++;
-        if (isCorrect) CorrectCount++;
+        return (counts, correctCounts, sumConfidence);
     }
 }

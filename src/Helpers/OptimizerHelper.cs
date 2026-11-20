@@ -159,17 +159,10 @@ public static class OptimizerHelper<T, TInput, TOutput>
                 }
             }
 
-            // Create a new 2D tensor
-            var result = new Tensor<T>([rows, cols]);
-
-            // Fill the tensor with the data from the selected columns
-            for (int col = 0; col < cols; col++)
-            {
-                for (int row = 0; row < rows; row++)
-                {
-                    result[row, col] = featureList[col][row];
-                }
-            }
+            // Stack the selected columns side by side into a [rows, cols] tensor
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var columns = featureList.Select(v => Tensor<T>.FromVector(v)).ToArray();
+            var result = AiDotNetEngine.Current.TensorStack(columns, 1);
 
             return (TInput)(object)result;
         }
@@ -222,17 +215,14 @@ public static class OptimizerHelper<T, TInput, TOutput>
             if (allInOrder) return X;
         }
 
-        var selectedX = new Matrix<T>(X.Rows, validFeatures.Count);
-        for (int i = 0; i < validFeatures.Count; i++)
+        if (validFeatures.Count == 0)
         {
-            var featureIndex = validFeatures[i];
-            for (int j = 0; j < X.Rows; j++)
-            {
-                selectedX[j, i] = X[j, featureIndex];
-            }
+            return new Matrix<T>(X.Rows, 0);
         }
 
-        return selectedX;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var columnIndices = new Tensor<int>(validFeatures.ToArray(), new[] { validFeatures.Count });
+        return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromMatrix(X), columnIndices, 1).ToMatrix();
     }
 
     /// <summary>
@@ -269,59 +259,15 @@ public static class OptimizerHelper<T, TInput, TOutput>
         var newShape = X._shape.ToArray();
         newShape[1] = selectedFeatures.Count;
 
-        var selectedX = new Tensor<T>(newShape);
-
-        // Calculate the total number of elements to process
-        int totalElements = X.Length;
-        int featuresCount = X.Shape[1];
-        int elementsPerSample = totalElements / X.Shape[0];
-
-        var oldIndices = new int[X.Shape.Length];
-        var newIndices = new int[newShape.Length];
-
-        for (int i = 0; i < X.Shape[0]; i++)
+        if (selectedFeatures.Count == 0)
         {
-            oldIndices[0] = i;
-            newIndices[0] = i;
-            for (int j = 0; j < selectedFeatures.Count; j++)
-            {
-                int featureIndex = selectedFeatures[j];
-                oldIndices[1] = featureIndex;
-                newIndices[1] = j;
-
-                // For 2D tensors, copy directly
-                if (X.Shape.Length == 2)
-                {
-                    selectedX[newIndices] = X[oldIndices];
-                }
-                else
-                {
-                    // For tensors with 3+ dimensions, iterate over additional dimensions
-                    CopyTensorSlice(X, selectedX, oldIndices, newIndices, 2);
-                }
-            }
+            return new Tensor<T>(newShape);
         }
 
-        return selectedX;
-    }
-
-    /// <summary>
-    /// Recursively copies tensor slices for higher-dimensional tensors.
-    /// </summary>
-    private static void CopyTensorSlice(Tensor<T> source, Tensor<T> dest, int[] srcIndices, int[] destIndices, int dim)
-    {
-        if (dim >= source.Shape.Length)
-        {
-            dest[destIndices] = source[srcIndices];
-            return;
-        }
-
-        for (int l = 0; l < source.Shape[dim]; l++)
-        {
-            srcIndices[dim] = l;
-            destIndices[dim] = l;
-            CopyTensorSlice(source, dest, srcIndices, destIndices, dim + 1);
-        }
+        // Gather the selected feature slices along axis 1; any trailing axes come along whole.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var featureIndices = new Tensor<int>(selectedFeatures.ToArray(), new[] { selectedFeatures.Count });
+        return AiDotNetEngine.Current.TensorIndexSelect(X, featureIndices, 1);
     }
 
     /// <summary>
@@ -348,14 +294,22 @@ public static class OptimizerHelper<T, TInput, TOutput>
             throw new ArgumentException("Feature vector cannot be null or empty.", nameof(featureVector));
         }
 
-        // Case 1: Binary feature vector (e.g., [0, 1, 0, 0])
-        if (featureVector.All(v => _numOps.Equals(v, _numOps.Zero) || _numOps.Equals(v, _numOps.One)))
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(featureVector);
+        int length = featureVector.Length;
+
+        // Case 1: Binary feature vector (e.g., [0, 1, 0, 0]). Zero and one are disjoint, so the two
+        // match counts add up to the length exactly when every entry is 0 or 1.
+        int zeroCount = engine.TensorCountNonzero(engine.TensorEquals(values, _numOps.Zero));
+        int oneCount = engine.TensorCountNonzero(engine.TensorEquals(values, _numOps.One));
+        if (zeroCount + oneCount == length)
         {
             return featureVector.IndexOf(_numOps.One);
         }
 
         // Case 2: One-hot encoded vector (e.g., [0, 0, 1, 0])
-        if (featureVector.Count(v => !_numOps.Equals(v, _numOps.Zero)) == 1)
+        if (length - zeroCount == 1)
         {
             return featureVector.IndexOfMax();
         }
@@ -363,14 +317,13 @@ public static class OptimizerHelper<T, TInput, TOutput>
         // Case 3: Continuous values (e.g., weights or importances)
         var threshold = _numOps.FromDouble(0.5); // Adjust this threshold as needed
         var maxValue = featureVector.Max();
-        var normalizedVector = new Vector<T>(featureVector.Select(v => _numOps.Divide(v, maxValue)));
+        var normalizedVector = engine.TensorDivideScalar(values, maxValue);
 
-        for (int i = 0; i < normalizedVector.Length; i++)
+        // First index above the threshold (TensorNonzero lists coordinates in row-major order).
+        var above = engine.TensorNonzero(engine.TensorGreaterThan(normalizedVector, threshold));
+        if (above.Shape[0] > 0)
         {
-            if (_numOps.GreaterThan(normalizedVector[i], threshold))
-            {
-                return i;
-            }
+            return above.GetFlat(0);
         }
 
         // If no value is above the threshold, return the index of the maximum value

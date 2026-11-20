@@ -2,7 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Audio.Codecs;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -298,5 +303,115 @@ public class SparkTTSPaperTests
         Assert.Equal(expected, restored.GetParameters().ToArray());
         Assert.Throws<InvalidDataException>(() =>
             restored.LoadConvertedWeights(_ => new double[expected.Length - 1]));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CodecGan_StrictReplayRefreshesDetachedWaveformsAndPreservesGradientBoundaries(bool generatorStep)
+    {
+        var previous = AiDotNetEngine.Current;
+        try
+        {
+            var engine = new CpuEngine();
+            AiDotNetEngine.Current = engine;
+            // Keep every period discriminator and feature-matching layer, reducing only channel widths.
+            // No mel/band branch is needed to exercise the two actual Detached call sites.
+            var gan = new CodecWaveformGan<double>(engine, 16000, Array.Empty<int>(), Array.Empty<int>(),
+                Array.Empty<int>(), Array.Empty<double>(), discriminatorChannels: 1, discriminatorWidthDivisor: 1024);
+            var discriminatorParameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+                gan.Layers.Cast<ILayer<double>>().ToList());
+            Assert.NotEmpty(discriminatorParameters);
+            for (int p = 0; p < discriminatorParameters.Count; p++)
+            {
+                var tensor = discriminatorParameters[p];
+                for (int i = 0; i < tensor.Length; i++) tensor.SetFlat(i, 0.12 + 0.01 * Math.Sin(i * 0.3 + p));
+                tensor.IncrementVersion();
+            }
+            var real = new Tensor<double>(new[] { 64 });
+            var generated = new Tensor<double>(new[] { 64 });
+            var discriminatorWeight = discriminatorParameters[discriminatorParameters.Count - 1];
+            var parameters = new[] { real, generated, discriminatorWeight };
+            void Fill(int step)
+            {
+                for (int i = 0; i < 64; i++)
+                {
+                    real.SetFlat(i, Math.Sin(0.19 * i + step * 0.7) + 0.15 * Math.Cos(0.07 * i));
+                    generated.SetFlat(i, Math.Cos(0.23 * i - step * 0.4) + 0.2 * Math.Sin(0.11 * i));
+                }
+                real.IncrementVersion();
+                generated.IncrementVersion();
+            }
+            Tensor<double> Objective()
+            {
+                var realWaveform = engine.TensorAddScalar(real, -0.1);
+                var generatedWaveform = engine.TensorAddScalar(generated, 0.05);
+                return generatorStep
+                    ? gan.GeneratorLoss(realWaveform, generatedWaveform)
+                    : gan.DiscriminatorLoss(realWaveform, generatedWaveform);
+            }
+            Fill(0);
+            using var recording = ClosureObjectiveGuard<double>.BeginRecording();
+            CompiledTrainingPlan<double> plan;
+            using (var scope = GraphMode.EnableTraining(parameters))
+            {
+                plan = scope.CompileTraining(parameters, Objective());
+                Assert.Null(scope.HostReadOp);
+            }
+            var guard = ClosureObjectiveGuard<double>.TakeRecorded(out var reason);
+            Assert.True(guard is not null, reason);
+            guard!.AttachTo(plan);
+            using (plan)
+            {
+                double? priorLoss = null;
+                for (int step = 0; step < 2; step++)
+                {
+                    Fill(step);
+                    double expectedLoss;
+                    double[][] expectedGradients;
+                    using (var tape = new GradientTape<double>())
+                    {
+                        var eagerLoss = Objective();
+                        var gradients = tape.ComputeGradients(eagerLoss, parameters);
+                        expectedLoss = eagerLoss.ToArray()[0];
+                        expectedGradients = parameters.Select(parameter => gradients.TryGetValue(parameter, out var gradient)
+                            ? gradient.ToArray() : new double[parameter.Length]).ToArray();
+                    }
+                    // Independent central difference on a connected operand, holding detached operands fixed.
+                    var differentiated = generatorStep ? generated : discriminatorWeight;
+                    int differentiatedIndex = generatorStep ? 7 : 0;
+                    const double delta = 1e-5;
+                    double original = differentiated.GetFlat(differentiatedIndex);
+                    differentiated.SetFlat(differentiatedIndex, original + delta);
+                    differentiated.IncrementVersion();
+                    double plus = Objective().ToArray()[0];
+                    differentiated.SetFlat(differentiatedIndex, original - delta);
+                    differentiated.IncrementVersion();
+                    double minus = Objective().ToArray()[0];
+                    differentiated.SetFlat(differentiatedIndex, original);
+                    differentiated.IncrementVersion();
+                    int connected = generatorStep ? 1 : 2;
+                    Assert.True(Math.Abs(expectedGradients[connected][differentiatedIndex] - (plus - minus) / (2 * delta)) < 1e-6);
+                    Assert.Contains(expectedGradients[connected], value => Math.Abs(value) > 1e-10);
+
+                    Assert.Equal(ClosureGuardResult.Matched, guard.TryRebind(Objective, parameters, out _));
+                    double actualLoss = plan.Step().ToArray()[0];
+                    Assert.Equal(expectedLoss, actualLoss, 9);
+                    if (priorLoss.HasValue) Assert.True(Math.Abs(actualLoss - priorLoss.Value) > 1e-9);
+                    priorLoss = actualLoss;
+                    for (int p = 0; p < parameters.Length; p++)
+                    {
+                        var actual = plan.Gradients[p].ToArray();
+                        Assert.Equal(expectedGradients[p].Length, actual.Length);
+                        for (int i = 0; i < actual.Length; i++)
+                            Assert.True(Math.Abs(expectedGradients[p][i] - actual[i]) < 1e-8);
+                    }
+                    // D updates must not train the generator; G feature targets must not train the real waveform.
+                    int stopped = generatorStep ? 0 : 1;
+                    Assert.All(plan.Gradients[stopped].ToArray(), value => Assert.Equal(0.0, value));
+                }
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
     }
 }

@@ -44,45 +44,7 @@ public class TilePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data._shape;
-        int batch = shape[0];
-        int channels = Math.Min(shape[1], 3);
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < 3; c++)
-            {
-                int srcC = Math.Min(c, channels - 1);
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        // Box blur approximation
-                        double sum = 0;
-                        int count = 0;
-                        int hMin = Math.Max(0, h - _blurRadius);
-                        int hMax = Math.Min(height - 1, h + _blurRadius);
-                        int wMin = Math.Max(0, w - _blurRadius);
-                        int wMax = Math.Min(width - 1, w + _blurRadius);
-
-                        for (int kh = hMin; kh <= hMax; kh++)
-                        {
-                            for (int kw = wMin; kw <= wMax; kw++)
-                            {
-                                sum += NumOps.ToDouble(data[b, srcC, kh, kw]);
-                                count++;
-                            }
-                        }
-
-                        result[b, c, h, w] = NumOps.FromDouble(sum / count);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Box blur approximation: per channel, the mean over the neighbourhood clipped to the image
+        return PreprocessorFilters.ClippedBoxMean(PreprocessorFilters.ToRgb(data), _blurRadius);
     }
 }

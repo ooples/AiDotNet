@@ -1345,6 +1345,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         cancellationToken.ThrowIfCancellationRequested();
         if (_dataLoader is not IStreamingDataLoader<T, TInput, TOutput>)
             ThrowIfStreamingTrainingConfigured("BuildAsync without a streaming data loader");
+        ResetPerBuildRobustnessState();
 
         // Propagate the builder's license key to ModelPersistenceGuard so it can
         // validate during serialize/deserialize operations within BuildAsync.
@@ -1512,6 +1513,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ProgramSynthesisInference);
+
         // Preprocessing requires fitted statistics - for inference-only builds, the pipeline must be pre-fitted
         if (_preprocessingPipeline is not null && !_preprocessingPipeline.IsFitted)
         {
@@ -1601,6 +1604,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
     {
+        // The content moderation group of ConfigureAdversarialRobustness fills the unset text settings.
+        MergeContentModerationIntoSafetyConfig();
         if (_safetyPipelineConfig != null)
         {
             result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
@@ -1651,10 +1656,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
         }
 
-        if (defense is not null)
+        // A defense whose defended model already replaced the result's model must not preprocess a second time in
+        // PredictWithDefense. Without any defense, UseInputPreprocessing alone attaches the preprocessing defense.
+        if (defense is null && !_adversarialDefenseAppliedToModel
+            && _adversarialRobustnessConfiguration is { Options.UseInputPreprocessing: true } preprocessingOnly)
+        {
+            var preprocessingOptions = ToAdversarialDefenseOptions(preprocessingOnly.Options);
+            preprocessingOptions.TrainingEpochs = 0;
+            defense = new AiDotNet.AdversarialRobustness.Defenses.AdversarialTraining<T, TInput, TOutput>(preprocessingOptions);
+        }
+
+        if (defense is not null && !(_adversarialDefenseAppliedToModel && ReferenceEquals(defense, _adversarialRobustnessConfiguration?.CustomDefense)))
         {
             result.SetAdversarialDefense(defense);
         }
+
+        AttachConfiguredRobustness(result);
     }
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
@@ -1866,6 +1883,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
     private AiModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.MetaLearning);
+
         // META-LEARNING TRAINING PATH
 
         // Create profiler session if profiling is enabled
@@ -2009,6 +2028,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
         CancellationToken cancellationToken)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.SelfSupervised);
+
         var profilerSession = CreateProfilerSession();
         using var _ = profilerSession?.Scope("BuildSelfSupervisedInternalAsync");
 
@@ -2269,8 +2290,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             for (int d = 1; d < t.Shape.Length; d++) sampleShape[d] = t.Shape[d];
             for (int k = 0; k < n; k++)
             {
-                var v = new Vector<T>(stride);
-                for (int j = 0; j < stride; j++) v[j] = data[k * stride + j];
+                var v = data.GetSubVector(k * stride, stride);
                 if (new Tensor<T>(sampleShape, v) is TInput ti) into.Add(ti);
             }
         }
@@ -2289,6 +2309,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ReinforcementLearning);
+
         // RL TRAINING PATH
 
         // Create profiler session if profiling is enabled
@@ -2375,7 +2397,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         double intrinsicRewardWeight = _rlOptions.IntrinsicRewardModule is not null
             ? _rlOptions.IntrinsicRewardWeight
             : _configuredIntrinsicRewardWeight;
-        double intrinsicRewardSum = 0;
+        T intrinsicRewardScale = numOps.FromDouble(intrinsicRewardWeight);
+        T intrinsicRewardSum = numOps.Zero;
         long intrinsicRewardCount = 0;
 
         // Training loop
@@ -2416,13 +2439,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     var intrinsic = intrinsicRewardModule.ComputeIntrinsicReward(nextState);
                     intrinsicRewardModule.Update(nextState);
-                    reward = numOps.Add(reward, numOps.FromDouble(intrinsicRewardWeight * numOps.ToDouble(intrinsic)));
-                    intrinsicRewardSum += numOps.ToDouble(intrinsic);
+                    reward = numOps.Add(reward, numOps.Multiply(intrinsicRewardScale, intrinsic));
+                    intrinsicRewardSum = numOps.Add(intrinsicRewardSum, intrinsic);
                     intrinsicRewardCount++;
                 }
 
                 // Store experience
-                rlAgent.StoreExperience(state, action, reward, nextState, isDone);
+                // Termination vs truncation (Gymnasium): an environment time limit, or the MaxStepsPerEpisode cap
+                // reached in a non-terminal state, truncates the episode, and the agent bootstraps V(nextState).
+                bool truncated = AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.IsTruncated(info)
+                    || (!isDone && steps + 1 >= _rlOptions.MaxStepsPerEpisode);
+                bool terminated = isDone && !truncated;
+                rlAgent.StoreExperience(state, action, reward, nextState, terminated, truncated);
 
                 // Train agent
                 var loss = rlAgent.Train();
@@ -2510,8 +2538,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? StatisticsHelper<T>.CalculateMean(episodeRewards)
             : numOps.Zero;
 
+        // The highest episode reward. Seeding the running max with zero reported 0 when every episode
+        // reward was negative.
         var bestReward = episodeRewards.Count > 0
-            ? episodeRewards.Aggregate(numOps.Zero, (max, r) => numOps.GreaterThan(r, max) ? r : max)
+            ? AiDotNetEngine.Current.TensorMaxValue(Vector<T>.FromArray(episodeRewards.ToArray()).AsTensor())
             : numOps.Zero;
 
         var overallAvgLoss = losses.Count > 0
@@ -2620,7 +2650,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // training and watch it fade across runs as the environment becomes familiar.
         if (intrinsicRewardCount > 0)
         {
-            result.SetConfiguredMetric("MeanIntrinsicReward", numOps.FromDouble(intrinsicRewardSum / intrinsicRewardCount));
+            result.SetConfiguredMetric("MeanIntrinsicReward", numOps.Divide(intrinsicRewardSum, numOps.FromDouble(intrinsicRewardCount)));
         }
 
         return result;

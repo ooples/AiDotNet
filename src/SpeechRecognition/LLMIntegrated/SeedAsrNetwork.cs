@@ -12,8 +12,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// converter (four frames spliced along the features, then a linear projection, for 160 ms) and the decoder-only LLM that
 /// reads the converter's output ahead of the transcript.
 /// </summary>
-internal sealed class SeedAsrNetwork<T>
+internal sealed class SeedAsrNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly int _llmWidth, _vocabulary;
@@ -60,6 +64,16 @@ internal sealed class SeedAsrNetwork<T>
     public Tensor<T> Speech(IReadOnlyList<double> waveform, bool training)
     {
         var encoded = Encoder.Encode(Encoder.Features(waveform), training);
+        int frames = encoded.Shape[0] / SpliceFrames * SpliceFrames;
+        if (frames == 0) throw new ArgumentException($"The recording is shorter than {SpliceFrames} encoder frames.", nameof(waveform));
+        var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });
+        return Converter.Forward(_engine.Reshape(kept, new[] { frames / SpliceFrames, EncoderWidth * SpliceFrames }));
+    }
+
+    /// <summary>The speech representation given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
         int frames = encoded.Shape[0] / SpliceFrames * SpliceFrames;
         if (frames == 0) throw new ArgumentException($"The recording is shorter than {SpliceFrames} encoder frames.", nameof(waveform));
         var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });

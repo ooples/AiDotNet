@@ -231,10 +231,9 @@ public partial class SpeechT5<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Text token ids lie in [0, {_options.VocabSize}).");
         }
@@ -337,14 +336,14 @@ public partial class SpeechT5<T> : TtsModelBase<T>
         int frames = mel.Shape[0], m = _options.MelChannels;
         if (mel.Rank != 2 || mel.Shape[1] != m) throw new ArgumentException($"The spectrogram is [frames, {m}].", nameof(mel));
         using var _ = new NoGradScope<T>();
-        var shift = new Tensor<T>(new[] { frames, m });
-        var scale = new Tensor<T>(new[] { frames, m });
-        for (int f = 0; f < frames; f++)
-            for (int c = 0; c < m; c++)
-            {
-                shift[f, c] = Ops.FromDouble(_vocoderMean![c]);
-                scale[f, c] = Ops.FromDouble(1.0 / _vocoderScale![c]);
-            }
+        var vocoderMean = _vocoderMean ?? throw NotNative();
+        var vocoderScale = _vocoderScale ?? throw NotNative();
+        // The vocoder's per-channel statistics (loaded as doubles), as [1, m] rows formed in double and then cast to T.
+        Tensor<double> StatisticsRow(double[] values) => Engine.TensorSlice(
+            new Tensor<double>(values, new[] { 1, values.Length }), new[] { 0, 0 }, new[] { 1, m });
+        var shift = Engine.TensorTile(StatisticsRow(vocoderMean).Cast<T>(), new[] { frames, 1 });
+        // 1 / scale in double: a scale past Half's 65,504 would round to ∞ first and its reciprocal to 0.
+        var scale = Engine.TensorTile(Engine.TensorReciprocal(StatisticsRow(vocoderScale)).Cast<T>(), new[] { frames, 1 });
         var normalized = Engine.TensorMultiply(Engine.TensorSubtract(mel, shift), scale);
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(normalized), new[] { 1, m, frames }));
         return Engine.Reshape(wave, new[] { wave.Length });

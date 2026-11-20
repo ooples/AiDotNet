@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -38,6 +40,7 @@ public class BallTree<T>
     private BallNode? _root;
     private Matrix<T>? _data;
     private int _dimensions;
+    private int[][]? _ranks;
 
     /// <summary>
     /// Initializes a new Ball Tree instance.
@@ -75,11 +78,14 @@ public class BallTree<T>
         _data = data;
         _dimensions = data.Columns;
 
-        var indices = new int[data.Rows];
-        for (int i = 0; i < data.Rows; i++)
+        // Dense per-dimension ranks: integer comparisons of ranks order points exactly like their values
+        _ranks = new int[_dimensions][];
+        for (int j = 0; j < _dimensions; j++)
         {
-            indices[i] = i;
+            _ranks[j] = ClusteringTensorOps.DenseRanks(data.GetColumn(j));
         }
+
+        var indices = Enumerable.Range(0, data.Rows).ToArray();
 
         _root = BuildRecursive(indices, 0, indices.Length);
     }
@@ -108,9 +114,16 @@ public class BallTree<T>
 
         QueryKNearestRecursive(_root, query, k, results);
 
-        results.Sort((a, b) => _numOps.ToDouble(a.Distance).CompareTo(_numOps.ToDouble(b.Distance)));
+        results.Sort(CompareByDistance);
         return results.Take(k).ToArray();
     }
+
+    /// <summary>Orders (index, distance) pairs by ascending distance.</summary>
+    private int CompareByDistance((int Index, T Distance) a, (int Index, T Distance) b)
+        => _numOps.Compare(a.Distance, b.Distance);
+
+    /// <summary>True when <paramref name="distance"/> is at most <paramref name="limit"/>.</summary>
+    private bool IsWithin(T distance, T limit) => _numOps.LessThanOrEquals(distance, limit);
 
     /// <summary>
     /// Finds all points within the given radius of the query point.
@@ -134,22 +147,24 @@ public class BallTree<T>
         var results = new List<(int Index, T Distance)>();
         QueryRadiusRecursive(_root, query, radius, results);
 
-        results.Sort((a, b) => _numOps.ToDouble(a.Distance).CompareTo(_numOps.ToDouble(b.Distance)));
+        results.Sort(CompareByDistance);
         return results.ToArray();
     }
 
     private BallNode BuildRecursive(int[] indices, int start, int end)
     {
         int count = end - start;
+        var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
+        var members = ClusteringTensorOps.SelectRows(data, new ArraySegment<int>(indices, start, count).ToArray());
 
         // Compute centroid of all points
-        var centroid = ComputeCentroid(indices, start, end);
+        var centroid = ClusteringTensorOps.ColumnMeans(members);
+
+        // Radius: largest distance from the centroid to a member
+        T radius = ClusteringTensorOps.MaxOrZero(ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, centroid));
 
         if (count <= _leafSize)
         {
-            // Compute radius
-            T radius = ComputeRadius(centroid, indices, start, end);
-
             var leafIndices = new int[count];
             Array.Copy(indices, start, leafIndices, 0, count);
 
@@ -163,23 +178,19 @@ public class BallTree<T>
         }
 
         // Find the dimension with maximum spread
-        int splitDim = FindMaxSpreadDimension(indices, start, end);
+        int splitDim = FindMaxSpreadDimension(members);
 
         // Sort indices by split dimension
-        var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
-        Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble(data[a, splitDim]).CompareTo(_numOps.ToDouble(data[b, splitDim]))));
+        var ranks = (_ranks ?? throw new InvalidOperationException("BallTree: Data not initialized."))[splitDim];
+        Array.Sort(indices, start, count, Comparer<int>.Create((a, b) => ranks[a].CompareTo(ranks[b])));
 
         int mid = start + count / 2;
-
-        // Compute radius for this node
-        T nodeRadius = ComputeRadius(centroid, indices, start, end);
 
         var node = new BallNode
         {
             IsLeaf = false,
             Centroid = centroid,
-            Radius = nodeRadius
+            Radius = radius
         };
 
         node.Left = BuildRecursive(indices, start, mid);
@@ -188,68 +199,16 @@ public class BallTree<T>
         return node;
     }
 
-    private Vector<T> ComputeCentroid(int[] indices, int start, int end)
+    private int FindMaxSpreadDimension(Matrix<T> members)
     {
-        var centroid = new Vector<T>(_dimensions);
-        int count = end - start;
-
-        for (int j = 0; j < _dimensions; j++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = start; i < end; i++)
-            {
-                sum = _numOps.Add(sum, (_data ?? throw new InvalidOperationException("BallTree: Data not initialized."))[indices[i], j]);
-            }
-            centroid[j] = _numOps.Divide(sum, _numOps.FromDouble(count));
-        }
-
-        return centroid;
+        // First dimension with the largest (max - min) spread; 0 when every dimension is constant
+        var rows = Tensor<T>.FromMatrix(members);
+        var spread = Engine.TensorSubtract(
+            Engine.ReduceMax(rows, new[] { 0 }, false), Engine.TensorAmin(rows, new[] { 0 }, false));
+        return ClusteringTensorOps.ArgMax(spread.ToVector());
     }
 
-    private T ComputeRadius(Vector<T> centroid, int[] indices, int start, int end)
-    {
-        T maxDist = _numOps.Zero;
-
-        for (int i = start; i < end; i++)
-        {
-            var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), indices[i]);
-            T dist = _distanceMetric.Compute(centroid, point);
-            if (_numOps.ToDouble(dist) > _numOps.ToDouble(maxDist))
-            {
-                maxDist = dist;
-            }
-        }
-
-        return maxDist;
-    }
-
-    private int FindMaxSpreadDimension(int[] indices, int start, int end)
-    {
-        int maxDim = 0;
-        double maxSpread = 0;
-
-        for (int d = 0; d < _dimensions; d++)
-        {
-            double min = double.MaxValue;
-            double max = double.MinValue;
-
-            for (int i = start; i < end; i++)
-            {
-                double val = _numOps.ToDouble((_data ?? throw new InvalidOperationException("BallTree: Data not initialized."))[indices[i], d]);
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            double spread = max - min;
-            if (spread > maxSpread)
-            {
-                maxSpread = spread;
-                maxDim = d;
-            }
-        }
-
-        return maxDim;
-    }
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private void QueryKNearestRecursive(BallNode node, Vector<T> query, int k, List<(int Index, T Distance)> results)
     {
@@ -260,8 +219,7 @@ public class BallTree<T>
         if (results.Count >= k)
         {
             T kthDist = results[results.Count - 1].Distance;
-            double minPossibleDist = _numOps.ToDouble(distToCenter) - _numOps.ToDouble(node.Radius);
-            if (minPossibleDist > _numOps.ToDouble(kthDist))
+            if (_numOps.GreaterThan(_numOps.Subtract(distToCenter, node.Radius), kthDist))
             {
                 return;
             }
@@ -269,17 +227,17 @@ public class BallTree<T>
 
         if (node.IsLeaf)
         {
+            var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
             foreach (int idx in (node.Indices ?? throw new InvalidOperationException("BallTree: Leaf node has null indices.")))
             {
-                var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), idx);
-                T dist = _distanceMetric.Compute(query, point);
+                T dist = _distanceMetric.Compute(query, data.GetRow(idx));
                 results.Add((idx, dist));
             }
 
             // Keep only k best
             if (results.Count > k)
             {
-                results.Sort((a, b) => _numOps.ToDouble(a.Distance).CompareTo(_numOps.ToDouble(b.Distance)));
+                results.Sort(CompareByDistance);
                 results.RemoveRange(k, results.Count - k);
             }
             return;
@@ -289,7 +247,7 @@ public class BallTree<T>
         T distToLeft = _distanceMetric.Compute(query, (node.Left ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")).Centroid);
         T distToRight = _distanceMetric.Compute(query, (node.Right ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")).Centroid);
 
-        if (_numOps.ToDouble(distToLeft) <= _numOps.ToDouble(distToRight))
+        if (_numOps.LessThanOrEquals(distToLeft, distToRight))
         {
             QueryKNearestRecursive(node.Left, query, k, results);
             QueryKNearestRecursive(node.Right, query, k, results);
@@ -307,19 +265,18 @@ public class BallTree<T>
         T distToCenter = _distanceMetric.Compute(query, node.Centroid);
 
         // If this ball is too far away, skip it entirely
-        double minPossibleDist = _numOps.ToDouble(distToCenter) - _numOps.ToDouble(node.Radius);
-        if (minPossibleDist > _numOps.ToDouble(radius))
+        if (_numOps.GreaterThan(_numOps.Subtract(distToCenter, node.Radius), radius))
         {
             return;
         }
 
         if (node.IsLeaf)
         {
+            var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
             foreach (int idx in (node.Indices ?? throw new InvalidOperationException("BallTree: Leaf node has null indices.")))
             {
-                var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), idx);
-                T dist = _distanceMetric.Compute(query, point);
-                if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
+                T dist = _distanceMetric.Compute(query, data.GetRow(idx));
+                if (IsWithin(dist, radius))
                 {
                     results.Add((idx, dist));
                 }
@@ -329,16 +286,6 @@ public class BallTree<T>
 
         QueryRadiusRecursive((node.Left ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")), query, radius, results);
         QueryRadiusRecursive((node.Right ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")), query, radius, results);
-    }
-
-    private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
-    {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
     }
 
     /// <summary>

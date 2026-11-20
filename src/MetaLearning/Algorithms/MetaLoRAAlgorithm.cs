@@ -122,30 +122,8 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Initialize task-specific coefficients from meta-learned init
-            var coeffs = new double[_rank];
-            for (int i = 0; i < _rank; i++)
-                coeffs[i] = NumOps.ToDouble(_loraCoeffInit[i]);
-
-            // Inner loop: adapt coefficients on support set
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                // Compute adapted params: θ' = θ + scaling * Σ c_i * v_i
-                var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-                ParamModel.SetParameters(adaptedParams);
-
-                // Compute full gradient ∂L/∂θ' on support set
-                var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Project gradient onto each basis vector: ∂L/∂c_j = scaling * ⟨∂L/∂θ', v_j⟩
-                var stepGradient = new double[coeffs.Length];
-                for (int j = 0; j < _rank; j++)
-                {
-                    double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                    stepGradient[j] = gradCoeff;
-                }
-                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
+            // Inner loop: adapt the coefficients from their meta-learned init on the support set
+            var coeffs = AdaptCoefficients(task, baseParams);
 
             // Evaluate on query set with final adapted params
             var finalAdapted = ComputeAdaptedParams(baseParams, coeffs);
@@ -178,27 +156,8 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (task == null) throw new ArgumentNullException(nameof(task));
         var baseParams = ParamModel.GetParameters();
 
-        // Initialize task-specific coefficients from meta-learned init
-        var coeffs = new double[_rank];
-        for (int i = 0; i < _rank; i++)
-            coeffs[i] = NumOps.ToDouble(_loraCoeffInit[i]);
-
-        // Inner loop: adapt coefficients on support set
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-            ParamModel.SetParameters(adaptedParams);
-
-            var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            var stepGradient = new double[coeffs.Length];
-            for (int j = 0; j < _rank; j++)
-            {
-                double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                stepGradient[j] = gradCoeff;
-            }
-            ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-        }
+        // Inner loop: adapt the coefficients from their meta-learned init on the support set
+        var coeffs = AdaptCoefficients(task, baseParams);
 
         var finalParams = ComputeAdaptedParams(baseParams, coeffs);
         ParamModel.SetParameters(baseParams); // Restore base params
@@ -206,39 +165,52 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     }
 
     /// <summary>
-    /// Computes adapted parameters: θ' = θ_base + (α/r) * Σ c_i * v_i.
+    /// Runs the inner loop on the support set: c starts at the meta-learned init and steps along
+    /// dL/dc_j = scaling * &lt;dL/dtheta', v_j&gt;, the full gradient projected onto each basis vector.
     /// </summary>
-    private Vector<T> ComputeAdaptedParams(Vector<T> baseParams, double[] coeffs)
+    private Vector<T> AdaptCoefficients(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> baseParams)
     {
-        var adapted = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            adapted[d] = baseParams[d];
-
-        for (int i = 0; i < _rank; i++)
+        var coeffs = _loraCoeffInit.Clone();
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            double scaledCoeff = _scalingFactor * coeffs[i];
-            if (Math.Abs(scaledCoeff) < 1e-15) continue;
+            // Compute adapted params: theta' = theta + scaling * sum c_i * v_i
+            ParamModel.SetParameters(ComputeAdaptedParams(baseParams, coeffs));
 
-            int basisOffset = i * _paramDim;
-            T scale = NumOps.FromDouble(scaledCoeff);
-            for (int d = 0; d < _paramDim; d++)
-                adapted[d] = NumOps.Add(adapted[d], NumOps.Multiply(_loraBasis[basisOffset + d], scale));
+            // Compute full gradient dL/dtheta' on support set and project it onto the basis
+            var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            coeffs = ApplyInnerGradients(coeffs, ProjectOntoBasis(fullGrad), _algoOptions.InnerLearningRate, step == 0);
         }
 
-        return adapted;
+        return coeffs;
+    }
+
+    /// <summary>The basis as a [rank, paramDim] matrix, one basis vector per row.</summary>
+    private Tensor<T> BasisMatrix() => Engine.Reshape(Tensor<T>.FromVector(_loraBasis), new[] { _rank, _paramDim });
+
+    /// <summary>
+    /// Computes adapted parameters: theta' = theta_base + (alpha/r) * sum c_i * v_i. Coefficients whose
+    /// scaled value is below 1e-15 in magnitude contribute nothing.
+    /// </summary>
+    private Vector<T> ComputeAdaptedParams(Vector<T> baseParams, Vector<T> coeffs)
+    {
+        var scaled = Tensor<T>.FromVector(Engine.Multiply(coeffs, NumOps.FromDouble(_scalingFactor)));
+        var negligible = Engine.TensorLessThan(Engine.TensorAbs(scaled), NumOps.FromDouble(1e-15));
+        var kept = Engine.TensorMultiply(scaled, Engine.ScalarMinusTensor(NumOps.One, negligible));
+        var offset = Engine.TensorMatMul(Engine.Reshape(kept, new[] { 1, _rank }), BasisMatrix()).ToVector();
+        return Engine.Add(baseParams, offset);
     }
 
     /// <summary>
-    /// Computes dot product of a gradient vector with the i-th basis vector.
+    /// scaling * B g: the dot product of the gradient with every basis vector, over the first
+    /// min(paramDim, |g|) entries of the gradient.
     /// </summary>
-    private double DotProductWithBasis(Vector<T> gradient, int basisIndex)
+    private Vector<T> ProjectOntoBasis(Vector<T> gradient)
     {
-        double dot = 0;
-        int offset = basisIndex * _paramDim;
-        int len = Math.Min(_paramDim, gradient.Length);
-        for (int d = 0; d < len; d++)
-            dot += NumOps.ToDouble(gradient[d]) * NumOps.ToDouble(_loraBasis[offset + d]);
-        return dot;
+        var g = gradient.Length == _paramDim ? gradient
+            : gradient.Length > _paramDim ? gradient.GetSubVector(0, _paramDim)
+            : Vector<T>.Concatenate(gradient, new Vector<T>(_paramDim - gradient.Length));
+        var projected = Engine.TensorMatMul(BasisMatrix(), Tensor<T>.FromVector(g, new[] { _paramDim, 1 })).ToVector();
+        return Engine.Multiply(projected, NumOps.FromDouble(_scalingFactor));
     }
 
     /// <summary>
@@ -247,35 +219,21 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     private double ComputeLoRALoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var baseParams = ParamModel.GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
-            var coeffs = new double[_rank];
-            for (int i = 0; i < _rank; i++)
-                coeffs[i] = NumOps.ToDouble(_loraCoeffInit[i]);
-
             // Quick adaptation
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
-                ParamModel.SetParameters(adaptedParams);
-                var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                var stepGradient = new double[coeffs.Length];
-                for (int j = 0; j < _rank; j++)
-                {
-                    double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                    stepGradient[j] = gradCoeff;
-                }
-                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
+            var coeffs = AdaptCoefficients(task, baseParams);
 
             var finalAdapted = ComputeAdaptedParams(baseParams, coeffs);
             ParamModel.SetParameters(finalAdapted);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(baseParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

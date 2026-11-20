@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Interfaces;
 
@@ -32,6 +33,16 @@ public class AdversarialRobustnessConfiguration<T, TInput, TOutput>
     /// This is the master switch. When false, all robustness features are skipped.
     /// </remarks>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the logger for the robustness build steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>Failures of the optional robustness evaluation steps are logged as warnings, and with
+    /// <see cref="AdversarialRobustnessOptions{T}.VerboseLogging"/> every step is logged as information.
+    /// Null (the default) discards the messages.</para>
+    /// </remarks>
+    public Microsoft.Extensions.Logging.ILogger? Logger { get; set; }
 
     /// <summary>
     /// Gets or sets the robustness options.
@@ -222,9 +233,9 @@ public class AdversarialRobustnessConfiguration<T, TInput, TOutput>
     /// <summary>
     /// Creates a configuration with certified robustness guarantees.
     /// </summary>
-    /// <param name="certificationMethod">The certification method: "RandomizedSmoothing", "IBP", or "CROWN".</param>
+    /// <param name="certificationMethod">The certification method.</param>
     public static AdversarialRobustnessConfiguration<T, TInput, TOutput> WithCertification(
-        string certificationMethod = "RandomizedSmoothing")
+        CertifiedDefenseMethod certificationMethod = CertifiedDefenseMethod.RandomizedSmoothing)
     {
         return new AdversarialRobustnessConfiguration<T, TInput, TOutput>
         {

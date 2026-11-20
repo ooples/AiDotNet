@@ -12,6 +12,6 @@ internal static class GroundedSam2OptionFixture
         var segments = model.Segment(image, "cat .");
         if (segments.Count == 0) throw new InvalidOperationException("The SAM decoder probe requires a detector box.");
         return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(segments.SelectMany(segment =>
-            new[] { segment.MaskScore }.Concat(segment.Mask.Select(ops.ToDouble))));
+            new[] { ops.ToDouble(segment.MaskScore) }.Concat(segment.Mask.Select(ops.ToDouble))));
     }
 }

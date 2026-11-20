@@ -51,20 +51,23 @@ public class OffsetNoiseSchedule<T>
     /// <returns>Noise with per-channel offset applied.</returns>
     public Vector<T> ApplyOffset(Vector<T> noise, int numChannels, Random random)
     {
-        var result = new Vector<T>(noise.Length);
+        var engine = AiDotNetEngine.Current;
         int pixelsPerChannel = noise.Length / numChannels;
 
+        // Offset noise (Guttenberg; diffusers noise_offset): noise + strength * N(0, 1) per channel. The seeded
+        // Box-Muller draws stay one per channel (no engine op consumes a caller Random).
+        var offsets = new Vector<T>(numChannels);
         for (int c = 0; c < numChannels; c++)
         {
-            // Generate per-channel offset
-            double offset = (random.NextDouble() * 2.0 - 1.0) * _offsetStrength;
-            var offsetT = NumOps.FromDouble(offset);
-
-            int start = c * pixelsPerChannel;
-            for (int i = start; i < start + pixelsPerChannel && i < noise.Length; i++)
-                result[i] = NumOps.Add(noise[i], offsetT);
+            double u1 = 1.0 - random.NextDouble();
+            double u2 = random.NextDouble();
+            offsets[c] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * _offsetStrength);
         }
 
-        return result;
+        // Every element of channel c gets offset c; elements past numChannels * pixelsPerChannel keep their noise.
+        var perElement = engine.TensorBroadcastTo(offsets.AsTensor().Reshape(new[] { numChannels, 1 }),
+            new[] { numChannels, pixelsPerChannel }).Reshape(new[] { numChannels * pixelsPerChannel }).ToVector();
+        var padded = Vector<T>.Concatenate(perElement, new Vector<T>(noise.Length - perElement.Length));
+        return engine.Add(noise, padded);
     }
 }

@@ -1,0 +1,61 @@
+{
+  "shard": {
+    "name": "Core",
+    "framework": "net10.0",
+    "project": "tests/AiDotNet.Tests/AiDotNetTests.csproj",
+    "filter": "FullyQualifiedName~Core",
+    "coverageIncludeDirectory": "worker-output",
+    "runner": "ubuntu-latest"
+  },
+  "testedSha": "1111111111111111111111111111111111111111",
+  "runId": "7001",
+  "runAttempt": "1",
+  "artifactId": "8001",
+  "artifactDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "coveragePolicy": {
+    "eventName": "push",
+    "forceCoverage": "false",
+    "COVERAGE_CARRIED": [],
+    "COVERAGE_RUN_WITHOUT_INSTRUMENTATION": [],
+    "COVERAGE_ROLLING": ["Core"]
+  },
+  "primaryJob": {
+    "id": 9001,
+    "name": "Tests (net10.0) - Core",
+    "check_run_url": "https://api.github.com/repos/ooples/AiDotNet/check-runs/99001",
+    "html_url": "https://github.com/ooples/AiDotNet/actions/runs/7001/job/9001",
+    "status": "completed",
+    "conclusion": "failure",
+    "runner_id": 5001,
+    "runner_name": "cpu-linux-1",
+    "labels": ["self-hosted", "Linux", "X64", "aidotnet-cpu"],
+    "steps": [
+      {"name": "Checkout", "conclusion": "success"},
+      {"name": "Run tests", "conclusion": null}
+    ]
+  },
+  "annotations": [
+    {
+      "annotation_level": "failure",
+      "path": ".github",
+      "start_line": 1,
+      "message": "The self-hosted runner lost communication with the server. Verify the machine is running."
+    }
+  ],
+  "sourceArtifact": {
+    "id": 8001,
+    "name": "build-output-1111111111111111111111111111111111111111",
+    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "expired": false,
+    "workflow_run": {"id": 7001}
+  },
+  "runners": [
+    {
+      "id": 5001,
+      "name": "cpu-linux-1",
+      "status": "online",
+      "busy": false,
+      "labels": [{"name": "self-hosted"}, {"name": "Linux"}, {"name": "X64"}, {"name": "aidotnet-cpu"}]
+    }
+  ]
+}

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Projection;
 
@@ -25,13 +26,13 @@ public class SVDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nFeaturesToSelect;
     private readonly int _nComponents;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -57,98 +58,33 @@ public class SVDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Center data
-        var means = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) X[i, j] -= means[j];
-        }
-
+        // Top right singular vectors V of the centred data, from the eigendecomposition of Xc'Xc
+        // (whose eigenvalues are the squared singular values)
         int k = Math.Min(_nComponents, Math.Min(n, p));
-        var rand = RandomHelper.CreateSecureRandom();
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var gram = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
+        var v = FeatureSelectionTensorOps.TopEigenpairs(gram, k, out var squaredSingularValues); // [p, k]
 
-        // Power iteration for top k right singular vectors (V)
-        var V = new double[p, k];
-        for (int c = 0; c < k; c++)
+        // Feature scores = squared loadings weighted by each component's share of the variance
+        var scores = new Tensor<T>(new[] { p });
+        if (k > 0)
         {
-            // Initialize random vector
-            var v = new double[p];
-            for (int j = 0; j < p; j++) v[j] = rand.NextDouble() - 0.5;
-            Normalize(v);
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                // Orthogonalize against previous components
-                for (int prev = 0; prev < c; prev++)
-                {
-                    double dot = 0;
-                    for (int j = 0; j < p; j++) dot += v[j] * V[j, prev];
-                    for (int j = 0; j < p; j++) v[j] -= dot * V[j, prev];
-                }
-
-                // X'X * v
-                var u = new double[n];
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < p; j++)
-                        u[i] += X[i, j] * v[j];
-
-                var newV = new double[p];
-                for (int j = 0; j < p; j++)
-                    for (int i = 0; i < n; i++)
-                        newV[j] += X[i, j] * u[i];
-
-                Normalize(newV);
-                Array.Copy(newV, v, p);
-            }
-
-            for (int j = 0; j < p; j++)
-                V[j, c] = v[j];
+            var squared = engine.TensorMax(squaredSingularValues, NumOps.Zero);
+            T totalVar = NumOps.Add(engine.TensorSum(squared), NumOps.FromDouble(1e-10));
+            var weights = engine.TensorDivideScalar(squared, totalVar);
+            scores = engine.Reshape(
+                engine.TensorMatMul(engine.TensorSquare(v), engine.Reshape(weights, new[] { k, 1 })), new[] { p });
         }
 
-        // Compute singular values
-        var singularValues = new double[k];
-        for (int c = 0; c < k; c++)
-        {
-            var u = new double[n];
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < p; j++)
-                    u[i] += X[i, j] * V[j, c];
-            singularValues[c] = Math.Sqrt(u.Sum(x => x * x));
-        }
-
-        // Feature scores = weighted sum of squared loadings
-        _featureScores = new double[p];
-        double totalVar = singularValues.Sum(s => s * s);
-        for (int c = 0; c < k; c++)
-        {
-            double weight = singularValues[c] * singularValues[c] / (totalVar + 1e-10);
-            for (int j = 0; j < p; j++)
-                _featureScores[j] += weight * V[j, c] * V[j, c];
-        }
+        _featureScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
-    }
-
-    private void Normalize(double[] v)
-    {
-        double norm = Math.Sqrt(v.Sum(x => x * x)) + 1e-10;
-        for (int i = 0; i < v.Length; i++)
-            v[i] /= norm;
     }
 
     /// <inheritdoc />
@@ -157,15 +93,7 @@ public class SVDBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("SVDBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

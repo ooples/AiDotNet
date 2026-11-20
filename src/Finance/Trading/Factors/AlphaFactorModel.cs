@@ -427,18 +427,14 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// <returns>The perturbed copy.</returns>
     private Tensor<T> ShiftFactor(Tensor<T> factors, int factorIndex, double delta)
     {
-        var shifted = new Tensor<T>(factors.Shape.ToArray());
-        for (int i = 0; i < factors.Length; i++)
-        {
-            shifted[i] = factors[i];
-        }
-
-        var step = NumOps.FromDouble(delta);
-        for (int i = factorIndex; i < shifted.Length; i += _numFactors)
-        {
-            shifted[i] = NumOps.Add(shifted[i], step);
-        }
-
+        var engine = AiDotNetEngine.Current;
+        int rows = factors.Length / _numFactors;
+        var offset = new Tensor<T>(new[] { 1, _numFactors });
+        offset[0, factorIndex] = NumOps.FromDouble(delta);
+        var flat = engine.Reshape(factors, new[] { rows, _numFactors });
+        var shifted = engine.Reshape(
+            engine.TensorAdd(flat, engine.TensorBroadcastTo(offset, new[] { rows, _numFactors })),
+            factors.Shape.ToArray());
         return shifted;
     }
 
@@ -510,7 +506,8 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
             var factors = RunLayerSpan(returns, 0, FactorSpanEnd);
             int samples = Math.Max(1, factors.Length / _numFactors);
             var scale = NumOps.FromDouble(1.0 / (2.0 * LoadingProbeStep * samples));
-            var loadings = new Tensor<T>(new[] { _numAssets, _numFactors });
+            var engine = AiDotNetEngine.Current;
+            var columns = new Tensor<T>[_numFactors];
 
             for (int k = 0; k < _numFactors; k++)
             {
@@ -519,20 +516,17 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
                 var down = RunLayerSpan(
                     ShiftFactor(factors, k, -LoadingProbeStep), AlphaSpanStart, AlphaSpanEnd);
 
-                for (int asset = 0; asset < _numAssets; asset++)
-                {
-                    var total = NumOps.Zero;
-                    for (int i = 0; i < samples; i++)
-                    {
-                        total = NumOps.Add(
-                            total,
-                            NumOps.Subtract(up[(i * _numAssets) + asset], down[(i * _numAssets) + asset]));
-                    }
-
-                    loadings[(asset * _numFactors) + k] = NumOps.Multiply(total, scale);
-                }
+                // loading[asset, k] = scale * sum_i (up - down)[i, asset] over the panel's observations.
+                var difference = engine.TensorSlice(
+                    engine.Reshape(engine.TensorSubtract(up, down), new[] { up.Length }),
+                    new[] { 0 },
+                    new[] { samples * _numAssets });
+                columns[k] = engine.TensorMultiplyScalar(
+                    engine.ReduceSum(engine.Reshape(difference, new[] { samples, _numAssets }), new[] { 0 }, false),
+                    scale);
             }
 
+            var loadings = engine.TensorStack(columns, 1);
             return loadings;
         });
     }
@@ -586,47 +580,18 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
                     nameof(returns));
             }
 
-            var factorMean = new T[_numFactors];
-            for (int k = 0; k < _numFactors; k++)
-            {
-                factorMean[k] = NumOps.Zero;
-            }
-
-            for (int i = 0; i < samples; i++)
-            {
-                for (int k = 0; k < _numFactors; k++)
-                {
-                    factorMean[k] = NumOps.Add(factorMean[k], factors[(i * _numFactors) + k]);
-                }
-            }
-
-            var meanScale = NumOps.FromDouble(1.0 / samples);
-            for (int k = 0; k < _numFactors; k++)
-            {
-                factorMean[k] = NumOps.Multiply(factorMean[k], meanScale);
-            }
-
-            var covariance = new Tensor<T>(new[] { _numFactors, _numFactors });
-            for (int i = 0; i < samples; i++)
-            {
-                for (int j = 0; j < _numFactors; j++)
-                {
-                    var centeredJ = NumOps.Subtract(factors[(i * _numFactors) + j], factorMean[j]);
-                    for (int k = 0; k < _numFactors; k++)
-                    {
-                        var centeredK = NumOps.Subtract(factors[(i * _numFactors) + k], factorMean[k]);
-                        int cell = (j * _numFactors) + k;
-                        covariance[cell] = NumOps.Add(
-                            covariance[cell], NumOps.Multiply(centeredJ, centeredK));
-                    }
-                }
-            }
-
-            var covarianceScale = NumOps.FromDouble(1.0 / (samples - 1));
-            for (int cell = 0; cell < covariance.Length; cell++)
-            {
-                covariance[cell] = NumOps.Multiply(covariance[cell], covarianceScale);
-            }
+            // Sample covariance over the observations (N-1 divisor): C = Xc^T Xc / (N - 1), Xc = X - mean(X).
+            var engine = AiDotNetEngine.Current;
+            var observations = engine.Reshape(
+                engine.TensorSlice(
+                    engine.Reshape(factors, new[] { factors.Length }), new[] { 0 }, new[] { samples * _numFactors }),
+                new[] { samples, _numFactors });
+            var factorMean = engine.ReduceMean(observations, new[] { 0 }, true);
+            var centered = engine.TensorSubtract(
+                observations, engine.TensorBroadcastTo(factorMean, new[] { samples, _numFactors }));
+            var covariance = engine.TensorMultiplyScalar(
+                engine.TensorMatMul(engine.TensorTranspose(centered), centered),
+                NumOps.FromDouble(1.0 / (samples - 1)));
 
             return covariance;
         });
@@ -793,8 +758,7 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
+        NumOps.ToFloatSpan(input.AsSpan(), inputData.AsSpan());
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = OnnxSession.InputMetadata.Keys.First();
@@ -806,11 +770,10 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
 
         var outputTensor = results.First().AsTensor<float>();
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var output = new Tensor<T>(outputShape);
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, output.AsWritableSpan());
 
-        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+        return output;
     }
 
     #endregion

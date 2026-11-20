@@ -27,16 +27,16 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _miScores;
-    private double[]? _jmiScores;
+    private Vector<T>? _miScores;
+    private Vector<T>? _jmiScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? MIScores => _miScores;
-    public double[]? JMIScores => _jmiScores;
+    public Vector<T>? MIScores => _miScores;
+    public Vector<T>? JMIScores => _jmiScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,192 +71,26 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Discretize features
-        var discretized = DiscretizeData(data, n, p);
-        var discretizedTarget = DiscretizeTarget(target, n);
-
-        // Compute MI(X_i; Y) for all features
-        _miScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _miScores[j] = ComputeMutualInformation(discretized, j, discretizedTarget, n);
-
-        // Greedy selection using JMI criterion
-        var selected = new List<int>();
-        _jmiScores = new double[p];
-
-        // Select first feature with highest MI
-        int bestFirst = _miScores
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .First().Index;
-
-        selected.Add(bestFirst);
-        _jmiScores[bestFirst] = _miScores[bestFirst];
-
-        // Select remaining features
-        while (selected.Count < _nFeaturesToSelect && selected.Count < p)
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var relevance = info.Relevance();
+        // mean joint relevance with the selected features, kept as a running mean (see
+        // DiscreteInformation.RunningMean)
+        var meanJoint = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
+        var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
-            int bestFeature = -1;
-            double bestJMI = double.MinValue;
+            if (chosen.Count == 0)
+                return relevance;
+            meanJoint = DiscreteInformation<T>.RunningMean(
+                meanJoint, info.JointRelevance(chosen[chosen.Count - 1]), chosen.Count);
+            return meanJoint;
+        });
 
-            for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j)) continue;
-
-                // JMI criterion: sum of I(X_j, X_s; Y) for all selected features
-                double jmi = 0;
-                foreach (int s in selected)
-                {
-                    jmi += ComputeJointMI(discretized, j, s, discretizedTarget, n);
-                }
-                jmi /= selected.Count;
-
-                if (jmi > bestJMI)
-                {
-                    bestJMI = jmi;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                _jmiScores[bestFeature] = bestJMI;
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
-
+        _miScores = relevance.ToVector();
+        _jmiScores = scores;
+        _selectedIndices = selected;
         IsFitted = true;
-    }
-
-    private int[,] DiscretizeData(Matrix<T> data, int n, int p)
-    {
-        var discretized = new int[n, p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-            for (int i = 0; i < n; i++)
-            {
-                if (range < 1e-10)
-                {
-                    discretized[i, j] = 0;
-                }
-                else
-                {
-                    int bin = (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1));
-                    discretized[i, j] = Math.Min(_nBins - 1, Math.Max(0, bin));
-                }
-            }
-        }
-
-        return discretized;
-    }
-
-    private int[] DiscretizeTarget(Vector<T> target, int n)
-    {
-        var discretized = new int[n];
-        for (int i = 0; i < n; i++)
-            discretized[i] = NumOps.GreaterThan(target[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-        return discretized;
-    }
-
-    private double ComputeMutualInformation(int[,] discretized, int featureIdx, int[] target, int n)
-    {
-        var jointCounts = new int[_nBins, 2];
-        var featureCounts = new int[_nBins];
-        var targetCounts = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            int f = discretized[i, featureIdx];
-            int t = target[i];
-            jointCounts[f, t]++;
-            featureCounts[f]++;
-            targetCounts[t]++;
-        }
-
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int t = 0; t < 2; t++)
-            {
-                if (jointCounts[f, t] > 0)
-                {
-                    double pJoint = (double)jointCounts[f, t] / n;
-                    double pFeature = (double)featureCounts[f] / n;
-                    double pTarget = (double)targetCounts[t] / n;
-
-                    if (pFeature > 0 && pTarget > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeJointMI(int[,] discretized, int f1, int f2, int[] target, int n)
-    {
-        // I(X_f1, X_f2; Y) = I(X_f1; Y) + I(X_f2; Y | X_f1)
-        // Approximated as: I(X_f1; Y) + I(X_f2; Y) - I(X_f1; X_f2)
-        var miScores = _miScores ?? throw new InvalidOperationException("MI scores have not been computed.");
-        double mi1 = miScores[f1];
-        double mi2 = miScores[f2];
-        double miJoint = ComputeFeatureFeatureMI(discretized, f1, f2, n);
-
-        return mi1 + mi2 - miJoint;
-    }
-
-    private double ComputeFeatureFeatureMI(int[,] discretized, int f1, int f2, int n)
-    {
-        var jointCounts = new int[_nBins, _nBins];
-        var f1Counts = new int[_nBins];
-        var f2Counts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int v1 = discretized[i, f1];
-            int v2 = discretized[i, f2];
-            jointCounts[v1, v2]++;
-            f1Counts[v1]++;
-            f2Counts[v2]++;
-        }
-
-        double mi = 0;
-        for (int v1 = 0; v1 < _nBins; v1++)
-        {
-            for (int v2 = 0; v2 < _nBins; v2++)
-            {
-                if (jointCounts[v1, v2] > 0)
-                {
-                    double pJoint = (double)jointCounts[v1, v2] / n;
-                    double p1 = (double)f1Counts[v1] / n;
-                    double p2 = (double)f2Counts[v2] / n;
-
-                    if (p1 > 0 && p2 > 0)
-                        mi += pJoint * Math.Log(pJoint / (p1 * p2) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
     }
 
     /// <inheritdoc />
@@ -272,15 +106,7 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("JointMutualInformation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

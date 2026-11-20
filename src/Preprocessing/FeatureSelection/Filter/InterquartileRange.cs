@@ -27,17 +27,17 @@ public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly double _minIQR;
 
-    private double[]? _iqrValues;
-    private double[]? _q1Values;
-    private double[]? _q3Values;
+    private Vector<T>? _iqrValues;
+    private Vector<T>? _q1Values;
+    private Vector<T>? _q3Values;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? IQRValues => _iqrValues;
-    public double[]? Q1Values => _q1Values;
-    public double[]? Q3Values => _q3Values;
+    public Vector<T>? IQRValues => _iqrValues;
+    public Vector<T>? Q1Values => _q1Values;
+    public Vector<T>? Q3Values => _q3Values;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -60,67 +60,21 @@ public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
-        _iqrValues = new double[p];
-        _q1Values = new double[p];
-        _q3Values = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract and sort column values
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-            Array.Sort(values);
-
-            // Compute Q1 and Q3 using linear interpolation
-            _q1Values[j] = Percentile(values, 0.25);
-            _q3Values[j] = Percentile(values, 0.75);
-            _iqrValues[j] = _q3Values[j] - _q1Values[j];
-        }
+        // Q1 and Q3 of every feature using linear interpolation
+        var q1 = FilterStatisticTensorOps.ColumnQuantile(x, 0.25);
+        var q3 = FilterStatisticTensorOps.ColumnQuantile(x, 0.75);
+        var iqr = engine.TensorSubtract(q3, q1);
+        _q1Values = q1.ToVector();
+        _q3Values = q3.ToVector();
+        _iqrValues = iqr.ToVector();
 
         // Select features above threshold or top by IQR
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_iqrValues[j] >= _minIQR)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _iqrValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _iqrValues
-                .Select((iqr, idx) => (IQR: iqr, Index: idx))
-                .OrderByDescending(x => x.IQR)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(iqr, NumOps.FromDouble(_minIQR), _nFeaturesToSelect);
 
         IsFitted = true;
-    }
-
-    private double Percentile(double[] sortedValues, double percentile)
-    {
-        int n = sortedValues.Length;
-        double index = percentile * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-            return sortedValues[lower];
-
-        double fraction = index - lower;
-        return sortedValues[lower] * (1 - fraction) + sortedValues[upper] * fraction;
     }
 
     /// <inheritdoc />
@@ -129,15 +83,7 @@ public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("InterquartileRange has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

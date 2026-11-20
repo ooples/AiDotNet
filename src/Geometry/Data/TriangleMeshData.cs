@@ -113,30 +113,8 @@ public sealed class TriangleMeshData<T>
             return (new Vector<T>(new[] { zero, zero, zero }), new Vector<T>(new[] { zero, zero, zero }));
         }
 
-        var minX = NumOps.MaxValue;
-        var minY = NumOps.MaxValue;
-        var minZ = NumOps.MaxValue;
-        var maxX = NumOps.MinValue;
-        var maxY = NumOps.MinValue;
-        var maxZ = NumOps.MinValue;
-
-        var data = Vertices.Data.Span;
-        for (int i = 0; i < NumVertices; i++)
-        {
-            int offset = i * 3;
-            var x = data[offset];
-            var y = data[offset + 1];
-            var z = data[offset + 2];
-
-            if (NumOps.LessThan(x, minX)) minX = x;
-            if (NumOps.LessThan(y, minY)) minY = y;
-            if (NumOps.LessThan(z, minZ)) minZ = z;
-            if (NumOps.GreaterThan(x, maxX)) maxX = x;
-            if (NumOps.GreaterThan(y, maxY)) maxY = y;
-            if (NumOps.GreaterThan(z, maxZ)) maxZ = z;
-        }
-
-        return (new Vector<T>(new[] { minX, minY, minZ }), new Vector<T>(new[] { maxX, maxY, maxZ }));
+        var (min, max) = GeometryEngineOps<T>.ColumnBounds(Vertices);
+        return (min.ToVector(), max.ToVector());
     }
 
     /// <summary>
@@ -150,66 +128,8 @@ public sealed class TriangleMeshData<T>
             return FaceNormals;
         }
 
-        var normals = new T[NumFaces * 3];
-        var vertices = Vertices.Data.Span;
-        var faces = Faces.Data.Span;
-
-        for (int f = 0; f < NumFaces; f++)
-        {
-            int faceOffset = f * 3;
-            int i0 = faces[faceOffset];
-            int i1 = faces[faceOffset + 1];
-            int i2 = faces[faceOffset + 2];
-
-            int v0 = i0 * 3;
-            int v1 = i1 * 3;
-            int v2 = i2 * 3;
-
-            var v0x = vertices[v0];
-            var v0y = vertices[v0 + 1];
-            var v0z = vertices[v0 + 2];
-            var v1x = vertices[v1];
-            var v1y = vertices[v1 + 1];
-            var v1z = vertices[v1 + 2];
-            var v2x = vertices[v2];
-            var v2y = vertices[v2 + 1];
-            var v2z = vertices[v2 + 2];
-
-            var e1x = NumOps.Subtract(v1x, v0x);
-            var e1y = NumOps.Subtract(v1y, v0y);
-            var e1z = NumOps.Subtract(v1z, v0z);
-            var e2x = NumOps.Subtract(v2x, v0x);
-            var e2y = NumOps.Subtract(v2y, v0y);
-            var e2z = NumOps.Subtract(v2z, v0z);
-
-            var nx = NumOps.Subtract(NumOps.Multiply(e1y, e2z), NumOps.Multiply(e1z, e2y));
-            var ny = NumOps.Subtract(NumOps.Multiply(e1z, e2x), NumOps.Multiply(e1x, e2z));
-            var nz = NumOps.Subtract(NumOps.Multiply(e1x, e2y), NumOps.Multiply(e1y, e2x));
-
-            var lenSq = NumOps.Add(
-                NumOps.Add(NumOps.Multiply(nx, nx), NumOps.Multiply(ny, ny)),
-                NumOps.Multiply(nz, nz));
-
-            if (NumOps.GreaterThan(lenSq, NumOps.Zero))
-            {
-                var invLen = NumOps.Divide(NumOps.One, NumOps.Sqrt(lenSq));
-                nx = NumOps.Multiply(nx, invLen);
-                ny = NumOps.Multiply(ny, invLen);
-                nz = NumOps.Multiply(nz, invLen);
-            }
-            else
-            {
-                nx = NumOps.Zero;
-                ny = NumOps.Zero;
-                nz = NumOps.Zero;
-            }
-
-            normals[faceOffset] = nx;
-            normals[faceOffset + 1] = ny;
-            normals[faceOffset + 2] = nz;
-        }
-
-        FaceNormals = new Tensor<T>(normals, new[] { NumFaces, 3 });
+        var crossProducts = GeometryEngineOps<T>.FaceCrossProducts(Vertices, Faces);
+        FaceNormals = GeometryEngineOps<T>.NormalizeRowsOrZero(crossProducts);
         return FaceNormals;
     }
 
@@ -225,52 +145,8 @@ public sealed class TriangleMeshData<T>
         }
 
         var faceNormals = FaceNormals ?? ComputeFaceNormals();
-        var normals = new T[NumVertices * 3];
-        var faces = Faces.Data.Span;
-
-        for (int f = 0; f < NumFaces; f++)
-        {
-            int faceOffset = f * 3;
-            var nx = faceNormals.Data.Span[faceOffset];
-            var ny = faceNormals.Data.Span[faceOffset + 1];
-            var nz = faceNormals.Data.Span[faceOffset + 2];
-
-            int i0 = faces[faceOffset];
-            int i1 = faces[faceOffset + 1];
-            int i2 = faces[faceOffset + 2];
-
-            AddNormal(normals, i0, nx, ny, nz);
-            AddNormal(normals, i1, nx, ny, nz);
-            AddNormal(normals, i2, nx, ny, nz);
-        }
-
-        for (int v = 0; v < NumVertices; v++)
-        {
-            int offset = v * 3;
-            var nx = normals[offset];
-            var ny = normals[offset + 1];
-            var nz = normals[offset + 2];
-
-            var lenSq = NumOps.Add(
-                NumOps.Add(NumOps.Multiply(nx, nx), NumOps.Multiply(ny, ny)),
-                NumOps.Multiply(nz, nz));
-
-            if (NumOps.GreaterThan(lenSq, NumOps.Zero))
-            {
-                var invLen = NumOps.Divide(NumOps.One, NumOps.Sqrt(lenSq));
-                normals[offset] = NumOps.Multiply(nx, invLen);
-                normals[offset + 1] = NumOps.Multiply(ny, invLen);
-                normals[offset + 2] = NumOps.Multiply(nz, invLen);
-            }
-            else
-            {
-                normals[offset] = NumOps.Zero;
-                normals[offset + 1] = NumOps.Zero;
-                normals[offset + 2] = NumOps.Zero;
-            }
-        }
-
-        VertexNormals = new Tensor<T>(normals, new[] { NumVertices, 3 });
+        var sums = GeometryEngineOps<T>.AccumulateToVertices(faceNormals, Faces, NumVertices);
+        VertexNormals = GeometryEngineOps<T>.NormalizeRowsOrZero(sums);
         return VertexNormals;
     }
 
@@ -303,64 +179,24 @@ public sealed class TriangleMeshData<T>
             throw new InvalidOperationException("VertexUVs are required to include UV features.");
         }
 
-        int colorDim = includeColors && colorsTensor != null ? colorsTensor.Shape[1] : 0;
-        int normalDim = includeNormals ? 3 : 0;
-        int uvDim = includeUVs ? 2 : 0;
-        int featureDim = colorDim + normalDim + uvDim;
-
-        var data = new T[NumVertices * (3 + featureDim)];
-        var vertices = Vertices.Data.Span;
-        var colors = colorsTensor != null ? colorsTensor.Data.Span : default;
-        var uv = VertexUVs != null ? VertexUVs.Data.Span : default;
-        var normalData = normals != null ? normals.Data.Span : default;
-
-        for (int v = 0; v < NumVertices; v++)
+        var parts = new List<Tensor<T>> { Vertices };
+        if (includeColors && colorsTensor != null)
         {
-            int srcOffset = v * 3;
-            int dstOffset = v * (3 + featureDim);
-
-            data[dstOffset] = vertices[srcOffset];
-            data[dstOffset + 1] = vertices[srcOffset + 1];
-            data[dstOffset + 2] = vertices[srcOffset + 2];
-
-            int featureOffset = dstOffset + 3;
-            if (includeColors && colors.Length > 0)
-            {
-                int colorOffset = v * colorDim;
-                for (int c = 0; c < colorDim; c++)
-                {
-                    data[featureOffset + c] = colors[colorOffset + c];
-                }
-                featureOffset += colorDim;
-            }
-
-            if (includeNormals && normalData.Length > 0)
-            {
-                int normalOffset = v * 3;
-                data[featureOffset] = normalData[normalOffset];
-                data[featureOffset + 1] = normalData[normalOffset + 1];
-                data[featureOffset + 2] = normalData[normalOffset + 2];
-                featureOffset += 3;
-            }
-
-            if (includeUVs && uv.Length > 0)
-            {
-                int uvOffset = v * 2;
-                data[featureOffset] = uv[uvOffset];
-                data[featureOffset + 1] = uv[uvOffset + 1];
-            }
+            parts.Add(colorsTensor);
         }
 
-        var tensor = new Tensor<T>(data, new[] { NumVertices, 3 + featureDim });
-        return new PointCloudData<T>(tensor);
-    }
+        if (includeNormals && normals != null)
+        {
+            parts.Add(normals);
+        }
 
-    private static void AddNormal(T[] normals, int vertexIndex, T nx, T ny, T nz)
-    {
-        int offset = vertexIndex * 3;
-        normals[offset] = NumOps.Add(normals[offset], nx);
-        normals[offset + 1] = NumOps.Add(normals[offset + 1], ny);
-        normals[offset + 2] = NumOps.Add(normals[offset + 2], nz);
+        if (includeUVs && VertexUVs != null)
+        {
+            parts.Add(VertexUVs);
+        }
+
+        var tensor = AiDotNetEngine.Current.TensorConcatenate(parts.ToArray(), 1);
+        return new PointCloudData<T>(tensor);
     }
 
     private static void ValidateVertices(Tensor<T> vertices)

@@ -228,12 +228,11 @@ public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
         return ids.Take(maxLength).ToArray();
     }
 
-    private static string TextOf(Tensor<T> ids)
+    private string TextOf(Tensor<T> ids)
     {
         var bytes = new List<byte>();
-        foreach (var v in ids.ToArray())
+        foreach (int id in RoundedIds(ids))
         {
-            int id = (int)Math.Round(Ops.ToDouble(v));
             if (id == 1 || id == 2) bytes.AddRange(System.Text.Encoding.ASCII.GetBytes($"[S{id}]"));
             else if (id >= 0 && id < 256) bytes.Add((byte)id);
             else throw new ArgumentOutOfRangeException(nameof(ids), id, "Byte ids lie in [0, 256).");
@@ -248,7 +247,7 @@ public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) return base.PreprocessText(text);
         var ids = Tokenize(text, _options.MaxTextLength);
         if (ids.Length == 0) throw new ArgumentException("The text has no bytes.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     // ---------------------------------------------------------------- housekeeping

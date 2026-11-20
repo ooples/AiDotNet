@@ -139,8 +139,10 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     {
         string detected = DetectLanguage(audio);
         var result = new Dictionary<string, T>();
+        T selected = NumOps.FromDouble(1.0);
+        T unselected = NumOps.FromDouble(0.0);
         foreach (string language in SupportedLanguages)
-            result[language] = NumOps.FromDouble(language == detected ? 1.0 : 0.0);
+            result[language] = language == detected ? selected : unselected;
         return result;
     }
 

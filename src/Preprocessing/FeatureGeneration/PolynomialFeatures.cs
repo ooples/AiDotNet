@@ -177,35 +177,46 @@ public class PolynomialFeatures<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         var columnsToProcess = GetColumnsToProcess(data.Columns);
-        var result = new T[numRows, _nOutputFeatures];
 
-        for (int i = 0; i < numRows; i++)
+        // Relevant feature columns and, lazily, their powers x_j^e
+        var features = new Tensor<T>[_nInputFeatures];
+        var powers = new Dictionary<(int Feature, int Exponent), Tensor<T>>();
+        for (int j = 0; j < _nInputFeatures; j++)
+            features[j] = PreprocessingTensorOps.Column(data, columnsToProcess[j]);
+
+        Tensor<T> Power(int feature, int exponent)
         {
-            // Extract relevant features
-            var features = new T[_nInputFeatures];
-            for (int j = 0; j < _nInputFeatures; j++)
+            if (exponent == 1)
+                return features[feature];
+            if (!powers.TryGetValue((feature, exponent), out var value))
             {
-                features[j] = data[i, columnsToProcess[j]];
+                value = engine.TensorMultiply(Power(feature, exponent - 1), features[feature]);
+                powers[(feature, exponent)] = value;
             }
 
-            // Compute each polynomial term
-            for (int p = 0; p < _powers.Count; p++)
-            {
-                T term = NumOps.One;
-                for (int j = 0; j < _nInputFeatures; j++)
-                {
-                    for (int power = 0; power < _powers[p][j]; power++)
-                    {
-                        term = NumOps.Multiply(term, features[j]);
-                    }
-                }
-                result[i, p] = term;
-            }
+            return value;
         }
 
-        return new Matrix<T>(result);
+        // Each polynomial term is the product of its features' powers (the empty product is 1)
+        var columns = new List<Tensor<T>>(_powers.Count);
+        for (int p = 0; p < _powers.Count; p++)
+        {
+            Tensor<T>? term = null;
+            for (int j = 0; j < _nInputFeatures; j++)
+            {
+                if (_powers[p][j] == 0)
+                    continue;
+                var factor = Power(j, _powers[p][j]);
+                term = term is null ? factor : engine.TensorMultiply(term, factor);
+            }
+
+            columns.Add(term ?? PreprocessingTensorOps.Filled(new[] { numRows }, NumOps.One));
+        }
+
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>

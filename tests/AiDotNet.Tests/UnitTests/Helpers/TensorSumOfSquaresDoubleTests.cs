@@ -7,9 +7,8 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.Helpers;
 
 /// <summary>
-/// <see cref="TensorReductionHelper.SumOfSquares{T}"/> against a plain loop, and the AiDotNet.Tensors defect it works
-/// around: in 0.150.0 <c>Engine.TensorSumOfSquares</c> is wrong for a <c>Tensor&lt;double&gt;</c> of 16 or more
-/// elements on an AVX2/FMA CPU (fixed upstream in AiDotNet.Tensors #1733, not yet released).
+/// <see cref="TensorReductionHelper.SumOfSquares{T}"/> against a plain loop, including the double SIMD
+/// reduction regression fixed upstream in AiDotNet.Tensors #1733.
 /// </summary>
 public class TensorSumOfSquaresDoubleTests
 {
@@ -48,42 +47,22 @@ public class TensorSumOfSquaresDoubleTests
             $"expected {expected:R}, got {actual:R}");
     }
 
-    /// <summary>
-    /// Pins the upstream defect itself, so the workaround does not outlive it. This test FAILS as soon as the pinned
-    /// AiDotNet.Tensors package sums squares correctly for double (the fix is AiDotNet.Tensors #1733). When it does,
-    /// delete this test and the double branch of <see cref="TensorReductionHelper.SumOfSquares{T}"/>.
-    /// </summary>
+    /// <summary>Every SIMD lane must contribute once to the double sum of squares.</summary>
     [Fact]
-    public void EngineTensorSumOfSquares_Double_StillHasTheTensors0150Defect_RemoveTheWorkaroundWhenThisFails()
+    public void EngineTensorSumOfSquares_Double_AllSixteenElementsContribute()
     {
         var oneToSixteen = Enumerable.Range(1, 16).Select(i => (double)i).ToArray();
         double engineValue = new CpuEngine().TensorSumOfSquares(new Tensor<double>(oneToSixteen, new[] { 16 }));
 
-        // 1^2 + ... + 16^2 = 1496, which every configuration the defect does not reach must return (net471, and a
-        // CPU without FMA, which .NET ties to AVX2, take the correct scalar or dot-product path). With FMA on net5+
-        // the faulty kernel returns 2 * (1^2 + 3^2 + ... + 15^2) = 1360.
-        double expected = 1496.0;
-        bool defectReachable = false;
-#if NET5_0_OR_GREATER
-        defectReachable = System.Runtime.Intrinsics.X86.Fma.IsSupported;
-        if (defectReachable) expected = 1360.0;
-#endif
-
-        Assert.True(
-            engineValue == expected,
-            defectReachable
-                ? $"Engine.TensorSumOfSquares(1..16 as double) returned {engineValue:R}, not the 1360 of the " +
-                  "AiDotNet.Tensors 0.150.0 defect. If it is 1496 the package is fixed: delete this test and the " +
-                  "double branch of TensorReductionHelper.SumOfSquares."
-                : $"Engine.TensorSumOfSquares(1..16 as double) returned {engineValue:R} on a configuration the " +
-                  "defect does not reach; expected 1496.");
+        // The old AVX2/FMA horizontal reduction dropped odd-index squares and returned 1360.
+        Assert.Equal(1496.0, engineValue);
     }
 
     [Fact]
     public void SumOfSquares_SparseDouble_MatchesTheDenseLoop()
     {
         // A 4 x 8 COO tensor whose stored values sit at odd flat indices (odd columns), plus a duplicate coordinate
-        // that must accumulate. The engine op runs the faulty double kernel over a sparse tensor too.
+        // that must accumulate before the sum of squares is taken.
         var rows = new List<int>();
         var columns = new List<int>();
         var values = new List<double>();

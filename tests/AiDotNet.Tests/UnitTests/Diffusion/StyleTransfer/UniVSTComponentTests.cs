@@ -527,6 +527,118 @@ public class UniVSTComponentTests
             new UniVSTOptions { DdimSteps = 0 }.Validate());
     }
 
+    [Fact]
+    public void AdaIn_Half_LargeActivationsKeepTheirStatistics()
+    {
+        // Centred values of +-300 square to 90,000, past Half's 65,504: a squared deviation would be infinite and
+        // the scale sigma(y) / sigma(x) zero, collapsing the output to the style mean.
+        var content = HalfTensor(new[] { 1, 4 }, 300.0, -300.0, 100.0, -100.0);
+        var style = HalfTensor(new[] { 1, 4 }, 1.0, 2.0, 3.0, 4.0);
+
+        var result = new UniVSTAdaInStylization<Half>().AdaIn(content, style);
+
+        // mu(x) = 0, sigma(x) = sqrt(50000); mu(y) = 2.5, sigma(y) = sqrt(1.25): x * sigma(y) / sigma(x) + 2.5.
+        double scale = Math.Sqrt(1.25) / Math.Sqrt(50000.0);
+        var expected = new[] { (300.0 * scale) + 2.5, (-300.0 * scale) + 2.5, (100.0 * scale) + 2.5, (-100.0 * scale) + 2.5 };
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], HalfOps.ToDouble(result[i]), tolerance: 1e-2);
+    }
+
+    [Fact]
+    public void AdaIn_Half_ChannelLongerThan2048KeepsItsMeanAndDeviation()
+    {
+        // 2048 ones then 2048 threes: mu = 2, sigma = 1. A Half running sum is 2048 after the ones and then rounds
+        // every +3 up to +4, so a mean reduced in Half came out as 2.5 and the deviation as about 1.06.
+        const int count = 4096;
+        var values = new double[count];
+        for (int i = 0; i < count; i++)
+            values[i] = i < count / 2 ? 1.0 : 3.0;
+        var content = HalfTensor(new[] { 1, count }, values);
+        var style = HalfTensor(new[] { 1, 2 }, -1.0, 1.0);
+
+        var result = new UniVSTAdaInStylization<Half>().AdaIn(content, style);
+
+        // mu(y) = 0, sigma(y) = 1: (x - 2) / (1 + 1e-8), i.e. -1 and +1, both exact in Half.
+        for (int i = 0; i < count; i++)
+            Assert.Equal(i < count / 2 ? -1.0 : 1.0, HalfOps.ToDouble(result[i]), tolerance: 1e-3);
+    }
+
+    [Fact]
+    public void MaskPropagation_Half_NormalizesRowsWhoseSquaredNormOverflows()
+    {
+        // 256 channels of magnitude 20: the squared norm 102,400 overflows Half, which used to zero the whole row.
+        const int channels = 256;
+        var values = new double[2 * channels];
+        for (int c = 0; c < channels; c++)
+        {
+            values[c] = c % 2 == 0 ? 20.0 : -20.0;
+            values[channels + c] = c < channels / 2 ? 30.0 : 0.0;
+        }
+
+        var rows = UniVSTMaskPropagation<Half>.NormalizeRows(HalfTensor(new[] { 1, 2, channels }, values), 2, channels);
+
+        for (int c = 0; c < channels; c++)
+        {
+            Assert.Equal((c % 2 == 0 ? 1.0 : -1.0) / Math.Sqrt(channels), HalfOps.ToDouble(rows[c]), tolerance: 1e-3);
+            Assert.Equal(c < channels / 2 ? 1.0 / Math.Sqrt(channels / 2) : 0.0, HalfOps.ToDouble(rows[channels + c]), tolerance: 1e-3);
+        }
+    }
+
+    [Fact]
+    public void MaskPropagation_Half_RowWiderThan2048ChannelsKeepsUnitNorm()
+    {
+        // 4096 equal channels: each normalized entry is 1 / sqrt(4096) = 1 / 64. A Half running sum of the
+        // squares stalls at 2048, which gave the norm sqrt(2048) and the entries 0.0221 instead.
+        const int channels = 4096;
+        var values = new double[channels];
+        for (int c = 0; c < channels; c++)
+            values[c] = 1.0;
+
+        var rows = UniVSTMaskPropagation<Half>.NormalizeRows(HalfTensor(new[] { 1, 1, channels }, values), 1, channels);
+
+        for (int c = 0; c < channels; c++)
+            Assert.Equal(1.0 / 64.0, HalfOps.ToDouble(rows[c]), tolerance: 1e-6);
+    }
+
+    [Theory]
+    [InlineData(1L)]
+    [InlineData(200L)]
+    public void MaskPropagation_BlockedVoteMatchesTheSingleBlockVote(long blockElements)
+    {
+        // Voting the query points in row blocks bounds the [points, anchors] grids; every point's vote depends
+        // only on its own row, so any block size must reproduce the single-block masks exactly.
+        const int h = 8, w = 8, c = 4;
+        var frames = new List<Tensor<double>>();
+        for (int f = 0; f < 4; f++)
+        {
+            int shift = f;
+            frames.Add(Features(h, w, c, (y, x, k) => Math.Sin((0.7 * (x + shift)) + (1.3 * y) + (2.1 * k)) + (k == 0 && x >= 4 ? 1.0 : 0.0)));
+        }
+        var mask = Mask(h, w, (y, x) => x >= 4 ? 1.0 : 0.0);
+
+        var single = new UniVSTMaskPropagation<double>(neighbors: 5, downsampleRate: 0.5, seed: 3)
+            .Propagate(frames, mask);
+        var blocked = new UniVSTMaskPropagation<double>(neighbors: 5, downsampleRate: 0.5, seed: 3)
+        {
+            SimilarityBlockElements = blockElements
+        }.Propagate(frames, mask);
+
+        Assert.Equal(single.Count, blocked.Count);
+        for (int f = 0; f < single.Count; f++)
+            for (int p = 0; p < h * w; p++)
+                Assert.Equal(single[f][p], blocked[f][p]);
+    }
+
+    private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<Half> HalfOps =
+        AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+    private static Tensor<Half> HalfTensor(int[] shape, params double[] values)
+    {
+        var data = new Half[values.Length];
+        for (int i = 0; i < values.Length; i++) data[i] = HalfOps.FromDouble(values[i]);
+        return new Tensor<Half>(shape, new Vector<Half>(data));
+    }
+
     private static (double Mean, double Std) MeanStd(Tensor<double> t, int offset, int count)
     {
         double mean = 0.0;

@@ -42,7 +42,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 public partial class PriorGrad<T> : DiffusionVocoderBase<T>
 {
     private DiffWaveNetwork<T>? _network;
+    private DiffWaveNetwork<T> RequiredNetwork => _network ?? throw new InvalidOperationException("The network has not been created.");
     private DifferentiableMel<T>? _features;
+    private DifferentiableMel<T> RequiredFeatures => _features ?? throw new InvalidOperationException("The network has not been created.");
 
     /// <summary>Creates a PriorGrad that runs an exported ONNX graph.</summary>
     public PriorGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, PriorGradOptions? options = null)
@@ -96,13 +98,13 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => RequiredNetwork.Forward(noisy, level, mel);
 
     /// <inheritdoc />
     /// <remarks>The natural-log mel spectrogram <c>ln(max(mel, 1e-5))</c> of the HiFi-GAN pipeline.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var rows = _features!.Forward(audio);
+        var rows = RequiredFeatures.Forward(audio);
         return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
     }
 
@@ -125,8 +127,7 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
     private Tensor<T> NormalizeRecording(Tensor<T> audio)
     {
         var flat = Flat(audio);
-        double peak = 0;
-        for (int i = 0; i < flat.Length; i++) peak = Math.Max(peak, Math.Abs(NumOps.ToDouble(flat[i])));
+        double peak = flat.Length == 0 ? 0 : NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(flat)));
         double scale = peak >= 2.2250738585072014e-308 ? .95 / peak : .95;
         int samples = flat.Length - flat.Length % UpsampleFactor;
         if (samples == 0) throw new ArgumentException("The recording must contain at least one complete hop.", nameof(audio));

@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -46,16 +48,27 @@ public class CertifiedDefenseOptions<T> : ModelOptions
     public double ConfidenceLevel { get; set; } = 0.99;
 
     /// <summary>
+    /// Gets or sets the number of noisy samples randomized smoothing uses to choose the top class
+    /// before it estimates that class's probability from <see cref="NumSamples"/> fresh samples.
+    /// </summary>
+    /// <value>Defaults to 100 (n0 in Cohen et al. 2019, Sec. 4).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Using separate samples to pick the class and to measure how often it
+    /// wins keeps the guarantee honest: the same samples would make the winner look more certain.</para>
+    /// </remarks>
+    public int SelectionSamples { get; set; } = 100;
+
+    /// <summary>
     /// Gets or sets the certification method to use.
     /// </summary>
-    /// <value>The method name, defaulting to "RandomizedSmoothing".</value>
+    /// <value>Defaults to <see cref="CertifiedDefenseMethod.RandomizedSmoothing"/>.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Different certification methods have different trade-offs:
     /// - RandomizedSmoothing: Works for any model, scalable
     /// - IBP (Interval Bound Propagation): Faster but might be looser
     /// - CROWN: Tight bounds but more computationally expensive</para>
     /// </remarks>
-    public string CertificationMethod { get; set; } = "RandomizedSmoothing";
+    public CertifiedDefenseMethod CertificationMethod { get; set; } = CertifiedDefenseMethod.RandomizedSmoothing;
 
     /// <summary>
     /// Gets or sets the batch size for certification.
@@ -80,11 +93,11 @@ public class CertifiedDefenseOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for certification.
     /// </summary>
-    /// <value>The norm type, defaulting to "L2".</value>
+    /// <value>Defaults to <see cref="AdversarialNormType.L2"/>.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> This defines what "small perturbation" means for certification.
     /// L2 norm is common for randomized smoothing.</para>
     /// </remarks>
-    public string NormType { get; set; } = "L2";
+    public AdversarialNormType NormType { get; set; } = AdversarialNormType.L2;
 
 }

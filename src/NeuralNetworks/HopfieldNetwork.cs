@@ -244,28 +244,21 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     public void Train(List<Vector<T>> patterns)
     {
+        if (_size == 0)
+            return;
+
+        // Hebbian rule: w_ij += p_i * p_j for i != j, pattern by pattern (the diagonal is never touched).
+        var offDiagonal = Engine.TensorEquals(Engine.TensorEye<T>(_size), NumOps.Zero);
+        var accumulated = _weights;
         foreach (var pattern in patterns)
         {
-            for (int i = 0; i < _size; i++)
-            {
-                for (int j = 0; j < _size; j++)
-                {
-                    if (i != j)
-                    {
-                        _weights[i, j] = NumOps.Add(_weights[i, j], NumOps.Multiply(pattern[i], pattern[j]));
-                    }
-                }
-            }
+            var column = Tensor<T>.FromVector(pattern.GetSubVector(0, _size));
+            var outer = Engine.TensorOuter(column, column);
+            accumulated = Engine.TensorWhere(offDiagonal, Engine.TensorAdd(accumulated, outer), accumulated);
         }
 
         // Normalize weights
-        for (int i = 0; i < _size; i++)
-        {
-            for (int j = 0; j < _size; j++)
-            {
-                _weights[i, j] = NumOps.Divide(_weights[i, j], NumOps.FromDouble(patterns.Count));
-            }
-        }
+        Engine.TensorDivideScalar(accumulated, NumOps.FromDouble(patterns.Count)).CopyTo(_weights.AsWritableSpan());
     }
 
     /// <summary>
@@ -418,23 +411,17 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         // Hopfield networks operate on bipolar patterns; raw [0,1] inputs
         // all have the same sign and produce identical sign() output.
         // Standard normalization: x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
-        var bipolarInput = new Vector<T>(inputVector.Length);
         var two = NumOps.FromDouble(2.0);
-        for (int i = 0; i < inputVector.Length; i++)
-        {
-            bipolarInput[i] = NumOps.Subtract(NumOps.Multiply(two, inputVector[i]), NumOps.One);
-        }
+        var bipolarInput = Engine.TensorSubtractScalar(
+            Engine.TensorMultiplyScalar(Tensor<T>.FromVector(inputVector), two), NumOps.One).ToVector();
 
         // Perform pattern recall on bipolar input
         Vector<T> bipolarResult = Recall(bipolarInput);
 
         // Denormalize back to [0,1] range: x = (x_bipolar + 1) / 2
         var half = NumOps.FromDouble(0.5);
-        Vector<T> recalledPattern = new Vector<T>(bipolarResult.Length);
-        for (int i = 0; i < bipolarResult.Length; i++)
-        {
-            recalledPattern[i] = NumOps.Multiply(NumOps.Add(bipolarResult[i], NumOps.One), half);
-        }
+        Vector<T> recalledPattern = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.FromVector(bipolarResult), NumOps.One), half).ToVector();
 
         // Convert the recalled pattern back to a tensor with the same shape as the input
         Tensor<T> result = Tensor<T>.FromVector(recalledPattern);
@@ -487,16 +474,21 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         var two = NumOps.FromDouble(2.0);
         List<Vector<T>> patterns = new List<Vector<T>>();
 
-        for (int i = 0; i < input.Shape[0]; i++)
+        // x_bipolar = 2*x - 1 maps [0,1] → [-1,+1], row by row over the first _size features
+        int rowCount = input.Shape[0];
+        if (rowCount > 0 && _size > 0)
         {
-            var pattern = new Vector<T>(_size);
-            for (int j = 0; j < _size; j++)
+            var bipolar = Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorSlice(input, [0, 0], [rowCount, _size]), two), NumOps.One);
+            for (int i = 0; i < rowCount; i++)
             {
-                // x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
-                pattern[j] = NumOps.Subtract(NumOps.Multiply(two, input[i, j]), NumOps.One);
+                patterns.Add(Engine.Reshape(Engine.TensorSlice(bipolar, [i, 0], [1, _size]), [_size]).ToVector());
             }
-
-            patterns.Add(pattern);
+        }
+        else
+        {
+            for (int i = 0; i < rowCount; i++)
+                patterns.Add(new Vector<T>(_size));
         }
 
         // Train the network using Hebbian learning
@@ -645,18 +637,13 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         // Lower energy = more stable state
         T energy = NumOps.Zero;
 
-        for (int i = 0; i < _size; i++)
+        if (_size > 0)
         {
-            for (int j = 0; j < _size; j++)
-            {
-                energy = NumOps.Subtract(
-                    energy,
-                    NumOps.Multiply(
-                        NumOps.Multiply(_weights[i, j], state[i]),
-                        state[j]
-                    )
-                );
-            }
+            // Terms (w_ij * s_i) * s_j, summed and subtracted from zero.
+            var s = Tensor<T>.FromVector(state);
+            var terms = Engine.TensorMultiply(
+                Engine.TensorMultiply(_weights, Engine.Reshape(s, [_size, 1])), Engine.Reshape(s, [1, _size]));
+            energy = NumOps.Subtract(energy, Engine.TensorSum(terms));
         }
 
         // Multiply by 0.5 (we've double-counted each pair)

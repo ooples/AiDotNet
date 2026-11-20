@@ -276,40 +276,39 @@ public class TaskBatch<T, TInput, TOutput>
         if (TaskDifficulties != null && TaskDifficulties.Length > 0)
         {
             var numOps = MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNetEngine.Current;
+            var difficulties = new Tensor<T>(TaskDifficulties, new[] { TaskDifficulties.Length });
+            T count = numOps.FromDouble(TaskDifficulties.Length);
 
             // Calculate mean
-            T sum = numOps.Zero;
-            foreach (var diff in TaskDifficulties)
-            {
-                sum = numOps.Add(sum, diff);
-            }
-            AverageDifficulty = numOps.Divide(sum, numOps.FromDouble(TaskDifficulties.Length));
+            AverageDifficulty = numOps.Divide(engine.TensorSum(difficulties), count);
 
-            // Calculate variance
-            T varianceSum = numOps.Zero;
-            foreach (var diff in TaskDifficulties)
-            {
-                var diffFromMean = numOps.Subtract(diff, AverageDifficulty);
-                var squared = numOps.Multiply(diffFromMean, diffFromMean);
-                varianceSum = numOps.Add(varianceSum, squared);
-            }
-            DifficultyVariance = numOps.Divide(varianceSum, numOps.FromDouble(TaskDifficulties.Length));
+            // Calculate (population) variance
+            var diffFromMean = engine.TensorSubtractScalar(difficulties, AverageDifficulty);
+            DifficultyVariance = numOps.Divide(engine.TensorSum(engine.TensorMultiply(diffFromMean, diffFromMean)), count);
         }
 
         // Calculate average task similarity if available
         if (TaskSimilarities != null)
         {
             var numOps = MathHelper.GetNumericOperations<T>();
+            int rows = TaskSimilarities.GetLength(0);
+            int cols = TaskSimilarities.GetLength(1);
             T similaritySum = numOps.Zero;
-            int count = 0;
 
-            for (int i = 0; i < TaskSimilarities.GetLength(0); i++)
+            // Number of strictly-upper-triangular entries (i < j) in a rows x cols matrix
+            int count = 0;
+            for (int i = 0; i < rows && i + 1 < cols; i++)
             {
-                for (int j = i + 1; j < TaskSimilarities.GetLength(1); j++)
-                {
-                    similaritySum = numOps.Add(similaritySum, TaskSimilarities[i, j]);
-                    count++;
-                }
+                count += cols - i - 1;
+            }
+
+            if (count > 0)
+            {
+                // Sum of the strictly upper triangle: engine triu(diagonal: 1) then sum
+                var engine = AiDotNetEngine.Current;
+                var similarities = Tensor<T>.FromMatrix(new Matrix<T>(TaskSimilarities));
+                similaritySum = engine.TensorSum(engine.TensorTriu(similarities, 1));
             }
 
             if (count > 0)

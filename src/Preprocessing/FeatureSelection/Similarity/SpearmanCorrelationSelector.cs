@@ -24,13 +24,13 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,81 +64,15 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Convert y to ranks
-        var yRanks = GetRanks(y);
-
-        _correlations = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var xRanks = GetRanks(col);
-
-            // Compute Pearson correlation on ranks
-            double xMean = xRanks.Average();
-            double yMean = yRanks.Average();
-
-            double numerator = 0;
-            double xSumSq = 0, ySumSq = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = xRanks[i] - xMean;
-                double yDiff = yRanks[i] - yMean;
-                numerator += xDiff * yDiff;
-                xSumSq += xDiff * xDiff;
-                ySumSq += yDiff * yDiff;
-            }
-
-            double denominator = Math.Sqrt(xSumSq * ySumSq);
-            _correlations[j] = denominator > 1e-10 ? Math.Abs(numerator / denominator) : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _correlations[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // |Spearman rho|: Pearson correlation of the 1-based average ranks, 0 where sqrt(sxx * syy) <= 1e-10
+        var xRanks = SelectorTensorOps.AverageRanks(Tensor<T>.FromMatrix(data));
+        var yRanks = Engine.Reshape(
+            SelectorTensorOps.AverageRanks(Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { n });
+        var scores = Engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(xRanks, yRanks));
+        _correlations = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double[] GetRanks(double[] values)
-    {
-        int n = values.Length;
-        var indexed = values.Select((v, i) => (value: v, index: i))
-            .OrderBy(x => x.value)
-            .ToArray();
-
-        var ranks = new double[n];
-        int i = 0;
-        while (i < n)
-        {
-            int j = i;
-            while (j < n - 1 && Math.Abs(indexed[j].value - indexed[j + 1].value) < 1e-10)
-                j++;
-
-            double avgRank = (i + j + 2) / 2.0; // Ranks are 1-based
-            for (int k = i; k <= j; k++)
-                ranks[indexed[k].index] = avgRank;
-
-            i = j + 1;
-        }
-
-        return ranks;
     }
 
     /// <inheritdoc />
@@ -154,15 +88,7 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("SpearmanCorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

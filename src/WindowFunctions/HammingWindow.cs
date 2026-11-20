@@ -29,16 +29,6 @@ namespace AiDotNet.WindowFunctions;
 public class HammingWindow<T> : IWindowFunction<T>
 {
     /// <summary>
-    /// The numeric operations provider for performing calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// This field stores an object that provides operations like addition, multiplication, and
-    /// trigonometric functions for the generic numeric type T. It's essential for implementing
-    /// the window function's mathematical formula across different numeric types.
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="HammingWindow{T}"/> class.
     /// </summary>
     /// <remarks>
@@ -48,7 +38,6 @@ public class HammingWindow<T> : IWindowFunction<T>
     /// </remarks>
     public HammingWindow()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -77,21 +66,8 @@ public class HammingWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        if (windowSize == 1)
-        {
-            window[0] = _numOps.One;
-            return window;
-        }
-
-        for (int n = 0; n < windowSize; n++)
-        {
-            window[n] = _numOps.Add(_numOps.FromDouble(0.54), _numOps.Multiply(_numOps.FromDouble(-0.46),
-                MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1))))));
-        }
-
-        return window;
+        // Generalized cosine window (scipy.signal.windows.hamming), built with engine ops.
+        return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.54, 0.46);
     }
 
     /// <summary>

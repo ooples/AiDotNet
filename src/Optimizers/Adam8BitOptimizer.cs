@@ -375,6 +375,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <inheritdoc/>
     protected override bool SupportsModelOwnStep => true;
 
+    /// <inheritdoc/>
+    internal override bool SupportsShardedTapeStateConsolidation => false;
+
     /// <summary>
     /// Performs the optimization process using the 8-bit Adam algorithm.
     /// </summary>
@@ -829,6 +832,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         float weightDecay,
         bool decoupledWeightDecay)
     {
+        if (gpuEngine.GetBackend() is not { } gpuBackend)
+        {
+            return false;
+        }
+
         var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref param);
         var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref grad);
 
@@ -840,57 +848,70 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     return false;
             }
 
-            if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackendBf16
+            if ((state.HostRestored || state.HostDirty)
                 && state.GpuMBf16 is { } gpuMBf16 && state.GpuVBf16 is { } gpuVBf16
                 && state.MBf16 is not null && state.VBf16 is not null)
             {
-                UploadUShortMomentsToGpu(restoreBackendBf16, gpuMBf16, state.MBf16);
-                UploadUShortMomentsToGpu(restoreBackendBf16, gpuVBf16, state.VBf16);
+                UploadUShortMomentsToGpu(gpuBackend, gpuMBf16, state.MBf16);
+                UploadUShortMomentsToGpu(gpuBackend, gpuVBf16, state.VBf16);
                 state.HostRestored = false;
                 state.HostDirty = false;
             }
 
-            if (!GpuOptimizer.TryAdamBf16Step(
-                pFloat, gFloat, state.GpuMBf16, state.GpuVBf16,
+            if (!TryExecuteGpuAdamBf16Step(
+                gpuEngine, gpuBackend, param, pFloat, gFloat,
+                state.GpuMBf16, state.GpuVBf16,
                 lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay))
             {
                 return false;
             }
 
-            state.GpuBackend = gpuEngine.GetBackend();
+            state.GpuBackend = gpuBackend;
             state.GpuDirty = true;
             return true;
         }
 
         if (state.FullPrecisionMoments)
         {
+            Tensor<T> mRef;
             if (state.MFullPrecision is null)
             {
                 var createdM = GpuOptimizer.CreateStateTensor(pFloat._shape);
-                state.MFullPrecision = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdM);
+                mRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdM);
+                state.MFullPrecision = mRef;
             }
             else if (!state.MFullPrecision._shape.SequenceEqual(param._shape))
             {
-                state.MFullPrecision = ShapeMomentLike(state.MFullPrecision, param._shape);
+                mRef = ShapeMomentLike(state.MFullPrecision, param._shape);
+                state.MFullPrecision = mRef;
+            }
+            else
+            {
+                mRef = state.MFullPrecision;
             }
 
+            Tensor<T> vRef;
             if (state.VFullPrecision is null)
             {
                 var createdV = GpuOptimizer.CreateStateTensor(pFloat._shape);
-                state.VFullPrecision = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdV);
+                vRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdV);
+                state.VFullPrecision = vRef;
             }
             else if (!state.VFullPrecision._shape.SequenceEqual(param._shape))
             {
-                state.VFullPrecision = ShapeMomentLike(state.VFullPrecision, param._shape);
+                vRef = ShapeMomentLike(state.VFullPrecision, param._shape);
+                state.VFullPrecision = vRef;
+            }
+            else
+            {
+                vRef = state.VFullPrecision;
             }
 
-            var mRef = state.MFullPrecision!;
-            var vRef = state.VFullPrecision!;
             var mFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref mRef);
             var vFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref vRef);
-            return decoupledWeightDecay
-                ? GpuOptimizer.TryAdamWStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep)
-                : GpuOptimizer.TryAdamStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep);
+            return TryExecuteGpuAdamOrAdamWStep(
+                gpuEngine, gpuBackend, param, pFloat, gFloat, mFloat, vFloat,
+                lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay);
         }
 
         bool canUseGpu8Bit = _options.CompressBothMoments
@@ -912,17 +933,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
         }
 
-        if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackend8
-            && state.MQuantized is not null && state.VQuantized is not null
-            && state.MScales is not null && state.VScales is not null)
+        if ((state.HostRestored || state.HostDirty)
+            && state.MQuantized is { } hostMQ && state.VQuantized is { } hostVQ
+            && state.MScales is { } hostMScales && state.VScales is { } hostVScales
+            && state.GpuMQuantized is { } devMQ && state.GpuVQuantized is { } devVQ)
         {
-            Upload8BitMomentsToGpu(restoreBackend8, state);
+            Upload8BitMomentsToGpu(gpuBackend, state, hostMQ, hostVQ, hostMScales, hostVScales, devMQ, devVQ);
             state.HostRestored = false;
             state.HostDirty = false;
         }
 
-        if (!GpuOptimizer.TryAdam8BitStep(
-            pFloat, gFloat,
+        if (!TryExecuteGpuAdam8BitStep(
+            gpuEngine, gpuBackend, param, pFloat, gFloat,
             state.GpuMQuantized, state.GpuVQuantized, state.GpuMScales, state.GpuVScales,
             lr, beta1, beta2, epsilon, biasCorrection1, biasCorrection2, _options.BlockSize,
             weightDecay, decoupledWeightDecay))
@@ -930,7 +952,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             return false;
         }
 
-        state.GpuBackend = gpuEngine.GetBackend();
+        state.GpuBackend = gpuBackend;
         state.GpuDirty = true;
         return true;
     }
@@ -942,28 +964,52 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         backend.UploadByteBuffer(target, bytes);
     }
 
-    private static void Upload8BitMomentsToGpu(IDirectGpuBackend backend, QuantizedTapeState state)
+    private static void Upload8BitMomentsToGpu(
+        IDirectGpuBackend backend,
+        QuantizedTapeState state,
+        Vector<byte> hostMQuantized,
+        Vector<byte> hostVQuantized,
+        Vector<double> hostMScales,
+        Vector<double> hostVScales,
+        IGpuBuffer gpuMQuantized,
+        IGpuBuffer gpuVQuantized)
     {
         int len = state.Length;
-        var mBytes = state.MQuantized!.AsSpan().Slice(0, len).ToArray();
-        var vBytes = state.VQuantized!.AsSpan().Slice(0, len).ToArray();
-        backend.UploadByteBuffer(state.GpuMQuantized!, mBytes);
-        backend.UploadByteBuffer(state.GpuVQuantized!, vBytes);
+        var mBytes = hostMQuantized.AsSpan().Slice(0, len).ToArray();
+        var vBytes = hostVQuantized.AsSpan().Slice(0, len).ToArray();
+        backend.UploadByteBuffer(gpuMQuantized, mBytes);
+        backend.UploadByteBuffer(gpuVQuantized, vBytes);
 
         int nb = state.NumBlocks;
         var mScales = new float[nb];
         var vScales = new float[nb];
-        var mScalesSrc = state.MScales!.AsSpan();
-        var vScalesSrc = state.VScales!.AsSpan();
+        var mScalesSrc = hostMScales.AsSpan();
+        var vScalesSrc = hostVScales.AsSpan();
         for (int b = 0; b < nb; b++)
         {
             mScales[b] = (float)mScalesSrc[b];
             vScales[b] = (float)vScalesSrc[b];
         }
-        GpuOptimizer.FreeGpuBuffer(state.GpuMScales);
-        GpuOptimizer.FreeGpuBuffer(state.GpuVScales);
-        state.GpuMScales = backend.AllocateBuffer(mScales);
-        state.GpuVScales = backend.AllocateBuffer(vScales);
+
+        if (state.GpuMScales is { } existingMScales && existingMScales.Handle != IntPtr.Zero && existingMScales.Size == nb)
+        {
+            backend.UploadBufferInPlace(mScales, existingMScales);
+        }
+        else
+        {
+            GpuOptimizer.FreeGpuBuffer(state.GpuMScales);
+            state.GpuMScales = backend.AllocateBuffer(mScales);
+        }
+
+        if (state.GpuVScales is { } existingVScales && existingVScales.Handle != IntPtr.Zero && existingVScales.Size == nb)
+        {
+            backend.UploadBufferInPlace(vScales, existingVScales);
+        }
+        else
+        {
+            GpuOptimizer.FreeGpuBuffer(state.GpuVScales);
+            state.GpuVScales = backend.AllocateBuffer(vScales);
+        }
     }
 
     private static void SyncGpuStateToHost(QuantizedTapeState state)

@@ -184,122 +184,204 @@ internal static class OuteTTSAudio
     }
 }
 
+/// <summary>Owns the temporary scores of one generation, reusing them after each selected token.</summary>
+/// <remarks>Language-model logits and cache remain caller-owned. Only the selected token leaves the active scratch
+/// scope, so resetting it cannot recycle any state needed by the language model's next forward.</remarks>
+internal sealed class OuteTTSSamplingSession<T> : IDisposable
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly AiDotNet.Tensors.Helpers.TensorArena _scratch = AiDotNet.Tensors.Helpers.TensorArena.CreateDetached();
+    private bool _disposed;
+
+    internal long PeakBackingBytes => _scratch.PeakBackingBytes;
+
+    internal int Select(Tensor<T> logits, IReadOnlyList<int> ids, OuteTTSOptions options, Random random)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(OuteTTSSamplingSession<T>));
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        using var activation = _scratch.Activate();
+        _scratch.Reset();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int n = logits.Length;
+        var scores = engine.Reshape(logits, new[] { n });
+        if (TtsSampling<T>.SumsInFloat || n == 0)
+        {
+            if (options.Temperature > 0)
+                return OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+                    options.RepetitionRange, options.Temperature, options.TopK, options.TopP, options.MinP), random);
+            return OuteTTSSampler<T>.Greedy(OuteTTSSampler<T>.Process(scores, ids, options.RepetitionPenalty,
+                options.RepetitionRange, 1.0, 0, 1.0, 0));
+        }
+
+        // Penalize only the distinct valid tokens in the repetition window (padded to a constant
+        // scratch shape so _scratch.PeakBackingBytes stays invariant across generation steps).
+        int repRange = options.RepetitionRange;
+        double repPenalty = options.RepetitionPenalty;
+        if (repRange > 0 && repPenalty != 1.0 && ids.Count > 0)
+        {
+            int wCap = Math.Min(n, repRange);
+            var distinct = new List<int>(wCap);
+            var seen = new HashSet<int>();
+            for (int i = Math.Max(0, ids.Count - repRange); i < ids.Count; i++)
+            {
+                int token = ids[i];
+                if (token >= 0 && token < n && seen.Add(token)) distinct.Add(token);
+            }
+            if (distinct.Count > 0)
+            {
+                var padded = new int[wCap];
+                int last = distinct[distinct.Count - 1];
+                for (int j = 0; j < wCap; j++) padded[j] = j < distinct.Count ? distinct[j] : last;
+                var idxTensor = new Tensor<int>(padded, new[] { wCap });
+                var sub = engine.TensorIndexSelect(scores, idxTensor, 0);
+                T penalty = Ops.FromDouble(repPenalty);
+                var penalized = engine.TensorWhere(engine.TensorGreaterThan(sub, Ops.Zero),
+                    engine.TensorDivideScalar(sub, penalty), engine.TensorMultiplyScalar(sub, penalty));
+                scores = engine.TensorScatter(scores, idxTensor, penalized, 0);
+            }
+        }
+
+        if (options.Temperature <= 0)
+            return OuteTTSSampler<T>.Greedy(scores);
+
+        if (options.Temperature != 1.0)
+            scores = engine.TensorDivideScalar(scores, Ops.FromDouble(options.Temperature));
+
+        int k = options.TopK;
+        if (k > 0 && k < n)
+        {
+            var largest = engine.TensorTopK(scores, k + 1, 0, out var topIndices);
+            var largestArr = largest.ToArray();
+            T kth = largestArr[k - 1];
+            T negativeInfinity = Ops.FromDouble(double.NegativeInfinity);
+            if (Ops.GreaterThan(kth, largestArr[k]) && !Ops.Equals(kth, negativeInfinity))
+            {
+                var topIdxArr = topIndices.ToArray();
+                var finite = new int[k];
+                Array.Copy(topIdxArr, 0, finite, 0, k);
+                Array.Sort(finite);
+                var finiteScores = engine.TensorIndexSelect(scores, new Tensor<int>(finite, new[] { k }), 0);
+                var compact = OuteTTSSampler<T>.Process(finiteScores, Array.Empty<int>(), 1.0, 0, 1.0, 0,
+                    options.TopP, options.MinP);
+                return finite[OuteTTSSampler<T>.Sample(compact, random)];
+            }
+        }
+
+        var processed = OuteTTSSampler<T>.Process(scores, Array.Empty<int>(), 1.0, 0, 1.0,
+            options.TopK, options.TopP, options.MinP);
+        return OuteTTSSampler<T>.Sample(processed, random);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _scratch.Dispose();
+        _disposed = true;
+    }
+}
+
 /// <summary>
 /// The sampling OuteTTS 1.0 generates with (Hugging Face <c>generate()</c> with the release's settings): its windowed
 /// repetition penalty (the last 64 tokens, ×1/1.1 on positive logits and ×1.1 on the others), then temperature, top-k,
 /// top-p and min-p, and a draw from the remaining distribution.
 /// </summary>
-internal static class OuteTTSSampler
+internal static class OuteTTSSampler<T>
 {
-    /// <summary>The processed scores (−∞ for removed tokens), in the order <c>generate()</c> applies them.</summary>
-    public static double[] Process(double[] logits, IReadOnlyList<int> ids, double repetitionPenalty, int repetitionRange, double temperature,
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The processed scores <c>[n]</c> (−∞ for removed tokens), in the order <c>generate()</c> applies them.</summary>
+    public static Tensor<T> Process(Tensor<T> logits, IReadOnlyList<int> ids, double repetitionPenalty, int repetitionRange, double temperature,
         int topK, double topP, double minP)
     {
-        var scores = (double[])logits.Clone();
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the top-p cut is taken in float.
+        if (TtsSampling<T>.SumsInFloat)
+            return OuteTTSSampler<float>.Process(TtsSampling<T>.InFloat(logits), ids, repetitionPenalty, repetitionRange, temperature, topK, topP, minP).Cast<T>();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int n = logits.Length;
+        T negativeInfinity = Ops.FromDouble(double.NegativeInfinity);
+        var removedScore = Tensor<T>.CreateDefault(new[] { n }, negativeInfinity);
+        var scores = engine.Reshape(logits, new[] { n });
         // RepetitionPenaltyLogitsProcessorPatch
         if (repetitionRange > 0 && repetitionPenalty != 1.0)
         {
-            var window = new HashSet<int>();
-            for (int i = Math.Max(0, ids.Count - repetitionRange); i < ids.Count; i++) window.Add(ids[i]);
-            foreach (int token in window)
-            {
-                if (token >= scores.Length) continue;
-                scores[token] = scores[token] <= 0 ? scores[token] * repetitionPenalty : scores[token] / repetitionPenalty;
-            }
+            var window = new bool[n];
+            for (int i = Math.Max(0, ids.Count - repetitionRange); i < ids.Count; i++)
+                if (ids[i] >= 0 && ids[i] < n) window[ids[i]] = true;
+            T penalty = Ops.FromDouble(repetitionPenalty);
+            var penalized = engine.TensorWhere(engine.TensorGreaterThan(scores, Ops.Zero),
+                engine.TensorDivideScalar(scores, penalty), engine.TensorMultiplyScalar(scores, penalty));
+            scores = engine.TensorWhere(window, penalized, scores);
         }
-        if (temperature != 1.0)
-            for (int i = 0; i < scores.Length; i++) scores[i] /= temperature;
+        if (temperature != 1.0) scores = engine.TensorDivideScalar(scores, Ops.FromDouble(temperature));
         if (topK > 0)
         {
-            int k = Math.Min(topK, scores.Length);
-            double kth = KthLargest(scores, k);
-            for (int i = 0; i < scores.Length; i++) if (scores[i] < kth) scores[i] = double.NegativeInfinity;
+            int k = Math.Min(topK, n);
+            var largest = engine.TensorTopK(scores, k, 0, out _);
+            T kth = engine.TensorSlice(largest, new[] { k - 1 }, new[] { 1 }).ToArray()[0];
+            scores = engine.TensorWhere(engine.TensorLessThan(scores, kth), removedScore, scores);
         }
         if (topP < 1.0)
         {
             // Ascending order, stable for ties; remove while the cumulative probability stays at most 1 − top_p, keeping
             // the most likely token. Removed tokens (-inf) sort first with probability 0 and stay removed, so only the
             // finite scores are ordered.
-            var current = scores;
-            var order = Enumerable.Range(0, scores.Length).Where(i => !double.IsNegativeInfinity(current[i])).ToArray();
-            Array.Sort(order, (a, b) => current[a] != current[b] ? current[a].CompareTo(current[b]) : a.CompareTo(b));
-            var probabilities = Softmax(order.Select(i => current[i]).ToArray());
-            double cumulative = 0;
-            var remove = new bool[order.Length];
-            for (int j = 0; j < order.Length; j++)
-            {
-                cumulative += probabilities[j];
-                remove[j] = cumulative <= 1 - topP && j < order.Length - 1;
-            }
-            for (int j = 0; j < order.Length; j++) if (remove[j]) scores[order[j]] = double.NegativeInfinity;
+            var removedBits = engine.TensorEquals(scores, negativeInfinity).Cast<int>().ToArray();
+            var finite = Enumerable.Range(0, n).Where(i => removedBits[i] == 0).ToArray();
+            if (finite.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+            var finiteScores = Select(engine, scores, finite);
+            var order = TtsSampling<T>.StableOrder(finiteScores, descending: false);
+            var cumulative = engine.TensorCumSum(Softmax(Select(engine, finiteScores, order)), 0);
+            var above = engine.TensorGreaterThan(cumulative, Ops.FromDouble(1 - topP)).Cast<int>().ToArray();
+            var remove = new bool[n];
+            for (int j = 0; j < order.Length - 1; j++) remove[finite[order[j]]] = above[j] == 0;
+            scores = engine.TensorWhere(remove, removedScore, scores);
         }
         if (minP > 0)
         {
             var probabilities = Softmax(scores);
-            double threshold = minP * probabilities.Max();
-            int best = 0;
-            for (int i = 1; i < scores.Length; i++) if (scores[i] > scores[best]) best = i;
-            for (int i = 0; i < scores.Length; i++)
-                if (probabilities[i] < threshold && i != best) scores[i] = double.NegativeInfinity;
+            T threshold = Ops.Multiply(Ops.FromDouble(minP), engine.TensorMaxValue(probabilities));
+            var low = engine.TensorLessThan(probabilities, threshold).Cast<int>().ToArray();
+            int best = Greedy(scores);
+            var remove = new bool[n];
+            for (int i = 0; i < n; i++) remove[i] = low[i] != 0 && i != best;
+            scores = engine.TensorWhere(remove, removedScore, scores);
         }
         return scores;
     }
 
-    // The k-th largest score (ties counted), as torch.topk's last value: a min-heap of the k largest so far.
-    private static double KthLargest(double[] scores, int k)
+    /// <summary>The softmax of scores, removed (−∞) ones at exactly 0.</summary>
+    internal static Tensor<T> Softmax(Tensor<T> scores)
     {
-        var heap = new double[k];
-        int count = 0;
-        foreach (double v in scores)
-        {
-            if (count < k)
-            {
-                int i = count++;
-                heap[i] = v;
-                while (i > 0 && heap[(i - 1) / 2] > heap[i])
-                {
-                    (heap[i], heap[(i - 1) / 2]) = (heap[(i - 1) / 2], heap[i]);
-                    i = (i - 1) / 2;
-                }
-            }
-            else if (v > heap[0])
-            {
-                heap[0] = v;
-                for (int i = 0; ;)
-                {
-                    int l = 2 * i + 1, r = l + 1, m = i;
-                    if (l < k && heap[l] < heap[m]) m = l;
-                    if (r < k && heap[r] < heap[m]) m = r;
-                    if (m == i) break;
-                    (heap[i], heap[m]) = (heap[m], heap[i]);
-                    i = m;
-                }
-            }
-        }
-        return heap[0];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var e = TtsSampling<T>.UnnormalizedProbabilities(scores);
+        return engine.TensorDivideScalar(e, engine.TensorSum(e));
     }
 
-    internal static double[] Softmax(double[] scores)
+    /// <summary>A token drawn from the processed scores' distribution: the first whose running probability exceeds the
+    /// draw, the last likely one when rounding leaves none.</summary>
+    public static int Sample(Tensor<T> scores, Random random)
     {
-        double max = scores.Max();
-        var e = scores.Select(v => double.IsNegativeInfinity(v) ? 0.0 : Math.Exp(v - max)).ToArray();
-        double sum = e.Sum();
-        return e.Select(v => v / sum).ToArray();
+        if (scores is null) throw new ArgumentNullException(nameof(scores));
+        if (TtsSampling<T>.SumsInFloat) return OuteTTSSampler<float>.Sample(TtsSampling<T>.InFloat(scores), random);
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var probabilities = engine.Reshape(Softmax(scores), new[] { scores.Length });
+        T u = Ops.FromDouble(random.NextDouble());
+        int n = probabilities.Length;
+        int position = n - engine.TensorGreaterThan(engine.TensorCumSum(probabilities, 0), u).Cast<int>().ToArray().Sum();
+        if (position < n) return position;
+        int last = Array.LastIndexOf(engine.TensorGreaterThan(probabilities, Ops.Zero).Cast<int>().ToArray(), 1);
+        return last >= 0 ? last : 0;
     }
 
-    /// <summary>A token drawn from the processed scores' distribution.</summary>
-    public static int Sample(double[] scores, Random random)
+    /// <summary>The first index of the largest score (greedy decoding, <c>Array.IndexOf(scores, scores.Max())</c>).</summary>
+    public static int Greedy(Tensor<T> scores)
     {
-        var probabilities = Softmax(scores);
-        double u = random.NextDouble(), cumulative = 0;
-        int last = 0;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (probabilities[i] <= 0) continue;
-            last = i;
-            cumulative += probabilities[i];
-            if (u < cumulative) return i;
-        }
-        return last;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var best = engine.TensorEquals(scores, engine.TensorMaxValue(scores)).Cast<int>().ToArray();
+        return Array.IndexOf(best, 1);
     }
+
+    private static Tensor<T> Select(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> values, int[] positions) =>
+        engine.TensorIndexSelect(values, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
 }

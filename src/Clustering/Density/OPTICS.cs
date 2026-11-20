@@ -128,83 +128,45 @@ public partial class OPTICS<T> : ClusteringBase<T>
         }
 
         // Normalize features for scale-invariant density ordering
-        var meansD = new double[d];
-        var stdsD = new double[d];
-        var xNorm = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
-        {
-            double sum = 0, varSum = 0;
-            for (int i = 0; i < n; i++)
-                sum += NumOps.ToDouble(x[i, j]);
-            meansD[j] = sum / n;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(x[i, j]) - meansD[j];
-                varSum += diff * diff;
-            }
-            stdsD[j] = Math.Sqrt(varSum / n);
-            if (stdsD[j] < 1e-10) stdsD[j] = 1.0;
-            for (int i = 0; i < n; i++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - meansD[j]) / stdsD[j]);
-        }
-        _featureMeans = new Vector<T>(meansD.Select(v => NumOps.FromDouble(v)));
-        _featureStds = new Vector<T>(stdsD.Select(v => NumOps.FromDouble(v)));
-        x = xNorm;
+        x = ClusteringTensorOps.StandardizeColumns(x, out var featureMeans, out var featureStds);
+        _featureMeans = featureMeans;
+        _featureStds = featureStds;
 
         // Initialize arrays
-        _reachabilityDistances = new Vector<T>(n);
-        _coreDistances = new Vector<T>(n);
+        T infinity = NumOps.MaxValue;
+        _reachabilityDistances = Engine.Fill(n, infinity);
         _ordering = new int[n];
         _predecessor = new int[n];
         var processed = new bool[n];
-        T infinity = NumOps.MaxValue;
 
         for (int i = 0; i < n; i++)
         {
-            _reachabilityDistances[i] = infinity;
-            _coreDistances[i] = infinity;
             _predecessor[i] = -1;
         }
 
         // Build spatial index
         var neighborFinder = CreateNeighborFinder(x);
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Compute core distances
         T maxEpsT = NumOps.FromDouble(_options.MaxEpsilon);
+        var coreDistances = new List<T>(n);
         for (int i = 0; i < n; i++)
         {
             var query = GetRow(x, i);
             var neighbors = FindNeighbors(neighborFinder, x, query, maxEpsT);
-
-            if (neighbors.Count >= _options.MinSamples)
-            {
-                // Core distance is the distance to the MinSamples-th nearest neighbor
-                var distances = new List<T>();
-                var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-                var queryArr = new T[d];
-                for (int j = 0; j < d; j++) queryArr[j] = x[i, j];
-                var neighborArr = new T[d];
-
-                foreach (int neighborIdx in neighbors)
-                {
-                    for (int j = 0; j < d; j++) neighborArr[j] = x[neighborIdx, j];
-                    T dist = metric.ComputeInline(queryArr, neighborArr, d);
-                    distances.Add(dist);
-                }
-
-                distances.Sort((a, b) => NumOps.Compare(a, b));
-                _coreDistances[i] = distances[Math.Min(_options.MinSamples - 1, distances.Count - 1)];
-            }
+            coreDistances.Add(neighbors.Count >= _options.MinSamples
+                ? CoreDistance(x, query, neighbors, metric)
+                : infinity);
         }
 
-        // OPTICS ordering algorithm using double for SortedSet (ordering boundary)
+        _coreDistances = Vector<T>.FromList(coreDistances);
+        var isCore = ClusteringTensorOps.LessThanFlags(_coreDistances, infinity);
+
+        // OPTICS ordering algorithm (seeds ordered by reachability, then index)
         int orderIndex = 0;
-        var orderSeeds = new SortedSet<(double Reachability, int Index)>(
-            Comparer<(double, int)>.Create((a, b) =>
-            {
-                int cmp = a.Item1.CompareTo(b.Item1);
-                return cmp != 0 ? cmp : a.Item2.CompareTo(b.Item2);
-            }));
+        var orderSeeds = new SortedSet<(T Reachability, int Index)>(
+            Comparer<(T, int)>.Create(CompareSeeds));
 
         for (int i = 0; i < n; i++)
         {
@@ -213,7 +175,7 @@ public partial class OPTICS<T> : ClusteringBase<T>
             processed[i] = true;
             _ordering[orderIndex++] = i;
 
-            if (NumOps.LessThan(_coreDistances[i], infinity))
+            if (isCore[i])
             {
                 UpdateSeeds(x, i, orderSeeds, processed, neighborFinder, maxEpsT);
 
@@ -227,7 +189,7 @@ public partial class OPTICS<T> : ClusteringBase<T>
                     processed[currentIdx] = true;
                     _ordering[orderIndex++] = currentIdx;
 
-                    if (NumOps.LessThan(_coreDistances[currentIdx], infinity))
+                    if (isCore[currentIdx])
                     {
                         UpdateSeeds(x, currentIdx, orderSeeds, processed, neighborFinder, maxEpsT);
                     }
@@ -244,138 +206,184 @@ public partial class OPTICS<T> : ClusteringBase<T>
         // Save normalized centers for Predict (where input is also normalized)
         if (_featureMeans is not null && _featureStds is not null && ClusterCenters is not null)
         {
-            _normalizedClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int k = 0; k < ClusterCenters.Rows; k++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    _normalizedClusterCenters[k, j] = ClusterCenters[k, j];
+            _normalizedClusterCenters = ClusterCenters.Clone();
 
             // De-normalize cluster centers back to original space for user consumption
-            for (int k = 0; k < ClusterCenters.Rows; k++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                {
-                    double normVal = NumOps.ToDouble(ClusterCenters[k, j]);
-                    double origVal = normVal * NumOps.ToDouble(_featureStds[j]) + NumOps.ToDouble(_featureMeans[j]);
-                    ClusterCenters[k, j] = NumOps.FromDouble(origVal);
-                }
+            ClusterCenters = ClusteringTensorOps.Destandardize(ClusterCenters, _featureMeans, _featureStds);
         }
 
         IsTrained = true;
     }
 
+    /// <summary>Distance from the query to its MinSamples-th nearest neighbor (or the farthest one when there are fewer).</summary>
+    private T CoreDistance(Matrix<T> x, Vector<T> query, List<int> neighbors, IDistanceMetric<T> metric)
+    {
+        var rows = ClusteringTensorOps.SelectRows(x, neighbors.ToArray());
+        var sorted = Engine.TensorMsort(ClusteringTensorOps.DistancesToPoint(metric, rows, query).AsTensor()).ToVector();
+        return sorted[Math.Min(_options.MinSamples - 1, sorted.Length - 1)];
+    }
+
+    /// <summary>Seed order: reachability, then index.</summary>
+    private int CompareSeeds((T Reachability, int Index) a, (T Reachability, int Index) b)
+    {
+        int cmp = NumOps.Compare(a.Reachability, b.Reachability);
+        return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+    }
+
     private void UpdateSeeds(
         Matrix<T> x,
         int centerIdx,
-        SortedSet<(double, int)> seeds,
+        SortedSet<(T, int)> seeds,
         bool[] processed,
         object neighborFinder,
         T maxEps)
     {
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
         var centerPoint = GetRow(x, centerIdx);
-        var neighbors = FindNeighbors(neighborFinder, x, centerPoint, maxEps);
-
-        T coreDist = _coreDistances[centerIdx];
-
-        foreach (int neighborIdx in neighbors)
+        var candidates = FindNeighbors(neighborFinder, x, centerPoint, maxEps)
+            .Where(neighborIdx => !processed[neighborIdx])
+            .ToArray();
+        if (candidates.Length == 0)
         {
-            if (processed[neighborIdx]) continue;
-
-            var neighborPoint = GetRow(x, neighborIdx);
-            T dist = metric.Compute(centerPoint, neighborPoint);
-            T reachDist = NumOps.GreaterThan(coreDist, dist) ? coreDist : dist;
-
-            if (NumOps.LessThan(reachDist, _reachabilityDistances[neighborIdx]))
-            {
-                // Remove old entry if exists (use double for SortedSet)
-                seeds.Remove((NumOps.ToDouble(_reachabilityDistances[neighborIdx]), neighborIdx));
-
-                _reachabilityDistances[neighborIdx] = reachDist;
-                _predecessor[neighborIdx] = centerIdx;
-
-                seeds.Add((NumOps.ToDouble(reachDist), neighborIdx));
-            }
+            return;
         }
+
+        // reach(o) = max(core(center), d(center, o)); keep the smaller of the old and new reachability
+        T coreDist = _coreDistances[centerIdx];
+        var distances = ClusteringTensorOps.DistancesToPoint(metric, ClusteringTensorOps.SelectRows(x, candidates), centerPoint);
+        var reach = Engine.TensorMax(distances.AsTensor(), coreDist);
+        var current = ClusteringTensorOps.SelectElements(_reachabilityDistances, candidates).AsTensor();
+        var improved = ClusteringTensorOps.ToBoolArray(Engine.TensorLessThan(reach, current).ToVector());
+
+        var oldKeys = current.ToArray();
+        var newKeys = reach.ToArray();
+        for (int j = 0; j < candidates.Length; j++)
+        {
+            if (!improved[j]) continue;
+
+            // Re-key the seed
+            seeds.Remove((oldKeys[j], candidates[j]));
+            _predecessor[candidates[j]] = centerIdx;
+            seeds.Add((newKeys[j], candidates[j]));
+        }
+
+        _reachabilityDistances = Engine.Scatter(
+            _reachabilityDistances.AsTensor(),
+            Vector<int>.Wrap(candidates).AsTensor(),
+            Engine.TensorWhere(Engine.TensorLessThan(reach, current), reach, current),
+            0).ToVector();
     }
 
     private void ExtractClusters(int n)
     {
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(NoiseLabel);
-        }
-
+        int[] labels;
+        int numClusters;
         if (_options.ExtractionMethod == OPTICSExtractionMethod.DbscanStyle)
         {
-            ExtractDbscanStyle(n);
+            labels = DbscanStyleLabels(NumOps.FromDouble(_options.ClusterEpsilon ?? _options.MaxEpsilon), out numClusters);
         }
         else
         {
-            ExtractXiMethod(n);
+            labels = XiLabels(n, out numClusters);
         }
+
+        Labels = ClusteringTensorOps.FromIntArray<T>(labels);
+        NumClusters = numClusters;
     }
 
-    private void ExtractDbscanStyle(int n)
+    /// <summary>
+    /// DBSCAN-style extraction along the ordering: a reachability jump above eps starts a cluster at a core point
+    /// (core distance at most eps) and otherwise leaves noise; smaller reachabilities join the current cluster.
+    /// </summary>
+    private int[] DbscanStyleLabels(T eps, out int numClusters)
     {
-        T eps = NumOps.FromDouble(_options.ClusterEpsilon ?? _options.MaxEpsilon);
-        T infinity = NumOps.MaxValue;
-        int currentCluster = 0;
+        int n = _ordering.Length;
+        var labels = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            labels[i] = NoiseLabel;
+        }
 
+        if (n == 0)
+        {
+            numClusters = 0;
+            return labels;
+        }
+
+        var reach = ClusteringTensorOps.SelectElements(_reachabilityDistances, _ordering).AsTensor();
+        var core = ClusteringTensorOps.SelectElements(_coreDistances, _ordering).AsTensor();
+        var jumps = ClusteringTensorOps.ToBoolArray(Engine.TensorGreaterThan(reach, eps).ToVector());
+        var corePoints = ClusteringTensorOps.ToBoolArray(Engine.TensorMultiply(
+            Engine.TensorLessThan(core, NumOps.MaxValue),
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorGreaterThan(core, eps))).ToVector());
+
+        int currentCluster = 0;
         for (int i = 0; i < n; i++)
         {
             int pointIdx = _ordering[i];
 
-            if (NumOps.GreaterThan(_reachabilityDistances[pointIdx], eps))
+            if (jumps[i])
             {
                 // Start new cluster or noise
-                if (NumOps.LessThan(_coreDistances[pointIdx], infinity) &&
-                    !NumOps.GreaterThan(_coreDistances[pointIdx], eps))
+                if (corePoints[i])
                 {
-                    if (Labels is not null)
-                    {
-                        Labels[pointIdx] = NumOps.FromDouble(currentCluster);
-                    }
+                    labels[pointIdx] = currentCluster;
                     currentCluster++;
                 }
             }
-            else
+            else if (currentCluster > 0)
             {
                 // Assign to current cluster
-                if (currentCluster > 0 && Labels is not null)
-                {
-                    Labels[pointIdx] = NumOps.FromDouble(currentCluster - 1);
-                }
+                labels[pointIdx] = currentCluster - 1;
             }
         }
 
-        NumClusters = currentCluster;
+        numClusters = currentCluster;
+        return labels;
     }
 
-    private void ExtractXiMethod(int n)
+    /// <summary>Reachabilities in ordering order with undefined (infinite) values replaced by MaxEpsilon.</summary>
+    private Tensor<T> OrderedReachability()
     {
-        T xi = NumOps.FromDouble(_options.Xi);
-        T maxEps = NumOps.FromDouble(_options.MaxEpsilon);
-        T infinity = NumOps.MaxValue;
-        T onePlusXi = NumOps.Add(NumOps.One, xi);
-        T oneMinusXi = NumOps.Subtract(NumOps.One, xi);
+        var reach = ClusteringTensorOps.SelectElements(_reachabilityDistances, _ordering).AsTensor();
+        var defined = Engine.TensorLessThan(reach, NumOps.MaxValue);
+        return Engine.TensorWhere(defined, reach, Engine.TensorFullLike(reach, NumOps.FromDouble(_options.MaxEpsilon)));
+    }
+
+    private int[] XiLabels(int n, out int numClusters)
+    {
+        var labels = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            labels[i] = NoiseLabel;
+        }
+
         int minClusterSize = Math.Max(2, (int)(n * _options.MinClusterSizeFraction));
+
+        // Steepness of every consecutive pair (p, p + 1) of the ordering
+        var steepUpPairs = new bool[Math.Max(0, n - 1)];
+        var steepDownPairs = new bool[Math.Max(0, n - 1)];
+        if (n > 1)
+        {
+            T xi = NumOps.FromDouble(_options.Xi);
+            var ordered = OrderedReachability();
+            var prev = Engine.TensorSlice(ordered, new[] { 0 }, new[] { n - 1 });
+            var curr = Engine.TensorSlice(ordered, new[] { 1 }, new[] { n - 1 });
+
+            // steep up: curr >= prev (1 + xi); steep down: curr <= prev (1 - xi)
+            var upThreshold = Engine.TensorMultiplyScalar(prev, NumOps.Add(NumOps.One, xi));
+            var downThreshold = Engine.TensorMultiplyScalar(prev, NumOps.Subtract(NumOps.One, xi));
+            steepUpPairs = ClusteringTensorOps.ToBoolArray(Engine.TensorLessThan(curr, upThreshold).ToVector(), invert: true);
+            steepDownPairs = ClusteringTensorOps.ToBoolArray(Engine.TensorGreaterThan(curr, downThreshold).ToVector(), invert: true);
+        }
 
         var steepAreas = new List<(int Start, int End, bool IsUp)>();
 
         // Find steep up and down areas
         for (int i = 1; i < n; i++)
         {
-            int prevIdx = _ordering[i - 1];
-            int currIdx = _ordering[i];
-
-            T prevReach = _reachabilityDistances[prevIdx];
-            T currReach = _reachabilityDistances[currIdx];
-
-            if (!NumOps.LessThan(prevReach, infinity)) prevReach = maxEps;
-            if (!NumOps.LessThan(currReach, infinity)) currReach = maxEps;
-
-            bool steepUp = !NumOps.LessThan(currReach, NumOps.Multiply(prevReach, onePlusXi));
-            bool steepDown = !NumOps.GreaterThan(currReach, NumOps.Multiply(prevReach, oneMinusXi));
+            bool steepUp = steepUpPairs[i - 1];
+            bool steepDown = steepDownPairs[i - 1];
 
             if (steepUp || steepDown)
             {
@@ -385,19 +393,7 @@ public partial class OPTICS<T> : ClusteringBase<T>
                 // Extend the steep area
                 while (end < n - 1)
                 {
-                    int nextPrevIdx = _ordering[end];
-                    int nextCurrIdx = _ordering[end + 1];
-
-                    T nextPrevReach = _reachabilityDistances[nextPrevIdx];
-                    T nextCurrReach = _reachabilityDistances[nextCurrIdx];
-
-                    if (!NumOps.LessThan(nextPrevReach, infinity)) nextPrevReach = maxEps;
-                    if (!NumOps.LessThan(nextCurrReach, infinity)) nextCurrReach = maxEps;
-
-                    bool stillSteep = steepUp
-                        ? !NumOps.LessThan(nextCurrReach, NumOps.Multiply(nextPrevReach, onePlusXi))
-                        : !NumOps.GreaterThan(nextCurrReach, NumOps.Multiply(nextPrevReach, oneMinusXi));
-
+                    bool stillSteep = steepUp ? steepUpPairs[end] : steepDownPairs[end];
                     if (!stillSteep) break;
                     end++;
                 }
@@ -434,23 +430,23 @@ public partial class OPTICS<T> : ClusteringBase<T>
             }
         }
 
-        // Assign labels based on clusters
+        // Assign labels based on clusters (earlier clusters keep their points)
         int currentCluster = 0;
-        T noiseT = NumOps.FromDouble(NoiseLabel);
         foreach (var (start, end) in clusters)
         {
             for (int i = start; i <= end && i < n; i++)
             {
                 int pointIdx = _ordering[i];
-                if (Labels is not null && NumOps.LessThan(Labels[pointIdx], NumOps.Zero))
+                if (labels[pointIdx] < 0)
                 {
-                    Labels[pointIdx] = NumOps.FromDouble(currentCluster);
+                    labels[pointIdx] = currentCluster;
                 }
             }
             currentCluster++;
         }
 
-        NumClusters = currentCluster;
+        numClusters = currentCluster;
+        return labels;
     }
 
     private object CreateNeighborFinder(Matrix<T> x)
@@ -511,14 +507,13 @@ public partial class OPTICS<T> : ClusteringBase<T>
 
     private List<int> FindNeighborsBruteForce(Matrix<T> data, Vector<T> query, T epsilon)
     {
-        var neighbors = new List<int>();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var within = ClusteringTensorOps.LessOrEqualFlags(ClusteringTensorOps.DistancesToPoint(metric, data, query), epsilon);
 
-        for (int i = 0; i < data.Rows; i++)
+        var neighbors = new List<int>();
+        for (int i = 0; i < within.Length; i++)
         {
-            var point = GetRow(data, i);
-            T dist = metric.Compute(query, point);
-            if (!NumOps.GreaterThan(dist, epsilon))
+            if (within[i])
             {
                 neighbors.Add(i);
             }
@@ -534,33 +529,8 @@ public partial class OPTICS<T> : ClusteringBase<T>
             return;
         }
 
-        ClusterCenters = new Matrix<T>(NumClusters, x.Columns);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            int cluster = (int)NumOps.ToDouble(Labels[i]);
-            if (cluster >= 0 && cluster < NumClusters)
-            {
-                counts[cluster]++;
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[cluster, j] = NumOps.Add(ClusterCenters[cluster, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                T countT = NumOps.FromDouble(counts[k]);
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], countT);
-                }
-            }
-        }
+        // Mean of each cluster's members (noise is ignored; empty clusters stay at zero)
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _);
     }
 
     /// <inheritdoc />
@@ -571,44 +541,24 @@ public partial class OPTICS<T> : ClusteringBase<T>
         // Normalize input using saved parameters from training
         if (_featureMeans is not null && _featureStds is not null)
         {
-            var xNorm = new Matrix<T>(x.Rows, x.Columns);
-            for (int i = 0; i < x.Rows; i++)
-                for (int j = 0; j < x.Columns; j++)
-                    xNorm[i, j] = NumOps.FromDouble(
-                        (NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_featureMeans[j])) / NumOps.ToDouble(_featureStds[j]));
-            x = xNorm;
+            x = ClusteringTensorOps.Standardize(x, _featureMeans, _featureStds);
         }
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        // Use normalized centers when input was normalized
+        var centersForPrediction = _normalizedClusterCenters ?? ClusterCenters;
+        if (centersForPrediction is null || NumClusters <= 0 || x.Rows == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = NoiseLabel;
-
-            // Use normalized centers when input was normalized
-            var centersForPrediction = _normalizedClusterCenters ?? ClusterCenters;
-            if (centersForPrediction is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(centersForPrediction, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            var noise = new Vector<T>(x.Rows);
+            return x.Rows == 0
+                ? noise
+                : Engine.TensorFullLike(noise.AsTensor(), NumOps.FromDouble(NoiseLabel)).ToVector();
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = centersForPrediction.Rows == NumClusters
+            ? centersForPrediction
+            : centersForPrediction.GetSubMatrix(0, 0, NumClusters, centersForPrediction.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -626,23 +576,14 @@ public partial class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering.Length;
-        T infinity = NumOps.MaxValue;
-        T maxEps = NumOps.FromDouble(_options.MaxEpsilon);
-        var plot = new (int, T)[n];
-
-        for (int i = 0; i < n; i++)
+        if (_ordering.Length == 0)
         {
-            int pointIdx = _ordering[i];
-            T reach = _reachabilityDistances[pointIdx];
-            if (!NumOps.LessThan(reach, infinity))
-            {
-                reach = maxEps;
-            }
-            plot[i] = (pointIdx, reach);
+            return Array.Empty<(int, T)>();
         }
 
-        return plot;
+        // Undefined (infinite) reachabilities are plotted at MaxEpsilon
+        var reach = OrderedReachability().ToArray();
+        return _ordering.Zip(reach, (pointIdx, r) => (pointIdx, r)).ToArray();
     }
 
     /// <summary>
@@ -654,39 +595,6 @@ public partial class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering.Length;
-        T epsT = NumOps.FromDouble(epsilon);
-        T infinity = NumOps.MaxValue;
-        var labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            labels[i] = NumOps.FromDouble(NoiseLabel);
-        }
-
-        int currentCluster = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            int pointIdx = _ordering[i];
-
-            if (NumOps.GreaterThan(_reachabilityDistances[pointIdx], epsT))
-            {
-                if (NumOps.LessThan(_coreDistances[pointIdx], infinity) &&
-                    !NumOps.GreaterThan(_coreDistances[pointIdx], epsT))
-                {
-                    labels[pointIdx] = NumOps.FromDouble(currentCluster);
-                    currentCluster++;
-                }
-            }
-            else
-            {
-                if (currentCluster > 0)
-                {
-                    labels[pointIdx] = NumOps.FromDouble(currentCluster - 1);
-                }
-            }
-        }
-
-        return labels;
+        return ClusteringTensorOps.FromIntArray<T>(DbscanStyleLabels(NumOps.FromDouble(epsilon), out _));
     }
 }

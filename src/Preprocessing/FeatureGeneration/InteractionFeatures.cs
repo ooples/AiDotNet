@@ -153,36 +153,35 @@ public class InteractionFeatures<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 nameof(data));
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        int colIdx = 0;
+        var x = Tensor<T>.FromMatrix(data);
+        var blocks = new List<Tensor<T>>(2);
 
         // Include original features if requested
         if (_includeOriginal)
+            blocks.Add(x);
+
+        // Generate interaction features: column idx1 times column idx2 for every pair
+        int pairs = _interactionPairs.Count;
+        if (pairs > 0 && numRows > 0)
         {
-            for (int j = 0; j < _nInputFeatures; j++)
+            var first = new int[pairs];
+            var second = new int[pairs];
+            for (int p = 0; p < pairs; p++)
             {
-                for (int i = 0; i < numRows; i++)
-                {
-                    result[i, colIdx] = data[i, j];
-                }
-                colIdx++;
+                first[p] = _interactionPairs[p].Item1;
+                second[p] = _interactionPairs[p].Item2;
             }
+
+            blocks.Add(engine.TensorMultiply(
+                engine.TensorIndexSelect(x, new Tensor<int>(first, new[] { pairs }), 1),
+                engine.TensorIndexSelect(x, new Tensor<int>(second, new[] { pairs }), 1)));
         }
 
-        // Generate interaction features
-        foreach (var (idx1, idx2) in _interactionPairs)
-        {
-            for (int i = 0; i < numRows; i++)
-            {
-                double v1 = NumOps.ToDouble(data[i, idx1]);
-                double v2 = NumOps.ToDouble(data[i, idx2]);
-                result[i, colIdx] = NumOps.FromDouble(v1 * v2);
-            }
-            colIdx++;
-        }
-
-        return new Matrix<T>(result);
+        if (numRows == 0 || blocks.Count == 0)
+            return new Matrix<T>(numRows, _nOutputFeatures);
+        return (blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 1)).ToMatrix();
     }
 
     /// <summary>

@@ -96,6 +96,12 @@ public partial class Transfusion<T>
         _patchProjection = new DenseLayer<T>(_options.DecoderDim, identity);
         _lmHead = new DenseLayer<T>(_options.VocabSize, identity);
         _noiseHead = new DenseLayer<T>(_patchDim, identity);
+        // These parallel heads do not consume the ordinary model-forward input. Declare their
+        // actual widths before parameter discovery can infer a sequential input for them. Shape-only
+        // resolution preserves deferred weight allocation and the seeded initialization stream.
+        _patchProjection.ResolveShapesOnly([_patchDim]);
+        _lmHead.ResolveShapesOnly([_options.DecoderDim]);
+        _noiseHead.ResolveShapesOnly([_options.DecoderDim]);
         _trainingRandom = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -181,10 +182,12 @@ public class VariationOfInformation<T> : IExternalClusterMetric<T>
         var trueCounts = new Dictionary<int, int>();
         var predCounts = new Dictionary<int, int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             var key = (trueLabel, predLabel);
             if (!contingency.ContainsKey(key))

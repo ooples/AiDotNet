@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -190,7 +191,8 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         var listWeights = engine.Reshape(engine.TensorBroadcastTo(engine.Reshape(valid, new[] { m, slots, 1 }),
             new[] { m, slots, listLength }), new[] { m, slots * listLength });
         var inNeighborKnn = engine.TensorGreaterThan(
-            engine.TensorScatterAdd(Tensor<T>.CreateZeros(new[] { m, nTraining }), neighborLists, listWeights, 1), NumOps.Zero);
+            engine.TensorScatterReduce(
+                Tensor<T>.CreateZeros(new[] { m, nTraining }), 1, neighborLists, listWeights, ScatterReduceMode.Sum), NumOps.Zero);
         var reverse = engine.ReduceMax(engine.Reshape(
             engine.TensorGather(knnMatrix, engine.Reshape(knnIndices, new[] { nTraining * listLength }), 1),
             new[] { m, nTraining, listLength }), new[] { 2 }, false);

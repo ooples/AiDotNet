@@ -252,33 +252,37 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private (T alpha, T beta, T gamma) EstimateParametersGridSearch(Vector<T> y)
     {
-        T bestAlpha = NumOps.Zero, bestBeta = NumOps.Zero, bestGamma = NumOps.Zero;
-        T bestMSE = NumOps.MaxValue;
-
-        for (double a = 0; a <= 1; a += 0.1)
+        // The grid 0, 0.1, ..., ~1.0 accumulated in double exactly like a `v += 0.1` loop, converted once.
+        var steps = new List<double>();
+        for (double v = 0; v <= 1; v += 0.1)
         {
-            for (double b = 0; b <= 1; b += 0.1)
+            steps.Add(v);
+        }
+
+        T[] grid = Array.ConvertAll(steps.ToArray(), NumOps.FromDouble);
+
+        // MSE of every (alpha, beta, gamma) combination, alpha outermost.
+        var mses = new List<T>(grid.Length * grid.Length * grid.Length);
+        foreach (T alpha in grid)
+        {
+            foreach (T beta in grid)
             {
-                for (double g = 0; g <= 1; g += 0.1)
+                foreach (T gamma in grid)
                 {
-                    T alpha = NumOps.FromDouble(a);
-                    T beta = NumOps.FromDouble(b);
-                    T gamma = NumOps.FromDouble(g);
-
-                    T mse = CalculateMSE(y, alpha, beta, gamma);
-
-                    if (NumOps.LessThan(mse, bestMSE))
-                    {
-                        bestMSE = mse;
-                        bestAlpha = alpha;
-                        bestBeta = beta;
-                        bestGamma = gamma;
-                    }
+                    mses.Add(CalculateMSE(y, alpha, beta, gamma));
                 }
             }
         }
 
-        return (bestAlpha, bestBeta, bestGamma);
+        // The first combination with the smallest MSE below the starting bound wins; none → zeros.
+        int best = TimeSeriesEngineOps<T>.FirstStrictMinimumBelow(new Vector<T>(mses), NumOps.MaxValue);
+        if (best < 0)
+        {
+            return (NumOps.Zero, NumOps.Zero, NumOps.Zero);
+        }
+
+        int size = grid.Length;
+        return (grid[best / (size * size)], grid[best / size % size], grid[best % size]);
     }
 
     /// <summary>
@@ -425,32 +429,14 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> EstimateInitialValues(Vector<T> y)
     {
-        Vector<T> initialValues = new Vector<T>(Options.SeasonalPeriod > 0 ? Options.SeasonalPeriod + 2 : 2);
+        // [level, trend, seasonal factors...]
+        T level = y[0];
+        T trend = EsOptions.UseTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
+        var head = new Vector<T>(new[] { level, trend });
 
-        // Initial level
-        initialValues[0] = y[0];
-
-        // Initial trend
-        if (EsOptions.UseTrend)
-        {
-            initialValues[1] = NumOps.Subtract(y[1], y[0]);
-        }
-        else
-        {
-            initialValues[1] = NumOps.Zero;
-        }
-
-        // Initial seasonal factors
-        if (Options.SeasonalPeriod > 0)
-        {
-            Vector<T> seasonalFactors = EstimateInitialSeasonalFactors(y);
-            for (int i = 0; i < Options.SeasonalPeriod; i++)
-            {
-                initialValues[i + 2] = seasonalFactors[i];
-            }
-        }
-
-        return initialValues;
+        return Options.SeasonalPeriod > 0
+            ? Vector<T>.Concatenate(head, EstimateInitialSeasonalFactors(y).GetSubVector(0, Options.SeasonalPeriod))
+            : head;
     }
 
     /// <summary>
@@ -479,39 +465,25 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> EstimateInitialSeasonalFactors(Vector<T> y)
     {
-        Vector<T> seasonalFactors = new Vector<T>(Options.SeasonalPeriod);
-        int seasons = y.Length / Options.SeasonalPeriod;
+        int period = Options.SeasonalPeriod;
+        int seasons = y.Length / period;
 
         if (seasons <= 0)
         {
             throw new InvalidOperationException(
                 $"Cannot estimate initial seasonal factors: " +
-                $"time series length ({y.Length}) is shorter than one seasonal period ({Options.SeasonalPeriod}).");
+                $"time series length ({y.Length}) is shorter than one seasonal period ({period}).");
         }
 
-        for (int i = 0; i < Options.SeasonalPeriod; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < seasons; j++)
-            {
-                sum = NumOps.Add(sum, y[i + j * Options.SeasonalPeriod]);
-            }
-            seasonalFactors[i] = NumOps.Divide(sum, NumOps.FromDouble(seasons));
-        }
+        // Average of each phase over the complete seasons: the [seasons, period] phase grid's column means.
+        var grid = Tensor<T>.FromVector(y.GetSubVector(0, seasons * period), new[] { seasons, period });
+        var seasonalFactors = Engine.TensorDivideScalar(
+            Engine.ReduceSum(grid, new[] { 0 }, keepDims: false), NumOps.FromDouble(seasons)).ToVector();
 
-        // Normalize seasonal factors
+        // Normalize so the factors average to 1: s_i · period / Σ s.
         T seasonalSum = Engine.Sum(seasonalFactors);
-        // VECTORIZED: Normalize seasonal factors using Engine operations
-        var periodScalar = NumOps.FromDouble(Options.SeasonalPeriod);
-        var periodVec = new Vector<T>(Options.SeasonalPeriod);
-        for (int i = 0; i < Options.SeasonalPeriod; i++) periodVec[i] = periodScalar;
-        seasonalFactors = (Vector<T>)Engine.Multiply(seasonalFactors, periodVec);
-
-        var sumVec = new Vector<T>(Options.SeasonalPeriod);
-        for (int i = 0; i < Options.SeasonalPeriod; i++) sumVec[i] = seasonalSum;
-        seasonalFactors = (Vector<T>)Engine.Divide(seasonalFactors, sumVec);
-
-        return seasonalFactors;
+        seasonalFactors = Engine.Multiply(seasonalFactors, NumOps.FromDouble(period));
+        return Engine.Divide(seasonalFactors, seasonalSum);
     }
 
     /// <summary>
@@ -541,27 +513,23 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         int steps = input.Rows;
 
-        // If requesting same number of steps as training data, return fitted values
+        // If predicting the same length as training data, return in-sample fitted values
         if (_fittedValues.Length > 0 && steps == _fittedValues.Length)
             return new Vector<T>(_fittedValues);
 
-        // Otherwise forecast ahead from trained state
-        Vector<T> predictions = new Vector<T>(steps);
-        T level = _trainedLevel;
+        // Otherwise, forecast forward from the trained state:
+        // prediction[i] = (level + trend · (i + 1)) · season[i mod m]
         T trend = EsOptions.UseTrend ? _trainedTrend : NumOps.Zero;
-        Vector<T> seasonalFactors = _trainedSeasonalFactors.Length > 0
-            ? new Vector<T>(_trainedSeasonalFactors)
-            : Vector<T>.Empty();
-
-        for (int i = 0; i < steps; i++)
+        if (steps <= 0)
         {
-            T prediction;
-            if (seasonalFactors.Length > 0)
-                prediction = NumOps.Multiply(NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1))),
-                    seasonalFactors[i % seasonalFactors.Length]);
-            else
-                prediction = NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1)));
-            predictions[i] = prediction;
+            return new Vector<T>(Math.Max(steps, 0));
+        }
+
+        var horizons = Engine.TensorArange<T>(1, steps + 1, 1).ToVector();
+        var predictions = Engine.Add(Engine.Fill(steps, _trainedLevel), Engine.Multiply(horizons, trend));
+        if (_trainedSeasonalFactors.Length > 0)
+        {
+            predictions = Engine.Multiply(predictions, TimeSeriesEngineOps<T>.RepeatPeriodic(_trainedSeasonalFactors, steps));
         }
 
         return predictions;
@@ -808,9 +776,10 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             Vector<T> seasonalFactors = EstimateInitialSeasonalFactors(y);
 
             // Ensure the seasonal factors are properly included in the initial values
-            for (int i = 0; i < Options.SeasonalPeriod && i + 2 < _initialValues.Length; i++)
+            int count = Math.Min(Options.SeasonalPeriod, _initialValues.Length - 2);
+            if (count > 0)
             {
-                _initialValues[i + 2] = seasonalFactors[i];
+                seasonalFactors.GetSubVector(0, count).CopyTo(_initialValues.AsWritableSpan().Slice(2, count));
             }
         }
 
@@ -820,16 +789,10 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         // Store learned parameters as ModelParameters for GetParameters() / serialization
         // Layout: [alpha, beta, gamma, level, trend, seasonal_0, seasonal_1, ...]
         int seasonalCount = _trainedSeasonalFactors.Length;
-        int totalParams = 3 + 2 + seasonalCount; // alpha, beta, gamma + level, trend + seasonal factors
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        ModelParameters[idx++] = _alpha;
-        ModelParameters[idx++] = _beta;
-        ModelParameters[idx++] = _gamma;
-        ModelParameters[idx++] = _trainedLevel;
-        ModelParameters[idx++] = _trainedTrend;
-        for (int i = 0; i < seasonalCount; i++)
-            ModelParameters[idx++] = _trainedSeasonalFactors[i];
+        // alpha, beta, gamma + level, trend + seasonal factors
+        ModelParameters = Vector<T>.Concatenate(
+            new Vector<T>(new[] { _alpha, _beta, _gamma, _trainedLevel, _trainedTrend }),
+            _trainedSeasonalFactors);
     }
 
     /// <summary>
@@ -930,24 +893,17 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Create a single-row matrix from the input vector
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
+        Matrix<T> singleRowMatrix = Matrix<T>.CreateFromVector(input);
 
-        // Use the existing Predict method to get a vector of predictions
-        // (in this case, a vector with just one value)
+        // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);
 
-        // Return the single prediction value
+        // Return the first (and only) prediction
         if (predictions.Length > 0)
         {
             return predictions[0];
         }
 
-        // If for some reason we couldn't make a prediction, return a default value
-        // This should never happen in normal operation, but provides a fallback
         return NumOps.Zero;
     }
 
