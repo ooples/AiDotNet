@@ -51,6 +51,7 @@ internal sealed class LstmBenchmarkFixture
     internal LstmBenchmarkFixture(BenchmarkOptions options, NeuralNetworkBase<float> network, IReadOnlyList<string> prefixes)
     {
         _options = options;
+        if (network.MaxGradNormValue != 1.0) throw new InvalidDataException("Unexpected model gradient clip norm.");
         string root = Path.GetFullPath(options.LstmFixture!);
         string path = Path.Combine(root, "manifest.json");
         _receipt = Path.GetFullPath(options.LstmWorkloadReceipt ?? (options.LstmNumerics is null
@@ -276,6 +277,7 @@ internal sealed class LstmBenchmarkFixture
         string receiptPath = Path.Combine(directory.FullName, "numeric-receipt.json");
         if (File.Exists(observations) || File.Exists(receiptPath)) throw new IOException("Preserve existing numerical evidence.");
         var raw = new Dictionary<string, Raw>();
+        var preClipNorms = new List<double>(3);
         var net = model.Classifier;
         for (int step = 1; step <= 3; step++)
         {
@@ -284,7 +286,14 @@ internal sealed class LstmBenchmarkFixture
             raw.Add(prefix + "logits", Snapshot(net.Predict(model.CurrentBatch.Input)));
             model.Backward();
             raw.Add(prefix + "loss", new Raw([], [net.GetLastLoss()]));
-            foreach (var (name, v) in Fields(net, net.GetParameterGradients().ToArray())) raw.Add(prefix + "gradient/" + name, v);
+            // The public gradient surface precedes clipping. On this frozen trajectory the clip is
+            // inactive, making the published values exactly the values AdamW applied.
+            float[] gradients = net.GetParameterGradients().ToArray();
+            double norm = Math.Sqrt(gradients.Sum(v => (double)v * v));
+            if (!double.IsFinite(norm) || norm + 1e-6 >= 1.0)
+                throw new InvalidDataException("The canonical LSTM trajectory requires observing an active gradient clip.");
+            preClipNorms.Add(norm);
+            foreach (var (name, v) in Fields(net, gradients)) raw.Add(prefix + "gradient/" + name, v);
             foreach (var (name, v) in Fields(net)) raw.Add(prefix + "state/" + name, v);
         }
         foreach (int batch in _options.InferenceBatchSizes)
@@ -297,6 +306,7 @@ internal sealed class LstmBenchmarkFixture
         var receipt = Receipt(NumericalSchema);
         receipt["completed_updates"] = 3;
         receipt["gradient_definition"] = "post_global_norm_clip_1";
+        receipt["pre_clip_global_norms"] = preClipNorms;
         receipt["observations"] = new { file = Path.GetFileName(observations), sha256 = HashFile(observations) };
         receipt["workload"] = new { file = Path.GetFileName(_receipt), sha256 = HashFile(_receipt) };
         WriteJson(receiptPath, receipt);

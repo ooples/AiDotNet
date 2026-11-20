@@ -210,6 +210,7 @@ class LstmFixture:
         params = dict(original.named_parameters())
         optimizer = torch.optim.AdamW(original.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
         observed = {}
+        pre_clip_norms = []
         compiled.train()
         for i, (x, y) in enumerate(self.pool[:3], 1):
             prefix = f"train/step{i}/"
@@ -219,7 +220,7 @@ class LstmFixture:
             observed[prefix + "logits"] = logits.detach().cpu().clone()
             observed[prefix + "loss"] = loss.detach().cpu().clone()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(params.values(), 1.0)
+            pre_clip_norms.append(float(torch.nn.utils.clip_grad_norm_(params.values(), 1.0).item()))
             for k, v in canonical({k: p.grad for k, p in params.items()}).items():
                 observed[prefix + "gradient/" + k] = v.detach().cpu().clone()
             optimizer.step()
@@ -234,6 +235,7 @@ class LstmFixture:
         write_safetensors(raw, observed)
         result = dict(schema="lstm-classification-numerical-v1", pid=os.getpid(), framework="pytorch", device=self.device.type,
                       model="lstm", completed_updates=3, gradient_definition=GRADIENT, source_sha256=source_hashes(),
+                      pre_clip_global_norms=pre_clip_norms,
                       observations={"file": raw.name, "sha256": file_hash(raw)},
                       workload={"file": self.receipt.name, "sha256": file_hash(self.receipt)}, **self.binding)
         save_json(receipt, result)
