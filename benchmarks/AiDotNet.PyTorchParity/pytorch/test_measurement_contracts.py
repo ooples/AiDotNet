@@ -349,6 +349,26 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit_coverage("gpu_backing", claim, run)
 
+    def test_torch_cpu_provider_counts_only_positive_cpu_events_inside_each_scored_window(self):
+        run = self.run_fixture(side="pytorch")
+        path = Path(run["path"]) / "cpu-allocations.json"
+        trace = json.loads(path.read_text())
+        pid = run["pid"]
+        # Inside the construction window: a parent operator carrying its children's bytes, a free and a GPU event.
+        trace["traceEvents"] += [
+            {"name": "aten::add", "ts": 150, "pid": pid, "args": {"cpu_memory_usage": 4096}},
+            {"name": "[memory]", "ts": 151, "pid": pid, "args": {"Device Type": 0, "Bytes": -4096}},
+            {"name": "[memory]", "ts": 152, "pid": pid, "args": {"Device Type": 1, "Bytes": 2048}},
+            # Positive CPU events outside every scored window: between windows and in training preparation.
+            {"name": "[memory]", "ts": 250, "pid": pid, "args": {"Device Type": 0, "Bytes": 512}},
+            {"name": "[memory]", "ts": 350, "pid": pid, "args": {"Device Type": 0, "Bytes": 512}},
+        ]
+        self.rewrite_raw(run, "cpu_allocations", trace)
+        values = provider_values(run, checked_phases(run), "torch_cpu_memory_events")
+        self.assertEqual({"construction", "training_epoch_0", "inference_b1"}, set(values))
+        for window, value in values.items():
+            self.assertEqual({"bytes": 20 * 256, "count": 20}, value, window)
+
     def test_compiled_workspace_loans_are_requests_and_cannot_be_backing(self):
         run = self.run_fixture()
         phases = checked_phases(run)
