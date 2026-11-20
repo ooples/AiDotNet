@@ -1991,6 +1991,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 # Same global-norm clip AiDotNet applies by default (MaxGradNorm 1.0).
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
+                if model_name == "lstm" and fixture is not None:
+                    fixture.trained(x, y)
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
             mark_phase(model_name, f"training-epoch-{epoch}-complete")
@@ -2104,9 +2106,28 @@ def parse_inference_batches(text: str) -> list[int]:
 
 def run(args: argparse.Namespace) -> dict[str, object]:
     fixture_path = getattr(args, "hifigan_fixture", None)
+    lstm_path = getattr(args, "lstm_fixture", None)
     required = getattr(args, "require_matched_workload", False)
-    if required and fixture_path is None:
-        raise ValueError("Matched mode requires an explicit shared HiFi workload fixture.")
+    if required and fixture_path is None and lstm_path is None:
+        raise ValueError("Matched mode requires an explicit shared workload fixture.")
+    cpu_mkldnn = getattr(args, "lstm_cpu_mkldnn", None)
+    if lstm_path is None and (getattr(args, "lstm_numerics", None) or getattr(args, "lstm_workload_receipt", None)
+                              or cpu_mkldnn is not None):
+        raise ValueError("LSTM receipts require --lstm-fixture")
+    if lstm_path is not None:
+        if fixture_path is not None or args.models.strip() != "lstm" or not args.compile:
+            raise ValueError("A shared LSTM workload requires --models lstm --compile and its own fixture")
+        from lstm_fixture import strict_lstm_settings
+        cpu = args.device == "cpu" or (args.device == "auto" and not torch.cuda.is_available())
+        if not cpu and cpu_mkldnn is not None:
+            raise ValueError("--lstm-cpu-mkldnn requires the CPU LSTM row")
+        with strict_lstm_settings(cpu_mkldnn=(cpu_mkldnn == "enabled") if cpu_mkldnn is not None else None):
+            return _run(args)
+    return _run(args)
+
+
+def _run(args: argparse.Namespace) -> dict[str, object]:
+    fixture_path = getattr(args, "hifigan_fixture", None)
     if fixture_path is not None and [name.strip() for name in args.models.split(",")] != ["hifigan-v1"]:
         raise ValueError("The shared fixture must be used with the single full HiFi row.")
 
@@ -2131,6 +2152,12 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         model, shape = make_model(name)
         model.to(device)
         fixture = None
+        original = model
+        lstm_path = getattr(args, "lstm_fixture", None)
+        if lstm_path is not None:
+            from lstm_fixture import LstmFixture
+            fixture = LstmFixture(lstm_path, args, device, inference_batches, model)
+            model._benchmark_fixture = fixture
         if getattr(args, "hifigan_fixture", None) is not None:
             from hifigan_fixture import HifiBenchmarkFixture
             receipt = getattr(args, "hifigan_workload_receipt", None) or (str(args.output) + ".workload.json")
@@ -2153,8 +2180,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 model.compile_parts()
             elif hasattr(model, "training_loss"):
                 model.training_loss = torch.compile(model.training_loss)
-            model = torch.compile(model)
-        if fixture is not None:
+            if lstm_path is not None:
+                model = torch.compile(model, backend=fixture.compilation, fullgraph=True, dynamic=False)
+                if args.lstm_numerics:
+                    return fixture.numeric(original, model, args.lstm_numerics)
+            else:
+                model = torch.compile(model)
+        if fixture_path is not None:
             model.eval()
             with torch.no_grad():
                 model(fixture.input_values["inference/1/mel"])
@@ -2213,6 +2245,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
     parser.add_argument("--hifigan-fixture", type=Path)
     parser.add_argument("--hifigan-workload-receipt", type=Path)
+    parser.add_argument("--lstm-fixture", type=Path)
+    parser.add_argument("--lstm-workload-receipt", type=Path)
+    parser.add_argument("--lstm-numerics", type=Path, help="Write three matched AdamW updates and inference observations.")
+    parser.add_argument("--lstm-cpu-mkldnn", choices=("enabled", "disabled"),
+                        help="Select the installed CPU backend only for a shared LSTM run. Omit to keep PyTorch's runtime default.")
     parser.add_argument("--require-matched-workload", action="store_true")
 
     args = parser.parse_args()

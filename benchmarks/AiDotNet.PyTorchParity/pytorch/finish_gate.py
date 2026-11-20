@@ -25,6 +25,7 @@ import time
 import psutil
 from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, fixed_windows, raw_file
 from python_process import bootstrap_argv, resolve_python_process, stop_launch
+from lstm_equivalence import lstm_correctness_gate, lstm_workload_gate
 from torch_policy import compare_reference, sha as streaming_sha
 
 
@@ -248,6 +249,8 @@ class Sampler:
 
 def reference_recipe_gate(run: dict) -> dict:
     """Require the actual hashed reference manifest to name the scored Torch recipe."""
+    if run.get("model") == "lstm":
+        return lstm_workload_gate(run)
     hashes = run.get("artifacts", {})
     try:
         manifest_path = Path(run.get("artifact_paths", {}).get("hifigan_reference_manifest", ""))
@@ -443,6 +446,11 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"), run_directory=str(run_dir))
     bindings["inference_batches"] = ",".join(map(str, protocol["inference_batch_sizes"]))
     argv = [str(arg).format_map(bindings) for arg in command["argv"]]
+    if model == "lstm" and "lstm_fixture_manifest" in config["artifacts"]:
+        if "--lstm-fixture" not in argv:
+            argv.extend(["--lstm-fixture", str(Path(config["artifacts"]["lstm_fixture_manifest"]).resolve().parent)])
+        if "--lstm-workload-receipt" not in argv:
+            argv.extend(["--lstm-workload-receipt", str(run_dir / "lstm-workload.json")])
     original_argv = argv.copy()
     bootstrap_receipt = None
     if side == "pytorch":
@@ -555,7 +563,8 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
     raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json",
-                 "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite"}
+                 "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite",
+                 "lstm_workload": "lstm-workload.json"}
     metadata["diagnostic_files"] = {key: {"name": name, "sha256": streaming_sha(run_dir / name)}
                                     for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
@@ -612,6 +621,8 @@ def hifigan_comparison_kinds() -> dict[str, str]:
 
 def correctness_gate(run: dict) -> dict:
     """Bind a successful full-V1 equivalence receipt to the exact scored binaries/reference."""
+    if run.get("model") == "lstm":
+        return lstm_correctness_gate(run)
     binding = run.get("correctness_receipt") or {}
     if run.get("model") != "hifigan-v1":
         return {"status": "unverified", "reason": "This family has no validated numerical-equivalence receipt contract."}
@@ -726,6 +737,10 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     errors = []
     if run.get("mode") == "score" and run.get("contention"):
         errors.append("external CI worker/testhost contention observed during scoring")
+    if run["model"] == "lstm":
+        workload = lstm_workload_gate(run)
+        if workload["status"] != "pass":
+            errors.append("LSTM workload: " + workload["reason"])
     if model.get("device") != run["device"]:
         errors.append("device mismatch")
     for name in ("epochs", "train_batches", "batch_size", "inference_iterations", "warmup_iterations", "warmup_min_ms", "seed", "inference_batch_sizes"):
@@ -801,6 +816,8 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
                     allocation_rows[side].append(({}, ["Diagnostic pair/source/protocol/cache/hardware differs from scoring."]))
                 elif cache_coverage(diagnostic)["status"] != "pass":
                     allocation_rows[side].append(({}, ["Allocation diagnostic cache coverage is incomplete."]))
+                elif model == "lstm" and lstm_workload_gate(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic did not run the matched LSTM workload."]))
                 else:
                     allocation_rows[side].append(allocation_metrics(diagnostic))
         # Compare computed exact/upper Ai bounds against exact/lower Torch bounds.

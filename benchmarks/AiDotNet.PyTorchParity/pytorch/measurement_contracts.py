@@ -19,9 +19,9 @@ from pathlib import Path
 CACHE_SENSITIVE_ENVIRONMENT = (
     "TORCHINDUCTOR_FX_GRAPH_CACHE", "TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE",
     "TORCHINDUCTOR_AUTOTUNE_REMOTE_CACHE", "TORCHINDUCTOR_AUTOGRAD_CACHE",
-    "TORCHINDUCTOR_AOT_AUTOGRAD_REMOTE_CACHE", "TORCHINDUCTOR_FORCE_DISABLE_CACHES",
+    "TORCHINDUCTOR_AOT_AUTOGRAD_REMOTE_CACHE", "TORCHINDUCTOR_AUTOGRAD_REMOTE_CACHE", "TORCHINDUCTOR_FORCE_DISABLE_CACHES",
     "TORCHINDUCTOR_REDIS_HOST", "TORCHINDUCTOR_REDIS_PORT", "TRITON_OVERRIDE_DIR",
-    "TRITON_DUMP_DIR", "TRITON_HOME", "TRITON_CACHE_MANAGER", "TORCH_HOME",
+    "TRITON_DUMP_DIR", "TRITON_HOME", "TRITON_CACHE_MANAGER", "TRITON_KERNEL_OVERRIDE", "TORCH_HOME",
     "CUDA_CACHE_DISABLE", "CUDA_CACHE_MAXSIZE",
 )
 
@@ -514,8 +514,8 @@ def cache_coverage(run: dict) -> dict:
             raise ValueError("Cache-sensitive inherited environment was not completely recorded.")
         if run["side"] == "pytorch":
             remote = ("TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE", "TORCHINDUCTOR_AUTOTUNE_REMOTE_CACHE",
-                      "TORCHINDUCTOR_AOT_AUTOGRAD_REMOTE_CACHE")
-            if any(str(sensitive[key]).lower() in ("1", "true") for key in remote) or sensitive["TRITON_OVERRIDE_DIR"] or sensitive["TRITON_CACHE_MANAGER"]:
+                      "TORCHINDUCTOR_AOT_AUTOGRAD_REMOTE_CACHE", "TORCHINDUCTOR_AUTOGRAD_REMOTE_CACHE", "TRITON_KERNEL_OVERRIDE")
+            if any(str(sensitive[key]).lower() in ("1", "true", "on", "yes") for key in remote) or sensitive["TRITON_OVERRIDE_DIR"] or sensitive["TRITON_CACHE_MANAGER"]:
                 raise ValueError("Active external/remote cache manager is outside the isolated local-cache contract.")
         return {"status": "pass", "regime": state["regime"], "boundary": "fresh_process_and_audited_persistent_roots"}
     except (KeyError, ValueError, TypeError, OSError, json.JSONDecodeError) as error:

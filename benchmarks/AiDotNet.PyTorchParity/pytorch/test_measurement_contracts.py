@@ -327,11 +327,14 @@ class ContractTests(unittest.TestCase):
         self.assertEqual("unverified", cache_coverage(run)["status"])
 
     def test_remote_cache_cannot_be_declared_inactive_by_a_boolean(self):
-        self.contract["caches"]["pytorch"]["sensitive_environment"]["TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE"] = "1"
-        self.commit_contract()
-        run = self.run_fixture("pytorch", mode="score")
-        run["cache_sensitive_environment"]["TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE"] = "1"
-        self.assertEqual("unverified", cache_coverage(run)["status"])
+        for pair, variable in enumerate(("TORCHINDUCTOR_FX_GRAPH_REMOTE_CACHE", "TORCHINDUCTOR_AUTOGRAD_REMOTE_CACHE", "TRITON_KERNEL_OVERRIDE")):
+            with self.subTest(variable=variable):
+                self.contract["caches"]["pytorch"]["sensitive_environment"] = dict.fromkeys(CACHE_SENSITIVE_ENVIRONMENT)
+                self.contract["caches"]["pytorch"]["sensitive_environment"][variable] = "1"
+                self.commit_contract()
+                run = self.run_fixture("pytorch", pair=pair, mode="score")
+                run["cache_sensitive_environment"][variable] = "1"
+                self.assertEqual("unverified", cache_coverage(run)["status"])
 
     def test_async_cuda_api_acquisitions_cannot_be_relabeled_physical_backing(self):
         run = self.run_fixture()
