@@ -230,17 +230,44 @@ public class PixelToSequenceDocumentTests
         var image = new Tensor<double>(new[] { 1, 3, height, width }, new Vector<double>(pixels));
 
         var preprocess = typeof(Pix2Struct<double>).GetMethod("ApplyDefaultPreprocessing",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-        var output = (Tensor<double>)preprocess.Invoke(model, new object[] { image })!;
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(preprocess);
+        var output = Assert.IsType<Tensor<double>>(preprocess.Invoke(model, new object[] { image }));
 
         Assert.Equal(new[] { 1, 3, expectedHeight, expectedWidth }, output.Shape.ToArray());
-        // Channel 0, row 0: the half-pixel bilinear sample of the ramp at src = (x + 0.5) * width / outW - 0.5,
-        // clamped to [0, width - 1], then ImageNet-normalized with mean 0.485 and std 0.229.
+        // Channel 0, row 0: PyTorch antialiased half-pixel bilinear resampling of the ramp, followed by Pix2Struct's
+        // per-image standardization (x - mean) / max(std, 1 / sqrt(N)).
+        double scale = (double)width / expectedWidth;
+        double support = Math.Max(scale, 1.0);
+        var resampledRow = new double[expectedWidth];
+        for (int x = 0; x < expectedWidth; x++)
+        {
+            double center = scale * (x + 0.5);
+            double weightedSum = 0.0, weightTotal = 0.0;
+            for (int j = 0; j < width; j++)
+            {
+                double w = Math.Max(1.0 - Math.Abs((j + 0.5 - center) / support), 0.0);
+                weightedSum += w * ((double)j / width);
+                weightTotal += w;
+            }
+            resampledRow[x] = weightedSum / weightTotal;
+        }
+        double mean = 0.0;
+        for (int x = 0; x < expectedWidth; x++) mean += resampledRow[x];
+        mean /= expectedWidth;
+        double variance = 0.0;
+        for (int x = 0; x < expectedWidth; x++)
+        {
+            double diff = resampledRow[x] - mean;
+            variance += diff * diff;
+        }
+        double std = Math.Max(Math.Sqrt(variance / expectedWidth),
+            1.0 / Math.Sqrt(3.0 * expectedHeight * expectedWidth));
+
         var values = output.ToArray();
         for (int x = 0; x < expectedWidth; x++)
         {
-            double src = Math.Min(Math.Max((x + 0.5) * width / expectedWidth - 0.5, 0.0), width - 1);
-            double expected = (src / width - 0.485) / 0.229;
+            double expected = (resampledRow[x] - mean) / std;
             Assert.True(Math.Abs(values[x] - expected) < 1e-9, $"column {x}: {values[x]} != {expected}");
         }
     }

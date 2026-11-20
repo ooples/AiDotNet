@@ -298,7 +298,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         var backbone = new List<LayerBase<T>>();
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? 42);
         _encoder = new SanmEncoder<T>(Engine, backbone, new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim, o.NumAttentionHeads,
-            o.FeedForwardDim, o.NumEncoderLayers, 0, o.FsmnKernelSize, 1e-12), random);
+            o.FeedForwardDim, o.NumEncoderLayers, 0, o.FsmnKernelSize, 1e-12, o.SampleRate), random);
         _network = new ParaformerNetwork<T>(Engine, backbone, new ParaformerConfiguration
         {
             Width = o.EncoderDim, Heads = o.NumAttentionHeads, FeedForward = o.FeedForwardDim, DecoderLayers = o.NumDecoderLayers,
