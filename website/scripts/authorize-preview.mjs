@@ -1,17 +1,19 @@
 export function approvedPreviewOrigin(value) {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.pathname !== '/' || url.search || url.hash
-    || !(url.hostname === 'test.aidotnet.dev' || /^aidotnetwebsite-[a-z0-9]+-franklins-projects-02a0b5a0\.vercel\.app$/.test(url.hostname))) throw new Error('An approved HTTPS AiDotNet preview origin is required');
+    || url.hostname !== 'test.aidotnet.dev') throw new Error('An approved HTTPS AiDotNet preview origin is required');
   return url.origin;
 }
 
+// The preview host (deploy/website/Caddyfile) answers a request carrying the shared secret with an
+// HttpOnly cookie; every later request presents only that cookie.
 // Run credential-bearing fetches outside Playwright request/error logging.
 export async function authorizePreview({ baseURL, secret, expectedCommit, expectedRun, fetcher = fetch }) {
   const origin = approvedPreviewOrigin(baseURL);
   if (!secret || !/^[0-9a-f]{40}$/.test(expectedCommit ?? '')) throw new Error('Preview credential and expected deployment commit are required');
   try {
     const first = await fetcher(origin, { redirect: 'manual', signal: AbortSignal.timeout(30_000),
-      headers: { 'x-vercel-protection-bypass': secret, 'x-vercel-set-bypass-cookie': 'true' } });
+      headers: { 'x-aidotnet-preview-bypass': secret } });
     if (![200,302,303,307,308].includes(first.status)) throw new Error('authorization');
     const cookies = first.headers.getSetCookie().map(raw => {
       const [pair, ...attributes] = raw.split(';').map(s => s.trim());

@@ -27,7 +27,7 @@ test('the real verification wrapper rejects setup-only success and preserves lis
     const listed=spawnSync(process.execPath,[...args,'--list'],{env,encoding:'utf8',timeout:30_000});
     assert.equal(listed.status,0,listed.stdout+listed.stderr);
     assert.match(listed.stdout,/fixture intentionally skipped/);
-    writeFileSync(fixture,"import {test} from '@playwright/test';test('fixture redacts private failure',()=>{throw new Error('Authorization: '+process.env.VERCEL_AUTOMATION_BYPASS_SECRET+'\\nReset link https://fixture.invalid/verify?token=fixture-recovery-token&type=recovery\\nPortal https://billing.stripe.com/p/session/fixture-portal-session?secret=fixture-portal-token&client_secret=fixture-client-token')});\n");
+    writeFileSync(fixture,"import {test} from '@playwright/test';test('fixture redacts private failure',()=>{throw new Error('Authorization: '+process.env.PREVIEW_BYPASS_SECRET+'\\nReset link https://fixture.invalid/verify?token=fixture-recovery-token&type=recovery\\nPortal https://billing.stripe.com/p/session/fixture-portal-session?secret=fixture-portal-token&client_secret=fixture-client-token')});\n");
     const failed=spawnSync(process.execPath,args,{env,encoding:'utf8',timeout:60_000});
     assert.equal(failed.status,1);
     assert.equal((failed.stdout+failed.stderr).includes('fixture-private-bypass'),false,'terminal reporters must redact credentials before displaying failures');

@@ -15,10 +15,6 @@ public class CodeExecutionService
     private readonly HttpClient _httpClient;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
-    // API endpoints - will be set based on environment
-    private const string ProductionApiUrl = "https://aidotnet.vercel.app/api/execute";
-    private const string LocalApiUrl = "http://localhost:3000/api/execute";
-
     // Azure Functions endpoint for AiDotNet code execution
     private const string AzureFunctionsApiUrl = "https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/execute";
     private const string LocalAzureFunctionsUrl = "http://localhost:7071/api/execute";
@@ -148,7 +144,7 @@ public class CodeExecutionService
     /// <summary>
     /// Executes C# code and returns the result.
     /// Uses smart routing: AiDotNet code goes to Azure Functions (with AiDotNet installed) first,
-    /// then falls back to simulation. Pure C# goes to Piston API first, then falls back to simulation.
+    /// then falls back to simulation. Plain C# goes to the same execution service, then falls back to simulation.
     /// </summary>
     public async Task<ExecutionResult> ExecuteAsync(string code)
     {
@@ -180,8 +176,9 @@ public class CodeExecutionService
                 return ExecuteAiDotNetSimulation(code);
             }
 
-            // Pure C# code can try real execution via Piston API
-            var apiResult = await TryExecuteViaApiAsync(code);
+            // Plain C# runs on the same isolated execution service; it compiles any C#,
+            // not only code that references AiDotNet.
+            var apiResult = await TryExecuteAiDotNetViaAzureFunctionsAsync(code);
             if (apiResult is not null)
             {
                 return apiResult;
@@ -339,139 +336,6 @@ public class CodeExecutionService
                 Success = false,
                 Output = $"Simulation error: {ex.Message}"
             };
-        }
-    }
-
-    /// <summary>
-    /// Attempts to execute code via the backend API.
-    /// Returns null if the API is unavailable or disabled.
-    /// </summary>
-    private async Task<ExecutionResult?> TryExecuteViaApiAsync(string code)
-    {
-        // Skip API calls if disabled (prevents console errors when no backend exists)
-        if (!EnableApiCalls)
-        {
-            return null;
-        }
-
-        try
-        {
-            var request = new ApiExecuteRequest { Code = code };
-
-            // Try production API first
-            var response = await TryApiEndpoint(ProductionApiUrl, request);
-            if (response is not null)
-            {
-                return response;
-            }
-
-            // Try local API as fallback (for development)
-            response = await TryApiEndpoint(LocalApiUrl, request);
-            return response;
-        }
-        catch
-        {
-            // API not available, return null to trigger simulation fallback
-            return null;
-        }
-    }
-
-    private async Task<ExecutionResult?> TryApiEndpoint(string url, ApiExecuteRequest request)
-    {
-        try
-        {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-
-            var response = await _httpClient.PostAsJsonAsync(url, request, JsonOptions, cts.Token);
-
-            // If rate limited, show a friendly message (this is the only user-facing API error)
-            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-            {
-                return new ExecutionResult
-                {
-                    Success = false,
-                    Output = "Rate limit reached. Please wait a moment before trying again.\n\nThe playground API allows 10 executions per minute."
-                };
-            }
-
-            // If not successful, fall back to simulation (don't show raw API errors to user)
-            if (!response.IsSuccessStatusCode)
-            {
-                // Log to console for debugging (only visible in browser dev tools)
-                Console.WriteLine($"API returned {response.StatusCode}, falling back to simulation");
-                return null;
-            }
-
-            ApiExecuteResponse? result = null;
-            try
-            {
-                result = await response.Content.ReadFromJsonAsync<ApiExecuteResponse>(JsonOptions, cts.Token);
-            }
-            catch
-            {
-                // If we can't parse the response, fall back to simulation
-                Console.WriteLine("Failed to parse API response, falling back to simulation");
-                return null;
-            }
-
-            if (result is null)
-            {
-                return null;
-            }
-
-            // Build output - show both successful and failed executions from API
-            // (Don't mask real compile/runtime errors with simulation)
-            var output = new StringBuilder();
-
-            output.AppendLine("=== Real Code Execution ===");
-            output.AppendLine();
-
-            if (result.Success)
-            {
-                output.AppendLine("Output:");
-                output.AppendLine("-------");
-                output.AppendLine(result.Output ?? "(No output)");
-            }
-            else
-            {
-                // Show real compilation/runtime errors to user
-                output.AppendLine("Execution Failed:");
-                output.AppendLine("-----------------");
-                if (!string.IsNullOrEmpty(result.Error))
-                {
-                    output.AppendLine(result.Error);
-                }
-                if (!string.IsNullOrEmpty(result.CompilationOutput))
-                {
-                    output.AppendLine();
-                    output.AppendLine("Compiler Output:");
-                    output.AppendLine(result.CompilationOutput);
-                }
-            }
-
-            if (result.ExecutionTime.HasValue)
-            {
-                output.AppendLine();
-                output.AppendLine($"Execution time: {result.ExecutionTime}ms");
-            }
-
-            return new ExecutionResult
-            {
-                Success = result.Success,
-                Output = output.ToString()
-            };
-        }
-        catch (TaskCanceledException)
-        {
-            // Timeout - fall back to simulation
-            Console.WriteLine("API request timed out, falling back to simulation");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            // Any other error - fall back to simulation
-            Console.WriteLine($"API error: {ex.Message}, falling back to simulation");
-            return null;
         }
     }
 
@@ -697,9 +561,6 @@ public class CodeExecutionService
         output.AppendLine("    git clone https://github.com/ooples/AiDotNet");
         output.AppendLine("    cd AiDotNet/samples/getting-started/HelloWorld");
         output.AppendLine("    dotnet run");
-        output.AppendLine();
-        output.AppendLine("  Option 2 - Deploy the playground API:");
-        output.AppendLine("    cd AiDotNet && vercel --prod");
         output.AppendLine();
         output.AppendLine("See samples/README.md for the full sample index.");
 
@@ -1397,27 +1258,6 @@ public class CodeExecutionService
         }
         return value.ToString($"F{defaultPrecision}");
     }
-}
-
-/// <summary>
-/// Request to the code execution API.
-/// </summary>
-internal class ApiExecuteRequest
-{
-    public string Code { get; set; } = "";
-    public string? Language { get; set; }
-}
-
-/// <summary>
-/// Response from the code execution API.
-/// </summary>
-internal class ApiExecuteResponse
-{
-    public bool Success { get; set; }
-    public string? Output { get; set; }
-    public string? Error { get; set; }
-    public string? CompilationOutput { get; set; }
-    public int? ExecutionTime { get; set; }
 }
 
 /// <summary>

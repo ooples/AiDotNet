@@ -85,9 +85,13 @@ All secrets required for CI/CD pipelines:
 | `CODECOV_TOKEN` | `quality.yml` | Codecov upload token |
 | `SONAR_TOKEN` | `quality.yml` | SonarCloud analysis token |
 | `OPENAI_API_KEY` | Tests | OpenAI API key for integration tests |
-| `VERCEL_TOKEN` | Website deploy | Vercel deployment token |
-| `VERCEL_ORG_ID` | Website deploy | Vercel organization ID |
-| `VERCEL_PROJECT_ID` | Website deploy | Vercel project ID |
+| `WEBSITE_SSH_HOST` | Website deploy | VPS host name or IP that serves aidotnet.dev |
+| `WEBSITE_SSH_USER` | Website deploy | Deploy account on the VPS (`aidotnet-deploy`) |
+| `WEBSITE_SSH_KEY` | Website deploy | Private SSH key for the deploy account |
+| `WEBSITE_SSH_KNOWN_HOSTS` | Website deploy | Pinned host key line(s) for the VPS |
+| `CLOUDFLARE_API_TOKEN` | Website deploy | Token with Zone > Cache Purge for aidotnet.dev |
+| `CLOUDFLARE_ZONE_ID` | Website deploy | Cloudflare zone ID of aidotnet.dev |
+| `PREVIEW_BYPASS_SECRET` | Website preview | Shared secret that unlocks test.aidotnet.dev |
 
 ## Local Development Setup
 
