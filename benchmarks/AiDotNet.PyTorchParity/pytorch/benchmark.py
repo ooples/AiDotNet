@@ -5,16 +5,15 @@ Twin of the C# harness (../Program.cs): same four reference models
 training + multi-batch inference measurement loop, and the same JSON schema,
 so the two reports compare directly via compare.py.
 
-IMPORTANT (fair comparison): PyTorch here runs EAGER (no torch.compile). The
-AiDotNet side runs its own compiled/fused path; pitting it against a separately
-torch.compile'd PyTorch would compare two different compilation stacks rather
-than the kernels. Pin both sides to the same CPU thread count:
-    python benchmark.py --threads 8 ...
+The performance target uses --compile (TorchInductor), including first-epoch
+and steady-state measurements. Without that flag this script measures an eager
+baseline. Pin both sides to the same device and CPU thread count:
+    python benchmark.py --threads 8 --compile ...
     dotnet run ... (set AIDOTNET_CPU_THREADS=8)
 
 Usage:
     pip install -r requirements.txt
-    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
         --threads 8 --output ../results/pytorch.json
 """
 
@@ -38,6 +37,8 @@ import psutil
 import torch
 from torch import nn
 from torch.nn import functional as F
+
+from benchmark_telemetry import mark_phase
 
 BATCH_SIZES = [1, 8, 32, 128]
 
@@ -79,6 +80,7 @@ class InferenceBatchResult:
     steady_state_latency_ms_p75: float
     throughput_samples_per_second: float
     memory_mb_peak: float
+    gpu_tensor_allocated_mb_peak: float | None = None
 
 
 @dataclass
@@ -112,12 +114,14 @@ class ResourceMonitor:
 
     def __enter__(self) -> ResourceMonitor:
         self.process.cpu_percent(interval=None)
-        self._thread.start()
+        if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
+            self._thread.start()
         return self
 
     def __exit__(self, *exc: object) -> None:
         self._stop.set()
-        self._thread.join(timeout=2)
+        if self._thread.ident is not None:
+            self._thread.join(timeout=2)
 
     def _sample(self) -> None:
         while not self._stop.is_set():
@@ -226,6 +230,10 @@ MODEL_NOTES = {
     "gat": "One sample is the whole Cora-sized graph (2,708 nodes); run at --batch-size 1 --inference-batches 1. "
            "Dense masked attention on both sides.",
     "dcgan": "One training step updates the discriminator then the generator; the loss is the discriminator's.",
+    "wav2vec2-base": "Feature encoder frozen and LayerDrop 0 on both sides; CTC loss averaged per utterance (not "
+                     "transformers' sum or target-length reduction).",
+    "hifigan-v1": "One utterance per step: run at --batch-size 1. A step updates the discriminators then the "
+                  "generator; the loss is the generator's (adversarial + 2 x feature matching + 45 x mel L1).",
 }
 
 
@@ -1858,6 +1866,12 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return CoraGAT(), (GAT_NODES, GAT_FEATURES)
     if name == "dcgan":
         return DCGAN64(), (DCGAN_LATENT,)
+    if name == "panns-cnn14":
+        return PannsCnn14(), (1, PANNS_FRAMES, PANNS_MELS)
+    if name == "wav2vec2-base":
+        return Wav2Vec2BaseCtc(), (W2V_SAMPLES,)
+    if name == "hifigan-v1":
+        return HifiGanV1(), (HIFI_MELS, HIFI_FRAMES)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name in TIME_SERIES_MODELS:
@@ -1908,7 +1922,7 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
     return x, y
 
 
-def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
+def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False, model_name: str = "") -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
     # A row whose step updates several networks (the GAN) owns its optimizers and its whole step (train_step).
@@ -1939,6 +1953,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             if profile_epoch:
                 synchronize(device)
                 torch.cuda.profiler.start()
+            mark_phase(model_name, f"training-epoch-{epoch}")
             start_epoch = time.perf_counter()
             for x, y in pool:
                 if optimizer is None:
@@ -1980,6 +1995,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                     fixture.trained(x, y)
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
+            mark_phase(model_name, f"training-epoch-{epoch}-complete")
             if profile_epoch:
                 torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
@@ -2015,7 +2031,7 @@ def json_loss(value: float) -> float | str:
 
 @torch.inference_mode()
 def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
-                        batch_sizes: list[int], warmup_min_ms: float = 0.0) -> list[InferenceBatchResult]:
+                        batch_sizes: list[int], warmup_min_ms: float = 0.0, model_name: str = "") -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
         mark_phase(model_name, f"inference-b{batch_size}-prepare")
@@ -2036,6 +2052,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             torch.cuda.reset_peak_memory_stats(device)
         process = psutil.Process(os.getpid())
         rss_peak = process.memory_info().rss / 1024 / 1024
+        mark_phase(model_name, f"inference-b{batch_size}-steady")
         steady: list[float] = []
         for _ in range(iterations):
             start = time.perf_counter()
@@ -2043,9 +2060,11 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             synchronize(device)
             elapsed = time.perf_counter() - start
             steady.append(elapsed)
-            rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
+            if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
+                rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
         total = sum(steady)
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
+        mark_phase(model_name, f"inference-b{batch_size}-complete")
         # p95 latency: robust to rig-contention noise that swings the mean.
         steady_sorted = sorted(steady)
         p95_idx = min(len(steady_sorted) - 1, round(0.95 * (len(steady_sorted) - 1)))
@@ -2058,7 +2077,8 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             steady_state_latency_ms_p25=round(quantile(steady_sorted, 0.25) * 1000, 3),
             steady_state_latency_ms_p75=round(quantile(steady_sorted, 0.75) * 1000, 3),
             throughput_samples_per_second=round((iterations * batch_size) / total, 3),
-            memory_mb_peak=round(max(rss_peak, cuda_peak), 3),
+            memory_mb_peak=round(rss_peak, 3),
+            gpu_tensor_allocated_mb_peak=round(cuda_peak, 3) if device.type == "cuda" else None,
         ))
     return results
 
@@ -2128,6 +2148,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
 
     model_results: list[ModelResult] = []
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
+        mark_phase(name, "construction")
         model, shape = make_model(name)
         model.to(device)
         fixture = None
@@ -2192,6 +2213,10 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         "device": str(device),
         "torch_num_threads": torch.get_num_threads(),
         "cuda_available": torch.cuda.is_available(),
+        "protocol": {"epochs": args.epochs, "train_batches": args.train_batches, "batch_size": args.batch_size,
+                     "inference_iterations": args.inference_iterations, "warmup_iterations": args.warmup_iterations,
+                     "warmup_min_ms": args.warmup_min_ms, "seed": args.seed, "inference_batch_sizes": inference_batches,
+                     "compile": args.compile},
         "results": [asdict(result) for result in model_results],
     }
 
@@ -2229,7 +2254,15 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    report = run(args)
+    allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")
+    if allocation_trace:
+        if os.environ.get("AIDOTNET_BENCH_DIAGNOSTICS") != "1":
+            raise ValueError("Allocation profiling requires a separate diagnostic run.")
+        with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], profile_memory=True) as profiler:
+            report = run(args)
+        profiler.export_chrome_trace(allocation_trace)
+    else:
+        report = run(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
