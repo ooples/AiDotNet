@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.PowerTransforms;
 
@@ -99,230 +100,312 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int numColumns = data.Columns;
         var columnsToProcess = GetColumnsToProcess(numColumns);
 
-        var lambdas = new T[numColumns];
-        var means = new T[numColumns];
-        var stdDevs = new T[numColumns];
+        // Columns not processed keep lambda 1, mean 0 and standard deviation 1
+        var lambdas = PreprocessingTensorOps.Filled(new[] { numColumns }, NumOps.One);
+        var means = new Tensor<T>(new[] { numColumns });
+        var stdDevs = PreprocessingTensorOps.Filled(new[] { numColumns }, NumOps.One);
 
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        if (data.Rows > 0 && columnsToProcess.Length > 0)
         {
-            lambdas[i] = NumOps.One;
-            means[i] = NumOps.Zero;
-            stdDevs[i] = NumOps.One;
-        }
-
-        foreach (var col in columnsToProcess)
-        {
-            var column = data.GetColumn(col);
-
-            // Check for Box-Cox constraint
-            if (_method == PowerTransformMethod.BoxCox)
+            var x = Tensor<T>.FromMatrix(data);
+            var transformedColumns = new List<Tensor<T>>(numColumns);
+            for (int col = 0; col < numColumns; col++)
             {
-                for (int i = 0; i < column.Length; i++)
+                var column = PreprocessingTensorOps.ColumnVector(x, col);
+                if (!columnsToProcess.Contains(col))
                 {
-                    if (NumOps.Compare(column[i], NumOps.Zero) <= 0)
-                    {
-                        throw new ArgumentException(
-                            $"Box-Cox transformation requires strictly positive data. " +
-                            $"Found non-positive value in column {col}. Use YeoJohnson instead.");
-                    }
+                    transformedColumns.Add(column);
+                    continue;
                 }
+
+                var (lambda, transformed) = FitColumn(column, col);
+                lambdas = Engine.TensorSetSlice(lambdas, lambda, new[] { col });
+                transformedColumns.Add(transformed);
             }
 
-            // Find optimal lambda using simple grid search
-            double bestLambda = FindOptimalLambda(column);
-            lambdas[col] = NumOps.FromDouble(bestLambda);
-
-            // Transform data and compute mean/stddev for standardization
             if (_standardize)
             {
-                var transformed = TransformColumn(column, NumOps.FromDouble(bestLambda));
-
-                T sum = NumOps.Zero;
-                for (int i = 0; i < transformed.Length; i++)
-                {
-                    sum = NumOps.Add(sum, transformed[i]);
-                }
-                T mean = NumOps.Divide(sum, NumOps.FromDouble(transformed.Length));
-
-                T varianceSum = NumOps.Zero;
-                for (int i = 0; i < transformed.Length; i++)
-                {
-                    T diff = NumOps.Subtract(transformed[i], mean);
-                    varianceSum = NumOps.Add(varianceSum, NumOps.Multiply(diff, diff));
-                }
-                T variance = NumOps.Divide(varianceSum, NumOps.FromDouble(transformed.Length));
-                T stdDev = NumOps.Sqrt(variance);
-                if (NumOps.Compare(stdDev, NumOps.Zero) == 0)
-                {
-                    stdDev = NumOps.One;
-                }
-
-                means[col] = mean;
-                stdDevs[col] = stdDev;
+                // scikit-learn standardizes with StandardScaler: NaN-ignoring mean and population standard
+                // deviation, with (near-)zero scales left at 1.
+                var transformedData = Tensor<T>.FromMatrix(PreprocessingTensorOps.StackColumns(transformedColumns, data.Rows));
+                var (mean, std, constant) = ScalerTensorOps.NanColumnMoments(transformedData);
+                var scale = ScalerTensorOps.HandleZerosInScale(std, constant);
+                var mask = ScalerTensorOps.ColumnMask<T>(numColumns, columnsToProcess);
+                means = Tensor<T>.FromVector(ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero));
+                stdDevs = Tensor<T>.FromVector(ScalerTensorOps.MaskedParameters(mask, scale, NumOps.One));
             }
         }
 
-        _lambdas = new Vector<T>(lambdas);
-        _mean = new Vector<T>(means);
-        _stdDev = new Vector<T>(stdDevs);
+        _lambdas = lambdas.ToVector();
+        _mean = means.ToVector();
+        _stdDev = stdDevs.ToVector();
     }
 
-    private double FindOptimalLambda(Vector<T> column)
+    /// <summary>
+    /// Fits the power parameter of one column (over its non-NaN values) and returns it as a [1] tensor with the
+    /// transformed column.
+    /// </summary>
+    private (Tensor<T> Lambda, Tensor<T> Transformed) FitColumn(Tensor<T> column, int col)
     {
-        // Simple grid search for lambda that minimizes log-likelihood
-        double bestLambda = 1.0;
-        double bestScore = double.MinValue;
+        var observed = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
+        var values = Engine.TensorIndexSelect(column, new Tensor<int>(observed, new[] { observed.Length }), 0);
 
-        // Search range and step
-        double minLambda = -2.0;
-        double maxLambda = 2.0;
-        double step = 0.1;
-
-        for (double lambda = minLambda; lambda <= maxLambda; lambda += step)
+        // Check for Box-Cox constraint
+        if (_method == PowerTransformMethod.BoxCox
+            && PreprocessingTensorOps.CountNonZero(Engine.TensorGreaterThan(values, NumOps.Zero)) < values.Length)
         {
-            double score = ComputeLogLikelihood(column, lambda);
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestLambda = lambda;
-            }
+            throw new ArgumentException(
+                $"Box-Cox transformation requires strictly positive data. " +
+                $"Found non-positive value in column {col}. Use YeoJohnson instead.");
         }
 
-        return bestLambda;
+        // scikit-learn's _fit keeps lambda 1 for a constant Yeo-Johnson feature (its likelihood has no maximum),
+        // and scipy.stats.boxcox raises "Data must not be constant." for Box-Cox.
+        bool constant = IsConstantFeature(values);
+        if (constant && _method == PowerTransformMethod.BoxCox)
+        {
+            throw new ArgumentException($"Box-Cox transformation requires non-constant data. Column {col} is constant.");
+        }
+
+        double bestLambda = values.Length == 0 || constant ? 1.0 : FindOptimalLambda(values);
+        T lambda = NumOps.FromDouble(bestLambda);
+        return (PreprocessingTensorOps.Filled(new[] { 1 }, lambda), TransformColumn(column, lambda));
     }
 
-    private double ComputeLogLikelihood(Vector<T> column, double lambda)
+    /// <summary>
+    /// The maximum-likelihood power parameter, found like scikit-learn / SciPy with
+    /// <c>scipy.optimize.brent(-loglike, brack=(-2, 2))</c>. The profile log-likelihood (up to constants) is
+    /// <c>-n/2 log(var(y)) + (lambda - 1) J</c> with <c>J = sum log(x)</c> (Box-Cox) or
+    /// <c>J = sum sign(x) log1p(|x|)</c> (Yeo-Johnson).
+    /// </summary>
+    private double FindOptimalLambda(Tensor<T> values)
     {
-        var transformed = TransformColumn(column, NumOps.FromDouble(lambda));
-
-        // Compute mean and variance
-        double sum = 0;
-        for (int i = 0; i < transformed.Length; i++)
-        {
-            sum += NumOps.ToDouble(transformed[i]);
-        }
-        double mean = sum / transformed.Length;
-
-        double variance = 0;
-        for (int i = 0; i < transformed.Length; i++)
-        {
-            double diff = NumOps.ToDouble(transformed[i]) - mean;
-            variance += diff * diff;
-        }
-        variance /= transformed.Length;
-
-        if (variance <= 0) return double.MinValue;
-
-        // Log-likelihood for normal distribution
-        double logLikelihood = -0.5 * transformed.Length * Math.Log(2 * Math.PI * variance);
-        logLikelihood -= 0.5 * transformed.Length; // Normalized sum of squared deviations
-
-        // Add Jacobian term
-        for (int i = 0; i < column.Length; i++)
-        {
-            double x = NumOps.ToDouble(column[i]);
-            if (_method == PowerTransformMethod.BoxCox)
-            {
-                logLikelihood += (lambda - 1) * Math.Log(x);
-            }
-            else // Yeo-Johnson
-            {
-                if (x >= 0)
-                {
-                    logLikelihood += (lambda - 1) * Math.Log(x + 1);
-                }
-                else
-                {
-                    logLikelihood += (1 - lambda) * Math.Log(1 - x);
-                }
-            }
-        }
-
-        return logLikelihood;
+        // Evaluated in float64 like scipy / scikit-learn: evaluating TransformColumn in Half quantized Brent's
+        // lambda probes to 10-bit steps and overflowed powers (x + 1)^lambda past 65504 on values near 300.
+        var wideValues = values.Cast<double>();
+        var jacobianTerms = _method == PowerTransformMethod.BoxCox
+            ? Engine.TensorLog(wideValues)
+            : Engine.TensorMultiply(Engine.TensorSign(wideValues), Engine.TensorLog1p(Engine.TensorAbs(wideValues)));
+        double jacobian = ScalerTensorOps.Sum(jacobianTerms);
+        double n = wideValues.Length;
+        return BrentMinimizer.Minimize(lambda => -ComputeLogLikelihood(wideValues, lambda, n, jacobian), -2.0, 2.0);
     }
 
-    private T[] TransformColumn(Vector<T> column, T lambda)
+    /// <summary>
+    /// scikit-learn's <c>_is_constant_feature</c> on the float64 mean and variance of the observed values:
+    /// <c>var &lt;= n eps var + (n mean eps)^2</c>.
+    /// </summary>
+    private static bool IsConstantFeature(Tensor<T> values)
     {
-        var result = new T[column.Length];
-        double lambdaDouble = NumOps.ToDouble(lambda);
-
-        for (int i = 0; i < column.Length; i++)
+        int n = values.Length;
+        if (n == 0)
         {
-            double x = NumOps.ToDouble(column[i]);
-            double transformed;
-
-            if (_method == PowerTransformMethod.BoxCox)
-            {
-                transformed = BoxCoxTransform(x, lambdaDouble);
-            }
-            else
-            {
-                transformed = YeoJohnsonTransform(x, lambdaDouble);
-            }
-
-            result[i] = NumOps.FromDouble(transformed);
+            return false;
         }
 
-        return result;
+        double mean = ScalerTensorOps.Sum(values) / n;
+        double variance = ScalerTensorOps.Variance(values);
+        double eps = ScalerTensorOps.Float64Epsilon;
+        return variance <= n * eps * variance + (n * mean * eps) * (n * mean * eps);
     }
 
-    private double BoxCoxTransform(double x, double lambda)
+    /// <summary>
+    /// The profile log-likelihood of <paramref name="lambda"/>; transformed data whose variance is below the
+    /// smallest normal double gives negative infinity (scikit-learn returns +inf for the negated value).
+    /// </summary>
+    private double ComputeLogLikelihood(Tensor<double> values, double lambda, double n, double jacobian)
     {
-        if (Math.Abs(lambda) < 1e-10)
+        var transformed = TransformColumnCore(values, lambda, _method);
+        double variance = ScalerTensorOps.Variance(transformed);
+        if (variance < Float64Tiny || double.IsNaN(variance))
         {
-            return Math.Log(x);
+            return double.NegativeInfinity;
         }
-        return (Math.Pow(x, lambda) - 1) / lambda;
+
+        return -n / 2 * Math.Log(variance) + (lambda - 1) * jacobian;
     }
 
-    private double YeoJohnsonTransform(double x, double lambda)
+    /// <summary>The Box-Cox or Yeo-Johnson transform of a column (NaN passes through).</summary>
+    private Tensor<T> TransformColumn(Tensor<T> column, T lambda)
     {
-        if (x >= 0)
+        double lambdaValue = NumOps.ToDouble(lambda);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
         {
-            if (Math.Abs(lambda) < 1e-10)
-            {
-                return Math.Log(x + 1);
-            }
-            return (Math.Pow(x + 1, lambda) - 1) / lambda;
+            return TransformColumnCore(column.Cast<double>(), lambdaValue, _method).Cast<T>();
+        }
+
+        return TransformColumnCore(column, lambdaValue, _method);
+    }
+
+    private Tensor<T> InverseTransformColumn(Tensor<T> y, T lambda)
+    {
+        double lambdaValue = NumOps.ToDouble(lambda);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            return InverseTransformColumnCore(y.Cast<double>(), lambdaValue, _method).Cast<T>();
+        }
+
+        return InverseTransformColumnCore(y, lambdaValue, _method);
+    }
+
+    private static Tensor<TW> TransformColumnCore<TW>(Tensor<TW> column, double lambdaValue, PowerTransformMethod method) =>
+        method == PowerTransformMethod.BoxCox
+            ? BoxCoxTransformCore(column, lambdaValue)
+            : YeoJohnsonTransformCore(column, lambdaValue);
+
+    private static Tensor<TW> InverseTransformColumnCore<TW>(Tensor<TW> y, double lambdaValue, PowerTransformMethod method) =>
+        method == PowerTransformMethod.BoxCox
+            ? InverseBoxCoxTransformCore(y, lambdaValue)
+            : InverseYeoJohnsonTransformCore(y, lambdaValue);
+
+    /// <summary>scikit-learn's <c>_box_cox</c> (SciPy <c>special.boxcox</c>): <c>expm1(lambda log x) / lambda</c>, or <c>log x</c> at lambda 0.</summary>
+    private static Tensor<TW> BoxCoxTransformCore<TW>(Tensor<TW> x, double lambdaValue)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var logX = engine.TensorLog(x);
+        if (Math.Abs(lambdaValue) < BoxCoxZero)
+        {
+            return logX;
+        }
+
+        TW lambda = ops.FromDouble(lambdaValue);
+        return engine.TensorDivideScalar(engine.TensorExpm1(engine.TensorMultiplyScalar(logX, lambda)), lambda);
+    }
+
+    /// <summary>
+    /// scikit-learn's <c>_yeo_johnson_transform</c>: for x &gt;= 0, <c>((x + 1)^lambda - 1) / lambda</c> (or
+    /// <c>log1p(x)</c> when |lambda| &lt; eps); for x &lt; 0, <c>-((1 - x)^(2 - lambda) - 1) / (2 - lambda)</c> (or
+    /// <c>-log1p(-x)</c> when |lambda - 2| &lt;= eps).
+    /// </summary>
+    private static Tensor<TW> YeoJohnsonTransformCore<TW>(Tensor<TW> x, double lambdaValue)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var negative = engine.TensorLessThan(x, ops.Zero);
+        var zeros = new Tensor<TW>(x.Shape.ToArray());
+        var positivePart = engine.TensorWhere(negative, zeros, x);
+        var negativePart = engine.TensorWhere(negative, x, zeros);
+
+        TW lambda = ops.FromDouble(lambdaValue);
+        Tensor<TW> positive = Math.Abs(lambdaValue) < Float64Spacing
+            ? engine.TensorLog1p(positivePart)
+            : engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(engine.TensorPower(engine.TensorAddScalar(positivePart, ops.One), lambda), ops.One),
+                lambda);
+
+        TW twoMinusLambda = ops.FromDouble(2 - lambdaValue);
+        Tensor<TW> negativeValues = Math.Abs(lambdaValue - 2) > Float64Spacing
+            ? engine.TensorNegate(engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(
+                    engine.TensorPower(engine.TensorAddScalar(engine.TensorNegate(negativePart), ops.One), twoMinusLambda), ops.One),
+                twoMinusLambda))
+            : engine.TensorNegate(engine.TensorLog1p(engine.TensorNegate(negativePart)));
+
+        return engine.TensorWhere(negative, negativeValues, positive);
+    }
+
+    /// <summary>scikit-learn's inverse Yeo-Johnson transform.</summary>
+    private static Tensor<TW> InverseYeoJohnsonTransformCore<TW>(Tensor<TW> y, double lambdaValue)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        var negative = engine.TensorLessThan(y, ops.Zero);
+        var zeros = new Tensor<TW>(y.Shape.ToArray());
+        var positivePart = engine.TensorWhere(negative, zeros, y);
+        var negativePart = engine.TensorWhere(negative, y, zeros);
+
+        TW lambda = ops.FromDouble(lambdaValue);
+        Tensor<TW> positive = Math.Abs(lambdaValue) < Float64Spacing
+            ? engine.TensorExpm1(positivePart)
+            : engine.TensorSubtractScalar(
+                engine.TensorPower(
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(positivePart, lambda), ops.One),
+                    ops.FromDouble(1 / lambdaValue)),
+                ops.One);
+
+        Tensor<TW> negativeValues;
+        if (Math.Abs(lambdaValue - 2) > Float64Spacing)
+        {
+            var bases = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(negativePart, ops.FromDouble(-(2 - lambdaValue))), ops.One);
+            negativeValues = PreprocessingTensorOps.OneMinus(engine.TensorPower(bases, ops.FromDouble(1 / (2 - lambdaValue))));
         }
         else
         {
-            if (Math.Abs(lambda - 2) < 1e-10)
-            {
-                return -Math.Log(1 - x);
-            }
-            return -(Math.Pow(1 - x, 2 - lambda) - 1) / (2 - lambda);
+            negativeValues = PreprocessingTensorOps.OneMinus(engine.TensorExp(engine.TensorNegate(negativePart)));
         }
+
+        return engine.TensorWhere(negative, negativeValues, positive);
     }
 
-    private double InverseBoxCoxTransform(double y, double lambda)
+    /// <summary>SciPy's <c>special.inv_boxcox</c>: <c>exp(log1p(lambda y) / lambda)</c>, or <c>exp(y)</c> at lambda 0.</summary>
+    private static Tensor<TW> InverseBoxCoxTransformCore<TW>(Tensor<TW> y, double lambdaValue)
     {
-        if (Math.Abs(lambda) < 1e-10)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TW>();
+        if (Math.Abs(lambdaValue) < BoxCoxZero)
         {
-            return Math.Exp(y);
+            return engine.TensorExp(y);
         }
-        return Math.Pow(lambda * y + 1, 1 / lambda);
+
+        TW lambda = ops.FromDouble(lambdaValue);
+        return engine.TensorExp(engine.TensorDivideScalar(engine.TensorLog1p(engine.TensorMultiplyScalar(y, lambda)), lambda));
     }
 
-    private double InverseYeoJohnsonTransform(double y, double lambda)
+    /// <summary>numpy's <c>spacing(1.0)</c>, the threshold scikit-learn uses for lambda 0 / 2 in Yeo-Johnson.</summary>
+    private const double Float64Spacing = 2.220446049250313e-16;
+
+    /// <summary>SciPy's threshold for lambda 0 in <c>boxcox</c> / <c>inv_boxcox</c>.</summary>
+    private const double BoxCoxZero = 1e-19;
+
+    /// <summary>numpy's <c>finfo(float64).tiny</c>.</summary>
+    private const double Float64Tiny = 2.2250738585072014e-308;
+
+    /// <summary>
+    /// Applies (or inverts) the fitted transform to every processed column; the other columns pass through.
+    /// </summary>
+    private Matrix<T> MapColumns(Matrix<T> data, bool inverse)
     {
-        if (y >= 0)
+        var lambdaVector = _lambdas ?? new Vector<T>(0);
+        int numRows = data.Rows;
+        int numColumns = data.Columns;
+        if (numRows == 0 || numColumns == 0)
         {
-            if (Math.Abs(lambda) < 1e-10)
-            {
-                return Math.Exp(y) - 1;
-            }
-            return Math.Pow(lambda * y + 1, 1 / lambda) - 1;
+            return new Matrix<T>(numRows, numColumns);
         }
-        else
+
+        var x = Tensor<T>.FromMatrix(data);
+        var lambdas = lambdaVector.ToArray();
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
+        for (int col = 0; col < numColumns; col++)
         {
-            if (Math.Abs(lambda - 2) < 1e-10)
-            {
-                return 1 - Math.Exp(-y);
-            }
-            return 1 - Math.Pow(-(2 - lambda) * y + 1, 1 / (2 - lambda));
+            var column = PreprocessingTensorOps.ColumnVector(x, col);
+            columns.Add(processSet.Contains(col) && col < lambdas.Length ? MapColumn(column, col, lambdas[col], inverse) : column);
         }
+
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
+    }
+
+    /// <summary>Transforms then standardizes one column, or un-standardizes then inverts it.</summary>
+    private Tensor<T> MapColumn(Tensor<T> column, int col, T lambda, bool inverse)
+    {
+        bool standardize = _standardize && _mean is not null && _stdDev is not null;
+        T mean = standardize && _mean is not null ? _mean[col] : NumOps.Zero;
+        T std = standardize && _stdDev is not null ? _stdDev[col] : NumOps.One;
+
+        if (!inverse)
+        {
+            var transformed = TransformColumn(column, lambda);
+            return standardize
+                ? Engine.TensorDivideScalar(Engine.TensorSubtractScalar(transformed, mean), std)
+                : transformed;
+        }
+
+        // Undo standardization first
+        var y = standardize ? Engine.TensorAddScalar(Engine.TensorMultiplyScalar(column, std), mean) : column;
+        return InverseTransformColumn(y, lambda);
     }
 
     /// <summary>
@@ -337,46 +420,7 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    double x = NumOps.ToDouble(value);
-                    double lambda = NumOps.ToDouble(_lambdas[j]);
-                    double transformed;
-
-                    if (_method == PowerTransformMethod.BoxCox)
-                    {
-                        transformed = BoxCoxTransform(x, lambda);
-                    }
-                    else
-                    {
-                        transformed = YeoJohnsonTransform(x, lambda);
-                    }
-
-                    if (_standardize && _mean is not null && _stdDev is not null)
-                    {
-                        transformed = (transformed - NumOps.ToDouble(_mean[j])) / NumOps.ToDouble(_stdDev[j]);
-                    }
-
-                    value = NumOps.FromDouble(transformed);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return MapColumns(data, inverse: false);
     }
 
     /// <summary>
@@ -391,47 +435,7 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    double y = NumOps.ToDouble(value);
-                    double lambda = NumOps.ToDouble(_lambdas[j]);
-
-                    // Undo standardization first
-                    if (_standardize && _mean is not null && _stdDev is not null)
-                    {
-                        y = y * NumOps.ToDouble(_stdDev[j]) + NumOps.ToDouble(_mean[j]);
-                    }
-
-                    double original;
-                    if (_method == PowerTransformMethod.BoxCox)
-                    {
-                        original = InverseBoxCoxTransform(y, lambda);
-                    }
-                    else
-                    {
-                        original = InverseYeoJohnsonTransform(y, lambda);
-                    }
-
-                    value = NumOps.FromDouble(original);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return MapColumns(data, inverse: true);
     }
 
     /// <summary>

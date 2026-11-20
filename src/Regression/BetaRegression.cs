@@ -452,7 +452,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         coefficients = Engine.Add(
             Engine.Multiply(coefficients, oneMinusLr),
-            Engine.Multiply(solution.GetSubVector(1, p), lr));
+            Engine.Multiply(RegressionEngineOps2.Slice(solution, 1, p), lr));
     }
 
     /// <summary>

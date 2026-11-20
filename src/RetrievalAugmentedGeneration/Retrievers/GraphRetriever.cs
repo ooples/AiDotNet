@@ -178,29 +178,30 @@ public class GraphRetriever<T> : RetrieverBase<T>
             metadataFilters ?? new Dictionary<string, object>()
         ).ToList();
 
-        // Score documents based on entity matches and relationships
-        var scoredDocuments = documents.Select(doc =>
-        {
-            var entityScore = CalculateEntityMatchScore(doc, entities);
-            var relationshipScore = CalculateRelationshipScore(doc, entities);
+        if (documents.Count == 0)
+            return Enumerable.Empty<Document<T>>();
 
-            // Combine scores
-            var baseScore = Convert.ToDouble(doc.RelevanceScore);
-            var enhancedScore = baseScore * (1.0 + entityScore * 0.3 + relationshipScore * 0.2);
-
-            return (doc, NumOps.FromDouble(enhancedScore));
-        }).ToList();
+        // Score documents based on entity matches and relationships:
+        // enhanced = base * (1 + 0.3 * entity match + 0.2 * relationship score)
+        var boosts = documents
+            .Select(doc => 1.0 + CalculateEntityMatchScore(doc, entities) * 0.3 + CalculateRelationshipScore(doc, entities) * 0.2)
+            .ToArray();
+        var enhanced = Engine.TensorMultiply(
+            new Tensor<T>(documents.Select(doc => doc.RelevanceScore).ToArray(), [documents.Count]),
+            new Tensor<double>(boosts, [boosts.Length]).Cast<T>()).ToArray();
 
         // Return top-K documents sorted by enhanced score
-        return scoredDocuments
-            .OrderByDescending(x => x.Item2)
+        return documents
+            .Select((doc, i) => (doc, score: enhanced[i]))
+            .OrderByDescending(x => x.score)
             .Take(topK)
             .Select(x =>
             {
-                x.doc.RelevanceScore = x.Item2;
+                x.doc.RelevanceScore = x.score;
                 x.doc.HasRelevanceScore = true;
                 return x.doc;
-            });
+            })
+            .ToList();
     }
 
     private double CalculateEntityMatchScore(Document<T> document, List<string> entities)

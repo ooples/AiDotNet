@@ -72,10 +72,10 @@ public class TETNPOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int NumHeads { get; set; } = 4;
 
     /// <summary>
-    /// Weight for the equivariance regularization loss that encourages
-    /// translation-equivariant behavior during training.
+    /// Weight of an optional regularizer on the variance of the refined representations' norms. TE-TNP is
+    /// translation equivariant by construction and uses none, so the default is 0.
     /// </summary>
-    public double EquivarianceRegWeight { get; set; } = 0.01;
+    public double EquivarianceRegWeight { get; set; } = 0.0;
 
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>

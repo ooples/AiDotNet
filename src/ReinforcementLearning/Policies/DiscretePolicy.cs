@@ -127,23 +127,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var logits = logitsTensor.ToVector();
 
             // Find which action was taken (one-hot encoded)
-            int actionIndex = 0;
-            for (int i = 0; i < action.Length; i++)
-            {
-                if (NumOps.GreaterThan(action[i], NumOps.FromDouble(0.5)))
-                {
-                    actionIndex = i;
-                    break;
-                }
-            }
+            int actionIndex = RLTensorOps.FirstPositiveIndex(action, NumOps.FromDouble(0.5));
 
             // Exact log-softmax, log p(a) = z_a - logsumexp(z), as torch's Categorical.log_prob. The former
             // log(p + 1e-8) biased every log-probability and left the probabilities summing past 1.
-            double max = double.NegativeInfinity;
-            for (int i = 0; i < logits.Length; i++) max = Math.Max(max, NumOps.ToDouble(logits[i]));
-            double sum = 0;
-            for (int i = 0; i < logits.Length; i++) sum += Math.Exp(NumOps.ToDouble(logits[i]) - max);
-            return NumOps.FromDouble(NumOps.ToDouble(logits[actionIndex]) - max - Math.Log(sum));
+            return RLTensorOps.LogSoftmaxAt(logits, actionIndex);
         }
 
         /// <inheritdoc />
@@ -161,65 +149,24 @@ namespace AiDotNet.ReinforcementLearning.Policies
         // Helper methods
         private Vector<T> OneHotArgMax(Vector<T> logits)
         {
-            int best = 0;
             // The argmax of the logits: softmax preserves their order, and a rounded probability can tie two
             // logits that differ.
-            for (int k = 1; k < logits.Length; k++)
-                if (NumOps.GreaterThan(logits[k], logits[best])) best = k;
-            var oneHot = new Vector<T>(logits.Length);
-            oneHot[best] = NumOps.One;
-            return oneHot;
+            return RLTensorOps.OneHot<T>(logits.Length, RLTensorOps.ArgMax(logits));
         }
 
         private Vector<T> Softmax(Vector<T> logits)
         {
-            var probabilities = new Vector<T>(logits.Length);
-            T maxLogit = logits[0];
-
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits[i], maxLogit))
-                {
-                    maxLogit = logits[i];
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                var expValue = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
-                probabilities[i] = expValue;
-                sumExp = NumOps.Add(sumExp, expValue);
-            }
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
-            }
-
-            return probabilities;
+            // exp(z - max z) / sum exp(z - max z)
+            return RLTensorOps.StableSoftmax(logits);
         }
 
         private Vector<T> SampleCategorical(Vector<T> probabilities)
         {
+            // First index whose running probability reaches the uniform draw; the last action when rounding
+            // leaves the total below it.
             double randomValue = _random.NextDouble();
-            double cumulativeProbability = 0.0;
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                cumulativeProbability += NumOps.ToDouble(probabilities[i]);
-                if (randomValue <= cumulativeProbability)
-                {
-                    var action = new Vector<T>(probabilities.Length);
-                    action[i] = NumOps.One;
-                    return action;
-                }
-            }
-
-            // Fallback (should not happen)
-            var fallbackAction = new Vector<T>(probabilities.Length);
-            fallbackAction[probabilities.Length - 1] = NumOps.One;
-            return fallbackAction;
+            int index = RLTensorOps.SampleFromCdf(probabilities, randomValue, probabilities.Length - 1);
+            return RLTensorOps.OneHot<T>(probabilities.Length, index);
         }
     }
 }

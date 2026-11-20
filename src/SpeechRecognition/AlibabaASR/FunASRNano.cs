@@ -115,7 +115,7 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var network = _network ?? throw new NotSupportedException("Transcription runs on the native network.");
         int[] tokens;
         using (new Tensors.Engines.Autodiff.NoGradScope<T>())
-            tokens = network.Greedy(network.Prompt(network.Encode(Waveform(audio)), Instruction(language)), _options.MaxTextLength);
+            tokens = network.Greedy(network.Prompt(network.Encode(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds)), Instruction(language)), _options.MaxTextLength);
         return new TranscriptionResult<T>
         {
             Text = Text(network, tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Length > 0 ? 1.0 : 0.0),
@@ -130,7 +130,7 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         ThrowIfDisposed();
         var network = _network ?? throw new NotSupportedException("The CTC decoder runs on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return network.CtcGreedy(network.Encode(Waveform(audio)));
+        return network.CtcGreedy(network.Encode(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds)));
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
@@ -165,32 +165,11 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         Layers.AddRange(layers);
     }
 
-    // The 16 kHz waveform, truncated to the longest recording transcribed.
-    private Tensor<T> Waveform(Tensor<T> audio)
-    {
-        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        audio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
-
-    // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
     private Tensor<T> FirstLogits(Tensor<T> input)
     {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
         string instruction = Instruction(null);
-        for (int r = 0; r < rows; r++) outputs[r] = _network.FirstLogits(_network.Prompt(_network.Encode(Waveform(Row(input, r, rows))), instruction));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+        return ForwardNativeWaveformBatch(input, _network, (net, wave) =>
+            net.FirstLogits(net.Prompt(net.Encode(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds)), instruction)));
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
@@ -199,68 +178,33 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
-    // The token ids a training target names: ids [length] within the vocabulary the stage trains, or one distribution per
-    // token [length, vocabulary], read as its most likely tokens; the reserved token (end or blank) is never a target.
-    private int[] Tokens(Tensor<T> target, int vocabulary, int reserved)
+    private int[] Tokens(FunAsrNanoNetwork<T> network, Tensor<T> target)
     {
-        var span = target.Data.Span;
-        if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
-        {
-            var tokens = new int[target.Length / vocabulary];
-            for (int r = 0; r < tokens.Length; r++)
-            {
-                int best = -1;
-                for (int v = 0; v < vocabulary; v++)
-                    if (v != reserved && (best < 0 || NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best]))) best = v;
-                tokens[r] = best;
-            }
-            return tokens;
-        }
-        var ids = new int[target.Length];
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= vocabulary || (int)value == reserved)
-                throw new ArgumentException($"Token {value} is outside the vocabulary or reserved.", nameof(target));
-            ids[i] = (int)value;
-        }
-        return ids;
+        int vocab = _options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder ? _options.CtcVocabSize : _options.VocabSize;
+        int reserved = _options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder ? network.Blank : network.EndToken;
+        return ParseVocabularyTargetTokens(target, vocab, reserved);
     }
 
-    // The stage's loss [1] of one utterance: the CTC loss for the CTC stage, the LLM's cross-entropy otherwise.
-    // Joint training reads the target as LLM tokens; the CTC decoder trains in its own stage, on its own vocabulary.
-    private Tensor<T> UtteranceLoss(FunAsrNanoNetwork<T> network, Tensor<T> audio, Tensor<T> target)
+    private Tensor<T> UtteranceLoss(FunAsrNanoNetwork<T> network, Tensor<T> audio, int[] targetTokens)
     {
-        var encoded = network.Encode(Waveform(audio));
+        var encoded = network.Encode(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds));
         if (_options.TrainingStage == FunASRNanoTrainingStage.CtcDecoder)
-            return network.CtcLoss(encoded, Tokens(target, _options.CtcVocabSize, network.Blank));
-        var loss = network.LlmLoss(network.Prompt(encoded, Instruction(null)), Tokens(target, _options.VocabSize, network.EndToken));
-        return Engine.Reshape(loss, new[] { 1 });
-    }
-
-    private Tensor<T> BatchLoss(FunAsrNanoNetwork<T> network, Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = UtteranceLoss(network, Row(input, r, rows), Row(target, r, rows));
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            return network.CtcLoss(encoded, targetTokens);
+        return network.LlmLoss(network.Prompt(encoded, Instruction(null)), targetTokens);
     }
 
     /// <inheritdoc />
     /// <remarks>The current stage's loss, averaged over the batch, with LoRA dropout active.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target)); }
-        finally { network.Llm.Training = false; }
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(
+            input,
+            target,
+            _network,
+            null,
+            Tokens,
+            UtteranceLoss,
+            beforeTrain: net => net.Llm.Training = true,
+            afterTrain: net => net.Llm.Training = false);
 
     // The modules the report's §4.2 stage updates.
     private IEnumerable<LayerBase<T>> TrainedLayers(FunAsrNanoNetwork<T> network) => _options.TrainingStage switch
@@ -290,12 +234,8 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target)[0];
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(input, target, _network, Tokens, UtteranceLoss);
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

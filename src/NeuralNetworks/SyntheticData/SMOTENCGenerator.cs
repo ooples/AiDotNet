@@ -176,7 +176,7 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         // Order the other samples by distance, ties by index (a NaN distance sorts first, as double.CompareTo
         // orders it). A sample's rank is the number of samples strictly closer.
         var engine = AiDotNetEngine.Current;
-        var keys = engine.TensorNanToNum(distances, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+        var keys = AiDotNet.Helpers.NanToNumHelper.Apply(engine, distances, -1.0, double.PositiveInfinity, double.NegativeInfinity);
         var sorted = engine.TensorSort(keys, 0, false).Values;
         var ranks = engine.TensorSearchSorted(sorted, keys, right: false).ToArray();
         var order = new long[n - 1];
@@ -290,7 +290,7 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
         var isNaN = engine.TensorWhere(engine.TensorIsFinite(values), zeros,
             engine.TensorWhere(engine.TensorIsInf(values), zeros, ones));
         T nanCount = engine.TensorSum(isNaN);
-        var keys = engine.TensorNanToNum(values, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        var keys = AiDotNet.Helpers.NanToNumHelper.Apply(engine, values, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity);
         var sorted = engine.TensorSort(keys, 0, false).Values;
         var blockSize = engine.TensorSubtract(
             engine.TensorSearchSorted(sorted, keys, right: true).Cast<T>(),

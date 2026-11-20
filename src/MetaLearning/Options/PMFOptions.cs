@@ -5,6 +5,29 @@ using AiDotNet.Validation;
 namespace AiDotNet.MetaLearning.Options;
 
 /// <summary>
+/// The metric PMF's ProtoNet classifier scores a query against the class prototypes with.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Each class is summarized by the mean feature vector of its support examples (its
+/// prototype). The metric decides how a query is compared with each prototype: by the angle between them (cosine)
+/// or by their straight-line distance (squared Euclidean).
+/// </para>
+/// </remarks>
+public enum PMFDistanceMetric
+{
+    /// <summary>
+    /// Cosine similarity scaled by a learnable inverse temperature, <c>cos(f(x), c_k) / tau</c>: the paper's choice
+    /// (Hu et al. 2022, following Chen et al. 2021).
+    /// </summary>
+    Cosine,
+
+    /// <summary>
+    /// Negative squared Euclidean distance, <c>-||f(x) - c_k||^2</c>, as in the original ProtoNet (Snell et al. 2017).
+    /// </summary>
+    SquaredEuclidean
+}
+
+/// <summary>
 /// Configuration options for PMF (P>M>F: Pre-training, Meta-training, Fine-tuning) (Hu et al., ICLR 2022).
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
@@ -23,11 +46,12 @@ namespace AiDotNet.MetaLearning.Options;
 /// This gives a strong foundation of general visual knowledge.
 ///
 /// **Stage 2: Meta-training (M)**
-/// Fine-tune with episodic meta-learning on the few-shot task distribution.
-/// This adapts the pretrained features for few-shot scenarios.
+/// Fine-tune the feature extractor episodically as a ProtoNet with a cosine classifier: each class's
+/// prototype is the mean of its support features, and a query's logits are its cosine similarity to
+/// each prototype divided by a learnable temperature. This adapts the pretrained features for few-shot scenarios.
 ///
 /// **Stage 3: Fine-tuning (F)**
-/// Optionally fine-tune on each test task's support set for extra performance.
+/// Optionally fine-tune on each test task's support set, with the same ProtoNet loss, for extra performance.
 ///
 /// **Why it works:**
 /// Pre-training provides rich, transferable features. Meta-training adapts them
@@ -115,10 +139,27 @@ public class PMFOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public bool EnableFineTuning { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the distance metric for classification.
+    /// Gets or sets the metric the ProtoNet classifier of Stage 2 (M) and of adaptation scores queries with.
     /// </summary>
-    /// <value>Default is "cosine".</value>
-    public string DistanceMetric { get; set; } = "cosine";
+    /// <value>Default is <see cref="PMFDistanceMetric.Cosine"/>, the paper's cosine classifier.</value>
+    public PMFDistanceMetric DistanceMetric { get; set; } = PMFDistanceMetric.Cosine;
+
+    /// <summary>
+    /// Gets or sets the initial temperature of the cosine classifier: the logits are
+    /// <c>cos(f(x), c_k) / Temperature</c>.
+    /// </summary>
+    /// <value>
+    /// Default is 0.1, the reference implementation's cosine scale of 10 (logits <c>10 * cos</c>). Ignored by
+    /// <see cref="PMFDistanceMetric.SquaredEuclidean"/>.
+    /// </value>
+    public double Temperature { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets whether the cosine classifier's scale <c>1 / Temperature</c> is learned during meta-training, as
+    /// in the paper's ProtoNet, or kept fixed at its initial value.
+    /// </summary>
+    /// <value>Default is true.</value>
+    public bool LearnTemperature { get; set; } = true;
 
     #endregion
 
@@ -141,7 +182,8 @@ public class PMFOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <inheritdoc/>
     public bool IsValid()
     {
-        return MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && InnerLearningRate > 0;
+        return MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && InnerLearningRate > 0
+            && Temperature > 0 && !double.IsNaN(Temperature) && !double.IsInfinity(Temperature);
     }
 
     /// <inheritdoc/>
@@ -158,7 +200,8 @@ public class PMFOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
             EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
             CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
             FineTuningLearningRate = FineTuningLearningRate, FineTuningSteps = FineTuningSteps,
-            EnableFineTuning = EnableFineTuning, DistanceMetric = DistanceMetric
+            EnableFineTuning = EnableFineTuning, DistanceMetric = DistanceMetric,
+            Temperature = Temperature, LearnTemperature = LearnTemperature
         };
     }
 

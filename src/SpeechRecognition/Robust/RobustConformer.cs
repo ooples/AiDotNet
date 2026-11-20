@@ -73,6 +73,8 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private NoiseRobustWav2Vec2Network<T>? _network;
     private Random _random;
+    [AiDotNet.Attributes.Scratch]
+    private bool _inContinualPretrain;
     internal NoiseRobustWav2Vec2Network<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
@@ -143,15 +145,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         Layers.AddRange(_network.Layers);
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _network is null ? null : _options.MaxAudioLengthSeconds;
 
     // CTC logits [frames, vocabulary] for a waveform [S], or [batch, frames, vocabulary] for [batch, S].
     private Tensor<T> Logits(Tensor<T> input, bool training)
@@ -166,7 +160,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
-        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && !_inContinualPretrain && _options.FreezeFeatureEncoder
             && _network is not null && _network.Stack.IsFeatureEncoderLayer(Layers[layerIndex])
             ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
             : declared;
@@ -182,37 +176,40 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         if (noisy.Length != clean.Length) throw new ArgumentException("The clean references must match the noisy waveforms.", nameof(clean));
         var x = Rows(noisy);
         var y = Engine.Reshape(clean, x.Shape.ToArray());
-        TrainWithCustomLoss(x, _ =>
+        var net = network.Stack.Network;
+        var c = network.Pretraining.Configuration;
+        var stepMask = c.MaskProbability > 0
+            ? net.DrawMask(x.Shape[0], net.Frames(x.Shape[1]), c.MaskProbability, _random)
+            : new bool[x.Shape[0], net.Frames(x.Shape[1])];
+        var stepNegatives = network.Pretraining.SampleNegatives(stepMask, _random);
+        using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
+        _inContinualPretrain = true;
+        try
         {
-            var (total, reconstruction) = network.ContinualPretrainingLoss(x, y, training: true, _random);
-            LastReconstructionLoss = NumOps.ToDouble(reconstruction[0]);
-            return total;
-        }, _optimizer);
+            TrainWithCustomObjective(x, y, (stepX, stepY) =>
+            {
+                var (total, reconstruction) = network.ContinualPretrainingLoss(stepX, stepY, training: true, _random, stepMask, stepNegatives);
+                if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                        "robust-conformer-reconstruction",
+                        Engine.TensorAddScalar(Engine.StopGradient(reconstruction), NumOps.Zero));
+                return total;
+            }, _optimizer);
+        }
+        finally
+        {
+            _inContinualPretrain = false;
+        }
+        outputs.Complete();
+        LastReconstructionLoss = NumOps.ToDouble(outputs.Get("robust-conformer-reconstruction")[0]);
         network.Pretraining.AfterUpdate();
     }
 
     private Tensor<T> Rows(Tensor<T> waveform) => waveform.Rank == 1 ? Engine.Reshape(waveform, new[] { 1, waveform.Length })
         : waveform.Rank == 2 ? waveform : Engine.Reshape(waveform, new[] { waveform.Shape[0], waveform.Length / waveform.Shape[0] });
 
-    // The labels a training target names: label ids [length], or one distribution per frame [frames, vocabulary] read as
-    // a CTC alignment (the most likely symbol per frame, repeats merged, blanks removed).
-    private int[] Labels(Tensor<T> target)
-    {
-        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
-        {
-            var frames = Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize });
-            return Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
-        }
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
-            labels[i] = (int)value;
-        }
-        return labels;
-    }
+    private int[] Labels(Tensor<T> target) =>
+        ParseCtcOrTokenTargetLabels(target, _options.VocabSize, Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc);
 
     private Tensor<T> CtcLoss(Tensor<T> logits, int[] labels)
     {
@@ -221,38 +218,11 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             new Tensor<int>(labels, new[] { labels.Length }), new[] { frames }, new[] { labels.Length }, 0);
     }
 
-    private (Tensor<T> Waveform, int[] Labels)[] Batch(Tensor<T> input, Tensor<T> target)
-    {
-        var x = Rows(input);
-        int rows = x.Shape[0], samples = x.Shape[1], perRow = target.Length / rows;
-        var batch = new (Tensor<T>, int[])[rows];
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            batch[r] = (Engine.Reshape(Engine.TensorSlice(x, new[] { r, 0 }, new[] { 1, samples }), new[] { samples }), Labels(row));
-        }
-        return batch;
-    }
-
     /// <inheritdoc />
     /// <remarks>CTC fine-tuning (section 3.3): the CTC loss of the target characters.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        if (_network is null) return false;
-        var batch = Batch(input, target);
-        TrainWithCustomLoss(input, _ =>
-        {
-            Tensor<T>? total = null;
-            foreach (var (waveform, labels) in batch)
-            {
-                var loss = CtcLoss(Logits(waveform, training: true), labels);
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
-            }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));
-        }, _optimizer);
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(Rows(input), target, _network, _optimizer, (_, row) => Labels(row),
+            (_, wave, rowLabels) => CtcLoss(Logits(wave, training: true), rowLabels));
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
@@ -260,15 +230,9 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
 
     /// <inheritdoc />
     /// <remarks>The CTC loss <see cref="TryApplyLearningRule"/> minimizes, in inference mode, averaged over the batch.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        if (_network is null) throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        var batch = Batch(input, target);
-        double total = 0;
-        foreach (var (waveform, labels) in batch) total += NumOps.ToDouble(CtcLoss(Logits(waveform, training: false), labels)[0]);
-        return NumOps.FromDouble(total / batch.Length);
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(Rows(input), target, _network, (_, row) => Labels(row),
+            (_, wave, rowLabels) => CtcLoss(Logits(wave, training: false), rowLabels));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

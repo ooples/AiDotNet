@@ -27,15 +27,15 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _edgeThreshold;
-    private readonly string _centralityMeasure;
+    private readonly GraphCentralityMeasure _centralityMeasure;
 
-    private double[]? _centralityScores;
+    private Vector<T>? _centralityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CentralityScores => _centralityScores;
+    public Vector<T>? CentralityScores => _centralityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -44,7 +44,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public GraphBasedFS(
         int nFeaturesToSelect = 10,
         double edgeThreshold = 0.3,
-        string centralityMeasure = "pagerank",
+        GraphCentralityMeasure centralityMeasure = GraphCentralityMeasure.PageRank,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -53,7 +53,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _edgeThreshold = edgeThreshold;
-        _centralityMeasure = centralityMeasure.ToLowerInvariant();
+        _centralityMeasure = centralityMeasure;
     }
 
     /// <inheritdoc />
@@ -72,234 +72,150 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var x = FilterStatisticTensorOps.AsTensor(data);
 
         // Compute feature-target correlations
-        var targetCorrelations = ComputeTargetCorrelations(X, y, n, p);
+        var targetCorrelations = FeatureScoringTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
 
         // Build adjacency matrix based on feature correlations
-        var adjacency = BuildAdjacencyMatrix(X, n, p);
+        var adjacency = BuildAdjacencyMatrix(x, _edgeThreshold);
 
         // Compute centrality scores
-        _centralityScores = _centralityMeasure switch
+        var centrality = _centralityMeasure switch
         {
-            "pagerank" => ComputePageRank(adjacency, p),
-            "degree" => ComputeDegreeCentrality(adjacency, p),
-            "eigenvector" => ComputeEigenvectorCentrality(adjacency, p),
-            "betweenness" => ComputeBetweennessCentrality(adjacency, p),
+            GraphCentralityMeasure.Degree => FeatureScoringTensorOps.Counts(Engine.TensorGreaterThan(adjacency, NumOps.Zero), 1),
+            GraphCentralityMeasure.Eigenvector => ComputeEigenvectorCentrality(adjacency, p),
+            GraphCentralityMeasure.Betweenness => BetweennessCentrality(adjacency),
             _ => ComputePageRank(adjacency, p)
         };
 
         // Combine centrality with target correlation
-        for (int j = 0; j < p; j++)
-            _centralityScores[j] *= Math.Abs(targetCorrelations[j]);
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _centralityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var scores = Engine.TensorMultiply(centrality, targetCorrelations);
+        _centralityScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
-    private double[] ComputeTargetCorrelations(double[,] X, double[] y, int n, int p)
+    // |r| between features where it reaches the edge threshold, 0 elsewhere and on the diagonal; a constant feature
+    // has no edges. r is the master formula cov / ((n - 1) s_j1 s_j2), evaluated on columns divided by their largest
+    // deviation (UnitDeviationCorrelationMatrix): the raw sums of squared deviations overflowed Half once the
+    // deviations passed a few hundred (norm = inf turned every r into 0 and removed every edge).
+    internal static Tensor<T> BuildAdjacencyMatrix(Tensor<T> x, double edgeThreshold)
     {
-        var correlations = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            correlations[j] = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-        }
-
-        return correlations;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = x.Shape[1];
+        var strength = engine.TensorAbs(FeatureScoringTensorOps.UnitDeviationCorrelationMatrix(x));
+        var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p));
+        var edge = engine.TensorMultiply(
+            PreprocessingTensorOps.OneMinus(engine.TensorLessThan(strength, ops.FromDouble(edgeThreshold))), offDiagonal);
+        return engine.TensorMultiply(strength, edge);
     }
 
-    private double[,] BuildAdjacencyMatrix(double[,] X, int n, int p)
+    // PageRank (Page et al. 1999) on the weighted graph, 100 power steps from the uniform vector: the rank of a
+    // node with no edges (dangling) is spread uniformly, as networkx.pagerank does.
+    private Tensor<T> ComputePageRank(Tensor<T> adjacency, int p, double damping = 0.85, int maxIter = 100)
     {
-        var adj = new double[p, p];
-        var means = new double[p];
-        var stds = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-        }
-
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += (X[i, j1] - means[j1]) * (X[i, j2] - means[j2]);
-                double corr = sum / ((n - 1) * stds[j1] * stds[j2]);
-
-                if (Math.Abs(corr) >= _edgeThreshold)
-                {
-                    adj[j1, j2] = Math.Abs(corr);
-                    adj[j2, j1] = Math.Abs(corr);
-                }
-            }
-        }
-
-        return adj;
-    }
-
-    private double[] ComputePageRank(double[,] adj, int p, double damping = 0.85, int maxIter = 100)
-    {
-        var scores = new double[p];
-        for (int j = 0; j < p; j++)
-            scores[j] = 1.0 / p;
-
-        var outDegrees = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int k = 0; k < p; k++)
-                outDegrees[j] += adj[j, k];
-
+        var outDegrees = Engine.ReduceSum(adjacency, new[] { 1 }, false);
+        var transition = FilterStatisticTensorOps.GuardedDivide(
+            adjacency, FilterStatisticTensorOps.ColumnBroadcast(outDegrees, p), 1e-10, NumOps.Zero);
+        var dangling = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(outDegrees, NumOps.FromDouble(1e-10)));
+        T d = NumOps.FromDouble(damping);
+        T teleport = NumOps.FromDouble((1 - damping) / p);
+        T spread = NumOps.FromDouble(damping / p);
+        var scores = FilterStatisticTensorOps.Filled(new[] { p }, NumOps.FromDouble(1.0 / p));
+        var transposed = Engine.TensorTranspose(transition);
         for (int iter = 0; iter < maxIter; iter++)
         {
-            var newScores = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < p; k++)
-                    if (outDegrees[k] > 1e-10)
-                        sum += adj[k, j] * scores[k] / outDegrees[k];
-                newScores[j] = (1 - damping) / p + damping * sum;
-            }
-            scores = newScores;
+            var flow = Engine.Reshape(Engine.TensorMatMul(transposed, Engine.Reshape(scores, new[] { p, 1 })), new[] { p });
+            var danglingMass = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(scores, dangling), new[] { 0 }, true), spread);
+            scores = Engine.TensorAdd(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(flow, d), teleport),
+                Engine.TensorBroadcastTo(danglingMass, new[] { p }));
         }
 
         return scores;
     }
 
-    private double[] ComputeDegreeCentrality(double[,] adj, int p)
+    // Eigenvector centrality: power iteration with A + I from the ones vector, L2-normalised each step (the shift
+    // keeps the iteration from oscillating on bipartite graphs, as networkx.eigenvector_centrality does)
+    private Tensor<T> ComputeEigenvectorCentrality(Tensor<T> adjacency, int p, int maxIter = 100)
     {
-        var scores = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int k = 0; k < p; k++)
-                if (adj[j, k] > 0)
-                    scores[j]++;
-        return scores;
-    }
-
-    private double[] ComputeEigenvectorCentrality(double[,] adj, int p, int maxIter = 100)
-    {
-        var scores = new double[p];
-        for (int j = 0; j < p; j++)
-            scores[j] = 1.0;
-
+        var shifted = Engine.TensorAdd(adjacency, Engine.TensorEye<T>(p));
+        var scores = FilterStatisticTensorOps.Filled(new[] { p, 1 }, NumOps.One);
+        T epsilon = NumOps.FromDouble(1e-10);
         for (int iter = 0; iter < maxIter; iter++)
         {
-            var newScores = new double[p];
-            for (int j = 0; j < p; j++)
-                for (int k = 0; k < p; k++)
-                    newScores[j] += adj[j, k] * scores[k];
-
-            double norm = Math.Sqrt(newScores.Sum(s => s * s)) + 1e-10;
-            for (int j = 0; j < p; j++)
-                newScores[j] /= norm;
-
-            scores = newScores;
+            var next = Engine.TensorMatMul(shifted, scores);
+            var norm = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(next), new[] { 0 }, true)), epsilon);
+            scores = Engine.TensorDivide(next, Engine.TensorBroadcastTo(norm, new[] { p, 1 }));
         }
 
-        return scores;
+        return Engine.Reshape(scores, new[] { p });
     }
 
-    private double[] ComputeBetweennessCentrality(double[,] adj, int p)
+    // Betweenness centrality (Freeman 1977) of the unweighted graph: sum over pairs s < t, both other than v, of
+    // the share of shortest s-t paths through v, sigma_sv sigma_vt / sigma_st when d(s, v) + d(v, t) = d(s, t)
+    // (networkx.betweenness_centrality, normalized=False). Distances and shortest-path counts come from a breadth-first
+    // expansion of all sources at once, one adjacency product per distance until no new pair is reached. Run in
+    // double, as master did: path counts overflow Half, and its distances are not exact past 2048.
+    internal static Tensor<T> BetweennessCentrality(Tensor<T> adjacency) =>
+        ComputeBetweennessCentrality(adjacency.Cast<double>(), adjacency.Shape[0]).Cast<T>();
+
+    private static Tensor<TN> ComputeBetweennessCentrality<TN>(Tensor<TN> adjacency, int p)
     {
-        // Simplified betweenness approximation
-        var scores = new double[p];
-        for (int s = 0; s < p; s++)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TN>();
+        TN zero = ops.Zero;
+        TN unreachable = ops.FromDouble(double.PositiveInfinity);
+        var linked = engine.TensorGreaterThan(adjacency, zero);
+        var distance = engine.TensorWhere(engine.TensorEye<TN>(p),
+            FilterStatisticTensorOps.Filled(new[] { p, p }, zero), FilterStatisticTensorOps.Filled(new[] { p, p }, unreachable));
+        var paths = engine.TensorEye<TN>(p);
+        // the distance levels 0 .. p - 1 as TN, so the loop compares against stored values
+        var levels = engine.TensorArange<TN>(0, p, 1).ToArray();
+        for (int step = 1; step < p; step++)
         {
-            for (int t = s + 1; t < p; t++)
-            {
-                // Find shortest path (BFS-like for unweighted)
-                var visited = new bool[p];
-                var prev = new List<int>[p];
-                for (int j = 0; j < p; j++)
-                    prev[j] = new List<int>();
+            // the shortest s-t paths of length step end with an edge from a u at distance step - 1:
+            // sigma_st = sum_u sigma_su [d(s, u) = step - 1] A_ut. Extending only those keeps the counts at the number
+            // of shortest paths; extending every walk let the counts grow like degree^step, which overflowed double on
+            // a dense graph with a long tail, and inf * 0 = NaN then hid every pair first reached after that
+            var frontier = engine.TensorMultiply(paths, engine.TensorEquals(distance, levels[step - 1]));
+            var walks = engine.TensorMatMul(frontier, linked);
+            var reachedNow = engine.TensorMultiply(
+                engine.TensorGreaterThan(walks, zero), engine.TensorEquals(distance, unreachable));
 
-                var queue = new Queue<int>();
-                queue.Enqueue(s);
-                visited[s] = true;
+            // no pair at this distance: none is farther either (a farther shortest path passes through one)
+            if (engine.TensorCountNonzero(reachedNow) == 0)
+                break;
 
-                while (queue.Count > 0)
-                {
-                    int curr = queue.Dequeue();
-                    if (curr == t) break;
-
-                    for (int next = 0; next < p; next++)
-                    {
-                        if (adj[curr, next] > 0 && !visited[next])
-                        {
-                            visited[next] = true;
-                            prev[next].Add(curr);
-                            queue.Enqueue(next);
-                        }
-                    }
-                }
-
-                // Count nodes on shortest paths
-                if (visited[t])
-                {
-                    var pathNodes = new HashSet<int>();
-                    var pathQueue = new Queue<int>();
-                    pathQueue.Enqueue(t);
-                    while (pathQueue.Count > 0)
-                    {
-                        int curr = pathQueue.Dequeue();
-                        foreach (int node in prev[curr])
-                        {
-                            if (node != s)
-                                pathNodes.Add(node);
-                            pathQueue.Enqueue(node);
-                        }
-                    }
-
-                    foreach (int node in pathNodes)
-                        scores[node]++;
-                }
-            }
+            distance = engine.TensorWhere(
+                reachedNow, FilterStatisticTensorOps.Filled(new[] { p, p }, levels[step]), distance);
+            paths = engine.TensorWhere(reachedNow, walks, paths);
         }
 
-        return scores;
+        // only pairs s < t with v different from both
+        TN one = ops.One;
+        var upper = engine.TensorTriu(FilterStatisticTensorOps.Filled(new[] { p, p }, one), 1);
+        var scores = new TN[p];
+        for (int v = 0; v < p; v++)
+        {
+            var toV = FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
+            var fromV = FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
+            var onPath = engine.TensorMultiply(engine.TensorEquals(engine.TensorAdd(toV, fromV), distance), upper);
+            var notEnd = engine.TensorMultiply(
+                FilterStatisticTensorOps.ColumnBroadcast(FeatureScoringTensorOps.ScatterToFeatures(
+                    FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p),
+                FilterStatisticTensorOps.RowBroadcast(FeatureScoringTensorOps.ScatterToFeatures(
+                    FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p));
+            var through = engine.TensorMultiply(
+                FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p),
+                FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p));
+            var share = FilterStatisticTensorOps.GuardedDivide(through, paths, 0.5, zero);
+            scores[v] = engine.TensorSum(engine.TensorMultiply(share, engine.TensorMultiply(onPath, notEnd)));
+        }
+
+        return new Tensor<TN>(scores, new[] { p });
     }
 
     /// <inheritdoc />
@@ -315,15 +231,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("GraphBasedFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
@@ -358,4 +266,20 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             .Select(i => inputFeatureNames[i])
             .ToArray();
     }
+}
+
+/// <summary>Centrality measure GraphBasedFS ranks features by.</summary>
+public enum GraphCentralityMeasure
+{
+    /// <summary>PageRank of the weighted correlation graph.</summary>
+    PageRank,
+
+    /// <summary>Number of neighbours.</summary>
+    Degree,
+
+    /// <summary>Principal eigenvector of the weighted adjacency.</summary>
+    Eigenvector,
+
+    /// <summary>Share of shortest paths between other features passing through the feature.</summary>
+    Betweenness
 }

@@ -58,30 +58,29 @@ public class AlphaCompositor<T>
         Vector<T> background, Vector<T> backgroundAlpha)
     {
         int len = Math.Min(foreground.Length, background.Length);
-        var result = new Vector<T>(len);
+        var engine = AiDotNetEngine.Current;
+        var fg = MaskVectorOps.Fit(foreground, len, NumOps.Zero);
+        var bg = MaskVectorOps.Fit(background, len, NumOps.Zero);
+        var fgA = MaskVectorOps.Fit(foregroundAlpha, len, NumOps.One);
+        var bgA = MaskVectorOps.Fit(backgroundAlpha, len, NumOps.One);
 
-        for (int i = 0; i < len; i++)
-        {
-            var fgA = i < foregroundAlpha.Length ? foregroundAlpha[i] : NumOps.One;
-            var bgA = i < backgroundAlpha.Length ? backgroundAlpha[i] : NumOps.One;
+        // out_alpha = fg_alpha + bg_alpha * (1 - fg_alpha)
+        var oneMinusFgA = engine.Subtract(DiffusionVectorOps.Ones<T>(len), fgA);
+        var outAlpha = engine.Add(fgA, engine.Multiply(bgA, oneMinusFgA));
 
-            // out_alpha = fg_alpha + bg_alpha * (1 - fg_alpha)
-            var oneMinusFgA = NumOps.Subtract(NumOps.One, fgA);
-            var outAlpha = NumOps.Add(fgA, NumOps.Multiply(bgA, oneMinusFgA));
-
-            if (NumOps.LessThan(outAlpha, NumOps.FromDouble(1e-10)))
-            {
-                result[i] = NumOps.Zero;
-                continue;
-            }
-
-            // out_color = (fg * fg_alpha + bg * bg_alpha * (1 - fg_alpha)) / out_alpha
-            var fgContrib = NumOps.Multiply(foreground[i], fgA);
-            var bgContrib = NumOps.Multiply(NumOps.Multiply(background[i], bgA), oneMinusFgA);
-            result[i] = NumOps.Divide(NumOps.Add(fgContrib, bgContrib), outAlpha);
-        }
-
-        return result;
+        // out_color = (fg * fg_alpha + bg * bg_alpha * (1 - fg_alpha)) / out_alpha, and 0 where out_alpha < 1e-10
+        // or out_alpha <= 0 (1e-10 rounds to zero in Half). The division runs before the selection, so those
+        // pixels divide by one instead of evaluating 0 / 0.
+        var fgContrib = engine.Multiply(fg, fgA);
+        var bgContrib = engine.Multiply(engine.Multiply(bg, bgA), oneMinusFgA);
+        var alpha = outAlpha.AsTensor();
+        var visible = engine.TensorMultiply(
+            engine.TensorGreaterThan(alpha, NumOps.Zero),
+            engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { len }, NumOps.One),
+                engine.TensorLessThan(alpha, NumOps.FromDouble(1e-10))));
+        var safeAlpha = engine.TensorWhere(visible, alpha, Tensor<T>.CreateDefault(new[] { len }, NumOps.One));
+        var color = engine.TensorDivide(engine.Add(fgContrib, bgContrib).AsTensor(), safeAlpha);
+        return engine.TensorWhere(visible, color, new Tensor<T>(new[] { len })).ToVector();
     }
 
     /// <summary>
@@ -97,17 +96,12 @@ public class AlphaCompositor<T>
         double weight1 = 0.5, double weight2 = 0.5)
     {
         int len = Math.Min(layer1.Length, layer2.Length);
-        var result = new Vector<T>(len);
+        var engine = AiDotNetEngine.Current;
         var w1 = NumOps.FromDouble(weight1);
         var w2 = NumOps.FromDouble(weight2);
 
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.Add(
-                NumOps.Multiply(w1, layer1[i]),
-                NumOps.Multiply(w2, layer2[i]));
-        }
-
-        return result;
+        return engine.Add(
+            engine.Multiply(MaskVectorOps.Fit(layer1, len, NumOps.Zero), w1),
+            engine.Multiply(MaskVectorOps.Fit(layer2, len, NumOps.Zero), w2));
     }
 }

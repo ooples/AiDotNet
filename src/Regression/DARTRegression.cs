@@ -494,7 +494,7 @@ public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             var gains = engine.Subtract(engine.Fill(splits, totalMse), engine.Add(leftMse, rightMse));
 
             // Skip if same feature value as next point (|x[s] - x[s-1]| < epsilon)
-            var gaps = engine.Abs(engine.Subtract(sortedFeature.GetSubVector(1, splits), sortedFeature.GetSubVector(0, splits)));
+            var gaps = engine.Abs(engine.Subtract(RegressionEngineOps2.Slice(sortedFeature, 1, splits), sortedFeature.GetSubVector(0, splits)));
             var distinct = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(Tensor<T>.FromVector(gaps), epsilon));
 
             var (index, gain, threshold) = RegressionEngineOps.BestSortedSplit(gains, distinct, allowed, sortedFeature);

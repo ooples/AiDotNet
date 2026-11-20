@@ -227,17 +227,12 @@ public class VerticalDataPartitioner<T> : FederatedLearningComponentBase<T>
         int totalCols = fullData.Rank > 1 ? fullData.Shape[1] : fullData.Shape[0];
         int partyCols = columnIndices.Count;
 
-        var result = new Tensor<T>(new[] { samples, partyCols });
-        for (int row = 0; row < samples; row++)
+        if (samples == 0)
         {
-            for (int c = 0; c < partyCols; c++)
-            {
-                int srcIdx = row * totalCols + columnIndices[c];
-                int dstIdx = row * partyCols + c;
-                result[dstIdx] = fullData[srcIdx];
-            }
+            return new Tensor<T>(new[] { 0, partyCols });
         }
 
-        return result;
+        var columns = new Tensor<int>(columnIndices.ToArray(), new[] { partyCols });
+        return AiDotNetEngine.Current.TensorIndexSelect(VerticalEngineOps.Rows(fullData, samples, totalCols), columns, 1);
     }
 }

@@ -177,27 +177,9 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        // Per-row argmax over the classes (first index wins ties, as before).
+        return Engine.TensorArgMax(Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), 1).ToArray();
     }
 
     /// <summary>
@@ -227,18 +209,13 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, int[] targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);  // Numerical stability
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProp = NumOps.Add(prob, epsilon);  // Avoid log(0)
-            var loss = NumOps.Negate(NumOps.Log(safeProp));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
+        // -mean_b log(p[b, target_b] + eps): gather each row's target probability, then reduce.
+        var targetIndex = Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, batchSize), new[] { batchSize, 1 });
+        var targetProb = Engine.TensorTakeAlongDim(
+            Engine.Reshape(probabilities, new[] { batchSize, _numClasses }), targetIndex, 1);
+        var totalLoss = NumOps.Negate(Engine.TensorSum(Engine.TensorLog(Engine.TensorAddScalar(targetProb, epsilon))));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
@@ -256,91 +233,21 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         T learningRate,
         Matrix<int>? categoricalIndices = null)
     {
-        // Collect every trainable tensor as a LIVE field instance — tokenizer
-        // (custom), then backbone encoder layers + final LayerNorm + the
-        // classification head (via the tape param collector). ComputeGradients
-        // maps gradients back to exactly these instances, and we apply SGD to
-        // them in place so the model actually updates.
-        var trainable = new System.Collections.Generic.List<Tensor<T>>(Tokenizer.GetTrainableTensors());
-        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>>();
-        foreach (var encoderLayer in EncoderLayers) layers.Add(encoderLayer);
-        layers.Add(FinalLayerNorm);
-        layers.Add(_classificationHead);
-        trainable.AddRange(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(layers));
-
-        // Reverse-mode AD over the whole network: the forward (tokenizer +
-        // transformer + head) and the cross-entropy below are Engine ops, so a
-        // forward under the tape records them and ComputeGradients fills in the
-        // gradient for every leaf tensor we collected. (Previously TrainStep had
-        // only a "// Backward pass" comment, so UpdateParameters threw "Backward
-        // pass must be called before updating parameters" — training never ran.)
-        // Plain SGD at the caller's rate, the update this step has always applied, as one step on the shared fused
-        // session: the compiled plan when it applies, the eager tape otherwise. Categorical features are looked up
-        // by integer index on the host, which a plan would bake in, so a batch carrying them stays eager.
-        T lossValue;
-        if (categoricalIndices is null)
-        {
-            var stepper = _tapeStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
-            lossValue = stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
-            {
-                Layers = Array.Empty<AiDotNet.Interfaces.ITrainableLayer<T>>(),
-                Input = numericalFeatures,
-                Target = OneHot(targets, numericalFeatures.Shape[0]),
-                Forward = features => Forward(features, null),
-                ComputeLoss = SoftmaxCrossEntropyLoss,
-                Optimizer = SgdAt(NumOps.ToDouble(learningRate)),
-                ExtraParameters = trainable,
-            });
-        }
-        else
-        {
-            // The same plain SGD on the shared eager tape step.
-            var onehot = OneHot(targets, numericalFeatures.Shape[0]);
-            lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-                () => trainable,
-                () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), onehot),
-                learningRate,
-                owner: this);
-        }
-
-        ResetState();
-        return lossValue;
+        var onehot = OneHot(targets, numericalFeatures.Shape[0]);
+        return RunSharedTrainingStep(
+            numericalFeatures,
+            onehot,
+            learningRate,
+            categoricalIndices,
+            Forward,
+            SoftmaxCrossEntropyLoss);
     }
 
     // The class targets as a one-hot [batch, classes] tensor: data the step carries, not a closure.
     private Tensor<T> OneHot(int[] targets, int batch)
     {
-        var onehot = new Tensor<T>([batch, _numClasses]);
-        for (int b = 0; b < batch; b++)
-            onehot[b * _numClasses + targets[b]] = NumOps.One;
-        return onehot;
-    }
-
-    private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
-
-    /// <summary>Training steps run on the fused compiled plan.</summary>
-    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
-
-    /// <summary>Training steps run on the eager tape.</summary>
-    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _sgd;
-    private double _sgdRate = double.NaN;
-
-    // Plain SGD at a rate, without the clipping the optimizer options enable by default (this step never clipped).
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> SgdAt(double rate)
-    {
-        // An exact match is the point: the cached optimizer is reused only for the very rate it was built with.
-        if (_sgd is null || !_sgdRate.Equals(rate))
-        {
-            _sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
-                new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = rate,
-                    EnableGradientClipping = false,
-                });
-            _sgdRate = rate;
-        }
-        return _sgd;
+        var targetIndex = Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, batch), new[] { batch });
+        return Engine.TensorOneHot<T>(targetIndex, _numClasses);
     }
 
     /// <summary>
@@ -404,35 +311,25 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </remarks>
     public T ComputeF1Score(Tensor<T> numericalFeatures, int[] targets, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Predict(numericalFeatures, categoricalIndices);
-        var totalF1 = NumOps.Zero;
+        return ComputeMacroF1(Predict(numericalFeatures, categoricalIndices), targets, _numClasses);
+    }
 
-        for (int c = 0; c < _numClasses; c++)
-        {
-            int truePositives = 0;
-            int falsePositives = 0;
-            int falseNegatives = 0;
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                if (predictions[i] == c && targets[i] == c)
-                    truePositives++;
-                else if (predictions[i] == c && targets[i] != c)
-                    falsePositives++;
-                else if (predictions[i] != c && targets[i] == c)
-                    falseNegatives++;
-            }
-
-            double precision = truePositives + falsePositives > 0
-                ? (double)truePositives / (truePositives + falsePositives) : 0.0;
-            double recall = truePositives + falseNegatives > 0
-                ? (double)truePositives / (truePositives + falseNegatives) : 0.0;
-            double f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0.0;
-
-            totalF1 = NumOps.Add(totalF1, NumOps.FromDouble(f1));
-        }
-
-        return NumOps.Divide(totalF1, NumOps.FromDouble(_numClasses));
+    private static T ComputeMacroF1(int[] predictions, int[] targets, int classes)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int n = predictions.Length;
+        // Count in double regardless of model storage precision; Half cannot count a large batch.
+        var predicted = engine.TensorOneHot<double>(Tensor<int>.FromVector(new Vector<int>(predictions)), classes);
+        var actual = engine.TensorOneHot<double>(Tensor<int>.FromVector(new Vector<int>(targets).GetSubVector(0, n)), classes);
+        var truePositives = engine.ReduceSum(engine.TensorMultiply(predicted, actual), new[] { 0 }, false);
+        var denominator = engine.TensorAdd(engine.ReduceSum(predicted, new[] { 0 }, false),
+            engine.ReduceSum(actual, new[] { 0 }, false));
+        var present = engine.TensorGreaterThan(denominator, 0.0);
+        var safeDenominator = engine.TensorWhere(present, denominator, engine.TensorFullLike(denominator, 1.0));
+        var f1 = engine.TensorWhere(present,
+            engine.TensorDivide(engine.TensorMultiplyScalar(truePositives, 2.0), safeDenominator),
+            new Tensor<double>(new[] { classes }));
+        return MathHelper.GetNumericOperations<T>().FromDouble(engine.TensorSum(f1) / classes);
     }
 
     /// <summary>

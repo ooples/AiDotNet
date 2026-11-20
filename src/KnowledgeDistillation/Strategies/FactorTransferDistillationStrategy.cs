@@ -65,13 +65,45 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
     private readonly int _numFactors;
     private readonly bool _normalizeFactors;
 
+    /// <summary>
+    /// Generator for the power-iteration starting vectors: seeded when a seed is given, otherwise secure.
+    /// </summary>
+    private readonly Random _random;
+
+    private static readonly INumericOperations<double> WideOps = MathHelper.GetNumericOperations<double>();
+    /// <summary>
+    /// Creates a factor transfer strategy with a secure, unseeded generator for the power-iteration starts.
+    /// </summary>
+    public FactorTransferDistillationStrategy(
+        double factorWeight,
+        FactorMode mode,
+        int numFactors,
+        bool normalizeFactors,
+        double temperature,
+        double alpha)
+        : this(factorWeight, mode, numFactors, normalizeFactors, temperature, alpha, seed: null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a factor transfer strategy whose power-iteration starts are drawn from a seeded generator.
+    /// </summary>
+    /// <param name="factorWeight">Weight of the factor loss (between 0 and 1).</param>
+    /// <param name="mode">How factors are compared.</param>
+    /// <param name="numFactors">Number of factors (eigenvectors) to extract.</param>
+    /// <param name="normalizeFactors">Whether extracted factors are normalized.</param>
+    /// <param name="temperature">Softmax temperature for the standard distillation loss.</param>
+    /// <param name="alpha">Weight of the hard-label loss in the standard distillation loss.</param>
+    /// <param name="seed">Seed for the power-iteration starting vectors; null uses a secure, unseeded generator.
+    /// With a fixed seed, the same sequence of calls gives identical factors.</param>
     public FactorTransferDistillationStrategy(
         double factorWeight = 0.5,
         FactorMode mode = FactorMode.LowRankApproximation,
         int numFactors = 32,
         bool normalizeFactors = true,
         double temperature = 3.0,
-        double alpha = 0.3)
+        double alpha = 0.3,
+        int? seed = null)
         : base(temperature, alpha)
     {
         if (factorWeight < 0 || factorWeight > 1)
@@ -84,6 +116,9 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         _mode = mode;
         _numFactors = numFactors;
         _normalizeFactors = normalizeFactors;
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />
@@ -93,38 +128,12 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-            else
-            {
-                sampleLoss = softLoss;
-            }
-
-            // Apply factor weight reduction exactly once
-            sampleLoss = NumOps.Multiply(sampleLoss, NumOps.FromDouble(1.0 - _factorWeight));
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Standard distillation loss per sample, with the factor weight reduction applied exactly once
+        var sampleLosses = Engine.Multiply(
+            DistillationHelper<T>.StandardSampleLosses(studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha),
+            NumOps.FromDouble(1.0 - _factorWeight));
+        T totalLoss = Engine.Sum(sampleLosses);
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -136,63 +145,16 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-
-                    // Hard gradient
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-
-                    // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                    var combined = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
-
-                    // Apply factor weight reduction exactly once
-                    gradient[i] = NumOps.Multiply(combined, NumOps.FromDouble(1.0 - _factorWeight));
-                }
-            }
-            else
-            {
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-
-                    // Apply factor weight reduction exactly once
-                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(1.0 - _factorWeight));
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad (soft only without labels),
+        // with the factor weight reduction applied exactly once
+        var gradientBatch = Engine.MatrixMultiplyScalar(
+            DistillationHelper<T>.StandardSampleGradients(studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha),
+            NumOps.FromDouble(1.0 - _factorWeight));
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
@@ -231,18 +193,20 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
                 throw new ArgumentException($"Feature vectors cannot be empty at index {i}");
         }
 
-        T loss = _mode switch
+        var studentWide = studentFeatures.Select(row => Tensor<T>.FromVector(row).Cast<double>().ToVector()).ToArray();
+        var teacherWide = teacherFeatures.Select(row => Tensor<T>.FromVector(row).Cast<double>().ToVector()).ToArray();
+        double loss = _mode switch
         {
-            FactorMode.LowRankApproximation => ComputeLowRankLoss(studentFeatures, teacherFeatures),
-            FactorMode.NuclearNormMatching => ComputeNuclearNormLoss(studentFeatures, teacherFeatures),
-            FactorMode.FactorMatching => ComputeFactorMatchingLoss(studentFeatures, teacherFeatures),
+            FactorMode.LowRankApproximation => ComputeLowRankLoss(studentWide, teacherWide),
+            FactorMode.NuclearNormMatching => ComputeNuclearNormLoss(studentWide, teacherWide),
+            FactorMode.FactorMatching => ComputeFactorMatchingLoss(studentWide, teacherWide),
             _ => throw new ArgumentOutOfRangeException(nameof(_mode), _mode, $"Unrecognised FactorMode '{_mode}'. Valid modes: LowRankApproximation, NuclearNormMatching, FactorMatching.")
         };
 
-        return NumOps.Multiply(loss, NumOps.FromDouble(_factorWeight));
+        return NumOps.FromDouble(loss * _factorWeight);
     }
 
-    private T ComputeLowRankLoss(Vector<T>[] studentFeatures, Vector<T>[] teacherFeatures)
+    private double ComputeLowRankLoss(Vector<double>[] studentFeatures, Vector<double>[] teacherFeatures)
     {
         // Extract top-k factors from both using simplified SVD approximation
         // For computational efficiency, we use power iteration-based approach
@@ -254,7 +218,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         return ComputeMSE(studentFactors, teacherFactors);
     }
 
-    private T ComputeNuclearNormLoss(Vector<T>[] studentFeatures, Vector<T>[] teacherFeatures)
+    private double ComputeNuclearNormLoss(Vector<double>[] studentFeatures, Vector<double>[] teacherFeatures)
     {
         // Nuclear norm = sum of singular values
         // Match the nuclear norms (captures overall "complexity" of representation)
@@ -263,19 +227,15 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         var teacherSingularValues = ComputeSingularValues(teacherFeatures, _numFactors);
 
         // Match singular value distributions
-        T loss = NumOps.Zero;
         int minLength = Math.Min(studentSingularValues.Length, teacherSingularValues.Length);
+        var diff = Engine.Subtract(
+            studentSingularValues.GetSubVector(0, minLength), teacherSingularValues.GetSubVector(0, minLength));
+        double loss = Engine.DotProduct(diff, diff);
 
-        for (int i = 0; i < minLength; i++)
-        {
-            double diff = studentSingularValues[i] - teacherSingularValues[i];
-            loss = NumOps.Add(loss, NumOps.FromDouble(diff * diff));
-        }
-
-        return NumOps.Divide(loss, NumOps.FromDouble(minLength));
+        return WideOps.Divide(loss, WideOps.FromDouble(minLength));
     }
 
-    private T ComputeFactorMatchingLoss(Vector<T>[] studentFeatures, Vector<T>[] teacherFeatures)
+    private double ComputeFactorMatchingLoss(Vector<double>[] studentFeatures, Vector<double>[] teacherFeatures)
     {
         // Paraphraser approach: Learn to match factorized representations
         // Simplified version: Extract factors and match with L2 + cosine similarity
@@ -284,24 +244,28 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         var teacherFactors = ExtractFactors(teacherFeatures, _numFactors);
 
         // L2 loss component
-        T l2Loss = ComputeMSE(studentFactors, teacherFactors);
+        double l2Loss = ComputeMSE(studentFactors, teacherFactors);
 
-        // Cosine similarity component (1 - cos_sim, so 0 when identical)
-        T cosineLoss = NumOps.Zero;
-        for (int i = 0; i < studentFactors.Length; i++)
-        {
-            double cosSim = VectorHelper.CosineSimilarity(studentFactors[i], teacherFactors[i]);
-            cosineLoss = NumOps.Add(cosineLoss, NumOps.FromDouble(1.0 - cosSim));
-        }
-        cosineLoss = NumOps.Divide(cosineLoss, NumOps.FromDouble(studentFactors.Length));
+        // Cosine similarity component (1 - cos_sim, so 0 when identical), for factor pairs (i, i)
+        int factorCount = studentFactors.Length;
+        var a = DistillationHelper<double>.StackRows(studentFactors);
+        var b = DistillationHelper<double>.StackRows(teacherFactors);
+        var dots = Engine.ReduceSum(Engine.TensorMultiply(a, b), [1], keepDims: false);
+        var normA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(a, a), [1], keepDims: false));
+        var normB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(b, b), [1], keepDims: false));
+        var denominator = Engine.TensorMultiply(normA, normB);
+        var valid = Engine.TensorGreaterThan(denominator, 1e-10);
+        var safe = Engine.TensorWhere(valid, denominator, Tensor<double>.CreateDefault([factorCount], 1.0));
+        var cosine = Engine.TensorWhere(valid, Engine.TensorClamp(Engine.TensorDivide(dots, safe), -1.0, 1.0), new Tensor<double>([factorCount]));
+        double cosineLoss = 1.0 - Engine.TensorSum(cosine) / factorCount;
 
         // Combined loss (equal weight)
-        return NumOps.Add(
-            NumOps.Multiply(l2Loss, NumOps.FromDouble(0.5)),
-            NumOps.Multiply(cosineLoss, NumOps.FromDouble(0.5)));
+        return WideOps.Add(
+            WideOps.Multiply(l2Loss, WideOps.FromDouble(0.5)),
+            WideOps.Multiply(cosineLoss, WideOps.FromDouble(0.5)));
     }
 
-    private Vector<T>[] ExtractFactors(Vector<T>[] features, int numFactors)
+    private Vector<double>[] ExtractFactors(Vector<double>[] features, int numFactors)
     {
         // Simplified factor extraction using variance-based approach
         // In practice, this approximates PCA/SVD by finding directions of maximum variance
@@ -317,7 +281,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         var covMatrix = ComputeCovarianceMatrix(centered);
 
         // Extract top-k eigenvectors (factors) using power iteration
-        var factors = new Vector<T>[k];
+        var factors = new Vector<double>[k];
         for (int i = 0; i < k; i++)
         {
             factors[i] = ExtractTopEigenvector(covMatrix, featureDim);
@@ -328,13 +292,13 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
             }
 
             // Deflate: remove this component from covariance matrix
-            DeflateCovariance(covMatrix, factors[i], featureDim);
+            covMatrix = DeflateCovariance(covMatrix, factors[i], featureDim);
         }
 
         return factors;
     }
 
-    private double[] ComputeSingularValues(Vector<T>[] features, int numValues)
+    private Vector<double> ComputeSingularValues(Vector<double>[] features, int numValues)
     {
         // Approximate singular values from eigenvalues of covariance matrix
         var centered = CenterData(features);
@@ -342,171 +306,116 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         int featureDim = features[0].Length;
         int k = Math.Min(numValues, featureDim);
 
-        var singularValues = new double[k];
+        var eigenvalues = new List<double>(k);
 
         for (int i = 0; i < k; i++)
         {
             var eigenvector = ExtractTopEigenvector(covMatrix, featureDim);
-            double eigenvalue = ComputeEigenvalue(covMatrix, eigenvector, featureDim);
+            eigenvalues.Add(ComputeEigenvalue(covMatrix, eigenvector, featureDim));
 
-            // Singular value = sqrt(eigenvalue * (n-1)) for covariance matrix
-            singularValues[i] = Math.Sqrt(Math.Max(0, eigenvalue * (features.Length - 1)));
-
-            DeflateCovariance(covMatrix, eigenvector, featureDim);
+            covMatrix = DeflateCovariance(covMatrix, eigenvector, featureDim);
         }
 
-        return singularValues;
+        // Singular value = sqrt(eigenvalue * (n-1)) for covariance matrix (negative estimates clamp to 0)
+        var scaled = Engine.Multiply(new Vector<double>(eigenvalues), WideOps.FromDouble(features.Length - 1));
+        return Engine.Sqrt(Engine.Max(new Vector<double>(k), scaled));
     }
 
-    private Vector<T>[] CenterData(Vector<T>[] features)
+    private Vector<double>[] CenterData(Vector<double>[] features)
     {
-        int batchSize = features.Length;
-        int featureDim = features[0].Length;
-
-        // Compute mean
-        var mean = new double[featureDim];
-        for (int j = 0; j < featureDim; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < batchSize; i++)
-            {
-                sum += Convert.ToDouble(features[i][j]);
-            }
-            mean[j] = sum / batchSize;
-        }
-
-        // Center
-        var centered = new Vector<T>[batchSize];
-        for (int i = 0; i < batchSize; i++)
-        {
-            centered[i] = new Vector<T>(featureDim);
-            for (int j = 0; j < featureDim; j++)
-            {
-                double val = Convert.ToDouble(features[i][j]) - mean[j];
-                centered[i][j] = NumOps.FromDouble(val);
-            }
-        }
+        // Subtract the per-feature mean over the batch from every sample
+        var data = DistillationHelper<double>.StackRows(features);
+        var mean = Engine.ReduceMean(data, [0], keepDims: true);
+        var centeredData = Engine.TensorSubtract(data, Engine.TensorBroadcastTo(mean, data.Shape.ToArray()));
+        var centeredMatrix = centeredData.ToMatrix();
+        var centered = Enumerable.Range(0, features.Length).Select(i => centeredMatrix.GetRow(i)).ToArray();
 
         return centered;
     }
 
-    private double[,] ComputeCovarianceMatrix(Vector<T>[] centeredFeatures)
+    private Tensor<double> ComputeCovarianceMatrix(Vector<double>[] centeredFeatures)
     {
         int batchSize = centeredFeatures.Length;
-        int featureDim = centeredFeatures[0].Length;
-        var cov = new double[featureDim, featureDim];
 
         // Cov = (1/n) * X^T * X for centered X
-        for (int i = 0; i < featureDim; i++)
-        {
-            for (int j = i; j < featureDim; j++) // Upper triangle only, symmetric
-            {
-                double sum = 0;
-                for (int k = 0; k < batchSize; k++)
-                {
-                    sum += Convert.ToDouble(centeredFeatures[k][i]) *
-                           Convert.ToDouble(centeredFeatures[k][j]);
-                }
-                cov[i, j] = sum / batchSize;
-                cov[j, i] = cov[i, j]; // Symmetric
-            }
-        }
+        var x = DistillationHelper<double>.StackRows(centeredFeatures);
+        var cov = Engine.TensorDivideScalar(
+            Engine.TensorMatMul(Engine.TensorTranspose(x), x), WideOps.FromDouble(batchSize));
 
         return cov;
     }
 
-    private Vector<T> ExtractTopEigenvector(double[,] matrix, int dim)
+    private Vector<double> ExtractTopEigenvector(Tensor<double> matrix, int dim)
     {
         // Power iteration to find dominant eigenvector
-        var vector = new Vector<T>(dim);
 
-        // Initialize with random values
-        var random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < dim; i++)
-        {
-            vector[i] = NumOps.FromDouble(random.NextDouble() - 0.5);
-        }
+        // Initialize with random values in [-0.5, 0.5), one draw seeded from the strategy's generator
+        var vector = Engine.TensorRandomUniformRange<double>(
+            [dim], WideOps.FromDouble(-0.5), WideOps.FromDouble(0.5), _random.Next()).ToVector();
         vector = VectorHelper.Normalize(vector);
 
         // Power iteration (10 iterations usually sufficient)
         for (int iter = 0; iter < 10; iter++)
         {
-            var newVector = new Vector<T>(dim);
-
             // Matrix-vector multiply
-            for (int i = 0; i < dim; i++)
-            {
-                double sum = 0;
-                for (int j = 0; j < dim; j++)
-                {
-                    sum += matrix[i, j] * Convert.ToDouble(vector[j]);
-                }
-                newVector[i] = NumOps.FromDouble(sum);
-            }
+            var newVector = MatrixVectorProduct(matrix, vector, dim);
 
             vector = VectorHelper.Normalize(newVector);
         }
 
-        return vector;
+        return CanonicalizeSign(vector);
     }
 
-    private double ComputeEigenvalue(double[,] matrix, Vector<T> eigenvector, int dim)
+    /// <summary>
+    /// Flips an eigenvector so its largest-magnitude component (first one on ties) is non-negative.
+    /// </summary>
+    /// <remarks>
+    /// Eigenvectors are only defined up to sign, and power iteration from a random start returns either
+    /// sign. Fixing the sign makes repeated runs, and student/teacher factors of the same subspace, agree.
+    /// </remarks>
+    private Vector<double> CanonicalizeSign(Vector<double> vector)
+    {
+        int largest = DistillationHelper<double>.ArgMax(Engine.Abs(vector));
+        return WideOps.LessThan(vector[largest], WideOps.Zero)
+            ? Engine.Multiply(vector, WideOps.FromDouble(-1.0))
+            : vector;
+    }
+
+    /// <summary>
+    /// A * v for a [dim, dim] matrix and a length-dim vector.
+    /// </summary>
+    private Vector<double> MatrixVectorProduct(Tensor<double> matrix, Vector<double> vector, int dim)
+    {
+        return Engine.Reshape(
+            Engine.TensorMatMul(matrix, Engine.Reshape(Tensor<double>.FromVector(vector), [dim, 1])), [dim]).ToVector();
+    }
+
+    private double ComputeEigenvalue(Tensor<double> matrix, Vector<double> eigenvector, int dim)
     {
         // Eigenvalue = v^T * A * v for normalized eigenvector v
-        var Av = new double[dim];
+        var Av = MatrixVectorProduct(matrix, eigenvector, dim);
 
-        for (int i = 0; i < dim; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < dim; j++)
-            {
-                sum += matrix[i, j] * Convert.ToDouble(eigenvector[j]);
-            }
-            Av[i] = sum;
-        }
-
-        double eigenvalue = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            eigenvalue += Convert.ToDouble(eigenvector[i]) * Av[i];
-        }
-
-        return eigenvalue;
+        return Engine.DotProduct(eigenvector, Av);
     }
 
-    private void DeflateCovariance(double[,] matrix, Vector<T> eigenvector, int dim)
+    private Tensor<double> DeflateCovariance(Tensor<double> matrix, Vector<double> eigenvector, int dim)
     {
         // Remove component: A := A - λ*v*v^T
         double eigenvalue = ComputeEigenvalue(matrix, eigenvector, dim);
 
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                double vi = Convert.ToDouble(eigenvector[i]);
-                double vj = Convert.ToDouble(eigenvector[j]);
-                matrix[i, j] -= eigenvalue * vi * vj;
-            }
-        }
+        var v = Tensor<double>.FromVector(eigenvector);
+        return Engine.TensorSubtract(matrix, Engine.TensorMultiplyScalar(Engine.TensorOuter(v, v), eigenvalue));
     }
 
-    private T ComputeMSE(Vector<T>[] vectors1, Vector<T>[] vectors2)
+    private double ComputeMSE(Vector<double>[] vectors1, Vector<double>[] vectors2)
     {
-        int n = vectors1.Length;
-        T mse = NumOps.Zero;
-        int totalElements = 0;
+        // Mean squared difference over every element of every vector pair
+        var diff = Engine.TensorSubtract(
+            DistillationHelper<double>.StackRows(vectors1), DistillationHelper<double>.StackRows(vectors2));
+        double mse = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
+        int totalElements = diff.Length;
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < vectors1[i].Length; j++)
-            {
-                double diff = Convert.ToDouble(vectors1[i][j]) - Convert.ToDouble(vectors2[i][j]);
-                mse = NumOps.Add(mse, NumOps.FromDouble(diff * diff));
-                totalElements++;
-            }
-        }
-
-        return NumOps.Divide(mse, NumOps.FromDouble(totalElements));
+        return WideOps.Divide(mse, WideOps.FromDouble(totalElements));
     }
 
 

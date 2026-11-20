@@ -87,22 +87,30 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
     /// example as a context pair via <see cref="EncodeContextPair"/>.
     /// </summary>
     protected List<Vector<T>> BuildContextRepresentations(Vector<T>? supportFeatures, Vector<T>? supportLabels)
+        => BuildContextRepresentations(supportFeatures, supportLabels, supportLabels?.Length ?? 0);
+
+    /// <summary>
+    /// Encodes <paramref name="exampleCount"/> context pairs: example i takes its run of the flattened features and
+    /// its run of the flattened labels, so a multi-output episode keeps one representation per example rather than
+    /// one per output value.
+    /// </summary>
+    protected List<Vector<T>> BuildContextRepresentations(Vector<T>? supportFeatures, Vector<T>? supportLabels, int exampleCount)
     {
         var contextReps = new List<Vector<T>>();
         if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
         {
-            int numEx = Math.Max(1, supportLabels.Length);
+            int numEx = Math.Max(1, exampleCount);
             int fDim = Math.Max(1, supportFeatures.Length / numEx);
+            int lDim = Math.Max(1, supportLabels.Length / numEx);
             for (int i = 0; i < numEx; i++)
             {
                 int fStart = i * fDim;
                 int fLen = Math.Min(fDim, supportFeatures.Length - fStart);
                 if (fLen <= 0) break;
-                var f = new Vector<T>(fLen);
-                for (int j = 0; j < fLen; j++) f[j] = supportFeatures[fStart + j];
-                var l = new Vector<T>(1);
-                l[0] = supportLabels[Math.Min(i, supportLabels.Length - 1)];
-                contextReps.Add(EncodeContextPair(f, l));
+                int lStart = Math.Min(i * lDim, supportLabels.Length - 1);
+                int lLen = Math.Max(1, Math.Min(lDim, supportLabels.Length - lStart));
+                contextReps.Add(EncodeContextPair(
+                    supportFeatures.GetSubVector(fStart, fLen), supportLabels.GetSubVector(lStart, lLen)));
             }
         }
         return contextReps;
@@ -211,9 +219,13 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
     }
 
     /// <summary>
-    /// Computes the KL divergence between two Gaussian distributions parameterized by
-    /// (mean1, logvar1) and (mean2, logvar2).
+    /// Computes the KL divergence between two diagonal Gaussian distributions parameterized by
+    /// (mean1, logvar1) and (mean2, logvar2), summed over dimensions.
     /// </summary>
+    /// <remarks>
+    /// Per dimension, KL(N(m1, s1^2) || N(m2, s2^2)) = log(s2 / s1) + (s1^2 + (m1 - m2)^2) / (2 s2^2) - 1/2, and
+    /// log(s2 / s1) = (logvar2 - logvar1) / 2. The log term used to miss the 1/2, doubling it.
+    /// </remarks>
     protected double KLDivergenceGaussian(Vector<T> mean1, Vector<T> logvar1, Vector<T> mean2, Vector<T> logvar2)
     {
         double kl = 0;
@@ -229,11 +241,15 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
             double v1 = Math.Exp(lv1);
             double v2 = Math.Exp(lv2);
 
-            kl += lv2 - lv1 + (v1 + (m1 - m2) * (m1 - m2)) / (2 * v2) - 0.5;
+            kl += 0.5 * (lv2 - lv1) + (v1 + (m1 - m2) * (m1 - m2)) / (2 * v2) - 0.5;
         }
 
         return Math.Max(kl, 0);
     }
+
+    /// <summary>The Gaussian KL divergence of <see cref="KLDivergenceGaussian"/> (for tests).</summary>
+    internal double KLDivergenceGaussianForTesting(Vector<T> mean1, Vector<T> logvar1, Vector<T> mean2, Vector<T> logvar2)
+        => KLDivergenceGaussian(mean1, logvar1, mean2, logvar2);
 
     /// <summary>
     /// Samples from a Gaussian distribution using the reparameterization trick:
@@ -286,7 +302,9 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            // The installed parameters are scale * initParams, so the chain rule scales the gradient before clipping.
+            metaGradients.Add(ClipGradients(
+                ScaleVector(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), scale)));
         }
 
         ApplyOuterUpdate(initParams, metaGradients, outerLR);
@@ -362,7 +380,7 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
     /// <inheritdoc />
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
     /// <inheritdoc />
-    public double[]? ParameterModulationFactors => null;
+    public Vector<T>? ParameterModulationFactors => null;
 
     /// <summary>
     /// Initializes the adapted model from the meta-model and the parameters conditioned on the context set.

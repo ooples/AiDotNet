@@ -13,8 +13,12 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// Conformer encoder, the identity modality adapter, the linear projection to the LLM's width, and Qwen3-1.7B, which
 /// reads the projection's output in place of <c>&lt;|audioplaceholder|&gt;</c>.
 /// </summary>
-internal sealed class CanaryQwenNetwork<T>
+internal sealed class CanaryQwenNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     // Qwen3's tokenizer (Qwen2.5's added tokens, then <tool_response>, </tool_response>, <think>, </think>) with the
     // release's audio locator tag added.
@@ -67,6 +71,10 @@ internal sealed class CanaryQwenNetwork<T>
     /// identity adapter, then the linear projection.</summary>
     public Tensor<T> Speech(IReadOnlyList<double> waveform, bool training)
         => Projection.Forward(Encoder.Encode(Encoder.Features(waveform), training));
+
+    /// <summary>The projection's output given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+        => Projection.Forward(Encoder.Encode(Encoder.FeatureTensor(waveform), training));
 
     /// <summary>
     /// The prompt embeddings <c>[L, LLM width]</c> in NeMo's <c>qwen</c> prompt format: <c>&lt;|im_start|&gt;user\n</c>,

@@ -157,8 +157,8 @@ public partial class Vevo<T>
         {
             InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = o.Epsilon, WeightDecay = o.WeightDecay,
             EnableGradientClipping = true, MaxGradientNorm = flow ? 0.2 : 1.0,
-            // transformers' get_inverse_sqrt_schedule: linear warm-up, then √(warmup / step).
-            LearningRateScheduler = new LambdaLRScheduler(rate, step => step < warmup ? step / (double)warmup : 1.0 / Math.Sqrt(step / (double)warmup)),
+            // transformers' get_inverse_sqrt_schedule: 1-indexed linear warm-up (LambdaLRScheduler evaluates step 0 on batch 1), then √(warmup / step).
+            LearningRateScheduler = new LambdaLRScheduler(rate, step => step < warmup ? (step + 1.0) / (warmup + 1.0) : 1.0 / Math.Sqrt((step + 1.0) / warmup)),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             MaskParameters = Training.TapeTrainingStep<T>.CollectParameters(StageLayers().Cast<ILayer<T>>().ToList(), -1).ToList(),
         };

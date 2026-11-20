@@ -54,6 +54,7 @@ public class LayoutGraphOptions : DocumentNeuralNetworkOptions
     /// <summary>
     /// Gets or sets the max nodes.
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("MaxNodes caps how many node rows DetectLayout and DetectReadingOrder parse into regions; the graph convolutions have no per-node table, so Predict, Train and the parameter count do not depend on it. Covered by DocumentSweepRegressionTests.LayoutGraph_MaxNodesCapsTheParsedReadingOrder.")]
     public int MaxNodes { get; set; }
 
     /// <summary>

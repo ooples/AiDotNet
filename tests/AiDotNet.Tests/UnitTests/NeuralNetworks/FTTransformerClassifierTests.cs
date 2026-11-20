@@ -120,6 +120,27 @@ public class FTTransformerClassifierTests
     }
 
     [Fact]
+    public void TrainStep_UpdatesTheFeatureTokenizer()
+    {
+        // The tokenizer used to build its [CLS] + feature-embedding sequence element by element into a fresh tensor,
+        // so the tape never saw its weights: GetTrainableTensors registered them, but no gradient reached them and
+        // they never moved. They are the first block of GetParameters (numerical weights, bias, CLS token).
+        var model = NewModel();
+        var (x, y) = MakeSeparable(9, seed: 3);
+        _ = model.PredictProbabilities(x);
+        int tokenizerCount = 2 * NumNumerical * Opts().EmbeddingDimension + Opts().EmbeddingDimension;
+        var before = model.GetParameters().ToArray();
+        model.TrainStep(x, y, learningRate: 0.05);
+        model.TrainStep(x, y, learningRate: 0.05);
+        var after = model.GetParameters().ToArray();
+
+        int changed = 0;
+        for (int i = 0; i < tokenizerCount; i++) if (before[i] != after[i]) changed++;
+        Assert.True(changed >= 0.9 * tokenizerCount,
+            $"Only {changed} of {tokenizerCount} tokenizer parameters changed after two training steps.");
+    }
+
+    [Fact]
     public void Train_ReducesCrossEntropy_OnSeparableData_AndStaysFinite()
     {
         // The classifier train path: TrainStep runs a tape-tracked forward +

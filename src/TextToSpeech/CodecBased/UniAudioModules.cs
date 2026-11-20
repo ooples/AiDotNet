@@ -20,6 +20,28 @@ internal static class UniAudioOps<T>
         return layer;
     }
 
+    /// <summary>
+    /// <paramref name="layer"/>'s learned positions added to <paramref name="input"/> <c>[..., seq, dim]</c>, exactly
+    /// as its forward (position i, the table's last row past its length), with the position ids built on the host
+    /// from the shape. The layer's own forward builds them with engine ops, which its table's index contract then reads
+    /// on the host: a compiled training trace cannot replay that read.
+    /// </summary>
+    internal static Tensor<T> AddPositions(IEngine engine, LearnedPositionalEmbeddingLayer<T> layer, Tensor<T> input)
+    {
+        int rank = input.Rank;
+        if (rank < 2) throw new ArgumentException($"Expected [seq, dim] or [batch, seq, dim]; got rank {rank}.", nameof(input));
+        if (input.Shape[rank - 1] != layer.EmbeddingDim)
+            throw new ArgumentException($"The positions are {layer.EmbeddingDim} wide; the input's last axis is {input.Shape[rank - 1]}.", nameof(input));
+        int seq = input.Shape[rank - 2], last = layer.MaxSequenceLength - 1;
+        var shape = new int[rank - 1];
+        for (int i = 0; i < rank - 1; i++) shape[i] = input.Shape[i];
+        int count = 1;
+        foreach (int axis in shape) count *= axis;
+        var ids = new double[count];
+        for (int i = 0; i < count; i++) ids[i] = Math.Min(i % seq, last);
+        return engine.TensorAdd(input, layer.PositionTable.Forward(new Tensor<double>(ids, shape).Cast<T>()));
+    }
+
     internal static Tensor<T> Ids(IReadOnlyList<int> ids)
     {
         var result = new Tensor<T>(new[] { ids.Count });
@@ -183,6 +205,9 @@ internal sealed class UniAudioMultiScaleTransformer<T>
             options.NumLLMLayers, options.LocalFeedForwardDim);
         _globalToLocal = UniAudioOps<T>.Own(owner,
             new DenseLayer<T>(options.LLMDim, identity, biasMode: BiasMode.Always));
+        // Sized now from a patch's slice of the global width: a first training forward that resized it would copy the
+        // old weights on the host inside a compiled trace.
+        _globalToLocal.ResolveFromShape(new[] { 1, options.LLMDim / options.NumCodebooks });
         _head = UniAudioOps<T>.Own(owner, new BiasFreeLinearLayer<T>(options.LLMDim, options.JointVocabularySize));
     }
 
@@ -226,7 +251,7 @@ internal sealed class UniAudioMultiScaleTransformer<T>
             var localIds = new int[nq];
             localIds[0] = _options.LocalStartToken;
             for (int q = 1; q < nq; q++) localIds[q] = sequence[patch * nq + q - 1];
-            var local = _localPosition.Forward(_localEmbedding.Forward(UniAudioOps<T>.Ids(localIds)));
+            var local = UniAudioOps<T>.AddPositions(_engine, _localPosition, _localEmbedding.Forward(UniAudioOps<T>.Ids(localIds)));
             local = _engine.TensorAdd(local, _engine.TensorSlice(contexts,
                 new[] { patch * nq, 0 }, new[] { nq, _options.LLMDim }));
             outputs.Add(_head.Forward(_local.Forward(local)));
@@ -252,7 +277,7 @@ internal sealed class UniAudioMultiScaleTransformer<T>
                 var input = new int[q + 1];
                 input[0] = _options.LocalStartToken;
                 for (int j = 1; j < input.Length; j++) input[j] = patch[j - 1];
-                var local = _localPosition.Forward(_localEmbedding.Forward(UniAudioOps<T>.Ids(input)));
+                var local = UniAudioOps<T>.AddPositions(_engine, _localPosition, _localEmbedding.Forward(UniAudioOps<T>.Ids(input)));
                 local = _engine.TensorAdd(local, _engine.TensorSlice(context,
                     new[] { 0, 0 }, new[] { q + 1, _options.LLMDim }));
                 var hidden = _local.Forward(local);
@@ -283,7 +308,7 @@ internal sealed class UniAudioMultiScaleTransformer<T>
         if (_options.PrefixLanguageModel)
             for (int i = 0; i < Math.Min(patches, prefixPatches); i++)
                 for (int j = i + 1; j < Math.Min(patches, prefixPatches); j++) mask[i, j] = UniAudioOps<T>.NumOps.Zero;
-        return _global.Forward(_globalPosition.Forward(rows), mask);
+        return _global.Forward(UniAudioOps<T>.AddPositions(_engine, _globalPosition, rows), mask);
     }
 
     private Tensor<T> NextGlobalContext(IReadOnlyList<int> sequence, int prefixPatches)

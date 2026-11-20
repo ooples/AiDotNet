@@ -108,6 +108,19 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        // The solver evaluates the augmented Lagrangian tens of thousands of times, each evaluation allocating a few
+        // small tensors that die at once. Inside a caller's TensorArena none of them is reclaimed until the arena
+        // ends, so a four-variable search held over a gigabyte and spent most of its time in GC (25 s against 4 s
+        // outside an arena). The search runs with the arena suspended, so its temporaries are ordinary short-lived
+        // garbage and the returned graph owns its memory.
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            return DiscoverStructureUnscoped(data);
+        }
+    }
+
+    private Matrix<T> DiscoverStructureUnscoped(Matrix<T> data)
+    {
         int n = data.Rows;
         int d = data.Columns;
 

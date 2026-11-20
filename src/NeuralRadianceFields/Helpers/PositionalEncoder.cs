@@ -24,8 +24,7 @@ internal static class PositionalEncoder<T>
     {
         int points = input.Shape[0];
         int dims = input.Shape[1];
-        var frequencies = new Tensor<T>(new[] { 1, 1, levels });
-        for (int l = 0; l < levels; l++) frequencies[l] = Ops.FromDouble(Math.Pow(2.0, l) * Math.PI);
+        var frequencies = Frequencies(engine, levels).Reshape(1, 1, levels);
 
         var angles = engine.TensorMultiply(engine.Reshape(input, new[] { points, dims, 1 }), frequencies); // [N, D, L]
         var pairs = engine.TensorConcatenate(new[]
@@ -34,5 +33,22 @@ internal static class PositionalEncoder<T>
             engine.Reshape(engine.TensorCos(angles), new[] { points, dims, levels, 1 }),
         }, axis: 3);
         return engine.Reshape(pairs, new[] { points, dims * 2 * levels });
+    }
+
+    /// <summary>
+    /// The octave frequencies 2^l * pi for l = 0..levels-1. Powers of two are built by an exact running product, so
+    /// each frequency equals pi scaled by 2^l with no rounding beyond pi's own.
+    /// </summary>
+    private static Tensor<T> Frequencies(IEngine engine, int levels)
+    {
+        if (levels == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var factors = engine.TensorFullLike(new Tensor<T>(new[] { levels }), Ops.FromDouble(2.0));
+        factors[0] = Ops.One;
+        var powers = engine.TensorCumProd(factors, 0);
+        return engine.TensorMultiplyScalar(powers, Ops.FromDouble(Math.PI));
     }
 }

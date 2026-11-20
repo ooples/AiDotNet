@@ -41,27 +41,11 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
     {
-        var h = _entityEmbeddings[headIdx];
-        var r = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        int dim = EmbeddingDimension;
-
         // Re(⟨h, r, conj(t)⟩) per Trouillon et al. (2016)
         // = Σ(hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe)
-        double score = 0.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double hRe = NumOps.ToDouble(h[d]);
-            double hIm = NumOps.ToDouble(h[d + dim]);
-            double rRe = NumOps.ToDouble(r[d]);
-            double rIm = NumOps.ToDouble(r[d + dim]);
-            double tRe = NumOps.ToDouble(t[d]);
-            double tIm = NumOps.ToDouble(t[d + dim]);
-
-            score += hRe * rRe * tRe + hRe * rIm * tIm + hIm * rRe * tIm - hIm * rIm * tRe;
-        }
-
-        return NumOps.FromDouble(score);
+        var p = new ComplexParts(this, headIdx, relationIdx, tailIdx);
+        return Engine.Sum(Engine.Add(
+            Engine.Multiply(p.HeadReal, p.GradHeadReal()), Engine.Multiply(p.HeadImag, p.GradHeadImag())));
     }
 
     private protected override double ComputeLossAndUpdateGradients(
@@ -69,8 +53,6 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
         int negHead, int negTail,
         double learningRate, KGEmbeddingOptions options)
     {
-        int dim = EmbeddingDimension;
-
         double posScore = NumOps.ToDouble(ScoreTripleInternal(posHead, relation, posTail));
         double negScore = NumOps.ToDouble(ScoreTripleInternal(negHead, relation, negTail));
 
@@ -85,44 +67,74 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
         double negGradScale = StableSigmoid(negScore);
 
         // Update positive triple
-        UpdateTripleGradients(posHead, relation, posTail, dim, learningRate * posGradScale);
+        UpdateTripleGradients(posHead, relation, posTail, learningRate * posGradScale);
         // Update negative triple
-        UpdateTripleGradients(negHead, relation, negTail, dim, learningRate * negGradScale);
+        UpdateTripleGradients(negHead, relation, negTail, learningRate * negGradScale);
 
         return loss;
     }
 
-    private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, int dim, double step)
+    private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, double step)
     {
+        var p = new ComplexParts(this, headIdx, relationIdx, tailIdx);
+        T scale = NumOps.FromDouble(step);
+
+        // Gradients of score = hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe w.r.t. each part,
+        // all formed from the pre-update embeddings.
+        var gradHRe = Engine.Multiply(p.GradHeadReal(), scale);
+        var gradHIm = Engine.Multiply(p.GradHeadImag(), scale);
+        var gradRRe = Engine.Multiply(Engine.Add(
+            Engine.Multiply(p.HeadReal, p.TailReal), Engine.Multiply(p.HeadImag, p.TailImag)), scale);
+        var gradRIm = Engine.Multiply(Engine.Subtract(
+            Engine.Multiply(p.HeadReal, p.TailImag), Engine.Multiply(p.HeadImag, p.TailReal)), scale);
+        var gradTRe = Engine.Multiply(Engine.Subtract(
+            Engine.Multiply(p.HeadReal, p.RelationReal), Engine.Multiply(p.HeadImag, p.RelationImag)), scale);
+        var gradTIm = Engine.Multiply(Engine.Add(
+            Engine.Multiply(p.HeadReal, p.RelationImag), Engine.Multiply(p.HeadImag, p.RelationReal)), scale);
+
+        int dim = EmbeddingDimension;
         var h = _entityEmbeddings[headIdx];
         var r = _relationEmbeddings[relationIdx];
         var t = _entityEmbeddings[tailIdx];
+        SubtractFrom(h, gradHRe, 0);
+        SubtractFrom(h, gradHIm, dim);
+        SubtractFrom(r, gradRRe, 0);
+        SubtractFrom(r, gradRIm, dim);
+        SubtractFrom(t, gradTRe, 0);
+        SubtractFrom(t, gradTIm, dim);
+    }
 
-        for (int d = 0; d < dim; d++)
+    /// <summary>Views of the real and imaginary halves of one triple's embeddings.</summary>
+    private sealed class ComplexParts
+    {
+        public ComplexParts(ComplExEmbedding<T> model, int headIdx, int relationIdx, int tailIdx)
         {
-            double hRe = NumOps.ToDouble(h[d]);
-            double hIm = NumOps.ToDouble(h[d + dim]);
-            double rRe = NumOps.ToDouble(r[d]);
-            double rIm = NumOps.ToDouble(r[d + dim]);
-            double tRe = NumOps.ToDouble(t[d]);
-            double tIm = NumOps.ToDouble(t[d + dim]);
-
-            // Gradients of score w.r.t. each component
-            // score = hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe
-            double gradHRe = rRe * tRe + rIm * tIm;
-            double gradHIm = rRe * tIm - rIm * tRe;
-            double gradRRe = hRe * tRe + hIm * tIm;
-            double gradRIm = hRe * tIm - hIm * tRe;
-            double gradTRe = hRe * rRe - hIm * rIm;
-            double gradTIm = hRe * rIm + hIm * rRe;
-
-            h[d] = NumOps.FromDouble(hRe - step * gradHRe);
-            h[d + dim] = NumOps.FromDouble(hIm - step * gradHIm);
-            r[d] = NumOps.FromDouble(rRe - step * gradRRe);
-            r[d + dim] = NumOps.FromDouble(rIm - step * gradRIm);
-            t[d] = NumOps.FromDouble(tRe - step * gradTRe);
-            t[d + dim] = NumOps.FromDouble(tIm - step * gradTIm);
+            int dim = model.EmbeddingDimension;
+            var h = model._entityEmbeddings[headIdx];
+            var r = model._relationEmbeddings[relationIdx];
+            var t = model._entityEmbeddings[tailIdx];
+            HeadReal = Row(h, 0, dim);
+            HeadImag = Row(h, dim, dim);
+            RelationReal = Row(r, 0, dim);
+            RelationImag = Row(r, dim, dim);
+            TailReal = Row(t, 0, dim);
+            TailImag = Row(t, dim, dim);
         }
+
+        public Vector<T> HeadReal { get; }
+        public Vector<T> HeadImag { get; }
+        public Vector<T> RelationReal { get; }
+        public Vector<T> RelationImag { get; }
+        public Vector<T> TailReal { get; }
+        public Vector<T> TailImag { get; }
+
+        /// <summary>d score / d hRe = rRe*tRe + rIm*tIm.</summary>
+        public Vector<T> GradHeadReal()
+            => Engine.Add(Engine.Multiply(RelationReal, TailReal), Engine.Multiply(RelationImag, TailImag));
+
+        /// <summary>d score / d hIm = rRe*tIm - rIm*tRe.</summary>
+        public Vector<T> GradHeadImag()
+            => Engine.Subtract(Engine.Multiply(RelationReal, TailImag), Engine.Multiply(RelationImag, TailReal));
     }
 
     /// <summary>

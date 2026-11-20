@@ -70,78 +70,60 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        if (_averaging == AveragingMethod.Binary || _averaging == AveragingMethod.None)
-            return ComputeBinary(predictions, actuals, _positiveLabel);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
 
-        var classes = GetClasses(predictions, actuals);
+        if (_averaging == AveragingMethod.Binary || _averaging == AveragingMethod.None)
+            return ComputeBinary(pred, actual, _positiveLabel);
+
+        var classes = EvaluationTensorOps<T>.UniqueLabels(pred, actual);
         if (_averaging == AveragingMethod.Micro)
-            return ComputeMicro(predictions, actuals, classes);
+            return ComputeMicro(pred, actual, classes);
 
         double sum = 0, weights = 0;
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            var fb = NumOps.ToDouble(ComputeBinary(predictions, actuals, NumOps.FromDouble(cls)));
-            int count = CountClass(actuals, cls);
+            var counts = EvaluationTensorOps<T>.LabelCounts(pred, actual, cls);
+            double fb = BinaryFromCounts(counts.TruePositives, counts.PredictedPositives, counts.ActualPositives);
+            int count = counts.ActualPositives;
             if (_averaging == AveragingMethod.Macro) { sum += fb; weights += 1; }
             else { sum += fb * count; weights += count; }
         }
         return weights > 0 ? NumOps.FromDouble(sum / weights) : NumOps.Zero;
     }
 
-    private T ComputeBinary(ReadOnlySpan<T> pred, ReadOnlySpan<T> actual, T posLabel)
+    private T ComputeBinary(Tensor<T> pred, Tensor<T> actual, T posLabel)
     {
-        double posVal = NumOps.ToDouble(posLabel);
-        int tp = 0, pp = 0, ap = 0;
-        for (int i = 0; i < pred.Length; i++)
-        {
-            bool isPred = NumOps.Compare(pred[i], NumOps.FromDouble(posVal)) == 0;
-            bool isActual = NumOps.Compare(actual[i], NumOps.FromDouble(posVal)) == 0;
-            if (isPred) pp++;
-            if (isActual) ap++;
-            if (isPred && isActual) tp++;
-        }
-        if (pp == 0 && ap == 0) return NumOps.One;
-        double prec = pp > 0 ? (double)tp / pp : 0;
-        double rec = ap > 0 ? (double)tp / ap : 0;
-        if (prec + rec == 0) return NumOps.Zero;
-        double b2 = _beta * _beta;
-        return NumOps.FromDouble((1 + b2) * prec * rec / (b2 * prec + rec));
+        var counts = EvaluationTensorOps<T>.LabelCounts(pred, actual, posLabel);
+        return NumOps.FromDouble(BinaryFromCounts(counts.TruePositives, counts.PredictedPositives, counts.ActualPositives));
     }
 
-    private T ComputeMicro(ReadOnlySpan<T> pred, ReadOnlySpan<T> actual, HashSet<double> classes)
+    private double BinaryFromCounts(int tp, int pp, int ap)
+    {
+        if (pp == 0 && ap == 0) return 1;
+        double prec = pp > 0 ? (double)tp / pp : 0;
+        double rec = ap > 0 ? (double)tp / ap : 0;
+        // Precision and recall are both zero exactly when nothing was predicted correctly.
+        if (tp == 0) return 0;
+        double b2 = _beta * _beta;
+        return (1 + b2) * prec * rec / (b2 * prec + rec);
+    }
+
+    private T ComputeMicro(Tensor<T> pred, Tensor<T> actual, Tensor<T> classes)
     {
         int totalTp = 0, totalPp = 0, totalAp = 0;
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            for (int i = 0; i < pred.Length; i++)
-            {
-                bool isPred = NumOps.Compare(pred[i], NumOps.FromDouble(cls)) == 0;
-                bool isActual = NumOps.Compare(actual[i], NumOps.FromDouble(cls)) == 0;
-                if (isPred) totalPp++;
-                if (isActual) totalAp++;
-                if (isPred && isActual) totalTp++;
-            }
+            var counts = EvaluationTensorOps<T>.LabelCounts(pred, actual, cls);
+            totalPp += counts.PredictedPositives;
+            totalAp += counts.ActualPositives;
+            totalTp += counts.TruePositives;
         }
         double prec = totalPp > 0 ? (double)totalTp / totalPp : 0;
         double rec = totalAp > 0 ? (double)totalTp / totalAp : 0;
         if (prec + rec == 0) return NumOps.Zero;
         double b2 = _beta * _beta;
         return NumOps.FromDouble((1 + b2) * prec * rec / (b2 * prec + rec));
-    }
-
-    private static HashSet<double> GetClasses(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
-    {
-        var c = new HashSet<double>();
-        for (int i = 0; i < predictions.Length; i++) c.Add(NumOps.ToDouble(predictions[i]));
-        for (int i = 0; i < actuals.Length; i++) c.Add(NumOps.ToDouble(actuals[i]));
-        return c;
-    }
-
-    private static int CountClass(ReadOnlySpan<T> vals, double cls)
-    {
-        int c = 0;
-        for (int i = 0; i < vals.Length; i++) if (NumOps.Compare(vals[i], NumOps.FromDouble(cls)) == 0) c++;
-        return c;
     }
 
     /// <inheritdoc />
@@ -164,19 +146,18 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray();
         var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

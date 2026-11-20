@@ -475,6 +475,89 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
 
         return result;
     }
+
+    /// <summary>
+    /// Shifts a flattened forecasting window forward by <paramref name="shiftElements"/> values and appends
+    /// the leading values of <paramref name="prediction"/>, zero-padding any remainder when <paramref name="prediction"/>
+    /// is shorter than the shift. Materializes contiguous buffers up front so non-contiguous tensor views work safely.
+    /// </summary>
+    private protected Tensor<T> ShiftFlatWindow(
+        Tensor<T> input,
+        Tensor<T> prediction,
+        int shiftElements,
+        bool preserveInputShape = false,
+        int windowLength = -1)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int targetLength = windowLength > 0 ? windowLength : input.Length;
+        if (targetLength <= 0)
+        {
+            return preserveInputShape ? new Tensor<T>((int[])input._shape.Clone()) : new Tensor<T>(new[] { 0 });
+        }
+
+        int availableInput = Math.Min(input.Length, targetLength);
+        int shift = Math.Max(0, Math.Min(shiftElements, availableInput));
+        int keepLen = Math.Max(0, availableInput - shift);
+        int fillLen = Math.Max(0, Math.Min(targetLength - keepLen, prediction.Length));
+        int padLen = Math.Max(0, targetLength - keepLen - fillLen);
+
+        var parts = new List<Tensor<T>>(3);
+        if (keepLen > 0)
+        {
+            var flatInput = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            parts.Add(Engine.TensorNarrow(flatInput, 0, shift, keepLen).Contiguous());
+        }
+
+        if (fillLen > 0)
+        {
+            var flatPred = Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length });
+            parts.Add(Engine.TensorNarrow(flatPred, 0, 0, fillLen).Contiguous());
+        }
+
+        if (padLen > 0)
+        {
+            parts.Add(new Tensor<T>(new[] { padLen }));
+        }
+
+        var combined = parts.Count == 0
+            ? new Tensor<T>(new[] { targetLength })
+            : parts.Count == 1
+                ? parts[0]
+                : Engine.TensorConcatenate(parts.ToArray(), 0);
+        return preserveInputShape && combined.Length == input.Length
+            ? Engine.Reshape(combined.Contiguous(), (int[])input._shape.Clone())
+            : combined;
+    }
+
+    /// <summary>
+    /// Concatenates autoregressive step predictions into a single 1-D forecast tensor using engine operations,
+    /// materializing any non-contiguous views safely.
+    /// </summary>
+    private protected Tensor<T> ConcatenateFlatPredictions(List<Tensor<T>> predictions)
+    {
+        if (predictions is null || predictions.Count == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var parts = new List<Tensor<T>>(predictions.Count);
+        for (int i = 0; i < predictions.Count; i++)
+        {
+            var pred = predictions[i];
+            if (pred.Length > 0)
+            {
+                parts.Add(Engine.Reshape(pred.Contiguous(), new[] { pred.Length }));
+            }
+        }
+
+        if (parts.Count == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+    }
     /// <summary>
     /// Walks the layer stack the way this family's forward passes do: instance-normalize the input and
     /// promote a bare rank-1 series to [1, N] before it reaches the first layer.

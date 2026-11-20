@@ -518,7 +518,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.1,
             UsePreprocessing = true,
-            PreprocessingMethod = "jpeg"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = CreateTestInput();
@@ -535,7 +535,9 @@ public class AdversarialRobustnessIntegrationTests
     public async Task AdversarialTraining_PreprocessingMethods_AllSupported()
     {
         // Test different preprocessing methods
-        var methods = new[] { "jpeg", "bit_depth_reduction", "denoising" };
+        var methods = new[] { AiDotNet.Enums.AdversarialPreprocessingMethod.JpegCompression,
+            AiDotNet.Enums.AdversarialPreprocessingMethod.BitDepthReduction,
+            AiDotNet.Enums.AdversarialPreprocessingMethod.MedianSmoothing };
 
         foreach (var method in methods)
         {
@@ -587,7 +589,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.15,
             UsePreprocessing = true,
-            PreprocessingMethod = "jpeg"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
@@ -847,7 +849,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Assert
         Assert.NotNull(options);
-        Assert.Equal("IBP", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, options.CertificationMethod);
     }
 
     [Fact(Timeout = 120000)]
@@ -929,7 +931,7 @@ public class AdversarialRobustnessIntegrationTests
         var newOptions = ibp.GetOptions();
 
         // Assert
-        Assert.Equal("IBP", newOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, newOptions.CertificationMethod);
     }
 
     [Fact(Timeout = 120000)]
@@ -1005,7 +1007,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Assert
         Assert.NotNull(options);
-        Assert.Equal("CROWN", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, options.CertificationMethod);
         Assert.True(options.UseTightBounds);
     }
 
@@ -1093,7 +1095,7 @@ public class AdversarialRobustnessIntegrationTests
         var newOptions = crown.GetOptions();
 
         // Assert
-        Assert.Equal("CROWN", newOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, newOptions.CertificationMethod);
         Assert.True(newOptions.UseTightBounds);
     }
 
@@ -1518,7 +1520,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.1,
             UsePreprocessing = true,
-            PreprocessingMethod = "denoising"
+            PreprocessingMethod = AdversarialPreprocessingMethod.MedianSmoothing
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(defenseOptions);
 

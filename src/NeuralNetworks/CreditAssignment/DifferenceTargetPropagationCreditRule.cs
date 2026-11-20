@@ -140,21 +140,14 @@ internal sealed class DifferenceTargetPropagationCreditRule<T> : CreditRuleBase<
     /// <summary>Element-wise <c>a − b</c>.</summary>
     private static Matrix<T> Subtract(Matrix<T> a, Matrix<T> b, INumericOperations<T> ops)
     {
-        var r = new Matrix<T>(a.Rows, a.Columns);
-        for (int i = 0; i < a.Rows; i++)
-            for (int j = 0; j < a.Columns; j++)
-                r[i, j] = ops.Subtract(a[i, j], b[i, j]);
-        return r;
+        return AiDotNetEngine.Current.MatrixSubtract(a, b);
     }
 
     /// <summary>Element-wise <c>a − scale·b</c>.</summary>
     private static Matrix<T> SubtractScaled(Matrix<T> a, Matrix<T> b, double scale, INumericOperations<T> ops)
     {
         T s = ops.FromDouble(scale);
-        var r = new Matrix<T>(a.Rows, a.Columns);
-        for (int i = 0; i < a.Rows; i++)
-            for (int j = 0; j < a.Columns; j++)
-                r[i, j] = ops.Subtract(a[i, j], ops.Multiply(s, b[i, j]));
-        return r;
+        var engine = AiDotNetEngine.Current;
+        return engine.MatrixSubtract(a, engine.MatrixMultiplyScalar(b, s));
     }
 }

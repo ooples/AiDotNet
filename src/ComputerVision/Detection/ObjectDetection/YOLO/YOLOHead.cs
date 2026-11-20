@@ -351,6 +351,30 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
     /// <summary>Distribution bins predicted per box side.</summary>
     internal int RegMax => _regMax;
 
+    internal bool HasAnyResolvedLayers =>
+        _clsConvs.Any(c => c.Layer.IsShapeResolved)
+        || _clsHeads.Any(c => c.Layer.IsShapeResolved)
+        || _regConvs.Any(c => c.Layer.IsShapeResolved)
+        || _regHeads.Any(c => c.Layer.IsShapeResolved);
+
+    /// <summary>
+    /// Harmonizes a freshly resolved dual head with <paramref name="source"/> in place (Wang et al. 2024, Sec. 3.1:
+    /// <c>one2one_cv2 = deepcopy(cv2)</c>, <c>one2one_cv3 = deepcopy(cv3)</c>).
+    /// </summary>
+    internal void CopyParametersInPlaceFrom(YOLOv8Head<T> source)
+    {
+        for (int i = 0; i < _clsConvs.Count; i++)
+        {
+            _clsConvs[i].SetParameters(source._clsConvs[i].GetParameters());
+            _clsHeads[i].SetParameters(source._clsHeads[i].GetParameters());
+        }
+        for (int i = 0; i < _regConvs.Count; i++)
+        {
+            _regConvs[i].SetParameters(source._regConvs[i].GetParameters());
+            _regHeads[i].SetParameters(source._regHeads[i].GetParameters());
+        }
+    }
+
     public YOLOv8Head(int[] inputChannels, int numClasses, int regMax = 16, int[]? strides = null)
     {
         // P3-P5 at strides 8, 16, 32 unless stated: the levels every YOLO in this library feeds the head.

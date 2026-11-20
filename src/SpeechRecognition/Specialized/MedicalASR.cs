@@ -154,16 +154,8 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         Layers.AddRange(layers);
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_network is null) return rawAudio;
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds =>
+        _network is not null ? _options.MaxAudioLengthSeconds : null;
 
     private MedicalAsrNetwork<T> RequireNetwork() =>
         _network ?? throw new NotSupportedException("This operation runs on the native paper network.");
@@ -177,7 +169,7 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (_network is not null && _options.DecoderType == MedicalAsrDecoderType.ListenAttendSpell)
         {
             using var _ = new NoGradScope<T>();
-            tokens = _network.Greedy(_network.Encode(_network.Features(PreprocessAudio(audio))), _options.MaxTextLength).Tokens;
+            tokens = _network.Greedy(_network.Encode(_network.FeatureTensor(PreprocessAudio(audio))), _options.MaxTextLength).Tokens;
         }
         else
         {
@@ -192,14 +184,10 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     }
 
     // LAS graphemes are code points; CTC units are written by their inventory names (or indices), space-separated.
-    private string Text(List<int> tokens)
-    {
-        if (_options.DecoderType == MedicalAsrDecoderType.Ctc || _network is null)
-            return string.Join(" ", tokens.Select(t => t < _options.PhoneInventory.Length ? _options.PhoneInventory[t] : t.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-        var sb = new System.Text.StringBuilder();
-        foreach (int t in tokens) if (t > 0 && t <= 0x10FFFF && (t < 0xD800 || t > 0xDFFF)) sb.Append(char.ConvertFromUtf32(t));
-        return sb.ToString().Trim();
-    }
+    private string Text(List<int> tokens) =>
+        _options.DecoderType == MedicalAsrDecoderType.Ctc || _network is null
+            ? string.Join(" ", tokens.Select(t => t < _options.PhoneInventory.Length ? _options.PhoneInventory[t] : t.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            : DecodeUnicodeTokens(tokens).Trim();
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null,
@@ -221,29 +209,14 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         throw new NotSupportedException("MedicalASR does not support streaming.");
 
     // Per waveform row: CTC logits [steps, V], or LAS greedy-decoding logits [MaxTextLength, V].
-    private Tensor<T> Logits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        var rows = Rows(input);
-        var outputs = new Tensor<T>[rows.Length];
-        for (int r = 0; r < rows.Length; r++)
+    private Tensor<T> Logits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _network, (network, wave) =>
         {
-            var encoded = _network.Encode(_network.Features(rows[r]));
-            outputs[r] = _options.DecoderType == MedicalAsrDecoderType.Ctc ? _network.CtcLogits(encoded) : _network.Greedy(encoded, _options.MaxTextLength).Logits;
-        }
-        return input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
-
-    private Tensor<T>[] Rows(Tensor<T> input)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var flat = Engine.Reshape(input, new[] { rows, samples });
-        var result = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            result[r] = PreprocessAudio(Engine.Reshape(Engine.TensorSlice(flat, new[] { r, 0 }, new[] { 1, samples }), new[] { samples }));
-        return result;
-    }
+            var encoded = network.Encode(network.FeatureTensor(PreprocessAudio(wave)));
+            return _options.DecoderType == MedicalAsrDecoderType.Ctc
+                ? network.CtcLogits(encoded)
+                : network.Greedy(encoded, _options.MaxTextLength).Logits;
+        });
 
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
@@ -256,63 +229,42 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private int[] Labels(Tensor<T> target)
     {
         int v = _options.VocabSize, width = target.Rank >= 2 ? target.Shape[^1] : 0;
-        if (width == v)
+        if (width == v && _options.DecoderType != MedicalAsrDecoderType.Ctc)
         {
-            var frames = Engine.Reshape(target, new[] { target.Length / width, width });
-            if (_options.DecoderType == MedicalAsrDecoderType.Ctc) return Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
-            var labels = new List<int>();
-            for (int i = 0; i < frames.Shape[0]; i++)
+            double[] values = target.Cast<double>().ToArray();
+            int steps = target.Length / width;
+            var labels = new List<int>(steps);
+            for (int i = 0; i < steps; i++)
             {
                 int best = 0;
-                for (int k = 1; k < v; k++) if (NumOps.GreaterThan(frames[i, k], frames[i, best])) best = k;
+                int rowOffset = i * width;
+                for (int k = 1; k < v; k++)
+                    if (values[rowOffset + k] > values[rowOffset + best]) best = k;
                 if (best == MedicalAsrNetwork<T>.Boundary) break;
                 labels.Add(best);
             }
             return labels.ToArray();
         }
-        var ids = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= v) throw new ArgumentException($"Unit {value} is the blank or boundary, or outside the {v}-unit inventory.", nameof(target));
-            ids[i] = (int)value;
-        }
-        return ids;
-    }
 
-    private (Tensor<T> Waveform, int[] Labels)[] Batch(Tensor<T> input, Tensor<T> target)
-    {
-        var rows = Rows(input);
-        int perRow = target.Length / rows.Length, width = target.Rank >= 2 ? target.Shape[^1] : 0;
-        bool distributions = width == _options.VocabSize;
-        var batch = new (Tensor<T>, int[])[rows.Length];
-        for (int r = 0; r < rows.Length; r++)
-        {
-            var row = rows.Length == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows.Length, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                distributions ? new[] { perRow / width, width } : new[] { perRow });
-            batch[r] = (rows[r], Labels(row));
-        }
-        return batch;
+        return ParseCtcOrTokenTargetLabels(target, v, Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc);
     }
 
     /// <summary>One step of the paper's training: CTC, or LAS cross-entropy with scheduled sampling.</summary>
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
-        var network = _network;
-        if (network is null) return false;
-        var batch = Batch(input, target);
         double sampling = CurrentSamplingProbability;
-        TrainWithCustomLoss(input, _ =>
+        if (!TrainNativeWaveformBatch(
+            input,
+            target,
+            _network,
+            _optimizer,
+            (_, row) => Labels(row),
+            (network, wave, rowLabels) => network.Loss(network.FeatureTensor(PreprocessAudio(wave)), rowLabels, sampling, _random),
+            isDistributionWidth: w => w == _options.VocabSize))
         {
-            Tensor<T>? total = null;
-            foreach (var (waveform, labels) in batch)
-            {
-                var loss = network.Loss(network.Features(waveform), labels, sampling, _random);
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
-            }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));
-        }, _optimizer);
+            return false;
+        }
+
         _trainingSteps++;
         return true;
     }
@@ -321,15 +273,14 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = RequireNetwork();
-        using var _ = new NoGradScope<T>();
-        var batch = Batch(input, target);
-        double total = 0;
-        foreach (var (waveform, labels) in batch) total += NumOps.ToDouble(network.Loss(network.Features(waveform), labels)[0]);
-        return NumOps.FromDouble(total / batch.Length);
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(
+            input,
+            target,
+            _network,
+            (_, row) => Labels(row),
+            (network, wave, rowLabels) => network.Loss(network.FeatureTensor(PreprocessAudio(wave)), rowLabels),
+            isDistributionWidth: w => w == _options.VocabSize);
 
     /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;

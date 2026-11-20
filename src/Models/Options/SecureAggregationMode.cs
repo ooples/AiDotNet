@@ -13,7 +13,8 @@ public enum SecureAggregationMode
     /// Synchronous secure aggregation that requires full participation from the selected clients.
     /// </summary>
     /// <remarks>
-    /// If any selected client drops out after masks are created, the round must be restarted.
+    /// Runs the Bonawitz et al. (2017) protocol with threshold <c>t = n</c>: every selected client must complete
+    /// every round, and any dropout aborts the round with a <c>SecureAggregationAbortedException</c>.
     /// </remarks>
     FullParticipation = 0,
 
@@ -21,9 +22,9 @@ public enum SecureAggregationMode
     /// Dropout-resilient secure aggregation with a reconstruction threshold.
     /// </summary>
     /// <remarks>
-    /// This mode is based on practical secure aggregation techniques (e.g., Bonawitz et al.),
-    /// allowing the server to recover the aggregate even if some clients fail to complete the
-    /// round, provided a sufficient number of clients remain.
+    /// Runs the Bonawitz et al. (2017) protocol with a Shamir threshold <c>t &lt; n</c>
+    /// (<see cref="SecureAggregationOptions.ReconstructionThreshold"/>; default <c>floor(2n/3) + 1</c>). The server
+    /// recovers the exact aggregate of the survivors as long as at least <c>t</c> clients complete every round.
     /// </remarks>
     ThresholdDropoutResilient = 1
 }

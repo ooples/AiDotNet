@@ -51,8 +51,6 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _classifierParams;
@@ -149,26 +147,15 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
         var logits = engine.TensorMatMul(rows, engine.TensorTranspose(weights));
         var probabilities = engine.Softmax(logits, axis: 1);
 
+        using var slots = new Tensor<int>(_classSlots, new[] { classes });
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            int n = probabilities.Shape[0];
-            var predicted = new Vector<T>(n);
-            for (int r = 0; r < n; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (NumOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
-                }
-
-                predicted[r] = NumOps.FromDouble(_classSlots[best]);
-            }
-
-            return (TOutput)(object)predicted;
+            // The class slot of each row's most probable class (the first one on ties)
+            return (TOutput)(object)FirstMax<T>.Select(probabilities, slots.Cast<T>()).ToVector();
         }
 
-        var columns = new Tensor<T>(new[] { classes, _options.NumClasses });
-        for (int c = 0; c < classes; c++) columns[c * _options.NumClasses + _classSlots[c]] = NumOps.One;
+        // Scatter the episode's class columns into the full class space
+        var columns = engine.TensorOneHot<T>(slots, _options.NumClasses);
         return ClassifierOutputs<T>.ToOutput<TOutput>(engine.TensorMatMul(probabilities, columns));
     }
 
@@ -189,24 +176,10 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     {
         // Return combined feature encoder + classifier parameters + latent code
         var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
-        int totalSize = encoderParams.Length + _classifierParams.Length + _latentCode.Length;
-        var combined = new Vector<T>(totalSize);
-
-        int idx = 0;
-        for (int i = 0; i < encoderParams.Length; i++)
+        return AiDotNetEngine.Current.Concat(new[]
         {
-            combined[idx++] = encoderParams[i];
-        }
-        for (int i = 0; i < _classifierParams.Length; i++)
-        {
-            combined[idx++] = _classifierParams[i];
-        }
-        for (int i = 0; i < _latentCode.Length; i++)
-        {
-            combined[idx++] = _latentCode[i];
-        }
-
-        return combined;
+            Tensor<T>.FromVector(encoderParams), Tensor<T>.FromVector(_classifierParams), Tensor<T>.FromVector(_latentCode),
+        }, 0).ToVector();
     }
 
     /// <inheritdoc/>

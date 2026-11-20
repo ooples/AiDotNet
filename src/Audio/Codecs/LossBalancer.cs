@@ -49,6 +49,106 @@ internal sealed class LossBalancer<T>
     /// <param name="losses">Each loss as a function of an output tensor.</param>
     public Tensor<T> Surrogate(Tensor<T> output, IReadOnlyDictionary<string, Func<Tensor<T>, Tensor<T>>> losses)
     {
+        var balanced = new Tensor<T>(new[] { output.Length + 1 });
+        Balance(output, losses, balanced.AsWritableSpan());
+        var stopped = _engine.Reshape(_engine.TensorSlice(balanced, new[] { 0 }, new[] { output.Length }), output._shape);
+        return SurrogateOf(output, stopped);
+    }
+
+    /// <summary>The number of balanced steps (each updates the norms' moving averages once).</summary>
+    internal int Steps { get; private set; }
+
+    /// <summary>
+    /// <see cref="Surrogate(Tensor{T}, IReadOnlyDictionary{string, Func{Tensor{T}, Tensor{T}}})"/> that a compiled training
+    /// plan replays: under a trace the balancing (its nested gradients, the host norms and their moving averages) is one
+    /// node that reruns it on every replay with that step's output and <paramref name="context"/>.
+    /// </summary>
+    /// <param name="output">The model output x̂ (on the outer tape or trace).</param>
+    /// <param name="context">The tensors the losses read (the real recording, say); the node's other inputs.</param>
+    /// <param name="lossesFor">The losses for given context values. The latest call's factory serves every replay, so a
+    /// step's choices (its discriminator) reach the plan when the step's objective runs.</param>
+    /// <returns>The surrogate (gradient Σ_i g̃_i on x̂) and the detached weighted sum of the losses' values.</returns>
+    public (Tensor<T> Surrogate, Tensor<T> WeightedLoss) TracedSurrogate(Tensor<T> output, Tensor<T>[] context,
+        Func<IReadOnlyList<Tensor<T>>, IReadOnlyDictionary<string, Func<Tensor<T>, Tensor<T>>>> lossesFor)
+    {
+        _lossesFor = lossesFor;
+        int n = output.Length;
+        var inputs = new Tensor<T>[context.Length + 1];
+        inputs[0] = output;
+        Array.Copy(context, 0, inputs, 1, context.Length);
+        Tensor<T> packed;
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            packed = new Tensor<T>(new[] { n + 1 });
+            Balance(output, lossesFor(context), packed.AsWritableSpan());
+        }
+        else
+        {
+            // The node may hold only values a plan's signature can compare (tensors, numbers), so it names this
+            // balancer by id; the balancer's moving averages and the step's losses stay outside the plan.
+            long id = _id;
+            Live[id] = new WeakReference<LossBalancer<T>>(this);
+            packed = scope.RecordVariadic(
+                AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom, "EnCodecLossBalancer",
+                inputs, new[] { n + 1 },
+                (replayEngine, result) =>
+                {
+                    if (!Live.TryGetValue(id, out var reference) || !reference.TryGetTarget(out var balancer))
+                        throw new InvalidOperationException("The loss balancer of this training plan no longer exists.");
+                    balancer.Replay(replayEngine, inputs, result);
+                },
+                static (_, _, _, _, _, _) => { }, Array.Empty<object>());
+        }
+        var stopped = _engine.Reshape(_engine.TensorSlice(packed, new[] { 0 }, new[] { n }), output._shape);
+        return (SurrogateOf(output, stopped), _engine.Reshape(_engine.TensorSlice(packed, new[] { n }, new[] { 1 }), Array.Empty<int>()));
+    }
+
+    private Func<IReadOnlyList<Tensor<T>>, IReadOnlyDictionary<string, Func<Tensor<T>, Tensor<T>>>>? _lossesFor;
+
+    private static long s_nextId;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, WeakReference<LossBalancer<T>>> Live = new();
+    private readonly long _id = System.Threading.Interlocked.Increment(ref s_nextId);
+
+    ~LossBalancer() => Live.TryRemove(_id, out _);
+
+    private void Replay(IEngine engine, Tensor<T>[] inputs, Tensor<T> result)
+    {
+        var factory = _lossesFor ?? throw new InvalidOperationException("The balancer has no losses.");
+        var value = new Tensor<T>(result._shape);
+        Balance(inputs[0], factory(new ArraySegment<Tensor<T>>(inputs, 1, inputs.Length - 1)), value.AsWritableSpan());
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(engine, value, result);
+    }
+
+    private Tensor<T> SurrogateOf(Tensor<T> output, Tensor<T> stopped)
+    {
+        var product = _engine.TensorMultiply(output, stopped);
+        return _engine.ReduceSum(product, System.Linq.Enumerable.Range(0, product.Rank).ToArray(), keepDims: false);
+    }
+
+    // Σ_i λ_i ℓ_i(x̂) on the engine.
+    private Tensor<T> WeightedLoss(Tensor<T> output, IReadOnlyDictionary<string, Func<Tensor<T>, Tensor<T>>> losses)
+    {
+        var names = System.Linq.Enumerable.ToArray(losses.Keys);
+        if (names.Length == 0) return new Tensor<T>(new[] { 1 });
+        var weights = AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { names.Length },
+            new Vector<double>(System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Select(names, name => _weights[name])))));
+        var values = _engine.TensorConcatenate(System.Linq.Enumerable.ToArray(
+            System.Linq.Enumerable.Select(names, name => _engine.Reshape(losses[name](output), new[] { 1 }))), 0);
+        return _engine.ReduceSum(_engine.TensorMultiply(values, weights), new[] { 0 }, keepDims: true);
+    }
+
+    // Writes Σ_i g̃_i (x̂'s elements) and then the weighted loss into result; updates the moving averages once.
+    // Without gradients (a no-grad evaluation, such as a training step's shape warm-up) there is nothing to balance:
+    // only the weighted loss is written, and the averages stay where the training steps left them.
+    private void Balance(Tensor<T> output, IReadOnlyDictionary<string, Func<Tensor<T>, Tensor<T>>> losses, Span<T> result)
+    {
+        if (NoGradScope<T>.IsSuppressed)
+        {
+            result.Clear();
+            result[result.Length - 1] = WeightedLoss(output, losses).GetFlat(0);
+            return;
+        }
         var gradients = new Dictionary<string, Tensor<T>>();
         var norms = new Dictionary<string, double>();
         double weighted = 0;
@@ -85,18 +185,21 @@ internal sealed class LossBalancer<T>
             averaged[name] = _total[name] / _fix[name];
         }
         AveragedNorms = averaged;
+        Steps++;
 
         double weightTotal = 0;
         foreach (var name in averaged.Keys) weightTotal += _weights[name];
         Tensor<T>? balanced = null;
-        foreach (var (name, average) in averaged)
+        using (new NoGradScope<T>())
         {
-            double scale = _weights[name] / weightTotal * _totalNorm / (_epsilon + average);
-            var term = _engine.TensorMultiplyScalar(gradients[name], NumOps.FromDouble(scale));
-            balanced = balanced is null ? term : _engine.TensorAdd(balanced, term);
+            foreach (var (name, average) in averaged)
+            {
+                double scale = _weights[name] / weightTotal * _totalNorm / (_epsilon + average);
+                var term = _engine.TensorMultiplyScalar(gradients[name], NumOps.FromDouble(scale));
+                balanced = balanced is null ? term : _engine.TensorAdd(balanced, term);
+            }
+            balanced!.Data.Span.CopyTo(result);
         }
-        var stopped = new Tensor<T>(balanced!._shape, balanced.ToVector());
-        var product = _engine.TensorMultiply(output, stopped);
-        return _engine.ReduceSum(product, System.Linq.Enumerable.Range(0, product.Rank).ToArray(), keepDims: false);
+        result[result.Length - 1] = NumOps.FromDouble(weighted);
     }
 }

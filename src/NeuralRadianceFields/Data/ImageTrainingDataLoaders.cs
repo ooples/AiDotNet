@@ -141,6 +141,7 @@ public static class ImageTrainingDataLoaders
             ImageView<T> view, int rayCount, Random rng)
         {
             var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNetEngine.Current;
             int H = view.Height;
             int W = view.Width;
 
@@ -148,54 +149,41 @@ public static class ImageTrainingDataLoaders
             // fallback. ImageView owns the precedence order; the loader just consumes.
             double focalPx = view.ResolveFocalLengthInPixels();
 
-            var origins = new T[rayCount * 3];
-            var dirs    = new T[rayCount * 3];
-            var colors  = new T[rayCount * 3];
-
+            // Pixel draws keep the seeded order: y then x for every ray.
+            var rows = new int[rayCount];
+            var columns = new int[rayCount];
             for (int i = 0; i < rayCount; i++)
             {
-                int y = rng.Next(H);
-                int x = rng.Next(W);
-
-                // Camera-space ray direction (right-handed, +z into scene) via pinhole intrinsics.
-                double dxCam = (x - W * 0.5) / focalPx;
-                double dyCam = -(y - H * 0.5) / focalPx;
-                double dzCam = 1.0;
-                double norm  = Math.Sqrt(dxCam * dxCam + dyCam * dyCam + dzCam * dzCam);
-                dxCam /= norm; dyCam /= norm; dzCam /= norm;
-
-                // Rotate into world coordinates via CameraRotation columns.
-                double r00 = Convert.ToDouble(view.CameraRotation[0, 0]);
-                double r01 = Convert.ToDouble(view.CameraRotation[0, 1]);
-                double r02 = Convert.ToDouble(view.CameraRotation[0, 2]);
-                double r10 = Convert.ToDouble(view.CameraRotation[1, 0]);
-                double r11 = Convert.ToDouble(view.CameraRotation[1, 1]);
-                double r12 = Convert.ToDouble(view.CameraRotation[1, 2]);
-                double r20 = Convert.ToDouble(view.CameraRotation[2, 0]);
-                double r21 = Convert.ToDouble(view.CameraRotation[2, 1]);
-                double r22 = Convert.ToDouble(view.CameraRotation[2, 2]);
-
-                double wx = r00 * dxCam + r01 * dyCam + r02 * dzCam;
-                double wy = r10 * dxCam + r11 * dyCam + r12 * dzCam;
-                double wz = r20 * dxCam + r21 * dyCam + r22 * dzCam;
-
-                origins[i * 3 + 0] = view.CameraPosition[0];
-                origins[i * 3 + 1] = view.CameraPosition[1];
-                origins[i * 3 + 2] = view.CameraPosition[2];
-
-                dirs[i * 3 + 0] = numOps.FromDouble(wx);
-                dirs[i * 3 + 1] = numOps.FromDouble(wy);
-                dirs[i * 3 + 2] = numOps.FromDouble(wz);
-
-                colors[i * 3 + 0] = view.Photo[y, x, 0];
-                colors[i * 3 + 1] = view.Photo[y, x, 1];
-                colors[i * 3 + 2] = view.Photo[y, x, 2];
+                rows[i] = rng.Next(H);
+                columns[i] = rng.Next(W);
             }
 
-            return (
-                new Tensor<T>(new[] { rayCount, 3 }, new Vector<T>(origins)),
-                new Tensor<T>(new[] { rayCount, 3 }, new Vector<T>(dirs)),
-                new Tensor<T>(new[] { rayCount, 3 }, new Vector<T>(colors)));
+            var rowIndex = new Tensor<int>(rows, new[] { rayCount });
+            var columnIndex = new Tensor<int>(columns, new[] { rayCount });
+            var ys = engine.TensorIndexSelect(engine.TensorArange<T>(0, H, 1), rowIndex, 0);
+            var xs = engine.TensorIndexSelect(engine.TensorArange<T>(0, W, 1), columnIndex, 0);
+
+            // Camera-space ray direction (right-handed, +z into scene) via pinhole intrinsics.
+            var focal = numOps.FromDouble(focalPx);
+            var dxCam = engine.TensorDivideScalar(engine.TensorSubtractScalar(xs, numOps.FromDouble(W * 0.5)), focal);
+            var dyCam = engine.TensorDivideScalar(
+                engine.TensorNegate(engine.TensorSubtractScalar(ys, numOps.FromDouble(H * 0.5))), focal);
+            var dzCam = engine.TensorOnesLike(dxCam);
+            var cameraDirs = engine.TensorStack(new[] { dxCam, dyCam, dzCam }, 1);
+            var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(cameraDirs), new[] { 1 }, true));
+            cameraDirs = engine.TensorDivide(cameraDirs, engine.TensorBroadcastTo(norm, cameraDirs.Shape.ToArray()));
+
+            // Rotate into world coordinates via CameraRotation columns: world = R * cam for every ray.
+            var rotation = engine.TensorSlice(Tensor<T>.FromMatrix(view.CameraRotation), new[] { 0, 0 }, new[] { 3, 3 });
+            var dirs = engine.TensorMatMul(cameraDirs, engine.TensorTranspose(rotation));
+
+            var position = Tensor<T>.FromVector(view.CameraPosition.GetSubVector(0, 3)).Reshape(1, 3);
+            var origins = engine.TensorBroadcastTo(position, new[] { rayCount, 3 }).Contiguous();
+
+            var pixels = engine.TensorIndex(view.Photo, new[] { rowIndex, columnIndex });
+            var colors = engine.TensorSlice(pixels, new[] { 0, 0 }, new[] { rayCount, 3 });
+
+            return (origins, dirs, colors);
         }
     }
 }

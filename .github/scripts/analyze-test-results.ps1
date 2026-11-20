@@ -13,10 +13,19 @@ param(
   [string]$CommitSha = $env:GITHUB_SHA,
   [string]$RunUrl,
   [string[]]$MissingFailedShards = @(),
-  [switch]$FailOnRegression
+  [switch]$FailOnRegression,
+  [string]$EvidenceProvenancePath,
+  [string]$PaperResultsPath
 )
 
 $ErrorActionPreference = 'Stop'
+$evidenceVerified = $true
+if ($EvidenceProvenancePath) {
+  try {
+    $provenance = Get-Content -LiteralPath $EvidenceProvenancePath -Raw | ConvertFrom-Json
+    $evidenceVerified = $provenance.verified -is [bool] -and $provenance.verified -eq $true -and $provenance.testedSha -ceq $CommitSha
+  } catch { $evidenceVerified = $false }
+}
 $terminalFailureOutcomes = @('Failed', 'Error', 'Timeout', 'Aborted')
 
 function Get-IntegerAttribute {
@@ -89,13 +98,14 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $resolvedResults = (Resolve-Path -LiteralPath $ResultsPath).Path
 
 $testJobs = @()
+$allJobs = @()
 if ($JobsJson -or ($JobsPath -and (Test-Path -LiteralPath $JobsPath -PathType Leaf))) {
   $jobDocument = if ($JobsJson) {
     $JobsJson | ConvertFrom-Json
   } else {
     Get-Content -LiteralPath $JobsPath -Raw | ConvertFrom-Json
   }
-  $allJobs = if ($null -ne $jobDocument.jobs) { @($jobDocument.jobs) } else { @($jobDocument) }
+  $allJobs = if ($jobDocument.PSObject.Properties['jobs']) { @($jobDocument.jobs) } else { @($jobDocument) }
   foreach ($job in $allJobs) {
     if ([string]$job.name -notmatch '^Tests \(net10\.0\) - (.+)$') { continue }
     $testJobs += [PSCustomObject]@{
@@ -251,6 +261,10 @@ foreach ($job in @($shardsForReport | Sort-Object name)) {
 $baseline = $null
 if ($BaselinePath -and (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) {
   $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+  if (($baseline.PSObject.Properties['diagnosticOnly'] -and $baseline.diagnosticOnly -eq $true) -or
+      ($baseline.PSObject.Properties['evidenceVerified'] -and $baseline.evidenceVerified -ne $true)) {
+    throw 'Diagnostic-only aggregate results cannot be used as a certified baseline.'
+  }
 }
 
 $currentFailureIds = @($uniqueFailures.identity)
@@ -269,6 +283,9 @@ $regressionStatus = if (-not $baselineAvailable) { 'baseline-unavailable' } else
 
 $report = [ordered]@{
   schemaVersion = 1
+  evidenceVerified = $evidenceVerified
+  diagnosticOnly = -not $evidenceVerified
+  baselinePublishable = $evidenceVerified
   generatedUtc = [DateTime]::UtcNow.ToString('o')
   source = [ordered]@{ repository = $Repository; commitSha = $CommitSha; runUrl = $RunUrl }
   summary = [ordered]@{
@@ -306,6 +323,23 @@ $report = [ordered]@{
     resolvedFailedShards = $resolvedFailedShards
   }
 }
+
+# Paper fidelity is a separate expected inventory, never folded into standard-shard totals or baseline policy.
+$paper = [ordered]@{ available = $false; diagnosticOnly = $true; scope = 'Separate paper-fidelity inventory'; reason = 'Paper inventory is unavailable.' }
+if ($PaperResultsPath -and (Test-Path -LiteralPath $PaperResultsPath)) {
+  try {
+    $paperComparison = Get-Content -LiteralPath $PaperResultsPath -Raw | ConvertFrom-Json
+    $paperDirectory = Split-Path -Parent $PaperResultsPath
+    $paperLedger = Get-Content (Join-Path $paperDirectory 'ledger.json') -Raw | ConvertFrom-Json
+    if ($paperLedger.sha -cne $CommitSha) { throw 'Paper diagnostic SHA does not match this run.' }
+    $paper.available = $true; $paper.reason = ''
+    $paper.expectedSlices = @(Get-Content (Join-Path $paperDirectory 'expected-shards.json') -Raw | ConvertFrom-Json).Count
+    $paper.counts = $paperComparison.counts
+    $paper.notExecutedTests = [int](@($paperLedger.shards | Measure-Object notExecuted -Sum).Sum)
+    $paper.missingSlices = @($paperLedger.missingExpectedShards)
+  } catch { $paper.available = $false; $paper.reason = $_.Exception.Message }
+}
+$report.paperFidelity = $paper
 
 $jsonPath = Join-Path $OutputDirectory 'ci-test-analysis.json'
 $markdownPath = Join-Path $OutputDirectory 'ci-test-analysis.md'
@@ -389,6 +423,16 @@ foreach ($failure in $uniqueFailures) {
 }
 $lines.Add('')
 $lines.Add('</details>')
+$lines.Add('')
+$lines.Add('## Separate paper-fidelity diagnostics')
+if ($paper.available) {
+  $lines.Add("Paper fidelity: **$($paper.expectedSlices) expected slices**, **$($paper.counts.totalTests) discovered**, **$($paper.counts.executedTests) executed**, **$($paper.counts.reportedFailureResults) failed result records**, **$($paper.notExecutedTests) not executed**, **$($paper.counts.incompleteShards) incomplete slices**, **$($paper.missingSlices.Count) missing slices**.")
+  $lines.Add('Full per-test failures and incomplete slice details are in the separate `paper-test-diagnostics` artifact; these counts are not part of the standard shard baseline.')
+} else { $lines.Add("Paper-fidelity case counts are unavailable: $($paper.reason) Standard totals do not claim paper coverage.") }
+if (-not $evidenceVerified) {
+  $lines.Add('')
+  $lines.Add('> DIAGNOSTIC ONLY: raw standard-shard observations; no baseline or regression verdict is certified. Paper-fidelity case counts are published in the separate paper diagnostic artifact.')
+}
 
 $lines | Set-Content -LiteralPath $markdownPath -Encoding utf8
 if ($env:GITHUB_STEP_SUMMARY) { $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8 }

@@ -175,7 +175,13 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDecoderLayer<T>, IShapeContract
 {
+    private readonly int _maximumEncoderLength;
+
     /// <summary>Creates a token-conditioned autoregressive decoder.</summary>
+    /// <param name="maximumEncoderLength">
+    /// The most conditioning tokens the encoder reads; a longer prompt keeps its first tokens, as a tokenizer
+    /// truncating to the text encoder's context would. 0 reads every token.
+    /// </param>
     public TokenConditionedDecoderLayer(
         IEnumerable<ILayer<T>> encoderLayers,
         EmbeddingLayer<T> decoderEmbedding,
@@ -183,20 +189,34 @@ public partial class TokenConditionedDecoderLayer<T> : AutoregressiveEncoderDeco
         ILayer<T> outputLayer,
         int encoderVocabularySize,
         int decoderVocabularySize,
-        int maximumDecoderLength)
+        int maximumDecoderLength,
+        int maximumEncoderLength = 0)
         : base(encoderLayers, decoderEmbedding, decoderLayers, outputLayer,
             encoderVocabularySize, decoderVocabularySize, maximumDecoderLength)
     {
+        if (maximumEncoderLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(maximumEncoderLength));
+        _maximumEncoderLength = maximumEncoderLength;
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Only the encoder branch is truncated; the decoder prompt still follows the full input length, so the output's
+    /// time axis is unchanged.
+    /// </remarks>
     protected override Tensor<T> NormalizeEncoderInput(Tensor<T> input)
     {
-        if (input.Rank <= 2)
-            return input;
+        var tokens = input;
+        if (input.Rank > 2)
+        {
+            int batchSize = input.Shape[0];
+            tokens = input.Reshape([batchSize, input.Length / batchSize]);
+        }
 
-        int batchSize = input.Shape[0];
-        return input.Reshape([batchSize, input.Length / batchSize]);
+        int timeAxis = tokens.Rank - 1;
+        return _maximumEncoderLength > 0 && tokens.Rank > 0 && tokens.Shape[timeAxis] > _maximumEncoderLength
+            ? Engine.TensorNarrow(tokens, timeAxis, 0, _maximumEncoderLength)
+            : tokens;
     }
 
     /// <inheritdoc />

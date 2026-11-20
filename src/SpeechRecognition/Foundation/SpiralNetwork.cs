@@ -133,6 +133,21 @@ internal sealed class SpiralNetwork<T>
         return frames;
     }
 
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        int n = waveform.Length;
+        var wide = _engine.Reshape(waveform.Contiguous().Cast<double>(), new[] { n });
+        var mean = _engine.TensorTile(_engine.TensorDivideScalar(_engine.ReduceSum(wide, new[] { 0 }, true), (double)n), new[] { n });
+        var centered = _engine.TensorSubtract(wide, mean);
+        var scaled = _engine.TensorDivideScalar(centered, Math.Sqrt(n));
+        var std = _engine.TensorTile(_engine.TensorSqrt(_engine.ReduceSum(_engine.TensorSquare(scaled), new[] { 0 }, true)), new[] { n });
+        var usable = _engine.TensorGreaterThan(std, 1e-8);
+        var safeStd = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorSubtractScalar(std, 1e-8)), 1e-8);
+        var normalized = _engine.TensorWhere(usable, _engine.TensorDivide(centered, safeStd), new Tensor<double>(new[] { n })).Cast<T>();
+        var mel = _mel.Forward(normalized);
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+    }
+
     /// <summary>Log-mel features <c>[frames, bins]</c> of a waveform: the waveform scaled to zero mean and unit variance,
     /// then each bin normalized over the utterance, as the released preprocessing does (normalize_time_domain,
     /// per_feature).</summary>
@@ -238,10 +253,8 @@ internal sealed class SpiralNetwork<T>
     private Tensor<T> Drop(Tensor<T> x, double rate, bool training, Random random)
     {
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 
     /// <summary>
@@ -251,12 +264,11 @@ internal sealed class SpiralNetwork<T>
     /// </summary>
     /// <param name="student">The student's outputs <c>[L, D]</c>.</param>
     /// <param name="teacher">The teacher's outputs at the same positions <c>[L, D]</c> (no gradient flows into them).</param>
-    public Tensor<T> ContrastiveLoss(Tensor<T> student, Tensor<T> teacher, int negatives, double temperature, Random random)
+    public Tensor<T> SampleTeacherCandidates(Tensor<T> teacher, int negatives, Random random)
     {
-        int length = student.Shape[0];
-        if (length < 2) throw new ArgumentException("The contrastive loss needs at least two positions.", nameof(student));
+        int length = teacher.Shape[0];
+        if (length < 2) throw new ArgumentException("The contrastive loss needs at least two positions.", nameof(teacher));
         int k = Math.Min(negatives, length - 1);
-        // Candidate c of position i: c = 0 is the positive, c > 0 a distractor index drawn from positions other than i.
         var index = new int[length * (k + 1)];
         for (int i = 0; i < length; i++)
         {
@@ -267,22 +279,38 @@ internal sealed class SpiralNetwork<T>
                 index[i * (k + 1) + c] = j >= i ? j + 1 : j;
             }
         }
-        var normalizedStudent = Normalize(student);
         var normalizedTeacher = Normalize(teacher);
-        var candidates = _engine.Reshape(_engine.TensorGather(normalizedTeacher, new Tensor<int>(new[] { index.Length }, new Vector<int>(index)), axis: 0),
+        return _engine.Reshape(_engine.TensorGather(normalizedTeacher, new Tensor<int>(new[] { index.Length }, new Vector<int>(index)), axis: 0),
             new[] { length, k + 1, teacher.Shape[1] });
+    }
+
+    public Tensor<T> ContrastiveLossFromCandidates(Tensor<T> student, Tensor<T> candidates, double temperature)
+    {
+        int length = student.Shape[0], kPlusOne = candidates.Shape[1];
+        var normalizedStudent = Normalize(student);
         var similarity = _engine.ReduceSum(_engine.TensorMultiply(candidates,
-            _engine.Reshape(normalizedStudent, new[] { length, 1, student.Shape[1] })), new[] { 2 }, keepDims: false);   // [L, k+1]
+            _engine.Reshape(normalizedStudent, new[] { length, 1, student.Shape[1] })), new[] { 2 }, keepDims: false);
         var logits = _engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(1.0 / temperature));
-        var pick = new Tensor<T>(new[] { length, k + 1 });
-        for (int i = 0; i < length; i++) pick[i, 0] = NumOps.FromDouble(-1.0);
+        Tensor<T> pick;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            var pickArr = new double[length * kPlusOne];
+            for (int i = 0; i < length; i++) pickArr[i * kPlusOne] = -1.0;
+            pick = new Tensor<double>(pickArr, new[] { length, kPlusOne }).Cast<T>();
+        }
         return _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorLogSoftmax(logits, axis: -1), pick), new[] { 0, 1 }, keepDims: false);
+    }
+
+    public Tensor<T> ContrastiveLoss(Tensor<T> student, Tensor<T> teacher, int negatives, double temperature, Random random)
+    {
+        var candidates = SampleTeacherCandidates(teacher, negatives, random);
+        return ContrastiveLossFromCandidates(student, candidates, temperature);
     }
 
     private Tensor<T> Normalize(Tensor<T> x)
     {
-        var norm = _engine.TensorSqrt(_engine.TensorAdd(_engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true),
-            new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-12) }))));
-        return _engine.TensorDivide(x, norm);
+        var normSq = _engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, keepDims: true);
+        var norm = _engine.TensorSqrt(_engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-12)));
+        return _engine.TensorDivide(x, _engine.TensorTile(norm, new[] { 1, x.Shape[1] }));
     }
 }

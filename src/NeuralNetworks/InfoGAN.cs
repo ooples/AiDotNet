@@ -534,20 +534,18 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < batchSize; i++)
+        if (batchSize > 0)
         {
-            T prediction = predictions[i, 0];
-            T target = targets[i, 0];
-
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-
-            T loss = NumOps.Negate(NumOps.Add(
-                NumOps.Multiply(target, logP),
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP)
-            ));
-
-            totalLoss = NumOps.Add(totalLoss, loss);
+            // Binary cross-entropy on column 0 of the first batchSize rows
+            var prediction = Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]);
+            var target = Engine.TensorSlice(targets, [0, 0], [batchSize, 1]);
+            var ones = new Tensor<T>([batchSize, 1]);
+            ones.Fill(NumOps.One);
+            var logP = Engine.TensorLog(Engine.TensorAddScalar(prediction, epsilon));
+            var logOneMinusP = Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorSubtract(ones, prediction), epsilon));
+            totalLoss = Engine.TensorSum(Engine.TensorNegate(Engine.TensorAdd(
+                Engine.TensorMultiply(target, logP),
+                Engine.TensorMultiply(Engine.TensorSubtract(ones, target), logOneMinusP))));
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
@@ -559,14 +557,19 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
         var gradients = new Tensor<T>(predictions._shape);
+        if (batchSize <= 0) return gradients;
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            gradients[i, 0] = NumOps.Divide(
-                NumOps.Subtract(predictions[i, 0], targets[i, 0]),
-                NumOps.FromDouble(batchSize)
-            );
-        }
+        // (prediction - target) / batchSize in column 0 of the first batchSize rows, zero elsewhere
+        var column = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(
+                Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]), Engine.TensorSlice(targets, [0, 0], [batchSize, 1])),
+            NumOps.FromDouble(batchSize));
+        int rows = predictions.Shape[0];
+        int width = predictions.Shape[1];
+        var block = width == 1 ? column : Engine.TensorConcatenate(new[] { column, new Tensor<T>([batchSize, width - 1]) }, 1);
+        if (rows > batchSize)
+            block = Engine.TensorConcatenate(new[] { block, new Tensor<T>([rows - batchSize, width]) }, 0);
+        gradients = block;
 
         return gradients;
     }

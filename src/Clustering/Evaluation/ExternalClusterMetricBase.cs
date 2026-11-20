@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -67,10 +68,12 @@ public abstract class ExternalClusterMetricBase<T> : IExternalClusterMetric<T>
         var trueCounts = new Dictionary<int, int>();
         var predCounts = new Dictionary<int, int>();
 
+        var trueIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)NumOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)NumOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueIds[i];
+            int predLabel = predIds[i];
 
             var key = (trueLabel, predLabel);
             if (!contingency.ContainsKey(key))
@@ -122,9 +125,8 @@ public abstract class ExternalClusterMetricBase<T> : IExternalClusterMetric<T>
         if (n == 0) return 0;
 
         var counts = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
+        foreach (int label in ClusteringTensorOps.ToIntArray(labels))
         {
-            int label = (int)NumOps.ToDouble(labels[i]);
             if (!counts.ContainsKey(label))
                 counts[label] = 0;
             counts[label]++;
@@ -182,31 +184,22 @@ public abstract class ExternalClusterMetricBase<T> : IExternalClusterMetric<T>
     protected (long A, long B, long C, long D) ComputePairConfusionMatrix(
         Vector<T> trueLabels, Vector<T> predictedLabels)
     {
-        int n = trueLabels.Length;
-        long a = 0, b = 0, c = 0, d = 0;
+        long n = trueLabels.Length;
+        var (contingency, trueCounts, predCounts) = BuildContingencyTable(trueLabels, predictedLabels);
 
-        for (int i = 0; i < n; i++)
-        {
-            int trueI = (int)NumOps.ToDouble(trueLabels[i]);
-            int predI = (int)NumOps.ToDouble(predictedLabels[i]);
-
-            for (int j = i + 1; j < n; j++)
-            {
-                int trueJ = (int)NumOps.ToDouble(trueLabels[j]);
-                int predJ = (int)NumOps.ToDouble(predictedLabels[j]);
-
-                bool sameTrue = trueI == trueJ;
-                bool samePred = predI == predJ;
-
-                if (sameTrue && samePred) a++;
-                else if (sameTrue && !samePred) b++;
-                else if (!sameTrue && samePred) c++;
-                else d++;
-            }
-        }
+        // Pairs in the same true and same predicted cluster, same true only, same predicted only, neither.
+        long a = contingency.Values.Sum(count => PairCount(count));
+        long sameTrue = trueCounts.Values.Sum(count => PairCount(count));
+        long samePred = predCounts.Values.Sum(count => PairCount(count));
+        long b = sameTrue - a;
+        long c = samePred - a;
+        long d = n * (n - 1) / 2 - a - b - c;
 
         return (a, b, c, d);
     }
+
+    /// <summary>Number of unordered pairs among <paramref name="count"/> items.</summary>
+    private static long PairCount(long count) => count * (count - 1) / 2;
 
     /// <summary>
     /// Computes the binomial coefficient C(n, k).

@@ -2157,7 +2157,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// options and the extension payload. The returned <see cref="StagedRestore.Commit"/> installs them in the order
     /// the restore has always used: declared state, options, subclass data, extension.
     /// </summary>
-    private protected StagedRestore StageDeserialize(byte[] data)
+    private protected virtual StagedRestore StageDeserialize(byte[] data)
     {
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         var commitDeclared = AiDotNet.Models.ModelStateEnvelope.Stage(

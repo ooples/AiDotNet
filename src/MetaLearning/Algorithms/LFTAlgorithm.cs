@@ -268,11 +268,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                         _metricHead, supportFeatures[i], supportTargets[i], weight: 1.0,
                         _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
                         MbPAOutputDistribution.Categorical);
-                    for (int d = 0; d < _metricHead.Length; d++)
-                    {
-                        _metricHead[d] = NumOps.Subtract(_metricHead[d],
-                            NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(headGrad[d])));
-                    }
+                    StepHeadInPlace(_metricHead, headGrad);
                 }
 
                 losses?.Add(TransformedQueryLoss(task));
@@ -339,24 +335,19 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var scale = _transformation.ScaleHyperparameters;
         var bias = _transformation.BiasHyperparameters;
 
-        // Rademacher probe direction, the standard SPSA choice.
-        var deltaScale = new double[c];
-        var deltaBias = new double[c];
+        // Rademacher probe direction, the standard SPSA choice. Drawn in master's interleaved
+        // (scale, bias) order so the seeded stream is unchanged.
+        var deltaScale = new Vector<T>(c);
+        var deltaBias = new Vector<T>(c);
+        T minusOne = NumOps.FromDouble(-1.0);
         for (int i = 0; i < c; i++)
         {
-            deltaScale[i] = RandomGenerator.NextDouble() < 0.5 ? -1.0 : 1.0;
-            deltaBias[i] = RandomGenerator.NextDouble() < 0.5 ? -1.0 : 1.0;
+            deltaScale[i] = RandomGenerator.NextDouble() < 0.5 ? minusOne : NumOps.One;
+            deltaBias[i] = RandomGenerator.NextDouble() < 0.5 ? minusOne : NumOps.One;
         }
 
-        Vector<T> Shift(Vector<T> baseVec, double[] delta, double sign)
-        {
-            var shifted = new Vector<T>(baseVec.Length);
-            for (int i = 0; i < baseVec.Length; i++)
-            {
-                shifted[i] = NumOps.FromDouble(NumOps.ToDouble(baseVec[i]) + sign * perturbation * delta[i]);
-            }
-            return shifted;
-        }
+        Vector<T> Shift(Vector<T> baseVec, Vector<T> delta, double sign)
+            => Engine.Add(baseVec, Engine.Multiply(delta, NumOps.FromDouble(sign * perturbation)));
 
         // THE HEAD IS PART OF THE PROBE STATE, NOT JUST THE MODEL. RunPseudoSeenStage mutates
         // _metricHead IN PLACE, and ProbeLoss reset only ParamModel -- so ProbeLoss(-1) trained on
@@ -374,7 +365,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         // Each probe must REDO stage 1 under the perturbed hyper-parameters, then measure the
         // pseudo-unseen loss on the model that produced. Measuring without re-running stage 1 scores
         // a quantity independent of theta_f.
-        double ProbeLoss(double sign)
+        T ProbeLoss(double sign)
         {
             _transformation.SetHyperparameters(Shift(scale, deltaScale, sign), Shift(bias, deltaBias, sign));
             ParamModel.SetParameters(initParams);
@@ -383,8 +374,8 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             return PseudoUnseenLoss(pseudoUnseen);
         }
 
-        double lossPlus;
-        double lossMinus;
+        T lossPlus;
+        T lossMinus;
         try
         {
             lossPlus = ProbeLoss(+1.0);
@@ -398,25 +389,20 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             _metricHead = stageOneHead;
         }
 
-        double scaledDifference = (lossPlus - lossMinus) / (2.0 * perturbation);
-        if (double.IsNaN(scaledDifference) || double.IsInfinity(scaledDifference)) return;
+        T scaledDifference = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), NumOps.FromDouble(2.0 * perturbation));
+        if (NumOps.IsNaN(scaledDifference) || NumOps.IsInfinity(scaledDifference)) return;
 
-        var newScale = new Vector<T>(c);
-        var newBias = new Vector<T>(c);
-        for (int i = 0; i < c; i++)
-        {
-            newScale[i] = NumOps.FromDouble(NumOps.ToDouble(scale[i])
-                - _algoOptions.HyperparameterLearningRate * scaledDifference / deltaScale[i]);
-            newBias[i] = NumOps.FromDouble(NumOps.ToDouble(bias[i])
-                - _algoOptions.HyperparameterLearningRate * scaledDifference / deltaBias[i]);
-        }
+        // theta_i - lr * d / delta_i
+        T step = NumOps.Multiply(NumOps.FromDouble(_algoOptions.HyperparameterLearningRate), scaledDifference);
+        var newScale = Engine.Subtract(scale, Engine.Divide(Engine.Fill(c, step), deltaScale));
+        var newBias = Engine.Subtract(bias, Engine.Divide(Engine.Fill(c, step), deltaBias));
         _transformation.SetHyperparameters(newScale, newBias);
     }
 
     /// <summary>
     /// The pseudo-unseen classification loss, measured with the transformation OFF.
     /// </summary>
-    private double PseudoUnseenLoss(List<IMetaLearningTask<T, TInput, TOutput>> pseudoUnseen)
+    private T PseudoUnseenLoss(List<IMetaLearningTask<T, TInput, TOutput>> pseudoUnseen)
     {
         // Measured through the metric head — which stage 1 just trained on TRANSFORMED features —
         // but with the transformation itself switched off. That combination is the paper's stage-2
@@ -426,8 +412,9 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         TransformationActive = false;
         try
         {
-            double total = 0.0;
+            T total = NumOps.Zero;
             int count = 0;
+            T floor = NumOps.FromDouble(1e-15);
             foreach (var task in pseudoUnseen)
             {
                 var features = EncodeWithOptionalTransform(task.QueryInput);
@@ -437,15 +424,18 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                     var probs = MbPAOutputNetwork<T>.Forward(
                         _metricHead, features[i], _algoOptions.FeatureDimension,
                         _algoOptions.OutputDimension, MbPAOutputDistribution.Categorical);
-                    for (int k = 0; k < _algoOptions.OutputDimension; k++)
-                    {
-                        double t = k < targets[i].Length ? NumOps.ToDouble(targets[i][k]) : 0.0;
-                        if (t > 0.0) total -= t * Math.Log(Math.Max(NumOps.ToDouble(probs[k]), 1e-15));
-                    }
+
+                    // -sum_k t_k log(max(p_k, 1e-15)) over the positive targets
+                    var target = Tensor<T>.FromVector(MbPAConversions<T>.ResizeTo(targets[i], _algoOptions.OutputDimension));
+                    var logProbs = Engine.TensorLog(Engine.TensorMax(
+                        Tensor<T>.FromVector(MbPAConversions<T>.ResizeTo(probs, _algoOptions.OutputDimension)), floor));
+                    var positive = Engine.TensorGreaterThan(target, NumOps.Zero);
+                    total = NumOps.Subtract(total,
+                        Engine.TensorSum(Engine.TensorMultiply(Engine.TensorMultiply(target, logProbs), positive)));
                     count++;
                 }
             }
-            return count > 0 ? total / count : 0.0;
+            return count > 0 ? NumOps.Divide(total, NumOps.FromDouble(count)) : NumOps.Zero;
         }
         finally
         {
@@ -507,11 +497,15 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         if (template is Tensor<T> tensor)
         {
-            var packed = new Tensor<T>(tensor._shape);
-            int n = Math.Min(values.Length, packed.Length);
-            for (int i = 0; i < n; i++) packed[i] = values[i];
-            for (int i = n; i < packed.Length; i++) packed[i] = tensor[i];
-            return (TOutput)(object)packed;
+            // The first n entries from the values, the rest kept from the template
+            int length = tensor.Length;
+            int n = Math.Min(values.Length, length);
+            var original = tensor.ToVector();
+            Vector<T> packed;
+            if (n == length) packed = values.Length == length ? values.Clone() : values.GetSubVector(0, length);
+            else if (n == 0) packed = original;
+            else packed = Vector<T>.Concatenate(values.GetSubVector(0, n), original.GetSubVector(n, length - n));
+            return (TOutput)(object)Tensor<T>.FromVector(packed, tensor._shape);
         }
 
         return template;
@@ -576,11 +570,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                     adaptedHead, features[i], targets[i], weight: 1.0,
                     _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
                     MbPAOutputDistribution.Categorical);
-                for (int d = 0; d < adaptedHead.Length; d++)
-                {
-                    adaptedHead[d] = NumOps.Subtract(adaptedHead[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(headGrad[d])));
-                }
+                StepHeadInPlace(adaptedHead, headGrad);
             }
         }
 
@@ -592,11 +582,16 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     }
 
     /// <summary>A copy of the head, so adaptation never writes to the meta-learned one.</summary>
-    private static Vector<T> CloneHead(Vector<T> head)
+    private static Vector<T> CloneHead(Vector<T> head) => head.Clone();
+
+    /// <summary>
+    /// head -= lr * gradient, written IN PLACE: the head loss composed into the encoder's objective holds
+    /// this vector by reference, so a replacement vector would leave it scoring a stale head.
+    /// </summary>
+    private void StepHeadInPlace(Vector<T> head, Vector<T> gradient)
     {
-        var copy = new Vector<T>(head.Length);
-        for (int i = 0; i < head.Length; i++) copy[i] = head[i];
-        return copy;
+        var updated = Engine.Subtract(head, Engine.Multiply(gradient, NumOps.FromDouble(_algoOptions.InnerLearningRate)));
+        updated.CopyTo(head.AsWritableSpan());
     }
 
     #endregion

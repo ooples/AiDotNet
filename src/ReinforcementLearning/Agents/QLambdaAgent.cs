@@ -136,29 +136,23 @@ public partial class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _activeTraceStates.Add(stateKey);
 
         // Only iterate over states with active traces (performance optimization)
+        var engine = AiDotNetEngine.Current;
+        T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
+        T traceThreshold = NumOps.FromDouble(TraceThreshold);
         var statesToRemove = new List<string>();
         foreach (var s in _activeTraceStates.ToList())
         {
-            bool hasActiveTrace = false;
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                T traceValue = _eligibilityTraces[s][a];
-                double traceDouble = NumOps.ToDouble(traceValue);
+            // Whole-row update of this state: Q += lr * (delta * e), then e *= gamma * lambda.
+            var traces = RLTensorOps.Row(_eligibilityTraces[s], _options.ActionSize);
+            var qRow = RLTensorOps.Row(_qTable[s], _options.ActionSize);
+            var update = engine.Multiply(engine.Multiply(traces, delta), LearningRate);
+            RLTensorOps.Fill(_qTable[s], engine.Add(qRow, update));
 
-                // Update Q-value using the trace
-                T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, traceValue));
-                _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
+            var decayed = engine.Multiply(traces, decayFactor);
+            RLTensorOps.Fill(_eligibilityTraces[s], decayed);
 
-                // Decay the trace
-                T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
-                _eligibilityTraces[s][a] = NumOps.Multiply(traceValue, decayFactor);
-
-                // Check if trace is still active after decay
-                if (NumOps.GreaterThan(NumOps.Abs(_eligibilityTraces[s][a]), NumOps.FromDouble(TraceThreshold)))
-                {
-                    hasActiveTrace = true;
-                }
-            }
+            // The state stays active while any decayed trace is above the threshold in magnitude.
+            bool hasActiveTrace = RLTensorOps.AnyGreaterThan(engine.Abs(decayed), traceThreshold);
 
             // Remove state from active set if all traces decayed to near-zero
             if (!hasActiveTrace)
@@ -209,9 +203,9 @@ public partial class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
         return string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
     }
-    private int GetGreedyAction(string stateKey) { int best = 0; T bestVal = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal)) { bestVal = _qTable[stateKey][a]; best = a; } return best; }
-    private T GetMaxQValue(string stateKey) { T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private int GetGreedyAction(string stateKey) { int best = RLTensorOps.ArgMax(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return best; }
+    private T GetMaxQValue(string stateKey) { T max = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return max; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override T Train() => NumOps.Zero;

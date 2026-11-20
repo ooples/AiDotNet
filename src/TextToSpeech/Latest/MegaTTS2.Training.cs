@@ -65,17 +65,26 @@ public partial class MegaTTS2<T>
         int frames = utterance.Mel.Shape[0];
         bool adversarial = o.AdversarialWeight > 0 && o.DiscriminatorWindows.All(w => w <= frames);
         var generatorStarts = adversarial ? Starts(frames, random) : null;
-        Tensor<T>? generated = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+        Tensor<T>? fake = null;
+        T loss;
+        using (var outputs = adversarial ? AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin() : null)
         {
-            var (total, reconstruction) = AcousticLoss(utterance, generatorStarts, update: true);
-            generated = reconstruction.Mel;
-            return total;
-        }, Optimizer(Turn.Acoustic));
-        if (adversarial && generated is not null)
+            loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+            {
+                var (total, reconstruction) = AcousticLoss(utterance, generatorStarts, update: true);
+                if (adversarial && AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput("megatts2-mel", Engine.StopGradient(reconstruction.Mel));
+                return total;
+            }, Optimizer(Turn.Acoustic));
+            if (outputs is not null)
+            {
+                outputs.Complete();
+                fake = outputs.Get("megatts2-mel");
+            }
+        }
+        if (adversarial && fake is not null)
         {
             // The discriminator reads the generator step's output, detached, with fresh windows for each mel.
-            var fake = new Tensor<T>(generated._shape, new Vector<T>(generated.ToArray()));
             var realStarts = Starts(frames, random);
             var fakeStarts = Starts(frames, random);
             _turn = Turn.Discriminator;
@@ -83,8 +92,10 @@ public partial class MegaTTS2<T>
             {
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    var real = Network.Discriminator.Forward(Batch(utterance.Mel), realStarts)!;
-                    var forged = Network.Discriminator.Forward(Batch(fake), fakeStarts)!;
+                    var real = Network.Discriminator.Forward(Batch(utterance.Mel), realStarts)
+                        ?? throw new InvalidOperationException("Discriminator returned null for real mel.");
+                    var forged = Network.Discriminator.Forward(Batch(fake), fakeStarts)
+                        ?? throw new InvalidOperationException("Discriminator returned null for generated mel.");
                     return Engine.TensorAdd(MeanSquare(real, 1), MeanSquare(forged, 0));
                 }, Optimizer(Turn.Discriminator));
             }
@@ -168,7 +179,7 @@ public partial class MegaTTS2<T>
     {
         Validation.Guard.NotNull(sample);
         var phones = Ids(sample.Tokens, nameof(sample));
-        var mel = sample.Mel ?? (sample.Audio is not null ? MelOf(Doubles(sample.Audio))
+        var mel = sample.Mel ?? (sample.Audio is not null ? MelOf(sample.Audio)
             : throw new ArgumentException($"{GetType().Name} trains on the mel spectrogram; set Mel or Audio.", nameof(sample)));
         if (mel.Shape.Length != 2 || mel.Shape[1] != _options.MelChannels)
             throw new ArgumentException($"The mel spectrogram is [frames, {_options.MelChannels}].", nameof(sample));
@@ -178,7 +189,7 @@ public partial class MegaTTS2<T>
         if (durations.Any(d => d < 0) || durations.Sum() != mel.Shape[0])
             throw new ArgumentException($"The durations sum to the mel spectrogram's {mel.Shape[0]} frames.", nameof(sample));
         var reference = sample.SpeakerReference is null ? mel
-            : sample.SpeakerReference.Shape.Length == 1 ? MelOf(Doubles(sample.SpeakerReference)) : sample.SpeakerReference;
+            : sample.SpeakerReference.Shape.Length == 1 ? MelOf(sample.SpeakerReference) : sample.SpeakerReference;
         if (reference.Shape.Length != 2 || reference.Shape[1] != _options.MelChannels)
             throw new ArgumentException($"The speaker reference is a recording or a [frames, {_options.MelChannels}] mel spectrogram.", nameof(sample));
         int limit = _options.TimbreReferenceFrames;

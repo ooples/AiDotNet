@@ -49,32 +49,10 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss = softLoss;
-
-            if (labelRow != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, labelRow);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Per sample: T²·KL(teacher_soft || student_soft), blended with hard CE when labels are given
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -86,53 +64,12 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var batchGradient = new Matrix<T>(batchSize, outputDim);
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
-
-            int n = studentRow.Length;
-            var gradient = new Vector<T>(n);
-            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
-
-            for (int i = 0; i < n; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            if (labelRow != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
-
-                for (int i = 0; i < n; i++)
-                {
-                    var hardGrad = NumOps.Subtract(studentProbs[i], labelRow[i]);
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), gradient[i]));
-                }
-            }
-
-            for (int c = 0; c < outputDim; c++)
-            {
-                batchGradient[r, c] = gradient[c];
-            }
-        }
+        var batchGradient = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
         var batchScale = NumOps.FromDouble(batchSize);
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < outputDim; c++)
-            {
-                batchGradient[r, c] = NumOps.Divide(batchGradient[r, c], batchScale);
-            }
-        }
+        batchGradient = Engine.TensorDivideScalar(Tensor<T>.FromMatrix(batchGradient), batchScale).ToMatrix();
 
         return batchGradient;
     }
@@ -171,8 +108,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
             }
         }
 
-        T totalLoss = NumOps.Zero;
-        int flowCount = 0;
+        var pairLosses = new List<T>(studentFeatures.Length - 1);
 
         // One FSP matrix per consecutive layer pair, for both networks, then the squared Frobenius
         // norm of their difference — equation (2) of the paper.
@@ -181,9 +117,11 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
             var studentFsp = ComputeFspMatrix(studentFeatures[i], studentFeatures[i + 1]);
             var teacherFsp = ComputeFspMatrix(teacherFeatures[i], teacherFeatures[i + 1]);
 
-            totalLoss = NumOps.Add(totalLoss, SquaredFrobeniusDistance(studentFsp, teacherFsp));
-            flowCount++;
+            pairLosses.Add(SquaredFrobeniusDistance(studentFsp, teacherFsp));
         }
+
+        int flowCount = pairLosses.Count;
+        T totalLoss = Engine.Sum(new Vector<T>(pairLosses));
 
         var avgLoss = flowCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(flowCount)) : NumOps.Zero;
         return NumOps.Multiply(avgLoss, NumOps.FromDouble(_flowWeight));
@@ -219,8 +157,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
                 "At least 2 layers are required: an FSP matrix describes the flow BETWEEN two layers.");
         }
 
-        T totalLoss = NumOps.Zero;
-        int flowCount = 0;
+        var pairLosses = new List<T>(studentFeatures.Length - 1);
 
         for (int i = 0; i < studentFeatures.Length - 1; i++)
         {
@@ -237,9 +174,11 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
                     "matrices are comparable.");
             }
 
-            totalLoss = NumOps.Add(totalLoss, SquaredFrobeniusDistance(studentFsp, teacherFsp));
-            flowCount++;
+            pairLosses.Add(SquaredFrobeniusDistance(studentFsp, teacherFsp));
         }
+
+        int flowCount = pairLosses.Count;
+        T totalLoss = Engine.Sum(new Vector<T>(pairLosses));
 
         var avgLoss = flowCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(flowCount)) : NumOps.Zero;
         return NumOps.Multiply(avgLoss, NumOps.FromDouble(_flowWeight));

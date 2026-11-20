@@ -207,26 +207,16 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
     public override Vector<Complex<T>> GetScalingCoefficients()
     {
         int length = 64; // Adjust as needed
-        var coeffs = new Complex<T>[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
 
-        for (int i = 0; i < length; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T value = NumOps.Equals(x, NumOps.Zero)
-                ? NumOps.One
-                : NumOps.Divide(MathHelper.Sin(NumOps.Divide(MathHelper.Pi<T>(), x)), NumOps.Multiply(MathHelper.Pi<T>(), x));
-            coeffs[i] = new Complex<T>(value, NumOps.Zero);
-            sum = NumOps.Add(sum, NumOps.Abs(value));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = new Complex<T>(NumOps.Divide(coeffs[i].Real, sum), NumOps.Zero);
-        }
-
-        return new Vector<Complex<T>>(coeffs);
+        // sinc(x) = sin(pi x) / (pi x), with sinc(0) = 1, normalized by the sum of absolute values
+        var piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
+        var sinc = engine.TensorDivide(engine.TensorSin(piX), piX);
+        var values = engine.TensorWhere(engine.TensorEquals(x, NumOps.Zero), engine.TensorOnesLike(x), sinc);
+        T sum = engine.TensorSum(engine.TensorAbs(values));
+        var real = engine.TensorDivideScalar(values, sum);
+        return engine.TensorComplex(real, engine.TensorZerosLike(real)).ToVector();
     }
 
     /// <summary>
@@ -261,33 +251,18 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
     public override Vector<Complex<T>> GetWaveletCoefficients()
     {
         int length = 256; // Adjust based on desired precision
-        var coeffs = new Complex<T>[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var t = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
 
-        for (int i = 0; i < length; i++)
-        {
-            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T realPart = MathHelper.Cos(NumOps.Multiply(_omega, t));
-            T imagPart = MathHelper.Sin(NumOps.Multiply(_omega, t));
-            T envelope = NumOps.Exp(NumOps.Divide(NumOps.Negate(NumOps.Multiply(t, t)), NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(_sigma, _sigma))));
-
-            coeffs[i] = new Complex<T>(
-                NumOps.Multiply(envelope, realPart),
-                NumOps.Multiply(envelope, imagPart)
-            );
-            sum = NumOps.Add(sum, NumOps.Abs(coeffs[i].Real));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = new Complex<T>(
-                NumOps.Divide(coeffs[i].Real, sum),
-                NumOps.Divide(coeffs[i].Imaginary, sum)
-            );
-        }
-
-        return new Vector<Complex<T>>(coeffs);
+        // exp(-t^2 / (2 sigma^2)) * (cos(omega t) + i sin(omega t)), normalized by the sum of |real part|
+        var phase = engine.TensorMultiplyScalar(t, _omega);
+        var envelope = engine.TensorExp(engine.TensorDivideScalar(
+            engine.TensorNegate(engine.TensorMultiply(t, t)),
+            NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(_sigma, _sigma))));
+        var real = engine.TensorMultiply(envelope, engine.TensorCos(phase));
+        var imag = engine.TensorMultiply(envelope, engine.TensorSin(phase));
+        T sum = engine.TensorSum(engine.TensorAbs(real));
+        return engine.TensorComplex(engine.TensorDivideScalar(real, sum), engine.TensorDivideScalar(imag, sum)).ToVector();
     }
 
     /// <summary>
@@ -324,15 +299,7 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
         var detailRecon = ConvolveReversed(detailUpsampled, waveletCoeffs);
 
         // Add contributions
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        int outputLength = Math.Min(approxRecon.Length, detailRecon.Length);
-        var reconstructed = new Vector<Complex<T>>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = complexOps.Add(approxRecon[i], detailRecon[i]);
-        }
-
-        return reconstructed;
+        return ComplexWaveletEngineOps<T>.AddTruncated(approxRecon, detailRecon);
     }
 
     /// <summary>
@@ -340,21 +307,7 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </summary>
     private Vector<Complex<T>> Upsample(Vector<Complex<T>> input, int factor)
     {
-        int newLength = input.Length * factor;
-        var result = new Complex<T>[newLength];
-        var zero = new Complex<T>(NumOps.Zero, NumOps.Zero);
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = zero;
-        }
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-
-        return new Vector<Complex<T>>(result);
+        return ComplexWaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -362,25 +315,7 @@ public class ComplexMorletWavelet<T> : ComplexWaveletFunctionBase<T>
     /// </summary>
     private Vector<Complex<T>> ConvolveReversed(Vector<Complex<T>> input, Vector<Complex<T>> kernel)
     {
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        int resultLength = input.Length;
-        var result = new Complex<T>[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            Complex<T> sum = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                int inputIndex = i - j + kernel.Length / 2;
-                if (inputIndex >= 0 && inputIndex < input.Length)
-                {
-                    int revJ = kernel.Length - 1 - j;
-                    sum = complexOps.Add(sum, complexOps.Multiply(input[inputIndex], kernel[revJ]));
-                }
-            }
-            result[i] = sum;
-        }
-
-        return new Vector<Complex<T>>(result);
+        // result[i] = sum_j input[i - j + K / 2] * kernel[K - 1 - j]: a centred convolution with the reversed kernel
+        return ComplexWaveletEngineOps<T>.CenteredConvolve(input, ComplexWaveletEngineOps<T>.Reverse(kernel));
     }
 }

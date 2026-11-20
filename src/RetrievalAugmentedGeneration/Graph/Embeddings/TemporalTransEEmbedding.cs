@@ -95,6 +95,12 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
             }
         }
 
+        // Relations are normalized once at initialization, as in TransE (Bordes et al. 2013, Algorithm 1).
+        foreach (var emb in _relationEmbeddings)
+        {
+            NormalizeL2(emb);
+        }
+
         // Build triple -> time bin mapping from edge temporal data
         _tripleTimeBins = [];
         foreach (var edge in graph.GetAllEdges())
@@ -172,21 +178,27 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
 
     private T ScoreTripleWithTime(int headIdx, int relationIdx, int tailIdx, int timeBin)
     {
-        var h = _entityEmbeddings[headIdx];
-        var r = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        var timeEmb = _timeBinEmbeddings[timeBin];
-        int dim = EmbeddingDimension;
-
         // ||h + r + t_time - t||
-        T sumSq = NumOps.Zero;
-        for (int d = 0; d < dim; d++)
-        {
-            T diff = NumOps.Subtract(NumOps.Add(NumOps.Add(h[d], r[d]), timeEmb[d]), t[d]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
+        return Engine.Norm(Residual(headIdx, relationIdx, tailIdx, timeBin));
+    }
 
-        return NumOps.Sqrt(sumSq);
+    /// <summary>h + r + t_time - t.</summary>
+    private Vector<T> Residual(int headIdx, int relationIdx, int tailIdx, int timeBin)
+        => Engine.Subtract(
+            Engine.Add(
+                Engine.Add(Row(_entityEmbeddings[headIdx]), Row(_relationEmbeddings[relationIdx])),
+                Row(_timeBinEmbeddings[timeBin])),
+            Row(_entityEmbeddings[tailIdx]));
+
+    /// <summary>
+    /// Entities are renormalized at the start of every mini-batch, as in TransE (Bordes et al. 2013, Algorithm 1).
+    /// </summary>
+    private protected override void OnBatchStart()
+    {
+        foreach (var emb in _entityEmbeddings)
+        {
+            NormalizeL2(emb);
+        }
     }
 
     private protected override double ComputeLossAndUpdateGradients(
@@ -195,52 +207,32 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         double learningRate, KGEmbeddingOptions options)
     {
         double margin = options.GetEffectiveMargin();
-        int dim = EmbeddingDimension;
 
         // Look up the time bin for this positive triple from edge temporal data
         int timeBin = _tripleTimeBins.TryGetValue((posHead, relation, posTail), out var bin) ? bin : 0;
 
-        double posDist = ComputeDistanceSqWithTime(posHead, relation, posTail, timeBin, dim);
-        double negDist = ComputeDistanceSqWithTime(negHead, relation, negTail, timeBin, dim);
+        // TransE margin loss with the L2 norm (Bordes et al. 2013), the distance the model scores with.
+        var posDiff = Residual(posHead, relation, posTail, timeBin);
+        var negDiff = Residual(negHead, relation, negTail, timeBin);
+        T posDist = Engine.Norm(posDiff);
+        T negDist = Engine.Norm(negDiff);
 
-        double loss = Math.Max(0.0, margin + posDist - negDist);
+        double loss = Math.Max(0.0, margin + NumOps.ToDouble(posDist) - NumOps.ToDouble(negDist));
         if (loss <= 0.0) return 0.0;
 
+        // d||x||/dx = x / ||x||; every step is formed from the pre-update embeddings.
         T lr = NumOps.FromDouble(learningRate);
-        T two = NumOps.FromDouble(2.0);
-        var timeEmb = _timeBinEmbeddings[timeBin];
+        var posStep = Engine.Multiply(UnitDirection(posDiff, posDist), lr);
+        var negStep = Engine.Multiply(UnitDirection(negDiff, negDist), lr);
 
-        var ph = _entityEmbeddings[posHead];
-        var relationEmb = _relationEmbeddings[relation];
-        var pt = _entityEmbeddings[posTail];
-        var nh = _entityEmbeddings[negHead];
-        var nt = _entityEmbeddings[negTail];
-
-        for (int d = 0; d < dim; d++)
-        {
-            // Positive gradient: 2(h + r + time - t)
-            T posGrad = NumOps.Multiply(two,
-                NumOps.Subtract(NumOps.Add(NumOps.Add(ph[d], relationEmb[d]), timeEmb[d]), pt[d]));
-
-            // Negative gradient: 2(nh + r + time - nt)
-            T negGrad = NumOps.Multiply(two,
-                NumOps.Subtract(NumOps.Add(NumOps.Add(nh[d], relationEmb[d]), timeEmb[d]), nt[d]));
-
-            // Update positive triple (decrease distance)
-            ph[d] = NumOps.Subtract(ph[d], NumOps.Multiply(lr, posGrad));
-            pt[d] = NumOps.Add(pt[d], NumOps.Multiply(lr, posGrad));
-
-            // Relation gradient accounts for both positive and negative triples
-            T rGrad = NumOps.Subtract(posGrad, negGrad);
-            relationEmb[d] = NumOps.Subtract(relationEmb[d], NumOps.Multiply(lr, rGrad));
-
-            // Time embedding gradient also accounts for both
-            timeEmb[d] = NumOps.Subtract(timeEmb[d], NumOps.Multiply(lr, rGrad));
-
-            // Update negative triple (increase distance)
-            nh[d] = NumOps.Add(nh[d], NumOps.Multiply(lr, negGrad));
-            nt[d] = NumOps.Subtract(nt[d], NumOps.Multiply(lr, negGrad));
-        }
+        // Relation and time embedding appear in both distances.
+        var sharedStep = Engine.Subtract(posStep, negStep);
+        SubtractFrom(_entityEmbeddings[posHead], posStep);
+        AddTo(_entityEmbeddings[posTail], posStep);
+        SubtractFrom(_relationEmbeddings[relation], sharedStep);
+        SubtractFrom(_timeBinEmbeddings[timeBin], sharedStep);
+        AddTo(_entityEmbeddings[negHead], negStep);
+        SubtractFrom(_entityEmbeddings[negTail], negStep);
 
         return loss;
     }
@@ -252,23 +244,6 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         {
             NormalizeL2(emb);
         }
-    }
-
-    private double ComputeDistanceSqWithTime(int headIdx, int relationIdx, int tailIdx, int timeBin, int dim)
-    {
-        var h = _entityEmbeddings[headIdx];
-        var r = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        var timeEmb = _timeBinEmbeddings[timeBin];
-
-        double sumSq = 0.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double diff = NumOps.ToDouble(h[d]) + NumOps.ToDouble(r[d]) + NumOps.ToDouble(timeEmb[d]) - NumOps.ToDouble(t[d]);
-            sumSq += diff * diff;
-        }
-
-        return sumSq;
     }
 
     private int GetTimeBin(DateTime timestamp)

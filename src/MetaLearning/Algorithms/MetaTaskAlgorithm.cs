@@ -13,28 +13,23 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
-/// Implementation of MetaTask: Meta-learned Task Augmentation via gradient interpolation.
+/// Implementation of MetaMix (Chen et al., ICPR 2020): MAML whose outer loss is computed on virtual
+/// examples mixed from pairs of query examples.
 /// </summary>
 /// <remarks>
-/// <para>
-/// MetaTask augments the meta-learning task distribution by generating synthetic tasks
-/// from convex combinations of real task gradients. For each synthetic task, two real tasks
-/// are randomly selected and their gradients are interpolated using a Beta-distributed
-/// coefficient. The meta-objective combines losses from both real and synthetic tasks.
-/// </para>
-/// <para><b>Algorithm:</b>
+/// <para><b>Algorithm (paper Algorithm 1, Eq. 2-7):</b>
 /// <code>
-/// For each real task t_i:
-///   Standard MAML inner loop → loss_real_i
-///
-/// For each synthetic task (s = 1..NumSyntheticTasks):
-///   Sample pair (t_i, t_j) randomly
-///   λ ~ Beta(α, α)
-///   grad_s = λ * grad_i + (1-λ) * grad_j  (gradient interpolation)
-///   Adapt using interpolated gradients → loss_synthetic_s
-///
-/// L_meta = mean(loss_real) + SyntheticWeight * mean(loss_synthetic)
+/// For each task T_i:
+///   θ'_i = θ - α ∇_θ L_S(f_θ)                       (inner loop on the support set, unchanged)
+///   pick Z random pairs (m, n) from the query set Q_i; λ ~ Beta(α̌, α̌)
+///   x̂_z = λ x_m + (1-λ) x_n,  ŷ_z = λ y_m + (1-λ) y_n
+/// θ ← θ - β ∇_θ Σ_i L_Q̂(f_θ'_i)                     (the mixed set replaces the query set)
 /// </code>
+/// </para>
+/// <para>
+/// <see cref="MetaTaskOptions{T, TInput, TOutput}.MixSource"/> can instead draw the first example of each
+/// pair from the support set. Inputs and targets must be <see cref="Tensor{T}"/>, <see cref="Matrix{T}"/>
+/// or <see cref="Vector{T}"/> with examples along the first axis.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -77,96 +72,50 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
         if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
 
-        var realLosses = new List<T>();
+        var mixedLosses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
 
-        // Collect per-task gradients for interpolation
-        var taskGradients = new List<Vector<T>>();
-
-        foreach (var task in taskBatch.Tasks)
+        try
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            Vector<T>? lastGrad = null;
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+            foreach (var task in taskBatch.Tasks)
             {
+                var adaptedParams = Adapted(initParams, task);
+
+                // Eq. 4-5: Z virtual examples mixed from random pairs, one λ ~ Beta(α̌, α̌) per episode.
+                var (first, second, lambda) = DrawMix(task);
+                var (mixedX, mixedY) = BuildMixedSet(task, first, second, lambda);
+
+                // Eq. 6-7: the mixed set replaces the query set in the outer objective.
                 ParamModel.SetParameters(adaptedParams);
-                lastGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, lastGrad, _algoOptions.InnerLearningRate, step == 0);
-            }
-
-            if (lastGrad != null)
-                taskGradients.Add(lastGrad);
-
-            ParamModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            realLosses.Add(queryLoss);
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
-        }
-
-        // Generate synthetic tasks via gradient interpolation
-        var syntheticLosses = new List<T>();
-        if (taskGradients.Count >= 2)
-        {
-            for (int s = 0; s < _algoOptions.NumSyntheticTasks; s++)
-            {
-                // Sample random pair
-                int i = RandomGenerator.Next(taskGradients.Count);
-                int j = RandomGenerator.Next(taskGradients.Count - 1);
-                if (j >= i) j++;
-
-                // Sample Beta(α,α) interpolation coefficient
-                double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
-
-                // Interpolate gradients and adapt
-                var adaptedParams = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-                for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-                {
-                    // Mix gradients from the two selected tasks
-                    var interpGrad = new Vector<T>(_paramDim);
-                    for (int d = 0; d < _paramDim; d++)
-                        interpGrad[d] = NumOps.FromDouble(
-                            lambda * NumOps.ToDouble(taskGradients[i][d])
-                          + (1.0 - lambda) * NumOps.ToDouble(taskGradients[j][d]));
-
-                    adaptedParams = ApplyInnerGradients(adaptedParams, interpGrad, _algoOptions.InnerLearningRate, step == 0);
-                }
-
-                // Evaluate synthetic task using a randomly selected real task's query set
-                int evalIdx = RandomGenerator.Next(taskBatch.Tasks.Length);
-                ParamModel.SetParameters(adaptedParams);
-                var synthLoss = ComputeLossFromOutput(
-                    MetaModel.Predict(taskBatch.Tasks[evalIdx].QueryInput),
-                    taskBatch.Tasks[evalIdx].QueryOutput);
-                syntheticLosses.Add(synthLoss);
-                metaGradients.Add(ClipGradients(ComputeGradients(
-                    MetaModel, taskBatch.Tasks[evalIdx].QueryInput, taskBatch.Tasks[evalIdx].QueryOutput)));
+                mixedLosses.Add(ComputeLossFromOutput(MetaModel.Predict(mixedX), mixedY));
+                metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, mixedX, mixedY)));
             }
         }
+        finally
+        {
+            // A failed episode (DrawPairs on an empty set, a throwing loss) must not leave task-adapted weights in;
+            // on success ApplyOuterUpdate starts from initParams too.
+            ParamModel.SetParameters(initParams);
+        }
 
-        // Outer update using all meta-gradients (real + synthetic)
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
-
-        // Report combined loss for monitoring
-        T totalLoss = ComputeMean(realLosses);
-        if (syntheticLosses.Count > 0)
-            totalLoss = NumOps.Add(totalLoss,
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.SyntheticWeight), ComputeMean(syntheticLosses)));
-
-        return totalLoss;
+        return ComputeMean(mixedLosses);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = Adapted(initParams, task);
+        ParamModel.SetParameters(initParams);
+        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
 
+    /// <summary>Eq. 3: the MAML inner loop on the support set, starting from a copy of <paramref name="initParams"/>.</summary>
+    private Vector<T> Adapted(Vector<T> initParams, IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var adaptedParams = initParams.Clone();
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
@@ -174,8 +123,82 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return adaptedParams;
+    }
+
+    /// <summary>
+    /// One episode's random draws, in MetaTrain's order: the Z example pairs, then lambda ~ Beta(alpha, alpha).
+    /// </summary>
+    internal (int[] First, int[] Second, double Lambda) DrawMix(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var (first, second) = DrawPairs(task);
+        double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
+        return (first, second, lambda);
+    }
+
+    /// <summary>
+    /// The number of examples in <paramref name="input"/>: a vector holds one scalar example per element (the
+    /// batch-size helper reads a vector as one example), a matrix or tensor one per row.
+    /// </summary>
+    private static int ExampleCount(TInput input)
+        => input is Vector<T> vector ? vector.Length : InputHelper<T, TInput>.GetBatchSize(input);
+
+    /// <summary>
+    /// Algorithm 1, line 9: Z random example pairs. The first index is into the query set (or the support
+    /// set under <see cref="MetaMixSource.SupportAndQuery"/>), the second into the query set.
+    /// </summary>
+    private (int[] First, int[] Second) DrawPairs(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        int queryCount = ExampleCount(task.QueryInput);
+        int firstCount = _algoOptions.MixSource == MetaMixSource.SupportAndQuery
+            ? ExampleCount(task.SupportInput)
+            : queryCount;
+        if (queryCount <= 0 || firstCount <= 0)
+        {
+            throw new ArgumentException(
+                "MetaMix needs a non-empty query set (and support set when mixing both).", nameof(task));
+        }
+
+        int z = _algoOptions.NumMixedPairs > 0 ? _algoOptions.NumMixedPairs : queryCount;
+        var first = new int[z];
+        var second = new int[z];
+        for (int k = 0; k < z; k++)
+        {
+            first[k] = RandomGenerator.Next(firstCount);
+            second[k] = RandomGenerator.Next(queryCount);
+        }
+
+        return (first, second);
+    }
+
+    /// <summary>
+    /// Eq. 4-5: x̂ = λ x_first + (1-λ) x_second and ŷ = λ y_first + (1-λ) y_second for each pair.
+    /// </summary>
+    internal (TInput X, TOutput Y) BuildMixedSet(
+        IMetaLearningTask<T, TInput, TOutput> task, int[] first, int[] second, double lambda)
+    {
+        T weight = NumOps.FromDouble(lambda);
+        bool fromSupport = _algoOptions.MixSource == MetaMixSource.SupportAndQuery;
+        var firstX = InputHelper<T, TInput>.GetBatch(fromSupport ? task.SupportInput : task.QueryInput, first);
+        var firstY = InputHelper<T, TOutput>.GetBatch(fromSupport ? task.SupportOutput : task.QueryOutput, first);
+        var secondX = InputHelper<T, TInput>.GetBatch(task.QueryInput, second);
+        var secondY = InputHelper<T, TOutput>.GetBatch(task.QueryOutput, second);
+        return (Mix(firstX, secondX, weight), Mix(firstY, secondY, weight));
+    }
+
+    /// <summary>λ a + (1-λ) b on whole containers, i.e. a lerp from b towards a by λ.</summary>
+    private TData Mix<TData>(TData a, TData b, T lambda)
+    {
+        object mixed = (object?)a switch
+        {
+            Tensor<T> ta when b is Tensor<T> tb => Engine.TensorLerp(tb, ta, lambda),
+            Matrix<T> ma when b is Matrix<T> mb =>
+                Engine.TensorLerp(Tensor<T>.FromMatrix(mb), Tensor<T>.FromMatrix(ma), lambda).ToMatrix(),
+            Vector<T> va when b is Vector<T> vb => Engine.Lerp(vb, va, lambda),
+            _ => throw new NotSupportedException(
+                $"MetaMix mixes Tensor<T>, Matrix<T> or Vector<T> data; got {typeof(TData).Name}."),
+        };
+        return (TData)mixed;
     }
 
 }

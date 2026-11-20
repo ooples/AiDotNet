@@ -163,14 +163,11 @@ public class WaveletKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T product = _numOps.One;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = _numOps.Subtract(x1[i], x2[i]);
-            T scaledDiff = _numOps.Divide(diff, _a);
-            product = _numOps.Multiply(product, _numOps.Multiply(_waveletFunction.Calculate(scaledDiff), _numOps.Sqrt(_c)));
-        }
-
-        return product;
+        // prod_i sqrt(c) * h((x1_i - x2_i) / a), with the user's mother wavelet h applied element-wise.
+        var engine = AiDotNetEngine.Current;
+        var scaledDiff = engine.Divide(engine.Subtract(x1, x2), _a);
+        var waveletValues = engine.TensorMap(scaledDiff.AsTensor(), _waveletFunction.Calculate);
+        var factors = engine.TensorMultiplyScalar(waveletValues, _numOps.Sqrt(_c));
+        return engine.Product(factors.ToVector());
     }
 }

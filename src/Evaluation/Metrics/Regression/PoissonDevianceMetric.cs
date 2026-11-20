@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -54,31 +55,17 @@ public class PoissonDevianceMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalDeviance = 0;
-        int validCount = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double y = Math.Max(0, NumOps.ToDouble(actuals[i]));
-            double mu = Math.Max(1e-10, NumOps.ToDouble(predictions[i]));
-
-            double deviance;
-            if (y > 0)
-            {
-                deviance = 2 * (y * Math.Log(y / mu) - (y - mu));
-            }
-            else
-            {
-                deviance = 2 * mu;
-            }
-
-            if (!double.IsNaN(deviance) && !double.IsInfinity(deviance))
-            {
-                totalDeviance += deviance;
-                validCount++;
-            }
-        }
-
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var y = EvaluationTensorOps<double>.MaxPreservingNaN(actual, 0.0);
+        var mu = EvaluationTensorOps<double>.MaxPreservingNaN(pred, 1e-10);
+        var positive = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.TensorMultiply(y, engine.TensorLog(engine.TensorDivide(y, mu))), engine.TensorSubtract(y, mu)),
+            2.0);
+        var deviance = engine.TensorWhere(engine.TensorGreaterThan(y, 0.0), positive, engine.TensorMultiplyScalar(mu, 2.0));
+        var (totalDeviance, validCount) = EvaluationTensorOps<double>.FiniteSumAndCount(deviance);
         return validCount > 0 ? NumOps.FromDouble(totalDeviance / validCount) : NumOps.Zero;
     }
 
@@ -102,18 +89,17 @@ public class PoissonDevianceMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

@@ -125,7 +125,8 @@ public abstract class UndersamplingBase<T> : IResamplingStrategy<T>
         }
 
         // Calculate target majority count
-        int targetMajorityCount = (int)Math.Ceiling(minorityCount / SamplingStrategy);
+        // imbalanced-learn (float sampling_strategy): int(n_minority / sampling_strategy), truncated
+        int targetMajorityCount = (int)(minorityCount / SamplingStrategy);
         int samplesToRemove = Math.Max(0, majorityCount - targetMajorityCount);
 
         // Get indices
@@ -150,18 +151,7 @@ public abstract class UndersamplingBase<T> : IResamplingStrategy<T>
         indicesToKeep.Sort();
 
         // Build result matrices
-        var resampledX = new Matrix<T>(indicesToKeep.Count, x.Columns);
-        var resampledY = new Vector<T>(indicesToKeep.Count);
-
-        for (int i = 0; i < indicesToKeep.Count; i++)
-        {
-            int originalIdx = indicesToKeep[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                resampledX[i, j] = x[originalIdx, j];
-            }
-            resampledY[i] = y[originalIdx];
-        }
+        var (resampledX, resampledY) = ResamplingTensorOps.KeepRows(x, y, indicesToKeep.ToArray());
 
         // Update statistics
         LastStatistics.TotalResampledSamples = resampledX.Rows;
@@ -202,37 +192,12 @@ public abstract class UndersamplingBase<T> : IResamplingStrategy<T>
     /// <summary>
     /// Gets the count of samples per class.
     /// </summary>
-    protected NumericDictionary<T, int> GetClassCounts(Vector<T> y)
-    {
-        var counts = new NumericDictionary<T, int>();
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (!counts.TryGetValue(y[i], out int count))
-            {
-                count = 0;
-            }
-            counts[y[i]] = count + 1;
-        }
-
-        return counts;
-    }
+    protected NumericDictionary<T, int> GetClassCounts(Vector<T> y) => ResamplingTensorOps.ClassCounts(y);
 
     /// <summary>
     /// Gets the indices of samples belonging to a specific class.
     /// </summary>
-    protected List<int> GetClassIndices(Vector<T> y, T targetClass)
-    {
-        var indices = new List<int>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-        return indices;
-    }
+    protected List<int> GetClassIndices(Vector<T> y, T targetClass) => ResamplingTensorOps.ClassIndices(y, targetClass);
 
     /// <summary>
     /// Computes the Euclidean distance between two vectors.

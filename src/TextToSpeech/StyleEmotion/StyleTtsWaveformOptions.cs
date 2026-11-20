@@ -38,6 +38,7 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
         SlmRelativePositionBuckets = other.SlmRelativePositionBuckets;
         MaxTrainingFrames = other.MaxTrainingFrames;
         WavePadding = other.WavePadding;
+        DiscriminatorWidthDivisor = other.DiscriminatorWidthDivisor;
     }
 
     /// <summary>The waveform generator (HiFi-GAN for LibriTTS, iSTFTNet for LJSpeech).</summary>
@@ -169,4 +170,18 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
 
     /// <summary>Zero samples the reference's data loader adds on each side of every recording (5000).</summary>
     public int WavePadding { get; set; } = 5000;
+
+    /// <summary>Divisor for the wave period discriminators' channel widths. One preserves the released graph;
+    /// larger values retain every period and objective in smaller native models.</summary>
+    public int DiscriminatorWidthDivisor { get; set; } = 1;
+
+    /// <summary>Validates <see cref="DiscriminatorWidthDivisor"/> and returns the wave period discriminator channel widths.</summary>
+    internal int[] CreateWavePeriodChannels()
+    {
+        if (DiscriminatorWidthDivisor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(DiscriminatorWidthDivisor));
+        return new[] { 32, 128, 512, 1024, 1024 }
+            .Select(width => Math.Max(1, width / DiscriminatorWidthDivisor))
+            .ToArray();
+    }
 }

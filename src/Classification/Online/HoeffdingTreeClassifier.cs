@@ -207,14 +207,10 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
                 $"Feature rows ({features.Rows}) must match label count ({labels.Length}).",
                 nameof(labels));
 
+        var labelValues = labels.ToArray();
         for (int i = 0; i < features.Rows; i++)
         {
-            var sample = new Vector<T>(features.Columns);
-            for (int j = 0; j < features.Columns; j++)
-            {
-                sample[j] = features[i, j];
-            }
-            PartialFit(sample, labels[i]);
+            PartialFit(features.GetRow(i), labelValues[i]);
         }
     }
 
@@ -362,19 +358,14 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
                 nameof(input));
         }
 
-        var predictions = new Vector<T>(input.Rows);
+        var predictions = new T[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
-            var features = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                features[j] = input[i, j];
-            }
-            predictions[i] = PredictSingle(features);
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
-        return predictions;
+        return Vector<T>.Wrap(predictions);
     }
 
     private T PredictSingle(Vector<T> features)
@@ -457,11 +448,13 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
 
     private int GetOrCreateClassIndex(T label)
     {
-        for (int i = 0; i < _knownClasses.Count; i++)
+        // Known classes are stored in first-seen order; equality test against all of them at once
+        if (_knownClasses.Count > 0)
         {
-            if (NumOps.Compare(_knownClasses[i], label) == 0)
+            var matches = Engine.TensorEquals(Vector<T>.Wrap(_knownClasses.ToArray()).AsTensor(), label);
+            if (NumOps.Compare(Engine.TensorSum(matches), NumOps.Zero) != 0)
             {
-                return i;
+                return Engine.TensorArgMax(matches.Reshape(1, _knownClasses.Count), 1).ToArray()[0];
             }
         }
 

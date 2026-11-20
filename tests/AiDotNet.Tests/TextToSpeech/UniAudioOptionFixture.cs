@@ -21,6 +21,12 @@ internal static class UniAudioOptionFixture
             options.MaximumGeneratedFrames = 32;
             options.MinimumGeneratedFrames = 32;
         }
+        if (option == "MinimumLengthRatio")
+        {
+            options.MinimumGeneratedFrames = 0;
+            options.MaximumGeneratedFrames = 32;
+            options.MaximumLengthRatio = 8.0;
+        }
         if (option == "Temperature")
         {
             options.MinimumGeneratedFrames = 8;

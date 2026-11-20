@@ -55,48 +55,22 @@ public class DirectionAlignmentInspector<T> : Infrastructure.FederatedLearningCo
         int d = clientUpdates.Values.First().Length;
         int subspaceSize = Math.Max(1, d / _numSubspaces);
 
-        // Step 1: Compute honest consensus direction (median of all updates)
-        var consensusDirection = ComputeConsensusDirection(clientUpdates, d);
+        var clientIds = clientUpdates.Keys.ToArray();
+        int n = clientIds.Length;
+        var stacked = Engine.TensorStack(clientUpdates.Values.Select(u => u.AsTensor()).ToArray(), 0);
 
-        // Step 2: For each client, compute per-subspace alignment scores
+        // Every analyzed subspace has exactly subspaceSize coordinates. Half / BFloat16 updates are evaluated in
+        // float: the per-subspace sums of squares pass 65504 and the 1e-10 norm guard rounds to 0 in Half.
+        int numChecked = Math.Min(_numSubspaces, d / subspaceSize);
+        double[] totals = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? SuspicionTotals(stacked.Cast<float>(), numChecked, subspaceSize, _alignmentThreshold)
+            : SuspicionTotals(stacked, numChecked, subspaceSize, _alignmentThreshold);
+
+        // Normalize suspicion to [0, 1]
         var suspicionScores = new Dictionary<int, double>();
-
-        foreach (var (clientId, update) in clientUpdates)
+        for (int k = 0; k < n; k++)
         {
-            double totalSuspicion = 0;
-            int numChecked = 0;
-
-            for (int s = 0; s < _numSubspaces; s++)
-            {
-                int start = s * subspaceSize;
-                int end = Math.Min(start + subspaceSize, d);
-                if (start >= d) break;
-
-                // Cosine similarity in this subspace
-                double dotProduct = 0, normA = 0, normB = 0;
-                for (int i = start; i < end; i++)
-                {
-                    double a = NumOps.ToDouble(update[i]);
-                    double b = consensusDirection[i];
-                    dotProduct += a * b;
-                    normA += a * a;
-                    normB += b * b;
-                }
-
-                double cosineSim = (normA > 1e-10 && normB > 1e-10)
-                    ? dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB))
-                    : 0;
-
-                // Low alignment in any subspace increases suspicion
-                if (cosineSim < _alignmentThreshold)
-                {
-                    totalSuspicion += 1.0 - cosineSim;
-                }
-                numChecked++;
-            }
-
-            // Normalize suspicion to [0, 1]
-            suspicionScores[clientId] = numChecked > 0 ? Math.Min(1.0, totalSuspicion / numChecked) : 0;
+            suspicionScores[clientIds[k]] = numChecked > 0 ? Math.Min(1.0, totals[k] / numChecked) : 0;
         }
 
         return suspicionScores;
@@ -127,33 +101,64 @@ public class DirectionAlignmentInspector<T> : Infrastructure.FederatedLearningCo
         return filtered;
     }
 
-    private double[] ComputeConsensusDirection(Dictionary<int, Vector<T>> clientUpdates, int d)
+    /// <summary>
+    /// For each client (row of the [n, d] <paramref name="stacked"/> updates), the sum over the first
+    /// <paramref name="numChecked"/> subspaces of (1 - cos) wherever the cosine with the consensus direction (the
+    /// coordinate-wise median) is below <paramref name="threshold"/>; cos is 0 when either squared norm is at most 1e-10.
+    /// </summary>
+    private static double[] SuspicionTotals<TV>(Tensor<TV> stacked, int numChecked, int subspaceSize, double threshold)
     {
-        // Coordinate-wise median as robust consensus
-        var allValues = new double[clientUpdates.Count][];
-        int idx = 0;
-        foreach (var update in clientUpdates.Values)
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int n = stacked.Shape[0];
+        int d = stacked.Shape[1];
+        var consensusDirection = ComputeConsensusDirection(stacked, n, d);
+
+        // Per-subspace cosine alignment of every client with the consensus, batched as [n, S, size].
+        int covered = numChecked * subspaceSize;
+        var updates = Engine.TensorSlice(stacked, new[] { 0, 0 }, new[] { n, covered })
+            .Reshape(n, numChecked, subspaceSize);
+        var consensus = Engine.TensorBroadcastTo(
+            Engine.TensorSlice(consensusDirection, new[] { 0 }, new[] { covered }).Reshape(1, numChecked, subspaceSize),
+            new[] { n, numChecked, subspaceSize });
+
+        var axes = new[] { 2 };
+        var dots = Engine.ReduceSum(Engine.TensorMultiply(updates, consensus), axes, false);
+        var normsA = Engine.ReduceSum(Engine.TensorSquare(updates), axes, false);
+        var normsB = Engine.ReduceSum(Engine.TensorSquare(consensus), axes, false);
+
+        // cos = dot / (||a|| ||b||) when both squared norms exceed 1e-10, otherwise 0. The denominator is
+        // sqrt(a) * sqrt(b) so the product of the two squared norms cannot overflow.
+        var eps = ops.FromDouble(1e-10);
+        var zeros = new Tensor<TV>(new[] { n, numChecked });
+        var valid = Engine.TensorMultiply(Engine.TensorGreaterThan(normsA, eps), Engine.TensorGreaterThan(normsB, eps));
+        var cosine = Engine.TensorWhere(
+            valid,
+            Engine.TensorDivide(dots, Engine.TensorMultiply(Engine.TensorSqrt(normsA), Engine.TensorSqrt(normsB))),
+            zeros);
+
+        // Low alignment in any subspace increases suspicion by (1 - cos).
+        var lowAlignment = Engine.TensorGreaterThan(Engine.TensorNegate(cosine), ops.FromDouble(-threshold));
+        var suspicion = Engine.TensorWhere(lowAlignment, Engine.ScalarMinusTensor(ops.One, cosine), zeros);
+        var totals = Engine.ReduceSum(suspicion, new[] { 1 }, false).Cast<double>();
+        return totals.ToArray();
+    }
+
+    /// <summary>
+    /// Coordinate-wise median of the stacked client updates ([n, d]); for an even client count the
+    /// median is the mean of the two middle order statistics, formed as 0.5 a + 0.5 b so it cannot overflow.
+    /// </summary>
+    private static Tensor<TV> ComputeConsensusDirection<TV>(Tensor<TV> stacked, int n, int d)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        var sorted = Engine.TensorSort(stacked, 0, false).Values;
+        var upper = Engine.TensorSlice(sorted, new[] { n / 2, 0 }, new[] { 1, d }).Reshape(d);
+        if (n % 2 == 1)
         {
-            allValues[idx] = new double[d];
-            for (int i = 0; i < d; i++)
-            {
-                allValues[idx][i] = NumOps.ToDouble(update[i]);
-            }
-            idx++;
+            return upper;
         }
 
-        var consensus = new double[d];
-        for (int i = 0; i < d; i++)
-        {
-            var values = new double[clientUpdates.Count];
-            for (int j = 0; j < clientUpdates.Count; j++)
-            {
-                values[j] = allValues[j][i];
-            }
-            Array.Sort(values);
-            consensus[i] = values[values.Length / 2]; // Median
-        }
-
-        return consensus;
+        var lower = Engine.TensorSlice(sorted, new[] { (n / 2) - 1, 0 }, new[] { 1, d }).Reshape(d);
+        var half = ops.FromDouble(0.5);
+        return Engine.TensorAdd(Engine.TensorMultiplyScalar(lower, half), Engine.TensorMultiplyScalar(upper, half));
     }
 }

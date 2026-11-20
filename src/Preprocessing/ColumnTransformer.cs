@@ -158,21 +158,7 @@ public class ColumnTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nOutputFeatures = outputIdx;
     }
 
-    private Matrix<T> ExtractColumns(Matrix<T> data, int[] columns)
-    {
-        int numRows = data.Rows;
-        var result = new T[numRows, columns.Length];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < columns.Length; j++)
-            {
-                result[i, j] = data[i, columns[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
+    private Matrix<T> ExtractColumns(Matrix<T> data, int[] columns) => PreprocessingTensorOps.SelectColumns(data, columns);
 
     /// <summary>
     /// Transforms the data by applying each transformer to its columns.
@@ -187,49 +173,33 @@ public class ColumnTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
 
-        // Initialize with zeros
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < _nOutputFeatures; j++)
-            {
-                result[i, j] = NumOps.Zero;
-            }
-        }
+        // Output columns start as zeros
+        var zero = new Tensor<T>(new[] { numRows });
+        var columns = new Tensor<T>[_nOutputFeatures];
+        for (int j = 0; j < _nOutputFeatures; j++)
+            columns[j] = zero;
 
-        // Apply each transformer
+        // Apply each transformer and place its output columns
         foreach (var (outputStart, outputEnd, transformerIndex) in _outputMapping)
         {
-            var (name, transformer, columns) = _transformers[transformerIndex];
+            var (name, transformer, transformerColumns) = _transformers[transformerIndex];
 
-            var subset = ExtractColumns(data, columns);
+            var subset = ExtractColumns(data, transformerColumns);
             var transformed = transformer.Transform(subset);
-
-            // Copy to output
-            for (int i = 0; i < numRows; i++)
-            {
-                for (int j = 0; j < transformed.Columns; j++)
-                {
-                    result[i, outputStart + j] = transformed[i, j];
-                }
-            }
+            for (int j = 0; j < transformed.Columns; j++)
+                columns[outputStart + j] = PreprocessingTensorOps.Column(transformed, j);
         }
 
         // Add remainder columns if passthrough
         if (_remainder == ColumnTransformerRemainder.Passthrough && _remainderColumns.Length > 0)
         {
             int remainderStart = _nOutputFeatures - _remainderColumns.Length;
-            for (int i = 0; i < numRows; i++)
-            {
-                for (int j = 0; j < _remainderColumns.Length; j++)
-                {
-                    result[i, remainderStart + j] = data[i, _remainderColumns[j]];
-                }
-            }
+            for (int j = 0; j < _remainderColumns.Length; j++)
+                columns[remainderStart + j] = PreprocessingTensorOps.Column(data, _remainderColumns[j]);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>

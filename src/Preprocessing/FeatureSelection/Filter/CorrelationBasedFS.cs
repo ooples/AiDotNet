@@ -27,13 +27,13 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,128 +67,54 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        // Compute all correlations
-        var featureTargetCorr = new double[p];
-        var featureCorr = new double[p, p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        // Compute means
-        var featureMeans = new double[p];
-        double targetMean = 0;
+        // Absolute feature-target and feature-feature correlations (0 when a sum of squares is not above 1e-10)
+        var featureTargetCorr = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, Tensor<T>.FromVector(target)));
+        var featureCorr = engine.TensorAbs(FeatureScoringTensorOps.CorrelationMatrix(X));
 
-        for (int i = 0; i < n; i++)
-            targetMean += NumOps.ToDouble(target[i]);
-        targetMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                featureMeans[j] += NumOps.ToDouble(data[i, j]);
-            featureMeans[j] /= n;
-        }
-
-        // Compute feature-target correlations
-        for (int j = 0; j < p; j++)
-        {
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - featureMeans[j];
-                double yDiff = NumOps.ToDouble(target[i]) - targetMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-            featureTargetCorr[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        // Compute feature-feature correlations
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            featureCorr[j1, j1] = 1.0;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                double sxy = 0, sxx = 0, syy = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double x1Diff = NumOps.ToDouble(data[i, j1]) - featureMeans[j1];
-                    double x2Diff = NumOps.ToDouble(data[i, j2]) - featureMeans[j2];
-                    sxy += x1Diff * x2Diff;
-                    sxx += x1Diff * x1Diff;
-                    syy += x2Diff * x2Diff;
-                }
-                double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-                featureCorr[j1, j2] = corr;
-                featureCorr[j2, j1] = corr;
-            }
-        }
-
-        // Greedy forward selection using CFS merit
-        var selected = new List<int>();
-        var remaining = Enumerable.Range(0, p).ToList();
+        // Greedy forward selection using CFS merit k * r_cf / sqrt(k + k(k-1) r_ff). For a candidate c added to the
+        // selected set S: k * r_cf = sum_S r_f + r_c and k + k(k-1) r_ff = 1 + sum_{S x S} r_ff + 2 sum_S r_fc.
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        var shape = new[] { p };
+        var selectedMask = new Tensor<T>(shape);
+        var remainingMask = PreprocessingTensorOps.Filled(shape, NumOps.One);
+        var scores = new Tensor<T>(shape);
+        var zeros = new Tensor<T>(shape);
+        var ones = PreprocessingTensorOps.Filled(shape, NumOps.One);
+        var excluded = PreprocessingTensorOps.Filled(shape, NumOps.FromDouble(double.NegativeInfinity));
+        T one = NumOps.One;
+        T two = NumOps.FromDouble(2);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var selected = new List<int>();
 
-        _featureScores = new double[p];
-
-        while (selected.Count < numToSelect && remaining.Count > 0)
+        while (selected.Count < numToSelect && selected.Count < p)
         {
-            double bestMerit = double.NegativeInfinity;
-            int bestIdx = -1;
-            int bestRemainingPos = -1;
+            var pairSums = engine.Reshape(engine.TensorMatMul(featureCorr, engine.Reshape(selectedMask, new[] { p, 1 })), shape);
+            T selectedTargetSum = engine.TensorSum(engine.TensorMultiply(featureTargetCorr, selectedMask));
+            T selectedPairSum = engine.TensorSum(engine.TensorMultiply(pairSums, selectedMask));
+            var numerators = engine.TensorAddScalar(featureTargetCorr, selectedTargetSum);
+            var denominators = engine.TensorSqrt(engine.TensorAddScalar(engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(pairSums, two), selectedPairSum), one));
+            var usable = engine.TensorGreaterThan(denominators, epsilon);
+            var merits = engine.TensorWhere(usable,
+                engine.TensorDivide(numerators, engine.TensorWhere(usable, denominators, ones)), zeros);
 
-            for (int r = 0; r < remaining.Count; r++)
-            {
-                int candidate = remaining[r];
-                var testSet = new List<int>(selected) { candidate };
-
-                // Compute CFS merit: k * r_cf / sqrt(k + k*(k-1)*r_ff)
-                // r_cf = mean feature-target correlation
-                // r_ff = mean feature-feature correlation
-                double sumCf = 0;
-                foreach (int f in testSet)
-                    sumCf += featureTargetCorr[f];
-                double meanCf = sumCf / testSet.Count;
-
-                double sumFf = 0;
-                int countFf = 0;
-                for (int i = 0; i < testSet.Count; i++)
-                {
-                    for (int j = i + 1; j < testSet.Count; j++)
-                    {
-                        sumFf += featureCorr[testSet[i], testSet[j]];
-                        countFf++;
-                    }
-                }
-                double meanFf = countFf > 0 ? sumFf / countFf : 0;
-
-                int k = testSet.Count;
-                double denom = Math.Sqrt(k + (double)k * (k - 1) * meanFf);
-                double merit = denom > 1e-10 ? k * meanCf / denom : 0;
-
-                if (merit > bestMerit)
-                {
-                    bestMerit = merit;
-                    bestIdx = candidate;
-                    bestRemainingPos = r;
-                }
-            }
-
-            if (bestIdx >= 0)
-            {
-                selected.Add(bestIdx);
-                remaining.RemoveAt(bestRemainingPos);
-                _featureScores[bestIdx] = bestMerit;
-            }
-            else
-            {
-                break;
-            }
+            // First remaining candidate with the highest merit
+            int bestIdx = PreprocessingTensorOps.FirstArgMax(engine.TensorWhere(remainingMask, merits, excluded));
+            var pick = engine.Reshape(engine.TensorOneHot<T>(new Tensor<int>(new[] { bestIdx }, new[] { 1 }), p), shape);
+            selected.Add(bestIdx);
+            scores = engine.TensorWhere(pick, merits, scores);
+            selectedMask = engine.TensorAdd(selectedMask, pick);
+            remainingMask = engine.TensorSubtract(remainingMask, pick);
         }
 
+        _featureScores = scores.ToVector();
         _selectedIndices = [.. selected.OrderBy(x => x)];
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -202,15 +128,7 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("CorrelationBasedFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

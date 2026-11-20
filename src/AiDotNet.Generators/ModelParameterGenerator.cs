@@ -55,6 +55,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
     private const string RebindLayerAliasesHook = "RebindLayerAliases";
+    private const string LayerAliasOwnerInterface = "AiDotNet.NeuralNetworks.Layers.ILayerAliasOwner<T>";
     private const string AdditionalLayerGroupsHook = "GetGeneratedAdditionalLayerGroups";
     private const string NestedNetworkLayerViewsHook = "GetGeneratedNestedNetworkLayerViews";
 
@@ -164,7 +165,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             if (persistentSource is not null)
                             {
                                 persistentFields.Add((tf.Name, persistentSource,
-                                    RoleExpression(classification.Kind),
+                                    RoleExpression(tf, classification.Kind),
                                     AvailabilityExpression(tf, classification.Kind)));
                                 continue;
                             }
@@ -240,7 +241,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             if (persistentSource is not null)
                             {
                                 persistentFields.Add((tp.Name, persistentSource,
-                                    RoleExpression(classification.Kind),
+                                    RoleExpression(tp, classification.Kind),
                                     AvailabilityExpression(tp, classification.Kind)));
                                 continue;
                             }
@@ -371,7 +372,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 {
                     components.Add((member.Name,
                         $"new ComponentCollectionParameterSource<{elem}>(() => {member.Name}?.EnumerateLayers())",
-                        RoleExpression(classification.Kind),
+                        RoleExpression(member, classification.Kind),
                         AvailabilityExpression(member, classification.Kind)));
                     continue;
                 }
@@ -410,7 +411,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             absentIsResolved
                                 ? $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name}, optional: true)"
                                 : $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
-                            RoleExpression(classification.Kind),
+                            RoleExpression(member, classification.Kind),
                             availability));
                         continue;
                     }
@@ -432,7 +433,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         // resolved fact, not a deferred shape.
                         components.Add((member.Name,
                             $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>, optional: true)",
-                            RoleExpression(classification.Kind),
+                            RoleExpression(member, classification.Kind),
                             AvailabilityExpression(member, classification.Kind, runtimeOptional: true)));
                         continue;
                     }
@@ -440,7 +441,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         components.Add((member.Name,
                             $"new ComponentCollectionParameterSource<{elem}>(() => {member.Name})",
-                            RoleExpression(classification.Kind),
+                            RoleExpression(member, classification.Kind),
                             AvailabilityExpression(member, classification.Kind)));
                         continue;
                     }
@@ -463,7 +464,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     allowSerializedObject:
                         classification.Kind == ParameterMemberSemanticModel.Kind.Fitted);
                 if (sourceExpression is null) continue;
-                fields.Add((member.Name, sourceExpression, RoleExpression(classification.Kind),
+                fields.Add((member.Name, sourceExpression, RoleExpression(member, classification.Kind),
                     AvailabilityExpression(member, classification.Kind)));
             }
 
@@ -1238,6 +1239,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 : $"ValidateReadonlyLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
         }
 
+        // A helper object that holds layers (a paper network builder) rebinds its own references; without this the
+        // clone kept running the helper's constructor layers while serializing the trained ones.
+        if (bare is INamedTypeSymbol named && named.AllInterfaces.Any(i =>
+                i.OriginalDefinition.ToDisplayString() == LayerAliasOwnerInterface))
+        {
+            return $"{member.Name}?.RebindLayerAliases(previousLayers, replacementLayers);";
+        }
+
         var element = LayerCollectionElementType(bare);
         if (element is null)
             return null;
@@ -1820,16 +1829,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
         or ParameterMemberSemanticModel.Kind.Frozen
         or ParameterMemberSemanticModel.Kind.Buffer;
 
-    private static string RoleExpression(ParameterMemberSemanticModel.Kind kind) => kind switch
+    private const string InputSizedStateRole = "global::AiDotNet.Models.Parameters.ParameterSlotRole.InputSizedState";
+
+    private static string RoleExpression(ISymbol member, ParameterMemberSemanticModel.Kind kind)
     {
-        ParameterMemberSemanticModel.Kind.Fitted =>
-            "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState",
-        ParameterMemberSemanticModel.Kind.Frozen =>
-            "global::AiDotNet.Models.Parameters.ParameterSlotRole.Frozen",
-        ParameterMemberSemanticModel.Kind.Buffer =>
-            "global::AiDotNet.Models.Parameters.ParameterSlotRole.Buffer",
-        _ => "global::AiDotNet.Models.Parameters.ParameterSlotRole.Trainable"
-    };
+        // ModelStateGenerator persists fitted state by name; input-sized state must not add flat width.
+        if (kind == ParameterMemberSemanticModel.Kind.Fitted
+            && member.GetAttributes().Any(attribute =>
+                ParameterMemberSemanticModel.TryGetKind(attribute, out var declaredKind)
+                && declaredKind == kind
+                && attribute.NamedArguments.Any(argument =>
+                    argument.Key == "InputSized" && argument.Value.Value is true)))
+            return InputSizedStateRole;
+
+        return kind switch
+        {
+            ParameterMemberSemanticModel.Kind.Fitted =>
+                "global::AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState",
+            ParameterMemberSemanticModel.Kind.Frozen =>
+                "global::AiDotNet.Models.Parameters.ParameterSlotRole.Frozen",
+            ParameterMemberSemanticModel.Kind.Buffer =>
+                "global::AiDotNet.Models.Parameters.ParameterSlotRole.Buffer",
+            _ => "global::AiDotNet.Models.Parameters.ParameterSlotRole.Trainable"
+        };
+    }
 
     private static string AvailabilityExpression(
         ISymbol member,
@@ -1965,11 +1988,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        base.RegisterGeneratedParameterComponents(registry);");
         string ownerId = classSymbol.ToDisplayString().Replace("\\", "\\\\").Replace("\"", "\\\"");
-        foreach (var f in fields.OrderBy(item => item.Name, System.StringComparer.Ordinal))
+        foreach (var f in fields.Where(item => item.Role != InputSizedStateRole).OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
             sb.AppendLine($"        registry.Register(\"{ownerId}::{f.Name}\", {f.SourceExpression}, {f.Role}, {f.Availability});");
         }
-        foreach (var c in components.OrderBy(item => item.Name, System.StringComparer.Ordinal))
+        foreach (var c in components.Where(item => item.Role != InputSizedStateRole).OrderBy(item => item.Name, System.StringComparer.Ordinal))
         {
             sb.AppendLine($"        registry.Register(\"{ownerId}::{c.Name}\", {c.SourceExpression}, {c.Role}, {c.Availability});");
         }

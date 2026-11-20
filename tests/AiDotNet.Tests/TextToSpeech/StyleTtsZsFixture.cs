@@ -20,6 +20,7 @@ internal static class StyleTtsZsFixture
         BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64,
         SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8,
         SlmPositionalConvKernel = 16, SlmPositionalConvGroups = 2,
+        DiscriminatorWidthDivisor = 16, MaxTrainingFrames = 128,
         SpeakerChannels = 2, SpeakerBlocks = new[] { 1, 1, 1, 1 }, SpeakerEmbedding = 8,
     };
 
@@ -29,12 +30,16 @@ internal static class StyleTtsZsFixture
 
     internal static TtsTrainingSample<T> Sample<T>() => StyleTts2Fixture.Sample<T>();
 
-    internal static bool IsDistillation(string option) => option is "DistillationGuidanceMin" or "DistillationGuidanceMax";
+    // SamplingSteps is the teacher's DDIM step count, which only the distillation stage (and teacher inference, off by
+    // default) runs, so its probe trains in that stage.
+    internal static bool IsDistillation(string option) =>
+        option is "DistillationGuidanceMin" or "DistillationGuidanceMax" or "SamplingSteps";
 
     internal static void PrepareOptions(StyleTTSZSOptions options, string option)
     {
         if (option == "MaxTextLength") options.MaxTextLength = 4;
-        if (option is "MonotonicLossWeight" or "SlmSampleRate") options.TmaStartStep = 0;
+        // The aligner objectives (L_mono and L_s2s) begin only after the TMA warm-up, as in StyleTTS2's probe.
+        if (option is "MonotonicLossWeight" or "S2sLossWeight" or "SlmSampleRate") options.TmaStartStep = 0;
         if (option == "TmaStartStep") options.TmaStartStep = 1;
     }
 

@@ -37,11 +37,11 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly bool _whiten;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _components;
-    private double[]? _explainedVariance;
-    private double[]? _explainedVarianceRatio;
-    private double[]? _singularValues;
+    private Vector<T>? _mean;
+    private Matrix<T>? _components;
+    private Vector<T>? _explainedVariance;
+    private Vector<T>? _explainedVarianceRatio;
+    private Vector<T>? _singularValues;
     private int _nSamplesSeen;
     private int _nFeaturesIn;
 
@@ -63,22 +63,22 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature.
     /// </summary>
-    public double[]? Mean => _mean;
+    public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the principal components.
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the explained variance for each component.
     /// </summary>
-    public double[]? ExplainedVariance => _explainedVariance;
+    public Vector<T>? ExplainedVariance => _explainedVariance;
 
     /// <summary>
     /// Gets the explained variance ratio for each component.
     /// </summary>
-    public double[]? ExplainedVarianceRatio => _explainedVarianceRatio;
+    public Vector<T>? ExplainedVarianceRatio => _explainedVarianceRatio;
 
     /// <summary>
     /// Gets the number of samples seen during fitting.
@@ -125,6 +125,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="data">The training data matrix.</param>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
@@ -136,112 +137,26 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
-        // Initialize running statistics
-        _mean = new double[p];
-        _nSamplesSeen = 0;
+        // Mean and sample covariance over every sample (the batched accumulation of sum and X^T X in one pass)
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        var covariance = engine.TensorDivideScalar(
+            DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n - 1));
+        _nSamplesSeen = n;
 
-        // Running sum of X and X^T * X for covariance estimation
-        var runningSum = new double[p];
-        var runningXTX = new double[p, p];
+        // Leading eigenpairs of the covariance
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        var explainedVariance = engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.Zero);
 
-        // Process in batches
-        for (int batchStart = 0; batchStart < n; batchStart += _batchSize)
-        {
-            int batchEnd = Math.Min(batchStart + _batchSize, n);
-            int batchN = batchEnd - batchStart;
+        T totalVariance = engine.TensorSum(engine.TensorDiagonal(covariance));
 
-            // Extract batch
-            var batchData = new double[batchN, p];
-            for (int i = 0; i < batchN; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    batchData[i, j] = NumOps.ToDouble(data[batchStart + i, j]);
-                }
-            }
-
-            // Update running sum
-            for (int j = 0; j < p; j++)
-            {
-                for (int i = 0; i < batchN; i++)
-                {
-                    runningSum[j] += batchData[i, j];
-                }
-            }
-
-            // Update running X^T * X
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = i; j < p; j++)
-                {
-                    double sum = 0;
-                    for (int r = 0; r < batchN; r++)
-                    {
-                        sum += batchData[r, i] * batchData[r, j];
-                    }
-                    runningXTX[i, j] += sum;
-                    if (i != j) runningXTX[j, i] = runningXTX[i, j];
-                }
-            }
-
-            _nSamplesSeen += batchN;
-        }
-
-        // Compute mean
-        for (int j = 0; j < p; j++)
-        {
-            _mean[j] = runningSum[j] / _nSamplesSeen;
-        }
-
-        // Compute covariance: (X^T * X) / (n-1) - n * mean * mean^T / (n-1)
-        var covariance = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                covariance[i, j] = (runningXTX[i, j] - _nSamplesSeen * _mean[i] * _mean[j]) / (_nSamplesSeen - 1);
-            }
-        }
-
-        // Compute eigenvalues and eigenvectors
-        var (eigenvalues, eigenvectors) = ComputeEigen(covariance, p, k);
-
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, k)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
-
-        _components = new double[k, p];
-        _explainedVariance = new double[k];
-        _singularValues = new double[k];
-
-        double totalVariance = 0;
-        for (int i = 0; i < p; i++)
-        {
-            totalVariance += covariance[i, i];
-        }
-
-        for (int i = 0; i < k; i++)
-        {
-            double eigenvalue = Math.Max(0, eigenvalues[indices[i]]);
-            _explainedVariance[i] = eigenvalue;
-            _singularValues[i] = Math.Sqrt(eigenvalue * (_nSamplesSeen - 1));
-
-            for (int j = 0; j < p; j++)
-            {
-                _components[i, j] = eigenvectors[indices[i], j];
-            }
-        }
-
-        // Compute explained variance ratio
-        _explainedVarianceRatio = new double[k];
-        if (totalVariance > 1e-10)
-        {
-            for (int i = 0; i < k; i++)
-            {
-                _explainedVarianceRatio[i] = _explainedVariance[i] / totalVariance;
-            }
-        }
+        _mean = mean.ToVector();
+        _components = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, k)).ToMatrix();
+        _explainedVariance = explainedVariance.ToVector();
+        _singularValues = engine.TensorSqrt(
+            engine.TensorMultiplyScalar(explainedVariance, NumOps.FromDouble(_nSamplesSeen - 1))).ToVector();
+        _explainedVarianceRatio = VarianceRatio(explainedVariance, totalVariance).ToVector();
     }
 
     /// <summary>
@@ -265,6 +180,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Incremental PCA update using SVD updating formula
         // Reference: Ross et al., "Incremental Learning for Robust Visual Tracking"
 
+        var engine = Engine;
         int nBatch = batch.Rows;
         int p = batch.Columns;
 
@@ -280,323 +196,90 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Internal state is inconsistent: _components is null after initialization.");
         }
 
-        // Validate all fitted state upfront to avoid partial gradient corruption
-        var singularValues = _singularValues;
-        var explainedVariance = _explainedVariance;
-        if (singularValues is null && explainedVariance is null)
-        {
-            throw new InvalidOperationException(
-                "Internal state is inconsistent: neither _singularValues nor _explainedVariance is available after initialization.");
-        }
+        var oldSingularValues = _singularValues is not null
+            ? Tensor<T>.FromVector(_singularValues)
+            : _explainedVariance is not null
+                ? engine.TensorSqrt(engine.TensorMultiplyScalar(
+                    Tensor<T>.FromVector(_explainedVariance), NumOps.FromDouble(_nSamplesSeen - 1)))
+                : throw new InvalidOperationException(
+                    "Internal state is inconsistent: neither _singularValues nor _explainedVariance is available after initialization.");
 
-        int k = _components.GetLength(0);
-
-        // Convert batch to double and compute batch statistics
-        var batchData = new double[nBatch, p];
-        var batchMean = new double[p];
-
-        for (int i = 0; i < nBatch; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double val = NumOps.ToDouble(batch[i, j]);
-                batchData[i, j] = val;
-                batchMean[j] += val;
-            }
-        }
-
-        for (int j = 0; j < p; j++)
-        {
-            batchMean[j] /= nBatch;
-        }
-
-        // Compute updated mean using weighted average
+        int k = _components.Rows;
         int nOld = _nSamplesSeen;
         int nTotal = nOld + nBatch;
-        var newMean = new double[p];
 
-        for (int j = 0; j < p; j++)
-        {
-            newMean[j] = (nOld * _mean[j] + nBatch * batchMean[j]) / nTotal;
-        }
+        // Updated mean: (nOld * oldMean + nBatch * batchMean) / nTotal
+        var x = Tensor<T>.FromMatrix(batch);
+        var oldMean = Tensor<T>.FromVector(_mean);
+        var batchMean = DimensionalityReductionOps.ColumnMeans(x);
+        var newMean = engine.TensorDivideScalar(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(oldMean, NumOps.FromDouble(nOld)),
+                engine.TensorMultiplyScalar(batchMean, NumOps.FromDouble(nBatch))),
+            NumOps.FromDouble(nTotal));
 
-        // Center the batch data with NEW mean
-        for (int i = 0; i < nBatch; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                batchData[i, j] -= newMean[j];
-            }
-        }
+        // Center the batch on the new mean
+        var centeredBatch = DimensionalityReductionOps.SubtractRow(x, newMean);
 
-        // Build the matrix for SVD update:
-        // [sqrt(n_old/(n_total)) * S * V^T + sqrt(n_old*n_batch/n_total) * (old_mean - new_mean)]
-        // [sqrt(1/n_total) * centered_batch]
-        // where S * V^T represents the old principal components scaled by singular values
+        // Mean-correction row: sqrt(nOld * nBatch / nTotal) * (oldMean - newMean)
+        var meanCorrection = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(oldMean, newMean), NumOps.FromDouble(Math.Sqrt((double)nOld * nBatch / nTotal)));
 
-        // Compute mean correction vector scaled appropriately
-        double meanCorrectionScale = Math.Sqrt((double)nOld * nBatch / nTotal);
-        var meanCorrection = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            meanCorrection[j] = meanCorrectionScale * (_mean[j] - newMean[j]);
-        }
+        // Stack [sqrt((nOld - 1) / (nTotal - 1)) * S * V^T; mean correction; X_centered / sqrt(nTotal - 1)]
+        var oldRows = engine.TensorMultiplyScalar(
+            DimensionalityReductionOps.ScaleRows(Tensor<T>.FromMatrix(_components), oldSingularValues),
+            NumOps.FromDouble(Math.Sqrt((double)(nOld - 1) / (nTotal - 1))));
+        var batchRows = engine.TensorMultiplyScalar(centeredBatch, NumOps.FromDouble(1.0 / Math.Sqrt(nTotal - 1)));
+        var combined = engine.TensorConcatenate(
+            new[] { oldRows, DimensionalityReductionOps.AsRow(meanCorrection), batchRows }, 0);
 
-        // Build combined matrix for SVD
-        // Row 0 to k-1: scaled old components (S_i * V_i^T)
-        // Row k: mean correction
-        // Rows k+1 to k+nBatch: scaled new batch
-        int numCombinedRows = k + 1 + nBatch;
-        var combinedMatrix = new double[numCombinedRows, p];
+        // Truncated SVD of the stacked matrix
+        var (newSingularValues, newComponents) = ComputeTruncatedSVD(combined, k);
 
-        // Add scaled old components
-        double oldScale = Math.Sqrt((double)(nOld - 1) / (nTotal - 1));
-        for (int i = 0; i < k; i++)
-        {
-            double singularValue = singularValues is not null
-                ? singularValues[i]
-                : Math.Sqrt((explainedVariance ?? throw new InvalidOperationException("Explained variance not available."))[i] * (nOld - 1));
-            for (int j = 0; j < p; j++)
-            {
-                combinedMatrix[i, j] = oldScale * singularValue * _components[i, j];
-            }
-        }
-
-        // Add mean correction row
-        for (int j = 0; j < p; j++)
-        {
-            combinedMatrix[k, j] = meanCorrection[j];
-        }
-
-        // Add scaled new batch
-        double batchScale = 1.0 / Math.Sqrt(nTotal - 1);
-        for (int i = 0; i < nBatch; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                combinedMatrix[k + 1 + i, j] = batchScale * batchData[i, j];
-            }
-        }
-
-        // Compute SVD of combined matrix (only need top k components)
-        var (newSingularValues, newComponents) = ComputeTruncatedSVD(combinedMatrix, numCombinedRows, p, k);
-
-        // Update state
-        _mean = newMean;
+        _mean = newMean.ToVector();
         _nSamplesSeen = nTotal;
-        _components = newComponents;
-        _singularValues = newSingularValues;
+        _components = newComponents.ToMatrix();
+        _singularValues = newSingularValues.ToVector();
 
-        // Update explained variance
-        _explainedVariance = new double[k];
-        double totalVariance = 0;
-        for (int i = 0; i < k; i++)
-        {
-            _explainedVariance[i] = newSingularValues[i] * newSingularValues[i] / (nTotal - 1);
-            totalVariance += _explainedVariance[i];
-        }
-
-        // Compute explained variance ratio (approximation based on captured variance)
-        _explainedVarianceRatio = new double[k];
-        if (totalVariance > 1e-10)
-        {
-            for (int i = 0; i < k; i++)
-            {
-                _explainedVarianceRatio[i] = _explainedVariance[i] / totalVariance;
-            }
-        }
+        // Explained variance: s^2 / (nTotal - 1), ratio over the kept components
+        var explainedVariance = engine.TensorDivideScalar(
+            engine.TensorSquare(newSingularValues), NumOps.FromDouble(nTotal - 1));
+        _explainedVariance = explainedVariance.ToVector();
+        _explainedVarianceRatio = VarianceRatio(explainedVariance, engine.TensorSum(explainedVariance)).ToVector();
     }
 
-    private (double[] SingularValues, double[,] RightVectors) ComputeTruncatedSVD(double[,] matrix, int m, int n, int k)
+    /// <summary>
+    /// Leading singular values and right singular vectors (as rows) of a matrix, from the Jacobi eigen solve
+    /// of its Gram matrix A^T A.
+    /// </summary>
+    private (Tensor<T> SingularValues, Tensor<T> RightVectors) ComputeTruncatedSVD(Tensor<T> matrix, int k)
     {
-        // Compute truncated SVD to get top k right singular vectors
-        // Uses power iteration on A^T * A
-
-        int numComponents = Math.Min(k, Math.Min(m, n));
-        var singularValues = new double[numComponents];
-        var rightVectors = new double[numComponents, n];
-
-        // Compute A^T * A
-        var AtA = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0;
-                for (int r = 0; r < m; r++)
-                {
-                    sum += matrix[r, i] * matrix[r, j];
-                }
-                AtA[i, j] = sum;
-            }
-        }
-
-        var A = (double[,])AtA.Clone();
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        for (int c = 0; c < numComponents; c++)
-        {
-            // Random initialization
-            var v = new double[n];
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-                norm += v[i] * v[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= norm;
-            }
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            // Compute eigenvalue (= singular value squared)
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            singularValues[c] = Math.Sqrt(Math.Max(0, eigenvalue));
-
-            for (int i = 0; i < n; i++)
-            {
-                rightVectors[c, i] = v[i];
-            }
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
+        var engine = Engine;
+        int numComponents = Math.Min(k, Math.Min(matrix.Shape[0], matrix.Shape[1]));
+        var gram = DimensionalityReductionOps.TransposeMatMul(matrix, matrix);
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(gram, descending: true);
+        var singularValues = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, numComponents), NumOps.Zero));
+        var rightVectors = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, numComponents));
         return (singularValues, rightVectors);
     }
 
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n, int k)
+    /// <summary>Explained variance divided by the total, or zeros when the total is (near) zero.</summary>
+    private Tensor<T> VarianceRatio(Tensor<T> explainedVariance, T totalVariance)
     {
-        // Power iteration with deflation
-        var eigenvalues = new double[k];
-        var eigenvectors = new double[k, n];
-        var A = (double[,])matrix.Clone();
-        var random = RandomHelper.CreateSeededRandom(42);
+        return NumOps.GreaterThan(totalVariance, DimensionalityReductionOps.Tolerance<T>(1e-10))
+            ? Engine.TensorDivideScalar(explainedVariance, totalVariance)
+            : Engine.TensorZerosLike(explainedVariance);
+    }
 
-        for (int m = 0; m < k; m++)
-        {
-            var v = new double[n];
-            double norm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-                norm += v[i] * v[i];
-            }
-            norm = Math.Sqrt(norm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= norm;
-            }
-
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            // Compute eigenvalue
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[m] = Math.Max(0, eigenvalue);
-
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[m, i] = v[i];
-            }
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+    /// <summary>
+    /// Per-component whitening scale sqrt(explained variance) (unit-variance outputs, as scikit-learn's
+    /// IncrementalPCA(whiten=True)); 1 for components with (near) zero variance.
+    /// </summary>
+    private Tensor<T> WhitenScale(Vector<T> explainedVariance)
+    {
+        var engine = Engine;
+        var std = engine.TensorSqrt(Tensor<T>.FromVector(explainedVariance));
+        return engine.TensorWhere(engine.TensorGreaterThan(std, DimensionalityReductionOps.Tolerance<T>(1e-10)), std, engine.TensorOnesLike(std));
     }
 
     /// <summary>
@@ -611,32 +294,15 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("IncrementalPCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-        var result = new T[n, k];
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        var projected = DimensionalityReductionOps.MatMulTranspose(centered, Tensor<T>.FromMatrix(_components));
 
-        for (int i = 0; i < n; i++)
+        if (_whiten && _explainedVariance is not null)
         {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    double centered = NumOps.ToDouble(data[i, j]) - _mean[j];
-                    sum += centered * _components[c, j];
-                }
-
-                if (_whiten && _singularValues is not null && _singularValues[c] > 1e-10)
-                {
-                    sum /= _singularValues[c];
-                }
-
-                result[i, c] = NumOps.FromDouble(sum);
-            }
+            projected = Engine.TensorDivide(projected, DimensionalityReductionOps.AsRow(WhitenScale(_explainedVariance)));
         }
 
-        return new Matrix<T>(result);
+        return projected.ToMatrix();
     }
 
     /// <summary>
@@ -651,30 +317,15 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("IncrementalPCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
-        var result = new T[n, p];
+        var scores = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), _components.Rows);
 
-        for (int i = 0; i < n; i++)
+        if (_whiten && _explainedVariance is not null)
         {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = _mean[j];
-                for (int c = 0; c < k; c++)
-                {
-                    double val = NumOps.ToDouble(data[i, c]);
-                    if (_whiten && _singularValues is not null && _singularValues[c] > 1e-10)
-                    {
-                        val *= _singularValues[c];
-                    }
-                    sum += val * _components[c, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
+            scores = DimensionalityReductionOps.ScaleColumns(scores, WhitenScale(_explainedVariance));
         }
 
-        return new Matrix<T>(result);
+        var reconstructed = Engine.TensorMatMul(scores, Tensor<T>.FromMatrix(_components));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
@@ -682,7 +333,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {

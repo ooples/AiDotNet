@@ -8,7 +8,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the SAN model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class SANOptions : SegmentationModelOptions
+public class SANOptions : TextQueriedSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public SANOptions()
@@ -25,6 +25,8 @@ public class SANOptions : SegmentationModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        CopyTextQuerySettings(other);
+
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         MaxGradNorm = other.MaxGradNorm;
@@ -39,5 +41,9 @@ public class SANOptions : SegmentationModelOptions
     /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
     /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        ValidateSegmentationCore();
+        ValidateTextQuerySettings();
+    }
 }

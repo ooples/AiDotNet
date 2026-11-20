@@ -323,12 +323,12 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             : NumOps.ToDouble(_temperature[0]);
 
     /// <summary>The policy's standard deviations (before the squash) for one state.</summary>
-    internal double[] PolicyStandardDeviationsFor(Vector<T> state)
+    internal Vector<T> PolicyStandardDeviationsFor(Vector<T> state)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         using var _ = new NoGradScope<T>();
         var (_, logStd) = PolicyParameters(_actor.Predict(Row(state)), 1);
-        return logStd.ToArray().Select(v => Math.Exp(NumOps.ToDouble(v))).ToArray();
+        return AiDotNetEngine.Current.TensorExp(logStd).ToVector();
     }
 
     internal (T Q1, T Q2) EvaluateCritics(Vector<T> state, Vector<T> action)
@@ -339,12 +339,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         return (_critic1.Predict(stateAction).ToVector()[0], _critic2.Predict(stateAction).ToVector()[0]);
     }
 
-    private static Tensor<T> Row(Vector<T> vector)
-    {
-        var row = new Tensor<T>([1, vector.Length]);
-        for (int i = 0; i < vector.Length; i++) row[0, i] = vector[i];
-        return row;
-    }
+    private static Tensor<T> Row(Vector<T> vector) => Tensor<T>.FromVector(vector.Clone(), [1, vector.Length]);
 
     // The policy's mean and clipped log standard deviation for n states, [n, A] each.
     private (Tensor<T> Mean, Tensor<T> LogStd) PolicyParameters(Tensor<T> actorOutput, int n)
@@ -441,16 +436,12 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         var states = Rows(batch.Select(e => e.State).ToList(), stateDim);
         var nextStates = Rows(batch.Select(e => e.NextState).ToList(), stateDim);
         var actions = Rows(batch.Select(e => e.Action).ToList(), actionDim);
-        var rewards = new double[n];
-        var notDone = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            rewards[i] = NumOps.ToDouble(batch[i].Reward);
-            notDone[i] = batch[i].Done ? 0.0 : 1.0;
-        }
+        var rewards = new Vector<T>(batch.Select(e => e.Reward)).AsTensor();
+        var dones = Tensor<int>.FromVector(Vector<int>.Wrap(batch.Select(e => e.Done ? 1 : 0).ToArray()), [n]).Cast<T>();
+        var notDone = AiDotNetEngine.Current.TensorSubtract(AiDotNetEngine.Current.TensorOnesLike(dones), dones);
 
         double alpha = CurrentAlpha;
-        double gamma = NumOps.ToDouble(TradingOptions.DiscountFactor);
+        T gamma = TradingOptions.DiscountFactor;
         bool v1 = _sacOptions.Variant == SacVariant.ValueNetwork;
         T qLoss1, qLoss2, policyLoss;
         SetTrainingModes(true);
@@ -520,11 +511,9 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private static Tensor<T> Rows(IReadOnlyList<Vector<T>> vectors, int width)
     {
-        var rows = new Tensor<T>([vectors.Count, width]);
-        var span = rows.AsWritableSpan();
-        for (int i = 0; i < vectors.Count; i++)
-            for (int j = 0; j < width; j++) span[i * width + j] = vectors[i][j];
-        return rows;
+        var engine = AiDotNetEngine.Current;
+        var rows = engine.TensorStack(vectors.Select(vector => vector.AsTensor()).ToArray(), 0);
+        return rows.Shape[1] == width ? rows : engine.TensorSlice(rows, [0, 0], [vectors.Count, width]);
     }
 
     private static NeuralNetworkBase<T> Trainable(INeuralNetwork<T> network) => (NeuralNetworkBase<T>)network;
@@ -546,7 +535,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     // The Q-functions' target: 2018a r + γ(1 − d)V̄(s'); 2018b r + γ(1 − d)(min Q̄(s', a') − α log π(a'|s')), a' ~ π(s').
-    private Tensor<T> QTargets(Tensor<T> nextStates, double[] rewards, double[] notDone, double gamma, double alpha)
+    private Tensor<T> QTargets(Tensor<T> nextStates, Tensor<T> rewards, Tensor<T> notDone, T gamma, double alpha)
     {
         var engine = AiDotNetEngine.Current;
         int n = nextStates.Shape[0];
@@ -564,10 +553,8 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             var minQ = engine.Reshape(MinQ(RequireTargetCritic1().Predict(stateAction), RequireTargetCritic2().Predict(stateAction)), [n]);
             next = engine.TensorSubtract(minQ, engine.TensorMultiplyScalar(logProb, NumOps.FromDouble(alpha)));
         }
-        var values = next.ToVector();
-        var targets = new Tensor<T>([n, 1]);
-        for (int i = 0; i < n; i++)
-            targets[i, 0] = NumOps.FromDouble(rewards[i] + gamma * notDone[i] * NumOps.ToDouble(values[i]));
+        var targets = engine.Reshape(
+            engine.TensorAdd(rewards, engine.TensorMultiplyScalar(engine.TensorMultiply(notDone, next), gamma)), [n, 1]);
         return targets;
     }
 
@@ -651,7 +638,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     private void UpdateTemperature(Tensor<T> logProbs)
     {
         double targetEntropy = _sacOptions.TargetEntropyRatio * TradingOptions.ActionSize;
-        double mean = logProbs.ToArray().Average(v => NumOps.ToDouble(v)) + targetEntropy;
+        T mean = NumOps.Add(AiDotNetEngine.Current.TensorMean(logProbs), NumOps.FromDouble(targetEntropy));
         var temperature = RequireTemperature();
         bool logParameter = _sacOptions.TemperatureParameter == SacTemperatureParameter.LogAlpha;
         var unit = new Tensor<T>([1]);
@@ -664,7 +651,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             {
                 var engine = AiDotNetEngine.Current;
                 var alphaValue = logParameter ? engine.TensorExp(temperature) : temperature;
-                return engine.TensorMultiplyScalar(engine.ReduceSum(alphaValue, [0], keepDims: false), NumOps.FromDouble(-mean));
+                return engine.TensorMultiplyScalar(engine.ReduceSum(alphaValue, [0], keepDims: false), NumOps.Negate(mean));
             },
             ComputeLoss = (loss, _) => loss,
             Optimizer = RequireTemperatureOptimizer(),
@@ -706,8 +693,8 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         var metrics = base.GetTradingMetrics();
         metrics["Alpha"] = NumOps.FromDouble(CurrentAlpha);
         if (_logStd is not null)
-            metrics["PolicyStdDev"] = NumOps.FromDouble(_logStd.ToArray().Average(v => Math.Exp(MathPolyfill.Clamp(
-                NumOps.ToDouble(v), MinLogStandardDeviation, MaxLogStandardDeviation))));
+            metrics["PolicyStdDev"] = AiDotNetEngine.Current.TensorMean(AiDotNetEngine.Current.TensorExp(AiDotNetEngine.Current.TensorClamp(
+                _logStd, NumOps.FromDouble(MinLogStandardDeviation), NumOps.FromDouble(MaxLogStandardDeviation))));
         metrics["Updates"] = NumOps.FromDouble(_updateCount);
         return metrics;
     }

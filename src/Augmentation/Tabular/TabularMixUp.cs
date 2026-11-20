@@ -40,6 +40,11 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Each row i becomes lambda * x_i + (1 - lambda) * x_perm(i) with perm a uniform random permutation and
+    /// lambda ~ Beta(alpha, alpha), exactly as in Zhang et al.'s reference implementation (index = randperm(n)).
+    /// A row the permutation maps to itself stays unchanged; every row is used as a partner exactly once.
+    /// </remarks>
     protected override Matrix<T> ApplyAugmentation(Matrix<T> data, AugmentationContext<T> context)
     {
         // For single-sample augmentation, we need at least 2 samples
@@ -49,37 +54,18 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
             return data.Clone();
         }
 
-        var result = data.Clone();
-        int cols = data.Columns;
-
         // Sample lambda from Beta(alpha, alpha) distribution
-        double lambda = SampleLambda(context);
-        LastMixingLambda = NumOps.FromDouble(lambda);
+        T lambda = NumOps.FromDouble(SampleLambda(context));
+        LastMixingLambda = lambda;
 
         // Shuffle indices to pair samples for mixing
         var indices = Enumerable.Range(0, rows).ToArray();
         ShuffleArray(indices, context.Random);
 
-        for (int i = 0; i < rows; i++)
-        {
-            int j = indices[i];
-
-            // Avoid self-mixing by using neighbor instead - ensures consistent augmentation
-            if (i == j)
-            {
-                j = (i + 1) % rows;
-            }
-
-            for (int c = 0; c < cols; c++)
-            {
-                double val1 = NumOps.ToDouble(data[i, c]);
-                double val2 = NumOps.ToDouble(data[j, c]);
-                double mixed = lambda * val1 + (1 - lambda) * val2;
-                result[i, c] = NumOps.FromDouble(mixed);
-            }
-        }
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var source = Tensor<T>.FromMatrix(data);
+        var partners = engine.TensorIndexSelect(source, new Tensor<int>(indices, new[] { rows }), 0);
+        return Mix(source, partners, lambda).ToMatrix();
     }
 
     /// <summary>
@@ -91,7 +77,7 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
     /// <param name="labels2">Labels for the second data matrix.</param>
     /// <param name="context">The augmentation context.</param>
     /// <returns>Tuple of (mixed data, mixed labels, lambda value).</returns>
-    public (Matrix<T> Data, Vector<T> Labels, double Lambda) MixWithLabels(
+    public (Matrix<T> Data, Vector<T> Labels, T Lambda) MixWithLabels(
         Matrix<T> data1,
         Matrix<T> data2,
         Vector<T> labels1,
@@ -119,30 +105,28 @@ public class TabularMixUp<T> : TabularMixingAugmenterBase<T>
 
         // Use minimum row count for mixing
         int rows = Math.Min(rows1, rows2);
-        var mixedData = new Matrix<T>(rows, cols);
-        var mixedLabels = new Vector<T>(rows);
 
-        double lambda = SampleLambda(context);
-        LastMixingLambda = NumOps.FromDouble(lambda);
+        T lambda = NumOps.FromDouble(SampleLambda(context));
+        LastMixingLambda = lambda;
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                double val1 = NumOps.ToDouble(data1[i, c]);
-                double val2 = NumOps.ToDouble(data2[i, c]);
-                double mixed = lambda * val1 + (1 - lambda) * val2;
-                mixedData[i, c] = NumOps.FromDouble(mixed);
-            }
+        var engine = AiDotNetEngine.Current;
+        var first = engine.TensorSlice(Tensor<T>.FromMatrix(data1), new[] { 0, 0 }, new[] { rows, cols });
+        var second = engine.TensorSlice(Tensor<T>.FromMatrix(data2), new[] { 0, 0 }, new[] { rows, cols });
+        var mixedData = Mix(first, second, lambda).ToMatrix();
 
-            // Mix labels the same way
-            double label1 = NumOps.ToDouble(labels1[i]);
-            double label2 = NumOps.ToDouble(labels2[i]);
-            double mixedLabel = lambda * label1 + (1 - lambda) * label2;
-            mixedLabels[i] = NumOps.FromDouble(mixedLabel);
-        }
+        // Mix labels the same way
+        var mixedLabels = Mix(labels1.GetSubVector(0, rows).AsTensor(), labels2.GetSubVector(0, rows).AsTensor(), lambda).ToVector();
 
         return (mixedData, mixedLabels, lambda);
+    }
+
+    /// <summary>lambda * a + (1 - lambda) * b.</summary>
+    private static Tensor<T> Mix(Tensor<T> a, Tensor<T> b, T lambda)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(a, lambda),
+            engine.TensorMultiplyScalar(b, NumOps.Subtract(NumOps.One, lambda)));
     }
 
     private static void ShuffleArray(int[] array, Random random)

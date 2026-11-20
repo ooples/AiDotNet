@@ -114,27 +114,7 @@ public class NODEClassifier<T> : NODEBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var predictions = new Vector<int>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses);
     }
 
     /// <summary>
@@ -143,19 +123,8 @@ public class NODEClassifier<T> : NODEBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, targets, batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -163,12 +132,12 @@ public class NODEClassifier<T> : NODEBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> features, Vector<int> targets, T learningRate)
     {
-        var probabilities = PredictProbabilities(features);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(targets, batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(features), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>
@@ -177,14 +146,7 @@ public class NODEClassifier<T> : NODEBase<T>
     public T ComputeAccuracy(Tensor<T> features, Vector<int> targets)
     {
         var predictions = Predict(features);
-        int correct = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (predictions[i] == targets[i])
-                correct++;
-        }
-
+        int correct = TabularMetrics.CountMatches(predictions, targets);
         return NumOps.FromDouble((double)correct / predictions.Length);
     }
 

@@ -76,8 +76,8 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     public CompressedTree Compress(Dictionary<string, T[]> parameterDelta)
     {
         Guard.NotNull(parameterDelta);
-        var allSplits = new Dictionary<string, double[]>();
-        var allLeafValues = new Dictionary<string, double[]>();
+        var allSplits = new Dictionary<string, int[]>();
+        var allLeafValues = new Dictionary<string, T[]>();
         var allLeafCounts = new Dictionary<string, int[]>();
 
         foreach (var (layerName, delta) in parameterDelta)
@@ -88,66 +88,114 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
                     $"Layer '{layerName}' has null or empty parameter delta.", nameof(parameterDelta));
             }
 
-            var values = new double[delta.Length];
-            for (int i = 0; i < delta.Length; i++)
-            {
-                values[i] = NumOps.ToDouble(delta[i]);
-            }
-
             // Build binary partition tree over parameter indices.
-            var splits = new List<double>();
-            var leafVals = new List<double>();
-            var leafCounts = new List<int>();
-
-            BuildTree(values, 0, values.Length, 0, splits, leafVals, leafCounts);
-
-            allSplits[layerName] = splits.ToArray();
-            allLeafValues[layerName] = leafVals.ToArray();
-            allLeafCounts[layerName] = leafCounts.ToArray();
+            var (splits, leafValues, leafCounts) = BuildTree(delta);
+            allSplits[layerName] = splits;
+            allLeafValues[layerName] = leafValues;
+            allLeafCounts[layerName] = leafCounts;
         }
 
         return new CompressedTree(allSplits, allLeafValues, allLeafCounts);
     }
 
-    private void BuildTree(double[] values, int start, int end, int depth,
-        List<double> splits, List<double> leafValues, List<int> leafCounts)
+    /// <summary>
+    /// Builds the index-midpoint partition tree of one layer.
+    /// </summary>
+    /// <remarks>
+    /// <para>A node over [start, end) becomes a leaf at the maximum depth, when it holds at most
+    /// <c>MinLeafSize</c> parameters, or when the standard deviation of its values is below the pruning
+    /// threshold; otherwise it splits at the index midpoint (which preserves the parameter-to-position
+    /// mapping). Leaf means below the pruning threshold in magnitude are pruned to zero.</para>
+    /// <para>Because splits are positional, all nodes of one depth are evaluated together: one segment
+    /// index-add gives their sums, and a second over the squared deviations gives their variances.
+    /// Leaves are returned left to right and split points in pre-order.</para>
+    /// </remarks>
+    private (int[] Splits, T[] LeafValues, int[] LeafCounts) BuildTree(T[] delta)
     {
-        int count = end - start;
+        var values = new Tensor<T>(delta, new[] { delta.Length });
 
-        // Compute variance to decide whether to split further.
-        double sum = 0, sumSq = 0;
-        for (int i = start; i < end; i++)
+        // Half and BFloat16 build the tree in float, as the former double tree did: a segment sum stops growing
+        // at 2048 in Half, the sums of squared deviations overflow at 65504, and so does the count of a layer
+        // with more than 65504 parameters, which made every mean 0.
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
         {
-            sum += values[i];
-            sumSq += values[i] * values[i];
+            var (wideSplits, wideLeaves, wideCounts) = BuildTree(values.Cast<float>());
+            return (wideSplits, new Tensor<float>(wideLeaves, new[] { wideLeaves.Length }).Cast<T>().ToArray(), wideCounts);
         }
 
-        double mean = count > 0 ? sum / count : 0;
-        double variance = count > 1 ? (sumSq / count - mean * mean) : 0;
+        return BuildTree(values);
+    }
 
-        // Leaf conditions: max depth, min size, or variance below threshold.
-        if (depth >= _maxTreeDepth || count <= _minLeafSize || variance < _pruningThreshold * _pruningThreshold)
+    private (int[] Splits, TV[] LeafValues, int[] LeafCounts) BuildTree<TV>(Tensor<TV> values)
+    {
+        int n = values.Length;
+        var threshold = MathHelper.GetNumericOperations<TV>().FromDouble(_pruningThreshold);
+
+        var active = new List<(int Start, int End)> { (0, n) };
+        var splitNodes = new List<(int Start, int Depth, int Mid)>();
+        var leafNodes = new List<(int Start, int Count, int MeanIndex)>();
+        var depthMeans = new List<Tensor<TV>>();
+        int meanOffset = 0;
+
+        for (int depth = 0; active.Count > 0; depth++)
         {
-            // Prune near-zero leaves.
-            if (Math.Abs(mean) < _pruningThreshold)
+            int segments = active.Count;
+
+            // Element -> active segment; elements already in leaves go to the spare bucket `segments`.
+            var segmentOf = new int[n];
+            segmentOf.AsSpan().Fill(segments);
+            var counts = new int[segments];
+            for (int s = 0; s < segments; s++)
             {
-                mean = 0;
+                var (start, end) = active[s];
+                segmentOf.AsSpan(start, end - start).Fill(s);
+                counts[s] = end - start;
             }
 
-            leafValues.Add(mean);
-            leafCounts.Add(count);
-            return;
+            var segmentIndex = new Tensor<int>(segmentOf, new[] { n });
+            var countsT = new Tensor<int>(counts, new[] { segments }).Cast<TV>();
+
+            // Segment means, then the (two-pass) segment variances.
+            var sums = Engine.TensorIndexAdd(new Tensor<TV>(new[] { segments + 1 }), 0, segmentIndex, values);
+            var means = Engine.TensorDivide(Engine.TensorSlice(sums, new[] { 0 }, new[] { segments }), countsT);
+            var meanPerElement = Engine.TensorGather(
+                Engine.TensorConcatenate(new[] { means, new Tensor<TV>(new[] { 1 }) }, 0), segmentIndex, 0);
+            var squaredDeviation = Engine.TensorSquare(Engine.TensorSubtract(values, meanPerElement));
+            var squaredSums = Engine.TensorIndexAdd(new Tensor<TV>(new[] { segments + 1 }), 0, segmentIndex, squaredDeviation);
+            var stdDev = Engine.TensorSqrt(
+                Engine.TensorDivide(Engine.TensorSlice(squaredSums, new[] { 0 }, new[] { segments }), countsT));
+            var smallSpread = Engine.TensorLessThan(stdDev, threshold).Cast<int>().ToArray();
+
+            // Prune near-zero leaf means.
+            depthMeans.Add(Engine.TensorWhere(
+                Engine.TensorLessThan(Engine.TensorAbs(means), threshold), new Tensor<TV>(new[] { segments }), means));
+
+            var next = new List<(int Start, int End)>();
+            for (int s = 0; s < segments; s++)
+            {
+                var (start, end) = active[s];
+                int count = counts[s];
+                if (depth >= _maxTreeDepth || count <= _minLeafSize || smallSpread[s] != 0)
+                {
+                    leafNodes.Add((start, count, meanOffset + s));
+                    continue;
+                }
+
+                int mid = start + count / 2;
+                splitNodes.Add((start, depth, mid));
+                next.Add((start, mid));
+                next.Add((mid, end));
+            }
+
+            meanOffset += segments;
+            active = next;
         }
 
-        // Index-based split: always split at the midpoint of the index range.
-        // This preserves the parameter-to-position mapping. Value-based partitioning
-        // would rearrange elements in-place and destroy positional correspondence,
-        // causing decompression to assign leaf means to wrong parameter positions.
-        int mid = start + count / 2;
-        splits.Add(mid);
-
-        BuildTree(values, start, mid, depth + 1, splits, leafValues, leafCounts);
-        BuildTree(values, mid, end, depth + 1, splits, leafValues, leafCounts);
+        var orderedLeaves = leafNodes.OrderBy(l => l.Start).ToArray();
+        var meanIndex = new Tensor<int>(orderedLeaves.Select(l => l.MeanIndex).ToArray(), new[] { orderedLeaves.Length });
+        var leafValues = Engine.TensorGather(Engine.TensorConcatenate(depthMeans.ToArray(), 0), meanIndex, 0).ToArray();
+        var splits = splitNodes.OrderBy(s => s.Start).ThenBy(s => s.Depth).Select(s => s.Mid).ToArray();
+        return (splits, leafValues, orderedLeaves.Select(l => l.Count).ToArray());
     }
 
     /// <summary>
@@ -164,37 +212,32 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
         foreach (var (layerName, template) in templateDelta)
         {
-            var reconstructed = new T[template.Length];
-
+            int length = template.Length;
             if (tree.LeafValues.TryGetValue(layerName, out var leafVals) &&
                 tree.LeafCounts.TryGetValue(layerName, out var leafCounts))
             {
+                // Position -> leaf; positions past the last leaf read the extra zero entry.
+                int leaves = Math.Min(leafVals.Length, leafCounts.Length);
+                var leafOf = new int[length];
+                leafOf.AsSpan().Fill(leaves);
                 int paramIdx = 0;
-                for (int leaf = 0; leaf < leafVals.Length && paramIdx < template.Length; leaf++)
+                for (int leaf = 0; leaf < leaves && paramIdx < length; leaf++)
                 {
-                    int count = leafCounts[leaf];
-                    double val = leafVals[leaf];
-                    for (int i = 0; i < count && paramIdx < template.Length; i++)
-                    {
-                        reconstructed[paramIdx++] = NumOps.FromDouble(val);
-                    }
+                    int count = Math.Min(Math.Max(leafCounts[leaf], 0), length - paramIdx);
+                    leafOf.AsSpan(paramIdx, count).Fill(leaf);
+                    paramIdx += count;
                 }
 
-                // Fill remaining with zero.
-                for (; paramIdx < template.Length; paramIdx++)
-                {
-                    reconstructed[paramIdx] = NumOps.Zero;
-                }
+                var source = new T[leaves + 1];
+                Array.Copy(leafVals, source, leaves);
+                source[leaves] = NumOps.Zero;
+                result[layerName] = Engine.TensorGather(
+                    new Tensor<T>(source, new[] { leaves + 1 }), new Tensor<int>(leafOf, new[] { length }), 0).ToArray();
             }
             else
             {
-                for (int i = 0; i < template.Length; i++)
-                {
-                    reconstructed[i] = NumOps.Zero;
-                }
+                result[layerName] = new Tensor<T>(new[] { length }).ToArray();
             }
-
-            result[layerName] = reconstructed;
         }
 
         return result;
@@ -229,28 +272,23 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
         foreach (var (layerName, template) in templateDelta)
         {
-            var merged = new double[template.Length];
+            // Half and BFloat16 accumulate in double: with 4096 equal clients a Half sum stops at 0.5.
+            var merged = new Infrastructure.FederatedTensorMath<T>.Accumulator(template.Length);
 
             foreach (var (clientId, decompressed) in decompressedClients)
             {
-                double w = clientWeights.GetValueOrDefault(clientId, 1.0);
+                // Normalized before it touches T: a raw sample-count weight times a leaf value overflows Half.
+                double w = totalWeight > 0 ? clientWeights.GetValueOrDefault(clientId, 1.0) / totalWeight : 0.0;
 
                 if (decompressed.TryGetValue(layerName, out var layerVals))
                 {
-                    for (int i = 0; i < layerVals.Length; i++)
-                    {
-                        merged[i] += w * NumOps.ToDouble(layerVals[i]);
-                    }
+                    merged.Add(new Tensor<T>(layerVals, new[] { layerVals.Length }), w);
                 }
             }
 
-            var mergedT = new T[template.Length];
-            for (int i = 0; i < template.Length; i++)
-            {
-                mergedT[i] = NumOps.FromDouble(totalWeight > 0 ? merged[i] / totalWeight : 0);
-            }
-
-            result[layerName] = mergedT;
+            result[layerName] = totalWeight > 0
+                ? merged.ToTensor().ToArray()
+                : new Tensor<T>(new[] { template.Length }).ToArray();
         }
 
         return result;
@@ -304,8 +342,8 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     {
         /// <summary>Creates a new compressed tree.</summary>
         public CompressedTree(
-            Dictionary<string, double[]> splitPoints,
-            Dictionary<string, double[]> leafValues,
+            Dictionary<string, int[]> splitPoints,
+            Dictionary<string, T[]> leafValues,
             Dictionary<string, int[]> leafCounts)
         {
             Guard.NotNull(splitPoints);
@@ -316,11 +354,11 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             LeafCounts = leafCounts;
         }
 
-        /// <summary>Split thresholds per layer.</summary>
-        public Dictionary<string, double[]> SplitPoints { get; }
+        /// <summary>Split positions (parameter indices, in pre-order) per layer.</summary>
+        public Dictionary<string, int[]> SplitPoints { get; }
 
-        /// <summary>Leaf average values per layer.</summary>
-        public Dictionary<string, double[]> LeafValues { get; }
+        /// <summary>Leaf average values per layer, left to right.</summary>
+        public Dictionary<string, T[]> LeafValues { get; }
 
         /// <summary>Number of parameters per leaf per layer.</summary>
         public Dictionary<string, int[]> LeafCounts { get; }

@@ -95,16 +95,9 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
 
             var gp = globalParams[layerName];
             var lp = localParams.GetValueOrDefault(layerName, gp);
-            var result = new T[gp.Length];
-
-            for (int i = 0; i < gp.Length; i++)
-            {
-                result[i] = NumOps.Add(
-                    NumOps.Multiply(lp[i], gT),
-                    NumOps.Multiply(gp[i], oneMinusG));
-            }
-
-            mixed[layerName] = result;
+            mixed[layerName] = Engine.Add(
+                Engine.Multiply(Vector<T>.Wrap(lp, 0, gp.Length), gT),
+                Engine.Multiply(Vector<T>.Wrap(gp), oneMinusG)).ToArray();
         }
 
         return mixed;

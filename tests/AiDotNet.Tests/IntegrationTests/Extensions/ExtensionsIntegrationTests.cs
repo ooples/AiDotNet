@@ -232,6 +232,18 @@ public class ExtensionsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TensorExtensions_CreateXavierInitializedTensor_RejectsInvalidShapesBeforeAllocating()
+    {
+        await Task.Yield();
+
+        // (-2, -3) multiplied to a positive 6 and (65536, 65536) wrapped around int to 0, so both were accepted
+        // as element counts.
+        var random = RandomHelper.CreateSeededRandom(42);
+        Assert.Throws<ArgumentOutOfRangeException>(() => TensorExtensions.CreateXavierInitializedTensor<double>(new[] { -2, -3 }, 0.1, random));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TensorExtensions.CreateXavierInitializedTensor<double>(new[] { 65536, 65536 }, 0.1, random));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TensorExtensions_CreateXavierInitializedTensor_NotAllZero()
     {
         var random = RandomHelper.CreateSeededRandom(42);

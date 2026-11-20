@@ -39,8 +39,8 @@ public class TableTransformerOptions : DocumentNeuralNetworkOptions
     public int NumQueries { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of classes the detection head predicts. Default: 2 — background
-    /// and table.
+    /// Gets or sets the number of classes the detection head predicts. Default: 2 — table and, last,
+    /// DETR's "no object" class (the official weights use 3: table, table rotated, no object).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -51,8 +51,8 @@ public class TableTransformerOptions : DocumentNeuralNetworkOptions
     public int NumTableClasses { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of classes the structure head predicts. Default: 7 — background,
-    /// table, column, row, column header, projected row header and spanning cell.
+    /// Gets or sets the number of classes the structure head predicts. Default: 7 — table, column,
+    /// row, column header, projected row header, spanning cell and, last, DETR's "no object" class.
     /// </summary>
     /// <remarks>
     /// <para>

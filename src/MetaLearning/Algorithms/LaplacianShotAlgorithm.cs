@@ -162,23 +162,10 @@ public partial class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         var refinedWeights = LaplacianRefine(supportFeatures, queryFeatures);
 
         // Compute modulation factors from refined vs raw support features
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (supportFeatures != null && refinedWeights != null)
         {
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < Math.Min(supportFeatures.Length, refinedWeights.Length); i++)
-            {
-                double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                double adaptedVal = NumOps.ToDouble(refinedWeights[i]);
-                if (Math.Abs(rawVal) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                    count++;
-                }
-            }
-            if (count > 0)
-                modulationFactors = [sumRatio / count];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, refinedWeights, 0.5, 2.0, 1e-10);
         }
 
         return new LaplacianShotModel<T, TInput, TOutput>(MetaModel, currentParams, refinedWeights, modulationFactors);
@@ -217,91 +204,48 @@ public partial class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         const int MaxGraphNodes = 256;
         int numQuery = Math.Min(queryFeatures.Length, MaxGraphNodes);
         int k = Math.Min(_lapShotOptions.KNearestNeighbors, numQuery - 1);
-        double sigma = _lapShotOptions.KernelBandwidth;
-        double lambda = _lapShotOptions.LaplacianWeight;
+        var square = new[] { numQuery, numQuery };
 
-        // Build kNN graph (adjacency matrix as flat array for simplicity)
-        var weights = new double[numQuery, numQuery];
-        for (int i = 0; i < numQuery; i++)
-        {
-            // Compute distances to all other queries
-            var distances = new double[numQuery];
-            for (int j = 0; j < numQuery; j++)
-            {
-                double diff = NumOps.ToDouble(queryFeatures[i]) - NumOps.ToDouble(queryFeatures[j]);
-                distances[j] = diff * diff;
-            }
+        // Build kNN graph: squared distances between query nodes, each node linked to its k nearest other nodes
+        // (distance, then index), symmetrized, with weights exp(-d / sigma)
+        var queries = numQuery == queryFeatures.Length ? queryFeatures : queryFeatures.GetSubVector(0, numQuery);
+        var column = Engine.Reshape(Tensor<T>.FromVector(queries), new[] { numQuery, 1 });
+        var distances = Engine.TensorSquare(Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(column, square),
+            Engine.TensorBroadcastTo(Engine.Reshape(column, new[] { 1, numQuery }), square)));
+        var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            distances, NumOps.FromDouble(-1.0 / Math.Max(_lapShotOptions.KernelBandwidth, 1e-10))));
+        var weights = Engine.TensorMultiply(NearestNeighborGraph.SymmetricNearestMask(Engine, distances, k), kernel);
 
-            // Find k nearest neighbors (clone distances to avoid modifying edge weight source)
-            var sortedDistances = (double[])distances.Clone();
-            var neighborIndices = new int[numQuery];
-            for (int j = 0; j < numQuery; j++) neighborIndices[j] = j;
-            Array.Sort(sortedDistances, neighborIndices);
+        // Compute degree and Laplacian L = D - W
+        var degree = Engine.ReduceSum(weights, new[] { 1 }, false).ToVector();
 
-            // Set edge weights for k nearest (skip self at index 0)
-            for (int n = 1; n <= k && n < numQuery; n++)
-            {
-                int j = neighborIndices[n];
-                double w = Math.Exp(-sortedDistances[n] / Math.Max(sigma, 1e-10));
-                weights[i, j] = w;
-                weights[j, i] = w; // Symmetric
-            }
-        }
+        // Initial logits from support-query similarity: q * sum(support), the sum accumulated in double as the
+        // scalar loop did (a Half running sum over the support features stops growing past 2048)
+        var logits = Engine.Multiply(queries, NumOps.FromDouble(WideReduction.Sum(Engine, supportFeatures)));
 
-        // Compute degree and Laplacian
-        var degree = new double[numQuery];
-        for (int i = 0; i < numQuery; i++)
-        {
-            for (int j = 0; j < numQuery; j++)
-            {
-                degree[i] += weights[i, j];
-            }
-        }
-
-        // Initial logits from support-query similarity
-        var logits = new double[numQuery];
-        for (int q = 0; q < numQuery; q++)
-        {
-            double sim = 0;
-            for (int s = 0; s < supportFeatures.Length; s++)
-            {
-                sim += NumOps.ToDouble(NumOps.Multiply(queryFeatures[q], supportFeatures[s % supportFeatures.Length]));
-            }
-            logits[q] = sim;
-        }
-
-        // Iterative Laplacian smoothing
-        var refined = (double[])logits.Clone();
-        double alpha = _lapShotOptions.StepSize;
-
+        // Iterative Laplacian smoothing: y <- y - alpha * (lambda * (D y - W y) + (y - logits))
+        var refined = logits.Clone();
+        T alpha = NumOps.FromDouble(_lapShotOptions.StepSize);
+        T lambda = NumOps.FromDouble(_lapShotOptions.LaplacianWeight);
         for (int iter = 0; iter < _lapShotOptions.PropagationIterations; iter++)
         {
-            var next = new double[numQuery];
-            for (int i = 0; i < numQuery; i++)
-            {
-                // Laplacian term: L @ Y = D @ Y - W @ Y
-                double lapTerm = degree[i] * refined[i];
-                for (int j = 0; j < numQuery; j++)
-                {
-                    lapTerm -= weights[i, j] * refined[j];
-                }
-
-                // Data fidelity term
-                double fidelityTerm = refined[i] - logits[i];
-
-                // Update
-                next[i] = refined[i] - alpha * (lambda * lapTerm + fidelityTerm);
-            }
-            refined = next;
+            var neighbors = Engine.Reshape(
+                Engine.TensorMatMul(weights, Engine.Reshape(Tensor<T>.FromVector(refined), new[] { numQuery, 1 })),
+                new[] { numQuery }).ToVector();
+            var lapTerm = Engine.Subtract(Engine.Multiply(degree, refined), neighbors);
+            var step = Engine.Add(Engine.Multiply(lapTerm, lambda), Engine.Subtract(refined, logits));
+            refined = Engine.Subtract(refined, Engine.Multiply(step, alpha));
         }
 
-        // Convert back to Vector<T>
-        var result = new Vector<T>(supportFeatures.Length);
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            double scale = i < numQuery ? 1.0 / (1.0 + Math.Exp(-refined[i])) : 0.5;
-            result[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(scale));
-        }
+        // Convert back: support feature i scaled by sigmoid(refined[i]), or 0.5 past the query nodes
+        int length = supportFeatures.Length;
+        int scored = Math.Min(length, numQuery);
+        var scores = Engine.Sigmoid(scored == numQuery ? refined : refined.GetSubVector(0, scored));
+        var scale = scored == length
+            ? scores
+            : Vector<T>.Concatenate(scores, Engine.Fill(length - scored, NumOps.FromDouble(0.5)));
+        var result = Engine.Multiply(supportFeatures, scale);
 
         return result;
     }
@@ -318,23 +262,24 @@ public partial class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 /// </remarks>
 internal class LaplacianShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedWeights;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _refinedWeights;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public LaplacianShotModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
-        Vector<T>? refinedWeights, double[]? modulationFactors)
+        Vector<T>? refinedWeights, Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -349,10 +294,7 @@ internal class LaplacianShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

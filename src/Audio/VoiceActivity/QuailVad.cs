@@ -174,9 +174,10 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
 
         int speechStart = -1;
         int silenceCount = 0;
+        int[] speechMask = VadEngineOps.SpeechMask(probs, Threshold);
         for (int i = 0; i < probs.Length; i++)
         {
-            bool isSpeech = NumOps.ToDouble(probs[i]) >= Threshold;
+            bool isSpeech = speechMask[i] != 0;
             if (isSpeech)
             {
                 if (speechStart < 0) speechStart = i;
@@ -213,10 +214,7 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
         var probs = new T[numFrames];
         for (int f = 0; f < numFrames; f++)
         {
-            var frame = new Tensor<T>([frameSamples]);
-            int start = f * frameSamples;
-            for (int i = 0; i < frameSamples && start + i < audio.Length; i++)
-                frame[i] = audio[start + i];
+            var frame = VadEngineOps.Frame(audio, f * frameSamples, frameSamples);
             probs[f] = GetSpeechProbability(frame);
         }
         return probs;
@@ -227,12 +225,11 @@ public partial class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDete
     {
         ThrowIfDisposed();
         _streamingBuffer ??= [];
-        for (int i = 0; i < audioChunk.Length; i++) _streamingBuffer.Add(audioChunk[i]);
+        _streamingBuffer.AddRange(audioChunk.ToArray());
         int frameSamples = FrameSize;
         if (_streamingBuffer.Count < frameSamples)
             return (false, NumOps.Zero);
-        var frame = new Tensor<T>([frameSamples]);
-        for (int i = 0; i < frameSamples; i++) frame[i] = _streamingBuffer[i];
+        var frame = new Tensor<T>(_streamingBuffer.GetRange(0, frameSamples).ToArray(), [frameSamples]);
         _streamingBuffer.RemoveRange(0, frameSamples);
         var prob = GetSpeechProbability(frame);
         bool isSpeech = NumOps.ToDouble(prob) >= Threshold;

@@ -70,8 +70,7 @@ public partial class LFTAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase
         : base(encoder)
     {
         if (metricHead is null) throw new ArgumentNullException(nameof(metricHead));
-        _metricHead = new Vector<T>(metricHead.Length);
-        for (int i = 0; i < metricHead.Length; i++) _metricHead[i] = metricHead[i];
+        _metricHead = metricHead.Clone();
         _featureDimension = featureDimension;
         _outputDimension = outputDimension;
     }
@@ -84,7 +83,7 @@ public partial class LFTAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase
     public override TOutput Predict(TInput input)
     {
         int batch = MbPAConversions<T>.GetBatchSize(input);
-        var scores = new Tensor<T>(new[] { batch, _outputDimension });
+        var rows = new List<Vector<T>>(batch);
         for (int row = 0; row < batch; row++)
         {
             var single = MbPAConversions<T>.SliceExample(input, row);
@@ -92,9 +91,12 @@ public partial class LFTAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase
                 ExtractFeaturesFromBaseModel(single, _featureDimension), _featureDimension);
             var probabilities = MbPAOutputNetwork<T>.Forward(
                 _metricHead, features, _featureDimension, _outputDimension, MbPAOutputDistribution.Categorical);
-            for (int c = 0; c < _outputDimension; c++) scores[row * _outputDimension + c] = probabilities[c];
+            rows.Add(probabilities.Length == _outputDimension
+                ? probabilities
+                : probabilities.GetSubVector(0, _outputDimension));
         }
 
+        var scores = Tensor<T>.FromVector(Vector<T>.Concatenate(rows), new[] { batch, _outputDimension });
         return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
     }
 

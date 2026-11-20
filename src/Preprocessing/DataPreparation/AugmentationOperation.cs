@@ -128,11 +128,13 @@ public class AugmentationOperation<T> : IRowOperation<T>
         }
 
         // Extract labels from tensor (assuming 1D or taking first element)
-        var vectorY = new Vector<T>(nSamples);
-        for (int i = 0; i < nSamples; i++)
-        {
-            vectorY[i] = y.Rank == 1 ? y[i] : y[new int[y.Rank].Select((_, idx) => idx == 0 ? i : 0).ToArray()];
-        }
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int labelWidth = nSamples == 0 ? 1 : y.Length / nSamples;
+        var vectorY = y.Rank == 1
+            ? y.ToVector()
+            : engine.Reshape(
+                engine.TensorSlice(engine.Reshape(y, new[] { nSamples, labelWidth }), new[] { 0, 0 }, new[] { nSamples, 1 }),
+                new[] { nSamples }).ToVector();
 
         // Apply augmentation
         var context = new Augmentation.AugmentationContext<T>(isTraining: true);
@@ -171,21 +173,15 @@ public class AugmentationOperation<T> : IRowOperation<T>
         // Convert vector back to tensor
         int[] newYShape = (int[])y._shape;
         newYShape[0] = newSamples;
-        var augmentedY = new Tensor<T>(newYShape);
-
-        for (int i = 0; i < newSamples; i++)
-        {
-            if (y.Rank == 1)
-            {
-                augmentedY[i] = augmentedVectorY[i];
-            }
-            else
-            {
-                int[] indices = new int[y.Rank];
-                indices[0] = i;
-                augmentedY[indices] = augmentedVectorY[i];
-            }
-        }
+        // Each sample's label goes to its first label element; any other label elements are zero
+        var labelColumn = engine.Reshape(Tensor<T>.FromVector(augmentedVectorY), new[] { newSamples, 1 });
+        var augmentedY = y.Rank == 1
+            ? Tensor<T>.FromVector(augmentedVectorY)
+            : engine.Reshape(
+                labelWidth == 1
+                    ? labelColumn
+                    : engine.TensorConcatenate(new[] { labelColumn, new Tensor<T>(new[] { newSamples, labelWidth - 1 }) }, 1),
+                newYShape);
 
         _isFitted = true;
         return (augmentedX, augmentedY);
@@ -289,53 +285,44 @@ public class AugmentationOperation<T> : IRowOperation<T>
             return originalY;
         }
 
-        // Create new label vector
-        var newY = new T[augmentedRows];
-
-        // Copy original labels
-        for (int i = 0; i < originalRows; i++)
-        {
-            newY[i] = originalY[i];
-        }
-
         // For new samples, we need to determine their labels
         // SMOTE generates samples for minority class, so we need to identify which class
         // This is a simplified approach - in practice, the augmenter should provide this info
+        T newLabel;
         if (_targetLabels != null && _targetLabels.Length > 0)
         {
             // Use the first target label for all new samples
-            for (int i = originalRows; i < augmentedRows; i++)
-            {
-                newY[i] = _targetLabels[0];
-            }
+            newLabel = _targetLabels[0];
         }
         else
         {
             // Find minority class (most common use case for augmentation)
-            var minorityLabel = FindMinorityClass(originalY);
-            for (int i = originalRows; i < augmentedRows; i++)
-            {
-                newY[i] = minorityLabel;
-            }
+            newLabel = FindMinorityClass(originalY);
         }
 
-        return new Vector<T>(newY);
+        // Original labels followed by the new samples' label
+        return AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorConcatenate(new[]
+        {
+            Tensor<T>.FromVector(originalY),
+            PreprocessingTensorOps.Filled(new[] { newSamples }, newLabel),
+        }, 0).ToVector();
     }
 
     private T FindMinorityClass(Vector<T> y)
     {
         var counts = new Dictionary<double, (T label, int count)>();
 
-        for (int i = 0; i < y.Length; i++)
+        var labels = y.ToArray();
+        for (int i = 0; i < labels.Length; i++)
         {
-            double key = Convert.ToDouble(y[i]);
+            double key = Convert.ToDouble(labels[i]);
             if (counts.TryGetValue(key, out var existing))
             {
                 counts[key] = (existing.label, existing.count + 1);
             }
             else
             {
-                counts[key] = (y[i], 1);
+                counts[key] = (labels[i], 1);
             }
         }
 

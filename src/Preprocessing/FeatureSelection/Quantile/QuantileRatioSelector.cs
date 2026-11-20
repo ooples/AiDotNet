@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Quantile;
 
@@ -27,7 +28,7 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _upperQuantile;
     private readonly double _lowerQuantile;
 
-    private double[]? _ratioValues;
+    private Vector<T>? _ratioValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +36,7 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double UpperQuantile => _upperQuantile;
     public double LowerQuantile => _lowerQuantile;
-    public double[]? RatioValues => _ratioValues;
+    public Vector<T>? RatioValues => _ratioValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,66 +67,26 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var upper = FilterStatisticTensorOps.ColumnQuantile(x, _upperQuantile);
+        var lower = FilterStatisticTensorOps.ColumnQuantile(x, _lowerQuantile);
 
-        _ratioValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var sorted = col.OrderBy(v => v).ToArray();
-            double upper = GetQuantile(sorted, _upperQuantile);
-            double lower = GetQuantile(sorted, _lowerQuantile);
-
-            // Handle potential division issues
-            if (Math.Abs(lower) < 1e-10)
-            {
-                // If lower is near zero, use difference instead of ratio
-                _ratioValues[j] = upper - lower;
-            }
-            else if (lower < 0 && upper > 0)
-            {
-                // Mixed signs - use absolute ratio
-                _ratioValues[j] = Math.Abs(upper) / Math.Abs(lower);
-            }
-            else
-            {
-                // Normal ratio
-                _ratioValues[j] = Math.Abs(upper / lower);
-            }
-        }
+        // |upper / lower| (mixed signs give the same |upper| / |lower|); a lower quantile near zero
+        // (|lower| < 1e-10) falls back to the difference upper - lower.
+        var absLower = engine.TensorAbs(lower);
+        var nearZero = engine.TensorLessThan(absLower, NumOps.FromDouble(1e-10));
+        var safeLower = engine.TensorWhere(nearZero, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), absLower);
+        var ratio = engine.TensorDivide(engine.TensorAbs(upper), safeLower);
+        var ratios = engine.TensorWhere(nearZero, engine.TensorSubtract(upper, lower), ratio);
+        _ratioValues = ratios.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _ratioValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ratios, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double GetQuantile(double[] sortedData, double quantile)
-    {
-        int n = sortedData.Length;
-        double index = quantile * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-            return sortedData[lower];
-
-        double fraction = index - lower;
-        return sortedData[lower] * (1 - fraction) + sortedData[upper] * fraction;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -140,15 +101,7 @@ public class QuantileRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantileRatioSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

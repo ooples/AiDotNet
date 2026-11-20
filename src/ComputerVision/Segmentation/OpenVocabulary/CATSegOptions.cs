@@ -8,7 +8,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CATSeg model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class CATSegOptions : SegmentationModelOptions
+public class CATSegOptions : TextQueriedSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public CATSegOptions()
@@ -24,6 +24,8 @@ public class CATSegOptions : SegmentationModelOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
+
+        CopyTextQuerySettings(other);
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
@@ -60,5 +62,9 @@ public class CATSegOptions : SegmentationModelOptions
     /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
     /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        ValidateSegmentationCore();
+        ValidateTextQuerySettings();
+    }
 }

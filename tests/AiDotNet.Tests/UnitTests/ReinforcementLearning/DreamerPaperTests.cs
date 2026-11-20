@@ -120,6 +120,35 @@ public class DreamerPaperTests
     private const int ActorNetwork = 9;
     private const int ValueNetwork = 10;
 
+    // Hafner et al. 2020, Section 3 and the authors' code: the actor maximises sum_k w_k V_lambda(s_k) with
+    // w_k = stop_gradient(prod_{j<k} discount_j). The weights are constants of the actor objective; a weight that
+    // carried the discounts' gradient would let the actor raise its objective through the continue model.
+    [Fact]
+    public void CumulativeDiscountWeights_AreDiscountProductsWithTheirGradientStopped()
+    {
+        using var agent = new DreamerAgent<double>(SmallOptions());
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var d0 = new Tensor<double>(new[] { 0.9, 0.5 }, new[] { 2, 1 });
+        var d1 = new Tensor<double>(new[] { 0.8, 0.25 }, new[] { 2, 1 });
+        var d2 = new Tensor<double>(new[] { 0.7, 0.6 }, new[] { 2, 1 });
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+        var weights = agent.CumulativeDiscountWeights(new[] { d0, d1, d2 });
+        var loss = engine.ReduceSum(weights[2], new[] { 0, 1 }, keepDims: false);
+        var gradients = tape.ComputeGradients(loss, new[] { d0, d1 });
+
+        // w_0 = 1, w_1 = d_0, w_2 = d_0 d_1, per row.
+        Assert.Equal(new[] { 1.0, 1.0 }, weights[0].ToVector().ToArray());
+        Assert.Equal(new[] { 0.9, 0.5 }, weights[1].ToVector().ToArray());
+        Assert.Equal(0.72, weights[2][0], 12);
+        Assert.Equal(0.125, weights[2][1], 12);
+        foreach (var gradient in gradients)
+        {
+            if (!ReferenceEquals(gradient.Key, d0) && !ReferenceEquals(gradient.Key, d1)) continue;
+            Assert.All(gradient.Value?.ToVector().ToArray() ?? Array.Empty<double>(), g => Assert.Equal(0.0, g));
+        }
+    }
+
     [Fact]
     public void GaussianKl_MatchesTheClosedFormForDiagonalGaussians()
     {

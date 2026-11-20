@@ -82,27 +82,18 @@ public class Binarizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
+            var column = PreprocessingTensorOps.Column(data, j);
 
-                if (processSet.Contains(j))
-                {
-                    // Values > threshold → 1, otherwise → 0
-                    value = NumOps.Compare(value, _threshold) > 0 ? NumOps.One : NumOps.Zero;
-                }
-
-                result[i, j] = value;
-            }
+            // Values > threshold -> 1, otherwise -> 0
+            columns.Add(processSet.Contains(j) ? Engine.TensorGreaterThan(column, _threshold) : column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>

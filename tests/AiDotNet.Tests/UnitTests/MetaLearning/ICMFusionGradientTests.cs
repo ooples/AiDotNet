@@ -58,22 +58,22 @@ public class ICMFusionGradientTests
         return learner;
     }
 
-    private static double[] Noise(int seed, int length)
+    private static Vector<double> Noise(int seed, int length)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
-        return Enumerable.Range(0, length).Select(_ => rng.NextDouble() * 2.0 - 1.0).ToArray();
+        return new Vector<double>(Enumerable.Range(0, length).Select(_ => rng.NextDouble() * 2.0 - 1.0).ToArray());
     }
 
     private static void AssertMatchesCentralDifferences(
         ICMFusionAlgorithm<double, Matrix<double>, Vector<double>> learner,
         MetaLearningTask<double, Matrix<double>, Vector<double>> task,
-        double[] firstNoise, double[] secondNoise,
-        double[] encoderGradient, double[] decoderGradient, double[]? frozenAdapted)
+        Vector<double> firstNoise, Vector<double> secondNoise,
+        Vector<double> encoderGradient, Vector<double> decoderGradient, Vector<double>? frozenAdapted)
     {
         var encoder = learner.EncoderParametersForTesting;
         var decoder = learner.DecoderParametersForTesting;
 
-        void Check(double[] parameters, double[] analytic, string name)
+        void Check(Vector<double> parameters, Vector<double> analytic, string name)
         {
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -156,6 +156,6 @@ public class ICMFusionGradientTests
         learner.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { Task(1), Task(2) }));
 
         Assert.NotEqual(pretrained.ToArray(), learner.GetMetaModel().GetParameters().ToArray());
-        Assert.Equal(pretrained.ToArray(), learner.PretrainedParametersForTesting());
+        Assert.Equal(pretrained.ToArray(), learner.PretrainedParametersForTesting().ToArray());
     }
 }

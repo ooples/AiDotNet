@@ -89,7 +89,9 @@ public partial class MegaTTS3<T>
             mean = Engine.TensorSlice(mean, new[] { 0, 0, 0 }, new[] { 1, frames, o.LatentChannels });
             var std = Engine.TensorExp(Engine.TensorMultiplyScalar(
                 Engine.TensorSlice(logVariance, new[] { 0, 0, 0 }, new[] { 1, frames, o.LatentChannels }), NumOps.FromDouble(0.5)));
-            var example = new TrainingExample(phones, tones, mel2ph, mean, std);
+            var example = new TrainingExample(phones, tones, mel2ph,
+                new Tensor<T>(mean.Shape.ToArray(), mean.ToVector()),
+                new Tensor<T>(std.Shape.ToArray(), std.ToVector()));
             if (_examples.Count > 64) _examples.Clear();
             return _examples[audio] = example;
         }

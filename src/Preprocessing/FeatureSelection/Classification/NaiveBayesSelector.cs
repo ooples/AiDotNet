@@ -25,13 +25,13 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _discriminativePower;
+    private Vector<T>? _discriminativePower;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DiscriminativePower => _discriminativePower;
+    public Vector<T>? DiscriminativePower => _discriminativePower;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,77 +65,87 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _discriminativePower = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute class-conditional means and variances
-            var classMeans = new Dictionary<int, double>();
-            var classVars = new Dictionary<int, double>();
-
-            foreach (var c in classes)
-            {
-                var indices = classIndices[c];
-                double mean = indices.Average(i => X[i, j]);
-                double variance = indices.Average(i => (X[i, j] - mean) * (X[i, j] - mean));
-                classMeans[c] = mean;
-                classVars[c] = Math.Max(variance, 1e-10);
-            }
-
-            // Compute discriminative power as KL divergence between class distributions
-            double totalDivergence = 0;
-            int pairCount = 0;
-
-            for (int c1Idx = 0; c1Idx < classes.Count; c1Idx++)
-            {
-                for (int c2Idx = c1Idx + 1; c2Idx < classes.Count; c2Idx++)
-                {
-                    int c1 = classes[c1Idx];
-                    int c2 = classes[c2Idx];
-
-                    double kl = ComputeGaussianKL(
-                        classMeans[c1], classVars[c1],
-                        classMeans[c2], classVars[c2]);
-                    totalDivergence += kl;
-                    pairCount++;
-                }
-            }
-
-            _discriminativePower[j] = pairCount > 0 ? totalDivergence / pairCount : 0;
-        }
-
+        // Half and BFloat16 are scored in float and the scores cast back once: a squared mean difference of 300
+        // (90000) and the sum of the pair divergences pass Half's 65504 though their average need not
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _discriminativePower[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var widePower = PairwiseKlPower(X.Cast<float>(), classIndex, k);
+            _discriminativePower = widePower.Cast<T>().ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(widePower, numToSelect);
+        }
+        else
+        {
+            var power = PairwiseKlPower(X, classIndex, k);
+            _discriminativePower = power.ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(power, numToSelect);
+        }
 
         IsFitted = true;
     }
 
-    private double ComputeGaussianKL(double mean1, double var1, double mean2, double var2)
+    /// <summary>
+    /// Discriminative power of every column of <paramref name="X"/> ([n, p]): the mean symmetric Gaussian KL
+    /// divergence over every unordered pair of the <paramref name="k"/> classes (0 with fewer than two classes).
+    /// </summary>
+    private static Tensor<TC> PairwiseKlPower<TC>(Tensor<TC> X, int[] classIndex, int k)
     {
-        // Symmetric KL divergence between two Gaussians
-        double kl12 = 0.5 * (Math.Log(var2 / var1) + var1 / var2 +
-            (mean1 - mean2) * (mean1 - mean2) / var2 - 1);
-        double kl21 = 0.5 * (Math.Log(var1 / var2) + var2 / var1 +
-            (mean2 - mean1) * (mean2 - mean1) / var1 - 1);
-        return (kl12 + kl21) / 2;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int p = X.Shape[1];
+        var power = new Tensor<TC>(new[] { p });
+        if (k < 2)
+            return power;
+
+        // Class-conditional means and (population) variances, floored at 1e-10.
+        var Y = PreprocessingTensorOps.ClassOneHot<TC>(classIndex, k);
+        // Per-class means of the values and of the squared deviations through GroupMeans, which counts and sums
+        // in double: a 0/1 count in Half stops at 2048
+        var means = FeatureScoringTensorOps.GroupMeans(Y, X, out _);
+        var centered = engine.TensorSubtract(X, engine.TensorMatMul(Y, means));
+        var variances = engine.TensorMax(
+            FeatureScoringTensorOps.GroupMeans(Y, engine.TensorSquare(centered), out _),
+            PreprocessingTensorOps.Tolerance<TC>(1e-10));
+
+        // Class c1 against every later class c2 > c1 at a time ([k - c1 - 1, p]), accumulated into one [p] sum: all
+        // ordered pairs at once is a [k, k, p] tensor per intermediate (1.6 GB of doubles for 200 classes of 5000
+        // features)
+        for (int c1 = 0; c1 < k - 1; c1++)
+        {
+            int rest = k - c1 - 1;
+            var restShape = new[] { rest, p };
+            var mean1 = engine.TensorBroadcastTo(engine.TensorSlice(means, new[] { c1, 0 }, new[] { 1, p }), restShape);
+            var var1 = engine.TensorBroadcastTo(engine.TensorSlice(variances, new[] { c1, 0 }, new[] { 1, p }), restShape);
+            var mean2 = engine.TensorSlice(means, new[] { c1 + 1, 0 }, restShape);
+            var var2 = engine.TensorSlice(variances, new[] { c1 + 1, 0 }, restShape);
+            power = engine.TensorAdd(power,
+                engine.ReduceSum(ComputeGaussianKL(mean1, var1, mean2, var2), new[] { 0 }, false));
+        }
+
+        // The mean over the k (k - 1) / 2 unordered pairs, divided by k and then (k - 1) / 2 so the pair count never
+        // exists in TC
+        var ops = MathHelper.GetNumericOperations<TC>();
+        return engine.TensorDivideScalar(
+            engine.TensorDivideScalar(power, ops.FromDouble(k)), ops.FromDouble((k - 1) / 2.0));
+    }
+
+    private static Tensor<TC> ComputeGaussianKL<TC>(Tensor<TC> mean1, Tensor<TC> var1, Tensor<TC> mean2, Tensor<TC> var2)
+    {
+        // Symmetric KL divergence between two Gaussians, element-wise
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        TC half = ops.FromDouble(0.5);
+        var meanDiffSq = engine.TensorSquare(engine.TensorSubtract(mean1, mean2));
+        var kl12 = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorAdd(engine.TensorAdd(
+            engine.TensorLog(engine.TensorDivide(var2, var1)), engine.TensorDivide(var1, var2)),
+            engine.TensorDivide(meanDiffSq, var2)), ops.One), half);
+        var kl21 = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorAdd(engine.TensorAdd(
+            engine.TensorLog(engine.TensorDivide(var1, var2)), engine.TensorDivide(var2, var1)),
+            engine.TensorDivide(meanDiffSq, var1)), ops.One), half);
+        return engine.TensorMultiplyScalar(engine.TensorAdd(kl12, kl21), half);
     }
 
     /// <inheritdoc />
@@ -151,15 +161,7 @@ public class NaiveBayesSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("NaiveBayesSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

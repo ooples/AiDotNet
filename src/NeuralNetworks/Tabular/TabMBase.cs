@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Interfaces;
+using System.Linq;
+using AiDotNet.Helpers;
 using AiDotNet.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
@@ -208,21 +213,9 @@ public abstract partial class TabMBase<T>
         {
             // Embed each feature: [batch, features] -> [batch, features * embed_dim]
             int embedDim = Options.FeatureEmbeddingDimension;
-            x = new Tensor<T>([batchSize, NumFeatures * embedDim]);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    var featureVal = features[b * NumFeatures + f];
-                    for (int e = 0; e < embedDim; e++)
-                    {
-                        var embWeight = _featureEmbeddings[f * embedDim + e];
-                        x[b * NumFeatures * embedDim + f * embedDim + e] =
-                            NumOps.Multiply(featureVal, embWeight);
-                    }
-                }
-            }
+            var values = TabularMetrics.Flat(features, batchSize * NumFeatures).Reshape(batchSize, NumFeatures, 1);
+            x = Engine.TensorMultiply(values, _featureEmbeddings.Reshape(1, NumFeatures, embedDim))
+                .Reshape(batchSize, NumFeatures * embedDim);
         }
         else
         {
@@ -235,14 +228,9 @@ public abstract partial class TabMBase<T>
             _hiddenOutputsCache.Add(x);
             var output = layer.Forward(x);
 
-            // Apply ReLU activation (inline for efficiency)
-            for (int i = 0; i < output.Length; i++)
-            {
-                if (NumOps.Compare(output[i], NumOps.Zero) < 0)
-                {
-                    output[i] = NumOps.Zero;
-                }
-            }
+            // ReLU as the scalar test wrote it: anything that compares below zero (negative or NaN) becomes 0
+            var zeros = Engine.TensorZerosLike(output);
+            output = Engine.TensorWhere(Engine.TensorGreaterEqual(output, zeros), output, zeros);
 
             x = output;
         }
@@ -261,21 +249,10 @@ public abstract partial class TabMBase<T>
         int expandedBatchSize = memberOutputs.Shape[0];
         int batchSize = expandedBatchSize / Options.NumEnsembleMembers;
 
-        var averaged = new Tensor<T>([batchSize, outputDim]);
         var scale = NumOps.FromDouble(1.0 / Options.NumEnsembleMembers);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < outputDim; j++)
-            {
-                var sum = NumOps.Zero;
-                for (int m = 0; m < Options.NumEnsembleMembers; m++)
-                {
-                    sum = NumOps.Add(sum, memberOutputs[(b * Options.NumEnsembleMembers + m) * outputDim + j]);
-                }
-                averaged[b * outputDim + j] = NumOps.Multiply(sum, scale);
-            }
-        }
+        var members = TabularMetrics.Flat(memberOutputs, batchSize * Options.NumEnsembleMembers * outputDim)
+            .Reshape(batchSize, Options.NumEnsembleMembers, outputDim);
+        var averaged = TensorTapeOps.TapeMultiplyScalar(Engine, Engine.ReduceSum(members, new[] { 1 }, false), scale);
 
         return averaged;
     }
@@ -290,8 +267,7 @@ public abstract partial class TabMBase<T>
         {
             var updated = Engine.TensorSubtract(_featureEmbeddings,
                 Engine.TensorMultiplyScalar(_featureEmbeddingsGrad, learningRate));
-            for (int i = 0; i < _featureEmbeddings.Length; i++)
-                _featureEmbeddings[i] = updated[i];
+            updated.AsSpan().CopyTo(_featureEmbeddings.AsWritableSpan());
         }
 
         // Update hidden layers
@@ -306,39 +282,28 @@ public abstract partial class TabMBase<T>
     /// </summary>
     public virtual Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
+        var parts = new List<Vector<T>>();
 
         // Feature embeddings
         if (_featureEmbeddings != null)
         {
-            for (int i = 0; i < _featureEmbeddings.Length; i++)
-            {
-                allParams.Add(_featureEmbeddings[i]);
-            }
+            parts.Add(_featureEmbeddings.ToVector());
         }
 
         // Hidden layers
         foreach (var layer in _hiddenLayers)
         {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
+            parts.Add(layer.GetParameters());
         }
-
 
         // Subclass head, last, in the same position ParameterCount puts it.
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            var extraParams = extra.GetParameters();
-            for (int i = 0; i < extraParams.Length; i++)
-            {
-                allParams.Add(extraParams[i]);
-            }
+            parts.Add(extra.GetParameters());
         }
-        return new Vector<T>([.. allParams]);
+
+        return TabularMetrics.ConcatenateVectors(parts);
     }
 
     /// <summary>
@@ -351,21 +316,16 @@ public abstract partial class TabMBase<T>
         // Feature embeddings
         if (_featureEmbeddings != null)
         {
-            for (int i = 0; i < _featureEmbeddings.Length; i++)
-            {
-                _featureEmbeddings[i] = parameters[offset++];
-            }
+            parameters.AsSpan().Slice(offset, _featureEmbeddings.Length).CopyTo(_featureEmbeddings.AsWritableSpan());
+            offset += _featureEmbeddings.Length;
         }
 
         // Hidden layers
         foreach (var layer in _hiddenLayers)
         {
             int layerCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerCount);
-            for (int i = 0; i < layerCount; i++)
-            {
-                layerParams[i] = parameters[offset++];
-            }
+            var layerParams = parameters.GetSubVector(offset, layerCount);
+            offset += layerCount;
             layer.SetParameters(layerParams);
         }
     }
@@ -375,38 +335,53 @@ public abstract partial class TabMBase<T>
     /// </summary>
     public virtual Vector<T> GetParameterGradients()
     {
-        var allGrads = new List<T>();
+        var parts = new List<Vector<T>>();
 
-        // Feature embeddings
+        // Feature embeddings (zeros until a gradient exists)
         if (_featureEmbeddings != null)
         {
-            if (_featureEmbeddingsGrad != null)
-            {
-                for (int i = 0; i < _featureEmbeddingsGrad.Length; i++)
-                {
-                    allGrads.Add(_featureEmbeddingsGrad[i]);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < _featureEmbeddings.Length; i++)
-                {
-                    allGrads.Add(NumOps.Zero);
-                }
-            }
+            parts.Add(_featureEmbeddingsGrad != null
+                ? _featureEmbeddingsGrad.ToVector()
+                : new Vector<T>(_featureEmbeddings.Length));
         }
 
         // Hidden layers
         foreach (var layer in _hiddenLayers)
         {
-            var layerGrads = layer.GetParameterGradients();
-            for (int i = 0; i < layerGrads.Length; i++)
-            {
-                allGrads.Add(layerGrads[i]);
-            }
+            parts.Add(layer.GetParameterGradients());
         }
 
-        return new Vector<T>([.. allGrads]);
+        return TabularMetrics.ConcatenateVectors(parts);
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the feature embeddings, the BatchEnsemble hidden layers and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        if (_featureEmbeddings != null) tensors.Add(_featureEmbeddings);
+        var layers = new List<ILayer<T>>();
+        layers.AddRange(_hiddenLayers);
+        layers.AddRange(GetExtraTrainableLayers());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>
@@ -447,39 +422,18 @@ public abstract partial class TabMBase<T>
         int expandedBatchSize = memberOutputs.Shape[0];
         int batchSize = expandedBatchSize / Options.NumEnsembleMembers;
 
-        var diversity = new Vector<T>(batchSize);
+        int members = Options.NumEnsembleMembers;
+        var outputs = TabularMetrics.Flat(memberOutputs, batchSize * members * outputDim)
+            .Reshape(batchSize, members, outputDim);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute mean across members
-            var mean = new T[outputDim];
-            for (int j = 0; j < outputDim; j++)
-            {
-                mean[j] = NumOps.Zero;
-                for (int m = 0; m < Options.NumEnsembleMembers; m++)
-                {
-                    mean[j] = NumOps.Add(mean[j], memberOutputs[(b * Options.NumEnsembleMembers + m) * outputDim + j]);
-                }
-                mean[j] = NumOps.Divide(mean[j], NumOps.FromDouble(Options.NumEnsembleMembers));
-            }
+        // Mean across members, then the population variance over every (member, output) pair of a sample
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(outputs, new[] { 1 }, true), NumOps.FromDouble(members));
+        var diff = Engine.TensorSubtract(outputs, mean);
+        var totalVariance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1, 2 }, false),
+            NumOps.FromDouble(members * outputDim));
 
-            // Compute variance across members
-            var totalVariance = NumOps.Zero;
-            for (int m = 0; m < Options.NumEnsembleMembers; m++)
-            {
-                for (int j = 0; j < outputDim; j++)
-                {
-                    var diff = NumOps.Subtract(
-                        memberOutputs[(b * Options.NumEnsembleMembers + m) * outputDim + j],
-                        mean[j]);
-                    totalVariance = NumOps.Add(totalVariance, NumOps.Multiply(diff, diff));
-                }
-            }
-            totalVariance = NumOps.Divide(totalVariance,
-                NumOps.FromDouble(Options.NumEnsembleMembers * outputDim));
-
-            diversity[b] = NumOps.Sqrt(totalVariance);
-        }
+        var diversity = Engine.TensorSqrt(totalVariance).ToVector();
 
         return diversity;
     }

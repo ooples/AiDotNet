@@ -230,6 +230,8 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
 
         var outMembrane = new Tensor<T>([batch, _outputSize]);
         Tensor<T>? outAccumulator = null;
+        T minusOne = NumOps.FromDouble(-1.0);
+        T minusThreshold = NumOps.FromDouble(-_threshold);
 
         for (int t = 0; t < _timeSteps; t++)
         {
@@ -238,12 +240,12 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
                 Tensor<T> current = l == 0 ? inputCurrent : _synapses[l].Forward(spikes[l - 1]);
 
                 // U = β·U·(1 − S) + I  (soft reset: spiked neurons drop their potential).
-                var oneMinusS = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(spikes[l], NumOps.FromDouble(-1.0)), NumOps.One);
+                var oneMinusS = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(spikes[l], minusOne), NumOps.One);
                 var decayed = Engine.TensorMultiply(Engine.TensorMultiplyScalar(membrane[l], beta), oneMinusS);
                 membrane[l] = Engine.TensorAdd(decayed, current);
 
                 // S = Θ(U − v_thr) with straight-through surrogate gradient.
-                var z = Engine.TensorAddScalar(membrane[l], NumOps.FromDouble(-_threshold));
+                var z = Engine.TensorAddScalar(membrane[l], minusThreshold);
                 spikes[l] = SurrogateSpike(z);
             }
 
@@ -272,9 +274,11 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
 
         // Hard Heaviside forward value (1 where z >= 0). Computed off-tape; it is
         // only consumed inside StopGradient, so it contributes no gradient.
-        var hard = new Tensor<T>(z._shape);
-        for (int i = 0; i < z.Length; i++)
-            hard[i] = NumOps.GreaterThanOrEquals(z[i], NumOps.Zero) ? NumOps.One : NumOps.Zero;
+        Tensor<T> hard;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            hard = Engine.TensorGreaterEqual(z, new Tensor<T>(z._shape));
+        }
 
         // S = soft + StopGradient(hard − soft)  ⇒  value = hard, gradient = ∂soft.
         return Engine.TensorAdd(soft, Engine.StopGradient(Engine.TensorSubtract(hard, soft)));

@@ -272,4 +272,32 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
 
         return filterbank;
     }
+
+    /// <summary>
+    /// Applies a 2D per-utterance spectrogram feature extractor across either a single 2D spectrogram
+    /// <c>[frames, bins]</c> or a 3D batched spectrogram <c>[batch, frames, bins]</c>.
+    /// </summary>
+    protected Tensor<T> ExtractSpectrogramBatch<TSpec>(
+        Tensor<TSpec> spectrogram,
+        Func<int, Tensor<TSpec>, Tensor<T>> extract2D)
+    {
+        if (spectrogram.Rank <= 2)
+        {
+            return extract2D(0, spectrogram);
+        }
+
+        int batch = spectrogram.Shape[0];
+        int numFrames = spectrogram.Shape[1];
+        int numBins = spectrogram.Shape[2];
+        var batchOutputs = new Tensor<T>[batch];
+        for (int b = 0; b < batch; b++)
+        {
+            var slice = Engine.Reshape(
+                Engine.TensorSlice(spectrogram, [b, 0, 0], [1, numFrames, numBins]),
+                [numFrames, numBins]);
+            batchOutputs[b] = extract2D(b, slice);
+        }
+
+        return Engine.TensorStack(batchOutputs, 0);
+    }
 }

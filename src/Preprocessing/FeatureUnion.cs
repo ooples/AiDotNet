@@ -124,28 +124,36 @@ public class FeatureUnion<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
+        var blocks = new List<Tensor<T>>(_transformers.Count);
 
-        int outputIdx = 0;
-
+        // Each transformer's output fills its fitted block of columns (zero-padded when narrower)
         for (int t = 0; t < _transformers.Count; t++)
         {
             var (name, transformer) = _transformers[t];
             var transformed = transformer.Transform(data);
-
-            // Copy to output
-            for (int i = 0; i < numRows; i++)
+            int width = _outputWidths[t];
+            if (transformed.Columns > width)
             {
-                for (int j = 0; j < transformed.Columns; j++)
-                {
-                    result[i, outputIdx + j] = transformed[i, j];
-                }
+                throw new InvalidOperationException(
+                    $"Transformer '{name}' produced {transformed.Columns} columns but {width} were fitted.");
             }
 
-            outputIdx += _outputWidths[t];
+            var block = Tensor<T>.FromMatrix(transformed);
+            if (transformed.Columns < width)
+            {
+                block = Engine.TensorConcatenate(
+                    new[] { block, new Tensor<T>(new[] { numRows, width - transformed.Columns }) }, 1);
+            }
+
+            blocks.Add(block);
         }
 
-        return new Matrix<T>(result);
+        if (blocks.Count == 0 || numRows == 0)
+        {
+            return new Matrix<T>(numRows, _nOutputFeatures);
+        }
+
+        return Engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>

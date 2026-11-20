@@ -199,10 +199,13 @@ public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
         // attention = ft @ S_a ([ftOut, n_a]). A matmul against a fixed 0/1 selector
         // is a tape-safe way to take the [:, :n_d] and [:, n_d:] slices of the
         // feature-transformer output without a (tape-fragile) tensor slice op.
-        _decisionSelector = new Tensor<T>(new[] { ftOut, _decisionDim });
-        for (int i = 0; i < _decisionDim; i++) _decisionSelector[i, i] = NumOps.One;
-        _attentionSelector = new Tensor<T>(new[] { ftOut, _attentionDim });
-        for (int j = 0; j < _attentionDim; j++) _attentionSelector[_decisionDim + j, j] = NumOps.One;
+        // They are the first n_d and the last n_a columns of the [ftOut, ftOut] identity.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var identity = Engine.TensorEye<T>(ftOut);
+            _decisionSelector = Engine.TensorSlice(identity, new[] { 0, 0 }, new[] { ftOut, _decisionDim });
+            _attentionSelector = Engine.TensorSlice(identity, new[] { 0, _decisionDim }, new[] { ftOut, _attentionDim });
+        }
 
         ResolveShapes(new[] { numFeatures }, new[] { _decisionDim });
         _built = true;

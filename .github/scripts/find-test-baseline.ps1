@@ -41,12 +41,32 @@ function Set-ActionOutput {
 $artifactName = "test-outcome-ledger-$BaseSha"
 $encodedName = [Uri]::EscapeDataString($artifactName)
 $artifactResponse = Invoke-GhJson "repos/$Repository/actions/artifacts?name=$encodedName&per_page=100"
-$ledgerArtifact = @($artifactResponse.artifacts |
+$ledgerCandidates = @($artifactResponse.artifacts |
     Where-Object {
         -not $_.expired -and $_.name -eq $artifactName -and
         $_.workflow_run -and $_.workflow_run.head_sha -eq $BaseSha
     } |
-    Sort-Object created_at -Descending | Select-Object -First 1)
+    Sort-Object created_at -Descending)
+
+$ledgerArtifact = @()
+$fallbackLedgerArtifact = @()
+foreach ($candidate in $ledgerCandidates) {
+    $candidateRunId = [string] $candidate.workflow_run.id
+    $candidateRun = Invoke-GhJson "repos/$Repository/actions/runs/$candidateRunId"
+    if ($candidateRun.conclusion -eq 'cancelled') {
+        continue
+    }
+    if ($candidateRun.conclusion -eq 'success') {
+        $ledgerArtifact = @($candidate)
+        break
+    }
+    if ($fallbackLedgerArtifact.Count -eq 0) {
+        $fallbackLedgerArtifact = @($candidate)
+    }
+}
+if ($ledgerArtifact.Count -eq 0 -and $fallbackLedgerArtifact.Count -gt 0) {
+    $ledgerArtifact = $fallbackLedgerArtifact
+}
 
 if ($ledgerArtifact.Count -gt 0) {
     Set-ActionOutput 'baseline_mode' 'ledger'
@@ -78,9 +98,11 @@ if ($run.Count -eq 0) {
 }
 
 $runId = [string] $run[0].id
-$runArtifacts = Invoke-GhJson "repos/$Repository/actions/runs/$runId/artifacts?per_page=100"
+$rawArtifacts = & gh api --paginate "repos/$Repository/actions/runs/$runId/artifacts?per_page=100" --jq '.artifacts[] | @json'
+if ($LASTEXITCODE -ne 0) { throw "gh api failed for 'repos/$Repository/actions/runs/$runId/artifacts'." }
+$allRunArtifacts = @($rawArtifacts | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
 $coveragePrefix = "coverage-$BaseSha-"
-$hasExactCoverage = @($runArtifacts.artifacts | Where-Object {
+$hasExactCoverage = @($allRunArtifacts | Where-Object {
     -not $_.expired -and ([string] $_.name).StartsWith($coveragePrefix, [StringComparison]::Ordinal)
 }).Count -gt 0
 

@@ -122,28 +122,11 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
         // Compute initial pairwise distance matrix
         var distMatrix = ComputeDistanceMatrix(x);
 
-        // Initialize cluster assignments
-        var clusterIds = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            clusterIds[i] = i;
-        }
-
         // Track cluster sizes
         var clusterSizes = new int[2 * n - 1];
         for (int i = 0; i < n; i++)
         {
             clusterSizes[i] = 1;
-        }
-
-        // Track cluster centroids for Ward's method
-        var centroids = new T[2 * n - 1, x.Columns];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                centroids[i, j] = x[i, j];
-            }
         }
 
         // Dendrogram storage
@@ -164,7 +147,7 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
         while (active.Count > targetClusters)
         {
             // Find closest pair
-            var (minI, minJ, minDist) = FindClosestPair(distMatrix, active, clusterSizes, centroids, x.Columns);
+            var (minI, minJ, minDist) = FindClosestPair(distMatrix, active);
 
             if (minI < 0 || minJ < 0)
             {
@@ -172,8 +155,7 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
             }
 
             // Check distance threshold
-            if (_options.DistanceThreshold.HasValue &&
-                NumOps.GreaterThan(minDist, NumOps.FromDouble(_options.DistanceThreshold.Value)))
+            if (ExceedsDistanceThreshold(minDist))
             {
                 break;
             }
@@ -181,19 +163,6 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
             // Record merge
             int newSize = clusterSizes[minI] + clusterSizes[minJ];
             _dendrogram.Add((minI, minJ, minDist, newSize));
-
-            // Update centroid
-            T sizeIT = NumOps.FromDouble(clusterSizes[minI]);
-            T sizeJT = NumOps.FromDouble(clusterSizes[minJ]);
-            T newSizeT = NumOps.FromDouble(newSize);
-            for (int d = 0; d < x.Columns; d++)
-            {
-                centroids[nextClusterId, d] = NumOps.Divide(
-                    NumOps.Add(
-                        NumOps.Multiply(centroids[minI, d], sizeIT),
-                        NumOps.Multiply(centroids[minJ, d], sizeJT)),
-                    newSizeT);
-            }
             clusterSizes[nextClusterId] = newSize;
 
             // Update distance matrix with Lance-Williams formula
@@ -220,155 +189,131 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private T[,] ComputeDistanceMatrix(Matrix<T> x)
+    /// <summary>True when a distance threshold is configured and the merge distance exceeds it.</summary>
+    private bool ExceedsDistanceThreshold(T distance)
+        => _options.DistanceThreshold.HasValue &&
+           NumOps.GreaterThan(distance, NumOps.FromDouble(_options.DistanceThreshold.Value));
+
+    private Matrix<T> ComputeDistanceMatrix(Matrix<T> x)
     {
         int n = x.Rows;
-        int d = x.Columns;
-        var distMatrix = new T[2 * n - 1, 2 * n - 1];
-        bool useWard = _options.Linkage == LinkageMethod.Ward;
+        int size = 2 * n - 1;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
-        // Cache rows as arrays for allocation-free ComputeInline
-        var rowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
+        // Pairwise distances (squared for Ward) between the points; entries for merged clusters start at infinity
+        var pairwise = Tensor<T>.FromMatrix(metric.ComputePairwise(x));
+        if (_options.Linkage == LinkageMethod.Ward)
         {
-            rowArrays[i] = new T[d];
-            for (int k = 0; k < d; k++)
-                rowArrays[i][k] = x[i, k];
+            pairwise = Engine.TensorMultiply(pairwise, pairwise);
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            distMatrix[i, i] = NumOps.Zero;
-
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
-                if (useWard)
-                    dist = NumOps.Multiply(dist, dist);
-
-                distMatrix[i, j] = dist;
-                distMatrix[j, i] = dist;
-            }
-        }
-
-        // Initialize remaining entries to infinity
-        for (int i = n; i < 2 * n - 1; i++)
-        {
-            for (int j = 0; j < 2 * n - 1; j++)
-            {
-                distMatrix[i, j] = NumOps.MaxValue;
-                distMatrix[j, i] = NumOps.MaxValue;
-            }
-        }
-
+        var distMatrix = Engine.TensorFullLike(Tensor<T>.CreateZeros(new[] { size, size }), NumOps.MaxValue).ToMatrix();
+        distMatrix.SetSubMatrix(0, 0, pairwise.ToMatrix());
         return distMatrix;
     }
 
-    private (int I, int J, T Dist) FindClosestPair(
-        T[,] distMatrix,
-        HashSet<int> active,
-        int[] sizes,
-        T[,] centroids,
-        int dims)
+    private (int I, int J, T Dist) FindClosestPair(Matrix<T> distMatrix, HashSet<int> active)
     {
-        int minI = -1, minJ = -1;
-        T minDist = NumOps.MaxValue;
-
-        var activeList = active.ToList();
-
-        for (int ai = 0; ai < activeList.Count; ai++)
+        // Scan pairs (ai < aj) in active-set order; the first strictly smallest distance wins
+        var activeList = active.ToArray();
+        int a = activeList.Length;
+        if (a < 2)
         {
-            int i = activeList[ai];
-            for (int aj = ai + 1; aj < activeList.Count; aj++)
-            {
-                int j = activeList[aj];
-
-                T dist = distMatrix[i, j];
-
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    minI = i;
-                    minJ = j;
-                }
-            }
+            return (-1, -1, NumOps.MaxValue);
         }
 
-        return (minI, minJ, minDist);
+        var sub = ClusteringTensorOps.SelectColumns(Tensor<T>.FromMatrix(ClusteringTensorOps.SelectRows(distMatrix, activeList)), activeList);
+        var upper = Engine.TensorTriu(Engine.TensorOnesLike(sub), 1);
+        var candidates = Engine.Reshape(Engine.TensorWhere(upper, sub, Engine.TensorFullLike(sub, NumOps.MaxValue)), new[] { a * a }).ToVector();
+        int best = ClusteringTensorOps.ArgMin(candidates);
+        T minDist = candidates[best];
+        if (!NumOps.LessThan(minDist, NumOps.MaxValue))
+        {
+            return (-1, -1, NumOps.MaxValue);
+        }
+
+        return (activeList[best / a], activeList[best % a], minDist);
     }
 
     private void UpdateDistanceMatrix(
-        T[,] distMatrix,
+        Matrix<T> distMatrix,
         HashSet<int> active,
         int mergedI,
         int mergedJ,
         int newCluster,
         int[] sizes)
     {
-        T sizeI = NumOps.FromDouble(sizes[mergedI]);
-        T sizeJ = NumOps.FromDouble(sizes[mergedJ]);
+        int size = distMatrix.Rows;
 
+        // Lance-Williams update against every other active cluster k
+        var others = new int[size];
         foreach (int k in active)
         {
-            if (k == mergedI || k == mergedJ)
+            if (k != mergedI && k != mergedJ)
             {
-                continue;
+                others[k] = 1;
             }
-
-            T dIK = distMatrix[mergedI, k];
-            T dJK = distMatrix[mergedJ, k];
-            T dIJ = distMatrix[mergedI, mergedJ];
-            T sizeK = NumOps.FromDouble(sizes[k]);
-
-            T newDist = ComputeLinkageDistance(dIK, dJK, dIJ, sizeI, sizeJ, sizeK);
-
-            distMatrix[newCluster, k] = newDist;
-            distMatrix[k, newCluster] = newDist;
         }
+
+        var newRow = ComputeLinkageDistances(
+            distMatrix.GetRow(mergedI).AsTensor(),
+            distMatrix.GetRow(mergedJ).AsTensor(),
+            distMatrix[mergedI, mergedJ],
+            NumOps.FromDouble(sizes[mergedI]),
+            NumOps.FromDouble(sizes[mergedJ]),
+            ClusteringTensorOps.FromIntArray<T>(sizes).AsTensor());
+
+        var mask = ClusteringTensorOps.FromIntArray<T>(others).AsTensor();
+        var updated = Engine.TensorWhere(mask, newRow, distMatrix.GetRow(newCluster).AsTensor()).ToVector();
+        Engine.SetRow(distMatrix, newCluster, updated);
+
+        var column = Engine.TensorWhere(mask, newRow, distMatrix.GetColumn(newCluster).AsTensor()).ToVector();
+        Engine.SetColumn(distMatrix, newCluster, column);
     }
 
-    private T ComputeLinkageDistance(
-        T dIK, T dJK, T dIJ,
-        T sizeI, T sizeJ, T sizeK)
+    private Tensor<T> ComputeLinkageDistances(
+        Tensor<T> dIK, Tensor<T> dJK, T dIJ,
+        T sizeI, T sizeJ, Tensor<T> sizeK)
     {
-        T two = NumOps.FromDouble(2.0);
-        T four = NumOps.FromDouble(4.0);
         T sizeIJ = NumOps.Add(sizeI, sizeJ);
+        Tensor<T> SizeWeighted() => Engine.TensorDivideScalar(
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(dIK, sizeI), Engine.TensorMultiplyScalar(dJK, sizeJ)), sizeIJ);
+        Tensor<T> HalfSum() => Engine.TensorMultiplyScalar(Engine.TensorAdd(dIK, dJK), NumOps.FromDouble(0.5));
 
-        return _options.Linkage switch
+        switch (_options.Linkage)
         {
-            LinkageMethod.Single =>
-                NumOps.LessThan(dIK, dJK) ? dIK : dJK,
+            case LinkageMethod.Complete:
+                return Engine.TensorMax(dIK, dJK);
 
-            LinkageMethod.Complete =>
-                NumOps.GreaterThan(dIK, dJK) ? dIK : dJK,
+            case LinkageMethod.Average:
+                return SizeWeighted();
 
-            LinkageMethod.Average =>
-                NumOps.Divide(NumOps.Add(NumOps.Multiply(sizeI, dIK), NumOps.Multiply(sizeJ, dJK)), sizeIJ),
+            case LinkageMethod.Weighted:
+                return HalfSum();
 
-            LinkageMethod.Weighted =>
-                NumOps.Divide(NumOps.Add(dIK, dJK), two),
+            case LinkageMethod.Ward:
+            {
+                // ((sI + sK) dIK + (sJ + sK) dJK - sK dIJ) / (sI + sJ + sK)
+                var numerator = Engine.TensorSubtract(
+                    Engine.TensorAdd(
+                        Engine.TensorMultiply(Engine.TensorAddScalar(sizeK, sizeI), dIK),
+                        Engine.TensorMultiply(Engine.TensorAddScalar(sizeK, sizeJ), dJK)),
+                    Engine.TensorMultiplyScalar(sizeK, dIJ));
+                return Engine.TensorDivide(numerator, Engine.TensorAddScalar(sizeK, sizeIJ));
+            }
 
-            LinkageMethod.Ward =>
-                NumOps.Divide(
-                    NumOps.Subtract(
-                        NumOps.Add(
-                            NumOps.Multiply(NumOps.Add(sizeI, sizeK), dIK),
-                            NumOps.Multiply(NumOps.Add(sizeJ, sizeK), dJK)),
-                        NumOps.Multiply(sizeK, dIJ)),
-                    NumOps.Add(sizeIJ, sizeK)),
+            case LinkageMethod.Centroid:
+                return Engine.TensorSubtractScalar(
+                    SizeWeighted(),
+                    NumOps.Divide(NumOps.Multiply(NumOps.Multiply(sizeI, sizeJ), dIJ), NumOps.Multiply(sizeIJ, sizeIJ)));
 
-            LinkageMethod.Centroid =>
-                NumOps.Subtract(
-                    NumOps.Divide(NumOps.Add(NumOps.Multiply(sizeI, dIK), NumOps.Multiply(sizeJ, dJK)), sizeIJ),
-                    NumOps.Divide(NumOps.Multiply(NumOps.Multiply(sizeI, sizeJ), dIJ), NumOps.Multiply(sizeIJ, sizeIJ))),
+            case LinkageMethod.Median:
+                return Engine.TensorSubtractScalar(HalfSum(), NumOps.Divide(dIJ, NumOps.FromDouble(4.0)));
 
-            LinkageMethod.Median =>
-                NumOps.Subtract(NumOps.Divide(NumOps.Add(dIK, dJK), two), NumOps.Divide(dIJ, four)),
-
-            _ => NumOps.LessThan(dIK, dJK) ? dIK : dJK
-        };
+            default:
+                // Single linkage
+                return Engine.TensorMin(dIK, dJK);
+        }
     }
 
     private Vector<T> AssignLabels(int n, HashSet<int> finalClusters)
@@ -427,13 +372,7 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
             }
         }
 
-        var result = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.FromDouble(labels[i]);
-        }
-
-        return result;
+        return ClusteringTensorOps.FromIntArray<T>(labels);
     }
 
     private void ComputeClusterCenters(Matrix<T> x)
@@ -443,33 +382,8 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
             return;
         }
 
-        ClusterCenters = new Matrix<T>(NumClusters, x.Columns);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            int cluster = (int)NumOps.ToDouble(Labels[i]);
-            if (cluster >= 0 && cluster < NumClusters)
-            {
-                counts[cluster]++;
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[cluster, j] = NumOps.Add(ClusterCenters[cluster, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                T count = NumOps.FromDouble(counts[k]);
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], count);
-                }
-            }
-        }
+        // Mean of each cluster's members (empty clusters stay at zero)
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _);
     }
 
     /// <inheritdoc />
@@ -477,34 +391,16 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearest = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearest = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearest);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -564,13 +460,7 @@ public partial class AgglomerativeClustering<T> : ClusteringBase<T>
             labels[i] = rootToCluster[root];
         }
 
-        var result = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.FromDouble(labels[i]);
-        }
-
-        return result;
+        return ClusteringTensorOps.FromIntArray<T>(labels);
     }
 
     private int FindRoot(int[] parent, int i)

@@ -96,7 +96,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         => Temperature = Math.Max(Temperature * Configuration.TemperatureDecay, Configuration.MinTemperature);
 
     /// <summary>The loss terms of one batch.</summary>
-    internal sealed record Losses(Tensor<T> Total, Tensor<T> Contrastive, Tensor<T> Diversity, Tensor<T> FeaturePenalty, int Masked, int[,] CodeIds);
+    internal sealed record Losses(Tensor<T> Total, Tensor<T> Contrastive, Tensor<T> Diversity, Tensor<T> FeaturePenalty, int Masked, int[,] CodeIds, Tensor<T>? CodeOneHot = null);
 
     private Tensor<T> Dense(LayerBase<T> layer, Tensor<T> x)
     {
@@ -107,83 +107,291 @@ internal sealed class Wav2Vec2Pretraining<T>
 
     private static Tensor<T> Constant(Tensor<T> x) => new(x._shape, new Vector<T>(x.ToArray()));
 
+    private static Tensor<T> ComputeRowOneHot(Tensor<T> scores, int rows, int v)
+    {
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "Wav2Vec2RowOneHot",
+            new[] { scores },
+            new[] { rows, v },
+            (inputs, destination) =>
+            {
+                var sv = inputs[0].Cast<double>().ToArray();
+                var span = destination.AsWritableSpan();
+                span.Clear();
+                T one = NumOps.One;
+                for (int r = 0; r < rows; r++)
+                {
+                    int best = 0;
+                    int rowBase = r * v;
+                    for (int j = 1; j < v; j++)
+                    {
+                        if (sv[rowBase + j] > sv[rowBase + best])
+                            best = j;
+                    }
+                    span[rowBase + best] = one;
+                }
+            });
+    }
+
+    private static Tensor<T> ComputeDistractorExclusion(
+        Tensor<T> targets, int[] flatNegatives, bool[] flatMask, int batch, int length, int k, int p)
+    {
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "Wav2Vec2ExcludeIdentical",
+            new[] { targets },
+            new[] { batch, length, k + 1 },
+            (inputs, destination) =>
+            {
+                var tv = inputs[0].Cast<double>().ToArray();
+                var span = destination.AsWritableSpan();
+                span.Clear();
+                T largeNeg = NumOps.FromDouble(-1e9);
+                for (int b = 0; b < batch; b++)
+                {
+                    for (int t = 0; t < length; t++)
+                    {
+                        int self = b * length + t;
+                        if (!flatMask[self]) continue;
+                        int outBase = self * (k + 1);
+                        int negBase = self * k;
+                        for (int j = 0; j < k; j++)
+                        {
+                            int other = flatNegatives[negBase + j];
+                            bool same = true;
+                            for (int d = 0; d < p && same; d++)
+                                same = tv[self * p + d] == tv[other * p + d];
+                            if (same)
+                                span[outBase + 1 + j] = largeNeg;
+                        }
+                    }
+                }
+            });
+    }
+
+    private static Tensor<T> ComputeDynamicDistractorExclusion(
+        Tensor<T> targets, Tensor<T> maskFlat, Tensor<T> negFlatIndices, int batch, int length, int k, int p)
+    {
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "Wav2Vec2ExcludeIdenticalDynamic",
+            new[] { targets, maskFlat, negFlatIndices },
+            new[] { batch, length, k + 1 },
+            (inputs, destination) =>
+            {
+                var tv = inputs[0].Cast<double>().ToArray();
+                var mv = inputs[1].Cast<double>().ToArray();
+                var nv = inputs[2].Cast<double>().ToArray();
+                var span = destination.AsWritableSpan();
+                span.Clear();
+                T largeNeg = NumOps.FromDouble(-1e9);
+                int totalSteps = batch * length;
+                for (int self = 0; self < totalSteps; self++)
+                {
+                    if (mv[self] <= 0.5) continue;
+                    int outBase = self * (k + 1);
+                    int negBase = self * k;
+                    for (int j = 0; j < k; j++)
+                    {
+                        int other = Math.Max(0, Math.Min(totalSteps - 1, (int)Math.Round(nv[negBase + j])));
+                        bool same = true;
+                        for (int d = 0; d < p && same; d++)
+                            same = tv[self * p + d] == tv[other * p + d];
+                        if (same)
+                            span[outBase + 1 + j] = largeNeg;
+                    }
+                }
+            });
+    }
+
     // The quantized features [B, L, d] and the codebook perplexity (Σ_g exp(entropy of the masked marginal)).
     // fixedIds, when given, replaces each step's argmax with its recorded entry (the groups' indices combined as below);
     // the Gumbel noise is still drawn, so the random stream stays aligned with an unfixed draw.
-    private (Tensor<T> Quantized, Tensor<T> Perplexity, int[,] Ids) Quantize(Tensor<T> features, bool[,] mask, bool training, Random random,
-        int[,]? fixedIds)
+    private (Tensor<T> Quantized, Tensor<T> Perplexity, int[,] Ids, Tensor<T>? FirstHard) Quantize(
+        Tensor<T> features,
+        bool[,]? mask,
+        bool training,
+        Random random,
+        int[,]? fixedIds,
+        Tensor<T>? dynamicMaskFlat = null,
+        Tensor<T>[]? fixedGumbelNoise = null)
     {
         var c = Configuration;
         int batch = features.Shape[0], length = features.Shape[1], rows = batch * length, v = c.EntriesPerGroup;
         var logits = _engine.Reshape(Dense(WeightProjection, features), new[] { rows, c.Groups * v });
         int maskedCount = 0;
-        var maskWeights = new Tensor<T>(new[] { rows, 1 });
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < length; t++)
-                if (mask[b, t])
-                {
-                    maskWeights[b * length + t, 0] = NumOps.One;
-                    maskedCount++;
-                }
+        Tensor<T> maskWeights;
+        Tensor<T>? dynamicSafeMasked = null;
+        if (dynamicMaskFlat is not null)
+        {
+            maskWeights = _engine.Reshape(dynamicMaskFlat, new[] { rows, 1 });
+            dynamicSafeMasked = _engine.TensorClampMin(_engine.ReduceSum(dynamicMaskFlat, new[] { 0 }, keepDims: false), NumOps.One);
+        }
+        else
+        {
+            var requiredMask = mask ?? throw new ArgumentNullException(nameof(mask));
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var maskWeightsArr = new double[rows];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                        if (requiredMask[b, t])
+                        {
+                            maskWeightsArr[b * length + t] = 1.0;
+                            maskedCount++;
+                        }
+                maskWeights = new Tensor<double>(maskWeightsArr, new[] { rows, 1 }).Cast<T>();
+            }
+        }
         var parts = new Tensor<T>[c.Groups];
         // Each step's assigned entry, the groups' indices combined as one id (sum over g of id_g * V^g).
         var ids = new int[batch, length];
         int place = 1;
         Tensor<T>? perplexity = null;
+        Tensor<T>? firstHard = null;
+        bool traced = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive || fixedGumbelNoise is not null || dynamicMaskFlat is not null;
+        T invTemp = NumOps.FromDouble(1.0 / Temperature);
+        T invMasked = NumOps.FromDouble(1.0 / Math.Max(maskedCount, 1));
+        T negOne = NumOps.FromDouble(-1.0);
         for (int g = 0; g < c.Groups; g++)
         {
             var group = _engine.TensorSlice(logits, new[] { 0, g * v }, new[] { rows, v });
-            var values = group.ToArray();
-            Tensor<T> probabilities, marginalSource;
-            var hard = new Tensor<T>(new[] { rows, v });
-            if (training)
+            Tensor<T> probabilities, marginalSource, hard;
+            if (traced)
+            {
+                if (training)
+                {
+                    Tensor<T> noise;
+                    if (fixedGumbelNoise is not null)
+                    {
+                        noise = fixedGumbelNoise[g];
+                    }
+                    else
+                    {
+                        var uniform = AiDotNet.Training.CompiledStepRandom<T>.Uniform(new[] { rows, v }, random, 1e-12, 1.0 - 1e-12);
+                        noise = _engine.TensorNegate(_engine.TensorLog(_engine.TensorNegate(_engine.TensorLog(uniform))));
+                    }
+                    var soft = _engine.Softmax(_engine.TensorMultiplyScalar(_engine.TensorAdd(group, noise), invTemp), axis: 1);
+                    if (fixedIds is not null)
+                    {
+                        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                        {
+                            var hardArr = new double[rows * v];
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = fixedIds[r / length, r % length] / place % v;
+                                hardArr[r * v + best] = 1.0;
+                                ids[r / length, r % length] += best * place;
+                            }
+                            hard = new Tensor<double>(hardArr, new[] { rows, v }).Cast<T>();
+                        }
+                    }
+                    else
+                    {
+                        hard = ComputeRowOneHot(soft, rows, v);
+                        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                        {
+                            var hv = hard.Cast<double>().ToArray();
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = 0;
+                                for (int j = 1; j < v; j++)
+                                    if (hv[r * v + j] > hv[r * v + best]) best = j;
+                                ids[r / length, r % length] += best * place;
+                            }
+                        }
+                    }
+                    probabilities = _engine.TensorAdd(soft, _engine.TensorSubtract(hard, _engine.StopGradient(soft)));
+                    marginalSource = _engine.Softmax(group, axis: 1);
+                }
+                else
+                {
+                    if (fixedIds is not null)
+                    {
+                        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                        {
+                            var hardArr = new double[rows * v];
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = fixedIds[r / length, r % length] / place % v;
+                                hardArr[r * v + best] = 1.0;
+                                ids[r / length, r % length] += best * place;
+                            }
+                            hard = new Tensor<double>(hardArr, new[] { rows, v }).Cast<T>();
+                        }
+                    }
+                    else
+                    {
+                        hard = ComputeRowOneHot(group, rows, v);
+                        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                        {
+                            var hv = hard.Cast<double>().ToArray();
+                            for (int r = 0; r < rows; r++)
+                            {
+                                int best = 0;
+                                for (int j = 1; j < v; j++)
+                                    if (hv[r * v + j] > hv[r * v + best]) best = j;
+                                ids[r / length, r % length] += best * place;
+                            }
+                        }
+                    }
+                    probabilities = hard;
+                    marginalSource = hard;
+                }
+            }
+            else if (training)
             {
                 // Straight-through Gumbel-softmax (hard = true): forward one-hot, backward through the soft sample.
-                var noise = new Tensor<T>(new[] { rows, v });
-                for (int i = 0; i < noise.Length; i++) noise[i] = NumOps.FromDouble(-Math.Log(-Math.Log(1.0 - random.NextDouble())));
-                var soft = _engine.Softmax(_engine.TensorMultiplyScalar(_engine.TensorAdd(group, noise), NumOps.FromDouble(1.0 / Temperature)), axis: 1);
-                var sv = soft.ToArray();
+                var noiseArr = new double[rows * v];
+                for (int i = 0; i < noiseArr.Length; i++) noiseArr[i] = -Math.Log(-Math.Log(1.0 - random.NextDouble()));
+                var noise = new Tensor<double>(noiseArr, new[] { rows, v }).Cast<T>();
+                var soft = _engine.Softmax(_engine.TensorMultiplyScalar(_engine.TensorAdd(group, noise), invTemp), axis: 1);
+                var sv = soft.Cast<double>().ToArray();
+                var hardArr = new double[rows * v];
                 for (int r = 0; r < rows; r++)
                 {
                     int best = 0;
                     if (fixedIds is not null) best = fixedIds[r / length, r % length] / place % v;
-                    else for (int j = 1; j < v; j++) if (NumOps.ToDouble(sv[r * v + j]) > NumOps.ToDouble(sv[r * v + best])) best = j;
-                    hard[r, best] = NumOps.One;
+                    else for (int j = 1; j < v; j++) if (sv[r * v + j] > sv[r * v + best]) best = j;
+                    hardArr[r * v + best] = 1.0;
                     ids[r / length, r % length] += best * place;
                 }
+                hard = new Tensor<double>(hardArr, new[] { rows, v }).Cast<T>();
                 probabilities = _engine.TensorAdd(soft, _engine.TensorSubtract(hard, Constant(soft)));
                 marginalSource = _engine.Softmax(group, axis: 1);
             }
             else
             {
+                var values = group.Cast<double>().ToArray();
+                var hardArr = new double[rows * v];
                 for (int r = 0; r < rows; r++)
                 {
                     int best = 0;
                     if (fixedIds is not null) best = fixedIds[r / length, r % length] / place % v;
-                    else for (int j = 1; j < v; j++) if (NumOps.ToDouble(values[r * v + j]) > NumOps.ToDouble(values[r * v + best])) best = j;
-                    hard[r, best] = NumOps.One;
+                    else for (int j = 1; j < v; j++) if (values[r * v + j] > values[r * v + best]) best = j;
+                    hardArr[r * v + best] = 1.0;
                     ids[r / length, r % length] += best * place;
                 }
+                hard = new Tensor<double>(hardArr, new[] { rows, v }).Cast<T>();
                 probabilities = hard;
                 marginalSource = hard;
             }
+            if (g == 0) firstHard = hard;
             parts[g] = Codebooks[g].Forward(probabilities);
             // The marginal over the masked steps, and exp of its entropy (xlogy: 0·log 0 = 0).
-            var marginal = _engine.TensorMultiplyScalar(
-                _engine.ReduceSum(_engine.TensorMultiply(marginalSource, _engine.TensorTile(maskWeights, new[] { 1, v })), new[] { 0 }, keepDims: false),
-                NumOps.FromDouble(1.0 / Math.Max(maskedCount, 1)));
+            var summedMarginal = _engine.ReduceSum(_engine.TensorMultiply(marginalSource, _engine.TensorTile(maskWeights, new[] { 1, v })), new[] { 0 }, keepDims: false);
+            var marginal = dynamicSafeMasked is not null
+                ? _engine.TensorDivide(summedMarginal, _engine.TensorBroadcastTo(dynamicSafeMasked, new[] { v }))
+                : _engine.TensorMultiplyScalar(summedMarginal, invMasked);
             // xlogy: an entry of zero probability contributes 0·log 0 = 0 (its log taken of 1 instead).
-            var mv = marginal.ToArray();
-            var zeros = new Tensor<T>(marginal._shape);
-            for (int i = 0; i < mv.Length; i++) zeros[i] = NumOps.ToDouble(mv[i]) == 0 ? NumOps.One : NumOps.Zero;
+            var zeros = _engine.TensorEquals(marginal, NumOps.Zero);
             var safe = _engine.TensorAdd(marginal, zeros);
-            var entropy = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(marginal, _engine.TensorLog(safe)), new[] { 0 }, keepDims: false), NumOps.FromDouble(-1.0));
+            var entropy = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(marginal, _engine.TensorLog(safe)), new[] { 0 }, keepDims: false), negOne);
             var term = _engine.TensorExp(entropy);
             perplexity = perplexity is null ? term : _engine.TensorAdd(perplexity, term);
             place *= v;
         }
         var quantized = _engine.Reshape(c.Groups == 1 ? parts[0] : _engine.TensorConcatenate(parts, 1), new[] { batch, length, c.CodevectorDim });
-        return (quantized, perplexity ?? throw new InvalidOperationException("The quantizer has no codebooks."), ids);
+        var codeOneHot = c.Groups == 1 && firstHard is not null ? _engine.Reshape(firstHard, new[] { batch, length, v }) : null;
+        return (quantized, perplexity ?? throw new InvalidOperationException("The quantizer has no codebooks."), ids, codeOneHot);
     }
 
     /// <summary>
@@ -217,23 +425,53 @@ internal sealed class Wav2Vec2Pretraining<T>
     /// <param name="random">The Gumbel noise's generator.</param>
     /// <param name="fixedIds">Each step's codebook entry to use in place of the quantizer's choice (the <see cref="Losses.CodeIds"/>
     /// of an earlier call), or null for the quantizer's own; gradients still flow through the soft sample.</param>
-    public Losses Loss(Wav2Vec2Network<T>.Output output, int[,,] negatives, bool training, Random random, int[,]? fixedIds = null)
+    public Losses Loss(
+        Wav2Vec2Network<T>.Output output,
+        int[,,]? negatives,
+        bool training,
+        Random random,
+        int[,]? fixedIds = null,
+        Tensor<T>? dynamicMaskFlat = null,
+        Tensor<T>? dynamicNegFlatIndices = null,
+        Tensor<T>[]? fixedGumbelNoise = null)
     {
         var c = Configuration;
-        var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
-        int batch = output.Hidden.Shape[0], length = output.Hidden.Shape[1], k = negatives.GetLength(2), p = c.ProjectedDim;
+        int batch = output.Hidden.Shape[0], length = output.Hidden.Shape[1], k = negatives?.GetLength(2) ?? c.Negatives, p = c.ProjectedDim;
         var predicted = Dense(ProjectHidden, output.Hidden);                                                       // [B, L, P]
-        var (quantized, perplexity, ids) = Quantize(output.Features, mask, training, random, fixedIds);
+        var (quantized, perplexity, ids, codeOneHot) = Quantize(
+            output.Features, output.Mask, training, random, fixedIds, dynamicMaskFlat, fixedGumbelNoise);
         var targets = Dense(ProjectQuantized, quantized);                                                           // [B, L, P]
 
         // Candidates [B, L, 1 + K, P]: the step's own target, then its distractors.
         var flat = _engine.Reshape(targets, new[] { batch * length, p });
-        var indices = new int[batch * length * k];
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < length; t++)
-                for (int j = 0; j < k; j++) indices[(b * length + t) * k + j] = negatives[b, t, j];
-        var distractors = _engine.Reshape(_engine.TensorGather(flat, new Tensor<int>(new[] { indices.Length }, new Vector<int>(indices)), axis: 0),
-            new[] { batch, length, k, p });
+        Tensor<T> distractors;
+        int[]? indices = null;
+        bool[]? flatMask = null;
+        if (dynamicNegFlatIndices is not null)
+        {
+            distractors = _engine.Reshape(_engine.TensorEmbeddingLookupFromFloatIndices(flat, dynamicNegFlatIndices),
+                new[] { batch, length, k, p });
+        }
+        else
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
+            var requiredNegatives = negatives ?? throw new ArgumentNullException(nameof(negatives));
+            indices = new int[batch * length * k];
+            flatMask = new bool[batch * length];
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < length; t++)
+                {
+                    flatMask[b * length + t] = mask[b, t];
+                    for (int j = 0; j < k; j++) indices[(b * length + t) * k + j] = requiredNegatives[b, t, j];
+                }
+            Tensor<int> indexTensor;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                indexTensor = new Tensor<int>(new[] { indices.Length }, new Vector<int>(indices));
+            }
+            distractors = _engine.Reshape(_engine.TensorGather(flat, indexTensor, axis: 0),
+                new[] { batch, length, k, p });
+        }
         var candidates = _engine.TensorConcatenate(new[] { _engine.Reshape(targets, new[] { batch, length, 1, p }), distractors }, 2);
 
         // Cosine similarity over κ.
@@ -243,42 +481,90 @@ internal sealed class Wav2Vec2Pretraining<T>
         var predictedNorm = _engine.TensorTile(_engine.Reshape(Norm(pred, 3), new[] { batch, length, 1 }), new[] { 1, 1, k + 1 });
         var norms = _engine.TensorMultiply(predictedNorm, _engine.Reshape(Norm(candidates, 3), new[] { batch, length, k + 1 }));
         // torch.cosine_similarity divides by max(‖a‖·‖b‖, 1e-8).
-        var nv = norms.ToArray();
-        var floor = new Tensor<T>(norms._shape);
-        for (int i = 0; i < nv.Length; i++) floor[i] = NumOps.FromDouble(Math.Max(0.0, 1e-8 - NumOps.ToDouble(nv[i])));
-        var logits = _engine.TensorMultiplyScalar(_engine.TensorDivide(dots, _engine.TensorAdd(norms, floor)),
+        T eps = NumOps.FromDouble(1e-8);
+        if (NumOps.Equals(eps, NumOps.Zero)) eps = NumOps.FromDouble(1e-4);
+        var denom = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorSubtractScalar(norms, eps)), eps);
+        var logits = _engine.TensorMultiplyScalar(_engine.TensorDivide(dots, denom),
             NumOps.FromDouble(1.0 / c.LogitTemperature));                                                         // [B, L, 1 + K]
 
-        // A distractor identical to the target is excluded (−∞), as in the reference.
-        var tv = targets.ToArray();
-        var exclude = new Tensor<T>(new[] { batch, length, k + 1 });
-        var minusInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        // A distractor identical to the target is excluded, as in the reference.
         int masked = 0;
-        var weights = new Tensor<T>(new[] { batch, length });
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < length; t++)
+        Tensor<T> weights;
+        Tensor<T>? dynamicMaskedCount = null;
+        if (dynamicMaskFlat is not null)
+        {
+            weights = _engine.Reshape(dynamicMaskFlat, new[] { batch, length });
+            dynamicMaskedCount = _engine.ReduceSum(dynamicMaskFlat, new[] { 0 }, keepDims: false);
+        }
+        else
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
             {
-                if (!mask[b, t]) continue;
-                masked++;
-                weights[b, t] = NumOps.One;
-                int self = b * length + t;
-                for (int j = 0; j < k; j++)
-                {
-                    int other = negatives[b, t, j];
-                    bool same = true;
-                    for (int d = 0; d < p && same; d++) same = NumOps.ToDouble(tv[self * p + d]) == NumOps.ToDouble(tv[other * p + d]);
-                    if (same) exclude[b, t, 1 + j] = minusInfinity;
-                }
+                var weightsArr = new double[batch * length];
+                for (int b = 0; b < batch; b++)
+                    for (int t = 0; t < length; t++)
+                    {
+                        if (!mask[b, t]) continue;
+                        masked++;
+                        weightsArr[b * length + t] = 1.0;
+                    }
+                weights = new Tensor<double>(weightsArr, new[] { batch, length }).Cast<T>();
             }
+        }
+        Tensor<T> exclude;
+        if (dynamicMaskFlat is not null && dynamicNegFlatIndices is not null)
+        {
+            exclude = ComputeDynamicDistractorExclusion(targets, dynamicMaskFlat, dynamicNegFlatIndices, batch, length, k, p);
+        }
+        else if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive || fixedGumbelNoise is not null)
+        {
+            exclude = ComputeDistractorExclusion(
+                targets,
+                indices ?? throw new InvalidOperationException("Static negative indices required."),
+                flatMask ?? throw new InvalidOperationException("Static flat mask required."),
+                batch, length, k, p);
+        }
+        else
+        {
+            var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
+            var requiredNegatives = negatives ?? throw new ArgumentNullException(nameof(negatives));
+            var tv = targets.Cast<double>().ToArray();
+            var excludeArr = new double[batch * length * (k + 1)];
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < length; t++)
+                {
+                    if (!mask[b, t]) continue;
+                    int self = b * length + t;
+                    int outBase = self * (k + 1);
+                    for (int j = 0; j < k; j++)
+                    {
+                        int other = requiredNegatives[b, t, j];
+                        bool same = true;
+                        for (int d = 0; d < p && same; d++) same = tv[self * p + d] == tv[other * p + d];
+                        if (same) excludeArr[outBase + 1 + j] = double.NegativeInfinity;
+                    }
+                }
+            exclude = new Tensor<double>(excludeArr, new[] { batch, length, k + 1 }).Cast<T>();
+        }
         logits = _engine.TensorAdd(logits, exclude);
         // Cross-entropy with target 0 over the masked steps, summed: logsumexp(logits) − logits₀.
-        var lv = logits.ToArray();
-        var shift = new Tensor<T>(new[] { batch, length, 1 });
-        for (int r = 0; r < batch * length; r++)
+        Tensor<T> shift;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive || dynamicMaskFlat is not null || fixedGumbelNoise is not null)
         {
-            double max = double.NegativeInfinity;
-            for (int j = 0; j <= k; j++) max = Math.Max(max, NumOps.ToDouble(lv[r * (k + 1) + j]));
-            shift[r / length, r % length, 0] = NumOps.FromDouble(max);
+            shift = _engine.ReduceMax(logits, new[] { 2 }, keepDims: true);
+        }
+        else
+        {
+            var lv = logits.Cast<double>().ToArray();
+            var shiftArr = new double[batch * length];
+            for (int r = 0; r < batch * length; r++)
+            {
+                double max = double.NegativeInfinity;
+                for (int j = 0; j <= k; j++) max = Math.Max(max, lv[r * (k + 1) + j]);
+                shiftArr[r] = max;
+            }
+            shift = new Tensor<double>(shiftArr, new[] { batch, length, 1 }).Cast<T>();
         }
         var shifted = _engine.TensorSubtract(logits, _engine.TensorTile(shift, new[] { 1, 1, k + 1 }));
         var logSumExp = _engine.TensorAdd(_engine.TensorLog(_engine.ReduceSum(_engine.TensorExp(shifted), new[] { 2 }, keepDims: false)),
@@ -287,14 +573,18 @@ internal sealed class Wav2Vec2Pretraining<T>
         var contrastive = _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorSubtract(logSumExp, first), weights), new[] { 0, 1 }, keepDims: false);
 
         int entries = c.Groups * c.EntriesPerGroup;
-        var diversity = _engine.TensorMultiplyScalar(_engine.TensorAddScalar(_engine.TensorMultiplyScalar(perplexity, NumOps.FromDouble(-1.0)),
-            NumOps.FromDouble(entries)), NumOps.FromDouble((double)masked / entries));
+        var baseDiv = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(perplexity, NumOps.FromDouble(-1.0)), NumOps.FromDouble(entries));
+        var diversity = dynamicMaskedCount is not null
+            ? _engine.TensorMultiply(_engine.TensorMultiplyScalar(baseDiv, NumOps.FromDouble(1.0 / entries)), _engine.Reshape(dynamicMaskedCount, baseDiv._shape))
+            : _engine.TensorMultiplyScalar(baseDiv, NumOps.FromDouble((double)masked / entries));
         var raw = output.RawFeatures;
-        var penalty = _engine.TensorMultiplyScalar(_engine.ReduceMean(_engine.TensorMultiply(raw, raw), Enumerable.Range(0, raw.Rank).ToArray(), keepDims: false),
-            NumOps.FromDouble(masked));
+        var basePenalty = _engine.ReduceMean(_engine.TensorMultiply(raw, raw), Enumerable.Range(0, raw.Rank).ToArray(), keepDims: false);
+        var penalty = dynamicMaskedCount is not null
+            ? _engine.TensorMultiply(basePenalty, _engine.Reshape(dynamicMaskedCount, basePenalty._shape))
+            : _engine.TensorMultiplyScalar(basePenalty, NumOps.FromDouble(masked));
         var total = _engine.TensorAdd(_engine.TensorAdd(contrastive, _engine.TensorMultiplyScalar(diversity, NumOps.FromDouble(c.DiversityWeight))),
             _engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(c.FeaturePenaltyWeight)));
-        return new Losses(total, contrastive, diversity, penalty, masked, ids);
+        return new Losses(total, contrastive, diversity, penalty, masked, ids, codeOneHot);
     }
 
     /// <summary>The reference's initialization: weight_proj N(0, 1) with zero bias, codevectors U(0, 1), the two

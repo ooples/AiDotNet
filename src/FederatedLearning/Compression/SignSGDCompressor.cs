@@ -30,8 +30,8 @@ internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentB
     private readonly double _learningRate;
     private readonly bool _useMajorityVote;
     private readonly double _momentum;
-    private Dictionary<int, Dictionary<string, double[]>>? _errorAccumulators;
-    private Dictionary<int, Dictionary<string, double[]>>? _momentumBuffers;
+    private Dictionary<int, Dictionary<string, Vector<T>>>? _errorAccumulators;
+    private Dictionary<int, Dictionary<string, Vector<T>>>? _momentumBuffers;
 
     /// <summary>
     /// Creates a new SignSGD compressor.
@@ -76,55 +76,47 @@ internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentB
             return new Dictionary<string, T[]>();
         }
 
-        _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
-        _momentumBuffers ??= new Dictionary<int, Dictionary<string, double[]>>();
+        _errorAccumulators ??= new Dictionary<int, Dictionary<string, Vector<T>>>();
+        _momentumBuffers ??= new Dictionary<int, Dictionary<string, Vector<T>>>();
 
         if (!_errorAccumulators.ContainsKey(clientId))
         {
-            _errorAccumulators[clientId] = new Dictionary<string, double[]>();
+            _errorAccumulators[clientId] = new Dictionary<string, Vector<T>>();
         }
 
         if (!_momentumBuffers.ContainsKey(clientId))
         {
-            _momentumBuffers[clientId] = new Dictionary<string, double[]>();
+            _momentumBuffers[clientId] = new Dictionary<string, Vector<T>>();
         }
 
         var errorAcc = _errorAccumulators[clientId];
         var momBuf = _momentumBuffers[clientId];
         var compressed = new Dictionary<string, T[]>(gradient.Count);
+        var momentumT = NumOps.FromDouble(_momentum);
+        var dampeningT = NumOps.FromDouble(1 - _momentum);
 
         foreach (var kvp in gradient)
         {
             if (!errorAcc.ContainsKey(kvp.Key))
             {
-                errorAcc[kvp.Key] = new double[kvp.Value.Length];
+                errorAcc[kvp.Key] = new Vector<T>(kvp.Value.Length);
             }
 
             if (!momBuf.ContainsKey(kvp.Key))
             {
-                momBuf[kvp.Key] = new double[kvp.Value.Length];
+                momBuf[kvp.Key] = new Vector<T>(kvp.Value.Length);
             }
 
-            var err = errorAcc[kvp.Key];
-            var mom = momBuf[kvp.Key];
-            var signs = new T[kvp.Value.Length];
+            var grad = Engine.Add(Vector<T>.Wrap(kvp.Value), errorAcc[kvp.Key]); // Add error feedback.
 
-            for (int i = 0; i < signs.Length; i++)
-            {
-                double grad = NumOps.ToDouble(kvp.Value[i]) + err[i]; // Add error feedback.
+            // SIGNUM: apply momentum before sign.
+            var mom = Engine.Add(Engine.Multiply(momBuf[kvp.Key], momentumT), Engine.Multiply(grad, dampeningT));
+            momBuf[kvp.Key] = mom;
+            var signs = Engine.Sign(_momentum > 0 ? mom : grad);
 
-                // SIGNUM: apply momentum before sign.
-                mom[i] = _momentum * mom[i] + (1 - _momentum) * grad;
-                double signInput = _momentum > 0 ? mom[i] : grad;
-
-                double sign = signInput > 0 ? 1.0 : signInput < 0 ? -1.0 : 0.0;
-                signs[i] = NumOps.FromDouble(sign);
-
-                // Error feedback: residual = original - reconstructed
-                err[i] = grad - sign; // sign is the "reconstruction" for sign compression.
-            }
-
-            compressed[kvp.Key] = signs;
+            // Error feedback: residual = original - reconstructed (sign is the reconstruction).
+            errorAcc[kvp.Key] = Engine.Subtract(grad, signs);
+            compressed[kvp.Key] = signs.ToArray();
         }
 
         return compressed;
@@ -149,38 +141,43 @@ internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentB
         foreach (var layerName in reference.Keys)
         {
             int len = reference[layerName].Length;
-            var aggregated = new T[len];
-
-            for (int i = 0; i < len; i++)
+            var votes = new List<Vector<T>>(clientSigns.Count);
+            foreach (var client in clientSigns.Values)
             {
-                double sum = 0;
-                foreach (var client in clientSigns.Values)
+                if (!client.TryGetValue(layerName, out var clientLayer))
                 {
-                    if (!client.TryGetValue(layerName, out var clientLayer))
-                    {
-                        continue; // Skip clients missing this layer.
-                    }
-
-                    if (clientLayer.Length != len)
-                    {
-                        throw new ArgumentException(
-                            $"Client layer '{layerName}' length {clientLayer.Length} does not match reference length {len}.");
-                    }
-
-                    sum += NumOps.ToDouble(clientLayer[i]);
+                    continue; // Skip clients missing this layer.
                 }
 
-                if (_useMajorityVote)
+                if (clientLayer.Length != len)
                 {
-                    aggregated[i] = NumOps.FromDouble(sum > 0 ? _learningRate : sum < 0 ? -_learningRate : 0);
+                    throw new ArgumentException(
+                        $"Client layer '{layerName}' length {clientLayer.Length} does not match reference length {len}.");
                 }
-                else
-                {
-                    aggregated[i] = NumOps.FromDouble(_learningRate * sum / clientSigns.Count);
-                }
+
+                votes.Add(Vector<T>.Wrap(clientLayer));
             }
 
-            result[layerName] = aggregated;
+            // The vote is tallied with weight 1 (majority) or lr / numClients (mean) per client; Half / BFloat16
+            // tallies are formed in float, since a Half running count saturates at 2048 and can flip the sign.
+            Vector<T> aggregated;
+            if (votes.Count == 0)
+            {
+                aggregated = new Vector<T>(len);
+            }
+            else if (_useMajorityVote)
+            {
+                var tally = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(
+                    votes, Enumerable.Repeat(1.0, votes.Count).ToArray());
+                aggregated = Engine.Multiply(Engine.Sign(tally), NumOps.FromDouble(_learningRate));
+            }
+            else
+            {
+                aggregated = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(
+                    votes, Enumerable.Repeat(_learningRate / clientSigns.Count, votes.Count).ToArray());
+            }
+
+            result[layerName] = aggregated.ToArray();
         }
 
         return result;
