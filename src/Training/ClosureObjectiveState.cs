@@ -52,8 +52,8 @@ internal sealed class ClosureObjectiveState<T>
         internal Entry(
             ICompiledTrainingPlan<T> plan,
             ClosureObjectiveGuard<T>? guard,
-            object[]? leaves = null,
-            CompiledOpShapeCache? shapes = null)
+            object[]? leaves,
+            CompiledOpShapeCache? shapes)
         {
             Plan = plan;
             _leaves = leaves ?? Array.Empty<object>();
@@ -230,8 +230,8 @@ internal sealed class ClosureObjectiveState<T>
         out ObjectiveSignature? signature, out object[] leaves, out string? reason)
     {
         foreach (var entry in _entries)
-            if (entry.Guard is { } guard)
-                return guard.ProbeWithRecordedShapes(objective, parameters, out signature, out leaves, out reason);
+            if (entry.Guard is not null && entry.Shapes is { } recordedShapes)
+                return ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, recordedShapes);
         return ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
     }
 
