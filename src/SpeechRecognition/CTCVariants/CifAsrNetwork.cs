@@ -131,11 +131,12 @@ internal sealed class CifAsrNetwork<T>
     private Tensor<T> Normalized(Tensor<T> x)
     {
         var mean = _engine.ReduceMean(x, new[] { 0 }, keepDims: true);                                   // [1, bands]
-        var square = _engine.ReduceMean(_engine.TensorMultiply(x, x), new[] { 0 }, keepDims: true);
-        var variance = _engine.ReLU(_engine.TensorSubtract(square, _engine.TensorMultiply(mean, mean)));
+        // The mean of the squared deviations, not E[x^2] - E[x]^2: that difference of two rounded, nearly equal terms
+        // loses a small variance entirely in a narrow element type (a Half band of 16 and 16.03125 gives 256.5 - 256.5).
+        var centered = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, x._shape));
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
         var deviation = _engine.TensorAddScalar(_engine.TensorSqrt(variance), NumOps.FromDouble(1e-5));
-        return _engine.TensorDivide(_engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, x._shape)),
-            _engine.TensorBroadcastTo(deviation, x._shape));
+        return _engine.TensorDivide(centered, _engine.TensorBroadcastTo(deviation, x._shape));
     }
 
     // Kaldi's deltas with a window of 2: Σ n (x[t+n] − x[t−n]) / (2 Σ n²), the edges repeated.
