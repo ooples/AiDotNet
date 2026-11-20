@@ -7,6 +7,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
 public sealed class OwnedDerivedTensorCacheTests
 {
+#if AIDOTNET_TENSORS_SOURCE // IEngine.TensorWeightNorm exists only in the Tensors source tree (#1793).
     [SkippableTheory]
     [InlineData(false)]
     [InlineData(true)]
@@ -21,8 +22,7 @@ public sealed class OwnedDerivedTensorCacheTests
         var first = cache.GetOrBuild(engine, static (e, s) => e.TensorWeightNorm(s[0], s[1], 1e-24), direction, gain);
         using var expectedTensor = new CpuEngine().TensorWeightNorm(direction, gain, 1e-24);
         var expected = expectedTensor.ToArray();
-        var backing = first.TryGetGpuBuffer()!;
-        Assert.NotNull(backing);
+        var backing = first.TryGetGpuBuffer() ?? throw new Xunit.Sdk.XunitException("The cached value has no GPU backing.");
         using var view = retainView ? new CpuEngine().Reshape(first, new[] { 8 }) : null;
         direction[0] = 1.5f;
         var second = cache.GetOrBuild(engine, static (e, s) => e.TensorWeightNorm(s[0], s[1], 1e-24), direction, gain);
@@ -40,6 +40,7 @@ public sealed class OwnedDerivedTensorCacheTests
         Assert.True(second.IsDisposed);
         Assert.False(direction.IsDisposed);
     }
+#endif
 
     [Fact]
     public void ReplacementAndInvalidationRetireOwnedValuesWhileViewsKeepTheirData()
