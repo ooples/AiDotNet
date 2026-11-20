@@ -439,6 +439,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return created;
     }
 
+    /// <summary>Whether the fast route is in use for <paramref name="input"/>'s shape: false until a probe at that shape
+    /// found it bitwise equal to the reference (tests).</summary>
+    internal bool OptimizedRouteMatchesReference(Tensor<T> input) => FinalVerdictFor(input)?.MatchesReference ?? false;
+
     private OptimizedRouteVerdict? FinalVerdictFor(Tensor<T> input)
     {
         foreach (var verdict in _optimizedVerdicts)
