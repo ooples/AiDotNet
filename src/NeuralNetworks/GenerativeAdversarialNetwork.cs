@@ -1022,47 +1022,62 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // computes below (same weights, same batch statistics), with the statistics still advancing once per
         // iteration, in that step. That step runs on the generator's fused session, so it needs a forward of its own;
         // sharing one taped forward between the two steps (#1390) kept the generator step eager.
+        //
+        // The fake batch, the concatenated batch and the generator forward's intermediates are dead once the
+        // discriminator step returns: this scope frees their device memory then, as PyTorch frees them at their last
+        // use, instead of leaving them to the garbage collector (which let DCGAN's footprint climb by ~1.5 GB of dead
+        // batches between collections). The discriminator step itself runs with the scope suspended: what it keeps
+        // (its loss, its compiled plan's buffers) is its own.
         var trainableGen = Generator;
-        var fakeImages = trainableGen.ForwardForTrainingDetached(input);
-
-        // Cache real / fake batches only when an auxiliary loss path needs
-        // them. Previously this clone ran unconditionally for UseFeatureMatching;
-        // the WGAN-GP gradient-penalty path silently saw null batches and the
-        // penalty contributed nothing (EnableGradientPenalty looked like a
-        // working toggle but never applied a real penalty signal during
-        // training). Both paths now share the same gated cache.
-        if (UseFeatureMatching || _useGradientPenalty)
+        var dStepScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
+        try
         {
-            _lastRealBatch = expectedOutput.Clone();
-            _lastFakeBatch = fakeImages.Clone();
-        }
+            var fakeImages = trainableGen.ForwardForTrainingDetached(input);
 
-        // === Combined discriminator step ===
-        //
-        // Train the discriminator on real and fake samples in a SINGLE
-        // forward+backward+optimizer-step instead of two sequential Train
-        // calls. The BCE loss over a concatenated [real; fake] batch with
-        // labels [1; 0] is mathematically equivalent to the average of the
-        // two separate-step losses, but at half the disc compute per
-        // iteration (one tape, one forward, one backward, one optimizer
-        // step instead of two of each).
-        //
-        // Secondary effect: BN now sees batch=2 instead of batch=1, so the
-        // training-mode forward goes through the actual Engine.BatchNorm
-        // path (computes real batch stats and updates running mean/variance)
-        // instead of falling through the batch=1 inference fallback that
-        // leaves running stats at defaults forever. That fixes a latent
-        // bug where DCGAN's BN layers never accumulated useful running
-        // statistics during training. (Pre-fix the batch=1 routing was the
-        // only safe option because variance over one sample is 0 and the
-        // gradient was pathological; at batch=2 variance is well-defined
-        // and gradients flow normally per Ioffe & Szegedy 2015.)
-        var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
-        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
-        var lblSpan = combinedLabels.Data.Span;
-        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
-        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
-        Discriminator.Train(combinedImages, combinedLabels);
+            // Cache real / fake batches only when an auxiliary loss path needs
+            // them. Previously this clone ran unconditionally for UseFeatureMatching;
+            // the WGAN-GP gradient-penalty path silently saw null batches and the
+            // penalty contributed nothing (EnableGradientPenalty looked like a
+            // working toggle but never applied a real penalty signal during
+            // training). Both paths now share the same gated cache.
+            if (UseFeatureMatching || _useGradientPenalty)
+            {
+                _lastRealBatch = dStepScope.Keep(expectedOutput.Clone());
+                _lastFakeBatch = dStepScope.Keep(fakeImages.Clone());
+            }
+
+            // === Combined discriminator step ===
+            //
+            // Train the discriminator on real and fake samples in a SINGLE
+            // forward+backward+optimizer-step instead of two sequential Train
+            // calls. The BCE loss over a concatenated [real; fake] batch with
+            // labels [1; 0] is mathematically equivalent to the average of the
+            // two separate-step losses, but at half the disc compute per
+            // iteration (one tape, one forward, one backward, one optimizer
+            // step instead of two of each).
+            //
+            // Secondary effect: BN now sees batch=2 instead of batch=1, so the
+            // training-mode forward goes through the actual Engine.BatchNorm
+            // path (computes real batch stats and updates running mean/variance)
+            // instead of falling through the batch=1 inference fallback that
+            // leaves running stats at defaults forever. That fixes a latent
+            // bug where DCGAN's BN layers never accumulated useful running
+            // statistics during training. (Pre-fix the batch=1 routing was the
+            // only safe option because variance over one sample is 0 and the
+            // gradient was pathological; at batch=2 variance is well-defined
+            // and gradients flow normally per Ioffe & Szegedy 2015.)
+            var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
+            var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
+            var lblSpan = combinedLabels.Data.Span;
+            for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
+            for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
+            using (AiDotNet.Tensors.Engines.TensorScope.Suspend())
+                Discriminator.Train(combinedImages, combinedLabels);
+        }
+        finally
+        {
+            dStepScope.Dispose();
+        }
         // The gradient-penalty step below trains the discriminator again and replaces its last loss, so that path
         // reads this step's loss now; otherwise it stays on the device until something asks for it.
         bool readDiscriminatorLossNow = _useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null;

@@ -17859,18 +17859,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
+        // Every device result of this forward -- each layer's output, the statistics snapshot -- is dead once the output
+        // is copied out and the statistics restored: the scope frees them when it ends, as PyTorch frees a no-grad
+        // forward's intermediates at their last use, instead of leaving them to the garbage collector (a DCGAN generator's
+        // detached forward held ~550 MB of dead activations across steps that way).
+        using var scope = AiDotNet.Tensors.Engines.TensorScope.Begin();
         var buffers = new List<Tensor<T>>();
         foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
         var saved = AiDotNet.Training.TensorCheckpoint<T>.Capture(buffers);
+        Tensor<T> output;
         try
         {
             using (new NoGradScope<T>())
-                return AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
+                output = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
         }
         finally
         {
             AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
+        return scope.Keep(output);
     }
 
     private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)
