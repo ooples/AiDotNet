@@ -308,9 +308,16 @@ internal sealed class InformerNetwork<T>
 
         // Every other query keeps the initial context: mean(V), or masked, the cumulative sum of V.
         var lazy = new Tensor<T>(new[] { 1, lq, lk });
-        for (int i = 0; i < lq; i++)
-            for (int j = 0; j < lk; j++)
-                if (masked ? j <= i : true) lazy[0, i, j] = masked ? NumOps.One : NumOps.FromDouble(1.0 / lk);
+        var contextWeights = lazy.AsWritableSpan();
+        if (masked)
+        {
+            for (int i = 0; i < lq; i++)
+                contextWeights.Slice(i * lk, i + 1).Fill(NumOps.One);
+        }
+        else
+        {
+            contextWeights.Fill(NumOps.FromDouble(1.0 / lk));
+        }
         var initial = _engine.BatchMatMul(_engine.TensorTile(lazy, new[] { bh, 1, 1 }), v);                    // [BH, Lq, E]
         var selectT = _engine.TensorPermute(select, new[] { 0, 2, 1 });
         return _engine.TensorAdd(initial, _engine.BatchMatMul(selectT, _engine.TensorSubtract(updated, _engine.BatchMatMul(select, initial))));
