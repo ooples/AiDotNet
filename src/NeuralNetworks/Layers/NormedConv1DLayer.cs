@@ -416,11 +416,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => ForwardCore(input, false, NumOps.Zero);
 
     /// <summary>Explicit composition used only when a private inference convolution feeds LeakyReLU immediately.</summary>
-    internal Tensor<T> ForwardLeakyInference(Tensor<T> input, T alpha)
+    internal Tensor<T> ForwardLeakyInference(Tensor<T> input, T alpha, bool detachedTraining = false)
     {
         var ports = InputPorts;
         if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY") == "0"
-            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsTrainingMode || IsInferringShapes
+            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsInferringShapes
+            || (IsTrainingMode && !CanFuseDetachedForward(detachedTraining))
             || Engine.Unwrap().GetType() != typeof(DirectGpuTensorEngine) || !ReferenceEquals(Engine, Engine.Unwrap())
             || GradientTape<T>.Current is not null || GraphMode.IsActive
             || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
@@ -434,10 +435,11 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Inference convolution followed by bias/residual addition and an optional separately owned activated carry.</summary>
     internal Tensor<T> ForwardResidualInference(Tensor<T> input, Tensor<T> residual, T alpha,
-        bool writeActivation, out Tensor<T>? activated)
+        bool writeActivation, out Tensor<T>? activated, bool detachedTraining = false)
     {
         if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_RESIDUAL") == "0"
-            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsTrainingMode || IsInferringShapes
+            || GetType() != typeof(NormedConv1DLayer<T>) || typeof(T) != typeof(float) || IsInferringShapes
+            || (IsTrainingMode && !CanFuseDetachedForward(detachedTraining))
             || Engine.Unwrap().GetType() != typeof(DirectGpuTensorEngine) || !ReferenceEquals(Engine, Engine.Unwrap())
             || GradientTape<T>.Current is not null || GraphMode.IsActive
             || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
@@ -485,6 +487,11 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         activated = writeActivation ? Engine.LeakyReLU(sum, alpha) : null;
         return sum;
     }
+
+    // The discriminator consumes only the generated waveform. Its detached forward can combine
+    // epilogues while Kernel() still computes the current training weights for every convolution.
+    private bool CanFuseDetachedForward(bool detachedTraining) =>
+        detachedTraining && NoGradScope<T>.IsSuppressed && _normalization != ConvolutionNormalization.Spectral;
 
     private Tensor<T> ForwardConvolution(Tensor<T> input, Tensor<T>? computedKernel = null)
     {

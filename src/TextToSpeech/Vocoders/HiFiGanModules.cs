@@ -200,7 +200,8 @@ internal sealed partial class HiFiGanGenerator<T>
         return owner.Keep(_engine.TensorConcatenate(outputs.ToArray(), 0));
     }
 
-    private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
+    private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu,
+        bool detachedTraining = false)
     {
         using var forward = TensorScope.Begin();
         T leakySlope = MathHelper.GetNumericOperations<T>().FromDouble(Slope);
@@ -288,9 +289,9 @@ internal sealed partial class HiFiGanGenerator<T>
                         var activatedResidual = carriedActivation ?? LeakyRelu(residual, Slope);
                         if (_resblockType1)
                         {
-                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual, leakySlope);
+                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual, leakySlope, detachedTraining);
                             h = second[n].ForwardResidualInference(activatedFirst, residual, leakySlope,
-                                n + 1 < first.Count, out nextActivatedResidual);
+                                n + 1 < first.Count, out nextActivatedResidual, detachedTraining);
                         }
                         else h = _engine.TensorAdd(first[n].Forward(activatedResidual), residual);
                         pair.Keep(h);
@@ -390,7 +391,7 @@ internal sealed partial class HiFiGanGenerator<T>
             // Detached discriminator generation needs only the waveform. Keep training mode and the existing
             // host-owned return contract while returning convolution/residual scratch at each pair boundary.
             using var scratch = TensorScope.Begin();
-            var detached = ForwardGpuInference(features, null, gpu);
+            var detached = ForwardGpuInference(features, null, gpu, detachedTraining: true);
             return new Tensor<T>(detached.ToArray(), detached.Shape.ToArray());
         }
 
