@@ -15023,15 +15023,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
 
-        // The eager step clips by the model's norm over its layer-owned parameters only, then by the optimizer's over
-        // all of them. The plan clips one global norm: the model's clip is that norm when it covers every trained
-        // parameter, absent when it covers none (VoxtLM trains model-owned language-model layers), and has no single-
-        // norm form when it covers some.
+        // The model's clip is one global norm over the step's whole trained set, eager and fused alike (torch's
+        // clip_grad_norm_ over the joint parameter list): a step that also trains another network's parameters (a
+        // CycleGAN generator step trains both generators) clips them together rather than only the hosting network's.
+        // It is absent when the model's layers own none of the trained parameters (VoxtLM trains model-owned
+        // language-model layers).
         var modelClipScope = MaxGradNormValue > 0.0
             ? CollectLayerOwnedTrainableTensorsForClipping(parameters)
             : (IReadOnlyList<Tensor<T>>)Array.Empty<Tensor<T>>();
         int modelClipped = modelClipScope.Count;
-        bool partialModelClip = clipCustomObjective && modelClipped > 0 && modelClipped < parameters.Count;
 
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
         // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
@@ -15047,9 +15047,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = parameters,
             Selection = parameters,
             ModelGradientClip = !clipCustomObjective || modelClipped == 0 ? 0.0 : MaxGradNormValue,
-            // A partial clip is not fused (GraphBreakReason below); its eager step clips only these gradients by the
-            // model's norm and leaves the model-owned ones to the optimizer's own clip.
-            ModelGradientClipScope = partialModelClip ? modelClipScope : null,
+            // Null: the clip covers every gradient of the step, as the plan's one global norm does.
+            ModelGradientClipScope = null,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
@@ -15063,9 +15062,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
                 : TrainingForwardSkipsLayersPerStep ? PerStepLayerSkipReason
-                : partialModelClip
-                    ? "the model's gradient clip covers only its layer-owned parameters; the plan clips one global norm"
-                    : layerGraphBreak,
+                : layerGraphBreak,
             // Only an explicit layer declaration may bridge a committed closure step to the plan's optimizer.
             ClosureGraphBreakPolicy = declaredClosureBreak && session.IsCommitted
                 ? Training.ClosureGraphBreakPolicy.UseConfiguredOptimizer

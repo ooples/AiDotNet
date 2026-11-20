@@ -5,8 +5,9 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.Training;
 
 /// <summary>
-/// The model's gradient clip covers its layer-owned parameters only. A custom objective that also trains model-owned
-/// parameters is not fused, and the eager step it falls back to must clip just the covered gradients.
+/// The eager stepper's clip primitive: given a scope it clips just the covered gradients by their own norm, and given
+/// none it clips every gradient by the global norm. A network's custom-objective step passes no scope (its clip covers
+/// the step's whole trained set, as the fused plan's does), so the scoped form is for callers that name one.
 /// </summary>
 public class ScopedGradientClipTests
 {
