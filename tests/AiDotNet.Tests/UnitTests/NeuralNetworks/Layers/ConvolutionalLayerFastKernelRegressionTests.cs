@@ -26,7 +26,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
 
-        AssertOptimizedRouteMatch(layer, expected: true,
+        AssertOptimizedRouteMatch(layer, input, expected: true,
             "AiDotNet.Tensors 0.129.7 must make the exact and optimized convolution routes " +
             "bitwise-equal; a slow reference fallback only hides the PatchGAN regression.");
         for (int replay = 0; replay < 32; replay++)
@@ -49,7 +49,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
 
-        AssertOptimizedRouteMatch(layer, expected: true,
+        AssertOptimizedRouteMatch(layer, input, expected: true,
             "The fused ReLU route must be bitwise-equal on every platform after the Tensors " +
             "upgrade; retaining the old Windows fallback would preserve a performance regression.");
         for (int replay = 0; replay < 32; replay++)
@@ -152,14 +152,11 @@ public class ConvolutionalLayerFastKernelRegressionTests
 
     private static void AssertOptimizedRouteMatch(
         ConvolutionalLayer<float> layer,
+        Tensor<float> input,
         bool expected,
         string message)
     {
-        var matchField = typeof(ConvolutionalLayer<float>).GetField(
-            "_optimizedMatchesReference",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(matchField);
-        bool actual = (bool)(matchField.GetValue(layer) ?? throw new InvalidOperationException("matchField.GetValue(layer) is null where it is required."));
+        bool actual = layer.OptimizedRouteMatchesReference(input);
         Assert.True(actual == expected, $"{message} Expected match={expected}, actual={actual}.");
     }
 
