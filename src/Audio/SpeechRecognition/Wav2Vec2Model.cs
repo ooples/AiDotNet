@@ -439,7 +439,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         ThrowIfDisposed();
 
         // Preprocess audio
-        var features = PreprocessAudio(audio);
+        var features = PreprocessAudio(_useNativeMode && audio.Rank > 1
+            ? Engine.Reshape(audio, new[] { audio.Length }) : audio);
 
         // Get model output
         Tensor<T> logits;
@@ -643,9 +644,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             if (label <= 0 || label >= _vocabSize)
                 throw new ArgumentException($"CTC label {label} is the blank or outside the {_vocabSize}-symbol vocabulary.", nameof(target));
         var targetLengths = Enumerable.Repeat(perRow, rows).ToArray();
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomLoss(input, logits =>
         {
-            var logits = RunModel(input, training: true);
             if (logits.Rank == 2) logits = Engine.Reshape(logits, new[] { 1, logits.Shape[0], logits.Shape[1] });
             int frames = logits.Shape[1];
             var timeMajor = Engine.TensorPermute(Engine.TensorLogSoftmax(logits, axis: -1), new[] { 1, 0, 2 });

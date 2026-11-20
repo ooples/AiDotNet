@@ -3,13 +3,107 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import psutil
 
 from benchmark_telemetry import cpu_storage_events
-from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_comparison_kinds, hifigan_comparison_policy, hifigan_required_checks, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
+from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_comparison_kinds, hifigan_comparison_policy, hifigan_required_checks, launch, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
+from finish_gate import warmed_cuda_calls_gate
 
 
 class GateTests(unittest.TestCase):
+    def test_overflowing_derived_ratios_stay_json_serializable(self):
+        result = paired_gate([1.0] * 5, [1e-320] * 5)
+        self.assertEqual("unverified", result["status"])
+        json.dumps(result, allow_nan=False)
+
+    def test_memory_and_latency_both_require_ten_percent_reduction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runs = [dict(model="tiny", device="cpu", mode="score", pair=pair, side=side, path=temporary)
+                    for pair in range(5) for side in ("aidotnet", "pytorch")]
+            def measured(run):
+                value = .95 if run["side"] == "aidotnet" else 1.0
+                return {"whole_process_rss_bytes": value, "training_seconds": value}, []
+            with patch("finish_gate.metrics", side_effect=measured), patch("finish_gate.correctness_gate", return_value={"status": "pass"}):
+                outcomes = evaluate(runs, .9)["tiny/cpu"]["metrics"]
+            self.assertEqual("fail", outcomes["whole_process_rss_bytes"]["status"])
+            self.assertEqual("fail", outcomes["training_seconds"]["status"])
+
+    def launch_config(self):
+        return {"commands": {side: {"argv": ["runner", __file__], "cwd": ".", "env": {"CUDA_VISIBLE_DEVICES": "wrong"}}
+                             for side in ("aidotnet", "pytorch")}, "protocol": {"inference_batch_sizes": [1]},
+                "diagnostic_protocol": {"inference_batch_sizes": [1]}, "gpu_id": "2",
+                "artifacts": {"python_process_bootstrap": __file__, "nsys": "nsys"},
+                "cache_policy": {"regime": "cold"}}
+
+    def test_cuda_launch_pins_both_runners_and_sampler_to_physical_uuid(self):
+        config = self.launch_config()
+        with tempfile.TemporaryDirectory() as temporary:
+            for side in ("aidotnet", "pytorch"):
+                sampler = Mock(contention=[])
+                sampler.finish.return_value = []
+                with patch("finish_gate.provenance", return_value={}), patch("finish_gate.contending_processes", return_value=[]), \
+                     patch("finish_gate.nvidia_query", return_value="2, GPU-test, 00000000:65:00.0") as query, \
+                     patch("finish_gate.subprocess.Popen", return_value=Mock(pid=123, wait=Mock(return_value=0))) as popen, \
+                     patch("finish_gate.psutil.Process", return_value=Mock(create_time=Mock(return_value=1.0))), \
+                     patch("finish_gate.resolve_python_process", return_value={"pid": 456, "process_create_time": 1.0}), \
+                     patch("finish_gate.Sampler", return_value=sampler) as sampling:
+                    result = launch(config, side, "tiny", "cuda", 0, "score", Path(temporary))
+                env = popen.call_args.kwargs["env"]
+                self.assertEqual("GPU-test", env["CUDA_VISIBLE_DEVICES"])
+                self.assertEqual("PCI_BUS_ID", env["CUDA_DEVICE_ORDER"])
+                self.assertEqual("cuda", env["AIDOTNET_DIRECTGPU_BACKENDS"])
+                self.assertIsNone(result["profiled_argv"])
+                sampling.assert_called_once_with(456 if side == "pytorch" else 123, "GPU-test")
+                query.assert_called_once_with("2", "index,uuid,pci.bus_id")
+                saved = json.loads((Path(result["path"]) / "measurement.json").read_text())
+                self.assertEqual("2", saved["gpu_mapping"]["physical_index"])
+                self.assertEqual("GPU-test", saved["environment_overrides"]["CUDA_VISIBLE_DEVICES"])
+
+    def test_cuda_launch_without_resolved_physical_gpu_fails_before_start(self):
+        with tempfile.TemporaryDirectory() as temporary, patch("finish_gate.nvidia_query", return_value=None), \
+             patch("finish_gate.subprocess.Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "physical nvidia-smi GPU"):
+                launch(self.launch_config(), "aidotnet", "tiny", "cuda", 0, "score", Path(temporary))
+            popen.assert_not_called()
+
+    def test_exited_child_writes_an_invalid_measurement(self):
+        with tempfile.TemporaryDirectory() as temporary, patch("finish_gate.provenance", return_value={}), \
+             patch("finish_gate.contending_processes", return_value=[]), \
+             patch("finish_gate.subprocess.Popen", return_value=Mock(pid=123, wait=Mock(return_value=7))), \
+             patch("finish_gate.Sampler", side_effect=psutil.NoSuchProcess(123)):
+            result = launch(self.launch_config(), "aidotnet", "tiny", "cpu", 0, "score", Path(temporary))
+            saved = json.loads((Path(result["path"]) / "measurement.json").read_text())
+            self.assertEqual(7, saved["return_code"])
+            self.assertEqual({}, saved["memory"])
+            self.assertIn("before memory sampling", saved["invalid_reason"])
+            self.assertEqual(({}, [saved["invalid_reason"]]), metrics(dict(saved, path=result["path"])))
+
+    def test_only_warmed_native_calls_can_match_a_zero_reference(self):
+        self.assertEqual("pass", warmed_cuda_calls_gate([0] * 5, [0] * 5, .9)["status"])
+        self.assertEqual("fail", warmed_cuda_calls_gate([0, 0, 1, 0, 0], [0] * 5, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([0] * 4, [0] * 4, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([None] * 5, [0] * 5, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([0, 8, 8, 8, 8], [0, 10, 10, 10, 10], .9)["status"])
+        self.assertEqual("pass", warmed_cuda_calls_gate([0] + [8] * 5, [0] + [10] * 5, .9)["status"])
+        self.assertEqual("fail", warmed_cuda_calls_gate([96] * 5, [100] * 5, .9)["status"])
+
+    def test_cuda_diagnostic_profiles_the_framework_process(self):
+        sampler = Mock(contention=[])
+        sampler.finish.return_value = []
+        with tempfile.TemporaryDirectory() as temporary, patch("finish_gate.provenance", return_value={}), \
+             patch("finish_gate.nvidia_query", return_value="2, GPU-test, 00000000:65:00.0"), \
+             patch("finish_gate.contending_processes", return_value=[]), \
+             patch("finish_gate.subprocess.Popen", return_value=Mock(pid=123, wait=Mock(return_value=0))), \
+             patch("finish_gate.profiled_dotnet_identity", return_value={"pid": 789, "process_create_time": 1.0}), \
+             patch("finish_gate.Sampler", return_value=sampler) as sampling:
+            result = launch(self.launch_config(), "aidotnet", "tiny", "cuda", 0, "diagnostic", Path(temporary))
+        self.assertEqual(["runner", __file__], result["profiled_argv"])
+        self.assertIn("--cuda-trace-all-apis=true", result["argv"])
+        self.assertIn("--export=sqlite", result["argv"])
+        sampling.assert_called_once_with(789, "GPU-test")
+
     def test_repeatable_ten_percent_win_passes(self):
         result = paired_gate([8.8, 8.7, 8.8, 8.9, 8.8], [10] * 5)
         self.assertEqual("pass", result["status"])
@@ -17,6 +111,10 @@ class GateTests(unittest.TestCase):
 
     def test_partial_speedup_fails(self):
         self.assertEqual("fail", paired_gate([9.5] * 5, [10] * 5)["status"])
+
+    def test_saved_runs_cannot_be_rescored_at_a_weaker_threshold(self):
+        with self.assertRaisesRegex(ValueError, "10%"):
+            evaluate([], 1.0)
 
     def test_noisy_point_win_does_not_hide_losing_pairs(self):
         result = paired_gate([8, 8, 8, 12, 12], [10] * 5)

@@ -216,7 +216,11 @@ public class ModelInputMeetsFirstLayerTests
                 // OS. After WhisperSpeech was built and disposed, the GC heap held 0.51 GB live while 6.96 GB stayed
                 // committed, and every later model was measured on top of that high-water mark. Nothing was rooted.
                 // An aggressive collection decommits the freed regions, so the host's size tracks the model being built.
+#if NET8_0_OR_GREATER
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+#else
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+#endif
 
                 // In the FINALLY so every path is measured - including the `continue`s above and a
                 // throwing constructor. Timing only the happy path would have understated exactly the

@@ -1,4 +1,5 @@
 #nullable enable
+override AiDotNet.NeuralNetworks.Layers.GraphConvolutionalLayer<T>.Dispose(bool disposing) -> void
 virtual AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateAccepted() -> void
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateRejected() -> void

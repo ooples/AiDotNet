@@ -23,8 +23,8 @@ import threading
 import time
 
 import psutil
-from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, raw_file
-from python_process import bootstrap_argv, resolve_python_process
+from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, fixed_windows, raw_file
+from python_process import bootstrap_argv, resolve_python_process, stop_launch
 from torch_policy import compare_reference, sha as streaming_sha
 
 
@@ -63,6 +63,8 @@ def paired_gate(ours: list[float | None], theirs: list[float | None], maximum: f
         # A zero-allocation reference cannot be beaten by 10%; equality is reported as a tie, never a win.
         return {"status": "fail", "reason": "Reference includes zero; a strict percentage win is not established."}
     ratios = [a / b for a, b in zip(ours, theirs)]
+    if any(not math.isfinite(ratio) for ratio in ratios):
+        return {"status": "unverified", "reason": "Derived ratios must be finite."}
     if all(ratio == 0 for ratio in ratios):
         return {"status": "pass", "median_ratio": 0.0, "upper_95_ratio": 0.0, "pairs": len(ratios)}
     # Tiny positive floor admits genuine zero allocations without log(0).
@@ -73,6 +75,21 @@ def paired_gate(ours: list[float | None], theirs: list[float | None], maximum: f
     point = statistics.median(ratios)
     return {"status": "pass" if point <= maximum and upper <= maximum else "fail",
             "median_ratio": point, "upper_95_ratio": upper, "pairs": len(ratios)}
+
+
+def warmed_cuda_calls_gate(ours: list[int | None], theirs: list[int | None], maximum: float) -> dict:
+    """Score exact native CUDA calls during a warmed workload phase."""
+    if (len(ours) != len(theirs) or len(ours) < 5 or
+            any(type(value) is not int or value < 0 for value in ours + theirs)):
+        return {"status": "unverified", "reason": "Five complete pairs of native CUDA call counts are required."}
+    if any(a != 0 and b == 0 for a, b in zip(ours, theirs)):
+        return {"status": "fail", "reason": "AiDotNet issued native CUDA calls against a zero-call reference."}
+    positive = [(a, b) for a, b in zip(ours, theirs) if b > 0]
+    if not positive:
+        return {"status": "pass", "zero_floor_pairs": len(ours), "reason": "Both frameworks issued zero native calls."}
+    result = paired_gate([a for a, _ in positive], [b for _, b in positive], maximum)
+    result["zero_floor_pairs"] = len(ours) - len(positive)
+    return result
 
 
 def phase_group(phase: str) -> str:
@@ -333,7 +350,7 @@ def provenance(config: dict) -> dict:
         if dirty:
             raise ValueError(f"Scoring source must be committed: {name} has working-tree changes.")
         repos[name] = sha
-    hashes = {name: hashlib.sha256(Path(path).read_bytes()).hexdigest() for name, path in config["artifacts"].items()}
+    hashes = {name: streaming_sha(path) for name, path in config["artifacts"].items()}
     receipt = read_json(Path(config["build_receipt"]))
     if receipt.get("repositories") != repos or receipt.get("artifacts") != hashes:
         raise ValueError("Build receipt does not bind these exact source commits and binary/script hashes.")
@@ -388,6 +405,36 @@ def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str,
                  "unverified": "Framework/vendor caches not honoring these environment variables require source and runtime verification."}
 
 
+def profiled_dotnet_identity(process, phase_file: Path, model: str, timeout: float = 60) -> dict:
+    """Identify the managed benchmark child when Nsight Systems owns the launcher PID."""
+    try:
+        launcher_birth = psutil.Process(process.pid).create_time()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if phase_file.is_file():
+                with phase_file.open("rb") as stream:
+                    line = stream.readline()
+                if line.endswith(b"\n"):
+                    marker = json.loads(line.decode("utf-8-sig"))
+                    if (marker.get("phase") != "construction" or marker.get("model") != model
+                            or marker.get("diagnostics") is not True or type(marker.get("pid")) is not int
+                            or marker["pid"] <= 0):
+                        raise ValueError("The first diagnostic marker does not identify the benchmark.")
+                    actual = psutil.Process(marker["pid"])
+                    birth = actual.create_time()
+                    if birth + .001 < launcher_birth or process.pid not in {item.pid for item in actual.parents()}:
+                        raise ValueError("The diagnostic marker belongs to a different process.")
+                    return {"pid": actual.pid, "process_create_time": birth, "launcher_pid": process.pid,
+                            "launcher_create_time": launcher_birth, "actual_process_image": actual.exe()}
+            if process.poll() is not None:
+                raise ValueError("Nsight exited before the benchmark emitted its construction marker.")
+            time.sleep(.02)
+        raise ValueError("Timed out waiting for the profiled benchmark construction marker.")
+    except (OSError, ValueError, psutil.Error):
+        stop_launch(process)
+        raise
+
+
 def launch(config: dict, side: str, model: str, device: str, pair: int, mode: str, output_dir: Path) -> dict:
     run_dir = output_dir / f"{model}-{device}-{mode}-{pair}-{side}"
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -404,6 +451,12 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
             raise ValueError("PyTorch needs a hash-bound real-process bootstrap; a Windows venv launcher PID is not the framework PID.")
         bootstrap_receipt = run_dir / "python-process.json"
         argv = bootstrap_argv(argv, bootstrap_script, bootstrap_receipt)
+    nsys = config.get("artifacts", {}).get("nsys") if device == "cuda" and mode == "diagnostic" else None
+    profiled_argv = argv.copy() if nsys else None
+    if nsys:
+        argv = [str(Path(nsys).resolve()), "profile", "--trace=cuda,nvtx", "--cuda-memory-usage=true",
+                "--cuda-trace-all-apis=true", "--sample=none", "--cpuctxsw=none", "--export=sqlite",
+                "--output", str(run_dir / "native-memory"), *profiled_argv]
     env = os.environ.copy()
     env.update({key: str(value).format_map(bindings) for key, value in command.get("env", {}).items()})
     cache_env, cache_state = cache_environment(run_dir, config["cache_policy"], side)
@@ -430,15 +483,31 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
                    CORECLR_PROFILER_PATH=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
                    CORECLR_PROFILER_PATH_64=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
                    AIDOTNET_ARRAY_PROFILER_OUTPUT=str(run_dir / "array-allocations.json"))
+    gpu_mapping = None
+    if device == "cuda":
+        gpu_id = str(config.get("gpu_id", "")).strip()
+        identity = nvidia_query(gpu_id, "index,uuid,pci.bus_id") if gpu_id else None
+        fields = [field.strip() for field in identity.split(",")] if identity and "\n" not in identity else []
+        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].startswith("GPU-") or not fields[2]:
+            raise ValueError("CUDA scoring requires gpu_id to resolve to one physical nvidia-smi GPU.")
+        gpu_mapping = dict(requested_id=gpu_id, physical_index=fields[0], uuid=fields[1], pci_bus_id=fields[2],
+                           cuda_visible_devices=fields[1], logical_device=0)
+        env["CUDA_VISIBLE_DEVICES"] = fields[1]
+        env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        env["AIDOTNET_DIRECTGPU_BACKENDS"] = "cuda"
     metadata = provenance(config)
     receipt_path = config.get("correctness_receipts", {}).get(model, {}).get(device)
     if receipt_path:
         receipt_file = Path(receipt_path).resolve()
         metadata["correctness_receipt"] = {"path": str(receipt_file),
             "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
-    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, original_argv=original_argv, protocol=protocol,
-                    cache_state=cache_state, cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
-                    environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) | set(profiler_keys) & set(env) |
+    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, original_argv=original_argv,
+                    profiled_argv=profiled_argv, protocol=protocol,
+                    cache_state=cache_state, gpu_mapping=gpu_mapping,
+                    cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
+                    environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
+                        (set(profiler_keys) & set(env)) |
+                        ({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "AIDOTNET_DIRECTGPU_BACKENDS"} & set(env)) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
                          "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
     blockers = contending_processes()
@@ -451,16 +520,26 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
-            identity = resolve_python_process(process, bootstrap_receipt, expected_target=Path(original_argv[1]),
-                                              expected_bootstrap=Path(bootstrap_script)) if bootstrap_receipt else {
-                "pid": process.pid, "process_create_time": psutil.Process(process.pid).create_time(), "launcher_pid": process.pid}
-        except (ValueError, OSError, psutil.Error) as error:
-            metadata.update(return_code=-3, launcher_pid=process.pid, memory={}, phase_events=[],
-                            invalid_reason="Actual Python process identity could not be verified: " + str(error))
+            if bootstrap_receipt:
+                identity = resolve_python_process(process, bootstrap_receipt, expected_target=Path(original_argv[1]),
+                                                  expected_bootstrap=Path(bootstrap_script))
+            elif nsys:
+                identity = profiled_dotnet_identity(process, run_dir / "phases.jsonl", model)
+            else:
+                identity = {"pid": process.pid, "process_create_time": psutil.Process(process.pid).create_time(),
+                            "launcher_pid": process.pid}
+            metadata.update(identity)
+            sampler = Sampler(identity["pid"], gpu_mapping["uuid"] if gpu_mapping else None)
+        except psutil.NoSuchProcess:
+            metadata.update(return_code=process.wait(), memory={}, phase_events=[], contention=[],
+                            invalid_reason="Child exited before memory sampling could start.")
             write_json(run_dir / "measurement.json", metadata)
             return {"path": str(run_dir), **metadata}
-        metadata.update(identity)
-        sampler = Sampler(identity["pid"], config.get("gpu_id") if device == "cuda" else None)
+        except (ValueError, OSError, psutil.Error) as error:
+            metadata.update(return_code=-3, launcher_pid=process.pid, memory={}, phase_events=[],
+                            invalid_reason="Benchmark process identity could not be verified: " + str(error))
+            write_json(run_dir / "measurement.json", metadata)
+            return {"path": str(run_dir), **metadata}
         sampler.start()
         try:
             return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
@@ -475,8 +554,9 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
             return_code = -1
         samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
-    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json", "torch_policy": "torch-policy.json"}
-    metadata["diagnostic_files"] = {key: {"name": name, "sha256": hashlib.sha256((run_dir / name).read_bytes()).hexdigest()}
+    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json",
+                 "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite"}
+    metadata["diagnostic_files"] = {key: {"name": name, "sha256": streaming_sha(run_dir / name)}
                                     for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
                     gpu_allocator_peaks=gpu_allocator_peaks(phases),
@@ -634,6 +714,8 @@ def cold_completion_seconds(run: dict) -> float:
 
 def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     path = Path(run["path"])
+    if run.get("invalid_reason"):
+        return {}, [run["invalid_reason"]]
     if run["return_code"] != 0 or not (path / "report.json").exists():
         return {}, ["process failed or report missing"]
     report = normalize(read_json(path / "report.json"))
@@ -681,6 +763,8 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
 
 
 def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None) -> dict:
+    if number(maximum) is None or not 0 < maximum <= .9:
+        raise ValueError("Every nonzero baseline requires at least a 10% reduction.")
     groups = sorted({(run["model"], run["device"]) for run in runs} | set(required or []))
     output = {}
     for model, device in groups:
@@ -712,7 +796,7 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
             for pair, score in zip(pairs, sides[side]):
                 matched = [run for run in diagnostics if run["side"] == side and run["pair"] == pair]
                 diagnostic = matched[0] if len(matched) == 1 else None
-                keys = ("protocol", "repositories", "artifacts", "machine", "gpu", "cache_policy")
+                keys = ("protocol", "repositories", "artifacts", "machine", "gpu", "gpu_mapping", "cache_policy")
                 if score is None or diagnostic is None or any(score.get(key) != diagnostic.get(key) for key in keys):
                     allocation_rows[side].append(({}, ["Diagnostic pair/source/protocol/cache/hardware differs from scoring."]))
                 elif cache_coverage(diagnostic)["status"] != "pass":
@@ -729,6 +813,15 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
                 outcome["coverage_errors"] = {side: [error for _, errors in allocation_rows[side] for error in errors] for side in sides}
                 outcome["window"] = "construction_training_epochs_inference_steady_excluding_adaptive_warmup"
                 outcomes[name] = outcome
+        if device == "cuda":
+            windows = {window for run in scored if "protocol" in run
+                       for window in fixed_windows(run) if window not in ("construction", "training_epoch_0")}
+            for window in sorted(windows):
+                for action in ("alloc", "free"):
+                    name = f"cuda_native_{window}_{action}_calls"
+                    outcomes[name] = warmed_cuda_calls_gate(
+                        [row[0].get(name) for row in allocation_rows["aidotnet"]],
+                        [row[0].get(name) for row in allocation_rows["pytorch"]], maximum)
         numerical = [correctness_gate(run) for run in scored]
         outcomes["numerical_equivalence"] = {
             "status": "pass" if numerical and all(row["status"] == "pass" for row in numerical) else
@@ -743,7 +836,7 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         all_identities = [(run.get("pid"), run.get("process_create_time")) for run in scored + diagnostics]
         if len(set(all_identities)) != len(all_identities):
             failures.append("score/diagnostic process identities were reused")
-        signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu")}, sort_keys=True)
+        signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu", "gpu_mapping")}, sort_keys=True)
                       for run in scored}
         if len(signatures) != 1:
             failures.append("source, binaries, or hardware changed within the campaign")

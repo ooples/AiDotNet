@@ -1,4 +1,6 @@
 """Synthetic parser fixtures only; these are not benchmark/build/correctness receipts."""
+from contextlib import closing
+import sqlite3
 import copy
 import json
 from pathlib import Path
@@ -117,6 +119,125 @@ class ContractTests(unittest.TestCase):
         path = Path(run["path"]) / receipt["name"]
         path.write_text(json.dumps(value) if key != "phases" else "\n".join(map(json.dumps, value)))
         receipt["sha256"] = digest(path)
+
+    def cuda_trace_fixture(self, pair=0):
+        self.protocol["epochs"] = 2
+        self.contract.update(device="cuda", protocol=copy.deepcopy(self.protocol))
+        self.commit_contract()
+        run = self.run_fixture(pair=pair)
+        directory = Path(run["path"])
+        run.update(device="cuda", gpu_mapping={"uuid": "GPU-abcd", "logical_device": 0},
+                   profiled_argv=["dotnet", "fixture.dll", "--output", str(directory / "report.json")])
+        names = [p["phase"] for p in map(json.loads, (directory / "phases.jsonl").read_text().splitlines())]
+        at = names.index("training-complete")
+        names[at:at] = ["training-epoch-1", "training-epoch-1-complete"]
+        self.rewrite_raw(run, "phases", [{"phase": name, "pid": run["pid"], "model": run["model"],
+                                         "diagnostics": True, "unix_ms": 1000 + index * 10}
+                                        for index, name in enumerate(names)])
+        path = directory / "native-memory.sqlite"
+        with closing(sqlite3.connect(path)) as db:
+            db.executescript("""
+                CREATE TABLE META_DATA_EXPORT(name,value);
+                CREATE TABLE META_DATA_CAPTURE(name,value);
+                CREATE TABLE TARGET_INFO_CUDA_DEVICE(gpuId,cudaId,pid,uuid);
+                CREATE TABLE ANALYSIS_DETAILS(globalVid,duration);
+                CREATE TABLE TARGET_INFO_SESSION_START_TIME(utcEpochNs);
+                CREATE TABLE DIAGNOSTIC_EVENT(globalPid,severity,text);
+                CREATE TABLE StringIds(id,value);
+                CREATE TABLE CUPTI_ACTIVITY_KIND_RUNTIME(globalTid,start,end,nameId,eventClass);
+                CREATE TABLE CUPTI_ACTIVITY_KIND_KERNEL(globalPid,deviceId,start,end);
+                INSERT INTO META_DATA_EXPORT VALUES ('EXPORT_PRODUCT_NAME','NVIDIA Nsight Systems'),('EXPORT_SCHEMA_VERSION','3.29.0');
+                INSERT INTO META_DATA_CAPTURE VALUES ('CAPTURE_EVENT_TYPE','Cuda'),('CUDA_TRACE_SCOPE','ProcessTree'),
+                    ('CUDA_SKIP_SOME_API_CALLS','false'),('COLLECT_GPU_MEMORY_USAGE','true'),('DISABLE_TIME_SYNC','false'),
+                    ('PROCESS_0:COMMAND','dotnet');
+                INSERT INTO ANALYSIS_DETAILS VALUES (281474976710656, 300000000);
+                INSERT INTO TARGET_INFO_SESSION_START_TIME VALUES (999000000);
+                INSERT INTO StringIds VALUES (1,'cudaMalloc_v3020'),(2,'cuMemAllocAsync_ptsz'),(3,'cuMemFree_v2'),
+                    (4,'cudaFreeAsync_v11020'),(5,'cudaFreeHost_v3020'),(6,'cuLaunchKernel');
+            """)
+            db.execute("INSERT INTO TARGET_INFO_CUDA_DEVICE VALUES (0,0,?,'abcd')", (run["pid"],))
+            db.executemany("INSERT INTO META_DATA_CAPTURE VALUES (?,?)", [
+                (f"PROCESS_0:ARGUMENT_{i}", arg) for i, arg in enumerate(run["profiled_argv"][1:])])
+            process = (1 << 48) | (run["pid"] << 24)
+            thread = process | 2
+            tick = lambda name: 1_000_000 + names.index(name) * 10_000_000
+            train, infer = tick("training-epoch-1"), tick("inference-b1-steady")
+            db.executemany("INSERT INTO CUPTI_ACTIVITY_KIND_KERNEL VALUES (?,0,?,?)", [
+                (process, mark + 4_000_000, mark + 5_000_000) for mark in (train, infer)])
+            events = [(thread, tick("training-epoch-0") + 2_000_000, 20, 1, 0),
+                      (thread, tick("inference-b1-warmup") + 2_000_000, 20, 2, 1),
+                      (thread, train + 2_000_000, 200, 1, 0),   # runtime wrapper
+                      (thread, train + 2_000_020, 20, 2, 1),    # actual driver acquisition
+                      (thread, train + 2_000_080, 20, 2, 1),    # second driver acquisition
+                      (thread, train + 3_000_000, 20, 1, 0),    # standalone runtime allocation
+                      (thread, train + 4_000_000, 20, 3, 1),
+                      (thread, train + 3_500_000, 20, 6, 1),
+                      (thread, infer + 2_000_000, 20, 4, 0),
+                      (thread, infer + 3_000_000, 20, 5, 0),    # host allocation is out of scope
+                      (thread, infer + 3_500_000, 20, 6, 1),
+                      (thread + (1 << 24), infer + 3_000_000, 20, 2, 1)]  # another PID
+            db.executemany("INSERT INTO CUPTI_ACTIVITY_KIND_RUNTIME VALUES (?,?,?,?,?)", [
+                (tid, start, start + duration, api, domain) for tid, start, duration, api, domain in events])
+            db.commit()
+        run["diagnostic_files"]["cuda_nsys_sqlite"] = {"name": path.name, "sha256": digest(path)}
+        return run, path
+
+    def test_cuda_native_warmed_windows_bind_zero_and_count_nested_driver_calls_once(self):
+        run, _ = self.cuda_trace_fixture()
+        values, errors = allocation_metrics(run)
+        self.assertFalse([e for e in errors if e.startswith("cuda_native")], errors)
+        self.assertEqual({k: v for k, v in values.items() if k.startswith("cuda_native")}, {
+            "cuda_native_training_epoch_1_alloc_calls": 3, "cuda_native_training_epoch_1_free_calls": 1,
+            "cuda_native_inference_b1_alloc_calls": 0, "cuda_native_inference_b1_free_calls": 1})
+
+    def test_cuda_native_verifies_true_warmed_zero_with_active_cuda_work(self):
+        run, path = self.cuda_trace_fixture()
+        with closing(sqlite3.connect(path)) as db:
+            db.execute("DELETE FROM CUPTI_ACTIVITY_KIND_RUNTIME WHERE start >= 51000000 AND nameId != 6")
+            db.commit()
+        run["diagnostic_files"]["cuda_nsys_sqlite"]["sha256"] = digest(path)
+        values, errors = allocation_metrics(run)
+        self.assertFalse([e for e in errors if e.startswith("cuda_native")], errors)
+        native = [v for k, v in values.items() if k.startswith("cuda_native")]
+        self.assertEqual([0, 0, 0, 0], native)
+
+    def test_cuda_native_drops_incomplete_foreign_or_ambiguous_evidence(self):
+        for pair, statement in enumerate([
+            "UPDATE META_DATA_CAPTURE SET value='true' WHERE name='CUDA_SKIP_SOME_API_CALLS'",
+            "UPDATE TARGET_INFO_CUDA_DEVICE SET pid=pid+1",
+            "UPDATE TARGET_INFO_CUDA_DEVICE SET uuid='another-device'",
+            "UPDATE META_DATA_CAPTURE SET value='another/report.json' WHERE name='PROCESS_0:ARGUMENT_2'",
+            "UPDATE TARGET_INFO_SESSION_START_TIME SET utcEpochNs=0",
+            "DELETE FROM CUPTI_ACTIVITY_KIND_KERNEL WHERE start>100000000",
+            "DELETE FROM CUPTI_ACTIVITY_KIND_RUNTIME WHERE eventClass IN (0,1)",
+            "UPDATE CUPTI_ACTIVITY_KIND_RUNTIME SET start=51000100, end=51000110 WHERE nameId=3",
+            "INSERT INTO DIAGNOSTIC_EVENT VALUES (0,2,'CUDA events dropped')",
+            "UPDATE StringIds SET value='cuMemAllocUnsupported_v2' WHERE id=2",
+            "DELETE FROM CUPTI_ACTIVITY_KIND_RUNTIME WHERE start>100000000",
+            "UPDATE CUPTI_ACTIVITY_KIND_RUNTIME SET end=start+300 WHERE nameId=2 AND start BETWEEN 53000010 AND 53000060",
+            "CREATE TABLE CUPTI_ACTIVITY_KIND_DRIVER (id)",
+        ]):
+            with self.subTest(statement=statement):
+                run, path = self.cuda_trace_fixture(pair)
+                with closing(sqlite3.connect(path)) as db:
+                    db.execute(statement)
+                    db.commit()
+                run["diagnostic_files"]["cuda_nsys_sqlite"]["sha256"] = digest(path)
+                values, errors = allocation_metrics(run)
+                self.assertTrue(any(e.startswith("cuda_native") for e in errors), errors)
+                self.assertFalse(any(k.startswith("cuda_native") for k in values))
+
+    def test_cuda_native_trace_hash_and_missing_trace_fail_closed(self):
+        run, path = self.cuda_trace_fixture()
+        with path.open("ab") as trace:
+            trace.write(b"changed after run receipt")
+        for receipt in ("tampered", "missing"):
+            with self.subTest(receipt=receipt):
+                if receipt == "missing":
+                    del run["diagnostic_files"]["cuda_nsys_sqlite"]
+                values, errors = allocation_metrics(run)
+                self.assertTrue(any(e.startswith("cuda_native") for e in errors), errors)
+                self.assertFalse(any(k.startswith("cuda_native") for k in values))
 
     def test_bounds_calculate_bytes_and_counts_from_fixed_work_raw_events(self):
         ours, errors = allocation_metrics(self.run_fixture())

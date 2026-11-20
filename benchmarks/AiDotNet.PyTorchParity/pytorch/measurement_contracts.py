@@ -8,6 +8,9 @@ the framework's own reuse pools, including CUDA async driver-pool suballocations
 It does not mean physical pages acquired by the driver.
 """
 from __future__ import annotations
+from contextlib import closing
+import re
+import sqlite3
 
 import hashlib
 import json
@@ -62,7 +65,11 @@ def load(path: Path) -> dict:
 
 
 def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    result = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            result.update(chunk)
+    return result.hexdigest()
 
 
 def integer(value: object) -> int:
@@ -293,6 +300,145 @@ def audit_coverage(category: str, claim: dict, run: dict) -> list[str]:
     return providers
 
 
+# Direct allocation/free entry points for device or managed memory and CUDA
+# arrays. CUDA host/pinned allocations, address reservations and pool handles have
+# different lifetimes and are outside the native device-allocation call metric.
+_CUDA_ALLOC = set("""cuMemAlloc cuMemAllocAsync cuMemAllocFromPoolAsync cuMemAllocManaged
+    cuMemAllocPitch cuMemCreate cuArrayCreate cuArray3DCreate cuMipmappedArrayCreate
+    cudaMalloc cudaMallocAsync cudaMallocFromPoolAsync cudaMallocManaged cudaMallocPitch
+    cudaMallocArray cudaMalloc3D cudaMalloc3DArray cudaMallocMipmappedArray""".split())
+_CUDA_FREE = set("""cuMemFree cuMemFreeAsync cuMemRelease cuArrayDestroy cuMipmappedArrayDestroy
+    cudaFree cudaFreeAsync cudaFreeArray cudaFreeMipmappedArray""".split())
+_CUDA_HOST_CALLS = {"cuMemAllocHost", "cuMemFreeHost", "cudaMallocHost", "cudaFreeHost"}
+
+
+def _nsys_capture(db, run):
+    """Verify the full API capture, physical device, target command and session clock."""
+    export = dict(db.execute("SELECT name,value FROM META_DATA_EXPORT"))
+    if (export.get("EXPORT_PRODUCT_NAME") != "NVIDIA Nsight Systems" or
+            not export.get("EXPORT_SCHEMA_VERSION", "").startswith("3.")):
+        raise ValueError("Expected a supported NVIDIA Nsight Systems v3 SQLite export.")
+    capture = dict(db.execute("SELECT name,value FROM META_DATA_CAPTURE"))
+    required = {"CUDA_SKIP_SOME_API_CALLS": "false", "CUDA_TRACE_SCOPE": "ProcessTree",
+                "COLLECT_GPU_MEMORY_USAGE": "true", "DISABLE_TIME_SYNC": "false"}
+    if any(capture.get(k) != v for k, v in required.items()) or not db.execute(
+            "SELECT 1 FROM META_DATA_CAPTURE WHERE name='CAPTURE_EVENT_TYPE' AND value='Cuda'").fetchone():
+        raise ValueError("Nsight must trace all CUDA APIs and GPU memory for the benchmark process tree.")
+    if db.execute("SELECT 1 FROM sqlite_master WHERE name='CUPTI_ACTIVITY_KIND_DRIVER'").fetchone():
+        raise ValueError("Separate Nsight runtime and driver tables are unsupported by this reader.")
+    argv = run["profiled_argv"]
+    if not isinstance(argv, list) or not argv or not all(isinstance(arg, str) for arg in argv):
+        raise ValueError("Missing Nsight benchmark target command.")
+    captured = {int(name.removeprefix("PROCESS_0:ARGUMENT_")): value for name, value in capture.items()
+                if name.startswith("PROCESS_0:ARGUMENT_")}
+    args = [captured[i] for i in range(len(captured))]
+    command = Path(capture["PROCESS_0:COMMAND"])
+    target = Path(argv[0])
+    if (command.name.casefold().removesuffix(".exe") != target.name.casefold().removesuffix(".exe") or
+            (command.is_absolute() and target.is_absolute() and command != target) or args != argv[1:]):
+        raise ValueError("Nsight command differs from this benchmark launch.")
+    if args.count("--output") != 1 or args[args.index("--output") + 1:][:1] != [str(Path(run["path"]) / "report.json")]:
+        raise ValueError("Nsight command or output differs from this benchmark launch.")
+    pid = integer(run["pid"])
+    mapping = run["gpu_mapping"]
+    uuid = mapping["uuid"]
+    if not 0 < pid < 1 << 24 or not isinstance(uuid, str) or not uuid.startswith("GPU-") or mapping["logical_device"] != 0:
+        raise ValueError("Invalid benchmark PID or physical CUDA device mapping.")
+    devices = list(db.execute("SELECT gpuId,cudaId,uuid FROM TARGET_INFO_CUDA_DEVICE WHERE pid=?", (pid,)))
+    if (len(devices) != 1 or devices[0][1] != 0 or not isinstance(devices[0][2], str) or
+            devices[0][2].lower() != uuid[4:].lower()):
+        raise ValueError("Nsight benchmark PID and physical CUDA UUID do not match the launch.")
+    [(vm, duration)] = db.execute("SELECT globalVid,duration FROM ANALYSIS_DETAILS")
+    [(epoch_ns,)] = db.execute("SELECT utcEpochNs FROM TARGET_INFO_SESSION_START_TIME")
+    process = vm | (pid << 24)
+    warnings = db.execute("""SELECT text FROM DIAGNOSTIC_EVENT
+        WHERE (globalPid IS NULL OR globalPid IN (0, ?, ?)) AND severity IN (2, 3)
+        AND (severity=3 OR lower(text) LIKE '%cuda%' OR lower(text) LIKE '%cupti%'
+             OR lower(text) LIKE '%lost%' OR lower(text) LIKE '%dropped%') LIMIT 1""", (vm, process)).fetchone()
+    if warnings:
+        raise ValueError("Nsight reports incomplete or failed CUDA collection: " + str(warnings[0]))
+    return process, devices[0][0], epoch_ns, duration
+
+
+def _nsys_device_calls(db, process):
+    # Nsight's unified API table uses eventClass 0 for runtime, 1 for driver.
+    # A runtime wrapper may record one or more nested driver calls on the same OS
+    # thread. Count the driver calls, or the runtime call when it has no driver
+    # children. Correlation IDs are not shared by every nested runtime/driver pair.
+    names = {}
+    for name_id, label in db.execute("SELECT id,value FROM StringIds WHERE value GLOB 'cu*'"):
+        api = re.sub(r"(?:_(?:v[0-9]+|ptsz|ptds))+$", "", label)
+        if api in _CUDA_ALLOC or api in _CUDA_FREE:
+            names[name_id] = (api, "alloc" if api in _CUDA_ALLOC else "free")
+        elif api.startswith(("cudaMalloc", "cudaFree", "cuMemAlloc", "cuMemFree")) and api not in _CUDA_HOST_CALLS:
+            names[name_id] = (api, None)
+    if not names:
+        raise ValueError("No recognized native CUDA allocation/free API names in this capture.")
+    placeholders = ",".join("?" for _ in names)
+    query = f"""SELECT globalTid,start,end,nameId,eventClass FROM CUPTI_ACTIVITY_KIND_RUNTIME
+        WHERE globalTid >= ? AND globalTid < ? AND nameId IN ({placeholders})
+        ORDER BY globalTid,start,end DESC,eventClass"""
+    calls = []
+    wrappers = set()
+    open_calls = {}
+    for thread, start, end, name_id, domain in db.execute(query, (process, process + (1 << 24), *names)):
+        api, kind = names[name_id]
+        if kind is None:
+            raise ValueError("Unsupported native CUDA allocation/free API: " + api)
+        if domain != (0 if api.startswith("cuda") else 1) or end <= start:
+            raise ValueError("Unsupported CUPTI allocation/free API domain or timestamps.")
+        stack = open_calls.setdefault((thread, kind), [])
+        while stack and calls[stack[-1]][1] <= start:
+            stack.pop()
+        if stack:
+            if end > calls[stack[-1]][1]:
+                raise ValueError("Overlapping CUDA allocator APIs have ambiguous wrapper ownership.")
+            wrappers.add(stack[-1])
+        stack.append(len(calls))
+        calls.append((start, end, kind))
+    if not any(kind == "alloc" for _, _, kind in calls):
+        raise ValueError("No positive native CUDA allocation control for the measured process.")
+    counted = [(start, kind) for i, (start, _, kind) in enumerate(calls) if i not in wrappers]
+    return counted, calls
+
+
+def cuda_native_metrics(run, phases):
+    """Count native device calls in complete warmed work, including failed calls.
+
+    The diagnostic launch receipts the exported native-memory.sqlite as
+    cuda_nsys_sqlite. File hashes, captured process command, UTC capture interval,
+    encoded CUPTI PID, CUDA UUID and kernel work per window bind zeros to that run.
+    Markers in phases.jsonl are floored UTC milliseconds. Calls straddling their
+    uncertainty interval cannot be reliably attributed and invalidate the evidence.
+    """
+    path = raw_file(run, "cuda_nsys_sqlite")
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)) as db:
+        process, device, epoch_ns, duration = _nsys_capture(db, run)
+        ns = {p["phase"]: integer(p["unix_ms"]) * 1_000_000 - epoch_ns for p in phases}
+        if ns["construction"] < 0 or ns["complete"] + 1_000_000 > duration:
+            raise ValueError("Nsight capture does not contain the complete benchmark phase sequence.")
+        calls, all_calls = _nsys_device_calls(db, process)
+        metrics = {}
+        for window, (first, last) in fixed_windows(run).items():
+            if window in ("construction", "training_epoch_0"):
+                continue
+            lo, hi = ns[first], ns[last]
+            if hi <= lo + 1_000_000 or not db.execute("""SELECT 1 FROM CUPTI_ACTIVITY_KIND_KERNEL
+                    WHERE globalPid=? AND deviceId=? AND start>=? AND end<=? LIMIT 1""",
+                    (process, device, lo + 1_000_000, hi)).fetchone():
+                raise ValueError("No verified CUDA kernel work inside warmed window " + window)
+            if not db.execute("""SELECT 1 FROM CUPTI_ACTIVITY_KIND_RUNTIME
+                    WHERE globalTid>=? AND globalTid<? AND start>=? AND end<=? LIMIT 1""",
+                    (process, process + (1 << 24), lo + 1_000_000, hi)).fetchone():
+                raise ValueError("No benchmark CUDA API activity in warmed window " + window)
+            if any(start < boundary + 1_000_000 and end >= boundary
+                   for start, end, _ in all_calls for boundary in (lo, hi)):
+                raise ValueError("CUDA allocation/free call touches an ambiguous phase boundary: " + window)
+            for kind in ("alloc", "free"):
+                metrics[f"cuda_native_{window}_{kind}_calls"] = sum(lo <= start < hi and op == kind for start, op in calls)
+        return metrics
+
+
 def allocation_metrics(run: dict) -> tuple[dict[str, int], list[str]]:
     values, errors = {}, []
     try:
@@ -300,6 +446,11 @@ def allocation_metrics(run: dict) -> tuple[dict[str, int], list[str]]:
             raise ValueError("Allocation evidence requires a successful separate diagnostic process.")
         contract = bound_contract(run)
         phases = checked_phases(run)
+        if run["device"] == "cuda":
+            try:
+                values.update(cuda_native_metrics(run, phases))
+            except (KeyError, ValueError, TypeError, OSError, sqlite3.Error) as error:
+                errors.append("cuda_native: " + str(error))
         claims = contract["allocations"][run["side"]]
         for category in ("cpu_framework_requested", "cpu_backing", *(("gpu_framework_requested", "gpu_backing") if run["device"] == "cuda" else ())):
             try:

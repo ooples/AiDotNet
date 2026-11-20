@@ -358,7 +358,7 @@ internal sealed partial class HiFiGanGenerator<T>
         string shape = string.Join(",", features.Shape.ToArray());
         string signature = $"{reasons}:{shape}";
         if (System.Threading.Interlocked.Exchange(ref _gpuLifetimeDiagnosticState, signature) == signature) return;
-        Console.Error.WriteLine($"[HIFI-GPU-LIFETIME] enabled={reasons == 0} reasons={reasons} shape=[{shape}] " +
+        System.Diagnostics.Trace.TraceInformation($"[HIFI-GPU-LIFETIME] enabled={reasons == 0} reasons={reasons} shape=[{shape}] " +
             $"resident={gpu.ResidentStepActive} inference_capture={gpu.InferenceCaptureActive} " +
             $"release_deferred={AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive} " +
             $"current_tape={GradientTape<T>.Current is not null} any_tape={AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()} " +

@@ -129,11 +129,10 @@ public sealed class HiFiGanGpuStageLifetimeTests
                     var loss = gpu.ReduceSum(output, null);
                     var gradients = tape.ComputeGradients(loss, sources: new[] { input });
                     Assert.True(gradients.TryGetValue(input, out var inputGradient));
-                    if (inputGradient is not null)
-                    {
-                        Assert.All(inputGradient.ToArray(), value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
-                        Assert.Contains(inputGradient.ToArray(), value => value != 0f);
-                    }
+                    Assert.NotNull(inputGradient);
+                    var values = (inputGradient ?? throw new InvalidOperationException("Input gradient is missing.")).ToArray();
+                    Assert.All(values, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
+                    Assert.Contains(values, value => value != 0f);
                 }
                 using var observer = new LayerForwardObserver<float>();
                 _ = generator.Forward(input);

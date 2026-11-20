@@ -17,7 +17,7 @@ class ReportSerializationTests(unittest.TestCase):
     def test_endpoint_losses_survive_both_readers(self):
         source = (Path(__file__).resolve().parents[1] / "Program.cs").read_text(encoding="utf-8")
         # Compile the production records and options, not a duplicate of the schema.
-        records = source[source.index("internal sealed record BenchmarkReport("):]
+        records = source[source.index("internal sealed record TrainingReport("):]
         records = records[:records.index("/// <summary>")]
         with tempfile.TemporaryDirectory(prefix="parity-report-") as temp:
             root = Path(temp)
