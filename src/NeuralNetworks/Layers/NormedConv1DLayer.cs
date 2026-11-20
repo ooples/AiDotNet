@@ -217,6 +217,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape, string? gainName,
         string? biasName)
     {
+        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
+        // inference forward built from the old values must not answer for the loaded ones.
+        _inferenceWeightKernel.Invalidate();
         if (gainName is not null && _normalization != ConvolutionNormalization.Weight)
             throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
         if (_normalization == ConvolutionNormalization.Spectral)
@@ -265,6 +268,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     internal void LoadTorchWeights(double[] weight, double[]? gain, double[] bias)
     {
+        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
+        // inference forward built from the old values must not answer for the loaded ones.
+        _inferenceWeightKernel.Invalidate();
         if (weight.Length != _direction.Length)
             throw new ArgumentException($"Expected {_direction.Length} kernel values, got {weight.Length}.", nameof(weight));
         if (bias.Length != _bias.Length)
