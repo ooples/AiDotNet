@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -66,9 +67,10 @@ public partial class GatedDeltaNetLayer<T>
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (state is null) throw new ArgumentNullException(nameof(state));
         int b = state.BatchSize, d = _modelDimension, h = _numHeads, hd = _headDimension, rows = b * h;
-        bool rank3 = input.Shape.Length == 3;
-        if ((rank3 && (input.Shape[0] != b || input.Shape[1] != 1 || input.Shape[2] != d))
-            || (!rank3 && (input.Shape.Length != 2 || input.Shape[0] != b || input.Shape[1] != d)))
+        // One position per sequence: [B, 1, D] or [B, D].
+        bool onePositionRank3 = input.Shape.Length == 3 && input.Shape[1] == 1 && input.Shape[2] == d;
+        bool onePositionRank2 = input.Shape.Length == 2 && input.Shape[1] == d;
+        if (input.Shape[0] != b || !(onePositionRank3 || onePositionRank2))
             throw new ArgumentException(
                 $"Step expects one position per sequence, [{b}, 1, {d}] or [{b}, {d}]; got [{string.Join(",", input.Shape)}].", nameof(input));
         if (state.ModelDimension != d || state.History.Length != _convKernelSize - 1 || state.Memory.Shape[0] != rows || state.Memory.Shape[1] != hd)
@@ -86,7 +88,9 @@ public partial class GatedDeltaNetLayer<T>
         }
         conv = Engine.TensorAdd(conv, Engine.Reshape(_convBias, new[] { 1, d }));
         for (int m = state.History.Length - 1; m > 0; m--) state.History[m] = state.History[m - 1];
-        if (state.History.Length > 0) state.History[0] = x;
+        // A snapshot, not x: on the CPU the reshape above is a view of the caller's tensor, and a caller that refills
+        // one input buffer per token would otherwise rewrite the previous position inside the history.
+        if (state.History.Length > 0) state.History[0] = x.Clone();
 
         var silu = Engine.Swish(conv);
         var q = Engine.Reshape(Engine.TensorMatMul(silu, _queryWeights), new[] { rows, hd, 1 });
@@ -108,8 +112,19 @@ public partial class GatedDeltaNetLayer<T>
 
         var projected = Engine.TensorAdd(Engine.TensorMatMul(Engine.TensorMultiply(o, gate), _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, d }));
-        var result = ApplyActivation(projected);
+        var result = StepActivation(projected);
         state.Position++;
         return Engine.Reshape(result, input._shape);
+    }
+
+    // A step is never followed by the eager backward that drains the layer's pre-activation cache, and a new layer is in
+    // training mode by default, so a decode loop would keep one projected tensor per token for the layer's life.
+    // Outside a tape the activation therefore runs in a no-grad scope, which does not retain it. Under a tape nothing
+    // is retained either way, and the step stays differentiable.
+    private Tensor<T> StepActivation(Tensor<T> projected)
+    {
+        if (GradientTape<T>.Current is not null) return ApplyActivation(projected);
+        using var noGrad = new NoGradScope<T>();
+        return ApplyActivation(projected);
     }
 }
