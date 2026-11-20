@@ -32,6 +32,18 @@ public class LogSNRImportanceSampling<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The largest |log-SNR| used for sampling, ln(1e10): the value log(alpha / (1 - alpha)) takes at alpha = 0 and
+    /// alpha = 1 under a 1e-10 guard.
+    /// </summary>
+    internal static readonly double LogSnrBound = Math.Log(1e10);
+
+    /// <summary>
+    /// Largest target-by-timestep distance grid formed at once (4M entries); targets are matched in row blocks
+    /// of at most this many entries (at least one row). Adjustable so tests can force several blocks.
+    /// </summary>
+    internal long DistanceBlockElements { get; set; } = 1L << 22;
+
+    /// <summary>
     /// Samples timesteps with importance weighting based on log-SNR distribution.
     /// </summary>
     /// <param name="batchSize">Number of timesteps to sample.</param>
@@ -40,38 +52,46 @@ public class LogSNRImportanceSampling<T>
     /// <returns>Array of sampled timestep indices.</returns>
     public int[] SampleTimesteps(int batchSize, Vector<T> alphasCumprod, Random random)
     {
+        var engine = AiDotNetEngine.Current;
         int numTimesteps = alphasCumprod.Length;
-        var timesteps = new int[batchSize];
 
-        // Compute log-SNR for each timestep
-        var logSNR = new double[numTimesteps];
-        for (int i = 0; i < numTimesteps; i++)
-        {
-            double alpha = NumOps.ToDouble(alphasCumprod[i]);
-            alpha = Math.Max(alpha, 1e-10);
-            logSNR[i] = Math.Log(alpha / (1.0 - alpha + 1e-10));
-        }
+        // log-SNR = log(alpha / (1 - alpha)) per timestep, clamped to +-ln(1e10) so zero-terminal-SNR schedules
+        // (alpha = 0, log-SNR = -inf) and alpha = 1 give a finite range. The bound is the log-SNR the 1e-10 guard
+        // assigns to alpha = 0 and alpha = 1, fixed in value rather than tied to the element type's epsilon, so
+        // the sampled distribution does not change with T.
+        var alphas = alphasCumprod.AsTensor();
+        var logSnr = engine.TensorClamp(
+            engine.TensorSubtract(engine.TensorLog(alphas), engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, alphas))),
+            NumOps.FromDouble(-LogSnrBound), NumOps.FromDouble(LogSnrBound));
 
-        // Sample uniformly in log-SNR space
-        double minLogSNR = logSNR[numTimesteps - 1];
-        double maxLogSNR = logSNR[0];
-
+        // Sample uniformly in log-SNR space. The seeded uniform draws stay one per batch element in master's order
+        // (no engine op consumes a caller Random).
+        var uniform = new Vector<T>(batchSize);
         for (int b = 0; b < batchSize; b++)
+            uniform[b] = NumOps.FromDouble(random.NextDouble());
+        T minLogSnr = logSnr[numTimesteps - 1];
+        T maxLogSnr = logSnr[0];
+        var targets = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(uniform.AsTensor(), NumOps.Subtract(maxLogSnr, minLogSnr)), minLogSnr);
+
+        // Closest timestep per target: argmin over |logSnr[i] - target| (first index on ties). The targets are
+        // matched in blocks so the [targets, timesteps] distance grid never exceeds DistanceBlockElements entries;
+        // each target's argmin depends only on its own row, so the blocks give the unblocked result.
+        var row = logSnr.Reshape(new[] { 1, numTimesteps });
+        int blockRows = (int)Math.Max(1L, Math.Min(batchSize, DistanceBlockElements / numTimesteps));
+        var result = new int[batchSize];
+        for (int first = 0; first < batchSize; first += blockRows)
         {
-            double targetLogSNR = minLogSNR + random.NextDouble() * (maxLogSNR - minLogSNR);
-
-            // Find closest timestep
-            int bestIdx = 0;
-            double bestDist = double.MaxValue;
-            for (int i = 0; i < numTimesteps; i++)
-            {
-                double dist = Math.Abs(logSNR[i] - targetLogSNR);
-                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-            }
-
-            timesteps[b] = bestIdx;
+            int count = Math.Min(blockRows, batchSize - first);
+            var blockTargets = count == batchSize
+                ? targets
+                : engine.TensorSlice(targets, new[] { first }, new[] { count });
+            var shape = new[] { count, numTimesteps };
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(row, shape),
+                engine.TensorBroadcastTo(blockTargets.Reshape(new[] { count, 1 }), shape)));
+            Array.Copy(engine.TensorArgMin(distances, 1).ToArray(), 0, result, first, count);
         }
-
-        return timesteps;
+        return result;
     }
 }

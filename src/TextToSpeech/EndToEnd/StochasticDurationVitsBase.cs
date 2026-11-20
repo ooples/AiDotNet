@@ -50,20 +50,14 @@ public abstract partial class StochasticDurationVitsBase<T> : VitsTtsModelBase<T
     /// <inheritdoc />
     /// <remarks>The stochastic duration predictor's negative lower bound on log p(d | c), per token (reference
     /// <c>l_length / sum(x_mask)</c>).</remarks>
-    protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, int[] durations, Random random)
+    protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Tensor<T> durations, Random random)
     {
         int tokens = durations.Length;
-        var w = new Tensor<T>(new[] { 1, 1, tokens });
-        for (int i = 0; i < tokens; i++) w[0, 0, i] = NumOps.FromDouble(durations[i]);
+        var w = Engine.Reshape(durations, new[] { 1, 1, tokens });
         return Engine.TensorMultiplyScalar(_durationPredictor!.NegativeLogLikelihood(hidden, speaker, language, w, random), NumOps.FromDouble(1.0 / tokens));
     }
 
     /// <inheritdoc />
-    protected override double[] PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
-    {
-        var logDurations = _durationPredictor!.SampleLogDurations(hidden, speaker, language, random, DurationOptions.DurationNoiseScale);
-        var durations = new double[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++) durations[i] = Math.Exp(NumOps.ToDouble(logDurations[i]));
-        return durations;
-    }
+    protected override Tensor<T> PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
+        => Engine.TensorExp(_durationPredictor!.SampleLogDurations(hidden, speaker, language, random, DurationOptions.DurationNoiseScale));
 }

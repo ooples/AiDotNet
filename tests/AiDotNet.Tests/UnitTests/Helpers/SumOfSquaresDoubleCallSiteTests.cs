@@ -965,7 +965,8 @@ public class SumOfSquaresDoubleCallSiteTests
         InvokeDeclared(typeof(AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel<Half>), model, "UpdateModelParameters",
             new Matrix<Half>(Count, 1), new Vector<Half>(y), states);
 
-        AssertClose(levelSum / (Count - 1), (double)covariance[0, 0], HalfTolerance);
+        var updatedCovariance = GetPrivate<Matrix<Half>>(model, "_stateCovariance");
+        AssertClose(levelSum / (Count - 1), (double)updatedCovariance[0, 0], HalfTolerance);
         AssertClose(observationSum / Count, (double)GetPrivate<Half>(model, "_observationVariance"), HalfTolerance);
     }
 
@@ -1057,11 +1058,11 @@ public class SumOfSquaresDoubleCallSiteTests
     public void TemporalFusionTransformer_NormStats_Half_HaveAFiniteStd()
         => AssertNormalizationStatistics<AiDotNet.TimeSeries.TemporalFusionTransformer<Half>>("ComputeNormStats");
 
-    // Two assets, 40 samples each, both with a spread near 280: every sum of squares passes Half.MaxValue.
+    // Two assets with a spread near 140: the scatter sums exceed Half.MaxValue, but the covariances fit.
     private static (Tensor<Half> Returns, double[] First, double[] Second) TwoWideAssets()
     {
-        var first = WideSeries(Count, seed: 32);
-        var second = WideSeries(Count, seed: 33);
+        var first = WideSeries(Count, seed: 32).Select(value => value * 0.5).ToArray();
+        var second = WideSeries(Count, seed: 33).Select(value => value * 0.5).ToArray();
         var data = new Half[2 * Count];
         for (int s = 0; s < Count; s++)
         {
@@ -1083,6 +1084,11 @@ public class SumOfSquaresDoubleCallSiteTests
         Func<Tensor<Half>, Tensor<Half>> realized, Func<Tensor<Half>, Tensor<Half>> covariance, Func<Tensor<Half>, Tensor<Half>> correlation)
     {
         var (returns, first, second) = TwoWideAssets();
+        Assert.True(SumSquaredDeviations(first) > (double)Half.MaxValue);
+        Assert.True(SumSquaredDeviations(second) > (double)Half.MaxValue);
+        Assert.True(SampleCovariance(first, first) < (double)Half.MaxValue);
+        Assert.True(SampleCovariance(second, second) < (double)Half.MaxValue);
+        Assert.True(Math.Abs(SampleCovariance(first, second)) < (double)Half.MaxValue);
 
         var volatility = realized(returns).ToArray();
         AssertClose(Math.Sqrt(first.Average(r => r * r)), (double)volatility[0], HalfTolerance);

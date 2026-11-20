@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -77,15 +78,25 @@ public class MinkowskiDistance<T> : DistanceMetricBase<T>
         }
 
         // General case
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
+        var powered = Engine.Power(Engine.Abs(Engine.Subtract(a, b)), NumOps.FromDouble(_p));
+        return Pow(Engine.Sum(powered), 1.0 / _p);
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b)
+    {
+        if (Math.Abs(_p - 1.0) < 1e-10)
         {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            T absDiff = Abs(diff);
-            sum = NumOps.Add(sum, Pow(absDiff, _p));
+            return ClusteringTensorOps.RowManhattan(a, b);
         }
 
-        return Pow(sum, 1.0 / _p);
+        if (Math.Abs(_p - 2.0) < 1e-10)
+        {
+            return ClusteringTensorOps.RowEuclidean(a, b);
+        }
+
+        var powered = Engine.TensorPower(Engine.TensorAbs(Engine.TensorSubtract(a, b)), NumOps.FromDouble(_p));
+        return Engine.TensorPower(Engine.ReduceSum(powered, new[] { 1 }, false), NumOps.FromDouble(1.0 / _p));
     }
 
     private T ComputeManhattan(Vector<T> a, Vector<T> b)

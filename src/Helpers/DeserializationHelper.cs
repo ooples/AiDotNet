@@ -5948,6 +5948,24 @@ public static class DeserializationHelper
                     continue;
                 }
 
+                // 8b. Required unary tensor transform (e.g. LambdaLayer<T> forwardFunction when reconstructed
+                //     from shapes only in DeserializationFallbackHorizontalIssue1235Tests; real Clone/Deserialize
+                //     routes through LayerStateGenerator's persisted program/expression factory first).
+                if (pType == typeof(Func<Tensor<T>, Tensor<T>>))
+                {
+                    if (additionalParams != null
+                        && (additionalParams.TryGetValue(pName, out var fnObj) || additionalParams.TryGetValue(capName, out fnObj))
+                        && fnObj is Func<Tensor<T>, Tensor<T>> fn)
+                    {
+                        args[pi] = fn;
+                        metadataMatches++;
+                        continue;
+                    }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    args[pi] = (Func<Tensor<T>, Tensor<T>>)(static x => x);
+                    continue;
+                }
+
                 // 9. other reference types — default value or null. Reject value
                 // types we don't know how to fill (otherwise we'd hand the ctor
                 // a default(T) that probably violates a precondition).

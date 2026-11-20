@@ -16,7 +16,7 @@ namespace AiDotNet.Audio.Foundations;
 /// <param name="NormEpsilon">The layer norms' epsilon: SenseVoice's own LayerNorm (1e-5), or FunASR's (1e-12) for
 /// Paraformer.</param>
 internal sealed record SanmEncoderConfiguration(int Mels = 80, int LfrM = 7, int LfrN = 6, int Width = 512, int Heads = 4,
-    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5, int SampleRate = 16000)
+    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5)
 {
     /// <summary>The stacked feature width, <c>Mels · LfrM</c> (560).</summary>
     public int InputSize => Mels * LfrM;
@@ -49,7 +49,7 @@ internal sealed class SanmEncoder<T>
         var c = configuration;
         if (c.Width % c.Heads != 0) throw new ArgumentException("The width must divide by the heads.", nameof(configuration));
         if (c.Blocks < 1) throw new ArgumentException("SAN-M needs at least one block.", nameof(configuration));
-        _fbank = new KaldiFbank<T>(engine, c.SampleRate, c.Mels, WindowType.Hamming);
+        _fbank = new KaldiFbank<T>(engine, 16000, c.Mels, WindowType.Hamming);
         _shift = new double[c.InputSize];
         _scale = Enumerable.Repeat(1.0, c.InputSize).ToArray();
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
@@ -128,27 +128,25 @@ internal sealed class SanmEncoder<T>
         if (t == 0) throw new ArgumentException("The recording is shorter than one filterbank frame.", nameof(audio));
         // apply_lfr: (m − 1)/2 copies of the first frame before, stacks of m every n, the last frame repeated past the end.
         int left = (c.LfrM - 1) / 2, padded = t + left, frames = (t + c.LfrN - 1) / c.LfrN;
-        // The stacks gather filterbank rows (row-major [frames, LfrM] picks, so feature k = j·Mels + m), then the CMVN
-        // shift and scale apply per feature. All engine ops: a compiled training plan traces the front end too.
-        var rows = new int[frames * c.LfrM];
+        var indices = new int[frames * c.LfrM];
+        int idx = 0;
         for (int f = 0; f < frames; f++)
             for (int j = 0; j < c.LfrM; j++)
-                rows[f * c.LfrM + j] = Math.Max(0, Math.Min(f * c.LfrN + j, padded - 1) - left);
-        var stacked = _engine.Reshape(_engine.TensorIndexSelect(fbank, new Tensor<int>(new[] { rows.Length }, new Vector<int>(rows)), 0),
-            new[] { frames, c.InputSize });
-        var shape = new[] { frames, c.InputSize };
-        var shifted = _engine.TensorAdd(stacked, _engine.TensorBroadcastTo(Row(_shift), shape));
-        return _engine.TensorMultiply(shifted, _engine.TensorBroadcastTo(Row(_scale), shape));
-    }
-
-    // A host constant [1, n] of the CMVN statistics.
-    [AiDotNet.Attributes.ScalarKernel("Converts the n CMVN constants once per call; the features themselves are engine ops.")]
-    private static Tensor<T> Row(double[] values)
-    {
-        var row = new Tensor<T>(new[] { 1, values.Length });
-        var span = row.AsWritableSpan();
-        for (int i = 0; i < values.Length; i++) span[i] = NumOps.FromDouble(values[i]);
-        return row;
+            {
+                int row = Math.Min(f * c.LfrN + j, padded - 1) - left;
+                indices[idx++] = Math.Max(0, row);
+            }
+        var gathered = _engine.TensorGather(fbank, new Tensor<int>(indices, new[] { indices.Length }), axis: 0);
+        var stacked = _engine.Reshape(gathered, new[] { frames, c.InputSize });
+        var shiftTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        var scaleTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        for (int k = 0; k < c.InputSize; k++)
+        {
+            shiftTensor[0, k] = NumOps.FromDouble(_shift[k]);
+            scaleTensor[0, k] = NumOps.FromDouble(_scale[k]);
+        }
+        var shifted = _engine.TensorAdd(stacked, _engine.TensorBroadcastTo(shiftTensor, new[] { frames, c.InputSize }));
+        return _engine.TensorMultiply(shifted, _engine.TensorBroadcastTo(scaleTensor, new[] { frames, c.InputSize }));
     }
 
     /// <summary>The encoder's output <c>[frames, width]</c> of features <c>[frames, Mels · LfrM]</c>.</summary>

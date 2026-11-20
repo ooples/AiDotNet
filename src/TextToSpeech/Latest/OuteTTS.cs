@@ -144,7 +144,8 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <inheritdoc />
     /// <remarks>OuteTTS trains on recordings: the recording (24 kHz) and its transcript as the language model's token ids
-    /// (<see cref="TtsTrainingSample{T}.Tokens"/>, from <see cref="TtsModelBase{T}.TextToTokens"/>).</remarks>
+    /// (<see cref="TtsTrainingSample{T}.Text"/> preserves the transcript for narrow numeric types; otherwise
+    /// <see cref="TtsTrainingSample{T}.Tokens"/> is decoded).</remarks>
     protected override TtsSupervision RequiredSupervision => TtsSupervision.Recording;
 
     /// <inheritdoc />
@@ -246,10 +247,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         var codes = OuteTTSAudio.Encode<T>(CodecEncode, HopSize, Doubles(audio), _options.SampleRate);
-        var tokens = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int q = 0; q < codes.GetLength(0); q++)
-            for (int t = 0; t < codes.GetLength(1); t++) tokens[q, t] = NumOps.FromDouble(codes[q, t]);
-        return tokens;
+        return IntMatrixTensor(codes);
     }
 
     /// <inheritdoc />
@@ -259,11 +257,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        int q = tokens.Shape[0], frames = tokens.Shape[1];
-        var codes = new int[q, frames];
-        for (int i = 0; i < q; i++)
-            for (int t = 0; t < frames; t++) codes[i, t] = (int)Math.Round(NumOps.ToDouble(tokens[i, t]));
-        return Wave(OuteTTSAudio.Decode<T>(CodecDecode, codes, _options.SampleRate));
+        return Wave(OuteTTSAudio.Decode<T>(CodecDecode, RoundedIdMatrix(tokens), _options.SampleRate));
     }
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
@@ -321,11 +315,9 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var tokens = t.Encode(" " + transcript.Trim()).ToList();
         if (tokens.Count == 0) return Array.Empty<(string, double, double)>();
         var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, Aligner.Dimensions.Mels, OpenAiWhisperTranscriber<T>.ChunkSamples);
-        int content = mel.GetLength(1) - OpenAiWhisperTranscriber<T>.ChunkFrames;
+        int content = mel.Shape[1] - OpenAiWhisperTranscriber<T>.ChunkFrames;
         int frames = Math.Min(content, OpenAiWhisperTranscriber<T>.ChunkFrames);
-        var window = new Tensor<T>(new[] { mel.GetLength(0), OpenAiWhisperTranscriber<T>.ChunkFrames });
-        for (int m = 0; m < mel.GetLength(0); m++)
-            for (int f = 0; f < frames; f++) window[m, f] = NumOps.FromDouble(mel[m, f]);
+        var window = OpenAiWhisperTranscriber<T>.Window(mel, 0, frames);
         using var _ = new NoGradScope<T>();
         var language = Transcriber.DetectLanguage(Aligner.Encode(window)).OrderByDescending(p => p.Value).First().Key;
         var segment = new WhisperTranscriptSegment
@@ -383,17 +375,54 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private int EosToken => Tokenizer.TokenId("<|im_end|>");
 
     /// <inheritdoc />
-    /// <remarks>The text's token ids in the language model's tokenizer (synthesis builds the prompt from their text).</remarks>
+    /// <remarks>The text's token ids in the language model's tokenizer. Use <see cref="TextToTokenIds"/> and
+    /// <see cref="PredictFromTokenIds"/> when T cannot represent the tokenizer's ids exactly.</remarks>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
+        var ids = TextToTokenIds(text).ToArray();
+        var tokens = IdTensor(ids);
+        if (!RoundedIds(tokens).SequenceEqual(ids))
+            throw new NotSupportedException("These token ids cannot be represented exactly by T. Use TextToTokenIds and PredictFromTokenIds, or Synthesize(string).");
+        return tokens;
+    }
+
+    /// <summary>Tokenizes text as exact integer ids, including ids not representable by Half.</summary>
+    /// <param name="text">The text to tokenize.</param>
+    /// <returns>The language model's integer token ids, shaped [tokens].</returns>
+    public Tensor<int> TextToTokenIds(string text)
+    {
+        ThrowIfDisposed();
+        if (text is null) throw new ArgumentNullException(nameof(text));
         var ids = Tokenizer.Encode(text);
         if (ids.Length == 0) throw new ArgumentException("The text has no tokens.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return new Tensor<int>(new[] { ids.Length }, Vector<int>.FromArray(ids));
+    }
+
+    /// <summary>Generates audio from exact integer text token ids using the native language model.</summary>
+    /// <param name="tokenIds">The token ids returned by <see cref="TextToTokenIds"/>.</param>
+    /// <returns>The generated waveform, or an empty tensor when no audio codes are generated.</returns>
+    public Tensor<T> PredictFromTokenIds(Tensor<int> tokenIds)
+    {
+        ThrowIfDisposed();
+        if (!HasPaperLayers) throw NotNative();
+        var prompt = Tokenizer.Encode(OuteTTSPrompts.CompletionPrompt(TextFromTokenIds(tokenIds), VoiceSpeaker()));
+        return AudioOf(Generate(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed)));
+    }
+
+    internal string TextFromTokenIds(Tensor<int> tokenIds)
+    {
+        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        if (tokenIds.Length == 0) throw new ArgumentException("There is no text.", nameof(tokenIds));
+        if (Engine.TensorMinValue(tokenIds) < 0 || Engine.TensorMaxValue(tokenIds) >= _options.VocabSize)
+            throw new ArgumentOutOfRangeException(nameof(tokenIds), $"Token ids lie in [0, {_options.VocabSize}).");
+        return Tokenizer.Decode(tokenIds.ToArray(), skipSpecial: true);
     }
 
     private string TextOf(Tensor<T> ids) =>
-        Tokenizer.Decode(ids.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))), skipSpecial: true);
+        Tokenizer.Decode(RoundedIds(ids), skipSpecial: true);
+
+    internal string TrainingTranscript(TtsTrainingSample<T> sample) => sample.Text ?? TextOf(sample.Tokens);
 
     /// <inheritdoc />
     /// <remarks>The release's chunked generation: the text in chunks of 10–30 words, each chunk's prompt continued until
@@ -427,7 +456,8 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
-        if (input.ToArray().Any(v => NumOps.ToDouble(v) < 0 || NumOps.ToDouble(v) >= _options.VocabSize))
+        if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
+            || NumOps.ToDouble(Engine.TensorMaxValue(input)) >= _options.VocabSize)
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         var prompt = Tokenizer.Encode(OuteTTSPrompts.CompletionPrompt(TextOf(input), VoiceSpeaker()));
         return AudioOf(Generate(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed)));
@@ -452,20 +482,11 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
             var generated = new List<int>();
             var cache = new LlamaCache<T>();
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
+            using var sampling = new OuteTTSSamplingSession<T>();
             int eos = EosToken;
             while (ids.Count < o.MaxLength)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
-                int next;
-                if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, o.RepetitionRange, o.Temperature, o.TopK, o.TopP, o.MinP), random);
-                else
-                {
-                    var processed = OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, o.RepetitionRange, 1.0, 0, 1.0, 0);
-                    next = Array.IndexOf(processed, processed.Max());
-                }
+                int next = sampling.Select(logits, ids, o, random);
                 ids.Add(next);
                 generated.Add(next);
                 if (next == eos) break;
@@ -614,7 +635,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         Validation.Guard.NotNull(sample);
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording; set Audio.", nameof(sample));
-        string transcript = TextOf(sample.Tokens);
+        string transcript = TrainingTranscript(sample);
         if (_examples.TryGetValue(audio, out var cached) && cached.Transcript == transcript) return (cached.Ids, cached.Labels);
         var speaker = CreateSpeaker(audio, transcript);
         string prompt = OuteTTSPrompts.TrainingPrompt(speaker);

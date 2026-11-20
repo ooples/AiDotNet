@@ -123,7 +123,11 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <summary>
     /// Cumulative probabilities for weighted sampling.
     /// </summary>
-    protected double[] CumulativeProbabilities;
+    /// <remarks>
+    /// Kept in double whatever <typeparamref name="T"/> is: a running sum of probabilities in single or half
+    /// precision drifts (and in half precision saturates), which skews every draw toward the last index.
+    /// </remarks>
+    protected Tensor<double> CumulativeProbabilities;
 
     /// <summary>
     /// Whether to sample with replacement.
@@ -162,7 +166,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
 
         NumSamplesOverride = numSamples;
         ReplacementEnabled = replacement;
-        CumulativeProbabilities = new double[WeightsArray.Length];
+        CumulativeProbabilities = new Tensor<double>(new[] { WeightsArray.Length });
         // Call the private core method directly to avoid virtual call in constructor
         ComputeCumulativeProbabilitiesCore();
     }
@@ -216,32 +220,36 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// </summary>
     private void ComputeCumulativeProbabilitiesCore()
     {
-        CumulativeProbabilities = new double[WeightsArray.Length];
-
-        // Convert weights to doubles and compute sum
-        double sum = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
-        {
-            double w = NumOps.ToDouble(WeightsArray[i]);
-            if (w < 0)
-            {
-                throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
-            }
-            sum += w;
-        }
-
-        if (sum <= 0)
+        CumulativeProbabilities = new Tensor<double>(new[] { WeightsArray.Length });
+        if (WeightsArray.Length == 0)
         {
             throw new ArgumentException("Total weight must be greater than zero.");
         }
 
-        // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
+        // Validate the weights with engine ops. The distribution is built in double (one cast), as the scalar
+        // accumulation was: in T the running sum drifts for large datasets and saturates in half precision.
+        var engine = AiDotNetEngine.Current;
+        var weights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length }).Cast<double>();
+        var negative = engine.TensorLessThan(weights, 0.0);
+        if (engine.TensorMaxValue(negative) > 0.0)
         {
-            cumulative += NumOps.ToDouble(WeightsArray[i]) / sum;
-            CumulativeProbabilities[i] = cumulative;
+            // ArgMax returns the first maximum, i.e. the first negative weight.
+            int i = engine.TensorArgMax(negative, 0).AsSpan()[0];
+            T w = WeightsArray[i];
+            throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
         }
+
+        // Running sum (left to right, like the previous scalar accumulation); its last entry is the total
+        var runningSum = engine.TensorCumSum(weights, 0);
+        double sum = runningSum.AsSpan()[WeightsArray.Length - 1];
+
+        if (sum <= 0.0)
+        {
+            throw new ArgumentException("Total weight must be greater than zero.");
+        }
+
+        // Compute cumulative probabilities: cumulative sum of w / sum
+        CumulativeProbabilities = engine.TensorCumSum(engine.TensorDivideScalar(weights, sum), 0);
 
         // Ensure last element is exactly 1.0 to avoid floating point issues
         CumulativeProbabilities[WeightsArray.Length - 1] = 1.0;
@@ -253,14 +261,35 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <returns>A randomly selected index based on weights.</returns>
     protected int SampleWeightedIndex()
     {
-        double r = Random.NextDouble();
+        // First entry with r <= cumulative, capped at the last index like the former binary search.
+        return CumulativeSearch.FirstAtOrAbove<double>(CumulativeProbabilities.AsSpan(), Random.NextDouble());
+    }
+}
+
+/// <summary>
+/// Binary search over a non-decreasing cumulative distribution for a single draw.
+/// </summary>
+/// <remarks>
+/// A sampler draws one index at a time, so each draw must stay O(log n). The engine's search-sorted is
+/// built for batches of values: for a single value it allocates two tensors, and on <see cref="float"/> it
+/// first scans the whole sequence for NaN, which made every draw O(n).
+/// </remarks>
+internal static class CumulativeSearch
+{
+    /// <summary>
+    /// Returns the first index whose cumulative value is not below <paramref name="value"/>, or the last
+    /// index when every entry is below it.
+    /// </summary>
+    internal static int FirstAtOrAbove<T>(ReadOnlySpan<T> cumulative, T value)
+    {
+        var comparer = Comparer<T>.Default;
         int left = 0;
-        int right = CumulativeProbabilities.Length - 1;
+        int right = cumulative.Length - 1;
 
         while (left < right)
         {
-            int mid = (left + right) / 2;
-            if (CumulativeProbabilities[mid] < r)
+            int mid = left + ((right - left) >> 1);
+            if (comparer.Compare(cumulative[mid], value) < 0)
             {
                 left = mid + 1;
             }

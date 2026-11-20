@@ -90,8 +90,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         var o = _options;
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++) _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
         var series = new double[y.Length];
@@ -168,9 +167,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         if (TryForecastTimeIndex(input, _trainingSeries, _options.ContextLength, PredictSingle, out var forecasts, Forecast,
                 extendShortHistory: false))
             return forecasts;
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++) predictions[i] = PredictSingle(input.GetRow(i));
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>The one-step point forecast after the context <paramref name="input"/>.</summary>

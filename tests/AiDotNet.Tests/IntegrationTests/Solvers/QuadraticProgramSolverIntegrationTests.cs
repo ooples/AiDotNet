@@ -305,4 +305,15 @@ public class QuadraticProgramSolverIntegrationTests
     }
 
     #endregion
+
+    [Fact]
+    public void Construct_HalfAsymmetryAbove2048_Throws()
+    {
+        // Indices 2048 and 2049 are the same Half, so a T-valued coordinate mask missed this pair.
+        const int n = 2050;
+        var quadratic = new Matrix<Half>(n, n);
+        quadratic[2048, 2049] = (Half)1;
+
+        Assert.Throws<ArgumentException>(() => new QuadraticProgram<Half>(quadratic, new Vector<Half>(n)));
+    }
 }

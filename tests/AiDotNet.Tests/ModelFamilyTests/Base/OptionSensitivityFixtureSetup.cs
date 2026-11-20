@@ -46,8 +46,12 @@ internal static class OptionSensitivityFixtureSetup
             : network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+        => network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> && DevaOptionFixture.Handles(option) ? "deva-video-" + option
+            : network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> && KMaXSemanticAtrousOptionFixture.Handles(option) ? "kmax-" + option
+            : AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
+            // TryTrainOption trains this option on a two-second recording, not the fixture input, so its control must too.
+            : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "lid-two-second-recording"
             : network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> && option is "PostNetLearningRate" or "PostNetTemperature" ? "portaspeech-postnet"
             // Trained on its own two-second recording (TryTrainOption), so its control must not be shared with the
             // options the fixture input trains: whichever ran first would set the other's control.
@@ -221,6 +225,20 @@ internal static class OptionSensitivityFixtureSetup
             return KokoroOptionFixture.Observe(kokoro, option);
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> deva && DevaOptionFixture.Handles(option))
+            task = OptionSensitivityHarness.Combine(task, DevaOptionFixture.Observe(deva, option));
+
+        if (network is AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T> hamiltonian
+            && option is "SymplecticSolverTolerance" or "SymplecticSolverMaxIterations")
+        {
+            // These options control the implicit simulation step, not Predict/Train. At this
+            // finite nonseparable state, a single correction has a measurable momentum residual.
+            var initial = new Vector<T>(Enumerable.Repeat(ops.FromDouble(1), input.Shape[^1]).ToArray());
+            var trajectory = hamiltonian.Simulate(initial, ops.FromDouble(4), 3);
+            task = OptionSensitivityHarness.Combine(task,
+                OptionSensitivityHarness.Fingerprint(trajectory.ToArray().Select(ops.ToDouble)));
+        }
+
         // Vector.Select materializes another full vector (and a double copy for float models).
         // Stream conversions so a paper-scale model needs only the existing parameter snapshot.
         var parameters = network.GetParameters();
@@ -397,8 +415,9 @@ internal static class OptionSensitivityFixtureSetup
             // feeds ready-made patches. The ResNet's global average pooling takes any patch length.
             return OptionSensitivityHarness.Fingerprint(events.GetEventProbabilities(LongWaveform<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel && option == "WindowLength")
-            // The analysis window acts in the model's mel front end (torchaudio MelSpectrogram), which the probe's
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel
+            && option is "WindowLength" or "SampleRate" or "HopSize" or "FftSize")
+            // The STFT and HTK mel front end (torchaudio MelSpectrogram) acts on waveforms, which the probe's
             // ready-made mel targets bypass.
             return OptionSensitivityHarness.Fingerprint(styleMel.ComputeMel(Waveform<T>(16000))
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
@@ -504,6 +523,9 @@ internal static class OptionSensitivityFixtureSetup
             var masks = medicalSam.SegmentImageSet(images, 0, new float[,] { { 32f, 32f } }, new[] { 1 });
             return OptionSensitivityHarness.Fingerprint(masks.SelectMany(mask => mask.Select(ops.ToDouble)));
         }
+        if (network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> kmax
+            && KMaXSemanticAtrousOptionFixture.Handles(option))
+            return KMaXSemanticAtrousOptionFixture.Observe(kmax);
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishText && option is "NormalizeChineseText" or "ChunkLength")
         {
             // Both act on the text Synthesize speaks (clean_text's number normalizer, split_text); Predict takes ids.
@@ -1362,6 +1384,7 @@ internal static class OptionSensitivityFixtureSetup
         : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
         : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? 0
         : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? 0
+        : network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> && KMaXSemanticAtrousOptionFixture.Handles(option) ? 0
         // Graph, inference and dropout probes already observe their native path directly; reserve the
         // full 100M-parameter backward pass for the optimizer settings that require it.
         : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> && option is not ("LearningRate" or "WeightDecay")
@@ -2127,6 +2150,9 @@ internal static class OptionSensitivityFixtureSetup
                 medicalSize.HieraGlobalAttentionBlockIndexes = null;
             }
         }
+        if (options is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions kmaxOptions
+            && KMaXSemanticAtrousOptionFixture.Handles(option))
+            KMaXSemanticAtrousOptionFixture.PrepareOptions(kmaxOptions, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fishOptions)
         {
             if (option == "ContextLength")
@@ -2192,10 +2218,19 @@ internal static class OptionSensitivityFixtureSetup
             tamSize.VitEmbeddingDimension = null;
             tamSize.VitHeadCount = null;
         }
-        if (options is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avMask && option == "AudioMaskProbability")
-            // The probe's 12 audio frames hold three starts for 10-frame spans, and at least two spans are drawn, so every
-            // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
-            avMask.AudioMaskLength = 2;
+        if (options is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avMask)
+        {
+            if (option == "AudioMaskProbability")
+            {
+                // The probe's 12 audio frames hold three starts for 10-frame spans, and at least two spans are drawn, so every
+                // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
+                avMask.AudioMaskLength = 2;
+            }
+            if (option == "AudioDropout")
+            {
+                avMask.ModalityDropout = 1.0;
+            }
+        }
         if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
             // The fixture's first cleaning pass leaves a mean |residue| between 8/255 and 16/255 (measured: thresholds
             // up to 8 run all three passes, from 16 one). From 11 the doubled and halved perturbations fall on
@@ -2528,6 +2563,15 @@ internal static class OptionSensitivityFixtureSetup
             spiral.PretrainingSteps = 4; // The third student step observes the teacher's changing EMA schedule.
             spiral.TeacherMomentumStart = 0.5;
             spiral.MaxTeacherPaddingUnits = 1; // The tiny fixture caps larger values to the same padding limit.
+            if (option == "TimeMaskLength")
+            {
+                spiral.TimeMaskProbability = 0.5;
+                spiral.TimeMaskLength = 2;
+            }
+        }
+        if (options is AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions voxtOpt && option == "MaxGradientNorm")
+        {
+            voxtOpt.MaxGradientNorm = 1e-8;
         }
         if (options is AiDotNet.TextToSpeech.Latest.KaniTTSOptions kani)
         {

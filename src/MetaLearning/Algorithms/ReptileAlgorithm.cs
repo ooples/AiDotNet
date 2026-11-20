@@ -159,11 +159,35 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
+        if (!_reptileOptions.UseSerialUpdate)
+        {
+            return MetaStep(taskBatch.Tasks);
+        }
+
+        // Serial Reptile (Nichol et al. 2018, Algorithm 1): one meta-update per task, each task adapting from the
+        // meta-parameters the previous task's update produced.
+        var taskLosses = new List<T>(taskBatch.Tasks.Length);
+        foreach (var task in taskBatch.Tasks)
+        {
+            taskLosses.Add(MetaStep(new[] { task }));
+        }
+
+        return ComputeMean(taskLosses);
+    }
+
+    /// <summary>
+    /// Adapts to each task from the current meta-parameters and moves them toward the mean adapted parameters
+    /// (Nichol et al. 2018, Algorithm 2; Algorithm 1 when given one task).
+    /// </summary>
+    /// <param name="tasks">The tasks of this meta-update.</param>
+    /// <returns>The mean query loss of the adapted models.</returns>
+    private T MetaStep(IReadOnlyList<IMetaLearningTask<T, TInput, TOutput>> tasks)
+    {
         // Accumulate parameter updates across all tasks
         Vector<T>? accumulatedUpdates = null;
-        T totalLoss = NumOps.Zero;
+        var taskLosses = new List<T>(tasks.Count);
 
-        foreach (var task in taskBatch.Tasks)
+        foreach (var task in tasks)
         {
             // Clone the meta model for this task
             var taskModel = CloneModel();
@@ -173,30 +197,15 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var adaptedParams = InnerLoopAdaptation(taskModel, task);
 
             // Compute the parameter update direction (adapted - initial)
-            var taskUpdate = new Vector<T>(initialParams.Length);
-            for (int i = 0; i < initialParams.Length; i++)
-            {
-                taskUpdate[i] = NumOps.Subtract(adaptedParams[i], initialParams[i]);
-            }
+            var taskUpdate = Engine.Subtract(adaptedParams, initialParams);
 
             // Accumulate updates
-            if (accumulatedUpdates == null)
-            {
-                accumulatedUpdates = taskUpdate;
-            }
-            else
-            {
-                for (int i = 0; i < accumulatedUpdates.Length; i++)
-                {
-                    accumulatedUpdates[i] = NumOps.Add(accumulatedUpdates[i], taskUpdate[i]);
-                }
-            }
+            accumulatedUpdates = accumulatedUpdates is null ? taskUpdate : Engine.Add(accumulatedUpdates, taskUpdate);
 
             // Evaluate on query set for loss tracking
             InterfaceGuard.Parameterizable(taskModel).SetParameters(adaptedParams);
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T taskLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
-            totalLoss = NumOps.Add(totalLoss, taskLoss);
+            taskLosses.Add(ComputeLossFromOutput(queryPredictions, task.QueryOutput));
         }
 
         if (accumulatedUpdates == null)
@@ -205,24 +214,24 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         }
 
         // Average the parameter updates
-        T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedUpdates.Length; i++)
-        {
-            accumulatedUpdates[i] = NumOps.Divide(accumulatedUpdates[i], batchSizeT);
-        }
+        T batchSizeT = NumOps.FromDouble(tasks.Count);
+        accumulatedUpdates = Engine.Divide(accumulatedUpdates, batchSizeT);
 
         // Update meta-parameters using interpolation
-        // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update, which is an SGD step on the
-        // "gradient" theta_old - phi. Nichol et al. (2018, section 3) feed that same vector to Adam, so a supplied
-        // meta-optimizer takes it instead. The optimizer steps at its own rate, so Interpolation then scales the
-        // displacement it produces, keeping Interpolation = 0 a no-op and 1 the full step.
+        // theta_new = theta_old + (epsilon_t * Interpolation) * average_update, which is an SGD step on the
+        // "gradient" theta_old - phi. epsilon_t anneals linearly from OuterLearningRate to FinalOuterLearningRate
+        // over NumMetaIterations (Nichol et al. 2018, Appendix A). Section 3 feeds that same vector to Adam, so a
+        // supplied meta-optimizer takes it instead. The optimizer steps at its own rate, so Interpolation and the
+        // annealing fraction epsilon_t / OuterLearningRate then scale the displacement it produces, keeping
+        // Interpolation = 0 a no-op and 1 the full step.
         var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var direction = Engine.Multiply(accumulatedUpdates, NumOps.FromDouble(-1.0));
+        double outerStep = AnnealedOuterLearningRate();
         Vector<T> updatedMetaParams;
         if (MetaOptimizer is null)
         {
             updatedMetaParams = ApplyOuterGradients(currentMetaParams, direction,
-                _reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
+                outerStep * _reptileOptions.Interpolation);
         }
         else if (_reptileOptions.Interpolation == 0)
         {
@@ -230,16 +239,36 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         }
         else
         {
+            double annealFraction = Math.Abs(_reptileOptions.OuterLearningRate) < double.Epsilon
+                ? 1.0
+                : outerStep / _reptileOptions.OuterLearningRate;
             var stepped = ApplyOuterGradients(currentMetaParams, direction, _reptileOptions.OuterLearningRate);
             var displacement = Engine.Subtract(stepped, currentMetaParams);
             updatedMetaParams = Engine.Add(currentMetaParams,
-                Engine.Multiply(displacement, NumOps.FromDouble(_reptileOptions.Interpolation)));
+                Engine.Multiply(displacement, NumOps.FromDouble(_reptileOptions.Interpolation * annealFraction)));
         }
 
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average loss
-        return NumOps.Divide(totalLoss, batchSizeT);
+        return ComputeMean(taskLosses);
+    }
+
+    /// <summary>
+    /// The outer step size for the current meta-iteration: OuterLearningRate linearly annealed to
+    /// FinalOuterLearningRate over NumMetaIterations, then held there.
+    /// </summary>
+    private double AnnealedOuterLearningRate()
+    {
+        double start = _reptileOptions.OuterLearningRate;
+        double? final = _reptileOptions.FinalOuterLearningRate;
+        if (!final.HasValue || _reptileOptions.NumMetaIterations <= 0)
+        {
+            return start;
+        }
+
+        double fraction = Math.Min(1.0, (double)_currentIteration / _reptileOptions.NumMetaIterations);
+        return (1.0 - fraction) * start + fraction * final.Value;
     }
 
     /// <summary>

@@ -67,34 +67,8 @@ public class MaskDilation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>The dilated mask.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask._shape;
-        var result = new Tensor<T>(shape);
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
-        int half = _kernelSize / 2;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                T maxVal = NumOps.Zero;
-
-                for (int dy = -half; dy <= half; dy++)
-                {
-                    for (int dx = -half; dx <= half; dx++)
-                    {
-                        int ny = Math.Max(0, Math.Min(y + dy, height - 1));
-                        int nx = Math.Max(0, Math.Min(x + dx, width - 1));
-                        var val = mask[ny, nx];
-                        if (NumOps.GreaterThan(val, maxVal))
-                            maxVal = val;
-                    }
-                }
-
-                result[y, x] = maxVal;
-            }
-        }
-
-        return result;
+        // Neighbourhood maximum (border pixels replicated), never below zero
+        var maxima = MaskVectorOps.ReplicateMaxFilter2D(mask, _kernelSize);
+        return AiDotNetEngine.Current.TensorMax(maxima, NumOps.Zero);
     }
 }

@@ -422,7 +422,7 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         {
             // Accumulator for blending overlapping predictions
             var accumulatedNoise = new Tensor<T>(videoLatentShape);
-            var accumulatedWeights = new Tensor<T>(videoLatentShape);
+            var accumulatedWeights = new Tensor<T>(new[] { 1, totalFrames, 1, 1, 1 });
 
             for (int w = 0; w < numWindows; w++)
             {
@@ -442,7 +442,8 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
                     : condPred;
 
                 // Blend window noise into accumulator with linear weights
-                BlendWindowNoise(accumulatedNoise, accumulatedWeights, windowNoise, startFrame, windowSize);
+                (accumulatedNoise, accumulatedWeights) =
+                    BlendWindowNoise(accumulatedNoise, accumulatedWeights, windowNoise, startFrame, windowSize);
             }
 
             // Normalize accumulated noise by weights
@@ -470,59 +471,23 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         // For each frame, we pass it through the spatial U-Net layers
         // and apply temporal attention in the motion modules
 
-        var result = new Tensor<T>(videoShape);
-        var resultSpan = result.AsWritableSpan();
-        var latentSpan = latents.AsSpan();
-
-        var batchSize = videoShape[0];
-        var channels = videoShape[2];
-        var height = videoShape[3];
-        var width = videoShape[4];
-        var frameSize = channels * height * width;
-
         // Process each frame through the U-Net
         // In a full implementation, motion modules would apply temporal attention
         // across frames. Here we use a simplified per-frame + blending approach.
+        var frames = new Tensor<T>[numFrames];
         for (int f = 0; f < numFrames; f++)
         {
-            // Extract frame latent
-            var frameShape = new[] { batchSize, channels, height, width };
-            var frameLatent = new Tensor<T>(frameShape);
-            var frameLatentSpan = frameLatent.AsWritableSpan();
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                var batchOffset = b * numFrames * frameSize + f * frameSize;
-                for (int i = 0; i < frameSize; i++)
-                {
-                    frameLatentSpan[b * frameSize + i] = latentSpan[batchOffset + i];
-                }
-            }
-
-            // Predict noise for this frame
+            // Frame f of every batch item: [batch, channels, height, width].
+            var frameLatent = Engine.TensorSelect(latents, 1, f);
             var frameNoise = _unet.PredictNoise(frameLatent, timestep, textEmbedding);
-            var frameNoiseSpan = frameNoise.AsSpan();
 
             // Apply temporal smoothing from motion modules
             // This is a simplified version - full implementation would use temporal attention
-            var temporalWeight = ApplyMotionModuleWeight(f, numFrames);
-
-            // Insert into result with temporal weighting
-            for (int b = 0; b < batchSize; b++)
-            {
-                var batchOffset = b * numFrames * frameSize + f * frameSize;
-                for (int i = 0; i < frameSize; i++)
-                {
-                    var weighted = NumOps.Multiply(temporalWeight, frameNoiseSpan[b * frameSize + i]);
-                    resultSpan[batchOffset + i] = weighted;
-                }
-            }
+            frames[f] = Engine.TensorMultiplyScalar(frameNoise, ApplyMotionModuleWeight(f, numFrames));
         }
 
         // Apply temporal smoothing across frames
-        ApplyTemporalSmoothing(result, numFrames);
-
-        return result;
+        return ApplyTemporalSmoothing(Engine.TensorStack(frames, 1), numFrames);
     }
 
     /// <summary>
@@ -549,56 +514,27 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Applies temporal smoothing across predicted noise.
     /// </summary>
-    private void ApplyTemporalSmoothing(Tensor<T> noise, int numFrames)
+    private Tensor<T> ApplyTemporalSmoothing(Tensor<T> noise, int numFrames)
     {
         if (numFrames <= 2 || _motionConfig.TemporalSmoothing <= 0)
-            return;
+            return noise;
 
-        var shape = noise._shape;
-        var batchSize = shape[0];
-        var channels = shape[2];
-        var height = shape[3];
-        var width = shape[4];
-        var frameSize = channels * height * width;
+        // Simple 1D temporal convolution on the interior frames, all read from the unmodified input:
+        // x'[f] = (1 - s) * x[f] + s * 0.5 * (x[f - 1] + x[f + 1]); the first and last frames are kept.
+        int interior = numFrames - 2;
+        var previous = Engine.TensorNarrow(noise, 1, 0, interior);
+        var current = Engine.TensorNarrow(noise, 1, 1, interior);
+        var next = Engine.TensorNarrow(noise, 1, 2, interior);
+        var smoothed = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(current, NumOps.FromDouble(1.0 - _motionConfig.TemporalSmoothing)),
+            Engine.TensorMultiplyScalar(Engine.TensorAdd(previous, next), NumOps.FromDouble(0.5 * _motionConfig.TemporalSmoothing)));
 
-        // Create a copy to read from while writing to original
-        // This prevents cascading effects where modified frames affect subsequent reads
-        var originalNoise = new Tensor<T>(shape);
-        var originalSpan = originalNoise.AsWritableSpan();
-        var noiseSpan = noise.AsWritableSpan();
-
-        // Copy the original values
-        for (int i = 0; i < noiseSpan.Length; i++)
+        return Engine.TensorConcatenate(new[]
         {
-            originalSpan[i] = noiseSpan[i];
-        }
-
-        var smoothingWeight = NumOps.FromDouble(_motionConfig.TemporalSmoothing);
-        var mainWeight = NumOps.FromDouble(1.0 - _motionConfig.TemporalSmoothing);
-
-        // Simple 1D temporal convolution (average with neighbors)
-        // Read from original copy, write to noise tensor
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 1; f < numFrames - 1; f++)
-            {
-                for (int i = 0; i < frameSize; i++)
-                {
-                    var prevIdx = b * numFrames * frameSize + (f - 1) * frameSize + i;
-                    var currIdx = b * numFrames * frameSize + f * frameSize + i;
-                    var nextIdx = b * numFrames * frameSize + (f + 1) * frameSize + i;
-
-                    // Read from original copy to avoid cascading modifications
-                    var avg = NumOps.Multiply(
-                        NumOps.FromDouble(0.5),
-                        NumOps.Add(originalSpan[prevIdx], originalSpan[nextIdx]));
-
-                    noiseSpan[currIdx] = NumOps.Add(
-                        NumOps.Multiply(mainWeight, originalSpan[currIdx]),
-                        NumOps.Multiply(smoothingWeight, avg));
-                }
-            }
-        }
+            Engine.TensorNarrow(noise, 1, 0, 1),
+            smoothed,
+            Engine.TensorNarrow(noise, 1, numFrames - 1, 1)
+        }, 1);
     }
 
     /// <summary>
@@ -642,73 +578,76 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Blends window noise into the accumulator with linear weights.
     /// </summary>
-    private void BlendWindowNoise(
+    /// <remarks>
+    /// Frame f of an n-frame window is weighted 1 - 0.5 * |f / (n - 1) - 0.5| (1 in the middle, 0.75 at the
+    /// edges); a one-frame window sits at the middle and gets weight 1 rather than the 0 / 0 position.
+    /// <paramref name="weights"/> holds one accumulated weight per frame, shaped [1, frames, 1, 1, 1].
+    /// Only the window's frame range of both accumulators is updated, in place (the returned tensors are the
+    /// ones passed in): padding each window to the full video made every denoising step quadratic in its length.
+    /// </remarks>
+    internal static (Tensor<T> Accumulated, Tensor<T> Weights) BlendWindowNoise(
         Tensor<T> accumulated,
         Tensor<T> weights,
         Tensor<T> windowNoise,
         int startFrame,
         int windowSize)
     {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var shape = accumulated._shape;
-        var batchSize = shape[0];
-        var totalFrames = shape[1];
-        var channels = shape[2];
-        var height = shape[3];
-        var width = shape[4];
-        var frameSize = channels * height * width;
+        int totalFrames = shape[1];
+        int frames = Math.Min(windowSize, totalFrames - startFrame);
+        if (frames <= 0)
+            return (accumulated, weights);
 
-        var accSpan = accumulated.AsWritableSpan();
-        var weightSpan = weights.AsWritableSpan();
-        var noiseSpan = windowNoise.AsSpan();
+        var frameWeights = frames == 1
+            ? Tensor<T>.CreateDefault(new[] { 1 }, ops.One)
+            : engine.ScalarMinusTensor(ops.One, engine.TensorMultiplyScalar(
+                engine.TensorAbs(engine.TensorSubtractScalar(
+                    engine.TensorArange<T>(0, frames, 1), ops.FromDouble(0.5 * (frames - 1)))),
+                ops.FromDouble(0.5 / (frames - 1))));
+        frameWeights = frameWeights.Reshape(new[] { 1, frames, 1, 1, 1 });
 
-        for (int b = 0; b < batchSize; b++)
+        var window = engine.TensorNarrow(windowNoise, 1, 0, frames);
+        var weighted = engine.TensorMultiply(window, engine.TensorBroadcastTo(frameWeights, window._shape));
+
+        AddIntoFrames(accumulated, weighted, startFrame);
+        AddIntoFrames(weights, frameWeights, startFrame);
+        return (accumulated, weights);
+    }
+
+    /// <summary>
+    /// Adds <paramref name="block"/> ([batch, n, ...]) into frames startFrame .. startFrame + n - 1 of
+    /// <paramref name="target"/> ([batch, totalFrames, ...]) in place, touching only that frame range.
+    /// </summary>
+    private static void AddIntoFrames(Tensor<T> target, Tensor<T> block, int startFrame)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = target._shape;
+        int batch = shape[0];
+        int totalFrames = shape[1];
+        int frames = block._shape[1];
+        int frameSize = target.Length / (batch * totalFrames);
+        var sum = engine.TensorAdd(engine.TensorNarrow(target, 1, startFrame, frames), block).ToArray();
+        var destination = target.AsWritableSpan();
+        for (int b = 0; b < batch; b++)
         {
-            for (int f = 0; f < windowSize; f++)
-            {
-                var globalFrame = startFrame + f;
-                if (globalFrame >= totalFrames) break;
-
-                // Linear blend weight (higher in the middle of the window)
-                var windowPos = (double)f / (windowSize - 1);
-                var blendWeight = 1.0 - Math.Abs(windowPos - 0.5) * 0.5;
-
-                var globalOffset = b * totalFrames * frameSize + globalFrame * frameSize;
-                var windowOffset = b * windowSize * frameSize + f * frameSize;
-
-                var blendT = NumOps.FromDouble(blendWeight);
-
-                for (int i = 0; i < frameSize; i++)
-                {
-                    accSpan[globalOffset + i] = NumOps.Add(
-                        accSpan[globalOffset + i],
-                        NumOps.Multiply(blendT, noiseSpan[windowOffset + i]));
-                    weightSpan[globalOffset + i] = NumOps.Add(
-                        weightSpan[globalOffset + i],
-                        blendT);
-                }
-            }
+            new ReadOnlySpan<T>(sum, b * frames * frameSize, frames * frameSize)
+                .CopyTo(destination.Slice(((b * totalFrames) + startFrame) * frameSize, frames * frameSize));
         }
     }
 
     /// <summary>
-    /// Normalizes accumulated noise by weights.
+    /// Normalizes accumulated noise by the per-frame accumulated weights; frames no window covered keep their
+    /// (zero) accumulation.
     /// </summary>
-    private Tensor<T> NormalizeAccumulatedNoise(Tensor<T> accumulated, Tensor<T> weights)
+    internal static Tensor<T> NormalizeAccumulatedNoise(Tensor<T> accumulated, Tensor<T> weights)
     {
-        var result = new Tensor<T>(accumulated._shape);
-        var resultSpan = result.AsWritableSpan();
-        var accSpan = accumulated.AsSpan();
-        var weightSpan = weights.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var weight = weightSpan[i];
-            resultSpan[i] = NumOps.GreaterThan(weight, NumOps.FromDouble(1e-8))
-                ? NumOps.Divide(accSpan[i], weight)
-                : accSpan[i];
-        }
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var fullWeights = engine.TensorBroadcastTo(weights, accumulated._shape);
+        var uncovered = engine.ScalarMinusTensor(ops.One, engine.TensorGreaterThan(fullWeights, ops.Zero));
+        return engine.TensorDivide(accumulated, engine.TensorAdd(fullWeights, uncovered));
     }
 
     /// <summary>

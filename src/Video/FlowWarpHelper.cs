@@ -110,7 +110,7 @@ public static class FlowWarpHelper
         var flowX = engine.TensorNarrow(flowNchw, 1, 0, 1);
         var flowY = engine.TensorNarrow(flowNchw, 1, 1, 1);
 
-        var (baseX, baseY) = GetBaseGrids<T>(height, width, numOps);
+        var (baseX, baseY) = GetBaseGrids<T>(height, width);
 
         // Source location in pixels, then normalized to [-1, 1] as GridSample expects.
         // A degenerate axis (size 1) has no interior to interpolate across, so its normalized
@@ -180,21 +180,17 @@ public static class FlowWarpHelper
     /// determines how the warp responds during training.
     /// </remarks>
     private static (Tensor<T> BaseX, Tensor<T> BaseY) GetBaseGrids<T>(
-        int height, int width, INumericOperations<T> numOps)
+        int height, int width)
     {
         var cached = BaseGrids.GetOrAdd((height, width, typeof(T)), _ =>
         {
-            var x = new Tensor<T>([1, 1, height, width]);
-            var y = new Tensor<T>([1, 1, height, width]);
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int index = h * width + w;
-                    x[index] = numOps.FromDouble(w);
-                    y[index] = numOps.FromDouble(h);
-                }
-            }
+            // Column index along x and row index along y, as [H, W] planes. The cache outlives the call,
+            // so it holds copies rather than engine-owned results.
+            var engine = AiDotNetEngine.Current;
+            var (gridX, gridY) = engine.TensorMeshgrid(
+                engine.TensorArange<T>(0, width, 1), engine.TensorArange<T>(0, height, 1));
+            var x = engine.Reshape(gridX, [1, 1, height, width]).Clone();
+            var y = engine.Reshape(gridY, [1, 1, height, width]).Clone();
 
             return (x, y);
         });

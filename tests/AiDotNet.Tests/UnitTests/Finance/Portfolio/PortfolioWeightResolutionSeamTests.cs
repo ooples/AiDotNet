@@ -165,7 +165,7 @@ public class PortfolioWeightResolutionSeamTests
         maxLeverage: maxLeverage, transactionCost: 0, slippageCoefficient: 0,
         annualBorrowCost: 0, annualHoldingCost: 0, allowShortSelling: true, seed: 17)
     {
-        public double[] Resolve(Vector<double> action) => ResolveTargetWeights(action);
+        public Vector<double> Resolve(Vector<double> action) => ResolveTargetWeights(action);
     }
 
     /// <summary>An override that ignores the action entirely — the clearest possible evidence it is in force.</summary>
@@ -178,6 +178,6 @@ public class PortfolioWeightResolutionSeamTests
         transactionCost: 0, slippageCoefficient: 0,
         annualBorrowCost: 0, annualHoldingCost: 0, allowShortSelling: true, seed: 17)
     {
-        protected override double[] ResolveTargetWeights(Vector<double> action) => fixedWeights;
+        protected override Vector<double> ResolveTargetWeights(Vector<double> action) => new(fixedWeights);
     }
 }

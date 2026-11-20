@@ -38,7 +38,9 @@ test.describe('Logged-in user — licenses', () => {
     // Setup instructions should only appear when the user actually has a
     // license to configure. If they show up in the empty-state branch, the
     // page is leaking DOM from an earlier render.
-    if (containerVisible > 0) {
+    await expect(page.locator('#licenses-container .copy-key-btn').first().or(page.locator('#no-licenses:not(.hidden)'))).toBeVisible();
+    const hasActiveKey = await page.locator('#licenses-container [data-license-status="active"][data-usable="true"]').count() > 0;
+    if (hasActiveKey) {
       await expect(page.locator('#setup-section')).toBeVisible();
       // The env-var snippet should be populated with a real key, not the
       // literal placeholder ("your-key-here").

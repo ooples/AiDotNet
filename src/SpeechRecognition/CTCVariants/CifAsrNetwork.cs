@@ -114,49 +114,100 @@ internal sealed class CifAsrNetwork<T>
 
     /// <summary>The input features <c>[1, 3, frames, mels]</c> of a 16 kHz waveform: log filterbanks, their deltas and
     /// delta-deltas (Kaldi's window of 2), each band normalized to zero mean and unit variance over the utterance.</summary>
+    /// <summary>The input features <c>[1, 3, frames, mels]</c> of a 16 kHz waveform: log filterbanks, their deltas and
+    /// delta-deltas (Kaldi's window of 2), each band normalized to zero mean and unit variance over the utterance.</summary>
     public Tensor<T> Features(Tensor<T> waveform)
     {
         var fbank = _fbank.Forward(waveform);
         int frames = fbank.Shape[0], mels = _o.Mels;
         if (frames == 0) throw new ArgumentException("The waveform is shorter than one analysis window.", nameof(waveform));
-        // All engine ops, so a compiled training plan traces the front end too.
-        var statics = fbank;
-        var delta = Deltas(statics);
-        var deltaDelta = Deltas(delta);
-        var channels = new[] { Normalized(statics), Normalized(delta), Normalized(deltaDelta) };
-        return _engine.Reshape(_engine.TensorStack(channels, 0), new[] { 1, 3, frames, mels });
+        var channels = new double[3][,];
+        channels[0] = new double[frames, mels];
+        for (int t = 0; t < frames; t++) for (int m = 0; m < mels; m++) channels[0][t, m] = NumOps.ToDouble(fbank[t, m]);
+        channels[1] = Deltas(channels[0]);
+        channels[2] = Deltas(channels[1]);
+        var features = new Tensor<T>(new[] { 1, 3, frames, mels });
+        for (int k = 0; k < 3; k++)
+            for (int m = 0; m < mels; m++)
+            {
+                double mean = 0, square = 0;
+                for (int t = 0; t < frames; t++) { mean += channels[k][t, m]; square += channels[k][t, m] * channels[k][t, m]; }
+                mean /= frames;
+                double deviation = Math.Sqrt(Math.Max(square / frames - mean * mean, 0)) + 1e-5;
+                for (int t = 0; t < frames; t++) features[0, k, t, m] = NumOps.FromDouble((channels[k][t, m] - mean) / deviation);
+            }
+        return features;
     }
 
-    // Each band [frames, bands] to zero mean and unit (population) deviation over the utterance, the deviation + 1e-5.
-    private Tensor<T> Normalized(Tensor<T> x)
+    private static double[,] Deltas(double[,] x)
     {
-        var mean = _engine.ReduceMean(x, new[] { 0 }, keepDims: true);                                   // [1, bands]
-        // The mean of the squared deviations, not E[x^2] - E[x]^2: that difference of two rounded, nearly equal terms
-        // loses a small variance entirely in a narrow element type (a Half band of 16 and 16.03125 gives 256.5 - 256.5).
-        var centered = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, x._shape));
-        var variance = _engine.ReduceMean(_engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
-        var deviation = _engine.TensorAddScalar(_engine.TensorSqrt(variance), NumOps.FromDouble(1e-5));
-        return _engine.TensorDivide(centered, _engine.TensorBroadcastTo(deviation, x._shape));
+        int frames = x.GetLength(0), bands = x.GetLength(1);
+        var d = new double[frames, bands];
+        for (int t = 0; t < frames; t++)
+            for (int m = 0; m < bands; m++)
+            {
+                double sum = 0;
+                for (int n = 1; n <= 2; n++) sum += n * (x[Math.Min(frames - 1, t + n), m] - x[Math.Max(0, t - n), m]);
+                d[t, m] = sum / 10.0;
+            }
+        return d;
+    }
+
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        var fbank = _fbank.Forward(waveform);
+        int frames = fbank.Shape[0], mels = _o.Mels;
+        if (frames == 0) throw new ArgumentException("The waveform is shorter than one analysis window.", nameof(waveform));
+        var c0 = ConformerAsrNetwork<T>.NormalizePerBin(_engine, fbank);
+        var delta1 = TensorDeltas(fbank);
+        var c1 = ConformerAsrNetwork<T>.NormalizePerBin(_engine, delta1);
+        var delta2 = TensorDeltas(delta1);
+        var c2 = ConformerAsrNetwork<T>.NormalizePerBin(_engine, delta2);
+        var stacked = _engine.TensorStack(new[] { c0, c1, c2 }, 0);
+        return _engine.Reshape(stacked, new[] { 1, 3, frames, mels });
     }
 
     // Kaldi's deltas with a window of 2: Σ n (x[t+n] − x[t−n]) / (2 Σ n²), the edges repeated.
-    private Tensor<T> Deltas(Tensor<T> x)
+    private Tensor<T> TensorDeltas(Tensor<T> x)
     {
-        int frames = x.Shape[0];
-        Tensor<T>? sum = null;
-        var weights = new[] { NumOps.One, NumOps.FromDouble(2) };
-        for (int n = 1; n <= 2; n++)
+        int frames = x.Shape[0], mels = x.Shape[1];
+        if (frames <= 1) return new Tensor<T>(new[] { frames, mels });
+
+        var lastRow = _engine.TensorSlice(x, new[] { frames - 1, 0 }, new[] { 1, mels });
+        var firstRow = _engine.TensorSlice(x, new[] { 0, 0 }, new[] { 1, mels });
+
+        var restP1 = _engine.TensorSlice(x, new[] { 1, 0 }, new[] { frames - 1, mels });
+        var xP1 = _engine.TensorConcatenate(new[] { restP1, lastRow }, 0);
+
+        var restM1 = _engine.TensorSlice(x, new[] { 0, 0 }, new[] { frames - 1, mels });
+        var xM1 = _engine.TensorConcatenate(new[] { firstRow, restM1 }, 0);
+
+        Tensor<T> xP2;
+        if (frames >= 3)
         {
-            var later = new int[frames];
-            var earlier = new int[frames];
-            for (int t = 0; t < frames; t++) { later[t] = Math.Min(frames - 1, t + n); earlier[t] = Math.Max(0, t - n); }
-            var difference = _engine.TensorSubtract(
-                _engine.TensorIndexSelect(x, new Tensor<int>(new[] { frames }, new Vector<int>(later)), 0),
-                _engine.TensorIndexSelect(x, new Tensor<int>(new[] { frames }, new Vector<int>(earlier)), 0));
-            var term = _engine.TensorMultiplyScalar(difference, weights[n - 1]);
-            sum = sum is null ? term : _engine.TensorAdd(sum, term);
+            var restP2 = _engine.TensorSlice(x, new[] { 2, 0 }, new[] { frames - 2, mels });
+            xP2 = _engine.TensorConcatenate(new[] { restP2, lastRow, lastRow }, 0);
         }
-        return _engine.TensorMultiplyScalar(sum!, NumOps.FromDouble(0.1));
+        else
+        {
+            xP2 = _engine.TensorConcatenate(new[] { lastRow, lastRow }, 0);
+        }
+
+        Tensor<T> xM2;
+        if (frames >= 3)
+        {
+            var restM2 = _engine.TensorSlice(x, new[] { 0, 0 }, new[] { frames - 2, mels });
+            xM2 = _engine.TensorConcatenate(new[] { firstRow, firstRow, restM2 }, 0);
+        }
+        else
+        {
+            xM2 = _engine.TensorConcatenate(new[] { firstRow, firstRow }, 0);
+        }
+
+        var d1 = _engine.TensorSubtract(xP1, xM1);
+        var d2 = _engine.TensorMultiplyScalar(_engine.TensorSubtract(xP2, xM2), NumOps.FromDouble(2.0));
+        var sum = _engine.TensorAdd(d1, d2);
+        return _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(0.1));
     }
 
     // [1, C, T, F] normalized over each frame's channels and frequencies.

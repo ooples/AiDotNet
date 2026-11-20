@@ -143,7 +143,7 @@ internal sealed class DiTToCodecTrainer<T>
 
     internal Tensor<T> Mean(Tensor<T> value) => _engine.ReduceMean(value, Enumerable.Range(0, value.Rank).ToArray(), false);
     private Tensor<T> Square(Tensor<T> value) => Mean(_engine.TensorMultiply(value, value));
-    private static Tensor<T> Detached(Tensor<T> value) => new(value.Shape.ToArray(), new Vector<T>(value.ToArray()));
+    private Tensor<T> Detached(Tensor<T> value) => _engine.StopGradient(value);
 
     internal Tensor<T> Generator(Tensor<T> real, Tensor<T> generated, Tensor<T> commitment, Tensor<T> variational, int[] starts)
     {

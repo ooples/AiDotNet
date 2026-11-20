@@ -31,21 +31,20 @@ public static class CompiledStepRandom<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    // One recorded draw: refills its tensor in place, bumps its version and drops any device copy. A draw of indices
-    // (Tensor<int>) and a draw of values share one list, so a replay refills them in the order the trace drew them and
-    // a fill that depends on an earlier one (distractors among the masked steps) sees that step's earlier draw.
     internal sealed class RecordedDraw
     {
-        public RecordedDraw(Action refill) => Refill = refill;
+        private readonly Action<IEngine> _redraw;
+        private RecordedDraw(Action<IEngine> redraw) => _redraw = redraw;
 
-        public Action Refill { get; }
+        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill)
+            => new(engine =>
+            {
+                fill(tensor);
+                tensor.IncrementVersion();
+                engine.InvalidatePersistentTensor(tensor);
+            });
 
-        public static RecordedDraw Of<TElement>(Tensor<TElement> tensor, Action<Tensor<TElement>> fill) => new(() =>
-        {
-            fill(tensor);
-            tensor.IncrementVersion();
-            AiDotNetEngine.Current.InvalidatePersistentTensor(tensor);
-        });
+        internal void Redraw(IEngine engine) => _redraw(engine);
     }
 
     // The draws made while the current thread traces a plan; null when nothing is tracing.
@@ -96,44 +95,85 @@ public static class CompiledStepRandom<T>
     /// A forward that runs only to resolve lazily shaped layers draws nothing (the tensor is zeros and
     /// <paramref name="fill"/> is not called), so the model's generator advances exactly as on the eager tape.
     /// </remarks>
-    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill)
+    public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
+
+    /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
+    internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill)
     {
         Guard.NotNull(shape);
         Guard.NotNull(fill);
-        var tensor = new Tensor<T>(shape);
+        var tensor = new Tensor<TData>(shape);
         if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
             return tensor;
-        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count && SameShape(replay.Draws[t_replayIndex], shape))
-            replay.Draws[t_replayIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
+        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count
+            && replay.Draws[t_replayIndex] is Tensor<TData> previous && SameShape(previous, shape))
+        {
+            previous.AsSpan().CopyTo(tensor.AsWritableSpan());
+            t_replayIndex++;
+        }
         else
             fill(tensor);
         t_captured?.Draws.Add(tensor);
-        t_recording?.Add(RecordedDraw.Of(tensor, fill));
+        t_recording?.Add(RecordedDraw.Create(tensor, fill));
         return tensor;
     }
 
     /// <summary>
-    /// A per-step random tensor of indices (a sampled position, a distractor's row), with the same contract as
-    /// <see cref="Draw"/>: an ordinary draw on the eager tape, refilled in place before every replay of a traced plan,
-    /// in order with the plan's other draws, and handed back by <see cref="ReplayDraws"/> like a value draw.
+    /// Registers an already-allocated per-step random tensor (such as a <see cref="NeuralNetworks.Layers.DropoutLayer{T}"/>
+    /// mask) with the active plan recording so every compiled replay refills it in place, including when the same layer
+    /// instance is invoked multiple times within one forward pass.
     /// </summary>
-    /// <param name="shape">The tensor shape.</param>
-    /// <param name="fill">Writes one step's indices into the tensor, in place, from the model's own generator.</param>
-    public static Tensor<int> DrawIndices(int[] shape, Action<Tensor<int>> fill)
+    internal static void RecordCustom(Tensor<T> tensor, Action<Tensor<T>> fill)
     {
-        Guard.NotNull(shape);
+        if (t_recording is null)
+            return;
+        Guard.NotNull(tensor);
         Guard.NotNull(fill);
-        var tensor = new Tensor<int>(shape);
-        if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
-            return tensor;
-        if (t_replay is { } replay && t_replayIndexDrawIndex < replay.IndexDraws.Count
-            && SameShape(replay.IndexDraws[t_replayIndexDrawIndex]._shape, shape))
-            replay.IndexDraws[t_replayIndexDrawIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
-        else
-            fill(tensor);
-        t_captured?.IndexDraws.Add(tensor);
-        t_recording?.Add(RecordedDraw.Of(tensor, fill));
-        return tensor;
+        t_recording.Add(RecordedDraw.Create(tensor, fill));
+    }
+
+    /// <summary>
+    /// An inverted-dropout mask of <paramref name="shape"/>, redrawn on every compiled replay: each entry is 0 with
+    /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>, one <see cref="Random.NextDouble"/> per
+    /// entry in row-major order, as an eager host loop draws it.
+    /// </summary>
+    internal static Tensor<T> InvertedDropoutMask(int[] shape, Random random, double rate)
+    {
+        Guard.NotNull(random);
+        T keep = NumOps.FromDouble(1.0 / (1.0 - rate));
+        return Draw(shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
+    }
+
+    /// <summary>
+    /// A per-step 0/1 gate (shape <c>[1]</c>) that is 0 with probability <paramref name="dropProbability"/>, redrawn on
+    /// every compiled replay: LayerDrop as <c>gate * layer(x) + (1 - gate) * x</c>, which is exactly <c>layer(x)</c> or
+    /// <c>x</c>, keeps every layer in the traced graph instead of baking the traced step's choice of layers into it.
+    /// </summary>
+    internal static Tensor<T> KeepGate(Random random, double dropProbability)
+    {
+        Guard.NotNull(random);
+        return Draw(new[] { 1 }, g => g.AsWritableSpan()[0] = random.NextDouble() < dropProbability ? NumOps.Zero : NumOps.One);
+    }
+
+    /// <summary>
+    /// <paramref name="kept"/> where the <see cref="KeepGate"/> gate is 1 and <paramref name="skipped"/> where it is 0,
+    /// as a selection that has the same shape as <paramref name="kept"/>.
+    /// </summary>
+    /// <remarks>
+    /// A selection, not <c>gate * kept + (1 - gate) * skipped</c>. A dropped layer still runs so that it stays in the
+    /// traced graph. If its output overflowed (inf or NaN, which Half reaches at 65504), <c>0 * inf</c> made the
+    /// skipped step NaN, where LayerDrop's reference skips the layer and returns the input untouched.
+    /// </remarks>
+    internal static Tensor<T> Gated(IEngine engine, Tensor<T> gate, Tensor<T> kept, Tensor<T> skipped)
+    {
+        var shape = kept._shape;
+        var ones = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Repeat(1, shape.Length));
+        var gateEverywhere = engine.TensorBroadcastTo(engine.Reshape(gate, ones), shape);
+        return engine.TensorWhere(engine.TensorGreaterThan(gateEverywhere, NumOps.Zero), kept, skipped);
     }
 
     /// <summary>
@@ -180,13 +220,9 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_replayCounterIndex;
 
-    [ThreadStatic]
-    private static int t_replayIndexDrawIndex;
-
-    private static bool SameShape(Tensor<T> tensor, int[] shape) => SameShape(tensor._shape, shape);
-
-    private static bool SameShape(int[] own, int[] shape)
+    private static bool SameShape<TData>(Tensor<TData> tensor, int[] shape)
     {
+        var own = tensor._shape;
         if (own.Length != shape.Length)
             return false;
         for (int i = 0; i < shape.Length; i++)
@@ -220,11 +256,9 @@ public static class CompiledStepRandom<T>
             t_captured = this;
         }
 
-        internal List<Tensor<T>> Draws { get; } = new List<Tensor<T>>();
+        internal List<object> Draws { get; } = new List<object>();
 
         internal List<ulong> Counters { get; } = new List<ulong>();
-
-        internal List<Tensor<int>> IndexDraws { get; } = new List<Tensor<int>>();
 
         public void Dispose()
         {
@@ -240,7 +274,6 @@ public static class CompiledStepRandom<T>
         private readonly CaptureScope? _previous;
         private readonly int _previousIndex;
         private readonly int _previousCounterIndex;
-        private readonly int _previousIndexDrawIndex;
         private bool _disposed;
 
         internal ReplayScope(CaptureScope captured)
@@ -249,11 +282,9 @@ public static class CompiledStepRandom<T>
             _previous = t_replay;
             _previousIndex = t_replayIndex;
             _previousCounterIndex = t_replayCounterIndex;
-            _previousIndexDrawIndex = t_replayIndexDrawIndex;
             t_replay = captured;
             t_replayIndex = 0;
             t_replayCounterIndex = 0;
-            t_replayIndexDrawIndex = 0;
         }
 
         public void Dispose()
@@ -263,7 +294,6 @@ public static class CompiledStepRandom<T>
             t_replay = _previous;
             t_replayIndex = _previousIndex;
             t_replayCounterIndex = _previousCounterIndex;
-            t_replayIndexDrawIndex = _previousIndexDrawIndex;
         }
     }
 
@@ -341,8 +371,11 @@ public static class CompiledStepRandom<T>
     {
         if (plan is null || !DrawsByPlan.TryGetValue(plan, out var draws))
             return;
+        var engine = AiDotNetEngine.Current;
         foreach (var draw in draws)
-            draw.Refill();
+        {
+            draw.Redraw(engine);
+        }
     }
 
     /// <summary>The draws of one plan trace; restores the enclosing recording when disposed.</summary>

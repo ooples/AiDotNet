@@ -145,38 +145,55 @@ internal class SlidingWindowVideoGen<T>
         int elementsPerFrame = currentWindow.Data.Length / Math.Max(1, currentWindow.Shape[0]);
         int accFrames = accumulated.Shape[0];
 
-        var result = new Tensor<T>(accumulated._shape);
-        accumulated.Data.Span.CopyTo(result.Data.Span);
-
-        for (int f = 0; f < overlapElements && f < currentWindow.Shape[0]; f++)
+        int frames = Math.Min(overlapElements, currentWindow.Shape[0]);
+        if (frames <= 0)
         {
-            double t = (double)(f + 1) / (overlapElements + 1);
-            double alpha;
-            switch (_blendingMode)
-            {
-                case BlendingMode.CosineBlend:
-                    alpha = 0.5 * (1.0 - Math.Cos(Math.PI * t));
-                    break;
-                case BlendingMode.HardCut:
-                    alpha = t >= 0.5 ? 1.0 : 0.0;
-                    break;
-                case BlendingMode.SlerpBlend:
-                    // Hermite smoothstep: smooth ease-in/ease-out transition (S-curve)
-                    alpha = t * t * (3.0 - 2.0 * t);
-                    break;
-                default: // LinearBlend
-                    alpha = t;
-                    break;
-            }
-            int accOffset = (accFrames - overlapElements + f) * elementsPerFrame;
-            int curOffset = f * elementsPerFrame;
-            for (int j = 0; j < elementsPerFrame && accOffset + j < result.Data.Length; j++)
-            {
-                double accVal = NumOps.ToDouble(result[accOffset + j]);
-                double curVal = NumOps.ToDouble(currentWindow[curOffset + j]);
-                result[accOffset + j] = NumOps.FromDouble(accVal * (1.0 - alpha) + curVal * alpha);
-            }
+            _previousWindowLatents = currentWindow;
+            return accumulated.Clone();
         }
+
+        // Overlap frame f (0-based) of the accumulated tail is blended toward the current window's frame f with
+        // weight alpha(t), t = (f + 1) / (overlap + 1).
+        var engine = AiDotNetEngine.Current;
+        int start = accFrames - overlapElements;
+        var t = engine.TensorDivideScalar(engine.TensorArange<T>(1, frames + 1, 1), NumOps.FromDouble(overlapElements + 1));
+        Tensor<T> alpha;
+        switch (_blendingMode)
+        {
+            case BlendingMode.CosineBlend:
+                // 0.5 * (1 - cos(pi t))
+                alpha = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One,
+                    engine.TensorCos(engine.TensorMultiplyScalar(t, NumOps.FromDouble(Math.PI)))), NumOps.FromDouble(0.5));
+                break;
+            case BlendingMode.HardCut:
+                alpha = engine.TensorGreaterEqual(t, Tensor<T>.CreateDefault(new[] { frames }, NumOps.FromDouble(0.5)));
+                break;
+            case BlendingMode.SlerpBlend:
+                // Hermite smoothstep: smooth ease-in/ease-out transition (S-curve), t^2 (3 - 2 t)
+                alpha = engine.TensorMultiply(engine.TensorSquare(t),
+                    engine.ScalarMinusTensor(NumOps.FromDouble(3.0), engine.TensorMultiplyScalar(t, NumOps.FromDouble(2.0))));
+                break;
+            default: // LinearBlend
+                alpha = t;
+                break;
+        }
+
+        var frameShape = new[] { frames, elementsPerFrame };
+        var weight = engine.TensorBroadcastTo(engine.Reshape(alpha, new[] { frames, 1 }), frameShape);
+        var accFlat = engine.Reshape(accumulated, new[] { accFrames, elementsPerFrame });
+        var accOverlap = engine.TensorNarrow(accFlat, 0, start, frames);
+        var curOverlap = engine.TensorNarrow(engine.Reshape(currentWindow, new[] { currentWindow.Shape[0], elementsPerFrame }), 0, 0, frames);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiply(accOverlap, engine.ScalarMinusTensor(NumOps.One, weight)),
+            engine.TensorMultiply(curOverlap, weight));
+
+        var parts = new List<Tensor<T>>();
+        if (start > 0)
+            parts.Add(engine.TensorNarrow(accFlat, 0, 0, start));
+        parts.Add(blended);
+        if (start + frames < accFrames)
+            parts.Add(engine.TensorNarrow(accFlat, 0, start + frames, accFrames - start - frames));
+        var result = engine.Reshape(engine.TensorConcatenate(parts.ToArray(), 0), accumulated._shape);
 
         _previousWindowLatents = currentWindow;
         return result;

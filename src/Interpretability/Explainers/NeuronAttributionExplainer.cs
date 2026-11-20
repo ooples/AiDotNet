@@ -166,39 +166,29 @@ public class NeuronAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </summary>
     private Vector<T> ComputeIntegratedGradientsAttribution(Vector<T> instance, int targetClass, Vector<T> activations)
     {
-        var attributions = new T[_layerSize];
+        var engine = AiDotNetEngine.Current;
         var baseline = new Vector<T>(instance.Length); // Baseline input (zeros)
         var baselineActivations = new Vector<T>(_layerSize);
 
+        // Interpolated inputs x' + alpha (x - x') at the midpoints alpha = (step + 0.5) / steps
+        var alphas = engine.TensorDivideScalar(
+            engine.TensorArange<T>(0.5, _integrationSteps, 1), NumOps.FromDouble(_integrationSteps));
+        var path = ExplainerTensorOps<T>.InterpolationPath(baseline, instance, alphas);
+        var interpolated = Enumerable.Range(0, _integrationSteps)
+            .Select(step => engine.TensorSliceAxis(path, 0, step).ToVector())
+            .ToList();
+
+        // IG = (activation - baseline_activation) × ∫₀¹ ∂F/∂a(baseline + α(input - baseline)) dα
+        var integralSums = new T[_layerSize];
         for (int neuronIdx = 0; neuronIdx < _layerSize; neuronIdx++)
         {
-            double integralSum = 0;
-
-            // Compute gradients at interpolated points between baseline and input
-            // IG = (activation - baseline_activation) × ∫₀¹ ∂F/∂a(baseline + α(input - baseline)) dα
-            for (int step = 0; step < _integrationSteps; step++)
-            {
-                // Interpolation factor α ∈ [0, 1]
-                double alpha = (step + 0.5) / _integrationSteps;
-
-                // Create interpolated input: x' + α(x - x')
-                var interpolated = new T[instance.Length];
-                for (int i = 0; i < instance.Length; i++)
-                {
-                    double baseVal = NumOps.ToDouble(baseline[i]);
-                    double inputVal = NumOps.ToDouble(instance[i]);
-                    interpolated[i] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
-                }
-
-                var gradient = _neuronGradientFunction(new Vector<T>(interpolated), targetClass, neuronIdx);
-                integralSum += NumOps.ToDouble(gradient);
-            }
-
-            double activationDiff = NumOps.ToDouble(activations[neuronIdx]) - NumOps.ToDouble(baselineActivations[neuronIdx]);
-            attributions[neuronIdx] = NumOps.FromDouble(activationDiff * integralSum / _integrationSteps);
+            int neuron = neuronIdx;
+            var gradients = new Vector<T>(interpolated.Select(point => _neuronGradientFunction(point, targetClass, neuron)));
+            integralSums[neuronIdx] = engine.Sum(gradients);
         }
 
-        return new Vector<T>(attributions);
+        var activationDiff = engine.Subtract(activations.GetSubVector(0, _layerSize), baselineActivations);
+        return engine.Divide(engine.Multiply(activationDiff, new Vector<T>(integralSums)), NumOps.FromDouble(_integrationSteps));
     }
 
     /// <summary>
@@ -207,14 +197,7 @@ public class NeuronAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     private Vector<T> ComputeConductanceAttribution(Vector<T> instance, int targetClass, Vector<T> activations)
     {
         var gradients = ComputeGradientAttribution(instance, targetClass);
-        var attributions = new T[_layerSize];
-
-        for (int i = 0; i < _layerSize; i++)
-        {
-            attributions[i] = NumOps.Multiply(activations[i], gradients[i]);
-        }
-
-        return new Vector<T>(attributions);
+        return AiDotNetEngine.Current.Multiply(activations.GetSubVector(0, _layerSize), gradients);
     }
 
     /// <summary>
@@ -222,20 +205,7 @@ public class NeuronAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </summary>
     private static int GetPredictedClass(Vector<T> prediction)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(prediction[0]);
-
-        for (int i = 1; i < prediction.Length; i++)
-        {
-            double val = NumOps.ToDouble(prediction[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(prediction);
     }
 }
 
@@ -329,7 +299,7 @@ public class NeuronAttributionResult<T>
 
         foreach (var (idx, name, attr, act) in top)
         {
-            lines.Add($"  {name}: attr={NumOps.ToDouble(attr):F4}, act={NumOps.ToDouble(act):F4}");
+            lines.Add($"  {name}: attr={attr:F4}, act={act:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

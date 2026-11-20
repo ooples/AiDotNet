@@ -70,16 +70,8 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
-
         // Initialize weights to zero
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                _weights[a, f] = NumOps.Zero;
-            }
-        }
+        _weights = Matrix<T>.CreateDefault(_options.ActionSize, _options.FeatureSize, NumOps.Zero);
 
         _epsilon = options.EpsilonStart;
     }
@@ -124,11 +116,7 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Update weights: w_a ← w_a + α * δ * φ(s)
         T learningRateT = NumOps.Multiply(LearningRate, tdError);
-        for (int f = 0; f < _options.FeatureSize; f++)
-        {
-            T update = NumOps.Multiply(learningRateT, state[f]);
-            _weights[actionIndex, f] = NumOps.Add(_weights[actionIndex, f], update);
-        }
+        RLTensorOps.AddScaledToRow(_weights, actionIndex, state, learningRateT);
 
         if (done)
         {
@@ -141,46 +129,19 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     private T ComputeQValue(Vector<T> features, int actionIndex)
     {
-        T qValue = NumOps.Zero;
-        for (int f = 0; f < _options.FeatureSize; f++)
-        {
-            T weightedFeature = NumOps.Multiply(_weights[actionIndex, f], features[f]);
-            qValue = NumOps.Add(qValue, weightedFeature);
-        }
-        return qValue;
+        // Q(s,a) = w_a . phi(s)
+        return RLTensorOps.LinearQValue(_weights, actionIndex, features);
     }
 
     private int GetGreedyAction(Vector<T> state)
     {
-        int bestAction = 0;
-        T bestValue = ComputeQValue(state, 0);
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            T value = ComputeQValue(state, a);
-            if (NumOps.GreaterThan(value, bestValue))
-            {
-                bestValue = value;
-                bestAction = a;
-            }
-        }
-
-        return bestAction;
+        // First arg-max of W * phi(s) over the actions.
+        return RLTensorOps.ArgMax(RLTensorOps.LinearQValues(_weights, state));
     }
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />
@@ -192,16 +153,7 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     private T ComputeWeightNorm()
     {
-        T sumSquares = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T squared = NumOps.Multiply(_weights[a, f], _weights[a, f]);
-                sumSquares = NumOps.Add(sumSquares, squared);
-            }
-        }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
+        return RLTensorOps.FrobeniusNorm(_weights);
     }
 
     /// <inheritdoc />

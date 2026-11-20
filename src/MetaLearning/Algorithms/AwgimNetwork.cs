@@ -161,8 +161,8 @@ internal sealed class AwgimNetwork<T>
         int offset = 0;
         foreach (var (name, rows, columns) in _shapes)
         {
-            var leaf = new Tensor<T>(rows == 1 ? new[] { columns } : new[] { rows, columns });
-            for (int i = 0; i < leaf.Length; i++) leaf[i] = weights[offset + i];
+            var leaf = new Tensor<T>(rows == 1 ? new[] { columns } : new[] { rows, columns },
+                weights.GetSubVector(offset, rows * columns));
             leaves.Add(name, leaf, offset);
             offset += rows * columns;
         }
@@ -335,14 +335,20 @@ internal sealed class AwgimNetwork<T>
         /// <summary>Writes each leaf's gradient into its slice of a flat gradient vector.</summary>
         public Vector<T> FlattenGradients(Dictionary<Tensor<T>, Tensor<T>> gradients, int length)
         {
-            var flat = new Vector<T>(length);
+            // Leaves are stored in offset order; any leaf without a gradient, and any gap, stays zero.
+            var parts = new List<Vector<T>>();
+            int position = 0;
             foreach (var (leaf, offset) in _ordered)
             {
                 if (!gradients.TryGetValue(leaf, out var gradient)) continue;
-                for (int i = 0; i < leaf.Length; i++) flat[offset + i] = gradient[i];
+                if (offset > position) parts.Add(new Vector<T>(offset - position));
+                parts.Add(gradient.ToVector());
+                position = offset + leaf.Length;
             }
 
-            return flat;
+            if (position < length) parts.Add(new Vector<T>(length - position));
+            if (parts.Count == 0) return new Vector<T>(length);
+            return parts.Count == 1 ? parts[0] : Vector<T>.Concatenate(parts);
         }
 
         /// <summary>The flat-vector ranges of each leaf, for per-variable norm clipping.</summary>

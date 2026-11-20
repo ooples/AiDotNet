@@ -1,4 +1,11 @@
+using System;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Trading.Agents;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 using static AiDotNet.Tests.UnitTests.Finance.FinancialAgentTestKit;
 
@@ -85,5 +92,170 @@ public sealed class FinancialA2CPolicyDistributionTests
         agent.Train();
 
         Assert.Equal(rewarded, ArgMax(agent.SelectAction(state, training: false)));
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_extreme_logits_preserve_finite_losses_gradients_and_rollout_readiness()
+    {
+        var actorLayer = new DenseLayer<Half>(2, (IActivationFunction<Half>)new IdentityActivation<Half>());
+        var criticLayer = new DenseLayer<Half>(1, (IActivationFunction<Half>)new IdentityActivation<Half>());
+        var actorArch = new NeuralNetworkArchitecture<Half>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 2);
+        var criticArch = new NeuralNetworkArchitecture<Half>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+        actorArch.Layers.Add(actorLayer);
+        criticArch.Layers.Add(criticLayer);
+
+        var options = new FinancialA2CAgentOptions<Half>
+        {
+            StateSize = 1,
+            ActionSize = 2,
+            HiddenLayers = Array.Empty<int>(),
+            BatchSize = 2,
+            NSteps = 2,
+            WarmupSteps = 0,
+            EntropyCoefficient = 0.01,
+            LearningRate = (Half)0.05,
+            InitialCapital = (Half)1000,
+            Seed = 17,
+        };
+
+        using var agent = new FinancialA2CAgent<Half>(actorArch, criticArch, options);
+        var state = new Vector<Half>(new[] { (Half)1 });
+        agent.SelectAction(state, training: false);
+
+        // Configure exact [0, -100] actor logits on state = [1] and V(s) = 0 on the critic.
+        actorLayer.SetParameters(new Vector<Half>(new[] { (Half)0, (Half)(-100), (Half)0, (Half)0 }));
+        criticLayer.SetParameters(new Vector<Half>(new[] { (Half)0, (Half)0 }));
+
+        // Step 1 of 2: rollout readiness holds back autonomous training until BatchSize / NSteps is met.
+        var firstAction = agent.SelectAction(state, training: true);
+        Assert.Equal((Half)1, firstAction[0]);
+        Assert.Equal((Half)0, firstAction[1]);
+        agent.StoreExperience(state, firstAction, (Half)1, state, done: false);
+        Assert.Equal((Half)0, agent.Train());
+
+        // Step 2 of 2: rollout becomes ready and trains without 0 * (-Infinity) = NaN in Half.
+        var secondAction = agent.SelectAction(state, training: true);
+        agent.StoreExperience(state, secondAction, (Half)1, state, done: true);
+        Half rolloutLoss = agent.Train();
+        Assert.False(Half.IsNaN(rolloutLoss));
+        Assert.False(Half.IsInfinity(rolloutLoss));
+        Assert.All(agent.GetParameters().ToArray(), value =>
+        {
+            Assert.False(Half.IsNaN(value));
+            Assert.False(Half.IsInfinity(value));
+        });
+        // Consumed rollout is drained after the update.
+        Assert.Equal((Half)0, agent.Train());
+
+        // Reset actor to [0, -100] and critic to 0, then apply a supervised reward to the -100 action:
+        // stable TensorLogSoftmax + TensorWhere must keep logProb[1] = -100 finite and propagate a non-zero
+        // gradient that raises logit[1] relative to logit[0].
+        actorLayer.SetParameters(new Vector<Half>(new[] { (Half)0, (Half)(-100), (Half)0, (Half)0 }));
+        criticLayer.SetParameters(new Vector<Half>(new[] { (Half)0, (Half)0 }));
+        var beforeWeights = actorLayer.GetParameters().ToArray();
+
+        agent.Train(state, new Vector<Half>(new[] { (Half)0, (Half)1 }));
+        Assert.All(agent.GetMetrics().Values, metric =>
+        {
+            Assert.False(Half.IsNaN(metric));
+            Assert.False(Half.IsInfinity(metric));
+        });
+
+        var afterWeights = actorLayer.GetParameters().ToArray();
+        Assert.All(afterWeights, value =>
+        {
+            Assert.False(Half.IsNaN(value));
+            Assert.False(Half.IsInfinity(value));
+        });
+        Assert.True((double)afterWeights[0] < (double)beforeWeights[0], $"Expected weight[0] to decrease from {beforeWeights[0]}, got {afterWeights[0]}.");
+        Assert.True((double)afterWeights[3] > (double)beforeWeights[3], $"Expected bias[1] to increase from {beforeWeights[3]}, got {afterWeights[3]}.");
+        double gapBefore = ((double)beforeWeights[1] + (double)beforeWeights[3]) - ((double)beforeWeights[0] + (double)beforeWeights[2]);
+        double gapAfter = ((double)afterWeights[1] + (double)afterWeights[3]) - ((double)afterWeights[0] + (double)afterWeights[2]);
+        Assert.True(gapAfter > gapBefore, $"Expected logit[1] - logit[0] to increase from {gapBefore}, got {gapAfter}.");
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_masked_action_with_extreme_bias_is_excluded_and_receives_zero_gradient()
+    {
+        var actorLayer = new DenseLayer<Half>(3, (IActivationFunction<Half>)new IdentityActivation<Half>());
+        var criticLayer = new DenseLayer<Half>(1, (IActivationFunction<Half>)new IdentityActivation<Half>());
+        var actorArch = new NeuralNetworkArchitecture<Half>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 3);
+        var criticArch = new NeuralNetworkArchitecture<Half>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+        actorArch.Layers.Add(actorLayer);
+        criticArch.Layers.Add(criticLayer);
+
+        var options = new FinancialA2CAgentOptions<Half>
+        {
+            StateSize = 1,
+            ActionSize = 3,
+            HiddenLayers = Array.Empty<int>(),
+            BatchSize = 1,
+            NSteps = 1,
+            WarmupSteps = 0,
+            EntropyCoefficient = 0.01,
+            LearningRate = (Half)0.1,
+            InitialCapital = (Half)1000,
+            Seed = 29,
+        };
+
+        using var agent = new FinancialA2CAgent<Half>(actorArch, criticArch, options);
+        var state = new Vector<Half>(new[] { (Half)1 });
+        agent.SelectAction(state, training: false);
+        bool[] legalActions = { true, true, false };
+
+        // Illegal action 2 has raw logit +50 (would dominate unmasked), while legal actions 0 and 1 have [0, -1].
+        actorLayer.SetParameters(new Vector<Half>(new[]
+        {
+            (Half)0, (Half)(-1), (Half)50,
+            (Half)0, (Half)0, (Half)0
+        }));
+        criticLayer.SetParameters(new Vector<Half>(new[] { (Half)0, (Half)0 }));
+
+        for (int i = 0; i < 32; i++)
+        {
+            var evalAction = agent.SelectAction(state, training: false, legalActions);
+            Assert.Equal((Half)0, evalAction[2]);
+        }
+
+        Vector<Half>? chosen = null;
+        for (int draw = 0; draw < 128; draw++)
+        {
+            var candidate = agent.SelectAction(state, training: true, legalActions);
+            Assert.Equal((Half)0, candidate[2]);
+            if (candidate[0] == (Half)1)
+            {
+                chosen = candidate;
+                break;
+            }
+        }
+
+        Assert.NotNull(chosen);
+        var beforeActor = actorLayer.GetParameters().ToArray();
+
+        agent.StoreExperience(state, chosen, (Half)2, state, done: true);
+        Half loss = agent.Train();
+
+        Assert.False(Half.IsNaN(loss));
+        Assert.False(Half.IsInfinity(loss));
+
+        var afterActor = actorLayer.GetParameters().ToArray();
+        Assert.All(afterActor, value =>
+        {
+            Assert.False(Half.IsNaN(value));
+            Assert.False(Half.IsInfinity(value));
+        });
+
+        // Legal action 0 was rewarded with positive advantage, so legal weights move; masked action 2 gets zero gradient.
+        double legalGapBefore = ((double)beforeActor[0] + (double)beforeActor[3]) - ((double)beforeActor[1] + (double)beforeActor[4]);
+        double legalGapAfter = ((double)afterActor[0] + (double)afterActor[3]) - ((double)afterActor[1] + (double)afterActor[4]);
+        Assert.True(legalGapAfter > legalGapBefore, $"Expected legal logit[0] - logit[1] to increase from {legalGapBefore}, got {legalGapAfter}.");
+        Assert.Equal(beforeActor[2], afterActor[2]);
+        Assert.Equal(beforeActor[5], afterActor[5]);
     }
 }

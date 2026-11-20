@@ -26,12 +26,12 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 {
     private readonly double _threshold;
 
-    private double[]? _variances;
+    private Vector<T>? _variances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[]? Variances => _variances;
+    public Vector<T>? Variances => _variances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -52,30 +52,13 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
 
-        _variances = new double[p];
+        // Population variance (divisor n) of every feature
+        var variances = FilterStatisticTensorOps.ColumnPopulationVariance(FilterStatisticTensorOps.AsTensor(data));
+        _variances = variances.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            _variances[j] = variance / n;
-        }
-
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => _variances[j] > _threshold)
-            .ToArray();
+        _selectedIndices = FilterStatisticTensorOps.MaskPositions(
+            Engine.TensorGreaterThan(variances, NumOps.FromDouble(_threshold)));
 
         IsFitted = true;
     }
@@ -86,15 +69,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("VarianceThreshold has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

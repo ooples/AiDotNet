@@ -652,10 +652,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // Compute updated values and copy back in-place to preserve GPU-registered tensor references
         var updatedKernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
         var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
-        for (int i = 0; i < _kernels.Length; i++)
-            _kernels[i] = updatedKernels[i];
-        for (int i = 0; i < _biases.Length; i++)
-            _biases[i] = updatedBiases[i];
+        updatedKernels.CopyTo(_kernels.AsWritableSpan());
+        updatedBiases.CopyTo(_biases.AsWritableSpan());
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);
@@ -727,5 +725,15 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
         return metadata;
+    }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long cIn = InputDepth > 0 ? InputDepth : Math.Max(1, inputChannelsOrFeatures);
+        long cOut = Math.Max(0, OutputDepth);
+        long k = Math.Max(1, KernelSize);
+        outputChannelsOrFeatures = OutputDepth > 0 ? OutputDepth : inputChannelsOrFeatures;
+        return cIn * cOut * k * k + cOut;
     }
 }

@@ -89,6 +89,28 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The continuity and two momentum residuals [N, 3], so the loss is their mean square rather than the square of the point-wise sum of squares.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var u = Output(outputs, 0);
+            var v = Output(outputs, 1);
+            T inverseDensity = NumOps.Divide(NumOps.One, _density);
+            var continuity = e.TensorAdd(D1(derivatives, 0, 0), D1(derivatives, 1, 1));
+            var momentum = new Tensor<T>[2];
+            for (int k = 0; k < 2; k++)
+            {
+                var convection = e.TensorAdd(e.TensorMultiply(u, D1(derivatives, k, 0)), e.TensorMultiply(v, D1(derivatives, k, 1)));
+                var pressure = e.TensorMultiplyScalar(D1(derivatives, 2, k), inverseDensity);
+                var diffusion = e.TensorMultiplyScalar(e.TensorAdd(D2(derivatives, k, 0, 0), D2(derivatives, k, 1, 1)), _viscosity);
+                momentum[k] = e.TensorSubtract(e.TensorAdd(D1(derivatives, k, 2), e.TensorAdd(convection, pressure)), diffusion);
+            }
+
+            return e.TensorStack(new[] { continuity, momentum[0], momentum[1] }, 1);
+        }
+
+
+        /// <inheritdoc/>
         /// <remarks>
         /// Computes three residuals (one for each equation):
         /// - R1 (Continuity): ∂u/∂x + ∂v/∂y = 0

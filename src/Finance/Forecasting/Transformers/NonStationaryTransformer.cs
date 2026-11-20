@@ -969,50 +969,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     #region Model-Specific Processing
 
     /// <summary>
-    /// The instance mean and population standard deviation plus <paramref name="eps"/> as detached <c>[1]</c> tensors,
-    /// computed on the engine so a compiled training step traces them instead of reading the input on the host.
-    /// </summary>
-    private (Tensor<T> Mean, Tensor<T> Std) InstanceStatistics(Tensor<T> input, double eps)
-    {
-        int n = input.Length;
-        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
-        // The mean, not a sum divided afterwards: 1024 Half values of 100 sum to 102400, above Half.MaxValue, although
-        // their mean is 100. The reduction accumulates and divides a narrow element type in a wider one before rounding.
-        var mean = Engine.StopGradient(Engine.Reshape(Engine.ReduceMean(flat, new[] { 0 }, false), new[] { 1 }));
-        // Centre the halved values. |x - mean| is bounded by the instance's range, which for values near the Half limit
-        // (60000 and -60000) exceeds Half.MaxValue; half of it cannot. Halving is exact in a binary type.
-        var half = NumOps.FromDouble(0.5);
-        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(flat, half),
-            Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(mean, half), new[] { n }));
-        // std = 2 * s * sqrt(sum((c / s)^2 / n)) for the halved deviations c and any s > 0. With s = max|c| (plus the
-        // smallest normal Half, so a constant series divides by a positive number) every term is at most 1 / n and the
-        // sum at most 1, so a Half sum of squares cannot pass 65504 and make the std infinite, and the statistics stay
-        // on the engine (traced by a compiled step, no host read).
-        var scale = Engine.TensorAddScalar(
-            Engine.Reshape(Engine.ReduceMax(Engine.TensorAbs(centered), new[] { 0 }, keepDims: false), new[] { 1 }),
-            NumOps.FromDouble(6.103515625e-05));
-        var unit = Engine.TensorMultiplyScalar(
-            Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, new[] { n })), NumOps.FromDouble(1.0 / Math.Sqrt(n)));
-        var rms = Engine.TensorSqrt(Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(unit), new[] { 0 }, keepDims: false), new[] { 1 }));
-        // The factor of two restores the scale of the unhalved deviations, so the stored statistics are unchanged.
-        var std = Engine.StopGradient(Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorMultiply(rms, scale), NumOps.FromDouble(2.0)), NumOps.FromDouble(eps)));
-        return (mean, std);
-    }
-
-    /// <summary>(input − mean) / std, formed as (input/2 − mean/2) / (std/2) so the difference cannot overflow a narrow
-    /// element type whose instance range exceeds its largest value.</summary>
-    private Tensor<T> NormalizeByInstance(Tensor<T> input, Tensor<T> mean, Tensor<T> std)
-    {
-        var half = NumOps.FromDouble(0.5);
-        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(input, half), Wide(Engine.TensorMultiplyScalar(mean, half), input));
-        return Engine.TensorDivide(centered, Wide(Engine.TensorMultiplyScalar(std, half), input));
-    }
-
-    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
-        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
-
-    /// <summary>
     /// Applies Series Stationarization or its inverse (de-stationarization).
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -1028,20 +984,43 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     private Tensor<T> ApplySeriesStationarization(Tensor<T> input, bool normalize)
     {
         var result = new Tensor<T>(input._shape);
+        var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
         {
-            if (input.Length == 0) return result;
-            // Compute mean and std for this instance (population std plus eps), then normalize. The whole map stays
-            // detached, as before.
+            // Compute mean and std for this instance (population std plus eps), then normalize.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var (mean, std) = InstanceStatistics(input, 1e-5);
+            if (input.Length == 0) return result;
+            // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+            // freezing the traced input's values, and an inference trace does not have to cross to the host.
+            var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            Tensor<T> mean;
+            Tensor<T> std;
+            if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+            {
+                var wide = flat.Cast<double>();
+                var wideMean = Engine.TensorDivideScalar(Engine.ReduceSum(wide, new[] { 0 }, keepDims: true), (double)input.Length);
+                var variance = Engine.TensorDivideScalar(
+                    Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(wide, wideMean)), new[] { 0 }, keepDims: true), (double)input.Length);
+                mean = wideMean.Cast<T>();
+                std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.ToDouble(eps)).Cast<T>();
+            }
+            else
+            {
+                // Keep supported compiled types on the tensor trace; Cast reads host storage.
+                var count = NumOps.FromDouble(input.Length);
+                mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+                var variance = Engine.TensorDivideScalar(
+                    Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
+                std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), eps);
+            }
+            var centered = Engine.TensorSubtract(flat, mean);
 
             // Store for de-normalization
             _instanceMean = mean;
             _instanceStd = std;
 
-            result = NormalizeByInstance(input, mean, std);
+            result = Engine.Reshape(Engine.TensorDivide(centered, std), input._shape);
         }
         else
         {
@@ -1184,4 +1163,3 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
 
     #endregion
 }
-

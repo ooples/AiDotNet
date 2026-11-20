@@ -415,8 +415,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput._shape);
+        return Engine.Softmax(modelOutput, axis: -1);
     }
 
     /// <inheritdoc/>

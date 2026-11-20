@@ -316,16 +316,8 @@ internal sealed class MegaTtsConvBlocks<T>
     private Tensor<T> NonPadding(Tensor<T> x)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        int b = x.Shape[0], t = x.Shape[1], c = x.Shape[2];
-        var mask = new Tensor<T>(new[] { b, t, 1 });
-        for (int i = 0; i < b; i++)
-            for (int j = 0; j < t; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < c; k++) sum += Math.Abs(ops.ToDouble(x[i, j, k]));
-                if (sum > 0) mask[i, j, 0] = ops.One;
-            }
-        return mask;
+        var l1 = _engine.ReduceSum(_engine.TensorAbs(x), new[] { 2 }, keepDims: true);
+        return _engine.StopGradient(_engine.TensorGreaterThan(l1, ops.Zero));
     }
 
     /// <summary>The stack on <c>[B, T, h]</c>: <c>[B, T, outputs]</c>.</summary>

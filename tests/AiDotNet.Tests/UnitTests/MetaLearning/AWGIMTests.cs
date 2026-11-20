@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
+using System.Reflection;
 using AiDotNet.Data.Structures;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Models;
@@ -21,6 +23,144 @@ public class AWGIMTests
     private const int Features = 3;
     private const int Width = 3;
     private const int Classes = 2;
+
+    [Fact]
+    public void PublicSaveLoad_RestoresEncoderGeneratorMomentsAndIteration()
+    {
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        var learner = CreateLearner(0);
+        var task = CreateTask(5);
+        learner.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { task }));
+        (typeof(AiDotNet.MetaLearning.MetaLearnerBase<double, Matrix<double>, Tensor<double>>)
+            .GetField("_currentIteration", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("iteration")).SetValue(learner, 9);
+        var parameters = learner.GetParameters().ToArray();
+        double objective = learner.ObjectiveForTesting(task, 17);
+        string path = Path.GetTempFileName();
+        try
+        {
+            learner.Save(path);
+            // A stale legacy sidecar must not override the embedded iteration.
+            File.WriteAllText(path + ".meta", "999");
+            var restored = CreateLearner(0);
+            restored.Load(path);
+            Assert.Equal(parameters, restored.GetParameters().ToArray());
+            Assert.Equal(learner.WeightsForTesting.ToArray(), restored.WeightsForTesting.ToArray());
+            Assert.Equal(objective, restored.ObjectiveForTesting(task, 17), 12);
+            Assert.Equal(9, restored.CurrentIteration);
+            foreach (string name in new[] { "_weightMoment1", "_weightMoment2", "_bodyMoment1", "_bodyMoment2" })
+            {
+                var field = learner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new InvalidOperationException(name);
+                Assert.Equal(Assert.IsType<Vector<double>>(field.GetValue(learner)).ToArray(),
+                    Assert.IsType<Vector<double>>(field.GetValue(restored)).ToArray());
+            }
+            var updates = learner.GetType().GetField("_updates", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("updates");
+            Assert.Equal(updates.GetValue(learner), updates.GetValue(restored));
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".meta");
+        }
+    }
+
+    [Theory]
+    [InlineData("7", 7)]
+    [InlineData("invalid", 0)]
+    [InlineData(null, 0)]
+    public void PublicLoad_ReadsLegacyEncoderFileAndIterationSidecar(string? metadata, int iteration)
+    {
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        var learner = CreateLearner(0);
+        var encoder = Assert.IsType<LinearEmbeddingModel>(learner.BaseModel);
+        var parameters = encoder.GetParameters();
+        parameters.AsWritableSpan().Fill(0.25);
+        encoder.SetParameters(parameters);
+        string path = Path.GetTempFileName();
+        try
+        {
+            encoder.SaveModel(path);
+            if (metadata is not null) File.WriteAllText(path + ".meta", metadata);
+            var restored = CreateLearner(0);
+            // A learner that has already trained must not keep its old iteration after a legacy load.
+            (typeof(AiDotNet.MetaLearning.MetaLearnerBase<double, Matrix<double>, Tensor<double>>)
+                .GetField("_currentIteration", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("iteration")).SetValue(restored, 9);
+            restored.Load(path);
+            Assert.Equal(parameters.ToArray(), Assert.IsType<LinearEmbeddingModel>(restored.BaseModel).GetParameters().ToArray());
+            Assert.Equal(iteration, restored.CurrentIteration);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(path + ".meta");
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void PublicLoad_RejectsInvalidEnvelopeBeforeChangingParameters(int corruption)
+    {
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        var learner = CreateLearner(0);
+        var before = learner.GetParameters().ToArray();
+        string path = Path.GetTempFileName();
+        try
+        {
+            using (var writer = new BinaryWriter(File.Create(path)))
+            {
+                writer.Write(unchecked((int)0xA1D04D4C));
+                if (corruption != 0)
+                {
+                    writer.Write(corruption == 1 ? 99 : 1);
+                    writer.Write(0);
+                    writer.Write(corruption == 2 ? 100 : corruption == 3 ? -1 : 0);
+                }
+            }
+            Assert.Throws<InvalidDataException>(() => learner.Load(path));
+            Assert.Equal(before, learner.GetParameters().ToArray());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void OptimizerBuffers_RoundTripWithoutJoiningFlatModelParameters()
+    {
+        var learner = CreateLearner(0);
+        int parameterCount = learner.GetParameters().Length;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = learner.GetType();
+        foreach (string name in new[] { "_weightMoment1", "_weightMoment2", "_bodyMoment1", "_bodyMoment2" })
+        {
+            var field = type.GetField(name, flags) ?? throw new InvalidOperationException(name);
+            if (field.GetValue(learner) is not Vector<double> values)
+            {
+                values = new Vector<double>(3);
+                field.SetValue(learner, values);
+            }
+            values[0] = 1e-12;
+        }
+        Assert.Equal(parameterCount, learner.GetParameters().Length);
+        using var persistence = AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation();
+        byte[] checkpoint = learner.Serialize();
+        var restored = CreateLearner(0);
+        restored.Deserialize(checkpoint);
+        foreach (string name in new[] { "_weightMoment1", "_weightMoment2", "_bodyMoment1", "_bodyMoment2" })
+        {
+            var field = type.GetField(name, flags) ?? throw new InvalidOperationException(name);
+            var values = Assert.IsType<Vector<double>>(field.GetValue(restored));
+            Assert.Equal(1e-12, values[0]);
+        }
+        Assert.Equal(parameterCount, restored.GetParameters().Length);
+    }
 
     private static MetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTask(int seed)
     {

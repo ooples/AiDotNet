@@ -72,22 +72,14 @@ public sealed class IsotropicPrior<T> : LearnedPrior<T>
         // training iteration, so recomputing an O(H*W) sum on every call would dominate
         // training time on large anchors.
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         int aH = _anchorPhoto.Shape[0];
         int aW = _anchorPhoto.Shape[1];
-        T rSum = numOps.Zero, gSum = numOps.Zero, bSum = numOps.Zero;
-        for (int y = 0; y < aH; y++)
-        {
-            for (int x = 0; x < aW; x++)
-            {
-                rSum = numOps.Add(rSum, _anchorPhoto[y, x, 0]);
-                gSum = numOps.Add(gSum, _anchorPhoto[y, x, 1]);
-                bSum = numOps.Add(bSum, _anchorPhoto[y, x, 2]);
-            }
-        }
+        var channelSums = engine.ReduceSum(_anchorPhoto, new[] { 0, 1 }, false);
         T count = numOps.FromDouble((double)aH * aW);
-        _rMean = numOps.Divide(rSum, count);
-        _gMean = numOps.Divide(gSum, count);
-        _bMean = numOps.Divide(bSum, count);
+        _rMean = numOps.Divide(channelSums[0], count);
+        _gMean = numOps.Divide(channelSums[1], count);
+        _bMean = numOps.Divide(channelSums[2], count);
     }
 
     /// <inheritdoc />

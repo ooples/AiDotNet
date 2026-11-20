@@ -316,7 +316,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
             groups.Add(group);
             previous = teacher is not null
                 ? Engine.TensorSlice(teacher, new[] { s * r + r - 1, 0 }, new[] { 1, o.MelChannels })
-                : new Tensor<T>(new[] { 1, o.MelChannels }, Engine.TensorSlice(group, new[] { r - 1, 0 }, new[] { 1, o.MelChannels }).ToVector());
+                : DetachTensor(Engine.TensorSlice(group, new[] { r - 1, 0 }, new[] { 1, o.MelChannels }));
         }
         return groups.Count == 1 ? groups[0] : Engine.TensorConcatenate(groups.ToArray(), 0);
     }
@@ -329,8 +329,12 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         if (p <= 0) return next;
         if (!IsTrainingMode)
             return Engine.TensorAdd(Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(p)), Engine.TensorMultiplyScalar(next, NumOps.FromDouble(1 - p)));
-        var mask = new Tensor<T>(next._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = _zoneoutRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        // A per-step draw: a compiled training plan refills the zoneout mask before every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(next._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _zoneoutRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        });
         var keep = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, previous), Engine.TensorMultiply(keep, next));
     }

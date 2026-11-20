@@ -174,14 +174,18 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
 
     private T[] CreateDefaultLearningRates(int numLevels)
     {
-        var rates = new T[numLevels];
+        if (numLevels <= 0) return new T[Math.Max(numLevels, 0)];
+
+        // baseLR / 10^i, evaluated in double and rounded to T once (an exp of an arange in T drifts, and
+        // in Half the exponent itself rounds).
         double baseLR = 0.01;
-        for (int i = 0; i < numLevels; i++)
-        {
-            double rate = baseLR / Math.Pow(10, i);
-            rates[i] = _numOps.FromDouble(rate);
-        }
-        return rates;
+        var engine = AiDotNetEngine.Current;
+        var tens = new Tensor<double>(new[] { numLevels });
+        tens.Fill(10.0);
+        var baseRates = new Tensor<double>(new[] { numLevels });
+        baseRates.Fill(baseLR);
+        var rates = engine.TensorDivide(baseRates, engine.TensorPower(tens, engine.TensorArange<double>(0, numLevels)));
+        return rates.Cast<T>().ToVector().ToArray();
     }
 
     /// <inheritdoc />
@@ -290,6 +294,9 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
         if (_mlpBlocks == null || _mlpBlocks.Length == 0)
             throw new InvalidOperationException("MLP blocks are not initialized");
 
+        T transferRate = _numOps.FromDouble(0.01);
+        T oneMinusTransfer = _numOps.Subtract(_numOps.One, transferRate);
+
         // Transfer knowledge from faster (lower level) to slower (higher level) MLPs
         for (int i = 0; i < _mlpBlocks.Length - 1; i++)
         {
@@ -310,8 +317,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
 
             // === Vectorized Memory Consolidation using Engine Tensor Operations ===
             int minLen = Math.Min(fastParams.Length, slowParams.Length);
-            T transferRate = _numOps.FromDouble(0.01);
-            T oneMinusTransfer = _numOps.Subtract(_numOps.One, transferRate);
 
             // Convert to tensors for Engine operations
             var consolidated = new Vector<T>(slowParams.Length);
@@ -326,28 +331,23 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
             }
             else if (minLen > 0)
             {
-                // Different sizes - handle overlapping portion
-                // For simplicity, copy slow params first, then blend overlapping portion
-                for (int j = 0; j < slowParams.Length; j++)
-                {
-                    consolidated[j] = slowParams[j];
-                }
-
-                // Blend overlapping portion
-                for (int j = 0; j < minLen; j++)
-                {
-                    T slowVal = NumOps.Multiply(slowParams[j], oneMinusTransfer);
-                    T fastVal = NumOps.Multiply(fastParams[j], transferRate);
-                    consolidated[j] = NumOps.Add(slowVal, fastVal);
-                }
+                // Different sizes - blend the overlapping portion, keep the rest of the slow params
+                var blended = Engine.Add(
+                    Engine.Multiply(slowParams.GetSubVector(0, minLen), oneMinusTransfer),
+                    Engine.Multiply(fastParams.GetSubVector(0, minLen), transferRate));
+                consolidated = minLen == slowParams.Length
+                    ? blended
+                    : Engine.TensorConcatenate(
+                        new[]
+                        {
+                            Tensor<T>.FromVector(blended),
+                            Tensor<T>.FromVector(slowParams.GetSubVector(minLen, slowParams.Length - minLen))
+                        }, 0).ToVector();
             }
             else
             {
                 // No overlap - just copy slow params
-                for (int j = 0; j < slowParams.Length; j++)
-                {
-                    consolidated[j] = slowParams[j];
-                }
+                consolidated = slowParams.Clone();
             }
 
             _mlpBlocks[i + 1].SetParameters(consolidated);

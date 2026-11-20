@@ -1352,69 +1352,13 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> newData)
-    {
-        var shifted = new Tensor<T>(input._shape);
-
-        // Guard against stepSize larger than input length
-        int stepSize = Math.Min(_numNodes * _numFeatures, input.Data.Length);
-        if (stepSize == 0) stepSize = 1;
-        int totalSteps = input.Data.Length / stepSize;
-
-        // Shift left by one time step
-        for (int t = 0; t < totalSteps - 1; t++)
-        {
-            for (int i = 0; i < stepSize; i++)
-            {
-                int srcIdx = (t + 1) * stepSize + i;
-                int dstIdx = t * stepSize + i;
-                if (srcIdx < input.Data.Length && dstIdx < shifted.Data.Length)
-                {
-                    shifted.Data.Span[dstIdx] = input.Data.Span[srcIdx];
-                }
-            }
-        }
-
-        // Add new prediction at the end
-        int lastStepOffset = (totalSteps - 1) * stepSize;
-        for (int i = 0; i < stepSize && i < newData.Data.Length; i++)
-        {
-            if (lastStepOffset + i < shifted.Data.Length)
-            {
-                shifted.Data.Span[lastStepOffset + i] = newData.Data.Span[i];
-            }
-        }
-
-        return shifted;
-    }
+        => ShiftFlatWindow(input, newData, Math.Max(1, _numNodes * _numFeatures), preserveInputShape: true);
 
     /// <summary>
     /// Concatenates multiple prediction tensors.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DCRNN model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the DCRNN architecture.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 1 });
-
-        int totalLength = predictions.Sum(p => p.Data.Length);
-        var combined = new Tensor<T>(new[] { totalLength });
-
-        int offset = 0;
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Data.Length; i++)
-            {
-                combined.Data.Span[offset + i] = pred.Data.Span[i];
-            }
-            offset += pred.Data.Length;
-        }
-
-        return combined;
-    }
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        => predictions.Count == 0 ? new Tensor<T>(new[] { 1 }) : ConcatenateFlatPredictions(predictions);
 
     /// <summary>
     /// Gets the teacher forcing ratio based on scheduled sampling.

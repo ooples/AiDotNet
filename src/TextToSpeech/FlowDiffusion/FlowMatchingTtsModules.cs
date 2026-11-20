@@ -101,9 +101,22 @@ internal static class FlowMatchingTts
         return layer;
     }
 
-    public static DenseLayer<T> Linear<T>(List<LayerBase<T>> layers, int outputs, bool zero = false)
-        => Own(layers, new DenseLayer<T>(outputs, new IdentityActivation<T>() as IActivationFunction<T>,
+    /// <summary>
+    /// A linear layer from <paramref name="inputs"/> to <paramref name="outputs"/> features, its shape resolved here.
+    /// </summary>
+    /// <remarks>
+    /// The network's shape walk treats the registered component layers as one chain, so a lazy layer was sized from
+    /// whatever layer preceded it in the list and re-sized by its first real forward. Inside a compiled training
+    /// trace that re-size reads the weight on the host, and the plan cannot replay it. Shapes only: the weights are
+    /// still drawn when the layer materializes.
+    /// </remarks>
+    public static DenseLayer<T> Linear<T>(List<LayerBase<T>> layers, int inputs, int outputs, bool zero = false)
+    {
+        var layer = Own(layers, new DenseLayer<T>(outputs, new IdentityActivation<T>() as IActivationFunction<T>,
             zero ? new AiDotNet.Initialization.ZeroInitializationStrategy<T>() : null));
+        layer.ResolveShapesOnly(new[] { 1, inputs });
+        return layer;
+    }
 }
 
 /// <summary>Sinusoidal (256) of 1000 t → Linear → SiLU → Linear (TimestepEmbedding).</summary>
@@ -116,11 +129,13 @@ internal sealed class FlowTimestepEmbedding<T>
     public FlowTimestepEmbedding(IEngine engine, List<LayerBase<T>> layers, int dim)
     {
         _engine = engine;
-        _first = FlowMatchingTts.Linear(layers, dim);
-        _second = FlowMatchingTts.Linear(layers, dim);
+        _first = FlowMatchingTts.Linear(layers, SinusoidalWidth, dim);
+        _second = FlowMatchingTts.Linear(layers, dim, dim);
     }
 
-    public Tensor<T> Forward(double t) => _second.Forward(_engine.Swish(_first.Forward(FlowMatchingTts.Sinusoidal<T>(t, 256, 1000.0))));
+    private const int SinusoidalWidth = 256;
+
+    public Tensor<T> Forward(double t) => _second.Forward(_engine.Swish(_first.Forward(FlowMatchingTts.Sinusoidal<T>(t, SinusoidalWidth, 1000.0))));
 }
 
 /// <summary>
@@ -180,11 +195,12 @@ internal sealed class FlowInputEmbedding<T>
     private readonly GroupedConv1DLayer<T> _conv2;
     private readonly int _dim;
 
-    public FlowInputEmbedding(IEngine engine, List<LayerBase<T>> layers, int dim, int kernelSize = 31, int groups = 16)
+    /// <param name="inputs">The width of [x; cond; text]: twice the mel channels plus the text width.</param>
+    public FlowInputEmbedding(IEngine engine, List<LayerBase<T>> layers, int inputs, int dim, int kernelSize = 31, int groups = 16)
     {
         _engine = engine;
         _dim = dim;
-        _projection = FlowMatchingTts.Linear(layers, dim);
+        _projection = FlowMatchingTts.Linear(layers, inputs, dim);
         _conv1 = FlowMatchingTts.Own(layers, new GroupedConv1DLayer<T>(dim, dim, kernelSize, groups, kernelSize / 2));
         _conv2 = FlowMatchingTts.Own(layers, new GroupedConv1DLayer<T>(dim, dim, kernelSize, groups, kernelSize / 2));
     }
@@ -219,10 +235,10 @@ internal sealed class FlowSelfAttention<T>
         _heads = heads;
         _headDim = headDim;
         _ropeHeads = ropeHeads ?? heads;
-        _query = FlowMatchingTts.Linear(layers, heads * headDim);
-        _key = FlowMatchingTts.Linear(layers, heads * headDim);
-        _value = FlowMatchingTts.Linear(layers, heads * headDim);
-        _out = FlowMatchingTts.Linear(layers, dim);
+        _query = FlowMatchingTts.Linear(layers, dim, heads * headDim);
+        _key = FlowMatchingTts.Linear(layers, dim, heads * headDim);
+        _value = FlowMatchingTts.Linear(layers, dim, heads * headDim);
+        _out = FlowMatchingTts.Linear(layers, heads * headDim, dim);
         if (dropout > 0) _dropout = FlowMatchingTts.Own(layers, new DropoutLayer<T>(dropout));
     }
 
@@ -263,8 +279,8 @@ internal sealed class FlowFeedForward<T>
     public FlowFeedForward(IEngine engine, List<LayerBase<T>> layers, int dim, int inner, double dropout)
     {
         _engine = engine;
-        _in = FlowMatchingTts.Linear(layers, inner);
-        _out = FlowMatchingTts.Linear(layers, dim);
+        _in = FlowMatchingTts.Linear(layers, dim, inner);
+        _out = FlowMatchingTts.Linear(layers, inner, dim);
         if (dropout > 0) _dropout = FlowMatchingTts.Own(layers, new DropoutLayer<T>(dropout));
     }
 
@@ -292,7 +308,7 @@ internal sealed class FlowDiTBlock<T>
     {
         _engine = engine;
         _dim = dim;
-        _modulation = FlowMatchingTts.Linear(layers, 6 * dim, zero: true);
+        _modulation = FlowMatchingTts.Linear(layers, dim, 6 * dim, zero: true);
         _attention = new FlowSelfAttention<T>(engine, layers, dim, heads, headDim, dropout, ropeHeads);
         _feedForward = new FlowFeedForward<T>(engine, layers, dim, ffInner, dropout);
     }

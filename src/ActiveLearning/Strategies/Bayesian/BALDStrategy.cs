@@ -51,6 +51,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
 
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly T EntropyEpsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
     private readonly int _mcSamples;
     private readonly T _dropoutRate;
@@ -92,15 +93,15 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
         IFullModel<T, TInput, TOutput> model,
         IDataset<T, TInput, TOutput> unlabeledPool)
     {
-        var scores = new T[unlabeledPool.Count];
+        var scores = new List<T>(unlabeledPool.Count);
 
         for (int i = 0; i < unlabeledPool.Count; i++)
         {
             var input = unlabeledPool.GetInput(i);
-            scores[i] = ComputeMutualInformation(model, input);
+            scores.Add(ComputeMutualInformation(model, input));
         }
 
-        return new Vector<T>(scores);
+        return Vector<T>.FromList(scores);
     }
 
     /// <inheritdoc/>
@@ -112,14 +113,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
         var scores = ComputeScores(model, unlabeledPool);
         var batchSizeToUse = Math.Min(batchSize, unlabeledPool.Count);
 
-        var indexedScores = scores
-            .Select((score, index) => (Index: index, Score: score))
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
-            .Take(batchSizeToUse)
-            .Select(x => x.Index)
-            .ToArray();
-
-        return indexedScores;
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSizeToUse);
     }
 
     /// <inheritdoc/>
@@ -130,13 +124,19 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
 
         // Collect MC dropout samples
         var mcPredictions = CollectMCPredictions(model, input);
+        if (mcPredictions.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var stacked = ActiveLearningEngineOps.StackVectors(mcPredictions);
 
         // Compute predictive entropy (entropy of averaged predictions)
-        var avgPrediction = ComputeAveragePrediction(mcPredictions);
+        var avgPrediction = ComputeAveragePrediction(stacked);
         var predictiveEntropy = ComputeEntropy(avgPrediction);
 
         // Compute expected entropy (average entropy of individual predictions)
-        var expectedEntropy = ComputeExpectedEntropy(mcPredictions);
+        var expectedEntropy = ComputeExpectedEntropy(stacked);
 
         // Mutual information = predictive entropy - expected entropy
         return NumOps.Subtract(predictiveEntropy, expectedEntropy);
@@ -146,7 +146,12 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
     public T ComputePredictiveEntropy(IFullModel<T, TInput, TOutput> model, TInput input)
     {
         var mcPredictions = CollectMCPredictions(model, input);
-        var avgPrediction = ComputeAveragePrediction(mcPredictions);
+        if (mcPredictions.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var avgPrediction = ComputeAveragePrediction(ActiveLearningEngineOps.StackVectors(mcPredictions));
         return ComputeEntropy(avgPrediction);
     }
 
@@ -193,71 +198,41 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
         return predictions;
     }
 
-    private Vector<T> ComputeAveragePrediction(List<Vector<T>> predictions)
+    /// <summary>
+    /// Mean of the [samples, classes] MC predictions over the samples.
+    /// </summary>
+    private static Tensor<T> ComputeAveragePrediction(Tensor<T> predictions)
     {
-        if (predictions.Count == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var length = predictions[0].Length;
-        var avg = new T[length];
-
-        for (int i = 0; i < length; i++)
-        {
-            avg[i] = NumOps.Zero;
-        }
-
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < length; i++)
-            {
-                avg[i] = NumOps.Add(avg[i], pred[i]);
-            }
-        }
-
-        var count = NumOps.FromDouble(predictions.Count);
-        for (int i = 0; i < length; i++)
-        {
-            avg[i] = NumOps.Divide(avg[i], count);
-        }
-
-        return new Vector<T>(avg);
+        var engine = AiDotNetEngine.Current;
+        var sum = engine.ReduceSum(predictions, new[] { 0 }, keepDims: false);
+        return engine.TensorDivideScalar(sum, NumOps.FromDouble(predictions.Shape[0]));
     }
 
-    private T ComputeExpectedEntropy(List<Vector<T>> predictions)
+    /// <summary>
+    /// Average entropy of the rows of the [samples, classes] MC predictions.
+    /// </summary>
+    private static T ComputeExpectedEntropy(Tensor<T> predictions)
     {
-        if (predictions.Count == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        T totalEntropy = NumOps.Zero;
-        foreach (var pred in predictions)
-        {
-            totalEntropy = NumOps.Add(totalEntropy, ComputeEntropy(pred));
-        }
-
-        return NumOps.Divide(totalEntropy, NumOps.FromDouble(predictions.Count));
+        var engine = AiDotNetEngine.Current;
+        var rowSums = engine.ReduceSum(EntropyTerms(predictions), new[] { 1 }, keepDims: false);
+        var totalEntropy = NumOps.Negate(engine.TensorSum(rowSums));
+        return NumOps.Divide(totalEntropy, NumOps.FromDouble(predictions.Shape[0]));
     }
 
-    private T ComputeEntropy(Vector<T> probabilities)
+    private static T ComputeEntropy(Tensor<T> probabilities)
     {
-        T entropy = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
+        return NumOps.Negate(AiDotNetEngine.Current.TensorSum(EntropyTerms(probabilities)));
+    }
 
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = probabilities[i];
-            if (NumOps.Compare(p, NumOps.Zero) > 0)
-            {
-                var pClipped = NumOps.Add(p, epsilon);
-                var logP = NumOps.Log(pClipped);
-                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, logP));
-            }
-        }
-
-        return entropy;
+    /// <summary>
+    /// p * log(p + eps) where p &gt; 0 and zero elsewhere (entropy is minus their sum).
+    /// </summary>
+    private static Tensor<T> EntropyTerms(Tensor<T> probabilities)
+    {
+        var engine = AiDotNetEngine.Current;
+        var terms = engine.TensorMultiply(probabilities, engine.TensorLog(engine.TensorAddScalar(probabilities, EntropyEpsilon)));
+        var positive = engine.TensorGreaterThan(probabilities, NumOps.Zero);
+        return engine.TensorWhere(positive, terms, new Tensor<T>(probabilities.Shape.ToArray()));
     }
 
     private Vector<T> ConvertToProbabilities(TOutput prediction)
@@ -274,6 +249,10 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
         return new Vector<T>(new[] { oneMinusP, p });
     }
 
+    /// <remarks>
+    /// Kept as a scalar loop until the engine can draw uniforms from a caller-supplied Random
+    /// (TensorUniformFromRng in missing-ops); the per-element clamp and renormalization follow the draws.
+    /// </remarks>
     private Vector<T> AddNoise(Vector<T> probabilities)
     {
         // Add small Gaussian noise to simulate uncertainty
@@ -287,7 +266,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
             // Ensure non-negative
             if (NumOps.Compare(noisy[i], NumOps.Zero) < 0)
             {
-                noisy[i] = NumOps.FromDouble(1e-10);
+                noisy[i] = ActiveLearningEngineOps.Tolerance<T>(1e-10);
             }
             sum = NumOps.Add(sum, noisy[i]);
         }
@@ -303,31 +282,15 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
 
     private Vector<T> Softmax(Vector<T> logits)
     {
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
+        if (logits.Length == 0)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
-            {
-                maxLogit = logits[i];
-            }
+            throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
-        var expValues = new T[logits.Length];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.Exp(shifted);
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        for (int i = 0; i < expValues.Length; i++)
-        {
-            expValues[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return new Vector<T>(expValues);
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+        var expValues = engine.TensorExp(engine.TensorSubtractScalar(values, engine.TensorMaxValue(values)));
+        return engine.TensorDivideScalar(expValues, engine.TensorSum(expValues)).ToVector();
     }
 
     private T Sigmoid(T x)

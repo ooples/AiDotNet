@@ -217,7 +217,7 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 
         // Position on the Hazen grid: u = (pos + 0.5)/n  ⇒  pos = u*n - 0.5.
         var pos = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(u, NumOps.FromDouble(n)), NumOps.FromDouble(0.5));
-        var inside = engine.TensorClamp(engine.TensorNanToNum(pos, 0.0), zero, lastIndex);
+        var inside = engine.TensorClamp(AiDotNet.Helpers.NanToNumHelper.Apply(engine, pos, 0.0), zero, lastIndex);
         var lo = engine.TensorMin(engine.TensorFloor(inside), NumOps.FromDouble(n - 2));
         var frac = engine.TensorSubtract(inside, lo);
         var below = engine.TensorGather(sorted, lo.Cast<int>(), 0);

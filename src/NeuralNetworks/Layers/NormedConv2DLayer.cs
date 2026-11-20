@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -291,42 +293,49 @@ public partial class NormedConv2DLayer<T> : LayerBase<T>, IShapeContract
             var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
             return Engine.Reshape(Engine.TensorMultiply(w, scale), _kernel._shape);
         }
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
+        // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
+        // on StopGradient(W) with accepted-step u/v state update:
+        // v <- StopGradient(W)^T u / ||StopGradient(W)^T u||
+        // u <- StopGradient(W) v / ||StopGradient(W) v||
+        // sigma = u^T W v with u and v held constant. Evaluation uses the stored u and v unchanged.
+        var u = Engine.Reshape(_u, new[] { 1, rows });
+        Tensor<T> uNormed;
+        Tensor<T> vNormed;
+
         if (IsTrainingMode)
         {
-            // One power iteration (torch.nn.utils.spectral_norm): v ← Wᵀu / ‖Wᵀu‖, u ← W v / ‖W v‖, both kept.
-            var host = _kernel.ToVector();
-            void Normalize(double[] a)
+            var wDetached = Engine.StopGradient(w);
+            var vUnnorm = Engine.TensorMatMul(u, wDetached);
+            var vNormSq = Engine.ReduceSum(Engine.TensorMultiply(vUnnorm, vUnnorm), new[] { 1 }, keepDims: true);
+            var vNormInv = Engine.TensorPow(Engine.TensorAddScalar(vNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
+            vNormed = Engine.TensorMultiply(vUnnorm, Engine.TensorTile(vNormInv, new[] { 1, per }));
+
+            var wDetachedT = Engine.TensorTranspose(wDetached);
+            var uUnnorm = Engine.TensorMatMul(vNormed, wDetachedT);
+            var uNormSq = Engine.ReduceSum(Engine.TensorMultiply(uUnnorm, uUnnorm), new[] { 1 }, keepDims: true);
+            var uNormInv = Engine.TensorPow(Engine.TensorAddScalar(uNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
+            uNormed = Engine.TensorMultiply(uUnnorm, Engine.TensorTile(uNormInv, new[] { 1, rows }));
+
+            if (!GraphMode.IsActive && !CompiledStepRandom<T>.InNonStepForward && !GraphMode.IsProbe)
             {
-                double n = Math.Sqrt(a.Sum(x => x * x));
-                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+                using (GraphMode.SuspendRecording())
+                {
+                    Engine.Reshape(uNormed, new[] { rows }).CopyTo(_u.AsWritableSpan());
+                    Engine.Reshape(vNormed, new[] { per }).CopyTo(_v.AsWritableSpan());
+                    Engine.InvalidatePersistentTensor(_u);
+                    Engine.InvalidatePersistentTensor(_v);
+                }
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(host[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(host[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
-            Engine.InvalidatePersistentTensor(_u);
-            Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
-        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, w), vT);                                     // [1, 1]
+        else
+        {
+            uNormed = u;
+            vNormed = Engine.Reshape(_v, new[] { 1, per });
+        }
+
+        var uW = Engine.TensorMatMul(uNormed, w);
+        var vNormedT = Engine.TensorTranspose(vNormed);
+        var sigma = Engine.TensorMatMul(uW, vNormedT);
         var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
         return Engine.Reshape(Engine.TensorMultiply(w, inverse), _kernel._shape);
     }

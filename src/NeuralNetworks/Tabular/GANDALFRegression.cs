@@ -124,13 +124,9 @@ public class GANDALFRegression<T> : GANDALFBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
+        var flat = new[] { predictions.Length };
+        var diff = Engine.TensorSubtract(Engine.Reshape(predictions, flat), Engine.Reshape(targets, flat));
+        var totalLoss = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -145,13 +141,9 @@ public class GANDALFRegression<T> : GANDALFBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
+        var flat = new[] { predictions.Length };
+        var diff = Engine.TensorSubtract(Engine.Reshape(predictions, flat), Engine.Reshape(targets, flat));
+        var totalLoss = Engine.TensorSum(Engine.TensorAbs(diff));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
     }
@@ -165,12 +157,18 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
     {
-        var predictions = Forward(features);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        // Mean squared error differentiated on the tape through the head, the trees and the gating
+        // network. (This step used to compute the loss and call UpdateParameters with no gradients,
+        // so nothing ever trained.)
+        return TrainWithTape(() =>
+        {
+            var predictions = Forward(features);
+            if (predictions.Length != targets.Length)
+                throw new ArgumentException("Predictions and targets must have the same size");
+            var diff = Engine.TensorSubtract(predictions, Engine.Reshape(targets, predictions._shape));
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), Enumerable.Range(0, diff.Rank).ToArray(), keepDims: false);
+            return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / predictions.Length));
+        }, learningRate);
     }
 
     /// <summary>
@@ -179,27 +177,18 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     public T ComputeR2Score(Tensor<T> features, Tensor<T> targets)
     {
         var predictions = Predict(features);
+        int n = targets.Length;
+        var y = Engine.Reshape(targets, new[] { n });
+        var yHat = Engine.TensorSlice(Engine.Reshape(predictions, new[] { predictions.Length }), new[] { 0 }, new[] { n });
 
         // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
+        var targetMean = NumOps.Divide(Engine.TensorSum(y), NumOps.FromDouble(n));
 
         // Compute SS_res and SS_tot
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
+        var residual = Engine.TensorSubtract(y, yHat);
+        var ssRes = Engine.TensorSum(Engine.TensorMultiply(residual, residual));
+        var deviation = Engine.TensorSubtractScalar(y, targetMean);
+        var ssTot = Engine.TensorSum(Engine.TensorMultiply(deviation, deviation));
 
         if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
         {

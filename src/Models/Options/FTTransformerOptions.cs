@@ -174,10 +174,11 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
     public double LayerNormEpsilon { get; set; } = 1e-6;
 
     /// <summary>
-    /// Gets or sets the initialization scale for embeddings.
+    /// Gets or sets the initialization scale multiplier for feature-token embeddings (Gorishniy et al. 2021 §3.1:
+    /// unit scale <c>1.0</c> initializes weights, biases and [CLS] uniformly in <c>[-1/sqrt(d), 1/sqrt(d)]</c>).
     /// </summary>
-    /// <value>The embedding initialization scale, defaulting to 0.01.</value>
-    public double EmbeddingInitScale { get; set; } = 0.01;
+    /// <value>The embedding initialization scale multiplier, defaulting to 1.0.</value>
+    public double EmbeddingInitScale { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets whether to use a bias term in the numerical feature embedding.

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.Imputers;
 
@@ -82,14 +83,7 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         // Store a copy of the training data for neighbor lookup
-        _fitData = new Matrix<T>(data.Rows, data.Columns);
-        for (int i = 0; i < data.Rows; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                _fitData[i, j] = data[i, j];
-            }
-        }
+        _fitData = data.Clone();
     }
 
     /// <summary>
@@ -106,186 +100,178 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        // Copy all data first
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        // For each row, find missing values and impute
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _fitData.Columns);
+        var x = Tensor<T>.FromMatrix(data);
+        var fit = Tensor<T>.FromMatrix(_fitData);
+        var missing = MissingMask(x);
+        var fitMissing = MissingMask(fit);
+
+        // scikit-learn KNNImputer: nan_euclidean distances between the query rows and the training rows;
+        // for each missing entry the donors are the n_neighbors nearest training rows that have that
+        // column, averaged uniformly or by inverse distance. The distances are computed in float64, as
+        // scikit-learn's euclidean_distances does for float32 data (_euclidean_distances_upcast): the
+        // a^2 + b^2 - 2ab expansion cancels catastrophically in a narrow T, and for Half the squares of
+        // values past 256 overflow (inf - inf is NaN, which left every donor unusable).
+        var distances = _fitData.Rows == 0
+            ? null
+            : NanEuclideanDistances(AsDouble(x), AsDouble(missing), AsDouble(fit), AsDouble(fitMissing));
+        var columns = new List<Tensor<T>>(numColumns);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        for (int col = 0; col < numColumns; col++)
         {
-            var row = data.GetRow(i);
-            var missingCols = new List<int>();
-
-            // Find missing columns in this row
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.ColumnVector(x, col);
+            var receivers = processSet.Contains(col)
+                ? PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.ColumnVector(missing, col))
+                : Array.Empty<int>();
+            if (receivers.Length == 0)
             {
-                if (processSet.Contains(j) && IsMissing(row[j]))
-                {
-                    missingCols.Add(j);
-                }
+                columns.Add(column);
+                continue;
             }
 
-            if (missingCols.Count == 0) continue;
-
-            // Find K nearest neighbors based on non-missing features
-            var (neighborIndices, neighborDistances) = FindKNearestNeighbors(row, missingCols);
-
-            // Impute each missing column
-            foreach (int col in missingCols)
-            {
-                result[i, col] = ImputeValue(col, neighborIndices, neighborDistances);
-            }
+            var imputed = ImputeColumn(col, receivers, distances, fit, fitMissing);
+            var receiverIndex = new Tensor<int>(receivers, new[] { receivers.Length });
+            columns.Add(Engine.TensorScatter(column.Clone(), receiverIndex, imputed, 0));
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
-    private bool IsMissing(T value)
+    /// <summary>
+    /// The imputed values of column <paramref name="col"/> for the <paramref name="receivers"/> rows.
+    /// </summary>
+    private Tensor<T> ImputeColumn(int col, int[] receivers, Tensor<double>? distances, Tensor<T> fit, Tensor<T> fitMissing)
     {
-        double val = NumOps.ToDouble(value);
+        var fitColumn = PreprocessingTensorOps.ColumnVector(fit, col);
+        var donors = PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.Not(PreprocessingTensorOps.ColumnVector(fitMissing, col)));
+        var columnMean = CalculateColumnMean(fitColumn, donors);
+        if (distances is null || donors.Length == 0)
+        {
+            return PreprocessingTensorOps.Filled(new[] { receivers.Length }, columnMean);
+        }
+
+        var donorIndex = new Tensor<int>(donors, new[] { donors.Length });
+        var donorValues = Engine.TensorIndexSelect(fitColumn, donorIndex, 0);
+        var donorDistances = Engine.TensorIndexSelect(
+            Engine.TensorIndexSelect(distances, new Tensor<int>(receivers, new[] { receivers.Length }), 0), donorIndex, 1);
+
+        var values = new Tensor<T>[receivers.Length];
+        for (int r = 0; r < receivers.Length; r++)
+        {
+            values[r] = ImputeValue(PreprocessingTensorOps.RowVector(donorDistances, r), donorValues, columnMean);
+        }
+
+        return Engine.TensorConcatenate(values, 0);
+    }
+
+    /// <summary>
+    /// 1 where an entry is missing: NaN when the missing value is NaN, otherwise an entry exactly equal to it
+    /// (scikit-learn compares with <c>X == missing_values</c>, no tolerance).
+    /// </summary>
+    private Tensor<T> MissingMask(Tensor<T> x)
+    {
         if (double.IsNaN(_missingValue))
         {
-            return double.IsNaN(val);
+            return ScalerTensorOps.NanMask(x);
         }
-        return Math.Abs(val - _missingValue) < 1e-10;
+
+        return Engine.TensorMax(ScalerTensorOps.NanMask(x), Engine.TensorEquals(x, NumOps.FromDouble(_missingValue)));
     }
 
-    private (int[] Indices, double[] Distances) FindKNearestNeighbors(Vector<T> queryRow, List<int> missingCols)
+    /// <summary>
+    /// scikit-learn's <c>nan_euclidean_distances</c> between every query row and every training row:
+    /// <c>sqrt(p / present * sum over coordinates present in both of (a - b)^2)</c>, NaN when the rows share no
+    /// present coordinate. Returns [queries, training rows].
+    /// </summary>
+    private Tensor<double> NanEuclideanDistances(
+        Tensor<double> x, Tensor<double> missing, Tensor<double> fit, Tensor<double> fitMissing)
     {
-        if (_fitData is null)
-        {
-            throw new InvalidOperationException("Fit data is not available.");
-        }
+        const double zero = 0.0;
+        var present = PreprocessingTensorOps.Not(missing);
+        var fitPresent = PreprocessingTensorOps.Not(fitMissing);
+        var x0 = Engine.TensorWhere(missing, new Tensor<double>(x.Shape.ToArray()), x);
+        var f0 = Engine.TensorWhere(fitMissing, new Tensor<double>(fit.Shape.ToArray()), fit);
 
-        var distances = new List<(int Index, double Distance)>();
-        var missingSet = new HashSet<int>(missingCols);
+        // sum present(a)present(b)(a - b)^2 = (a0^2) . present(b) + present(a) . (b0^2) - 2 a0 . b0
+        var sumSq = Engine.TensorAdd(
+            Engine.TensorMatMul(Engine.TensorSquare(x0), Engine.TensorTranspose(fitPresent)),
+            Engine.TensorMatMul(present, Engine.TensorTranspose(Engine.TensorSquare(f0))));
+        sumSq = Engine.TensorSubtract(
+            sumSq, Engine.TensorMultiplyScalar(Engine.TensorMatMul(x0, Engine.TensorTranspose(f0)), 2.0));
+        sumSq = Engine.TensorMax(sumSq, zero);
 
-        for (int i = 0; i < _fitData.Rows; i++)
-        {
-            double dist = CalculateDistance(queryRow, _fitData.GetRow(i), missingSet);
-            if (!double.IsNaN(dist) && !double.IsInfinity(dist))
-            {
-                distances.Add((i, dist));
-            }
-        }
-
-        // Sort by distance and take K nearest
-        var nearest = distances.OrderBy(d => d.Distance).Take(_nNeighbors).ToArray();
-
-        return (
-            nearest.Select(n => n.Index).ToArray(),
-            nearest.Select(n => n.Distance).ToArray()
-        );
+        var count = Engine.TensorMatMul(present, Engine.TensorTranspose(fitPresent));
+        var noOverlap = Engine.TensorEquals(count, zero);
+        var safeCount = Engine.TensorWhere(noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), 1.0), count);
+        var scaled = Engine.TensorDivide(Engine.TensorMultiplyScalar(sumSq, (double)x.Shape[1]), safeCount);
+        return Engine.TensorWhere(
+            noOverlap, PreprocessingTensorOps.Filled(count.Shape.ToArray(), double.NaN), Engine.TensorSqrt(scaled));
     }
 
-    private double CalculateDistance(Vector<T> a, Vector<T> b, HashSet<int> ignoreCols)
+    /// <summary>
+    /// <paramref name="t"/> as float64. Only called on freshly built tensors: <see cref="Tensor{T}.Cast{TOut}"/>
+    /// reads the backing storage from its start, which is wrong for slice and broadcast views.
+    /// </summary>
+    private static Tensor<double> AsDouble(Tensor<T> t) =>
+        t is Tensor<double> d ? d : t.Cast<double>();
+
+    /// <summary>
+    /// One imputed value (as a [1] tensor) from the distances to the donors and their values: the
+    /// n_neighbors nearest donors (ties to the lower row), excluding donors at NaN distance; uniform mean, or
+    /// inverse-distance weights where donors at distance 0 get weight 1 and the others 0 (scikit-learn's
+    /// <c>_get_weights</c>). With no usable donor, the column mean.
+    /// </summary>
+    private Tensor<T> ImputeValue(Tensor<double> donorDistances, Tensor<T> donorValues, T columnMean)
     {
-        double sumSq = 0;
-        int count = 0;
-
-        for (int j = 0; j < a.Length; j++)
+        var usable = PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(donorDistances));
+        if (PreprocessingTensorOps.CountNonZero(usable) == 0)
         {
-            if (ignoreCols.Contains(j)) continue;
-
-            double va = NumOps.ToDouble(a[j]);
-            double vb = NumOps.ToDouble(b[j]);
-
-            if (double.IsNaN(va) || double.IsNaN(vb)) continue;
-
-            double diff = va - vb;
-            sumSq += diff * diff;
-            count++;
+            return PreprocessingTensorOps.Filled(new[] { 1 }, columnMean);
         }
 
-        if (count == 0) return double.PositiveInfinity;
+        int k = Math.Min(_nNeighbors, donorDistances.Length);
+        var order = PreprocessingTensorOps.StableOrder(ScalerTensorOps.FillNan(donorDistances, double.MaxValue), descending: false);
+        var nearest = new Tensor<int>(order.AsSpan().Slice(0, k).ToArray(), new[] { k });
+        var distances = Engine.TensorIndexSelect(donorDistances, nearest, 0);
+        var values = AsDouble(Engine.TensorIndexSelect(donorValues, nearest, 0));
+        var weights = Engine.TensorIndexSelect(usable, nearest, 0);
 
-        // Normalize by number of features used
-        return Math.Sqrt(sumSq / count) * Math.Sqrt(a.Length);
-    }
-
-    private T ImputeValue(int col, int[] neighborIndices, double[] neighborDistances)
-    {
-        if (_fitData is null)
-        {
-            throw new InvalidOperationException("Fit data is not available.");
-        }
-
-        var validValues = new List<double>();
-        var validDistances = new List<double>();
-
-        for (int i = 0; i < neighborIndices.Length; i++)
-        {
-            int neighborIdx = neighborIndices[i];
-            T neighborValue = _fitData[neighborIdx, col];
-
-            if (!IsMissing(neighborValue))
-            {
-                validValues.Add(NumOps.ToDouble(neighborValue));
-                validDistances.Add(neighborDistances[i]);
-            }
-        }
-
-        if (validValues.Count == 0)
-        {
-            // Fallback to column mean if no valid neighbors
-            return CalculateColumnMean(col);
-        }
-
-        double result;
         if (_weights == KNNWeights.Distance)
         {
-            // Distance-weighted average
-            double weightSum = 0;
-            double valueSum = 0;
-
-            for (int i = 0; i < validValues.Count; i++)
+            var atZero = Engine.TensorMultiply(weights, Engine.TensorEquals(distances, 0.0));
+            if (PreprocessingTensorOps.CountNonZero(atZero) > 0)
             {
-                double weight = validDistances[i] < 1e-10 ? 1e10 : 1.0 / validDistances[i];
-                weightSum += weight;
-                valueSum += weight * validValues[i];
+                weights = atZero;
             }
-
-            result = valueSum / weightSum;
-        }
-        else
-        {
-            // Uniform weights - simple average
-            result = validValues.Average();
+            else
+            {
+                var safe = Engine.TensorWhere(weights, distances, PreprocessingTensorOps.Filled(new[] { k }, 1.0));
+                weights = Engine.TensorMultiply(weights, Engine.TensorReciprocal(safe));
+            }
         }
 
-        return NumOps.FromDouble(result);
+        // The weighted mean in float64 too: Half sums of a few large donor values overflow past 65504
+        double numerator = Engine.TensorSum(Engine.TensorMultiply(weights, values));
+        double denominator = Engine.TensorSum(weights);
+        return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(numerator / denominator));
     }
 
-    private T CalculateColumnMean(int col)
+    /// <summary>Mean of the training column over its non-missing rows (0 when there are none).</summary>
+    private T CalculateColumnMean(Tensor<T> fitColumn, int[] donors)
     {
-        if (_fitData is null)
+        if (donors.Length == 0)
         {
             return NumOps.Zero;
         }
 
-        double sum = 0;
-        int count = 0;
-
-        for (int i = 0; i < _fitData.Rows; i++)
-        {
-            T value = _fitData[i, col];
-            if (!IsMissing(value))
-            {
-                sum += NumOps.ToDouble(value);
-                count++;
-            }
-        }
-
-        return count > 0 ? NumOps.FromDouble(sum / count) : NumOps.Zero;
+        return ScalerTensorOps.Mean(
+            Engine.TensorIndexSelect(fitColumn, new Tensor<int>(donors, new[] { donors.Length }), 0));
     }
 
     /// <summary>

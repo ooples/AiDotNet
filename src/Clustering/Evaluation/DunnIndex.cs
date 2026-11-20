@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Enums;
@@ -57,9 +58,10 @@ public class DunnIndex<T> : IClusterMetric<T>
 
         // Get unique cluster labels
         var clusterLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 clusterLabels.Add(label);
@@ -81,7 +83,7 @@ public class DunnIndex<T> : IClusterMetric<T>
 
         for (int i = 0; i < n; i++)
         {
-            int label = (int)numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0 && clusterPoints.ContainsKey(label))
             {
                 clusterPoints[label].Add(i);

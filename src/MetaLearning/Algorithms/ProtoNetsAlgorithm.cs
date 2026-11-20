@@ -160,11 +160,11 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 
         var body = ParamModel.GetParameters();
         Vector<T>? bodyGradient = null, attentionGradient = null, mahalanobisGradient = null, classGradient = null;
-        T totalLoss = NumOps.Zero;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         foreach (var task in taskBatch.Tasks)
         {
             var (loss, taskBody, attention, mahalanobis, classes) = EpisodeGradient(task);
-            totalLoss = NumOps.Add(totalLoss, loss);
+            losses.Add(loss);
             bodyGradient = Accumulate(bodyGradient, taskBody);
             attentionGradient = Accumulate(attentionGradient, attention);
             mahalanobisGradient = Accumulate(mahalanobisGradient, mahalanobis);
@@ -193,7 +193,7 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         _mahalanobisLogScale = updated[2];
         _classLogScale = updated[3];
 
-        return NumOps.Divide(totalLoss, batchSize);
+        return NumOps.Divide(Engine.Sum(new Vector<T>(losses)), batchSize);
     }
 
     /// <summary>
@@ -335,29 +335,25 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 ReadLabels(t.QueryOutput).DefaultIfEmpty(-1).Max())) + 1;
             if (slots > _classLogScale.Length)
             {
-                var grown = new Vector<T>(slots);
-                for (int i = 0; i < _classLogScale.Length; i++) grown[i] = _classLogScale[i];
-                _classLogScale = grown;
+                _classLogScale = Vector<T>.Concatenate(_classLogScale, new Vector<T>(slots - _classLogScale.Length));
             }
         }
     }
 
     private static int[] ReadLabels(TOutput labels)
     {
+        // Round half to even, as Math.Round does, then read the class indices.
         var tensor = ClassifierOutputs<T>.Labels(labels, int.MaxValue);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return AiDotNetEngine.Current.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     private static Tensor<T>? ParameterTensor(Vector<T> values) => values.Length > 0 ? Tensor<T>.FromVector(values) : null;
 
     private static Vector<T> GradientOf(Dictionary<Tensor<T>, Tensor<T>> gradients, Tensor<T>? source, int length)
     {
-        var result = new Vector<T>(length);
-        if (source is null || !gradients.TryGetValue(source, out var gradient)) return result;
-        for (int i = 0; i < length; i++) result[i] = gradient[i];
-        return result;
+        if (source is null || !gradients.TryGetValue(source, out var gradient)) return new Vector<T>(length);
+        var flat = gradient.ToVector();
+        return flat.Length == length ? flat : flat.GetSubVector(0, length);
     }
 
     #endregion
@@ -404,21 +400,17 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
     private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
+        return AiDotNetEngine.Current.Divide(values, divisor);
     }
 
     private static Vector<T> CloneVector(Vector<T> source)
     {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
+        return source.Clone();
     }
 
     #endregion
@@ -430,8 +422,6 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 /// </summary>
 internal sealed class PrototypeEpisode<T>
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-
     private PrototypeEpisode(int rows, Tensor<T> supportSelector, Tensor<T> querySelector, Tensor<T> membership,
         Tensor<T> queryTarget, int[] classSlots)
     {
@@ -473,15 +463,28 @@ internal sealed class PrototypeEpisode<T>
         int query = queryLabels.Length;
         int rows = support + query;
 
-        var supportSelector = new Tensor<T>(new[] { support, rows });
-        for (int s = 0; s < support; s++) supportSelector[s * rows + s] = Ops.One;
-        var querySelector = new Tensor<T>(new[] { query, rows });
-        for (int q = 0; q < query; q++) querySelector[q * rows + support + q] = Ops.One;
+        // The episode outlives the training step that builds it: its selectors are reused after ComputeGradients
+        // resets the step arena. Arena tensors are reissued by element count after a reset, so a [support, rows]
+        // selector came back as a same-count [rows, support] tensor. Build every episode tensor on the heap.
+        using var heapOwned = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
 
-        var membership = new Tensor<T>(new[] { classes.Length, support });
-        for (int s = 0; s < support; s++) membership[column[supportLabels[s]] * support + s] = Ops.One;
+        // The selectors are the support and query row blocks of the identity over the stacked rows.
+        var engine = AiDotNetEngine.Current;
+        var identity = engine.TensorEye<T>(rows);
+        var supportSelector = support == 0
+            ? new Tensor<T>(new[] { 0, rows })
+            : engine.TensorSlice(identity, new[] { 0, 0 }, new[] { support, rows });
+        var querySelector = query == 0
+            ? new Tensor<T>(new[] { 0, rows })
+            : engine.TensorSlice(identity, new[] { support, 0 }, new[] { query, rows });
 
-        var queryTarget = new Tensor<T>(new[] { query });
+        // membership[class, s] = 1 for the class of support row s.
+        var supportColumns = supportLabels.Select(label => column[label]).ToArray();
+        var membership = support == 0
+            ? new Tensor<T>(new[] { classes.Length, 0 })
+            : engine.TensorTranspose(engine.TensorOneHot<T>(IndexTensor(supportColumns), classes.Length));
+
+        var queryColumns = new int[query];
         for (int q = 0; q < query; q++)
         {
             if (!column.TryGetValue(queryLabels[q], out int c))
@@ -490,11 +493,16 @@ internal sealed class PrototypeEpisode<T>
                     $"Query label {queryLabels[q]} has no support example, so it has no prototype.", nameof(queryLabels));
             }
 
-            queryTarget[q] = Ops.FromDouble(c);
+            queryColumns[q] = c;
         }
+
+        var queryTarget = IndexTensor(queryColumns).Cast<T>();
 
         return new PrototypeEpisode<T>(rows, supportSelector, querySelector, membership, queryTarget, classes);
     }
+
+    /// <summary>A one-dimensional integer tensor over the given indices.</summary>
+    internal static Tensor<int> IndexTensor(int[] indices) => new Tensor<int>(new[] { indices.Length }, new Vector<int>(indices));
 }
 
 /// <summary>
@@ -584,11 +592,13 @@ internal static class PrototypeMetric<T>
 
         if (classLogScale is not null)
         {
-            var selector = new Tensor<T>(new[] { classLogScale.Length, classSlots.Length });
-            for (int c = 0; c < classSlots.Length; c++)
-            {
-                if (classSlots[c] < classLogScale.Length) selector[classSlots[c] * classSlots.Length + c] = Ops.One;
-            }
+            // selector[slot, c] = 1 for each column's class slot; a slot past the learned scales selects nothing (it
+            // is sent to an extra one-hot row that is then dropped).
+            int scales = classLogScale.Length;
+            var slotRows = classSlots.Select(slot => slot >= 0 && slot < scales ? slot : scales).ToArray();
+            var selector = engine.TensorSlice(
+                engine.TensorTranspose(engine.TensorOneHot<T>(PrototypeEpisode<T>.IndexTensor(slotRows), scales + 1)),
+                new[] { 0, 0 }, new[] { scales, classSlots.Length });
 
             var logScales = engine.TensorMatMul(engine.Reshape(classLogScale, new[] { 1, classLogScale.Length }), selector);
             distances = engine.TensorMultiply(distances, engine.TensorExp(logScales));
@@ -600,12 +610,7 @@ internal static class PrototypeMetric<T>
     /// <summary>A tensor as a matrix, one row per leading index.</summary>
     public static Matrix<T> ToMatrix(Tensor<T> tensor)
     {
-        var rows = ClassifierOutputs<T>.AsRows(tensor);
-        int r = rows.Shape[0], c = rows.Shape[1];
-        var matrix = new Matrix<T>(r, c);
-        for (int i = 0; i < r; i++)
-            for (int j = 0; j < c; j++) matrix[i, j] = rows[i * c + j];
-        return matrix;
+        return ClassifierOutputs<T>.AsRows(tensor).ToMatrix();
     }
 }
 
@@ -629,7 +634,6 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
 {
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly ProtoNetsOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
     private readonly Tensor<T> _prototypes;
     private readonly int[] _classSlots;
     private readonly Tensor<T>? _mahalanobisLogScale;
@@ -670,13 +674,11 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         Guard.NotNull(numOps);
         _featureEncoder = featureEncoder.DeepCopy();
         _options = options;
-        _numOps = numOps;
         _mahalanobisLogScale = mahalanobisLogScale.Length > 0 ? Tensor<T>.FromVector(mahalanobisLogScale) : null;
         _classLogScale = classLogScale.Length > 0 ? Tensor<T>.FromVector(classLogScale) : null;
 
         var labels = ClassifierOutputs<T>.Labels(supportOutputs, int.MaxValue);
-        var supportLabels = new int[labels.Length];
-        for (int i = 0; i < supportLabels.Length; i++) supportLabels[i] = (int)Math.Round(numOps.ToDouble(labels[i]));
+        var supportLabels = AiDotNetEngine.Current.TensorRound(labels).Cast<int>().ToArray();
         if (supportLabels.Length == 0)
             throw new ArgumentException("The support set is empty, so there are no prototypes.", nameof(supportOutputs));
 
@@ -712,18 +714,12 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            int rows = probabilities.Shape[0], classes = probabilities.Shape[1];
-            var predicted = new Vector<T>(rows);
-            for (int r = 0; r < rows; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (_numOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
-                }
-
-                predicted[r] = _numOps.FromDouble(_classSlots[best]);
-            }
+            // The most probable column of each row (the first on a tie), read out as its class label.
+            int rows = probabilities.Shape[0];
+            if (rows == 0) return (TOutput)(object)new Vector<T>(0);
+            var best = engine.TensorArgMax(probabilities, 1);
+            var slots = PrototypeEpisode<T>.IndexTensor(_classSlots).Cast<T>();
+            var predicted = engine.TensorIndexSelect(slots, best, 0).ToVector();
 
             return (TOutput)(object)predicted;
         }

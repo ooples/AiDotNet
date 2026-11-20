@@ -166,7 +166,7 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var support = ClassifierOutputs<T>.AsRows(MetaModel.Predict(task.SupportInput));
         var prototypes = PrototypeMetric<T>.Prototypes(support, episode.Membership, attention: null);
         var projected = _projectionWeights.Length > 0 ? Project(support).ToVector() : null;
-        return new MCLModel<T, TInput, TOutput>(MetaModel, prototypes, episode.ClassSlots, NumOps, projected);
+        return new MCLModel<T, TInput, TOutput>(MetaModel, prototypes, episode.ClassSlots, projected);
     }
 
     /// <inheritdoc/>
@@ -209,6 +209,7 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         T loss;
         var projectionGradient = new Vector<T>(_projectionWeights.Length);
+        var headLength = head.Sum(leaf => leaf.Length);
         if (head.Count == 0)
         {
             using var noGrad = new NoGradScope<T>();
@@ -221,16 +222,21 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 head,
                 gradients =>
                 {
-                    int offset = 0;
+                    // The head's leaves in order, with zeros for a leaf the objective did not reach.
+                    var parts = new List<Vector<T>>(head.Count + 1);
                     foreach (var leaf in head)
                     {
-                        if (gradients.TryGetValue(leaf, out var gradient))
-                        {
-                            for (int i = 0; i < leaf.Length; i++) projectionGradient[offset + i] = gradient[i];
-                        }
-
-                        offset += leaf.Length;
+                        parts.Add(gradients.TryGetValue(leaf, out var gradient)
+                            ? gradient.ToVector()
+                            : new Vector<T>(leaf.Length));
                     }
+
+                    if (headLength < projectionGradient.Length)
+                    {
+                        parts.Add(new Vector<T>(projectionGradient.Length - headLength));
+                    }
+
+                    projectionGradient = Vector<T>.Concatenate(parts);
                 },
                 persistent: true);
         }
@@ -275,30 +281,23 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         // The denominator runs over a != i, so the diagonal is pushed out of the log-sum-exp by a large negative
         // constant rather than dropped, which keeps every step a whole-tensor operation.
-        var selfMask = new Tensor<T>(new[] { rows, rows });
-        var weights = new Tensor<T>(new[] { rows, rows });
-        var counts = new int[rows];
-        for (int i = 0; i < rows; i++)
-        {
-            selfMask[i * rows + i] = NumOps.FromDouble(-1e9);
-            for (int j = 0; j < rows; j++)
-            {
-                if (i != j && labels[i] == labels[j]) counts[i]++;
-            }
-        }
+        var eye = engine.TensorEye<T>(rows);
+        var selfMask = engine.TensorWhere(eye,
+            engine.TensorFullLike(eye, NumOps.MinValue), engine.TensorZerosLike(eye));
 
-        // An anchor with no positive has no term in the paper's sum, so it is left out of both the weights and the
-        // average.
-        int anchors = 0;
-        for (int i = 0; i < rows; i++)
-        {
-            if (counts[i] == 0) continue;
-            anchors++;
-            for (int j = 0; j < rows; j++)
-            {
-                if (i != j && labels[i] == labels[j]) weights[i * rows + j] = NumOps.FromDouble(1.0 / counts[i]);
-            }
-        }
+        // Label identity and positive counts must not round or overflow in the model's storage type.
+        var square = new[] { rows, rows };
+        var labelColumn = new Tensor<int>(labels, new[] { rows, 1 });
+        var positives = engine.TensorSubtract(
+            engine.TensorEquals(
+                engine.TensorBroadcastTo(labelColumn, square),
+                engine.TensorBroadcastTo(engine.Reshape(labelColumn, new[] { 1, rows }), square)).Cast<double>(),
+            eye.Cast<double>());
+        var counts = engine.ReduceSum(positives, new[] { 1 }, true);
+        var hasPositive = engine.TensorGreaterThan(counts, 0.0);
+        var safeCounts = engine.TensorWhere(hasPositive, counts, engine.TensorOnesLike(counts));
+        var weights = engine.TensorDivide(positives, engine.TensorBroadcastTo(safeCounts, square)).Cast<T>();
+        double anchors = engine.TensorSum(hasPositive);
 
         var masked = engine.TensorAdd(similarity, selfMask);
         var max = engine.ReduceMax(masked, new[] { 1 }, true, out _);
@@ -308,7 +307,7 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 engine.TensorExp(engine.TensorAdd(masked, engine.TensorNegate(stable))), new[] { 1 }, keepDims: true)),
             stable);
 
-        if (anchors == 0)
+        if (!(anchors > 0))
         {
             return Scalar(engine.TensorMultiplyScalar(engine.ReduceSum(similarity, null), NumOps.Zero));
         }
@@ -341,10 +340,10 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         int projection = _mclOptions.ProjectionDim, position = 0;
         void Take(params int[] shape)
         {
-            var leaf = new Tensor<T>(shape);
-            for (int i = 0; i < leaf.Length; i++) leaf[i] = _projectionWeights[position + i];
-            position += leaf.Length;
-            leaves.Add(leaf);
+            int count = 1;
+            foreach (int dimension in shape) count *= dimension;
+            leaves.Add(new Tensor<T>(shape, _projectionWeights.GetSubVector(position, count)));
+            position += count;
         }
 
         Take(projection, _embeddingWidth);
@@ -391,9 +390,7 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private static int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, int.MaxValue);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return AiDotNetEngine.Current.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     #endregion
@@ -445,25 +442,15 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
     private static Tensor<T> Scalar(Tensor<T> value) => AiDotNetEngine.Current.Reshape(value, new[] { 1 });
 
-    private Vector<T> CloneVector(Vector<T> source)
-    {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
-        return copy;
-    }
+    private static Vector<T> CloneVector(Vector<T> source) => source.Clone();
 
     private Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return Engine.Add(sum, values);
     }
 
-    private Vector<T> Scale(Vector<T> values, T divisor)
-    {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
-    }
+    private Vector<T> Scale(Vector<T> values, T divisor) => Engine.Divide(values, divisor);
 
     #endregion
 }
@@ -485,7 +472,6 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
-    private readonly INumericOperations<T> _numOps;
     private readonly Tensor<T> _prototypes;
     private readonly int[] _classSlots;
     private readonly Vector<T>? _projectedSupport;
@@ -501,27 +487,23 @@ internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <remarks>
     /// None: adaptation is prototypical, so it never rescales the embedding network's parameters. It used to.
     /// </remarks>
-    public double[]? ParameterModulationFactors => null;
+    public Vector<T>? ParameterModulationFactors => null;
 
     /// <summary>Initializes the adapted model with the task's prototypes.</summary>
     /// <param name="featureEncoder">The trained feature encoder; the model keeps its own copy.</param>
     /// <param name="prototypes">The support set's class prototypes, <c>[classes, width]</c>.</param>
     /// <param name="classSlots">The class label behind each prototype, in ascending order.</param>
-    /// <param name="numOps">Numeric operations for type T.</param>
     /// <param name="projectedSupport">The projected support features, or null before the head is sized.</param>
     public MCLModel(
         IFullModel<T, TInput, TOutput> featureEncoder,
         Tensor<T> prototypes,
         int[] classSlots,
-        INumericOperations<T> numOps,
         Vector<T>? projectedSupport)
     {
         Guard.NotNull(featureEncoder);
-        Guard.NotNull(numOps);
         _featureEncoder = featureEncoder.DeepCopy();
         _prototypes = prototypes;
         _classSlots = classSlots;
-        _numOps = numOps;
         _projectedSupport = projectedSupport;
     }
 
@@ -538,20 +520,10 @@ internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            int rows = probabilities.Shape[0], classes = probabilities.Shape[1];
-            var predicted = new Vector<T>(rows);
-            for (int r = 0; r < rows; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (_numOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
-                }
-
-                predicted[r] = _numOps.FromDouble(_classSlots[best]);
-            }
-
-            return (TOutput)(object)predicted;
+            // The first most probable class per row, mapped to its label.
+            var best = engine.TensorArgMax(probabilities, 1);
+            var slots = new Tensor<int>(_classSlots, new[] { _classSlots.Length }).Cast<T>();
+            return (TOutput)(object)engine.TensorIndexSelect(slots, best, 0).ToVector();
         }
 
         return ClassifierOutputs<T>.ToOutput<TOutput>(probabilities);

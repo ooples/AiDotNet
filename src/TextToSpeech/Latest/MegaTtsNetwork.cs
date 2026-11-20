@@ -9,55 +9,33 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// NATSpeech's log-mel spectrogram (<c>librosa_wav2spec</c>): a centred STFT padded with zeros (periodic Hann window),
 /// its magnitude through librosa's Slaney mel filterbank, and <c>log10(max(1e-6, x))</c>: <c>[frames, mels]</c>.
 /// </summary>
-internal sealed class MegaTtsMel
+internal sealed class MegaTtsMel<T>
 {
-    private readonly double[] _window;
-    private readonly double[,] _basis;
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+    private readonly Tensor<T> _window;
+    private readonly Tensor<T> _basis;
 
     public MegaTtsMel(int sampleRate, int fftSize, int hopSize, int windowSize, int mels, double fMin, double fMax)
     {
         FftSize = fftSize;
         HopSize = hopSize;
         Mels = mels;
-        _window = new double[fftSize];
-        int offset = (fftSize - windowSize) / 2;
-        for (int i = 0; i < windowSize; i++) _window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / windowSize);
-        _basis = MelFilterbanks.Slaney(sampleRate, fftSize, mels, fMin, fMax);
+        _window = EngineStft<T>.CenteredHann(fftSize, windowSize);
+        _basis = AiDotNetEngine.Current.TensorTranspose(EngineStft<T>.Table(MelFilterbanks.Slaney(sampleRate, fftSize, mels, fMin, fMax)));
     }
 
     public int FftSize { get; }
     public int HopSize { get; }
     public int Mels { get; }
 
-    public double[,] LogMel(double[] audio)
+    /// <summary>The log10 mel spectrogram <c>[frames, mels]</c> of a waveform.</summary>
+    public Tensor<T> LogMel(Tensor<T> audio)
     {
-        int pad = FftSize / 2, frames = 1 + audio.Length / HopSize, bins = FftSize / 2 + 1;
-        var padded = new double[audio.Length + 2 * pad];
-        Array.Copy(audio, 0, padded, pad, audio.Length);
-        var re = new double[frames * FftSize];
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < FftSize; k++) re[f * FftSize + k] = padded[f * HopSize + k] * _window[k];
-        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.FFT(new Tensor<double>(new[] { frames, FftSize }, new Vector<double>(re)),
-            new Tensor<double>(new[] { frames, FftSize }), out var outRe, out var outIm);
-        var sRe = outRe.AsSpan();
-        var sIm = outIm.AsSpan();
-        var mel = new double[frames, Mels];
-        var magnitude = new double[bins];
-        for (int f = 0; f < frames; f++)
-        {
-            for (int k = 0; k < bins; k++)
-            {
-                double a = sRe[f * FftSize + k], b = sIm[f * FftSize + k];
-                magnitude[k] = Math.Sqrt(a * a + b * b);
-            }
-            for (int m = 0; m < Mels; m++)
-            {
-                double acc = 0;
-                for (int k = 0; k < bins; k++) acc += _basis[m, k] * magnitude[k];
-                mel[f, m] = Math.Log10(Math.Max(1e-6, acc));
-            }
-        }
-        return mel;
+        var engine = AiDotNetEngine.Current;
+        // Off the gradient tape, as the array code it replaces was: log10's backward is infinite at a silent frame.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var magnitude = EngineStft<T>.Magnitude(audio, FftSize, HopSize, _window, AiDotNet.Tensors.Engines.PadMode.Constant);
+        return engine.TensorLog10(engine.TensorMax(engine.TensorMatMul(magnitude, _basis), Ops.FromDouble(1e-6)));
     }
 }
 
@@ -122,12 +100,23 @@ internal sealed class MegaTtsVectorQuantizer<T>
         return _engine.Reshape(Codebook.Forward(ids), new[] { b, l, Dimension });
     }
 
+    private int[,] _lastQuantizedCodes = new int[0, 0];
+
     /// <summary>Quantizes <c>[B, L, d]</c>: the straight-through output, the codes, and the codebook plus commitment loss
     /// over the positions <paramref name="mask"/> <c>[B, L, 1]</c> keeps.</summary>
     public (Tensor<T> Quantized, int[,] Codes, Tensor<T> Loss) Forward(Tensor<T> x, Tensor<T> mask)
     {
-        var codes = Encode(x);
-        var zq = Lookup(codes);
+        int b = x.Shape[0], l = x.Shape[1];
+        var tableTensor = Table;
+        var oneHot = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+            "MegaTtsQuantize",
+            this,
+            stateTag: 0,
+            new[] { x, _engine.StopGradient(tableTensor) },
+            new[] { b * l, Codes },
+            static (self, _, inputs, dest) => self.ExecuteQuantize(inputs, dest));
+        int[,] codes = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[0, 0] : _lastQuantizedCodes;
+        var zq = _engine.Reshape(_engine.TensorMatMul(oneHot, tableTensor), new[] { b, l, Dimension });
         var shape = x.Shape.ToArray();
         var m = _engine.TensorBroadcastTo(mask, shape);
         var stopX = _engine.StopGradient(x);
@@ -137,11 +126,45 @@ internal sealed class MegaTtsVectorQuantizer<T>
             var d = _engine.TensorMultiply(_engine.TensorSubtract(a, c), m);
             return _engine.ReduceSum(_engine.TensorMultiply(d, d), Enumerable.Range(0, shape.Length).ToArray(), false);
         }
-        double count = Math.Max(1, m.ToArray().Sum(v => NumOps.ToDouble(v)));
-        var loss = _engine.TensorMultiplyScalar(_engine.TensorAdd(Sse(stopX, zq), Sse(stopQ, x)), NumOps.FromDouble(1 / count));
+        var count = _engine.TensorClampMin(
+            _engine.ReduceSum(_engine.StopGradient(m), Enumerable.Range(0, shape.Length).ToArray(), false),
+            NumOps.One);
+        var loss = _engine.TensorDivide(_engine.TensorAdd(Sse(stopX, zq), Sse(stopQ, x)), count);
         // Straight-through: x + sg[z_q − x].
         var quantized = _engine.TensorAdd(x, _engine.StopGradient(_engine.TensorSubtract(zq, x)));
         return (quantized, codes, loss);
+    }
+
+    private void ExecuteQuantize(Tensor<T>[] inputs, Tensor<T> dest)
+    {
+        int b = inputs[0].Shape[0], l = inputs[0].Shape[1];
+        var xVals = inputs[0].Cast<double>().ToArray();
+        var tVals = inputs[1].Cast<double>().ToArray();
+        var stepCodes = new int[b, l];
+        var span = dest.AsWritableSpan();
+        span.Clear();
+        T one = NumOps.One;
+        for (int i = 0; i < b; i++)
+            for (int j = 0; j < l; j++)
+            {
+                int xOffset = (i * l + j) * Dimension;
+                double best = double.PositiveInfinity;
+                int bestCode = 0;
+                for (int c = 0; c < Codes; c++)
+                {
+                    int tOffset = c * Dimension;
+                    double distance = 0;
+                    for (int d = 0; d < Dimension; d++)
+                    {
+                        double diff = xVals[xOffset + d] - tVals[tOffset + d];
+                        distance += diff * diff;
+                    }
+                    if (distance < best) { best = distance; bestCode = c; }
+                }
+                stepCodes[i, j] = bestCode;
+                span[(i * l + j) * Codes + bestCode] = one;
+            }
+        _lastQuantizedCodes = stepCodes;
     }
 }
 

@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -75,14 +76,10 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
     /// <param name="epsilon">Small value to clip probabilities and avoid log(0). Default: 1e-15.</param>
     public LogLossMetric(double epsilon = 1e-15)
     {
-        _epsilon = epsilon;
-    }
+        if (double.IsNaN(epsilon) || double.IsInfinity(epsilon) || epsilon <= 0 || epsilon > 0.5)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be finite and in (0, 0.5].");
 
-    private static double Clamp(double value, double min, double max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
+        _epsilon = epsilon;
     }
 
     /// <inheritdoc/>
@@ -118,38 +115,53 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
 
     private T ComputeBinaryLogLoss(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals)
     {
-        int n = probabilities.Length;
-        double loss = 0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var probs = EvaluationTensorOps<T>.ToTensor(probabilities).Cast<double>();
+        var y = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
 
-        for (int i = 0; i < n; i++)
+        // A NaN probability or label makes the loss NaN (Math.Log and the clip propagate it).
+        if (EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(probs)) > 0
+            || EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(y)) > 0)
         {
-            double p = Clamp(NumOps.ToDouble(probabilities[i]), _epsilon, 1 - _epsilon);
-            double y = NumOps.ToDouble(actuals[i]);
-
-            // Log loss = -[y*log(p) + (1-y)*log(1-p)]
-            loss -= y * Math.Log(p) + (1 - y) * Math.Log(1 - p);
+            return NumOps.FromDouble(double.NaN);
         }
 
-        return NumOps.FromDouble(loss / n);
+        // Log loss = -[y*log(p) + (1-y)*log(1-p)] with p clipped to [eps, 1 - eps]. 1 - p is floored at eps
+        // as well: in a type narrower than double, 1 - eps rounds to 1 and 1 - p would reach 0.
+        double epsilon = _epsilon;
+        var p = engine.TensorClamp(probs, epsilon, 1 - _epsilon);
+        var one = engine.TensorOnesLike(p);
+        var logP = engine.TensorLog(p);
+        var logOneMinusP = engine.TensorLog(engine.TensorMax(engine.TensorSubtract(one, p), epsilon));
+        var perSample = engine.TensorAdd(
+            engine.TensorMultiply(y, logP),
+            engine.TensorMultiply(engine.TensorSubtract(one, y), logOneMinusP));
+
+        return NumOps.FromDouble(-engine.TensorMean(perSample));
     }
 
     private T ComputeMultiClassLogLoss(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses)
     {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
         int numSamples = actuals.Length;
-        double loss = 0;
+        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probabilities).Cast<double>(), new[] { numSamples, numClasses });
 
-        for (int i = 0; i < numSamples; i++)
+        // The probability of each sample's rounded true class; a sample whose class is out of range adds nothing.
+        var oneHot = EvaluationTensorOps<T>.RoundedOneHot(EvaluationTensorOps<T>.ToTensor(actuals), numClasses).Cast<double>();
+        var trueClassProb = engine.ReduceSum(engine.TensorWhere(oneHot, probMatrix, engine.TensorZerosLike(probMatrix)), new[] { 1 }, false);
+        var valid = engine.ReduceSum(oneHot, new[] { 1 }, false);
+
+        if (EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(trueClassProb)) > 0)
         {
-            int trueClass = (int)Math.Round(NumOps.ToDouble(actuals[i]));
-
-            if (trueClass >= 0 && trueClass < numClasses)
-            {
-                double p = Clamp(NumOps.ToDouble(probabilities[i * numClasses + trueClass]), _epsilon, 1 - _epsilon);
-                loss -= Math.Log(p);
-            }
+            return NumOps.FromDouble(double.NaN);
         }
 
-        return NumOps.FromDouble(loss / numSamples);
+        var p = engine.TensorClamp(trueClassProb, _epsilon, 1 - _epsilon);
+        var loss = engine.TensorSum(engine.TensorMultiply(valid, engine.TensorLog(p)));
+
+        return NumOps.FromDouble(-loss / numSamples);
     }
 
     /// <inheritdoc/>
@@ -191,7 +203,7 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var bootstrapValues = new double[bootstrapSamples];
+        var bootstrapValues = new List<T>(bootstrapSamples);
         var probArray = probabilities.ToArray();
         var actualArray = actuals.ToArray();
 
@@ -213,10 +225,8 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
                 }
             }
 
-            bootstrapValues[b] = NumOps.ToDouble(Compute(sampledProb, sampledActual, numClasses));
+            bootstrapValues.Add(Compute(sampledProb, sampledActual, numClasses));
         }
-
-        Array.Sort(bootstrapValues);
 
         double alpha = 1 - confidenceLevel;
         int lowerIdx = (int)Math.Floor(alpha / 2 * bootstrapSamples);
@@ -225,6 +235,6 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
         lowerIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, lowerIdx));
         upperIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, upperIdx));
 
-        return (NumOps.FromDouble(bootstrapValues[lowerIdx]), NumOps.FromDouble(bootstrapValues[upperIdx]));
+        return EvaluationTensorOps<T>.OrderStatistics(bootstrapValues, lowerIdx, upperIdx);
     }
 }

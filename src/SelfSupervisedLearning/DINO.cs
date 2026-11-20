@@ -49,10 +49,6 @@ public class DINO<T> : TeacherStudentSSL<T>
     private readonly DINOLoss<T> _loss;
     private readonly int _outputDim;
 
-    // The step's teacher outputs; the center advances once from them after the optimizer has stepped.
-    [Scratch]
-    private Tensor<T>? _pendingTeacherOutputs;
-
     /// <inheritdoc />
     /// <remarks>
     /// Caron et al. 2021, Alg. 1 with multi-crop (Sec. 3.1): the student's distribution for every crop is matched to the
@@ -66,7 +62,6 @@ public class DINO<T> : TeacherStudentSSL<T>
         var s2 = ForwardStudent(view2);
         var t1 = ForwardTeacher(view1);
         var t2 = ForwardTeacher(view2);
-        _pendingTeacherOutputs = Engine.Concat(new[] { t1, t2 }, 0);
         var loss = Engine.TensorAdd(
             _loss.ComputeDifferentiableLoss(s1, t2, updateCenter: false),
             _loss.ComputeDifferentiableLoss(s2, t1, updateCenter: false));
@@ -86,10 +81,16 @@ public class DINO<T> : TeacherStudentSSL<T>
     protected override void AfterOptimizerStep()
     {
         base.AfterOptimizerStep();
-        if (_pendingTeacherOutputs is { } teacherOutputs)
+        if (_lastStepView1 is { } v1 && _lastStepView2 is { } v2)
         {
-            _loss.UpdateCenter(teacherOutputs);
-            _pendingTeacherOutputs = null;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var t1 = ForwardTeacher(v1);
+                var t2 = ForwardTeacher(v2);
+                _loss.UpdateCenter(Engine.Concat(new[] { t1, t2 }, 0));
+            }
+            _lastStepView1 = null;
+            _lastStepView2 = null;
         }
     }
 

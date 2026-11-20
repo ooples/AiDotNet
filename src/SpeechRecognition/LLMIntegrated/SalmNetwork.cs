@@ -13,8 +13,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Conformer audio encoder, the modality adapter (Conformer layers with their own 4x subsampling), the projection to the
 /// LLM's width and the Megatron GPT decoder that reads the speech ahead of the text prompt.
 /// </summary>
-internal sealed class SalmNetwork<T>
+internal sealed class SalmNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     // Megatron GPT-2B-001's SentencePiece BPE model (256,000 pieces).
     private static readonly Lazy<SentencePieceModel> MegatronText = new(LoadTokenizer);
@@ -78,6 +82,13 @@ internal sealed class SalmNetwork<T>
     public Tensor<T> Speech(IReadOnlyList<double> waveform, bool training)
     {
         var encoded = Encoder.Encode(Encoder.Features(waveform), training);
+        return Projection.Forward(Adapter.Encode(encoded, training));
+    }
+
+    /// <summary>The speech prompt given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
         return Projection.Forward(Adapter.Encode(encoded, training));
     }
 

@@ -244,6 +244,17 @@ const base = import.meta.env.BASE_URL;
       deleteConfirm.textContent = deletePending ? 'Deleting…' : 'Delete account';
     };
     const closeDelete = () => { if (deleteModal.open) deleteModal.close(); };
+    deleteModal.addEventListener('keydown', (event) => {
+      if (event.key !== 'Tab') return;
+      const controls = [...deleteModal.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]')]
+        .filter((control) => control.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first?.focus();
+      }
+    });
     // close() and Escape both end here: reset the form and give focus back to the opener.
     deleteModal.addEventListener('close', () => {
       deleteGeneration++;
@@ -265,7 +276,7 @@ const base = import.meta.env.BASE_URL;
       deletePending = true;
       syncConfirm();
       deleteError.classList.add('hidden');
-      const { error } = await supabase.functions.invoke('delete-account', { method: 'POST', body: { confirm: 'DELETE' } });
+      const { error } = await supabase.functions.invoke(import.meta.env.PUBLIC_DELETE_ACCOUNT_FUNCTION || 'delete-account', { method: 'POST', body: { confirm: 'DELETE' } });
       if (error) {
         // The dialog was closed (and maybe reopened) meanwhile: this answer belongs to a dialog that is gone.
         if (generation !== deleteGeneration) return;

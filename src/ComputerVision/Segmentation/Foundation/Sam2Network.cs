@@ -378,6 +378,8 @@ internal sealed partial class Sam2Network<T>
     public (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeFeatures(Tensor<T> images)
     {
         var c = Configuration;
+        if (images.Rank != 4 || images.Shape[1] != c.Channels)
+            throw new ArgumentException($"Expected normalized images [B, {c.Channels}, H, W], got [{string.Join(", ", images.Shape.ToArray())}].", nameof(images));
         int b = images.Shape[0];
         if (c.PlainVit) return (EncodeVit(images), null, null);
         var patches = Convolve(PatchProjection, images, c.PatchKernel, c.PatchStride, c.PatchPadding);       // [B, C, H, W]
@@ -543,8 +545,8 @@ internal sealed partial class Sam2Network<T>
         var shape = new int[branch.Rank];
         shape[0] = b;
         for (int i = 1; i < shape.Length; i++) shape[i] = 1;
-        var keep = new Tensor<T>(shape);
-        for (int i = 0; i < b; i++) keep[i] = TrainingRandom.NextDouble() < drop ? NumOps.Zero : NumOps.FromDouble(1.0 / (1.0 - drop));
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        var keep = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(shape, TrainingRandom, drop);
         return _engine.TensorMultiply(branch, _engine.TensorBroadcastTo(keep, branch.Shape.ToArray()));
     }
 

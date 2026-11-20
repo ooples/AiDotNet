@@ -1,0 +1,6 @@
+# diffusers_diffusion_reference.py only, in its own environment: the scheduler and guidance references were
+# generated with diffusers 0.35.0, the first release with diffusers.guiders (normalized_guidance). The shared
+# requirements.txt pin serves CosyVoice, which needs APIs later releases removed.
+torch==2.14.1+cpu
+numpy==2.5.3
+diffusers==0.35.0

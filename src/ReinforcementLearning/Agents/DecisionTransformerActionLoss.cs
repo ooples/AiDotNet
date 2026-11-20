@@ -89,13 +89,9 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
         var gatheredActual = GatherRows(actual);
         if (_continuous) return _continuousLoss.CalculateLoss(gatheredPredicted, gatheredActual);
 
-        T total = NumOps.Zero;
-        for (int i = 0; i < _actionRows.Length; i++)
-        {
-            var logProbabilities = LogSoftmax(gatheredPredicted, i * _actionSize);
-            for (int a = 0; a < _actionSize; a++)
-                total = NumOps.Add(total, NumOps.Multiply(gatheredActual[i * _actionSize + a], logProbabilities[a]));
-        }
+        // -mean_i sum_a y_ia log softmax(z_i)_a
+        var logProbabilities = LogSoftmaxRows(gatheredPredicted);
+        T total = Engine.TensorSum(Engine.TensorMultiply(logProbabilities, LabelledRows(gatheredActual)));
 
         return NumOps.Negate(NumOps.Divide(total, NumOps.FromDouble(_actionRows.Length)));
     }
@@ -113,40 +109,30 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
         var actualFlat = actual.ToVector();
         var gatheredPredicted = GatherRows(predictedFlat);
         var gatheredActual = GatherRows(actualFlat);
-        var gradient = new T[predicted.Length];
         T loss;
+        Tensor<T> labelledGradient;
 
         if (_continuous)
         {
             var shape = new[] { _actionRows.Length, _actionSize };
             var (innerLoss, innerGradient) = _continuousLoss.CalculateLossAndGradientGpu(
-                new Tensor<T>(gatheredPredicted.ToArray(), shape),
-                new Tensor<T>(gatheredActual.ToArray(), shape));
+                LabelledRows(gatheredPredicted), LabelledRows(gatheredActual));
             loss = innerLoss;
-            var innerFlat = innerGradient.ToVector();
-            for (int i = 0; i < _actionRows.Length; i++)
-                for (int a = 0; a < _actionSize; a++)
-                    gradient[_actionRows[i] * _actionSize + a] = NumOps.Add(
-                        gradient[_actionRows[i] * _actionSize + a], innerFlat[i * _actionSize + a]);
+            labelledGradient = Engine.Reshape(innerGradient, shape);
         }
         else
         {
             // d(mean cross-entropy)/dz = (softmax(z) - y) / N for one-hot y.
             loss = CalculateLoss(predictedFlat, actualFlat);
-            T count = NumOps.FromDouble(_actionRows.Length);
-            for (int i = 0; i < _actionRows.Length; i++)
-            {
-                var probabilities = Softmax(gatheredPredicted, i * _actionSize);
-                for (int a = 0; a < _actionSize; a++)
-                {
-                    int flat = _actionRows[i] * _actionSize + a;
-                    gradient[flat] = NumOps.Add(gradient[flat], NumOps.Divide(
-                        NumOps.Subtract(probabilities[a], gatheredActual[i * _actionSize + a]), count));
-                }
-            }
+            var probabilities = Engine.TensorExp(LogSoftmaxRows(gatheredPredicted));
+            labelledGradient = Engine.TensorDivideScalar(
+                Engine.TensorSubtract(probabilities, LabelledRows(gatheredActual)), NumOps.FromDouble(_actionRows.Length));
         }
 
-        return (loss, new Tensor<T>(gradient, predicted.Shape.ToArray()));
+        // Each labelled row's gradient lands back on its token row (repeated rows accumulate); the rest stay zero.
+        int rows = predicted.Length / _actionSize;
+        var gradient = Engine.TensorScatterAdd(new Tensor<T>([rows, _actionSize]), ActionRowIndices(), labelledGradient, 0);
+        return (loss, Engine.Reshape(gradient, predicted.Shape.ToArray()));
     }
 
     /// <summary>Number of token rows in a flattened <c>[batch, tokens, actionSize]</c> buffer, validating the labelled rows.</summary>
@@ -169,34 +155,19 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
     /// <summary>Copies the labelled rows of a flattened <c>[rows, actionSize]</c> buffer into a compact vector.</summary>
     private Vector<T> GatherRows(Vector<T> flat)
     {
-        var gathered = new Vector<T>(_actionRows.Length * _actionSize);
-        for (int i = 0; i < _actionRows.Length; i++)
-            for (int a = 0; a < _actionSize; a++)
-                gathered[i * _actionSize + a] = flat[_actionRows[i] * _actionSize + a];
-        return gathered;
+        var table = Engine.Reshape(flat.AsTensor(), [flat.Length / _actionSize, _actionSize]);
+        return Engine.TensorGather(table, ActionRowIndices(), 0).ToVector();
     }
 
-    /// <summary>The softmax of one <c>actionSize</c>-wide row starting at <paramref name="offset"/>, max-shifted for stability.</summary>
-    private T[] Softmax(Vector<T> logits, int offset)
-    {
-        var result = LogSoftmax(logits, offset);
-        for (int a = 0; a < _actionSize; a++) result[a] = NumOps.Exp(result[a]);
-        return result;
-    }
+    /// <summary>The labelled rows as a [labelled, action] tensor.</summary>
+    private Tensor<T> LabelledRows(Vector<T> gathered)
+        => Engine.Reshape(gathered.AsTensor(), [_actionRows.Length, _actionSize]);
 
-    /// <summary>log softmax of one <c>actionSize</c>-wide row: z_a - max - log sum_b exp(z_b - max).</summary>
-    private T[] LogSoftmax(Vector<T> logits, int offset)
-    {
-        T max = logits[offset];
-        for (int a = 1; a < _actionSize; a++)
-            if (NumOps.GreaterThan(logits[offset + a], max)) max = logits[offset + a];
+    /// <summary>log softmax over each labelled row (z - logsumexp z).</summary>
+    private Tensor<T> LogSoftmaxRows(Vector<T> gathered)
+        => Engine.TensorLogSoftmax(LabelledRows(gathered), axis: -1);
 
-        T sum = NumOps.Zero;
-        for (int a = 0; a < _actionSize; a++) sum = NumOps.Add(sum, NumOps.Exp(NumOps.Subtract(logits[offset + a], max)));
-        T logNormalizer = NumOps.Add(max, NumOps.Log(sum));
-
-        var result = new T[_actionSize];
-        for (int a = 0; a < _actionSize; a++) result[a] = NumOps.Subtract(logits[offset + a], logNormalizer);
-        return result;
-    }
+    /// <summary>The labelled token rows as a gather/scatter index tensor.</summary>
+    private Tensor<int> ActionRowIndices()
+        => new Tensor<int>((int[])_actionRows.Clone(), [_actionRows.Length]);
 }

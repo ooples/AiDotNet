@@ -84,20 +84,29 @@ public sealed class HarRvModel<T> : RegressionBase<T>
 
         int first = MonthlyWindow - 1;
         int rows = Math.Max(0, realizedVariance.Count - 1 - first);
-        var x = new Matrix<T>(rows, 3);
-        var y = new Vector<T>(rows);
-
-        for (int r = 0; r < rows; r++)
+        if (rows == 0)
         {
-            int t = first + r;
-            var feat = HarRow(realizedVariance, t);
-            x[r, 0] = feat[0];
-            x[r, 1] = feat[1];
-            x[r, 2] = feat[2];
-            y[r] = realizedVariance[t + 1];
+            return (new Matrix<T>(0, 3), new Vector<T>(0));
         }
 
-        return (x, y);
+        // window[r, k] = RV_(t - 21 + k) for t = first + r: the trailing month ending at t.
+        var engine = AiDotNetEngine.Current;
+        var rv = new Tensor<T>(realizedVariance.ToArray(), new[] { realizedVariance.Count });
+        var lag = Enumerable.Range(0, rows * MonthlyWindow)
+            .Select(k => (k / MonthlyWindow) + (k % MonthlyWindow))
+            .ToArray();
+        var window = engine.Reshape(engine.TensorTake(rv, new Tensor<int>(lag, new[] { lag.Length })),
+            new[] { rows, MonthlyWindow });
+
+        var daily = engine.TensorSlice(window, new[] { 0, MonthlyWindow - 1 }, new[] { rows, 1 });
+        var weekly = engine.ReduceMean(
+            engine.TensorSlice(window, new[] { 0, MonthlyWindow - WeeklyWindow }, new[] { rows, WeeklyWindow }),
+            new[] { 1 }, keepDims: true);
+        var monthly = engine.ReduceMean(window, new[] { 1 }, keepDims: true);
+        var x = engine.TensorConcatenate(new[] { daily, weekly, monthly }, 1);
+        var y = engine.TensorSlice(rv, new[] { first + 1 }, new[] { rows });
+
+        return (x.ToMatrix(), y.ToVector());
     }
 
     /// <summary>Fits directly on a realized-variance series (builds the HAR design, then OLS).</summary>
@@ -115,14 +124,23 @@ public sealed class HarRvModel<T> : RegressionBase<T>
             return NumOps.Zero;
         }
 
-        var row = HarRow(realizedVariance, realizedVariance.Count - 1);
-        T rv = Options.UseIntercept ? Intercept : NumOps.Zero;
-        for (int i = 0; i < 3; i++)
+        // [daily, weekly, monthly] at the last point; short histories average what there is.
+        var engine = AiDotNetEngine.Current;
+        int n = realizedVariance.Count;
+        var rv = new Tensor<T>(realizedVariance.ToArray(), new[] { n });
+        int week = Math.Min(WeeklyWindow, n);
+        int month = Math.Min(MonthlyWindow, n);
+        var row = new Tensor<T>(new[]
         {
-            rv = NumOps.Add(rv, NumOps.Multiply(Coefficients[i], row[i]));
-        }
+            rv[n - 1],
+            engine.TensorMean(engine.TensorSlice(rv, new[] { n - week }, new[] { week })),
+            engine.TensorMean(engine.TensorSlice(rv, new[] { n - month }, new[] { month })),
+        }, new[] { 3 });
+        var coefficients = engine.TensorSlice(Tensor<T>.FromVector(Coefficients), new[] { 0 }, new[] { 3 });
 
-        return NumOps.GreaterThan(rv, NumOps.Zero) ? rv : NumOps.Zero; // variance can't be negative
+        T rvNext = NumOps.Add(Options.UseIntercept ? Intercept : NumOps.Zero,
+            engine.TensorSum(engine.TensorMultiply(coefficients, row)));
+        return NumOps.GreaterThan(rvNext, NumOps.Zero) ? rvNext : NumOps.Zero; // variance can't be negative
     }
 
     /// <summary>Forecasts next-period ANNUALIZED realized vol = √(variance × periodsPerYear).</summary>
@@ -131,58 +149,29 @@ public sealed class HarRvModel<T> : RegressionBase<T>
 
     /// <summary>
     /// Convenience: fit + forecast annualized vol straight from a per-period RETURN series, using squared
-    /// returns as the realized-variance proxy (RV_t = r_t²). Returns the forecast as a double for the
-    /// options vol-edge signal. Falls back to the sample vol when there is too little history to fit HAR.
+    /// returns as the realized-variance proxy (RV_t = r_t²). Falls back to the sample vol when there is too
+    /// little history to fit HAR.
     /// </summary>
-    public static double ForecastVolFromReturns(IReadOnlyList<double> returns, double periodsPerYear = 252)
+    public static T ForecastVolFromReturns(IReadOnlyList<T> returns, double periodsPerYear = 252)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         if (returns is null || returns.Count == 0)
         {
-            return 0;
+            return ops.Zero;
         }
 
-        var ops = MathHelper.GetNumericOperations<T>();
-        var rv = new T[returns.Count];
-        for (int i = 0; i < returns.Count; i++)
-        {
-            rv[i] = ops.FromDouble(returns[i] * returns[i]);
-        }
+        var engine = AiDotNetEngine.Current;
+        var rv = engine.TensorSquare(new Tensor<T>(returns.ToArray(), new[] { returns.Count }));
 
         // Too little history to populate the monthly window → sample-variance persistence fallback.
         if (returns.Count <= MonthlyWindow + 2)
         {
-            double mean = 0;
-            for (int i = 0; i < returns.Count; i++)
-            {
-                mean += returns[i] * returns[i];
-            }
-
-            mean /= returns.Count;
-            return Math.Sqrt(mean * periodsPerYear);
+            return ops.Sqrt(ops.Multiply(engine.TensorMean(rv), ops.FromDouble(periodsPerYear)));
         }
 
         var model = new HarRvModel<T>(new RegressionOptions<T> { UseIntercept = true });
-        model.FitRealizedVariance(rv);
-        return Convert.ToDouble(model.ForecastAnnualizedVol(rv, periodsPerYear));
-    }
-
-    /// <summary>The HAR feature row at time <paramref name="t"/>: [daily RV, weekly avg, monthly avg].</summary>
-    private T[] HarRow(IReadOnlyList<T> rv, int t) =>
-    [
-        rv[t],
-        TrailingMean(rv, t, WeeklyWindow),
-        TrailingMean(rv, t, MonthlyWindow),
-    ];
-
-    private T TrailingMean(IReadOnlyList<T> rv, int t, int window)
-    {
-        int lo = Math.Max(0, t - window + 1);
-        T sum = NumOps.Zero;
-        for (int i = lo; i <= t; i++)
-        {
-            sum = NumOps.Add(sum, rv[i]);
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(t - lo + 1));
+        var series = rv.ToArray();
+        model.FitRealizedVariance(series);
+        return model.ForecastAnnualizedVol(series, periodsPerYear);
     }
 }

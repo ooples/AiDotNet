@@ -1,4 +1,4 @@
-name: Website E2E (production)
+name: Website E2E
 
 # The Playwright suite against https://www.aidotnet.dev, shared by the post-deploy smoke run
 # (deploy-website.yml) and the nightly health check (website-health.yml). The auth-backed
@@ -7,26 +7,116 @@ name: Website E2E (production)
 
 on:
   workflow_call:
+    inputs:
+      expected_preview_commit:
+        type: string
+        default: ''
+      expected_preview_run:
+        type: string
+        default: ''
+      preview:
+        type: boolean
+        default: false
+      part:
+        type: string
+        default: all
+      preview_pipeline:
+        type: boolean
+        default: false
+      configure_preview_auth:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      expected_preview_commit:
+        description: 'Expected preview build commit (defaults to this ref)'
+        type: string
+        default: ''
+      expected_preview_run:
+        description: 'Expected preview deployment workflow run (optional)'
+        type: string
+        default: ''
+      preview:
+        description: "Use the existing preview environment"
+        type: boolean
+        default: true
+      part:
+        description: 'Preview checks to run'
+        type: choice
+        options: [suite, all, journeys, billing, checkout, anon, free, pro-stripe, pro-granted, admin, auth-config]
+        default: suite
+      repair_email:
+        description: 'Verify the existing repository mail key and synchronize the function mail secret'
+        type: boolean
+        default: false
+      configure_preview_auth:
+        description: 'Add the existing preview host to the Supabase Auth redirect allow list'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# The preview build already owns the alias lock while calling this workflow.
+# Manual preview runs take the same lock so a push cannot replace their assets.
+concurrency:
+  group: ${{ inputs.preview && !inputs.preview_pipeline && 'website-preview-verification' || format('website-e2e-run-{0}', github.run_id) }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
-  e2e:
-    name: Playwright against production (${{ matrix.part }})
+  validate-inputs:
     runs-on: ubuntu-latest
+    steps:
+      - name: Validate mail repair scope
+        env:
+          INVALID_MAIL_REPAIR: ${{ inputs.repair_email && (!inputs.preview || (inputs.part != 'suite' && inputs.part != 'all')) }}
+          PART: ${{ inputs.part }}
+        run: |
+          case "$PART" in
+            suite|all|journeys|billing|checkout|anon|free|pro-stripe|pro-granted|admin|auth-config) ;;
+            *) echo '::error::Unsupported verification part'; exit 1 ;;
+          esac
+          if [ "$INVALID_MAIL_REPAIR" = true ]; then
+            echo '::error::Mail repair requires preview=true and part=suite or all.'
+            exit 1
+          fi
+  preview-auth:
+    needs: validate-inputs
+    if: ${{ inputs.preview && (inputs.configure_preview_auth || inputs.part == 'auth-config') }}
+    environment: Preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+      - name: Configure the existing preview Auth redirects
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node website/scripts/configure-preview-auth.mjs
+
+  e2e:
+    needs: [preview-auth, validate-inputs]
+    if: ${{ !cancelled() && needs.validate-inputs.result == 'success' && inputs.part != 'auth-config' && (needs.preview-auth.result == 'success' || needs.preview-auth.result == 'skipped') }}
+    name: Playwright (${{ matrix.part }})
+    environment: ${{ inputs.preview && 'Preview' || 'Production' }}
+    # Playwright 1.58.2 supports Ubuntu 24.04, not the moving ubuntu-latest image.
+    runs-on: ubuntu-24.04
     # One job runs the suite; the full-site crawl runs as one job per kind of visitor, in parallel.
     # Run back to back on one worker, with failures retried, they took hours.
     strategy:
       fail-fast: false
       matrix:
-        part: [suite, anon, free, pro-stripe, pro-granted, admin]
+        part: ${{ fromJSON(inputs.part != 'all' && format('["{0}"]', inputs.part) || '["suite","anon","free","pro-stripe","pro-granted","admin"]') }}
     timeout-minutes: 60
     # The license-lifecycle spec writes to production; never run two suites at once. Each crawl
     # makes its own throwaway users, so only the same part of two runs is serialized.
     concurrency:
       group: website-e2e-production-${{ matrix.part }}
       cancel-in-progress: false
+      queue: max
     defaults:
       run:
         working-directory: website
@@ -87,33 +177,86 @@ jobs:
           echo "::add-mask::$key"
           echo "SUPABASE_SERVICE_ROLE_KEY=$key" >> "$GITHUB_ENV"
 
+      - name: Verify and synchronize the existing mail key
+        id: mail
+        continue-on-error: true
+        if: ${{ inputs.preview && inputs.repair_email && matrix.part == 'suite' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          : "${RESEND_API_KEY:?Missing RESEND_API_KEY}"
+          trap 'rm -f "$RUNNER_TEMP/mail-check.json" "$RUNNER_TEMP/function-mail.env"' EXIT
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/mail-check.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $RESEND_API_KEY" -H 'Content-Type: application/json' \
+            --data '{"from":"AiDotNet <noreply@aidotnet.dev>","to":["delivered@resend.dev"],"subject":"AiDotNet automated delivery check","html":"Automated test inbox verification."}' \
+            https://api.resend.com/emails)
+          [ "$code" = 200 ] || [ "$code" = 201 ] || { echo "::error::Repository mail credential failed verification: HTTP $code"; exit 1; }
+          printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/function-mail.env"
+          supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/function-mail.env"
+
       - name: Run Playwright E2E smoke tests
         # Nothing is retried. A crawl re-run reaches the same broken link again, and a suite test that
         # passes only on a retry is a flaky check that should show red, not spend the job's budget.
         run: |
+          config=playwright.config.ts
+          if [ "$PREVIEW_RUN" = true ]; then config=playwright.deployed.config.ts; fi
           if [ "$PART" = suite ]; then
-            npx playwright test --grep-invert "every link and control works for" --retries=0
+            npx playwright test --config "$config" --grep-invert "every link and control works for" --retries=0
+          elif [ "$PART" = journeys ]; then
+            npx playwright test --config "$config" --project=journeys --grep-invert "every link and control works for" --retries=0
+          elif [ "$PART" = billing ]; then
+            npx playwright test --config "$config" --project=journeys tests/e2e/journeys/account-billing.spec.ts --retries=0
+          elif [ "$PART" = checkout ]; then
+            npx playwright test --config "$config" --project=journeys tests/e2e/journeys/checkout-claim.spec.ts --retries=0
           else
-            npx playwright test --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
+            npx playwright test --config "$config" --project=journeys tests/e2e/journeys/every-control.spec.ts --grep "every link and control works for: $PART\$" --retries=0
           fi
         env:
           PART: ${{ matrix.part }}
-          PLAYWRIGHT_BASE_URL: https://www.aidotnet.dev
+          PREVIEW_RUN: ${{ inputs.preview }}
+          EXPECTED_PREVIEW_COMMIT: ${{ inputs.expected_preview_commit || github.sha }}
+          EXPECTED_PREVIEW_RUN: ${{ inputs.expected_preview_run }}
+          PLAYWRIGHT_BASE_URL: ${{ inputs.preview && 'https://test.aidotnet.dev' || 'https://www.aidotnet.dev' }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
           PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
           PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
           SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_WEBHOOK_FUNCTION: ${{ inputs.preview && 'stripe-webhook-preview' || 'stripe-webhook' }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           CI: '1'
+          AIDOTNET_AUTH_RUN_DIR: ${{ runner.temp }}/aidotnet-auth-${{ github.run_id }}-${{ matrix.part }}
+
+      - name: Sanitize credential-bearing report diagnostics
+        id: report_safety
+        if: always()
+        run: python3 scripts/sanitize-playwright-report.py "$REPORT_DIRECTORY"
+        env:
+          REPORT_DIRECTORY: ${{ inputs.preview && 'playwright-report/deployed' || 'playwright-report' }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
+          PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+          AIDOTNET_AUTH_RUN_DIR: ${{ runner.temp }}/aidotnet-auth-${{ github.run_id }}-${{ matrix.part }}
+
+      - name: Keep failed environment preparation visible
+        if: ${{ always() && steps.mail.outcome == 'failure' }}
+        run: |
+          echo "::error::The preview journeys ran, but the requested mail preparation failed. See that step for its exact permission or configuration error."
+          exit 1
 
       - name: Upload Playwright report
         # Always upload (success or fail) — on failure the HTML report +
         # trace viewer is the fastest path to diagnosing a broken deploy;
         # on success the artifact proves the run happened with the
         # expected test counts.
-        if: always()
+        if: ${{ always() && steps.report_safety.outcome == 'success' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report-${{ matrix.part }}

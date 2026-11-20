@@ -262,13 +262,15 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
 
     private Tensor<T> Gaussian(int[] shape, Random random)
     {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
+        int length = 1;
+        foreach (int d in shape) length *= d;
+        var draws = new T[length];
+        for (int i = 0; i < draws.Length; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+            draws[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
         }
-        return t;
+        return new Tensor<T>(draws, shape);
     }
 
     // ---------------------------------------------------------------- training
@@ -339,7 +341,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
             var (alpha2, sigma2) = Schedule(t - stride);
             using (new NoGradScope<T>())
             {
-                var condition = new Tensor<T>(expanded._shape, expanded.ToVector());
+                var condition = DetachTensor(expanded);
                 var f = _teacher!.Predict(xt, t, condition);
                 var x1 = DdimStep(f, xt, alpha, sigma, alpha1, sigma1);
                 var f1 = _teacher.Predict(x1, t - stride / 2, condition);
@@ -347,7 +349,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
                 double ratio = sigma2 / sigma;
                 var solved = Engine.TensorMultiplyScalar(Engine.TensorSubtract(x2, Engine.TensorMultiplyScalar(xt, NumOps.FromDouble(ratio))),
                     NumOps.FromDouble(1.0 / (alpha2 - ratio * alpha)));
-                target = new Tensor<T>(solved._shape, solved.ToVector());
+                target = DetachTensor(solved);
             }
         }
 

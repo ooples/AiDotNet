@@ -365,6 +365,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             InitialLearningRate = _options.LearningRate,
             Beta1 = _options.Beta1,
             Beta2 = _options.Beta2,
+            UseAdaptiveLearningRate = false,
         };
 
     /// <summary>
@@ -410,7 +411,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
 
-        T totalCriticLoss = NumOps.Zero;
+        var criticStepLosses = new T[_criticIterations];
 
         // Train critic multiple times
         for (int i = 0; i < _criticIterations; i++)
@@ -425,10 +426,11 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             // Train critic and get losses
             var (criticLoss, _) = TrainCriticBatchWithGP(realBatch, fakeImages, batchSize);
 
-            totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
+            criticStepLosses[i] = criticLoss;
         }
 
         // Average critic loss
+        T totalCriticLoss = Engine.Sum(new Vector<T>(criticStepLosses));
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
@@ -509,122 +511,87 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         Tensor<T> fakeImages,
         int batchSize)
     {
+        _ = batchSize;
+        EnsureSubnetworkMaterialized(Critic);
         Critic.SetTrainingMode(true);
-
-        // Preferred fused path: WganGpFusedStep runs the full WGAN-GP critic
-        // objective (Wasserstein + λ·GP with createGraph=true GP) in one
-        // compiled plan. Bypasses the legacy flat-vector round-trip (which
-        // needs to Predict the critic three times per step, extract flat
-        // gradients, combine host-side, then apply). See ooples/AiDotNet#1845.
-        var criticDiscParams = Training.TapeTrainingStep<T>.CollectParameters(Critic.Layers);
-        if (criticDiscParams.Count > 0
-            && TryMapToFusedOptimizerConfig(
-                _criticOptimizer,
-                out var wganCfg))
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(Critic.Layers);
+        if (parameters.Count > 0
+            && Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(_criticOptimizer, out var config))
         {
-            var wganStep = _wganFusedStep ??= new AiDotNet.Training.WganGpFusedStep<T>();
-            Tensor<T> DiscFwd(Tensor<T> inp)
-            {
-                Tensor<T> current = inp;
-                foreach (var layer in Critic.Layers)
-                    current = layer.Forward(current);
-                return current;
-            }
-            Tensor<T> EpsilonSampler(int bs) =>
-                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One, Random.Next());
-            if (wganStep.TryStep(
-                    discParameters: criticDiscParams,
+            var primitive = _wganFusedStep ??= new Training.WganGpFusedStep<T>();
+            if (primitive.TryStep(
+                    discParameters: parameters,
                     realBatch: realImages,
                     fakeBatch: fakeImages,
-                    discForward: DiscFwd,
-                    epsilonSampler: EpsilonSampler,
+                    discForward: Critic.ForwardForTraining,
+                    epsilonSampler: size => Engine.TensorRandomUniformRange<T>(new[] { size, 1 }, NumOps.Zero, NumOps.One, Random.Next()),
                     gradientPenaltyWeight: _gradientPenaltyCoefficient,
-                    optimizerType: wganCfg.Type,
-                    learningRate: wganCfg.LearningRate,
-                    beta1: wganCfg.Beta1,
-                    beta2: wganCfg.Beta2,
-                    epsilon: wganCfg.Epsilon,
-                    weightDecay: wganCfg.WeightDecay,
-                    lrSchedule: wganCfg.Schedule,
-                    extras: wganCfg.Extras,
-                    out T fusedLoss))
+                    optimizerType: config.Type,
+                    learningRate: config.LearningRate,
+                    beta1: config.Beta1,
+                    beta2: config.Beta2,
+                    epsilon: config.Epsilon,
+                    weightDecay: config.WeightDecay,
+                    lrSchedule: config.Schedule,
+                    extras: config.Extras,
+                    out T primitiveLoss))
             {
-                return (fusedLoss, NumOps.Zero);
+                return (primitiveLoss, NumOps.Zero);
             }
         }
 
-        // Eager fallback: optimize the same single differentiable objective as Algorithm 1.
-        // The previous path created real/fake output-gradient tensors but never backpropagated
-        // either one, and returned an all-zero placeholder for the GP parameter gradients. Its
-        // optimizer therefore received an all-zero vector and every critic iteration was a no-op.
-        T gradientPenalty = NumOps.Zero;
-        var trainableCritic = (NeuralNetworkBase<T>)Critic;
-        T criticLoss = trainableCritic.TrainWithCustomLoss(realImages, realScores =>
-        {
-            var fakeScores = Critic.ForwardForTraining(fakeImages);
-            var realAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
-            var fakeAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
-            var wasserstein = Engine.TensorSubtract(
-                Engine.ReduceMean(fakeScores, fakeAxes, keepDims: false),
-                Engine.ReduceMean(realScores, realAxes, keepDims: false));
-
-            // x-hat = epsilon * real + (1 - epsilon) * fake, with one epsilon per sample.
-            var epsilonShape = new int[realImages.Shape.Length];
-            epsilonShape[0] = batchSize;
-            for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
-            var epsilonBase = Engine.TensorRandomUniformRange<T>(epsilonShape, NumOps.Zero, NumOps.One, Random.Next());
-            var tileFactors = new int[realImages.Shape.Length];
-            tileFactors[0] = 1;
-            for (int d = 1; d < tileFactors.Length; d++) tileFactors[d] = realImages.Shape[d];
-            var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
-            var ones = new Tensor<T>(epsilon._shape);
-            Engine.TensorFill(ones, NumOps.One);
-            var interpolated = Engine.TensorAdd(
-                Engine.TensorMultiply(epsilon, realImages),
-                Engine.TensorMultiply(Engine.TensorSubtract(ones, epsilon), fakeImages));
-
-            // createGraph=true is essential: the outer critic tape must differentiate the
-            // input-gradient norm back into the critic weights, just as PyTorch's autograd.grad
-            // and the paper's official TensorFlow implementation do.
-            Tensor<T> inputGradients;
-            // Outside the step arena: the input gradients this inner tape builds outlive it, and an arena may reissue a
-            // step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+), corrupting the penalty's backward.
-            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-            using (var innerTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        int realCount = realImages.Shape[0];
+        var stacked = Engine.TensorConcatenate(new[] { realImages, fakeImages }, axis: 0);
+        double gpLambda = _gradientPenaltyCoefficient;
+        Tensor<T>? tracedBoth = null;
+        var trainableCriticLayers = Critic.Layers.OfType<ITrainableLayer<T>>().ToList();
+        var extraParams = Critic.Layers.Count == trainableCriticLayers.Count ? null : parameters;
+        T criticLoss = Training.TapeTrainingStepper<T>.EagerStep(
+            new Training.FusedTrainingStepRequest<T>
             {
-                var interpolatedScores = Critic.ForwardForTraining(interpolated);
-                var scoreAxes = Enumerable.Range(0, interpolatedScores.Shape.Length).ToArray();
-                var summedScores = Engine.ReduceSum(interpolatedScores, scoreAxes, keepDims: false);
-                var innerGradients = innerTape.ComputeGradients(
-                    summedScores, [interpolated], createGraph: true);
-                inputGradients = innerGradients.TryGetValue(interpolated, out var gradient)
-                    ? gradient
-                    : new Tensor<T>(interpolated._shape);
-            }
-
-            int elementsPerSample = inputGradients.Length / batchSize;
-            var flattenedGradients = Engine.Reshape(inputGradients, [batchSize, elementsPerSample]);
-            var squaredGradients = Engine.TensorMultiply(flattenedGradients, flattenedGradients);
-            var squaredNorm = Engine.ReduceSum(squaredGradients, [1], keepDims: false);
-            var stabilizedSquaredNorm = Engine.TensorAddScalar(squaredNorm, NumOps.FromDouble(1e-12));
-            var gradientNorm = Engine.TensorSqrt(stabilizedSquaredNorm);
-            var normOnes = new Tensor<T>(gradientNorm._shape);
-            Engine.TensorFill(normOnes, NumOps.One);
-            var normDeviation = Engine.TensorSubtract(gradientNorm, normOnes);
-            var perSamplePenalty = Engine.TensorMultiply(normDeviation, normDeviation);
-            var penaltyAxes = Enumerable.Range(0, perSamplePenalty.Shape.Length).ToArray();
-            var penalty = Engine.ReduceMean(perSamplePenalty, penaltyAxes, keepDims: false);
-            gradientPenalty = penalty.Length > 0 ? penalty[0] : NumOps.Zero;
-
-            var weightedPenalty = Engine.TensorMultiplyScalar(
-                penalty, NumOps.FromDouble(_gradientPenaltyCoefficient));
-            var alignedPenalty = weightedPenalty._shape.SequenceEqual(wasserstein._shape)
-                ? weightedPenalty
-                : Engine.Reshape(weightedPenalty, wasserstein._shape);
-            return Engine.TensorAdd(wasserstein, alignedPenalty);
-        }, _criticOptimizer);
-
-        return (criticLoss, gradientPenalty);
+                Layers = trainableCriticLayers,
+                ExtraParameters = extraParams,
+                Input = stacked,
+                Target = new Tensor<T>(new[] { 1 }),
+                Forward = both =>
+                {
+                    tracedBoth = both;
+                    return Critic.ForwardForTraining(both);
+                },
+                ComputeLoss = (scores, _) =>
+                {
+                    var both = tracedBoth ?? stacked;
+                    var beginReal = new int[scores.Rank];
+                    var shapeReal = scores._shape.ToArray();
+                    shapeReal[0] = realCount;
+                    var beginFake = new int[scores.Rank];
+                    beginFake[0] = realCount;
+                    var shapeFake = scores._shape.ToArray();
+                    shapeFake[0] = scores.Shape[0] - realCount;
+                    var realScores = Engine.TensorSlice(scores, beginReal, shapeReal);
+                    var fakeScores = Engine.TensorSlice(scores, beginFake, shapeFake);
+                    var scoreAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+                    var wasserstein = Engine.TensorSubtract(
+                        Engine.ReduceMean(fakeScores, scoreAxes, keepDims: false),
+                        Engine.ReduceMean(realScores, scoreAxes, keepDims: false));
+                    var beginBothFake = new int[both.Rank];
+                    beginBothFake[0] = realCount;
+                    var shapeBothReal = both._shape.ToArray();
+                    shapeBothReal[0] = realCount;
+                    var shapeBothFake = both._shape.ToArray();
+                    shapeBothFake[0] = both.Shape[0] - realCount;
+                    var gp = Training.WassersteinCriticStep<T>.GradientPenalty(
+                        Engine,
+                        Engine.TensorSlice(both, new int[both.Rank], shapeBothReal),
+                        Engine.TensorSlice(both, beginBothFake, shapeBothFake),
+                        Critic.ForwardForTraining,
+                        Random);
+                    return Engine.TensorAdd(wasserstein, Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(gpLambda)));
+                },
+                Optimizer = _criticOptimizer,
+            },
+            Critic);
+        return (criticLoss, NumOps.Zero);
     }
 
     /// <summary>
@@ -835,16 +802,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         Critic.SetTrainingMode(false);
         var criticScores = Critic.Predict(generatedImages);
 
-        var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
-        {
-            scoresList.Add(NumOps.ToDouble(criticScores[i, 0]));
-        }
-
-        metrics["AverageCriticScore"] = scoresList.Average();
-        metrics["MinCriticScore"] = scoresList.Min();
-        metrics["MaxCriticScore"] = scoresList.Max();
-        metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        CriticScoreMetrics.Add(metrics, criticScores, sampleSize);
         metrics["GradientPenaltyCoefficient"] = _gradientPenaltyCoefficient;
 
         if (_generatorLosses.Count > 0)

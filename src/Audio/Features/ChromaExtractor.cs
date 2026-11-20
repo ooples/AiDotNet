@@ -90,9 +90,13 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
         // Features are computed from fresh values (not part of the autodiff graph).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        // Compute STFT magnitude
+        // Compute STFT complex spectrum: [numFrames, numFreqs] or [batch, numFrames, numFreqs]
         var stftResult = _stft.Forward(audio);
+        return ExtractSpectrogramBatch(stftResult, (_, slice) => Extract2D(slice));
+    }
 
+    private Tensor<T> Extract2D(Tensor<Complex<T>> stftResult)
+    {
         // STFT result is Tensor<Complex<T>> with shape [numFrames, numFreqs]
         int numFrames = stftResult.Shape[0];
         int numFreqs = stftResult.Shape[1];

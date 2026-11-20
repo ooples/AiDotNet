@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -247,6 +248,17 @@ public partial class Transfusion<T>
                     _options.DropoutRate
                 )
             );
+            // This factory's real edges fix each normalization width. A speculative model
+            // shape walk deliberately leaves LayerNorm deferred; declare these known widths
+            // without allocating affine parameters so discovery includes them before training.
+            int featureWidth = _options.VisionDim;
+            foreach (var layer in Layers)
+            {
+                if (layer is DenseLayer<T>)
+                    featureWidth = layer.GetOutputLayerShape().RequireConcrete("Declaring Transfusion normalization width")[^1];
+                else if (layer is LayerNormalizationLayer<T> normalization)
+                    normalization.ResolveArchitectureFeatureSizeOnly(featureWidth);
+            }
             ComputeEncoderDecoderBoundary();
         }
     }

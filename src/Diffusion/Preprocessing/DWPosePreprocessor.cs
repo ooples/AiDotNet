@@ -36,30 +36,15 @@ public class DWPosePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 3, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    double center = NumOps.ToDouble(data[b, 0, h, w]);
-                    double dx = Math.Abs(NumOps.ToDouble(data[b, 0, h, w + 1]) - NumOps.ToDouble(data[b, 0, h, w - 1]));
-                    double dy = Math.Abs(NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]));
-                    double edge = Math.Min(1.0, (dx + dy) * 3.0);
-
-                    result[b, 0, h, w] = NumOps.FromDouble(edge);
-                    result[b, 1, h, w] = NumOps.FromDouble(edge * 0.7);
-                    result[b, 2, h, w] = NumOps.FromDouble(edge * 0.3);
-                }
-            }
-        }
-
-        return result;
+        // Edge strength min(1, 3 (|dx| + |dy|)) of channel 0 from central differences, colour-coded (1, 0.7, 0.3)
+        var differences = engine.TensorAbs(PreprocessorFilters.Interior3x3(PreprocessorFilters.Channel(data, 0), PreprocessorFilters.CentralDifferences));
+        var sum = engine.TensorAdd(PreprocessorFilters.Channel(differences, 0), PreprocessorFilters.Channel(differences, 1));
+        var edge = engine.TensorMin(engine.TensorMultiplyScalar(sum, NumOps.FromDouble(3.0)), NumOps.One);
+        return PreprocessorFilters.PadBorder(PreprocessorFilters.ColorChannels(edge, 1.0, 0.7, 0.3));
     }
 }

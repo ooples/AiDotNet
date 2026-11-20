@@ -104,24 +104,14 @@ public class ContextEncoder<T>
         // Final projection
         var output = _outputProjection.Forward(attended);
 
-        // Residual connection
-        for (int i = 0; i < output.Length; i++)
-        {
-            output[i] = NumOps.Add(output[i], queryEmbedding[i]);
-        }
-
-        return output;
+        // Residual connection (a new tensor, so the projection's output is not mutated in place).
+        return AiDotNetEngine.Current.TensorAdd(output, AiDotNetEngine.Current.Reshape(queryEmbedding, output._shape));
     }
 
     private Tensor<T> EmbedLabels(Tensor<T> labels, int batchSize, int numNeighbors)
     {
         int labelDim = labels.Shape[2];
-        var flatLabels = new Tensor<T>([batchSize * numNeighbors, labelDim]);
-
-        for (int i = 0; i < flatLabels.Length; i++)
-        {
-            flatLabels[i] = labels[i];
-        }
+        var flatLabels = AiDotNetEngine.Current.Reshape(labels, new[] { batchSize * numNeighbors, labelDim });
 
         var embedded = _labelEmbedding.Forward(flatLabels);
         return embedded;
@@ -129,102 +119,37 @@ public class ContextEncoder<T>
 
     private Tensor<T> CombineValuesAndLabels(Tensor<T> values, Tensor<T> labelEmbeddings, int batchSize, int numNeighbors)
     {
-        var combined = new Tensor<T>([batchSize, numNeighbors, _embeddingDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNeighbors; n++)
-            {
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int valueIdx = b * numNeighbors * _embeddingDim + n * _embeddingDim + d;
-                    int labelIdx = (b * numNeighbors + n) * _embeddingDim + d;
-                    combined[valueIdx] = NumOps.Add(values[valueIdx], labelEmbeddings[labelIdx]);
-                }
-            }
-        }
-
-        return combined;
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { batchSize, numNeighbors, _embeddingDim };
+        return engine.TensorAdd(engine.Reshape(values, shape), engine.Reshape(labelEmbeddings, shape));
     }
 
     private Tensor<T> FlattenContext(Tensor<T> context, int batchSize, int numNeighbors)
     {
-        var flat = new Tensor<T>([batchSize * numNeighbors, _embeddingDim]);
-        for (int i = 0; i < flat.Length; i++)
-        {
-            flat[i] = context[i];
-        }
-        return flat;
+        return AiDotNetEngine.Current.Reshape(context, new[] { batchSize * numNeighbors, _embeddingDim });
     }
 
     private Tensor<T> ProjectContext(Tensor<T> flatContext, FullyConnectedLayer<T> layer, int batchSize, int numNeighbors)
     {
         var projected = layer.Forward(flatContext);
-        var reshaped = new Tensor<T>([batchSize, numNeighbors, _embeddingDim]);
-        for (int i = 0; i < projected.Length; i++)
-        {
-            reshaped[i] = projected[i];
-        }
-        return reshaped;
+        return AiDotNetEngine.Current.Reshape(projected, new[] { batchSize, numNeighbors, _embeddingDim });
     }
 
     private Tensor<T> CrossAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
         Tensor<T> priorWeights, int batchSize, int numNeighbors)
     {
-        var output = new Tensor<T>([batchSize, _embeddingDim]);
+        var engine = AiDotNetEngine.Current;
         var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+        var contextShape = new[] { batchSize, numNeighbors, _embeddingDim };
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute attention scores
-            var scores = new T[numNeighbors];
-            for (int n = 0; n < numNeighbors; n++)
-            {
-                var dot = NumOps.Zero;
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(
-                        queries[b * _embeddingDim + d],
-                        keys[b * numNeighbors * _embeddingDim + n * _embeddingDim + d]));
-                }
-                scores[n] = NumOps.Multiply(dot, scale);
-            }
+        // scores[b, n] = (q[b] . k[b, n]) * scale, softmax over the neighbours.
+        var query = engine.TensorBroadcastTo(engine.Reshape(queries, new[] { batchSize, 1, _embeddingDim }), contextShape);
+        var dots = engine.ReduceSum(engine.TensorMultiply(query, engine.Reshape(keys, contextShape)), new[] { 2 }, false);
+        var weights = engine.Softmax(engine.TensorMultiplyScalar(dots, scale), 1);
 
-            // Softmax
-            var maxScore = scores[0];
-            for (int n = 1; n < numNeighbors; n++)
-            {
-                if (NumOps.Compare(scores[n], maxScore) > 0)
-                    maxScore = scores[n];
-            }
-
-            var sumExp = NumOps.Zero;
-            for (int n = 0; n < numNeighbors; n++)
-            {
-                scores[n] = NumOps.Exp(NumOps.Subtract(scores[n], maxScore));
-                sumExp = NumOps.Add(sumExp, scores[n]);
-            }
-
-            for (int n = 0; n < numNeighbors; n++)
-            {
-                scores[n] = NumOps.Divide(scores[n], sumExp);
-            }
-
-            // Weighted sum of values
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                var sum = NumOps.Zero;
-                for (int n = 0; n < numNeighbors; n++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(
-                        scores[n],
-                        values[b * numNeighbors * _embeddingDim + n * _embeddingDim + d]));
-                }
-                output[b * _embeddingDim + d] = sum;
-            }
-        }
-
-        return output;
+        // Weighted sum of values: out[b, :] = sum_n weights[b, n] * v[b, n, :]
+        var weightGrid = engine.TensorBroadcastTo(engine.Reshape(weights, new[] { batchSize, numNeighbors, 1 }), contextShape);
+        return engine.ReduceSum(engine.TensorMultiply(weightGrid, engine.Reshape(values, contextShape)), new[] { 1 }, false);
     }
 
     /// <summary>

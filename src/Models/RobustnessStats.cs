@@ -57,9 +57,10 @@ public sealed class RobustnessStats<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This measures how much the input needs to be changed on average
     /// to fool the model. Larger values suggest the model is more robust (harder to fool with
-    /// small changes).</para>
+    /// small changes). It is the mean L2 norm over the successful adversarial examples, in the
+    /// model's numeric type.</para>
     /// </remarks>
-    public double AveragePerturbationSize { get; set; }
+    public T AveragePerturbationSize { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets the certified accuracy at the specified perturbation radius.
@@ -105,9 +106,9 @@ public sealed class RobustnessStats<T>
     public string AttackType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets the norm type used for measuring perturbation size (e.g., "L2", "Linf").
+    /// Gets the norm type used for measuring perturbation size.
     /// </summary>
-    public string NormType { get; set; } = "Linf";
+    public AdversarialNormType NormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
     /// Gets a combined robustness score (0-1) that balances clean and adversarial performance.

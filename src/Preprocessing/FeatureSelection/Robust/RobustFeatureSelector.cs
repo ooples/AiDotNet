@@ -27,13 +27,13 @@ public class RobustFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly double _outlierThreshold;
 
-    private double[]? _robustScores;
+    private Vector<T>? _robustScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? RobustScores => _robustScores;
+    public Vector<T>? RobustScores => _robustScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,80 +69,29 @@ public class RobustFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var yColumn = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+
+        // Non-outlier rows by the target: |y - median| / (MAD + 1e-10) <= threshold
+        var deviation = engine.TensorAbs(engine.TensorSubtract(yColumn, SelectorTensorOps.ColumnMedian(yColumn, keepDims: true)));
+        var mad = engine.TensorAddScalar(SelectorTensorOps.ColumnMedian(deviation, keepDims: true), NumOps.FromDouble(1e-10));
+        var scaled = engine.Reshape(engine.TensorDivide(deviation, mad), new[] { n });
+        var nonOutlierIndices = PreprocessingTensorOps.MaskPositions(
+            engine.TensorLessEqual(scaled, PreprocessingTensorOps.Filled(new[] { n }, NumOps.FromDouble(_outlierThreshold))));
+
+        // Spearman correlation (average ranks) on the non-outlier rows
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (nonOutlierIndices.Length >= 3)
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var rows = new Tensor<int>(nonOutlierIndices, new[] { nonOutlierIndices.Length });
+            var xRanks = SelectorTensorOps.AverageRanks(engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), rows, 0));
+            var yRanks = SelectorTensorOps.AverageRanks(engine.TensorIndexSelect(yColumn, rows, 0));
+            scores = SelectorTensorOps.PearsonWithColumn(xRanks, yRanks);
         }
 
-        // Identify non-outlier indices based on target
-        var nonOutlierIndices = IdentifyNonOutliers(y, n);
-
-        // Compute robust correlation scores
-        _robustScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _robustScores[j] = ComputeRobustCorrelation(X, y, j, nonOutlierIndices, n);
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_robustScores[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _robustScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(scores), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private List<int> IdentifyNonOutliers(double[] values, int n)
-    {
-        var sorted = values.OrderBy(v => v).ToList();
-        double median = sorted[n / 2];
-
-        var absoluteDeviations = values.Select(v => Math.Abs(v - median)).OrderBy(d => d).ToList();
-        double mad = absoluteDeviations[n / 2] + 1e-10;
-
-        return Enumerable.Range(0, n)
-            .Where(i => Math.Abs(values[i] - median) / mad <= _outlierThreshold)
-            .ToList();
-    }
-
-    private double ComputeRobustCorrelation(double[,] X, double[] y, int featureIdx, List<int> indices, int totalN)
-    {
-        int n = indices.Count;
-        if (n < 3) return 0;
-
-        // Use Spearman correlation (rank-based, robust to outliers)
-        var xRanks = new double[n];
-        var yRanks = new double[n];
-
-        var xSorted = indices.OrderBy(i => X[i, featureIdx]).ToList();
-        var ySorted = indices.OrderBy(i => y[i]).ToList();
-
-        for (int i = 0; i < n; i++)
-        {
-            xRanks[indices.IndexOf(xSorted[i])] = i + 1;
-            yRanks[indices.IndexOf(ySorted[i])] = i + 1;
-        }
-
-        // Pearson correlation on ranks
-        double xMean = xRanks.Average();
-        double yMean = yRanks.Average();
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = xRanks[i] - xMean;
-            double yDiff = yRanks[i] - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
     /// <inheritdoc />
@@ -158,15 +107,7 @@ public class RobustFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("RobustFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

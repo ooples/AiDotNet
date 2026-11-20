@@ -358,8 +358,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         int n = _grid * _grid;
         var tokens = Engine.TensorPermute(Engine.Reshape(map, new[] { _visionDim, n }), new[] { 1, 0 });   // [N, C]
 
-        var positions = new Tensor<T>(new[] { _grid });
-        for (int i = 0; i < _grid; i++) positions[i] = NumOps.FromDouble(i);
+        var positions = Engine.TensorArange<T>(0, _grid);
         var columnTable = _columns.Forward(positions);                                                     // [w, C - C/2]
         var rowTable = _rows.Forward(positions);                                                           // [h, C/2]
         var columnOf = new int[n];
@@ -374,9 +373,8 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         tokens = Engine.TensorAdd(tokens, position);
 
         // Cosine temporal embedding of frame 0: sin(0) = 0 on even channels, cos(0) = 1 on odd ones.
-        var temporal = new Tensor<T>(new[] { n, _visionDim });
-        for (int i = 0; i < n; i++)
-            for (int d = 1; d < _visionDim; d += 2) temporal[i, d] = NumOps.One;
+        // One [1, C] row of 0 (even) / 1 (odd) channels, broadcast over the n tokens.
+        var temporal = new Tensor<int>(Enumerable.Range(0, _visionDim).Select(d => d % 2).ToArray(), new[] { 1, _visionDim }).Cast<T>();
         tokens = Engine.TensorAdd(tokens, temporal);
 
         var mean = Engine.ReduceMean(tokens, new[] { 0 }, keepDims: true);                                // [1, C]
@@ -487,7 +485,7 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
         // BartPreTrainedModel._init_weights: N(0, init_std = 0.02); the padding row (id 1) starts at zero.
         var random = LayerInitializationSeedScope.NextRandom();
         _shared = NormalTensor(new[] { vocabSize, dim }, 0.02, random);
-        for (int c = 0; c < dim; c++) _shared[1, c] = NumOps.Zero;
+        Engine.TensorIndexFillInPlace(_shared, 0, new Tensor<int>(new[] { 1 }, new[] { 1 }), NumOps.Zero);
         _encoderPositions = NormalTensor(new[] { maxPositions + PositionOffset, dim }, 0.02, random);
         _decoderPositions = NormalTensor(new[] { maxPositions + PositionOffset, dim }, 0.02, random);
         RegisterTrainableParameter(_shared, PersistentTensorRole.Weights);

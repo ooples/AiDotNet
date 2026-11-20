@@ -13,7 +13,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// <para>
 /// TransE (Bordes et al., 2013) models relations as translations in embedding space.
 /// For a valid triple (h, r, t), the model learns embeddings such that h + r ≈ t.
-/// Training uses margin-based ranking loss: max(0, margin + d_pos - d_neg).
+/// Training uses the margin-based ranking loss max(0, margin + d_pos - d_neg) with d the L2 norm,
+/// relations normalized once at initialization and entities renormalized before every mini-batch.
 /// </para>
 /// <para><b>For Beginners:</b> Imagine entities as points on a map and relations as directions.
 /// "Paris" + "capital_of" should point to "France". If the model learns good vectors,
@@ -28,21 +29,28 @@ public class TransEEmbedding<T> : KGEmbeddingBase<T>
     public override bool IsDistanceBased => true;
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
+        => Engine.Norm(Residual(headIdx, relationIdx, tailIdx));
+
+    /// <summary>
+    /// Relations are normalized once at initialization (Bordes et al. 2013, Algorithm 1, line 2).
+    /// </summary>
+    private protected override void OnInitialize(KGEmbeddingOptions options, Random rng, KnowledgeGraph<T> graph)
     {
-        var h = _entityEmbeddings[headIdx];
-        var r = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        int dim = EmbeddingDimension;
-
-        // L2 distance: ||h + r - t||
-        T sumSq = NumOps.Zero;
-        for (int d = 0; d < dim; d++)
+        foreach (var emb in _relationEmbeddings)
         {
-            T diff = NumOps.Subtract(NumOps.Add(h[d], r[d]), t[d]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+            NormalizeL2(emb);
         }
+    }
 
-        return NumOps.Sqrt(sumSq);
+    /// <summary>
+    /// Entities are renormalized at the start of every mini-batch (Bordes et al. 2013, Algorithm 1, line 5).
+    /// </summary>
+    private protected override void OnBatchStart()
+    {
+        foreach (var emb in _entityEmbeddings)
+        {
+            NormalizeL2(emb);
+        }
     }
 
     private protected override double ComputeLossAndUpdateGradients(
@@ -51,63 +59,26 @@ public class TransEEmbedding<T> : KGEmbeddingBase<T>
         double learningRate, KGEmbeddingOptions options)
     {
         double margin = options.GetEffectiveMargin();
-        int dim = EmbeddingDimension;
 
-        var h = _entityEmbeddings[posHead];
-        var r = _relationEmbeddings[relation];
-        var t = _entityEmbeddings[posTail];
-        var nh = _entityEmbeddings[negHead];
-        var nt = _entityEmbeddings[negTail];
+        // Bordes et al. 2013: loss = [margin + d(h + r, t) - d(h' + r, t')]_+ with d the L2 norm.
+        var posDiff = Residual(posHead, relation, posTail);
+        var negDiff = Residual(negHead, relation, negTail);
+        T posDist = Engine.Norm(posDiff);
+        T negDist = Engine.Norm(negDiff);
 
-        // Compute positive distance: ||h + r - t||²
-        double posDist = 0.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double diff = NumOps.ToDouble(NumOps.Subtract(NumOps.Add(h[d], r[d]), t[d]));
-            posDist += diff * diff;
-        }
-
-        // Compute negative distance: ||nh + r - nt||²
-        double negDist = 0.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double diff = NumOps.ToDouble(NumOps.Subtract(NumOps.Add(nh[d], r[d]), nt[d]));
-            negDist += diff * diff;
-        }
-
-        double loss = Math.Max(0.0, margin + posDist - negDist);
+        double loss = Math.Max(0.0, margin + NumOps.ToDouble(posDist) - NumOps.ToDouble(negDist));
         if (loss <= 0.0) return 0.0;
 
-        // Gradient update: push positive closer, negative farther
-        // Per Bordes et al. 2013: loss = [margin + d(h+r,t) - d(h'+r,t')]_+
-        // Relation r appears in both positive and negative distances,
-        // so its gradient is: 2(h+r-t) - 2(h'+r-t')
+        // d||x||/dx = x / ||x||; every step is formed from the pre-update embeddings.
         T lr = NumOps.FromDouble(learningRate);
-        T two = NumOps.FromDouble(2.0);
+        var posStep = Engine.Multiply(UnitDirection(posDiff, posDist), lr);
+        var negStep = Engine.Multiply(UnitDirection(negDiff, negDist), lr);
 
-        for (int d = 0; d < dim; d++)
-        {
-            // Positive gradient: 2(h + r - t)
-            T posGrad = NumOps.Subtract(NumOps.Add(h[d], r[d]), t[d]);
-            T scaledPosGrad = NumOps.Multiply(two, posGrad);
-
-            // Negative gradient: 2(nh + r - nt)
-            T negGrad = NumOps.Subtract(NumOps.Add(nh[d], r[d]), nt[d]);
-            T scaledNegGrad = NumOps.Multiply(two, negGrad);
-
-            // Update positive triple embeddings (decrease distance)
-            h[d] = NumOps.Subtract(h[d], NumOps.Multiply(lr, scaledPosGrad));
-            t[d] = NumOps.Add(t[d], NumOps.Multiply(lr, scaledPosGrad));
-
-            // Relation gradient accounts for both positive and negative triples:
-            // grad_r = 2(h+r-t) - 2(h'+r-t')
-            T rGrad = NumOps.Subtract(scaledPosGrad, scaledNegGrad);
-            r[d] = NumOps.Subtract(r[d], NumOps.Multiply(lr, rGrad));
-
-            // Update negative triple embeddings (increase distance)
-            nh[d] = NumOps.Add(nh[d], NumOps.Multiply(lr, scaledNegGrad));
-            nt[d] = NumOps.Subtract(nt[d], NumOps.Multiply(lr, scaledNegGrad));
-        }
+        SubtractFrom(_entityEmbeddings[posHead], posStep);
+        AddTo(_entityEmbeddings[posTail], posStep);
+        SubtractFrom(_relationEmbeddings[relation], Engine.Subtract(posStep, negStep));
+        AddTo(_entityEmbeddings[negHead], negStep);
+        SubtractFrom(_entityEmbeddings[negTail], negStep);
 
         return loss;
     }
@@ -122,4 +93,10 @@ public class TransEEmbedding<T> : KGEmbeddingBase<T>
             NormalizeL2(emb);
         }
     }
+
+    /// <summary>h + r - t.</summary>
+    private Vector<T> Residual(int headIdx, int relationIdx, int tailIdx)
+        => Engine.Subtract(
+            Engine.Add(Row(_entityEmbeddings[headIdx]), Row(_relationEmbeddings[relationIdx])),
+            Row(_entityEmbeddings[tailIdx]));
 }

@@ -93,37 +93,41 @@ public class FederatedGraphPartitioner<T> : FederatedLearningComponentBase<T>
 
         int subSize = partitionNodes.Count;
 
-        // Extract subgraph adjacency
-        var subAdj = new Tensor<T>(new[] { subSize * subSize });
-        for (int i = 0; i < subSize; i++)
-        {
-            for (int j = 0; j < subSize; j++)
-            {
-                int srcIdx = partitionNodes[i] * numNodes + partitionNodes[j];
-                if (srcIdx < adjacency.Shape[0])
-                {
-                    subAdj[i * subSize + j] = adjacency[srcIdx];
-                }
-            }
-        }
+        // Extract subgraph adjacency: gather the (i, j) cells of the partition nodes; cells outside the
+        // adjacency stay zero.
+        var subAdj = GatherOrZero(adjacency, subSize * subSize, k => partitionNodes[k / subSize] * numNodes + partitionNodes[k % subSize]);
 
         // Extract subgraph features
-        var subFeatures = new Tensor<T>(new[] { subSize * featureDim });
-        for (int i = 0; i < subSize; i++)
-        {
-            for (int f = 0; f < featureDim; f++)
-            {
-                int srcIdx = partitionNodes[i] * featureDim + f;
-                int dstIdx = i * featureDim + f;
-
-                if (srcIdx < nodeFeatures.Shape[0] && dstIdx < subFeatures.Shape[0])
-                {
-                    subFeatures[dstIdx] = nodeFeatures[srcIdx];
-                }
-            }
-        }
+        var subFeatures = GatherOrZero(nodeFeatures, subSize * featureDim, k => partitionNodes[k / featureDim] * featureDim + k % featureDim);
 
         return (subAdj, subFeatures);
+    }
+
+    /// <summary>
+    /// Builds a flat tensor of <paramref name="count"/> entries whose entry k is source[sourceIndex(k)], or zero
+    /// when that index lies outside the source.
+    /// </summary>
+    private Tensor<T> GatherOrZero(Tensor<T> source, int count, Func<int, int> sourceIndex)
+    {
+        if (count == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        int sourceLength = source.Shape[0];
+        var index = new int[count];
+        var valid = new int[count];
+        for (int k = 0; k < count; k++)
+        {
+            int src = sourceIndex(k);
+            bool inRange = src >= 0 && src < sourceLength;
+            index[k] = inRange ? src : 0;
+            valid[k] = inRange ? 1 : 0;
+        }
+
+        var flat = source.Reshape(new[] { source.Length });
+        var gathered = Engine.TensorGather(flat, new Tensor<int>(index, new[] { count }), 0);
+        return Engine.TensorMultiply(gathered, new Tensor<int>(valid, new[] { count }).Cast<T>());
     }
 
     private int[] RandomPartition(int numNodes, int numPartitions)
@@ -389,15 +393,22 @@ public class FederatedGraphPartitioner<T> : FederatedLearningComponentBase<T>
             neighbors.Add(new List<int>());
         }
 
-        for (int i = 0; i < numNodes; i++)
+        int cells = Math.Min(numNodes * numNodes, adjacency.Shape[0]);
+        if (cells == 0)
         {
-            for (int j = 0; j < numNodes; j++)
+            return neighbors;
+        }
+
+        // Positive entries of the flattened adjacency in row-major order (so each neighbor list is ascending).
+        var flat = Engine.TensorSlice(adjacency.Reshape(new[] { adjacency.Length }), new[] { 0 }, new[] { cells });
+        var edges = Engine.TensorNonzero(Engine.TensorGreaterThan(flat, NumOps.Zero)).ToArray();
+        foreach (int idx in edges)
+        {
+            int i = idx / numNodes;
+            int j = idx % numNodes;
+            if (i != j)
             {
-                int idx = i * numNodes + j;
-                if (idx < adjacency.Shape[0] && NumOps.GreaterThan(adjacency[idx], NumOps.Zero) && i != j)
-                {
-                    neighbors[i].Add(j);
-                }
+                neighbors[i].Add(j);
             }
         }
 

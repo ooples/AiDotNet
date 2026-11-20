@@ -435,17 +435,7 @@ public abstract partial class VideoDiffusionModelBase<T> : LatentDiffusionModelB
             var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 
-            var augmented = new Tensor<T>(image._shape);
-            var augSpan = augmented.AsWritableSpan();
-            var imgSpan = image.AsSpan();
-            var noiseSpan = scaledNoise.AsSpan();
-
-            for (int i = 0; i < augSpan.Length; i++)
-            {
-                augSpan[i] = NumOps.Add(imgSpan[i], noiseSpan[i]);
-            }
-
-            return EncodeToLatent(augmented, sampleMode: false);
+            return EncodeToLatent(Engine.TensorAdd(image, scaledNoise), sampleMode: false);
         }
 
         return EncodeToLatent(image, sampleMode: false);

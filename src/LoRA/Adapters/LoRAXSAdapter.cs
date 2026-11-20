@@ -252,14 +252,8 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         : base(baseLayer, rank, alpha, freezeBaseLayer: true) // Always freeze base layer for LoRA-XS
     {
         // Initialize trainable R matrix to identity (neutral starting point)
-        _trainableR = new Tensor<T>([rank, rank]);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                _trainableR[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
-            }
-        }
+        _trainableR = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(rank));
+
 
         _initializedFromSVD = false;
 
@@ -330,31 +324,13 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         int rank = Rank;
 
         // Extract U_r: top-r left singular vectors (columns of U)
-        _frozenU = new Tensor<T>([outputSize, rank]);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                _frozenU[i, j] = svd.U[i, j];
-            }
-        }
+        _frozenU = Tensor<T>.FromMatrix(svd.U.GetSubMatrix(0, 0, outputSize, rank));
 
         // Extract Σ_r: top-r singular values (diagonal elements)
-        _frozenSigma = new Tensor<T>([rank]);
-        for (int i = 0; i < rank; i++)
-        {
-            _frozenSigma[i] = svd.S[i];
-        }
+        _frozenSigma = Tensor<T>.FromVector(svd.S.GetSubVector(0, rank));
 
         // Extract V_r^T: top-r right singular vectors (rows of V^T)
-        _frozenVt = new Tensor<T>([rank, inputSize]);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _frozenVt[i, j] = svd.Vt[i, j];
-            }
-        }
+        _frozenVt = Tensor<T>.FromMatrix(svd.Vt.GetSubMatrix(0, 0, rank, inputSize));
 
         _initializedFromSVD = true;
     }
@@ -440,14 +416,8 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update R matrix: R = R - learningRate * dR
-        for (int i = 0; i < _trainableR.Shape[0]; i++)
-        {
-            for (int j = 0; j < _trainableR.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_trainableRGradient[i, j], learningRate);
-                _trainableR[i, j] = NumOps.Subtract(_trainableR[i, j], update);
-            }
-        }
+        Engine.TensorSubtractInPlace(
+            _trainableR, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_trainableRGradient, learningRate)));
 
         // Base layer is always frozen in LoRA-XS
     }
@@ -509,14 +479,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         var RVtTensor = Engine.TensorMatMul(rTensor, vtTensor);
 
         // Step 2: Σ_r * (R * V_r^T) — diagonal scaling per row
-        for (int i = 0; i < rank; i++)
-        {
-            T sigma = _frozenSigma[i];
-            for (int j = 0; j < inputSize; j++)
-            {
-                RVtTensor[i, j] = NumOps.Multiply(sigma, RVtTensor[i, j]);
-            }
-        }
+        RVtTensor = Engine.TensorMultiply(RVtTensor, Engine.Reshape(_frozenSigma, [rank, 1]));
 
         // Step 3: U_r * (Σ_r * R * V_r^T) — vectorized Engine.TensorMatMul
         var uTensor = _frozenU;
@@ -530,22 +493,12 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights: baseWeight + loraWeight
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged (LoRA doesn't modify biases)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights: baseWeight + loraWeight. The delta is [outputSize, inputSize]; DenseLayer
+        // stores its weights input-major ([inputSize, outputSize]) and FullyConnectedLayer
+        // output-major, so DenseLayer uses the transpose. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights : loraWeights.Transpose(), weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
@@ -600,18 +553,10 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         int batchSize = tensor.Shape[0];
         int rank = sigma.Length;
 
-        Vector<T> resultData = new Vector<T>(batchSize * rank);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < rank; i++)
-            {
-                int idx = b * rank + i;
-                resultData[idx] = NumOps.Multiply(sigma[i], tensor[idx]);
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, rank }, resultData);
+        // result[b, i] = sigma[i] * tensor[b, i]
+        return Engine.TensorMultiply(
+            Engine.Reshape(tensor, [batchSize, rank]),
+            Engine.Reshape(Tensor<T>.FromVector(sigma), [1, rank]));
     }
 
     /// <summary>
@@ -634,21 +579,10 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         int m = left.Shape.Length > 1 ? left.Shape[1] : left.Length / batchSize;
         int n = right.Shape.Length > 1 ? right.Shape[1] : right.Length / batchSize;
 
-        Matrix<T> gradient = new Matrix<T>(m, n);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < m; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    int leftIdx = b * m + i;
-                    int rightIdx = b * n + j;
-                    T product = NumOps.Multiply(left[leftIdx], right[rightIdx]);
-                    gradient[i, j] = NumOps.Add(gradient[i, j], product);
-                }
-            }
-        }
+        // gradient[i, j] = sum_b left[b, i] * right[b, j] = left^T * right
+        Matrix<T> gradient = Engine.TensorMatMul(
+            Engine.TensorTranspose(Engine.Reshape(left, [batchSize, m])),
+            Engine.Reshape(right, [batchSize, n])).ToMatrix();
 
         return gradient;
     }

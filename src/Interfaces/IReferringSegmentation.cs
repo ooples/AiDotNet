@@ -103,9 +103,9 @@ public class ReferringSegmentationResult<T>
     public string TextResponse { get; set; } = string.Empty;
 
     /// <summary>
-    /// Confidence score for the segmentation.
+    /// Confidence score for the segmentation: the mean mask probability over the segmented pixels.
     /// </summary>
-    public double Confidence { get; set; }
+    public T Confidence { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Bounding boxes for each referred object [numObjects, 4] as (x1, y1, x2, y2).

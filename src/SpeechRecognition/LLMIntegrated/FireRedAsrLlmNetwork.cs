@@ -13,8 +13,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// the FireRedASR-AED Conformer encoder, the adapter (frame splicing, linear with ReLU, linear) and the Qwen2 decoder that
 /// reads the adapter's output in place of the <c>&lt;speech&gt;</c> token.
 /// </summary>
-internal sealed class FireRedAsrLlmNetwork<T>
+internal sealed class FireRedAsrLlmNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     // Qwen2-7B-Instruct's tokenizer with the release's added <speech> token (id 151646).
     private static readonly Lazy<QwenTokenizer> QwenText = new(() => QwenTokenizer.Qwen2(new[] { SpeechToken }));
@@ -76,6 +80,17 @@ internal sealed class FireRedAsrLlmNetwork<T>
     public Tensor<T> Speech(IReadOnlyList<double> waveform, bool training)
     {
         var encoded = Encoder.Encode(Encoder.Features(waveform), training);
+        int frames = encoded.Shape[0] / DownsampleRate * DownsampleRate;
+        if (frames == 0) throw new ArgumentException($"The recording is shorter than {DownsampleRate} encoder frames.", nameof(waveform));
+        var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });
+        var spliced = _engine.Reshape(kept, new[] { frames / DownsampleRate, EncoderWidth * DownsampleRate });
+        return Adapter2.Forward(_engine.ReLU(Adapter1.Forward(spliced)));
+    }
+
+    /// <summary>The adapter's output given a waveform tensor.</summary>
+    public Tensor<T> Speech(Tensor<T> waveform, bool training)
+    {
+        var encoded = Encoder.Encode(Encoder.FeatureTensor(waveform), training);
         int frames = encoded.Shape[0] / DownsampleRate * DownsampleRate;
         if (frames == 0) throw new ArgumentException($"The recording is shorter than {DownsampleRate} encoder frames.", nameof(waveform));
         var kept = frames == encoded.Shape[0] ? encoded : _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { frames, EncoderWidth });

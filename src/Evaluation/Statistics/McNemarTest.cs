@@ -53,15 +53,10 @@ public class McNemarTest<T> : ITwoSampleTest<T>
         // Build contingency table
         // b = A correct, B wrong
         // c = A wrong, B correct
-        int b = 0, c = 0;
-        for (int i = 0; i < n; i++)
-        {
-            bool aCorrect = NumOps.Compare(correctA[i], NumOps.One) == 0;
-            bool bCorrect = NumOps.Compare(correctB[i], NumOps.One) == 0;
-
-            if (aCorrect && !bCorrect) b++;
-            else if (!aCorrect && bCorrect) c++;
-        }
+        var aCorrect = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(correctA, new[] { n }), NumOps.One);
+        var bCorrect = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(correctB, new[] { n }), NumOps.One);
+        int b = EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.And(aCorrect, EvaluationTensorOps<T>.Not(bCorrect)));
+        int c = EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.And(EvaluationTensorOps<T>.Not(aCorrect), bCorrect));
 
         // If both b and c are zero, no disagreement exists
         if (b + c == 0)

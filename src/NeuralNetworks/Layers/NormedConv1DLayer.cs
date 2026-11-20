@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -325,44 +327,50 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
-        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
-        // stored u and v unchanged.
-        // All engine ops, and u and v updated in place (as a batch norm's running statistics), so a compiled training plan
-        // replays the iteration instead of reading the kernel on the host. A forward that is not a training step leaves
-        // them alone, or the step that follows would iterate twice.
-        if (IsTrainingMode && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+        // on StopGradient(W) with accepted-step u/v state update:
+        // v <- StopGradient(W)^T u / ||StopGradient(W)^T u||
+        // u <- StopGradient(W) v / ||StopGradient(W) v||
+        // sigma = u^T W v with u and v held constant. Evaluation uses the stored u and v unchanged.
+        var u = Engine.Reshape(_u, new[] { 1, rows });
+        Tensor<T> uNormed;
+        Tensor<T> vNormed;
+
+        if (IsTrainingMode)
         {
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            var wDetached = Engine.StopGradient(v);
+            var vUnnorm = Engine.TensorMatMul(u, wDetached);
+            var vNormSq = Engine.ReduceSum(Engine.TensorMultiply(vUnnorm, vUnnorm), new[] { 1 }, keepDims: true);
+            var vNormInv = Engine.TensorPow(Engine.TensorAddScalar(vNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
+            vNormed = Engine.TensorMultiply(vUnnorm, Engine.TensorTile(vNormInv, new[] { 1, per }));
+
+            var wDetachedT = Engine.TensorTranspose(wDetached);
+            var uUnnorm = Engine.TensorMatMul(vNormed, wDetachedT);
+            var uNormSq = Engine.ReduceSum(Engine.TensorMultiply(uUnnorm, uUnnorm), new[] { 1 }, keepDims: true);
+            var uNormInv = Engine.TensorPow(Engine.TensorAddScalar(uNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
+            uNormed = Engine.TensorMultiply(uUnnorm, Engine.TensorTile(uNormInv, new[] { 1, rows }));
+
+            if (!GraphMode.IsActive && !CompiledStepRandom<T>.InNonStepForward && !GraphMode.IsProbe)
             {
-                var w = Engine.StopGradient(v);
-                var nextV = UnitNorm(Engine.TensorMatMul(Engine.Reshape(_u, new[] { 1, rows }), w));            // [1, per]
-                var nextU = UnitNorm(Engine.TensorMatMul(w, Engine.Reshape(nextV, new[] { per, 1 })));          // [rows, 1]
-                Assign(_v, Engine.Reshape(nextV, new[] { per }));
-                Assign(_u, Engine.Reshape(nextU, new[] { rows }));
+                using (GraphMode.SuspendRecording())
+                {
+                    Engine.Reshape(uNormed, new[] { rows }).CopyTo(_u.AsWritableSpan());
+                    Engine.Reshape(vNormed, new[] { per }).CopyTo(_v.AsWritableSpan());
+                    Engine.InvalidatePersistentTensor(_u);
+                    Engine.InvalidatePersistentTensor(_v);
+                }
             }
-            Engine.InvalidatePersistentTensor(_u);
-            Engine.InvalidatePersistentTensor(_v);
         }
-        var uT = Engine.StopGradient(Engine.Reshape(_u, new[] { 1, rows }));
-        var vT = Engine.StopGradient(Engine.Reshape(_v, new[] { per, 1 }));
-        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
+        else
+        {
+            uNormed = u;
+            vNormed = Engine.Reshape(_v, new[] { 1, per });
+        }
+
+        var uW = Engine.TensorMatMul(uNormed, v);
+        var vNormedT = Engine.TensorTranspose(vNormed);
+        var sigma = Engine.TensorMatMul(uW, vNormedT);
         var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
-    }
-
-    // x / max(‖x‖, 1e-12), as torch's normalize.
-    private Tensor<T> UnitNorm(Tensor<T> x)
-    {
-        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), Enumerable.Range(0, x.Rank).ToArray(), keepDims: true));
-        var floor = NumOps.FromDouble(1e-12);
-        var clamped = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(norm, NumOps.Negate(floor))), floor);
-        return Engine.TensorDivide(x, Engine.TensorBroadcastTo(clamped, x._shape));
-    }
-
-    private void Assign(Tensor<T> destination, Tensor<T> source)
-    {
-        Engine.TensorMultiplyScalarInPlace(destination, NumOps.Zero);
-        Engine.TensorAddInPlace(destination, source);
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)

@@ -138,6 +138,7 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
         _nFeatures = X.Columns;
         int nSamples = Math.Min(_maxSamples, X.Rows);
         _trainingSampleSize = nSamples;
+        int maxDepth = nSamples > 1 ? (int)Math.Ceiling(Math.Log(nSamples) / Math.Log(2.0)) : 0;
         int q = Math.Min(_attributesPerHyperplane, _nFeatures);
         var data = AnomalyTensorOps.ToTensor(X);
 
@@ -149,7 +150,7 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             // Sub-sample without replacement
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
             var tree = new SCiTree(_nFeatures, q, _hyperplanesPerNode, random, NumOps);
-            tree.Build(AnomalyTensorOps.SelectRows(data, sampleIndices));
+            tree.Build(AnomalyTensorOps.SelectRows(data, sampleIndices), 0, maxDepth);
             _trees.Add(tree);
         }
 
@@ -237,54 +238,103 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
     /// </summary>
     internal static (T Gain, T SplitPoint) BestSdGainSplit(Tensor<T> projections)
     {
-        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
         int m = projections.Length;
-        T noGain = numOps.Negate(numOps.MaxValue);
         if (m < 2)
         {
-            return (noGain, numOps.Zero);
+            return (numOps.Negate(numOps.MaxValue), numOps.Zero);
         }
 
-        var (sorted, _) = engine.TensorSort(projections, 0, false);
-        var centered = engine.TensorSubtractScalar(sorted, engine.TensorMean(sorted));
-        T total = numOps.FromDouble(m);
-        T sigma = numOps.Sqrt(numOps.Divide(engine.TensorSum(engine.TensorSquare(centered)), total));
-        if (!numOps.GreaterThan(sigma, numOps.Zero))
+        var (_, gain, split) = BestSdGainSplits(AiDotNetEngine.Current.Reshape(projections, new[] { 1, m }));
+        return (gain, split);
+    }
+
+    /// <summary>
+    /// Batched evaluation of <see cref="BestSdGainSplit"/> over <c>[tau, m]</c> candidate hyper-plane projections,
+    /// returning the first trial and boundary achieving the maximum SD-gain across all <c>tau</c> rows.
+    /// </summary>
+    private static (int BestTrial, T Gain, T SplitPoint) BestSdGainSplits(Tensor<T> projections2D)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int tau = projections2D.Shape[0];
+        int m = projections2D.Shape[1];
+        T noGain = numOps.Negate(numOps.MaxValue);
+        if (tau < 1 || m < 2)
         {
-            return (noGain, numOps.Zero);
+            return (0, noGain, numOps.Zero);
+        }
+
+        var (sorted, _) = engine.TensorSort(projections2D, 1, false);
+        var centered = engine.TensorSubtract(sorted, engine.ReduceMean(sorted, new[] { 1 }, keepDims: true));
+        var centeredSquares = engine.TensorSquare(centered);
+        T total = numOps.FromDouble(m);
+        int splits = m - 1;
+        var cumSum = engine.TensorCumSum(centered, 1);
+        var cumSumSquares = engine.TensorCumSum(centeredSquares, 1);
+        var sum = engine.TensorSlice(cumSum, new[] { 0, splits }, new[] { tau, 1 });
+        var sumSquares = engine.TensorSlice(cumSumSquares, new[] { 0, splits }, new[] { tau, 1 });
+        var sigma = engine.TensorSqrt(engine.TensorDivideScalar(sumSquares, total));
+        var positiveSigma = engine.TensorGreaterThan(sigma, numOps.Zero);
+        if (AnomalyTensorOps.NonzeroIndices(engine.Reshape(positiveSigma, new[] { tau })).Length == 0)
+        {
+            return (0, noGain, numOps.Zero);
         }
 
         // Left part = the first i sorted values (i = 1..m-1), right part the rest; std from the sums of the
-        // centered values and their squares
-        var prefix = engine.TensorSlice(engine.TensorCumSum(centered, 0), new[] { 0 }, new[] { m - 1 });
-        var prefixSquares = engine.TensorSlice(engine.TensorCumSum(engine.TensorSquare(centered), 0), new[] { 0 }, new[] { m - 1 });
-        T sum = engine.TensorSum(centered);
-        T sumSquares = engine.TensorSum(engine.TensorSquare(centered));
-        var leftCount = engine.TensorAddScalar(AnomalyTensorOps.Range(m - 1).Cast<T>(), numOps.One);
+        // centered values and their squares across all tau hyper-planes simultaneously. Because each row is
+        // sorted, a partition is constant (including singleton partitions) iff its endpoints are equal, avoiding
+        // sqrt(1-ULP) residual amplification on zero-variance partitions.
+        var splitShape = new[] { tau, splits };
+        var lower = engine.TensorSlice(sorted, new[] { 0, 0 }, splitShape);
+        var upper = engine.TensorSlice(sorted, new[] { 0, 1 }, splitShape);
+        var firstCol = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { tau, 1 }), splitShape);
+        var lastCol = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, splits }, new[] { tau, 1 }), splitShape);
+        var prefix = engine.TensorSlice(cumSum, new[] { 0, 0 }, splitShape);
+        var prefixSquares = engine.TensorSlice(cumSumSquares, new[] { 0, 0 }, splitShape);
+        var leftCount = AnomalyTensorOps.BroadcastRow(
+            engine.TensorAddScalar(AnomalyTensorOps.Range(splits).Cast<T>(), numOps.One), tau);
         var rightCount = engine.ScalarMinusTensor(total, leftCount);
-        var leftStd = PartStd(engine, numOps, prefix, prefixSquares, leftCount);
-        var rightStd = PartStd(engine, numOps, engine.ScalarMinusTensor(sum, prefix),
-            engine.ScalarMinusTensor(sumSquares, prefixSquares), rightCount);
-        var gains = engine.TensorDivideScalar(engine.ScalarMinusTensor(sigma,
-            engine.TensorMultiplyScalar(engine.TensorAdd(leftStd, rightStd), numOps.FromDouble(0.5))), sigma);
+        var leftStd = engine.TensorMultiply(
+            PartStd(engine, numOps, prefix, prefixSquares, leftCount),
+            engine.TensorLessThan(firstCol, lower));
+        var rightStd = engine.TensorMultiply(
+            PartStd(engine, numOps,
+                engine.TensorSubtract(engine.TensorBroadcastTo(sum, splitShape), prefix),
+                engine.TensorSubtract(engine.TensorBroadcastTo(sumSquares, splitShape), prefixSquares),
+                rightCount),
+            engine.TensorLessThan(upper, lastCol));
+        var safeSigma = engine.TensorWhere(positiveSigma, sigma, Tensor<T>.CreateOnes(new[] { tau, 1 }));
+        var gains = engine.TensorDivide(
+            engine.TensorSubtract(
+                engine.TensorBroadcastTo(sigma, splitShape),
+                engine.TensorMultiplyScalar(engine.TensorAdd(leftStd, rightStd), numOps.FromDouble(0.5))),
+            engine.TensorBroadcastTo(safeSigma, splitShape));
 
-        // Only boundaries between distinct neighbours separate the values
-        var lower = engine.TensorSlice(sorted, new[] { 0 }, new[] { m - 1 });
-        var upper = engine.TensorSlice(sorted, new[] { 1 }, new[] { m - 1 });
-        var distinct = engine.TensorLessThan(lower, upper);
-        gains = engine.TensorWhere(distinct, gains, engine.Fill(m - 1, noGain).AsTensor());
+        // Only boundaries between distinct neighbours in non-constant projections separate the values.
+        var valid = engine.TensorMultiply(
+            engine.TensorLessThan(lower, upper),
+            engine.TensorBroadcastTo(positiveSigma, splitShape));
+        var noGainFill = engine.Reshape(engine.Fill(tau * splits, noGain).AsTensor(), splitShape);
+        var flatGains = engine.Reshape(engine.TensorWhere(valid, gains, noGainFill), new[] { tau * splits });
 
-        int best = AnomalyTensorOps.FirstArgMax(gains);
-        T gain = engine.TensorSlice(gains, new[] { best }, new[] { 1 }).ToVector()[0];
-        T low = engine.TensorSlice(lower, new[] { best }, new[] { 1 }).ToVector()[0];
-        T high = engine.TensorSlice(upper, new[] { best }, new[] { 1 }).ToVector()[0];
+        int bestFlat = AnomalyTensorOps.FirstArgMax(flatGains);
+        T gain = engine.TensorSlice(flatGains, new[] { bestFlat }, new[] { 1 }).ToVector()[0];
+        if (!numOps.GreaterThan(gain, noGain))
+        {
+            return (0, noGain, numOps.Zero);
+        }
+
+        int bestTrial = bestFlat / splits;
+        int bestBoundary = bestFlat % splits;
+        T low = engine.TensorSlice(lower, new[] { bestTrial, bestBoundary }, new[] { 1, 1 }).ToVector()[0];
+        T high = engine.TensorSlice(upper, new[] { bestTrial, bestBoundary }, new[] { 1, 1 }).ToVector()[0];
 
         // Midpoint halved before adding (no overflow); when it rounds down onto low, split at high so that
-        // low < p <= high always separates the two neighbours
+        // low < p <= high always separates the two neighbours.
         T half = numOps.FromDouble(0.5);
         T midpoint = numOps.Add(numOps.Multiply(low, half), numOps.Multiply(high, half));
-        return (gain, numOps.GreaterThan(midpoint, low) ? midpoint : high);
+        return (bestTrial, gain, numOps.GreaterThan(midpoint, low) ? midpoint : high);
     }
 
     // sqrt(max(sumSquares / count - (sum / count)^2, 0))
@@ -326,12 +376,12 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             _lowerLimit = _ops.Zero;
         }
 
-        // Algorithm 1: split while the node holds more than two rows.
-        public void Build(Tensor<T> data)
+        // Algorithm 1 (Liu, Ting and Zhou, 2010): split while depth < ceiling(log2(psi)) and the node holds > 2 rows.
+        public void Build(Tensor<T> data, int currentDepth, int maxDepth)
         {
             var engine = AiDotNetEngine.Current;
             _size = data.Shape[0];
-            if (_size <= 2)
+            if (currentDepth >= maxDepth || _size <= 2)
             {
                 _isLeaf = true;
                 return;
@@ -345,38 +395,38 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
                 Tensor<T>.CreateZeros(new[] { _nFeatures }));
 
             // tau random hyper-planes over q attributes without replacement, coefficients uniform in [-1, 1];
-            // keep the one whose best split has the highest Sdgain (the first on ties)
-            var trialWeights = new List<Vector<T>>();
-            var trialProjections = new List<Tensor<T>>();
-            var trialGains = new List<Tensor<T>>();
-            var trialSplits = new List<Tensor<T>>();
+            // evaluate all tau projections in one [tau, _size] pass and keep the first best split.
+            int totalDraws = _hyperplanesPerNode * _attributesPerHyperplane;
+            var flatIndices = new int[totalDraws];
+            var pool = new int[_nFeatures];
             for (int trial = 0; trial < _hyperplanesPerNode; trial++)
             {
-                var pool = Enumerable.Range(0, _nFeatures).ToArray();
-                var attributes = new int[_attributesPerHyperplane];
+                for (int k = 0; k < _nFeatures; k++)
+                {
+                    pool[k] = k;
+                }
+
+                int rowOffset = trial * _nFeatures;
+                int drawOffset = trial * _attributesPerHyperplane;
                 for (int i = 0; i < _attributesPerHyperplane; i++)
                 {
                     int j = i + _random.Next(_nFeatures - i);
                     (pool[i], pool[j]) = (pool[j], pool[i]);
-                    attributes[i] = pool[i];
+                    flatIndices[drawOffset + i] = rowOffset + pool[i];
                 }
-
-                // Coefficients of the chosen attributes: one seeded engine draw, seed taken from the tree's Random
-                var drawn = engine.TensorUniform<T>(new[] { _attributesPerHyperplane }, -1.0, 1.0, _random.Next());
-                var coefficients = engine.TensorIndexCopy(Tensor<T>.CreateZeros(new[] { _nFeatures }), 0,
-                    Tensor<int>.FromVector(Vector<int>.Wrap(attributes), new[] { _attributesPerHyperplane }), drawn);
-                var weights = engine.TensorMultiply(coefficients, inverseStd).ToVector();
-                var projections = AnomalyTensorOps.Project(data, weights);
-                var (gain, split) = BestSdGainSplit(projections);
-                trialWeights.Add(weights);
-                trialProjections.Add(projections);
-                trialGains.Add(Tensor<T>.CreateDefault(new[] { 1 }, gain));
-                trialSplits.Add(Tensor<T>.CreateDefault(new[] { 1 }, split));
             }
 
-            var gains = engine.Concat(trialGains, 0);
-            int best = AnomalyTensorOps.FirstArgMax(gains);
-            T bestGain = engine.TensorSlice(gains, new[] { best }, new[] { 1 }).ToVector()[0];
+            var drawn = engine.TensorUniform<T>(new[] { totalDraws }, -1.0, 1.0, _random.Next());
+            var flatCoefficients = engine.TensorIndexCopy(
+                Tensor<T>.CreateZeros(new[] { _hyperplanesPerNode * _nFeatures }),
+                0,
+                Tensor<int>.FromVector(Vector<int>.Wrap(flatIndices), new[] { totalDraws }),
+                drawn);
+            var trialWeightsMatrix = AnomalyTensorOps.MultiplyRow(
+                engine.Reshape(flatCoefficients, new[] { _hyperplanesPerNode, _nFeatures }),
+                inverseStd);
+            var projections = engine.TensorMatMul(trialWeightsMatrix, engine.TensorTranspose(data));
+            var (best, bestGain, bestSplit) = BestSdGainSplits(projections);
             if (!_ops.GreaterThan(bestGain, _ops.Negate(_ops.MaxValue)))
             {
                 // Every hyper-plane projects the node's rows onto a single value: nothing separates them
@@ -384,9 +434,8 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
                 return;
             }
 
-            var bestWeights = trialWeights[best];
-            var bestProjections = trialProjections[best];
-            T bestSplit = engine.TensorSlice(engine.Concat(trialSplits, 0), new[] { best }, new[] { 1 }).ToVector()[0];
+            var bestWeights = engine.TensorSliceAxis(trialWeightsMatrix, 0, best).ToVector();
+            var bestProjections = engine.TensorSliceAxis(projections, 0, best);
 
             // f(x) = w . x - p: f < 0 goes left; acceptable range [-v, v] with v = max f - min f
             var f = engine.TensorSubtractScalar(bestProjections, bestSplit);
@@ -408,8 +457,8 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
             _lowerLimit = _ops.Negate(v);
             _left = new SCiTree(_nFeatures, _attributesPerHyperplane, _hyperplanesPerNode, _random, _ops);
             _right = new SCiTree(_nFeatures, _attributesPerHyperplane, _hyperplanesPerNode, _random, _ops);
-            _left.Build(AnomalyTensorOps.SelectRows(data, leftIndices));
-            _right.Build(AnomalyTensorOps.SelectRows(data, rightIndices));
+            _left.Build(AnomalyTensorOps.SelectRows(data, leftIndices), currentDepth + 1, maxDepth);
+            _right.Build(AnomalyTensorOps.SelectRows(data, rightIndices), currentDepth + 1, maxDepth);
         }
 
         /// <summary>

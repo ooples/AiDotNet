@@ -832,10 +832,11 @@ internal static class AnomalyTensorOps
 
         var (sorted, order) = engine.TensorSort(values, 1, descending);
         var positions = order.ToArray();
+        // The 0/1 "value changed" flags are counted in int: a running sum in T saturates (Half stops at 2048).
         var groups = k > 1
             ? engine.TensorCumSum(engine.TensorNotEquals(
                 engine.TensorSlice(sorted, new[] { 0, 1 }, new[] { m, k - 1 }),
-                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k - 1 })), 1).Cast<int>().ToArray()
+                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k - 1 })).Cast<int>(), 1).ToArray()
             : Array.Empty<int>();
 
         // keys[r, j] = (dense rank of values[r, j] in sort order) * k + (j, or k - 1 - j for the last among ties)

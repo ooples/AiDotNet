@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,7 +25,7 @@ public class ScientificMLTests
         var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
         var model = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var derivative = model.ComputeTimeDerivative(new[] { 0.2, -0.4 });
+        var derivative = model.ComputeTimeDerivative(new Vector<double>(new[] { 0.2, -0.4 }));
 
         Assert.Equal(2, derivative.Length);
         Assert.InRange(derivative[0], 0.999, 1.001);
@@ -96,25 +97,48 @@ public class ScientificMLTests
     [Fact(Timeout = 60000)]
     public async Task LagrangianNeuralNetwork_ComputeAcceleration_ConstantLagrangianReturnsZero()
     {
-        var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
-        layer.SetParameters(new Vector<double>(new[] { 0.0, 0.0, 1.0 }));
+        // L(q, qDot) = -tanh(qDot + 0.5) + 1 has dL/dq = 0, d^2L/(dq dqDot) = 0, and positive mass
+        // d^2L/dqDot^2 = 2 * tanh(qDot + 0.5) * sech^2(qDot + 0.5) > 0 at qDot = -0.2, so qDDot = 0.
+        var kineticHidden = new DenseLayer<double>(1, (IActivationFunction<double>)new TanhActivation<double>());
+        kineticHidden.Forward(new Tensor<double>(new[] { 1, 2 }));
+        kineticHidden.SetParameters(new Vector<double>(new[] { 0.0, 1.0, 0.5 }));
+        var readout = CreateLinearLayer(inputSize: 1, outputSize: 1);
+        readout.Forward(new Tensor<double>(new[] { 1, 1 }));
+        readout.SetParameters(new Vector<double>(new[] { -1.0, 1.0 }));
 
-        var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
+        var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { kineticHidden, readout });
         var model = new LagrangianNeuralNetwork<double>(architecture, configurationDim: 1);
 
-        var acceleration = model.ComputeAcceleration(new[] { 0.5 }, new[] { -0.2 });
+        var q = new Vector<double>(new[] { 0.5 });
+        var qDot = new Vector<double>(new[] { -0.2 });
+        var acceleration = model.ComputeAcceleration(q, qDot);
 
         Assert.Single(acceleration);
         Assert.InRange(Math.Abs(acceleration[0]), 0.0, 1e-6);
+
+        // A genuinely constant L(q, qDot) = 1 has identically zero Hessian mass matrix (0 / 0) and must
+        // surface a non-finite acceleration rather than silently regularizing to zero.
+        var singularLayer = CreateLinearLayer(inputSize: 2, outputSize: 1);
+        singularLayer.SetParameters(new Vector<double>(new[] { 0.0, 0.0, 1.0 }));
+        var singularModel = new LagrangianNeuralNetwork<double>(
+            CreateArchitecture(2, 1, new List<ILayer<double>> { singularLayer }),
+            configurationDim: 1);
+        var singularAcceleration = singularModel.ComputeAcceleration(q, qDot);
+        Assert.Single(singularAcceleration);
+        Assert.True(double.IsNaN(singularAcceleration[0]) || double.IsInfinity(singularAcceleration[0]));
     }
 
     [Fact(Timeout = 60000)]
     public async Task LagrangianNeuralNetwork_TrainUpdatesParameters()
     {
-        var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
-        layer.SetParameters(new Vector<double>(new[] { 0.3, -0.4, 0.2 }));
+        var hidden = new DenseLayer<double>(2, (IActivationFunction<double>)new TanhActivation<double>());
+        hidden.Forward(new Tensor<double>(new[] { 1, 2 }));
+        hidden.SetParameters(new Vector<double>(new[] { 0.3, -0.2, 0.8, 0.5, 0.4, -0.3 }));
+        var output = CreateLinearLayer(inputSize: 2, outputSize: 1);
+        output.Forward(new Tensor<double>(new[] { 1, 2 }));
+        output.SetParameters(new Vector<double>(new[] { 0.6, -0.4, 0.2 }));
 
-        var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
+        var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { hidden, output });
         var model = new LagrangianNeuralNetwork<double>(architecture, configurationDim: 1);
 
         var input = new Tensor<double>(new[] { 1, 2 });

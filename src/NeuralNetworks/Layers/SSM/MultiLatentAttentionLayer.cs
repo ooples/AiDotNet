@@ -336,8 +336,65 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Causality is the engine's flag, not a mask tensor, and the heads stay interleaved in [B, S, H*hd]: a GPU
         // engine runs one fused FlashAttention-2 kernel (causal in the kernel, device backward) with no head permutes.
         // The [B, H, S, S] bool mask this built on every forward was 2M bools at B8 H4 S256, converted to float and
-        // uploaded each call.
-        return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, 1.0 / Math.Sqrt(_headDimension), causal: true);
+        // uploaded each call. That holds for float32 where the fused kernel applies; for other element types, or a head
+        // size the kernel declines, the engine's decomposed fallback still builds that mask itself (same causality).
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+
+        int batchSize = q.Shape[0], seqLen = q.Shape[1];
+        if (!UsesAttentionCore(batchSize, seqLen))
+        {
+            var attended = Engine.FlashAttention(
+                SplitHeads(q, batchSize, seqLen), SplitHeads(k, batchSize, seqLen), SplitHeads(v, batchSize, seqLen),
+                scale, isCausal: true, out _, attentionBias: null);
+            return MergeHeads(attended, batchSize, seqLen);
+        }
+
+        return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, scale, causal: true);
+    }
+
+    /// <summary>
+    /// False in the two cases where the engine's attention core runs its decomposed chain to this layer's cost; those
+    /// take the per-head FlashAttention kernel instead, as the layer did before it used the core.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>An inference trace (CompiledModelHost) of any element type but float32. The chain's masked attention
+    /// refuses to be captured for inference, so the host dropped the plan and ran the model eagerly on every call.</item>
+    /// <item>An eager float32 call on a GPU engine whose fused attention kernel declines it: a head size the backend
+    /// has no kernel for (CUDA has 16, 32 and 64), a size the backend prefers composed (the portable kernels of
+    /// OpenCL, Vulkan, Metal and WebGPU below 64M score elements), or autocast. Under the tape the chain's attention
+    /// runs on the host: it read the query, key and value back from the device on every forward (25 MB a step at
+    /// batch 8, sequence 256, width 256 over four layers, the step going from 0.31 s to 7.8 s on an RTX 3090 Ti
+    /// under OpenCL). The conditions are the engine's own (DirectGpuTensorEngine.TryFusedAttentionOnDevice).</item>
+    /// </list>
+    /// A training trace keeps the core everywhere: there the chain is recorded as device primitives.
+    /// </remarks>
+    private bool UsesAttentionCore(int batchSize, int seqLen)
+    {
+        if (typeof(T) != typeof(float))
+            return !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            || Engine is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu)
+            return true;
+        return !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+            && gpu.PlacementBackend is AiDotNet.Tensors.Engines.DirectGpu.CUDA.IFusedAttentionBackend fused
+            && fused.SupportsFusedAttention(_headDimension)
+            && (fused is not AiDotNet.Tensors.Engines.DirectGpu.CUDA.IFusedAttentionPreference preference
+                || preference.PrefersFusedAttention(batchSize, _numHeads, seqLen, seqLen, _headDimension));
+    }
+
+    /// <summary>[B, S, H*hd] -> [B, H, S, hd], the layout FlashAttention expects.</summary>
+    private Tensor<T> SplitHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var byHead = Engine.Reshape(x, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        return Engine.TensorPermute(byHead, new[] { 0, 2, 1, 3 });
+    }
+
+    /// <summary>[B, H, S, hd] -> [B, S, H*hd], the inverse of <see cref="SplitHeads"/>.</summary>
+    private Tensor<T> MergeHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var bySeq = Engine.TensorPermute(x, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(bySeq, new[] { batchSize, seqLen, _modelDimension });
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)

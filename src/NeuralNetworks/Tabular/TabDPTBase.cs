@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System;
@@ -303,18 +304,10 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     private Tensor<T> CreateOneHotEncoding(Matrix<int> categoricalIndices, int featureIndex, int cardinality)
     {
         int batchSize = categoricalIndices.Rows;
-        var oneHot = new Tensor<T>([batchSize, cardinality]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int categoryIndex = categoricalIndices[b, featureIndex];
-            if (categoryIndex >= 0 && categoryIndex < cardinality)
-            {
-                oneHot[b * cardinality + categoryIndex] = NumOps.One;
-            }
-        }
-
-        return oneHot;
+        // Indices outside [0, cardinality) leave an all-zero row
+        var indices = Tensor<int>.FromVector(categoricalIndices.GetColumn(featureIndex));
+        return Engine.TensorOneHot<T>(indices, cardinality).Reshape(batchSize, cardinality);
     }
 
     /// <summary>
@@ -342,6 +335,39 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         }
 
         _finalNorm.UpdateParameters(learningRate);
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the feature and categorical projections, every transformer and feature-attention block, the MLP, the final norm and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        foreach (var block in _transformerBlocks) tensors.AddRange(block.TrainableTensors());
+        if (_featureAttention != null) tensors.AddRange(_featureAttention.TrainableTensors());
+        var layers = new List<ILayer<T>> { _featureProjection };
+        layers.AddRange(_categoricalEmbeddings);
+        layers.AddRange(_mlpLayers);
+        layers.Add(_finalNorm);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>
@@ -416,6 +442,10 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         [Scratch]
         private Tensor<TBlock>? _attentionScoresCache;
 
+        /// <summary>The live tensors a tape training step updates: the projections, then the sub-layers.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors()
+            => AttentionTensors().Concat(TabularTraining.LayerTensors(SubLayers()));
+
         /// <summary>The block attention projections, in serialization order.</summary>
         private IEnumerable<Tensor<TBlock>> AttentionTensors()
         {
@@ -462,13 +492,15 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+                tensor.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, tensor.Length));
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
             {
                 var part = layer.GetParameters();
-                for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+                part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, part.Length));
+                offset += part.Length;
             }
 
             return result;
@@ -489,7 +521,8 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
             int offset = 0;
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+                parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
@@ -497,8 +530,8 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
                 int count = checked((int)layer.ParameterCount);
                 if (count == 0) continue;
 
-                var slice = new Vector<TBlock>(count);
-                for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+                var slice = parameters.GetSubVector(offset, count);
+                offset += count;
                 layer.SetParameters(slice);
             }
         }
@@ -614,72 +647,23 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         private Tensor<TBlock> ComputeAttention(Tensor<TBlock> query, Tensor<TBlock> key, Tensor<TBlock> value, int batchSize)
         {
+            var eng = AiDotNetEngine.Current;
             var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+            int count = batchSize * _embeddingDim;
+            var q = TabularMetrics.Flat(query, count).Reshape(batchSize, _embeddingDim);
+            var k = TabularMetrics.Flat(key, count).Reshape(batchSize, _embeddingDim);
+            var v = TabularMetrics.Flat(value, count).Reshape(batchSize, _embeddingDim);
 
             // Compute attention scores: Q * K^T / sqrt(d_k)
-            var scores = new Tensor<TBlock>([batchSize, batchSize]);
+            var scores = TensorTapeOps.TapeMultiplyScalar(eng, eng.TensorMatMul(q, eng.TensorTranspose(k)), scale);
 
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < batchSize; j++)
-                {
-                    var dot = NumOps.Zero;
-                    for (int k = 0; k < _embeddingDim; k++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(
-                            query[i * _embeddingDim + k],
-                            key[j * _embeddingDim + k]));
-                    }
-                    scores[i * batchSize + j] = NumOps.Multiply(dot, scale);
-                }
-            }
-
-            // Apply softmax
-            for (int i = 0; i < batchSize; i++)
-            {
-                var maxVal = scores[i * batchSize];
-                for (int j = 1; j < batchSize; j++)
-                {
-                    var val = scores[i * batchSize + j];
-                    if (NumOps.Compare(val, maxVal) > 0)
-                        maxVal = val;
-                }
-
-                var sumExp = NumOps.Zero;
-                for (int j = 0; j < batchSize; j++)
-                {
-                    var expVal = NumOps.Exp(NumOps.Subtract(scores[i * batchSize + j], maxVal));
-                    scores[i * batchSize + j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-
-                for (int j = 0; j < batchSize; j++)
-                {
-                    scores[i * batchSize + j] = NumOps.Divide(scores[i * batchSize + j], sumExp);
-                }
-            }
+            // Apply softmax over each row
+            scores = eng.Softmax(scores, -1);
 
             _attentionScoresCache = scores;
 
             // Compute output: softmax(scores) * V
-            var output = new Tensor<TBlock>([batchSize, _embeddingDim]);
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int k = 0; k < _embeddingDim; k++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int j = 0; j < batchSize; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            scores[i * batchSize + j],
-                            value[j * _embeddingDim + k]));
-                    }
-                    output[i * _embeddingDim + k] = sum;
-                }
-            }
-
-            return output;
+            return eng.TensorMatMul(scores, v).Reshape(batchSize, _embeddingDim);
         }
 
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)
@@ -736,6 +720,9 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private Tensor<TBlock> _featureValue;
         private Tensor<TBlock> _featureOutput;
 
+        /// <summary>The live tensors a tape training step updates.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors() => Tensors();
+
         /// <summary>The four projections, in serialization order.</summary>
         private IEnumerable<Tensor<TBlock>> Tensors()
         {
@@ -764,7 +751,8 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
             foreach (var tensor in Tensors())
             {
-                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+                tensor.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, tensor.Length));
+                offset += tensor.Length;
             }
 
             return result;
@@ -785,7 +773,8 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
             int offset = 0;
             foreach (var tensor in Tensors())
             {
-                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+                parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+                offset += tensor.Length;
             }
         }
 

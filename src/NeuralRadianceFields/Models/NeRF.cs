@@ -786,32 +786,16 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
 
     private Tensor<T> ApplySigmoidGradient(Tensor<T> raw, Tensor<T> gradient)
     {
-        var numOps = NumOps;
-        var data = new T[gradient.Length];
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
-            double sig = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data.Span[i]);
-            data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
-        }
-
-        return new Tensor<T>(data, gradient._shape);
+        // d/dx sigmoid(x) = sigmoid(x) (1 - sigmoid(x)).
+        var sig = Engine.Sigmoid(raw);
+        var slope = Engine.TensorMultiply(sig, Engine.ScalarMinusTensor(NumOps.One, sig));
+        return Engine.TensorMultiply(gradient, slope);
     }
 
     private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
     {
-        var numOps = NumOps;
-        var data = new T[gradient.Length];
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data.Span[i]);
-            data[i] = numOps.FromDouble(grad * sigmoid);
-        }
-
-        return new Tensor<T>(data, gradient._shape);
+        // d/dx softplus(x) = sigmoid(x).
+        return Engine.TensorMultiply(gradient, Engine.Sigmoid(raw));
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
@@ -826,51 +810,8 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         int height,
         T focalLength)
     {
-        int numRays = width * height;
-        var origins = new T[numRays * 3];
-        var directions = new T[numRays * 3];
-        double f = NumOps.ToDouble(focalLength);
-        double cx = (width - 1) * 0.5;
-        double cy = (height - 1) * 0.5;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double px = (x - cx) / f;
-                double py = (y - cy) / f;
-                double pz = 1.0;
-
-                double dx = NumOps.ToDouble(cameraRotation[0, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[0, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[0, 2]) * pz;
-                double dy = NumOps.ToDouble(cameraRotation[1, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[1, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[1, 2]) * pz;
-                double dz = NumOps.ToDouble(cameraRotation[2, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[2, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[2, 2]) * pz;
-
-                double norm = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                if (norm > 0.0)
-                {
-                    double inv = 1.0 / norm;
-                    dx *= inv;
-                    dy *= inv;
-                    dz *= inv;
-                }
-
-                int idx = (y * width + x) * 3;
-                origins[idx] = cameraPosition[0];
-                origins[idx + 1] = cameraPosition[1];
-                origins[idx + 2] = cameraPosition[2];
-                directions[idx] = NumOps.FromDouble(dx);
-                directions[idx + 1] = NumOps.FromDouble(dy);
-                directions[idx + 2] = NumOps.FromDouble(dz);
-            }
-        }
-
-        return (new Tensor<T>(origins, [numRays, 3]), new Tensor<T>(directions, [numRays, 3]));
+        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.GeneratePinholeRays(
+            Engine, cameraPosition, cameraRotation, width, height, focalLength);
     }
 
     private (Tensor<T> positions, Tensor<T> directions, double[] sampleTs, double[] rayNear, double[] rayFar)

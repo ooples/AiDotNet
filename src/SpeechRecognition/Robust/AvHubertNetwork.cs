@@ -55,6 +55,7 @@ internal sealed class AvHubertNetwork<T>
     private readonly IEngine _engine;
     private readonly AvHubertConfiguration _c;
     private readonly MelSpectrogram<T> _filterbank;
+    private readonly Tensor<T> _unitScalarInput = new(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One }));
 
     internal sealed record ResBlock(ConvolutionalLayer<T> Conv1, BatchNormalizationLayer<T> Norm1, PReLULayer<T> Act1,
         ConvolutionalLayer<T> Conv2, BatchNormalizationLayer<T> Norm2, PReLULayer<T> Act2,
@@ -167,6 +168,38 @@ internal sealed class AvHubertNetwork<T>
     }
 
     /// <summary>The audio encoder's output <c>[T, D]</c>; masked frames take the learned mask embedding.</summary>
+    public Tensor<T> EncodeAudio(Tensor<T> features, bool[]? mask)
+    {
+        int frames = features.Shape[0], width = AudioWidth;
+        if (mask is null || !mask.Any(m => m))
+        {
+            return AudioEncoder.Forward(features);
+        }
+
+        var keep = new Tensor<T>(new[] { frames, width });
+        var span = keep.Data.Span;
+        for (int t = 0; t < frames; t++)
+        {
+            T val = mask[t] ? NumOps.Zero : NumOps.One;
+            int row = t * width;
+            for (int i = 0; i < width; i++) span[row + i] = val;
+        }
+        return EncodeAudioWithKeepMask(features, keep);
+    }
+
+    /// <summary>The audio encoder's output <c>[T, D]</c> using a per-step keep mask tensor <c>[T, AudioWidth]</c>.</summary>
+    public Tensor<T> EncodeAudioWithKeepMask(Tensor<T> features, Tensor<T> keep)
+    {
+        int frames = features.Shape[0], width = AudioWidth;
+        var embedding = AudioMaskEmbedding.Forward(_unitScalarInput);   // [1, 104]
+        var drop = _engine.ScalarMinusTensor(NumOps.One, keep);
+        var x = _engine.TensorAdd(
+            _engine.TensorMultiply(features, keep),
+            _engine.TensorMultiply(drop, _engine.TensorBroadcastTo(embedding, new[] { frames, width })));
+        return AudioEncoder.Forward(x);
+    }
+
+    /// <summary>The audio encoder's output <c>[T, D]</c>; masked frames take the learned mask embedding.</summary>
     public Tensor<T> EncodeAudio(double[,] features, bool[]? mask)
     {
         int frames = features.GetLength(0), width = AudioWidth;
@@ -188,6 +221,46 @@ internal sealed class AvHubertNetwork<T>
         return AudioEncoder.Forward(x);
     }
 
+    /// <summary>
+    /// Audio features computed on a waveform tensor: 26-channel log filterbanks computed at 100 Hz, every four consecutive
+    /// frames stacked into one 25 Hz frame, each frame normalized by its own mean and standard deviation (appendix B.3).
+    /// </summary>
+    public Tensor<T> AudioFeatureTensor(Tensor<T> waveform)
+    {
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            var samples = _engine.Reshape(waveform, new[] { waveform.Length });
+            var bank = _filterbank.Forward(samples);
+            int frames = bank.Shape[0] / _c.StackedFrames, width = AudioWidth;
+            var stacked = _engine.Reshape(_engine.TensorSlice(bank, new[] { 0, 0 }, new[] { frames * _c.StackedFrames, _c.FilterbankBins }), new[] { frames, width });
+            var wide = stacked.Contiguous().Cast<double>();
+            var mean = _engine.TensorBroadcastTo(_engine.TensorDivideScalar(_engine.ReduceSum(wide, new[] { 1 }, true), (double)width), new[] { frames, width });
+            var centered = _engine.TensorSubtract(wide, mean);
+            var variance = _engine.TensorBroadcastTo(_engine.TensorDivideScalar(_engine.ReduceSum(_engine.TensorSquare(centered), new[] { 1 }, true), (double)width), new[] { frames, width });
+            var std = _engine.TensorSqrt(_engine.TensorAddScalar(variance, 1e-5));
+            return _engine.TensorDivide(centered, std).Cast<T>();
+        }
+    }
+
+    public int[] SampleVideoCopyIndices(int frames, bool[]? mask, Random random)
+    {
+        var copy = Enumerable.Range(0, frames).ToArray();
+        if (mask is null || !mask.Any(m => m)) return copy;
+        // Each masked span copies the frames of a span starting elsewhere (outside the span and the span before it).
+        int t = 0;
+        while (t < frames)
+        {
+            if (!mask[t]) { t++; continue; }
+            int start = t;
+            while (t < frames && mask[t]) t++;
+            int length = t - start;
+            var others = Enumerable.Range(0, frames).Where(o => o < Math.Max(0, start - length) || o >= t).ToArray();
+            int other = others.Length > 0 ? others[random.Next(others.Length)] : 0;
+            for (int k = 0; k < length; k++) copy[start + k] = Math.Min(frames - 1, other + k);
+        }
+        return copy;
+    }
+
     /// <summary>The lip encoder's output <c>[T, D]</c> of grayscale mouth crops <c>[T, H, W]</c>; masked frames are
     /// replaced by a same-length segment drawn from elsewhere in the utterance.</summary>
     public Tensor<T> EncodeVideo(Tensor<T> lips, bool[]? mask, Random random, bool training)
@@ -196,27 +269,51 @@ internal sealed class AvHubertNetwork<T>
         var source = lips;
         if (mask is not null && mask.Any(m => m))
         {
-            // Each masked span copies the frames of a span starting elsewhere (outside the span and the span before it).
-            var copy = Enumerable.Range(0, frames).ToArray();
-            int t = 0;
-            while (t < frames)
+            var copy = SampleVideoCopyIndices(frames, mask, random);
+            Tensor<T> copyIndices;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
             {
-                if (!mask[t]) { t++; continue; }
-                int start = t;
-                while (t < frames && mask[t]) t++;
-                int length = t - start;
-                var others = Enumerable.Range(0, frames).Where(o => o < Math.Max(0, start - length) || o >= t).ToArray();
-                int other = others.Length > 0 ? others[random.Next(others.Length)] : 0;
-                for (int k = 0; k < length; k++) copy[start + k] = Math.Min(frames - 1, other + k);
+                var copyDouble = new double[frames];
+                for (int i = 0; i < frames; i++) copyDouble[i] = copy[i];
+                copyIndices = new Tensor<double>(copyDouble, new[] { frames }).Cast<T>();
             }
-            source = _engine.TensorGather(lips, new Tensor<int>(new[] { frames }, new Vector<int>(copy)), axis: 0);
+            source = _engine.Reshape(
+                _engine.TensorEmbeddingLookupFromFloatIndices(_engine.Reshape(lips, new[] { frames, h * w }), copyIndices),
+                new[] { frames, h, w });
+        }
+        return EncodeVideoSource(source, training);
+    }
+
+    /// <summary>The lip encoder's output <c>[T, D]</c> using per-step float gather indices <c>[T]</c>.</summary>
+    public Tensor<T> EncodeVideoWithCopyIndices(Tensor<T> lips, Tensor<T> copyIndices, bool training)
+    {
+        int frames = lips.Shape[0], h = lips.Shape[1], w = lips.Shape[2];
+        var source = _engine.Reshape(
+            _engine.TensorEmbeddingLookupFromFloatIndices(_engine.Reshape(lips, new[] { frames, h * w }), copyIndices),
+            new[] { frames, h, w });
+        return EncodeVideoSource(source, training);
+    }
+
+    private Tensor<T> EncodeVideoSource(Tensor<T> source, bool training)
+    {
+        int frames = source.Shape[0], h = source.Shape[1], w = source.Shape[2];
+        Tensor<T> zeroLead;
+        Tensor<T> zeroTail;
+        Tensor<T> indexTensor;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            zeroLead = new Tensor<T>(new[] { 2, h, w });
+            zeroTail = new Tensor<T>(new[] { 2, h, w });
+            var idxDouble = new double[frames * 5];
+            for (int f = 0; f < frames; f++)
+                for (int k = 0; k < 5; k++)
+                    idxDouble[f * 5 + k] = f + k;
+            indexTensor = new Tensor<double>(idxDouble, new[] { frames * 5 }).Cast<T>();
         }
         // The 5-frame neighbourhood of every frame as channels: [T, 5, H, W], zero beyond the ends.
-        var padded = _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 2, h, w }), source, new Tensor<T>(new[] { 2, h, w }) }, 0);
-        var index = new int[frames * 5];
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < 5; k++) index[f * 5 + k] = f + k;
-        var neighbourhoods = _engine.Reshape(_engine.TensorGather(padded, new Tensor<int>(new[] { index.Length }, new Vector<int>(index)), axis: 0),
+        var padded = _engine.TensorConcatenate(new[] { zeroLead, source, zeroTail }, 0);
+        var neighbourhoods = _engine.Reshape(
+            _engine.TensorEmbeddingLookupFromFloatIndices(_engine.Reshape(padded, new[] { frames + 4, h * w }), indexTensor),
             new[] { frames, 5, h, w });
         FrontNorm.SetTrainingMode(training);
         var x = FrontAct.Forward(FrontNorm.Forward(FrontConv.Forward(neighbourhoods)));
@@ -272,11 +369,11 @@ internal sealed class AvHubertNetwork<T>
         var weights = ClusterEmbeddings.Weights;                                                                // [F, C]
         var rowNorm = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(projected, projected), new[] { 1 }, keepDims: true));   // [T, 1]
         var embeddingNorm = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(weights, weights), new[] { 0 }, keepDims: true)); // [1, C]
-        var denominator = _engine.TensorMultiply(_engine.TensorBroadcastTo(rowNorm, dots._shape), _engine.TensorBroadcastTo(embeddingNorm, dots._shape));
-        var floor = new Tensor<T>(dots._shape);
-        var dv = denominator.ToArray();
-        for (int i = 0; i < dv.Length; i++) floor[i] = NumOps.FromDouble(Math.Max(0.0, 1e-6 - NumOps.ToDouble(dv[i])));
-        return _engine.TensorMultiplyScalar(_engine.TensorDivide(dots, _engine.TensorAdd(denominator, floor)), NumOps.FromDouble(1.0 / _c.LogitTemperature));
+        var denominator = _engine.TensorMultiply(_engine.TensorTile(rowNorm, new[] { 1, dots.Shape[1] }), _engine.TensorTile(embeddingNorm, new[] { dots.Shape[0], 1 }));
+        T eps = NumOps.FromDouble(1e-6);
+        if (NumOps.Equals(eps, NumOps.Zero)) eps = NumOps.FromDouble(1e-4);
+        var safeDenom = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorSubtractScalar(denominator, eps)), eps);
+        return _engine.TensorMultiplyScalar(_engine.TensorDivide(dots, safeDenom), NumOps.FromDouble(1.0 / _c.LogitTemperature));
     }
 
     /// <summary>The CTC logits <c>[T, VocabSize]</c>: a projection of the Transformer output.</summary>
@@ -285,9 +382,7 @@ internal sealed class AvHubertNetwork<T>
     private Tensor<T> Drop(Tensor<T> x, double rate, bool training, Random random)
     {
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 }
