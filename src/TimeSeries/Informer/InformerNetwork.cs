@@ -95,7 +95,42 @@ internal sealed class InformerNetwork<T>
 
     /// <summary>A <c>DataEmbedding</c>: the circular-conv token embedding (as a linear map of [x_{t−1}, x_t, x_{t+1}])
     /// and the optional time-feature embedding.</summary>
-    internal sealed record Embedding(DenseLayer<T> Token, DenseLayer<T>? Time);
+    internal sealed class Embedding(DenseLayer<T> token, DenseLayer<T>? time)
+    {
+        [AiDotNet.Attributes.Scratch]
+        private Tensor<T>? _positions;
+
+        public DenseLayer<T> Token { get; } = token;
+        public DenseLayer<T>? Time { get; } = time;
+
+        internal Tensor<T> AddPositions(IEngine engine, Tensor<T> tokens) =>
+            engine.TensorAdd(tokens, Positions(tokens.Shape[1], tokens.Shape[2]));
+
+        // Encoder and decoder retain one host-owned, immutable table each. A traced plan or an
+        // in-flight forward may still read an older table after a change in sequence length.
+        internal Tensor<T> Positions(int length, int width)
+        {
+            var cached = System.Threading.Volatile.Read(ref _positions);
+            if (cached is not null && cached.Shape[1] == length && cached.Shape[2] == width)
+                return cached;
+
+            var table = new Tensor<T>(new[] { 1, length, width });
+            var values = table.AsWritableSpan();
+            for (int i = 0; i < width; i += 2)
+            {
+                double frequency = Math.Exp(i * -(Math.Log(10000.0) / width));
+                for (int p = 0; p < length; p++)
+                {
+                    double angle = p * frequency;
+                    values[p * width + i] = NumOps.FromDouble(Math.Sin(angle));
+                    values[p * width + i + 1] = NumOps.FromDouble(Math.Cos(angle));
+                }
+            }
+
+            System.Threading.Volatile.Write(ref _positions, table);
+            return table;
+        }
+    }
 
     /// <summary>An <c>AttentionLayer</c>'s query, key, value and output projections.</summary>
     internal sealed record Attention(DenseLayer<T> Query, DenseLayer<T> Key, DenseLayer<T> Value, DenseLayer<T> Output);
@@ -196,26 +231,10 @@ internal sealed class InformerNetwork<T>
         return _engine.TensorConcatenate(new[] { previous, x, next }, 2);
     }
 
-    // The fixed sinusoidal position embedding [L, D] (PositionalEmbedding: sin on even, cos on odd features).
-    private Tensor<T> Positions(int length)
-    {
-        int d = Configuration.ModelDim;
-        var table = new Tensor<T>(new[] { 1, length, d });
-        for (int p = 0; p < length; p++)
-            for (int i = 0; i < d; i += 2)
-            {
-                double angle = p * Math.Exp(i * -(Math.Log(10000.0) / d));
-                table[0, p, i] = NumOps.FromDouble(Math.Sin(angle));
-                table[0, p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        return table;
-    }
-
     private Tensor<T> Embed(Embedding e, Tensor<T> x, Tensor<T>? marks, bool training, Random random)
     {
-        int batch = x.Shape[0], length = x.Shape[1];
-        var sum = _engine.TensorAdd(Dense(e.Token, CircularNeighbours(x)),
-            _engine.TensorTile(Positions(length), new[] { batch, 1, 1 }));
+        int length = x.Shape[1];
+        var sum = e.AddPositions(_engine, Dense(e.Token, CircularNeighbours(x)));
         if (e.Time is not null)
         {
             if (marks is null || marks.Shape[1] != length || marks.Shape[2] != Configuration.TimeFeatures)
