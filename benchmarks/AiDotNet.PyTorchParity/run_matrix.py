@@ -411,6 +411,34 @@ def build_environment(env):
     return build_env
 
 
+def succeeded(stem):
+    """True when the process for STEM already ran and exited 0 (only possible when resuming)."""
+    receipt = stem.with_suffix(".receipt.json")
+    return receipt.is_file() and json.loads(receipt.read_text(encoding="utf-8")).get("exitCode") == 0
+
+
+def completed(tag):
+    """True when a benchmark process already finished: it exited 0 and wrote its report."""
+    return succeeded(tag) and tag.with_suffix(".json").is_file()
+
+
+def resume_run(run_directory, torch_version):
+    """Load an interrupted run's protocol and check that it can continue unchanged: same source and same PyTorch."""
+    info = json.loads((run_directory / "protocol.json").read_text(encoding="utf-8"))
+    current = revision(HERE.parents[1])
+    if current != info["ai"]:
+        raise SystemExit(f"--resume needs the run's source revision {info['ai']}; this checkout is {current}.")
+    if torch_version != info["torch"]:
+        raise SystemExit(f"--resume needs PyTorch {info['torch']}; this environment has {torch_version}.")
+    recorded = json.loads((run_directory / "assemblies.json").read_text(encoding="utf-8"))["sha256"]
+    dll = run_directory / "bin/AiDotNet.PyTorchParity.dll"
+    if {p: digest(dll.with_name(p)) for p in recorded} != recorded:
+        raise SystemExit(f"The run's private binaries in {dll.parent} no longer match assemblies.json.")
+    info.setdefault("resumed", []).append(now())
+    save(run_directory / "protocol.json", info)
+    return info
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devices", nargs="+", choices=["cuda", "cpu"], default=["cuda", "cpu"])
@@ -424,96 +452,113 @@ def main():
     parser.add_argument("--allow-battery", action="store_true", help="Run even when the machine is on battery power")
     parser.add_argument("--summarize", type=Path, metavar="RUN_DIR",
                         help="Only rebuild RUN_DIR's CSVs and table from its raw reports, into RUN_DIR/regenerated")
+    parser.add_argument("--resume", type=Path, metavar="RUN_DIR",
+                        help="Continue an interrupted run with its recorded settings and binaries; completed processes are kept")
     args = parser.parse_args()
     if args.summarize:
         sys.exit(regenerate(args.summarize.resolve()))
-    launches = args.launches if args.launches is not None else (1 if args.smoke else 5)
-    if launches < 1 or len(set(args.devices)) != len(args.devices) or len(set(args.models)) != len(args.models):
-        parser.error("Select distinct devices/models and a positive launch count.")
     import torch
     import torchvision
     import torch._dynamo.config as dynamo
     if dynamo.disable or dynamo.suppress_errors or os.environ.get("TORCH_COMPILE_DISABLE") == "1":
         parser.error("Enable torch.compile and disable silent compilation-error fallback.")
-    if "cuda" in args.devices and not torch.cuda.is_available():
-        parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
     if os.name == "nt" and not shutil.which("cl"):
         parser.error("Use Developer PowerShell for Visual Studio with the x64 C++ build tools.")
     if on_external_power() is False and not args.allow_battery:
         parser.error("The machine is on battery power. Connect external power or pass --allow-battery.")
-    arms = {device: [a for a in args.torch_configurations if device in ARMS[a]["devices"]] for device in args.devices}
-    if not all(arms.values()):
-        parser.error("Every device needs at least one PyTorch configuration that runs on it.")
-    args.output.mkdir(exist_ok=True, parents=True)
-    dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
-    print(f"Results: {dest}", flush=True)
     env = os.environ.copy()
     # A CUDA row must not fall back to OpenCL/HIP when CUDA fails to initialise. CPU launches never read this.
     env["AIDOTNET_DIRECTGPU_BACKENDS"] = "cuda"
     for key in ("AIDOTNET_CPU_THREADS", "AIDOTNET_BLAS_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[key] = str(THREADS)
-    epochs, batches, iters, warm = (2, 2, 3, 1) if args.smoke else (3, 20, 100, 10)
-    common = ["--epochs", str(epochs), "--train-batches", str(batches), "--batch-size", "64", "--inference-batches", "1,8,16",
-              "--inference-iterations", str(iters), "--warmup-iterations", str(warm), "--warmup-min-ms", "1000", "--seed", "1234"]
-    refs = [m for m in REFERENCE if m in args.models]
-    import psutil
-    info = dict(started=now(), models=args.models, devices=args.devices, launches=launches, smoke=args.smoke, common=common,
-                threads=THREADS, referenceModels=refs, torchConfigurations={d: arms[d] for d in args.devices},
-                configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
-                ai=revision(HERE.parents[1]), torch=torch.__version__, torchvision=torchvision.__version__,
-                packages=package_versions("torch", "torchvision", "triton", "triton-windows", "numpy", "psutil"),
-                cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(), gpu=torch.cuda.get_device_name() if torch.cuda.is_available() else None,
-                os=platform.platform(), cpu=cpu_name(), logicalCpus=os.cpu_count(), memoryBytes=psutil.virtual_memory().total,
-                python=sys.version, sdk=subprocess.check_output(["dotnet", "--version"], text=True).strip())
-    if shutil.which("nvidia-smi"):
-        info["driver"] = nvidia_smi("--query-gpu=name,driver_version,memory.total", "--format=csv")
-    build = ["dotnet", "build", str(HERE / "AiDotNet.PyTorchParity.csproj"), "-c", "Release", "-p:GeneratePackageOnBuild=false",
-             "-p:UseSharedCompilation=false", "-m:1"]
-    if args.tensors:
-        tensors = args.tensors.resolve()
-        info["tensors"] = revision(tensors)
-        build += ["-p:UseLocalTensors=true", f"-p:LocalTensorsRoot={tensors}"]
+
+    if args.resume:
+        dest = args.resume.resolve()
+        info = resume_run(dest, torch.__version__)
+        print(f"Resuming: {dest}", flush=True)
     else:
-        build += ["-p:UseLocalTensors=false"]
-    save(dest / "protocol.json", info)
-    # The build output directory is shared by every invocation, so build, check and copy it under a lock,
-    # then hash and launch only this invocation's private copy.
+        launches = args.launches if args.launches is not None else (1 if args.smoke else 5)
+        if launches < 1 or len(set(args.devices)) != len(args.devices) or len(set(args.models)) != len(args.models):
+            parser.error("Select distinct devices/models and a positive launch count.")
+        arms = {device: [a for a in args.torch_configurations if device in ARMS[a]["devices"]] for device in args.devices}
+        if not all(arms.values()):
+            parser.error("Every device needs at least one PyTorch configuration that runs on it.")
+        epochs, batches, iters, warm = (2, 2, 3, 1) if args.smoke else (3, 20, 100, 10)
+        common = ["--epochs", str(epochs), "--train-batches", str(batches), "--batch-size", "64", "--inference-batches", "1,8,16",
+                  "--inference-iterations", str(iters), "--warmup-iterations", str(warm), "--warmup-min-ms", "1000", "--seed", "1234"]
+        import psutil
+        args.output.mkdir(exist_ok=True, parents=True)
+        dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
+        print(f"Results: {dest}", flush=True)
+        info = dict(started=now(), models=args.models, devices=args.devices, launches=launches, smoke=args.smoke, common=common,
+                    threads=THREADS, referenceModels=[m for m in REFERENCE if m in args.models],
+                    torchConfigurations={d: arms[d] for d in args.devices},
+                    configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
+                    ai=revision(HERE.parents[1]), torch=torch.__version__, torchvision=torchvision.__version__,
+                    packages=package_versions("torch", "torchvision", "triton", "triton-windows", "numpy", "psutil"),
+                    cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(),
+                    gpu=torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+                    os=platform.platform(), cpu=cpu_name(), logicalCpus=os.cpu_count(), memoryBytes=psutil.virtual_memory().total,
+                    python=sys.version, sdk=subprocess.check_output(["dotnet", "--version"], text=True).strip())
+        if shutil.which("nvidia-smi"):
+            info["driver"] = nvidia_smi("--query-gpu=name,driver_version,memory.total", "--format=csv")
+        build = ["dotnet", "build", str(HERE / "AiDotNet.PyTorchParity.csproj"), "-c", "Release", "-p:GeneratePackageOnBuild=false",
+                 "-p:UseSharedCompilation=false", "-m:1"]
+        if args.tensors:
+            tensors = args.tensors.resolve()
+            info["tensors"] = revision(tensors)
+            build += ["-p:UseLocalTensors=true", f"-p:LocalTensorsRoot={tensors}"]
+        else:
+            build += ["-p:UseLocalTensors=false"]
+        save(dest / "protocol.json", info)
+        # The build output directory is shared by every invocation, so build, check and copy it under a lock,
+        # then hash and launch only this invocation's private copy.
+        dll = dest / "bin/AiDotNet.PyTorchParity.dll"
+        output = HERE / "bin/Release/net10.0"
+        with build_lock(HERE / ".run_matrix.lock"):
+            run(build, dest / "build", build_environment(env), allow_battery=args.allow_battery)
+            # Each assembly in the benchmark output must be the one its own project just built, never an older copy.
+            library = HERE.parents[1] / "src/bin/Release/net10.0/AiDotNet.dll"
+            if not (output / dll.name).is_file() or digest(output / "AiDotNet.dll") != digest(library):
+                raise RuntimeError(f"{output} does not hold this build's AiDotNet.dll ({library}). See {dest / 'build.log'}")
+            if args.tensors and digest(output / "AiDotNet.Tensors.dll") != digest(tensors / "src/AiDotNet.Tensors/bin/Release/net10.0/AiDotNet.Tensors.dll"):
+                raise RuntimeError("Loaded Tensors assembly differs from the requested checkout")
+            shutil.copytree(output, dll.parent)
+        hashes = {p: digest(dll.with_name(p)) for p in (dll.name, "AiDotNet.dll", "AiDotNet.Tensors.dll")}
+        deps = json.loads(dll.with_name("AiDotNet.PyTorchParity.deps.json").read_text(encoding="utf-8-sig"))
+        tensors_library = {k: v.get("type") for k, v in deps["libraries"].items() if k.startswith("AiDotNet.Tensors/")}
+        save(dest / "assemblies.json", dict(sha256=hashes, tensorsLibrary=tensors_library))
+
+    if "cuda" in info["devices"] and not torch.cuda.is_available():
+        parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
     dll = dest / "bin/AiDotNet.PyTorchParity.dll"
-    output = HERE / "bin/Release/net10.0"
-    with build_lock(HERE / ".run_matrix.lock"):
-        run(build, dest / "build", build_environment(env))
-        # Each assembly in the benchmark output must be the one its own project just built, never an older copy.
-        library = HERE.parents[1] / "src/bin/Release/net10.0/AiDotNet.dll"
-        if not (output / dll.name).is_file() or digest(output / "AiDotNet.dll") != digest(library):
-            raise RuntimeError(f"{output} does not hold this build's AiDotNet.dll ({library}). See {dest / 'build.log'}")
-        if args.tensors and digest(output / "AiDotNet.Tensors.dll") != digest(tensors / "src/AiDotNet.Tensors/bin/Release/net10.0/AiDotNet.Tensors.dll"):
-            raise RuntimeError("Loaded Tensors assembly differs from the requested checkout")
-        shutil.copytree(output, dll.parent)
-    hashes = {p: digest(dll.with_name(p)) for p in (dll.name, "AiDotNet.dll", "AiDotNet.Tensors.dll")}
-    deps = json.loads(dll.with_name("AiDotNet.PyTorchParity.deps.json").read_text(encoding="utf-8-sig"))
-    tensors_library = {k: v.get("type") for k, v in deps["libraries"].items() if k.startswith("AiDotNet.Tensors/")}
-    save(dest / "assemblies.json", dict(sha256=hashes, tensorsLibrary=tensors_library))
+    common = info["common"]
+    refs = info["referenceModels"]
     if refs:
         ref = dest / "reference"
-        run([sys.executable, str(HERE / "pytorch/export_reference.py"), "--models", ",".join(refs), "--out", str(ref)],
-            dest / "reference-export", env, allow_battery=args.allow_battery)
-        for device in args.devices:
+        if not succeeded(dest / "reference-export"):
+            run([sys.executable, str(HERE / "pytorch/export_reference.py"), "--models", ",".join(refs), "--out", str(ref)],
+                dest / "reference-export", env, allow_battery=args.allow_battery)
+        for device in info["devices"]:
             stem = dest / f"reference-{device}"
-            run(["dotnet", str(dll), "--verify-step1", str(ref), "--models", ",".join(refs), "--device", device], stem, env,
-                device, args.allow_battery)
+            if not succeeded(stem):
+                run(["dotnet", str(dll), "--verify-step1", str(ref), "--models", ",".join(refs), "--device", device], stem, env,
+                    device, args.allow_battery)
             lines = stem.with_suffix(".log").read_text(encoding="utf-8", errors="replace").splitlines()
             if not all(any(line.startswith(f"[step1] {m}: PASS") for line in lines) for m in refs):
                 raise RuntimeError(f"Missing first-update verdict. See {stem.with_suffix('.log')}")
-    for launch in range(1, launches + 1):
-        for device in args.devices:
-            for model in args.models:
-                sides = ["aidotnet", *arms[device]]
+    for launch in range(1, info["launches"] + 1):
+        for device in info["devices"]:
+            for model in info["models"]:
+                sides = ["aidotnet", *info["torchConfigurations"][device]]
                 # Rotate the order every launch so no side always runs first (or last) on a warming machine.
                 shift = (launch - 1) % len(sides)
                 for side in sides[shift:] + sides[:shift]:
+                    tag = dest / f"{side}-{launch}-{device}-{model}"
+                    if completed(tag):
+                        continue  # only when resuming: this process already finished
                     cmd = (["dotnet", str(dll)] if side == "aidotnet" else
                            [sys.executable, str(HERE / "pytorch/benchmark.py"), *ARMS[side]["flags"], "--threads", str(THREADS)])
-                    tag = dest / f"{side}-{launch}-{device}-{model}"
                     try:
                         run([*cmd, "--models", model, "--device", device, *common, "--output", str(tag.with_suffix(".json"))],
                             tag, env, device, args.allow_battery)
@@ -521,7 +566,7 @@ def main():
                         print(error, flush=True)  # its receipt records the exit code; collect() reports it below
     # Every measurement comes from re-reading the reports on disk, exactly as --summarize does for an archive.
     rows, problems = collect(dest)
-    write_outputs(dest, rows, launches)
+    write_outputs(dest, rows, info["launches"])
     save(dest / "completion.json", dict(finished=now(), failures=problems))
     if problems:
         sys.exit("\n".join(problems))
