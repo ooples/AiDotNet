@@ -1,0 +1,4 @@
+# Evidence files must stay byte-identical to what run_matrix.py --summarize writes (LF) on every platform.
+*.csv text eol=lf
+*.md text eol=lf
+*.zip binary
