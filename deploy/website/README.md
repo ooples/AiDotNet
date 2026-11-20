@@ -168,9 +168,16 @@ All of these are free:
    **Also apply rate limiting to cached assets → off** (count only requests that reach the
    server). Lower limits fail real traffic: the smoke tests fetch about 12,000 pages right after
    a deploy has emptied the cache, and one page view loads dozens of files.
-7. **Analytics & Logs → Web Analytics:** enable it for `aidotnet.dev`. This replaces Vercel
+   Then, so the smoke tests themselves are never counted: **Security → WAF → Custom rules →
+   Create rule** named "Smoke tests skip the rate limit": **Cookie contains
+   `aidotnet_preview=<PREVIEW_BYPASS_SECRET>`** → **Skip** → **All rate limiting rules**. (The free
+   plan does not allow cookies inside a rate limiting rule itself.)
+7. **Scrape Shield → Email Address Obfuscation:** **off**. It rewrites every email address in a
+   page into a link to `/cdn-cgi/l/email-protection`, which answers 404 to a link checker, so the
+   smoke tests report it as a broken link.
+8. **Analytics & Logs → Web Analytics:** enable it for `aidotnet.dev`. This replaces Vercel
    Analytics with cookieless analytics injected by Cloudflare, with no code change needed.
-8. If you're under attack right now: **Overview → Under Attack Mode** on. Turn it off
+9. If you're under attack right now: **Overview → Under Attack Mode** on. Turn it off
    afterwards, because it shows every visitor a check page.
 
 Then rerun **Deploy Marketing Website** once, so the cache purge and smoke tests pass.
@@ -179,8 +186,8 @@ Then rerun **Deploy Marketing Website** once, so the cache purge and smoke tests
 
 1. Vercel → each project (`aidotnet_website`, the playground API at `aidotnet.vercel.app`) →
    **Settings → Delete Project**.
-2. Vercel → team **Settings → Billing**: downgrade to Hobby or delete the team. This stops the
-   $52/month.
+2. Vercel → team **Settings → Billing**: if the team is on a paid plan, downgrade it to Hobby or
+   delete the team.
 3. GitHub → repository secrets: delete `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`
    and `VERCEL_AUTOMATION_BYPASS_SECRET`.
 
