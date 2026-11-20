@@ -7,7 +7,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// The per-sequence decoding state of a <see cref="MultiLatentAttentionLayer{T}"/>: the compressed latent of every
 /// position consumed so far (the MLA cache, <c>latentDim</c> values per position instead of full keys and values), in a
 /// fixed-capacity buffer written at a position held in a tensor. Create it with
-/// <see cref="MultiLatentAttentionLayer{T}.CreateStepState(int, int)"/>.
+/// <see cref="MultiLatentAttentionLayer{T}.CreateStepState(int, int?)"/>.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 public sealed class MultiLatentAttentionStepState<T>
@@ -47,28 +47,21 @@ public sealed class MultiLatentAttentionStepState<T>
 public partial class MultiLatentAttentionLayer<T>
 {
     /// <summary>
-    /// Creates an empty latent cache for <paramref name="batchSize"/> sequences holding up to the layer's sequence
-    /// length, for use with <see cref="Step"/>.
-    /// </summary>
-    /// <param name="batchSize">The number of sequences decoded together.</param>
-    /// <returns>An empty cache, equivalent to the start of a sequence.</returns>
-    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize = 1) => CreateStepState(batchSize, _sequenceLength);
-
-    /// <summary>
     /// Creates an empty latent cache for <paramref name="batchSize"/> sequences holding up to <paramref name="capacity"/>
-    /// positions, for use with <see cref="Step"/>.
+    /// positions (the layer's sequence length when null), for use with <see cref="Step"/>.
     /// </summary>
     /// <param name="batchSize">The number of sequences decoded together.</param>
     /// <param name="capacity">The most positions the cache holds; each step attends over all of them (empty slots are
     /// masked), so size it to the longest sequence decoded.</param>
     /// <returns>An empty cache, equivalent to the start of a sequence.</returns>
-    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize, int capacity)
+    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize = 1, int? capacity = null)
     {
+        int slots = capacity ?? _sequenceLength;
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
-        if (capacity <= 0)
-            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be positive.");
-        return new MultiLatentAttentionStepState<T>(batchSize, _latentDimension, capacity);
+        if (slots <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capacity), slots, "Capacity must be positive.");
+        return new MultiLatentAttentionStepState<T>(batchSize, _latentDimension, slots);
     }
 
     /// <summary>
