@@ -31,9 +31,10 @@ internal sealed partial class HiFiGanGenerator<T>
         internal int Time { get; } = time;
     }
 
-    private bool TryForwardPrivateCpu(Tensor<T> features, Tensor<T>? condition, out Tensor<T> output)
+    private bool TryForwardPrivateCpu(Tensor<T> features, Tensor<T>? condition,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? output)
     {
-        output = null!;
+        output = null;
         if (typeof(T) != typeof(float) || !InferenceArenaSettings.Enabled || !InferenceArenaSettings.RecycleLayerScratch
             || TensorArena.Current is null
             || !_resblockType1 || condition is not null || _outputReflectPad != 0 || _blocks.Any(stage => stage.Count <= 1)
@@ -49,10 +50,20 @@ internal sealed partial class HiFiGanGenerator<T>
         int inputCount = checked(features.Shape[1] * time);
         if (!_pre.TryPrivateCpuOutputTime(time, out time)) return false;
         long maximum = Math.Max(inputCount, (long)_pre.OutputChannels * time);
-        foreach (var up in _ups)
+        for (int stage = 0; stage < _ups.Count; stage++)
         {
+            var up = _ups[stage];
             if (!up.TryPrivateCpuOutputTime(time, out time)) return false;
             maximum = Math.Max(maximum, (long)up.OutputChannels * time);
+            // Each residual pair writes into a destination of its own output length and adds the carry without
+            // broadcasting. The ordinary path's TensorAdd broadcasts a one-frame result across a longer carry, so a
+            // pair that does not preserve the carry length must take the ordinary path.
+            foreach (var (first, second) in _blocks[stage])
+                for (int pair = 0; pair < first.Count; pair++)
+                    if (!first[pair].TryPrivateCpuOutputTime(time, out int middleTime)
+                        || !second[pair].TryPrivateCpuOutputTime(middleTime, out int residualTime)
+                        || residualTime != time)
+                        return false;
         }
         if (!_post.TryPrivateCpuOutputTime(time, out int outputTime)) return false;
         long sampleOutputCount = (long)_post.OutputChannels * outputTime;

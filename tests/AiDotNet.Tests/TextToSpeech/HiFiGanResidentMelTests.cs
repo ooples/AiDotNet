@@ -14,6 +14,30 @@ public sealed class HiFiGanResidentMelTests
     private static bool HasEngineRfft => typeof(IEngine).Assembly.GetType("AiDotNet.Tensors.Engines.RfftMagnitudeEngineExtensions")
         ?.GetMethod("TensorRfftMagnitude") is not null;
 
+    // torch.hann_window(1) is [1]: a one-sample window passes the centre sample of each frame through, so a unit
+    // waveform has magnitude sqrt(1 + epsilon) in every bin. The double model always takes the folded-window DFT; the
+    // float model takes the engine's real FFT when the package provides it and the folded DFT otherwise, so this
+    // holds in both dependency configurations.
+    [Fact]
+    public void One_sample_window_is_unit_on_the_folded_and_real_fft_paths()
+    {
+        var cpu = new CpuEngine();
+        var previous = AiDotNetEngine.Current; AiDotNetEngine.Current = cpu;
+        try
+        {
+            double expected = Math.Sqrt(1 + Epsilon);
+            var folded = new DifferentiableMel<double>(cpu, 4000, N, Hop, 1, 4, 0, 2000, true)
+                .Magnitude(new Tensor<double>(Enumerable.Repeat(1.0, Length).ToArray(), new[] { Length }), Epsilon).ToArray();
+            Assert.NotEmpty(folded);
+            foreach (double value in folded) Assert.InRange(Math.Abs(value - expected), 0, 1e-12);
+            var single = new DifferentiableMel<float>(cpu, 4000, N, Hop, 1, 4, 0, 2000, true)
+                .Magnitude(new Tensor<float>(Enumerable.Repeat(1f, Length).ToArray(), new[] { Length }), Epsilon).ToArray();
+            Assert.Equal(folded.Length, single.Length);
+            foreach (float value in single) Assert.InRange(Math.Abs(value - expected), 0, 1e-5);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     [Fact]
     public void Cpu_default_preserves_folded_double_window_dft()
     {

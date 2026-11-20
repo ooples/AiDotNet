@@ -790,7 +790,10 @@ internal sealed class DifferentiableMel<T>
             // Generic numeric types and other engines retain the folded-window DFT.
             var window = new double[fftSize];
             int offset = (fftSize - windowSize) / 2;
-            for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
+            // torch.hann_window(1) is [1], not the formula's 0: a one-sample window passes its sample through, as
+            // PeriodicHannFloat does on the real-FFT path.
+            if (windowSize == 1) window[offset] = 1;
+            else for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
             _cos = new Tensor<T>(new[] { fftSize, bins });
             _sin = new Tensor<T>(new[] { fftSize, bins });
             for (int n = 0; n < fftSize; n++)
