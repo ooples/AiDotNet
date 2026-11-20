@@ -11,9 +11,20 @@ public partial class NormedConv1DLayer<T>
 
     internal bool TryPrivateCpuOutputTime(int inputTime, out int outputTime)
     {
-        long time = _transposed
-            ? ((long)inputTime - 1) * _stride - 2L * _padding + _kernel + _outputPadding
-            : ((long)inputTime + 2L * _padding - (long)_dilation * (_kernel - 1) - 1) / _stride + 1;
+        long time;
+        if (_transposed)
+            time = ((long)inputTime - 1) * _stride - 2L * _padding + _kernel + _outputPadding;
+        else
+        {
+            // Integer division truncates toward zero, so a negative numerator (no complete window) would yield 1.
+            long numerator = (long)inputTime + 2L * _padding - (long)_dilation * (_kernel - 1) - 1;
+            if (numerator < 0)
+            {
+                outputTime = 0;
+                return false;
+            }
+            time = numerator / _stride + 1;
+        }
         outputTime = time > 0 && time <= int.MaxValue ? (int)time : 0;
         return outputTime != 0;
     }

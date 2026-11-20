@@ -7,6 +7,21 @@ public abstract partial class GanVocoderBase<T>
     private readonly bool _ownedTrainingInputLifetimes =
         Environment.GetEnvironmentVariable("AIDOTNET_GAN_TRAINING_INPUT_LIFETIMES") == "1";
     private Dictionary<string, Tensor<T>>? _trainingInputStages;
+    private int _ganStepInFlight;
+
+    // The staged destinations are shared by every call with the same role and geometry, and the base class takes
+    // its own sentinel only inside the objective step, after the copies. Hold this one from before staging (and
+    // before the shared crop random is drawn) until the step and its cleanup finish, so a second call is rejected
+    // before it can overwrite the inputs of the step in flight.
+    private void EnterGanStep()
+    {
+        if (Interlocked.CompareExchange(ref _ganStepInFlight, 1, 0) != 0)
+            throw new InvalidOperationException(
+                "Concurrent training calls on the same GAN vocoder instance are not supported: " +
+                "a second call would overwrite the staged inputs of the step in flight.");
+    }
+
+    private void ExitGanStep() => Volatile.Write(ref _ganStepInFlight, 0);
 
     private Tensor<T> StageTrainingInput(string role, Tensor<T> source)
     {
