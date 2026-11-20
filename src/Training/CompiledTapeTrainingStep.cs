@@ -2007,7 +2007,13 @@ public static class CompiledTapeTrainingStep<T>
                 {
                     // Per-step random draws (CompiledStepRandom) are suppressed for the same reason.
                     using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                    // Its activations are dead once it returns: freed here, not left to the garbage collector across
+                    // the first traced step (~270 MB on a DCGAN generator step at batch 64). The weights it sized
+                    // are kept.
+                    using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
                     forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
+                    foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection))
+                        sizingScope.Keep(sized);
                 }
                 finally
                 {
