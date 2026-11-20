@@ -22,13 +22,17 @@ The full run takes several hours on a laptop. For a quick execution check, run `
 ### What it measures
 
 - **Separate processes.** Each model, device and launch runs AiDotNet and every PyTorch configuration in a new process. The default is five launches. The order rotates each launch, so no framework always runs first or last.
-- **The fastest PyTorch configuration.** PyTorch runs in every configuration below that applies to the device. Every configuration uses `torch.compile` with static shapes, so each inference batch size gets its own specialized graph. Each training row and each inference batch size is compared with the PyTorch configuration that has the lowest median time for that row.
+- **The fastest PyTorch configuration.** PyTorch runs in every configuration below that applies to the device and model. Every configuration uses `torch.compile` with static shapes, so each inference batch size gets its own specialized graph. Each training row and each inference batch size is compared with the PyTorch configuration that has the lowest median time for that row.
 
   | Configuration | Devices | Setup |
   | --- | --- | --- |
   | `torch-compile` | CPU, CUDA | `torch.compile` default mode, PyTorch's default AdamW (foreach on CUDA) |
   | `torch-compile-fused` | CPU, CUDA | `torch.compile` default mode, fused AdamW |
   | `torch-cudagraphs-fused` | CUDA | `torch.compile(mode="reduce-overhead")` with CUDA graphs, fused AdamW |
+  | `torch-compile-fused-rnn` | CPU, GRU only | As `torch-compile-fused`, with `torch._dynamo.config.allow_rnn` so the GRU is compiled |
+  | `torch-cudagraphs-fused-rnn` | CUDA, LSTM and GRU | As `torch-cudagraphs-fused`, with `allow_rnn` so the LSTM or GRU is compiled and captured in CUDA graphs |
+
+  By default `torch.compile` does not compile `nn.LSTM` or `nn.GRU`. Dynamo skips any model that contains one, so the first three configurations run the LSTM and GRU rows eagerly, on cuDNN or oneDNN. Eager is often PyTorch's fastest choice for these models, so those configurations stay in the comparison. The two `-rnn` configurations compile the recurrent models as well. On CPU, PyTorch 2.14 cannot compile the LSTM (`expected Tensor() for op: torch.ops.aten.mkldnn_rnn_layer.default`), so the CPU LSTM row uses eager oneDNN. Each PyTorch report records how many graphs Dynamo compiled for the model. The runner rejects a compiled configuration that compiled nothing, unless the model is an LSTM or GRU that the configuration was not set to compile.
 
 - **Same workload.** Both frameworks use eight CPU threads, seed 1234, AdamW with learning rate 1e-3, global gradient clipping at 1.0, and three epochs of 20 updates at batch size 64. The first epoch includes compilation and is excluded. The training figure is the median steady-state epoch time divided by 20. Inference runs at batch sizes 1, 8 and 16. After at least 10 calls and 1 second of warm-up, the runner records the median of 100 timed calls. GPU work is synchronized before each clock reading.
 - **Same function where it can be checked.** Before any timing, MLP, CNN, LSTM and Transformer must reproduce PyTorch's first update from the same weights on each device. The check covers the forward pass, loss, gradients and parameter change. The other seven rows are timing comparisons of the same architecture. Three have slightly different parameter counts: GRU (AiDotNet 19,274, PyTorch 19,466), ViT (2,689,738 and 2,693,578) and MobileNetV2 (2,253,738 and 2,236,682). Those rows are flagged `parameters-differ`. [benchmark.py](pytorch/benchmark.py) gives the PyTorch definitions and model notes.
@@ -269,6 +273,7 @@ our worst-of-95% steady-state latency still beats their average.
 | `--compile` (PyTorch) | off | `torch.compile` each model with static shapes |
 | `--compile-mode` (PyTorch) | `default` | `default`, `reduce-overhead` (CUDA graphs), `max-autotune`, `max-autotune-no-cudagraphs` |
 | `--optimizer-impl` (PyTorch) | `default` | AdamW implementation: PyTorch's default choice or `fused` |
+| `--compile-rnn` (PyTorch) | off | under `--compile`, also compile `nn.LSTM`/`nn.GRU` (`torch._dynamo.config.allow_rnn`); without it they run eagerly |
 
 Run directly, both harnesses measure inference at batch sizes **1, 8, 32, 128** by default (`--inference-batches`). `run_matrix.py` passes `1,8,16` so the vision rows fit a 6 GB GPU.
 

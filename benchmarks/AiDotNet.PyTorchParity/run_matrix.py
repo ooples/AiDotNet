@@ -45,7 +45,30 @@ ARMS = {
         protocol=dict(compile=True, compile_mode="reduce-overhead", optimizer_impl="fused", dynamic_shapes=False,
                       cuda_graphs=True),
         description="torch.compile reduce-overhead (CUDA graphs) with fused AdamW"),
+    # torch.compile does not trace nn.LSTM or nn.GRU unless torch._dynamo.config.allow_rnn is set: Dynamo skips the
+    # whole forward and the arms above run those models eagerly (cuDNN on CUDA, oneDNN on CPU). These arms compile
+    # them too, so the RNN rows are compared with whichever is faster. CPU LSTM is excluded because PyTorch 2.14 fails
+    # to compile it ("expected Tensor() for op: torch.ops.aten.mkldnn_rnn_layer.default").
+    "torch-compile-fused-rnn": dict(
+        flags=["--compile", "--optimizer-impl", "fused", "--compile-rnn"], devices=("cpu",), models=("gru",),
+        protocol=dict(compile=True, compile_mode="default", optimizer_impl="fused", dynamic_shapes=False, compile_rnn=True),
+        description="torch.compile default mode with fused AdamW, tracing nn.GRU (allow_rnn)"),
+    "torch-cudagraphs-fused-rnn": dict(
+        flags=["--compile", "--compile-mode", "reduce-overhead", "--optimizer-impl", "fused", "--compile-rnn"],
+        devices=("cuda",), models=("lstm", "gru"),
+        protocol=dict(compile=True, compile_mode="reduce-overhead", optimizer_impl="fused", dynamic_shapes=False,
+                      cuda_graphs=True, compile_rnn=True),
+        description="torch.compile reduce-overhead (CUDA graphs) with fused AdamW, tracing nn.LSTM/nn.GRU (allow_rnn)"),
 }
+# Models whose forward Dynamo skips unless allow_rnn is set, so a compiled arm without it legitimately compiles nothing.
+RNN_MODELS = ("lstm", "gru")
+
+
+def sides_for(info, device, model):
+    """AiDotNet plus every PyTorch configuration that runs this model on this device. Runs recorded before
+    configurations could be limited to some models have no configurationModels entry and run every model."""
+    limited = info.get("configurationModels", {})
+    return ["aidotnet", *(a for a in info["torchConfigurations"][device] if model in (limited.get(a) or (model,)))]
 # A side whose slowest launch exceeds its fastest by this factor is reported as unstable.
 UNSTABLE_SPREAD = 1.5
 # System CPU use (percent) sampled just before a launch above which that launch is flagged as contended.
@@ -243,9 +266,15 @@ def measurements(path, side, model, device, epochs, batches):
             raise ValueError("PyTorch device/thread count mismatch")
         expected = dict(ARMS[side]["protocol"])
         expected.setdefault("cuda_graphs", False)
-        recorded = {key: obj["protocol"][key] for key in expected}
+        expected.setdefault("compile_rnn", False)
+        # Reports written before compile_rnn existed never set allow_rnn.
+        recorded = {key: obj["protocol"].get(key, False if key == "compile_rnn" else None) for key in expected}
         if recorded != expected:
             raise ValueError(f"PyTorch ran {recorded}, expected {expected}")
+        # A compiled configuration must have compiled something, except an RNN model it was not told to trace.
+        graphs = (obj["protocol"].get("compiled_graphs") or {}).get(model)
+        if graphs == 0 and (model not in RNN_MODELS or expected["compile_rnn"]):
+            raise ValueError("torch.compile compiled no graph for this model")
     row = _index(obj)[model]
     if row.device != device or row.training is None or set(row.inference) != set(BATCHES):
         raise ValueError("Incomplete or mismatched benchmark row")
@@ -270,6 +299,8 @@ def summarize(rows, launches):
     groups = {}
     for r in rows:
         groups.setdefault((r["model"], r["device"], r["operation"], r["batch"]), []).append(r)
+    # One median column per configuration this run used, so an older run's summary keeps its original columns.
+    arms_run = [arm for arm in ARMS if any(r["configuration"] == arm for r in rows)]
     summary = []
     for (model, device, operation, batch), items in groups.items():
         by_side = {}
@@ -302,7 +333,7 @@ def summarize(rows, launches):
             torch_configuration=best, torch_median_ms=medians[best], torch_min_ms=min(torch_ms), torch_max_ms=max(torch_ms),
             torch_over_ai=medians[best] / statistics.median(ai_ms),
             launch_ratio_min=min(ratios) if ratios else None, launch_ratio_max=max(ratios) if ratios else None,
-            **{f"{arm}_median_ms": medians.get(arm) for arm in ARMS},
+            **{f"{arm}_median_ms": medians.get(arm) for arm in arms_run},
             flags=";".join(sorted(flags))))
     order = {m: i for i, m in enumerate(MODELS)}
     summary.sort(key=lambda s: (s["device"] != "cuda", order.get(s["model"], 99),
@@ -348,7 +379,7 @@ def collect(dest):
     for launch in range(1, info["launches"] + 1):
         for device in info["devices"]:
             for model in info["models"]:
-                for side in ["aidotnet", *info["torchConfigurations"][device]]:
+                for side in sides_for(info, device, model):
                     tag = dest / f"{side}-{launch}-{device}-{model}"
                     try:
                         receipt = json.loads(tag.with_suffix(".receipt.json").read_text(encoding="utf-8"))
@@ -494,6 +525,7 @@ def main():
                     threads=THREADS, referenceModels=[m for m in REFERENCE if m in args.models],
                     torchConfigurations={d: arms[d] for d in args.devices},
                     configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
+                    configurationModels={a: list(ARMS[a]["models"]) for a in args.torch_configurations if "models" in ARMS[a]},
                     ai=revision(HERE.parents[1]), torch=torch.__version__, torchvision=torchvision.__version__,
                     packages=package_versions("torch", "torchvision", "triton", "triton-windows", "numpy", "psutil"),
                     cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(),
@@ -550,7 +582,7 @@ def main():
     for launch in range(1, info["launches"] + 1):
         for device in info["devices"]:
             for model in info["models"]:
-                sides = ["aidotnet", *info["torchConfigurations"][device]]
+                sides = sides_for(info, device, model)
                 # Rotate the order every launch so no side always runs first (or last) on a warming machine.
                 shift = (launch - 1) % len(sides)
                 for side in sides[shift:] + sides[:shift]:
