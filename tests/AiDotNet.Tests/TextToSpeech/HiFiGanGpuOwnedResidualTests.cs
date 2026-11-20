@@ -34,7 +34,7 @@ public sealed class HiFiGanGpuOwnedResidualTests
                     conditionChannels: 3, tanhOutput: type1, conditionInEachUpsamplingLayer: true,
                     initialization: new Random(312), defaultInitialization: new Random(312));
                 foreach (var layer in generator.Layers) layer.SetTrainingMode(false);
-                Assert.Equal(enabled, typeof(HiFiGanGenerator<float>).GetField("_gpuOwnedResidualsEnabled", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(generator));
+                Assert.Equal(enabled, PrivateState.Value(typeof(HiFiGanGenerator<float>), "_gpuOwnedResidualsEnabled", generator));
                 return generator;
             }
             reference = Create(false); candidate = Create(true);

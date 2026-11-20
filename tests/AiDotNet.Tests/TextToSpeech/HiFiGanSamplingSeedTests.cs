@@ -78,8 +78,8 @@ public sealed class HiFiGanSamplingSeedTests
         var result = new Dictionary<string, double[]>();
         foreach (var item in new[] { ("generator", "_generator"), ("discriminator", "_discriminators") })
         {
-            var module = typeof(HiFiGAN<double>).GetField(item.Item2, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(model)!;
-            var layers = (IReadOnlyList<LayerBase<double>>)module.GetType().GetProperty("Layers")!.GetValue(module)!;
+            var module = PrivateState.Required(typeof(HiFiGAN<double>), item.Item2, model);
+            var layers = (IReadOnlyList<LayerBase<double>>)PrivateState.NotNull(PrivateState.Property(module, "Layers"), "the layer list");
             for (int i = 0; i < layers.Count; i++)
                 foreach (string field in Fields) result.Add($"{item.Item1}/{i}/{field}", Tensor((NormedConv1DLayer<double>)layers[i], field));
         }
@@ -87,5 +87,5 @@ public sealed class HiFiGanSamplingSeedTests
     }
 
     private static double[] Tensor(NormedConv1DLayer<double> layer, string field) =>
-        ((Tensor<double>)typeof(NormedConv1DLayer<double>).GetField(field, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(layer)!).ToArray();
+        ((Tensor<double>)PrivateState.Required(typeof(NormedConv1DLayer<double>), field, layer)).ToArray();
 }

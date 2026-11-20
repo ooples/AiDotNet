@@ -38,7 +38,7 @@ public sealed class NormedConvSpectralReplayTests
         {
             var ops = MathHelper.GetNumericOperations<T>();
             Tensor<T> Field(NormedConv1DLayer<T> layer, string name) =>
-                (Tensor<T>)typeof(NormedConv1DLayer<T>).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(layer)!;
+                (Tensor<T>)PrivateState.Required(typeof(NormedConv1DLayer<T>), name, layer);
             NormedConv1DLayer<T> Create()
             {
                 var layer = new NormedConv1DLayer<T>(2, 2, 1, 1, 1, 1, 0, false, ConvolutionNormalization.Spectral);
@@ -81,7 +81,7 @@ public sealed class NormedConvSpectralReplayTests
             {
                 var guard = ClosureObjectiveGuard<T>.TakeRecorded(out var reason);
                 Assert.True(guard is not null, reason);
-                guard!.AttachTo(plan);
+                PrivateState.NotNull(guard, "the replay guard").AttachTo(plan);
                 plan.DisableGraphStep();
                 plan.ConfigureOptimizer(OptimizerType.SGD, learningRate: .01);
                 for (int step = 0; step < 3; step++)

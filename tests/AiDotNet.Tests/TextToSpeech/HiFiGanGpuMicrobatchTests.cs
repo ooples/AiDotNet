@@ -32,7 +32,7 @@ public sealed class HiFiGanGpuMicrobatchTests
                     Enumerable.Range(0, 3).Select(_ => new[] { 1, 3 }).ToArray(), true,
                     initialization: new Random(514), defaultInitialization: new Random(514));
                 foreach (var layer in generator.Layers) layer.SetTrainingMode(false);
-                Assert.Equal(chunkLimit, typeof(HiFiGanGenerator<float>).GetField("_gpuInferenceBatchLimit", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(generator));
+                Assert.Equal(chunkLimit, PrivateState.Value(typeof(HiFiGanGenerator<float>), "_gpuInferenceBatchLimit", generator));
                 return generator;
             }
             reference = Create(0); candidate = Create(limit);

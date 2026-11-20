@@ -28,17 +28,17 @@ public sealed class FusedPersistenceOwnershipTests
         return e.TensorMultiplyScalar(e.ReduceSum(e.TensorMultiply(delta, delta), null), 1f / delta.Length);
     }
 
-    private static long NativeSequence() => (long)typeof(GpuMemoryTracker).GetField("s_seq", PrivateStatic)!.GetValue(null)!;
+    private static long NativeSequence() => (long)StaticField(typeof(GpuMemoryTracker), "s_seq");
 
     private static object[] LiveProbeAllocations(long afterSequence)
     {
-        var live = (IEnumerable)typeof(GpuMemoryTracker).GetField("s_live", PrivateStatic)!.GetValue(null)!;
+        var live = (IEnumerable)StaticField(typeof(GpuMemoryTracker), "s_live");
         var records = new List<object>();
         foreach (object pair in live)
         {
-            object record = pair.GetType().GetProperty("Value")!.GetValue(pair)!;
-            long sequence = (long)record.GetType().GetField("Seq")!.GetValue(record)!;
-            string site = (string)record.GetType().GetField("Site")!.GetValue(record)!;
+            object record = Member(pair, "Value");
+            long sequence = (long)Member(record, "Seq");
+            string site = (string)Member(record, "Site");
             // Sampling may upload a caller-owned parameter for the first time. Its input buffer
             // stays live; only the newly computed copy belongs to the persistence probe.
             if (sequence > afterSequence && site.Contains(".SampleParameters")
@@ -46,6 +46,34 @@ public sealed class FusedPersistenceOwnershipTests
         }
         return records.ToArray();
     }
+
+    private static object StaticField(Type type, string name)
+    {
+        var field = type.GetField(name, PrivateStatic)
+            ?? throw new Xunit.Sdk.XunitException(type.Name + " has no private static field '" + name + "'.");
+        return field.GetValue(null) ?? throw new Xunit.Sdk.XunitException(type.Name + "." + name + " is null.");
+    }
+
+    // The value of a public field or property that must be present.
+    private static object Member(object owner, string name)
+    {
+        var type = owner.GetType();
+        object? value;
+        if (type.GetField(name) is { } field) value = field.GetValue(owner);
+        else if (type.GetProperty(name) is { } property) value = property.GetValue(owner);
+        else throw new Xunit.Sdk.XunitException(type.Name + " has no public member '" + name + "'.");
+        return value ?? throw new Xunit.Sdk.XunitException(type.Name + "." + name + " is null.");
+    }
+
+    private static MethodInfo SessionMethod(string name) =>
+        typeof(FusedTrainingSession<float>).GetMethod(name, PrivateStatic)
+        ?? throw new Xunit.Sdk.XunitException("FusedTrainingSession has no private static method '" + name + "'.");
+
+    private static object Call(MethodInfo method, object[] arguments) =>
+        method.Invoke(null, arguments) ?? throw new Xunit.Sdk.XunitException(method.Name + " returned null.");
+
+    private static T Present<T>(T? value, string what) where T : class =>
+        value ?? throw new Xunit.Sdk.XunitException("Expected " + what + " to be present.");
 
     private static object? Read(object? obj, string name)
     {
@@ -61,15 +89,15 @@ public sealed class FusedPersistenceOwnershipTests
 
     private static Tensor<float> Snapshot(object sample)
     {
-        var values = (Array)Read(sample, "Samples")!;
-        object first = values.GetValue(0)!;
-        return (Tensor<float>)first.GetType().GetField("Item3")!.GetValue(first)!;
+        var values = (Array)Present(Read(sample, "Samples"), "the parameter samples");
+        object first = Present(values.GetValue(0), "the first parameter sample");
+        return (Tensor<float>)Member(first, "Item3");
     }
 
     private static void AssertNoProbeAllocations(long sequence, string metadata = "")
     {
         var records = LiveProbeAllocations(sequence);
-        var sites = records.Select(r => (string)r.GetType().GetField("Site")!.GetValue(r)!);
+        var sites = records.Select(r => (string)Member(r, "Site"));
         Assert.True(records.Length == 0, string.Join(Environment.NewLine, sites) + metadata);
     }
 
@@ -80,8 +108,8 @@ public sealed class FusedPersistenceOwnershipTests
     {
         var previous = AiDotNetEngine.Current;
         using var device = gpu ? new DirectGpuTensorEngine() : null;
-        if (gpu) Assert.True(device!.IsGpuAvailable, "Native GPU required; this test must execute.");
-        AiDotNetEngine.Current = gpu ? device! : new CpuEngine();
+        if (gpu) Assert.True(Present(device, "the GPU engine").IsGpuAvailable, "Native GPU required; this test must execute.");
+        AiDotNetEngine.Current = gpu ? Present(device, "the GPU engine") : new CpuEngine();
         try
         {
             if (gpu) Assert.True(GpuMemoryTracker.Enabled, "Enable native allocation tracking before test process startup.");
@@ -92,14 +120,14 @@ public sealed class FusedPersistenceOwnershipTests
                 Layers = Array.Empty<ITrainableLayer<float>>(), Input = source, Target = source,
                 Forward = x => x, ComputeLoss = Loss, Optimizer = Sgd(), Selection = new[] { source },
             };
-            var sample = typeof(FusedTrainingSession<float>).GetMethod("SampleParameters", PrivateStatic)!.Invoke(null, new object[] { request })!;
+            var sample = Call(SessionMethod("SampleParameters"), new object[] { request });
             using var owner = Assert.IsAssignableFrom<IDisposable>(sample);
             var snapshot = Snapshot(sample);
             var buffer = Read(snapshot, "_gpuBuffer");
-            var changed = typeof(FusedTrainingSession<float>).GetMethod("AnySampleChanged", PrivateStatic)!;
-            Assert.False((bool)changed.Invoke(null, new[] { sample })!);
+            var changed = SessionMethod("AnySampleChanged");
+            Assert.False((bool)Call(changed, new[] { sample }));
             source[0] = 9f;
-            Assert.True((bool)changed.Invoke(null, new[] { sample })!);
+            Assert.True((bool)Call(changed, new[] { sample }));
             owner.Dispose();
             owner.Dispose();
             Assert.Equal(new[] { 9f, 2f, 3f, 4f }, source.ToArray());
@@ -108,13 +136,12 @@ public sealed class FusedPersistenceOwnershipTests
                 Assert.Null(Read(Read(snapshot.DataVector, "_deviceState"), "Buffer"));
                 Assert.Null(Read(snapshot, "_gpuBuffer"));
                 // The native allocation can remain cached; ownership must return to the reuse pool.
-                Assert.Equal(1, (int)Read(buffer, "_poolState")!);
+                Assert.Equal(1, (int)Present(Read(buffer, "_poolState"), "the pool state"));
                 long warmedSequence = NativeSequence();
                 for (int repeat = 0; repeat < 6; repeat++)
                 {
-                    using var next = (IDisposable)typeof(FusedTrainingSession<float>)
-                        .GetMethod("SampleParameters", PrivateStatic)!.Invoke(null, new object[] { request })!;
-                    Assert.False((bool)changed.Invoke(null, new object[] { next })!);
+                    using var next = (IDisposable)Call(SessionMethod("SampleParameters"), new object[] { request });
+                    Assert.False((bool)Call(changed, new object[] { next }));
                 }
                 Assert.Equal(warmedSequence, NativeSequence());
             }
@@ -129,8 +156,8 @@ public sealed class FusedPersistenceOwnershipTests
     {
         var previous = AiDotNetEngine.Current;
         using var device = gpu ? new DirectGpuTensorEngine() : null;
-        if (gpu) Assert.True(device!.IsGpuAvailable, "Native GPU required; this test must execute.");
-        AiDotNetEngine.Current = gpu ? device! : new CpuEngine();
+        if (gpu) Assert.True(Present(device, "the GPU engine").IsGpuAvailable, "Native GPU required; this test must execute.");
+        AiDotNetEngine.Current = gpu ? Present(device, "the GPU engine") : new CpuEngine();
         try
         {
             if (gpu) Assert.True(GpuMemoryTracker.Enabled);

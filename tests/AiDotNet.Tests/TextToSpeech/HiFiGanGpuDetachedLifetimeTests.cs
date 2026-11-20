@@ -52,7 +52,7 @@ public sealed class HiFiGanGpuDetachedLifetimeTests
                 Assert.Equal(original, input.ToArray());
                 Assert.All(candidate.Layers, layer => Assert.True(layer.InTrainingMode));
             }
-            Assert.Equal(firstExpected, retained!.ToArray());
+            Assert.Equal(firstExpected, PrivateState.NotNull(retained, "the retained output").ToArray());
             for (int i = 0; i < candidate.Layers.Count; i++) Assert.Equal(parameters[i], candidate.Layers[i].GetParameters().ToArray());
             using var differentiableInput = new Tensor<float>(Enumerable.Range(0, 88).Select(i => .01f * (i - 30)).ToArray(), new[] { 2, 4, 11 });
             using var tape = new GradientTape<float>();
@@ -60,7 +60,7 @@ public sealed class HiFiGanGpuDetachedLifetimeTests
             var gradients = tape.ComputeGradients(gpu.ReduceSum(waveform, null), sources: new[] { differentiableInput });
             Assert.True(gradients.TryGetValue(differentiableInput, out var gradient));
             Assert.NotNull(gradient);
-            var values = gradient!.ToArray();
+            var values = PrivateState.NotNull(gradient, "the gradient").ToArray();
             Assert.All(values, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
             Assert.Contains(values, value => value != 0f);
         }

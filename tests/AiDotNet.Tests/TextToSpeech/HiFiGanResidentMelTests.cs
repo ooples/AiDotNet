@@ -64,9 +64,9 @@ public sealed class HiFiGanResidentMelTests
             var expected = Oracle(input.ToArray().Select(value => (double)value).ToArray(), stagedFloatWindow: HasEngineRfft);
             var mel = new DifferentiableMel<float>(cpu, 4000, N, Hop, Window, 4, 0, 2000, true);
             var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-            Assert.Equal(!HasEngineRfft, mel.GetType().GetField("_cos", flags)!.GetValue(mel) is not null);
-            Assert.Equal(!HasEngineRfft, mel.GetType().GetField("_sin", flags)!.GetValue(mel) is not null);
-            Assert.Equal(HasEngineRfft, mel.GetType().GetField("_fftWindow", flags)!.GetValue(mel) is not null);
+            Assert.Equal(!HasEngineRfft, PrivateState.Value(mel.GetType(), "_cos", mel) is not null);
+            Assert.Equal(!HasEngineRfft, PrivateState.Value(mel.GetType(), "_sin", mel) is not null);
+            Assert.Equal(HasEngineRfft, PrivateState.Value(mel.GetType(), "_fftWindow", mel) is not null);
             using var tape = new GradientTape<float>();
             var magnitude = mel.Magnitude(input, Epsilon);
             using var upstream = new Tensor<float>(expected.Upstream.Select(value => (float)value).ToArray(), magnitude.Shape.ToArray());
@@ -88,9 +88,9 @@ public sealed class HiFiGanResidentMelTests
             using var input = new Tensor<float>(Input().ToArray().Select(value => (float)value).ToArray(), new[] { Length });
             using var graph = GraphMode.EnableTraining(new[] { input });
             var magnitude = mel.Magnitude(input, Epsilon);
-            var node = typeof(TensorBase<float>).GetField("LazySource", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(magnitude);
+            var node = PrivateState.Value(typeof(TensorBase<float>), "LazySource", magnitude);
             Assert.NotNull(node);
-            Assert.Equal(HasEngineRfft ? "TensorRfftMagnitude" : "TensorPow", node!.GetType().GetProperty("OpName")!.GetValue(node));
+            Assert.Equal(HasEngineRfft ? "TensorRfftMagnitude" : "TensorPow", PrivateState.Property(PrivateState.NotNull(node, "the lazy source"), "OpName"));
             Assert.Equal(new[] { Length / Hop, N / 2 + 1 }, magnitude.Shape.ToArray());
         }
         finally { AiDotNetEngine.Current = previous; }
@@ -133,9 +133,9 @@ public sealed class HiFiGanResidentMelTests
             using var graph = GraphMode.EnableTraining(new[] { input });
             var magnitude = mel.Magnitude(input, Epsilon);
             // LazySource belongs to the Tensors assembly's internal graph ABI.
-            var node = typeof(TensorBase<float>).GetField("LazySource", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(magnitude);
+            var node = PrivateState.Value(typeof(TensorBase<float>), "LazySource", magnitude);
             Assert.NotNull(node);
-            Assert.Equal(HasEngineRfft ? "TensorRfftMagnitude" : "TensorPow", node!.GetType().GetProperty("OpName")!.GetValue(node));
+            Assert.Equal(HasEngineRfft ? "TensorRfftMagnitude" : "TensorPow", PrivateState.Property(PrivateState.NotNull(node, "the lazy source"), "OpName"));
             Assert.Equal(new[] { Length / Hop, N / 2 + 1 }, magnitude.Shape.ToArray());
         }
         finally { AiDotNetEngine.Current = previous; }

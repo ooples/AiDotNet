@@ -37,7 +37,7 @@ public sealed class NormedConvSeededConstructionTests
         foreach (string name in new[] { "_in", "_out", "_kernel", "_stride", "_padding", "_dilation", "_groups",
                      "_transposed", "_normalization", "_useBias", "_outputPadding" })
         {
-            var field = typeof(NormedConv1DLayer<double>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var field = PrivateState.Field(typeof(NormedConv1DLayer<double>), name);
             Assert.Equal(field.GetValue(source), field.GetValue(full));
             Assert.Equal(field.GetValue(source), field.GetValue(architecture));
         }
@@ -45,8 +45,8 @@ public sealed class NormedConvSeededConstructionTests
         Assert.Equal(before, full.GetParameters().ToArray());
         foreach (string name in new[] { "_u", "_v" })
         {
-            var field = typeof(NormedConv1DLayer<double>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
-            Assert.Equal(((Tensor<double>)field.GetValue(source)!).ToArray(), ((Tensor<double>)field.GetValue(full)!).ToArray());
+            var field = PrivateState.Field(typeof(NormedConv1DLayer<double>), name);
+            Assert.Equal(((Tensor<double>)PrivateState.NotNull(field.GetValue(source), name)).ToArray(), ((Tensor<double>)PrivateState.NotNull(field.GetValue(full), name)).ToArray());
         }
         full.SetTrainingMode(false);
         using var input = new Tensor<double>(Enumerable.Range(0, 44).Select(i => Math.Sin(.13 * i)).ToArray(), new[] { 1, 4, 11 });

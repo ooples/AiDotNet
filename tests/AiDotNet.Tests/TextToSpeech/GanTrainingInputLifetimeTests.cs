@@ -48,7 +48,7 @@ public sealed class GanTrainingInputLifetimeTests
             var view = engine.Reshape(caller, new[] { 4, 8 });
             GanVocoderBase<float>.ReleaseOwnedTrainingInput(engine, view, caller, target);
             Assert.Equal(values, caller.ToArray());
-            if (cuda) { Assert.Same(callerBuffer, Buffer(caller)); Assert.NotEqual(IntPtr.Zero, callerBuffer!.Handle); }
+            if (cuda) { Assert.Same(callerBuffer, Buffer(caller)); Assert.NotEqual(IntPtr.Zero, PrivateState.NotNull(callerBuffer, "the caller buffer").Handle); }
 
             for (int iteration = 0; iteration < 16; iteration++)
             {
@@ -59,8 +59,8 @@ public sealed class GanTrainingInputLifetimeTests
                 GanVocoderBase<float>.ReleaseOwnedTrainingInput(engine, temporary, caller, target);
                 if (cuda)
                 {
-                    Assert.Equal(IntPtr.Zero, uploaded!.Handle);
-                    using var reused = gpu!.GetBackend().AllocateBuffer(32);
+                    Assert.Equal(IntPtr.Zero, PrivateState.NotNull(uploaded, "the uploaded buffer").Handle);
+                    using var reused = PrivateState.NotNull(gpu, "the GPU engine").GetBackend().AllocateBuffer(32);
                     Assert.Equal(address, reused.Handle);
                     Assert.All(gpu.GetBackend().DownloadBuffer(reused), value => Assert.Equal(0f, value));
                 }
