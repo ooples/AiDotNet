@@ -138,7 +138,11 @@ internal sealed class BestRqNetwork<T>
     {
         var samples = new Tensor<T>(new[] { waveform.Count });
         for (int i = 0; i < waveform.Count; i++) samples[i] = NumOps.FromDouble(waveform[i]);
-        var mel = _mel.Forward(samples);
+        Tensor<T> mel;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            mel = _mel.Forward(samples);
+        }
         int frames = mel.Shape[0], bins = mel.Shape[1];
         var features = new double[frames, bins];
         for (int b = 0; b < bins; b++)
@@ -287,5 +291,102 @@ internal sealed class BestRqNetwork<T>
         }
         var sum = total ?? throw new InvalidOperationException("No codebooks.");
         return count == 0 ? sum : _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / (count * (double)_o.NumCodebooks)));
+    }
+
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        var mel = _mel.Forward(waveform);
+        int frames = mel.Shape[0], bins = mel.Shape[1];
+        var mean = _engine.TensorBroadcastTo(_engine.ReduceMean(mel, new[] { 0 }, keepDims: true), new[] { frames, bins });
+        var centered = _engine.TensorSubtract(mel, mean);
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
+        var eps = NumOps.FromDouble(1e-16);
+        var std = _engine.TensorBroadcastTo(_engine.TensorSqrt(_engine.TensorAddScalar(variance, eps)), new[] { frames, bins });
+        var valid = _engine.TensorBroadcastTo(_engine.TensorGreaterThan(variance, eps), new[] { frames, bins });
+        return _engine.TensorMultiply(_engine.TensorDivide(centered, std), valid);
+    }
+
+    public Tensor<T> Encode(Tensor<T> features, bool training)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1], d = _o.EncoderDim;
+        var mel = _engine.Reshape(features, new[] { 1, 1, frames, bins });
+        var x = _engine.ReLU(FirstConv.Forward(mel));
+        x = _engine.ReLU(SecondConv.Forward(x));
+        int length = x.Shape[2];
+        if (length <= 0) throw new ArgumentException("The audio is too short for the feature encoder.");
+        var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { length, d * _subsampledBins });
+        var h = InputProjection.Forward(steps);
+        foreach (var block in Blocks)
+        {
+            block.SetTrainingMode(training);
+            h = block.Forward(h);
+        }
+        return h;
+    }
+
+    internal sealed record PreparedPretrainingUtterance(Tensor<T> MaskedFeatures, Tensor<T>[] Weights, Tensor<T> Scale);
+
+    public PreparedPretrainingUtterance[] PreparePretrainingBatch(IReadOnlyList<double[]> waveforms, Random random)
+    {
+        using var _ = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+        var batch = new PreparedPretrainingUtterance[waveforms.Count];
+        for (int r = 0; r < waveforms.Count; r++)
+        {
+            var features = Features(waveforms[r]);
+            var (masked, mask) = MaskInput(features, random);
+            int frames = masked.GetLength(0), bins = masked.GetLength(1);
+            var flatMasked = new double[frames * bins];
+            Buffer.BlockCopy(masked, 0, flatMasked, 0, flatMasked.Length * sizeof(double));
+            var maskedTensor = new Tensor<double>(flatMasked, new[] { frames, bins }).Cast<T>();
+
+            int encLen = EncodedLength(frames);
+            if (encLen <= 0) throw new ArgumentException("The audio is too short for the feature encoder.");
+            var weightsPerBook = new Tensor<T>[_o.NumCodebooks];
+            int count = 0;
+            for (int n = 0; n < _o.NumCodebooks; n++)
+            {
+                var labels = Quantize(features, n);
+                int length = Math.Min(encLen, labels.Length), stack = _o.StackedFrames;
+                var w = new double[encLen * _o.CodebookSize];
+                count = 0;
+                for (int g = 0; g < length; g++)
+                {
+                    bool any = false;
+                    for (int s = 0; s < stack; s++) any |= mask[g * stack + s];
+                    if (!any) continue;
+                    w[(g * _o.CodebookSize) + labels[g]] = -1.0;
+                    count++;
+                }
+                weightsPerBook[n] = new Tensor<double>(w, new[] { encLen, _o.CodebookSize }).Cast<T>();
+            }
+            double inv = count == 0 ? 1.0 : 1.0 / (count * (double)_o.NumCodebooks * waveforms.Count);
+            var scaleTensor = new Tensor<double>(new[] { inv }, new[] { 1 }).Cast<T>();
+            batch[r] = new PreparedPretrainingUtterance(maskedTensor, weightsPerBook, scaleTensor);
+        }
+        return batch;
+    }
+
+    public Tensor<T> PretrainingLossFromPrepared(PreparedPretrainingUtterance[] batch, bool training)
+    {
+        Tensor<T>? batchTotal = null;
+        for (int r = 0; r < batch.Length; r++)
+        {
+            var item = batch[r];
+            var encoded = Encode(item.MaskedFeatures, training);
+            Tensor<T>? total = null;
+            for (int n = 0; n < _o.NumCodebooks; n++)
+            {
+                var logits = PretrainingHeads[n].Forward(encoded);
+                var term = _engine.ReduceSum(
+                    _engine.TensorMultiply(_engine.TensorLogSoftmax(logits, axis: -1), item.Weights[n]),
+                    new[] { 0, 1 },
+                    keepDims: false);
+                total = total is null ? term : _engine.TensorAdd(total, term);
+            }
+            var sum = _engine.Reshape(total ?? throw new InvalidOperationException("No codebooks."), new[] { 1 });
+            var scaled = _engine.TensorMultiply(sum, item.Scale);
+            batchTotal = batchTotal is null ? scaled : _engine.TensorAdd(batchTotal, scaled);
+        }
+        return batchTotal ?? throw new ArgumentException("No audio.", nameof(batch));
     }
 }

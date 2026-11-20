@@ -420,12 +420,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Small uniform weights from a fixed seed, so two agents built from the same options start from the same
         // controller (Clone reproduces the policy) while different inputs still give different actions.
         var random = RandomHelper.CreateSeededRandom(SeededBase(ControllerSeedBase));
-        var parameters = new Vector<T>(ControllerParameterCount(_controllerLayerSizes));
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 0.1);
-        }
-        return parameters;
+        int count = ControllerParameterCount(_controllerLayerSizes);
+        var draws = Vector<double>.FromEnumerable(
+            Enumerable.Range(0, count).Select(_ => (random.NextDouble() - 0.5) * 0.1).ToList());
+        return count == 0 ? new Vector<T>(0) : draws.AsTensor().Cast<T>().ToVector();
     }
 
     private static int ControllerParameterCount(int[] sizes)
@@ -469,17 +467,14 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // The carried (h, c) and controller memory this step produces are read by the next call, after Train's tapes
         // have rewound any active arena, so they must not come from it.
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-        var batch = new Tensor<T>(new[] { 1, ObservationSize });
-        for (int i = 0; i < ObservationSize; i++) batch[i] = observation[i];
+        var batch = new Tensor<T>(new[] { 1, ObservationSize }, observation.Clone());
         var (mean, logVar) = Encode(batch);
         var z = training ? SampleLatent(mean, logVar) : mean;
 
         var action = ControllerForward(BuildController(_controllerParameters), z, _controllerMemory);
         _controllerMemory = StepMemory(z, action, _hiddenStates, _cellStates);
 
-        var result = new Vector<T>(_options.ActionSize);
-        for (int i = 0; i < _options.ActionSize; i++) result[i] = action[i];
-        return result;
+        return action.ToVector().GetSubVector(0, _options.ActionSize);
     }
 
     /// <inheritdoc />
@@ -642,12 +637,8 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         int obsSize = ObservationSize;
         int latent = _options.LatentSize;
 
-        var observations = new Tensor<T>(new[] { n, obsSize });
-        for (int b = 0; b < n; b++)
-        {
-            var state = _replayBuffer.SequenceFromSlot(slots[b], 1)[0].State;
-            for (int j = 0; j < obsSize; j++) observations[b * obsSize + j] = state[j];
-        }
+        var observations = RLTensorOps.Batch(
+            slots.Select(slot => _replayBuffer.SequenceFromSlot(slot, 1)[0].State).ToList(), obsSize);
 
         var noise = GaussianTensor(new[] { n, latent });
         var (mean, logVar) = Encode(observations);
@@ -722,56 +713,48 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Encode every state and next state once, then draw z from V's posterior (fresh noise on every step,
         // as the paper resamples z from the stored mu and sigma for each batch).
-        var states = new Tensor<T>(new[] { total, obsSize });
-        var nextStates = new Tensor<T>(new[] { total, obsSize });
-        int row = 0;
-        foreach (var window in windows)
-        {
-            foreach (var experience in window)
-            {
-                for (int j = 0; j < obsSize; j++)
-                {
-                    states[row * obsSize + j] = experience.State[j];
-                    nextStates[row * obsSize + j] = experience.NextState[j];
-                }
-                row++;
-            }
-        }
+        var experiences = windows.SelectMany(window => window).ToList();
+        var states = RLTensorOps.Batch(experiences.Select(experience => experience.State), obsSize);
+        var nextStates = RLTensorOps.Batch(experiences.Select(experience => experience.NextState), obsSize);
 
         var (stateMean, stateLogVar) = Encode(states);
         var (nextMean, nextLogVar) = Encode(nextStates);
         var z = SampleLatent(stateMean, stateLogVar);
         var zNext = SampleLatent(nextMean, nextLogVar);
 
-        var inputs = new Tensor<T>(new[] { n, steps, latent + actionSize });
-        var zTarget = new Tensor<T>(new[] { n, steps, latent });
-        var rewardTarget = new Tensor<T>(new[] { n, steps, 1 });
-        var doneTarget = new Tensor<T>(new[] { n, steps, 1 });
-        var mask = new Tensor<T>(new[] { n, steps, 1 });
-
-        row = 0;
-        for (int b = 0; b < n; b++)
+        // Cell b * steps + t holds window b's step t; cells past a window's end are padding (zero, masked out).
+        // Each cell reads its row of the flattened windows, padding reads an appended zero row.
+        var rowStarts = new List<int>(n);
+        int rowStart = 0;
+        foreach (var window in windows)
         {
-            var window = windows[b];
-            for (int t = 0; t < window.Count; t++)
-            {
-                var experience = window[t];
-                int cell = b * steps + t;
-                for (int d = 0; d < latent; d++)
-                {
-                    inputs[cell * (latent + actionSize) + d] = z[row * latent + d];
-                    zTarget[cell * latent + d] = zNext[row * latent + d];
-                }
-                for (int a = 0; a < actionSize; a++)
-                {
-                    inputs[cell * (latent + actionSize) + latent + a] = experience.Action[a];
-                }
-                rewardTarget[cell] = experience.Reward;
-                doneTarget[cell] = experience.Done ? NumOps.One : NumOps.Zero;
-                mask[cell] = NumOps.One;
-                row++;
-            }
+            rowStarts.Add(rowStart);
+            rowStart += window.Count;
         }
+        var cells = Enumerable.Range(0, n * steps)
+            .Select(cell => cell % steps < windows[cell / steps].Count ? windows[cell / steps][cell % steps] : null)
+            .ToList();
+        var cellRows = Enumerable.Range(0, n * steps)
+            .Select(cell => cell % steps < windows[cell / steps].Count ? rowStarts[cell / steps] + cell % steps : total)
+            .ToArray();
+        var rowIndex = new Tensor<int>(cellRows, new[] { cellRows.Length });
+        var zCells = Engine.TensorGather(
+            Engine.TensorConcatenate(new[] { Engine.Reshape(z, new[] { total, latent }), new Tensor<T>(new[] { 1, latent }) }, 0),
+            rowIndex, 0);
+        var zNextCells = Engine.TensorGather(
+            Engine.TensorConcatenate(new[] { Engine.Reshape(zNext, new[] { total, latent }), new Tensor<T>(new[] { 1, latent }) }, 0),
+            rowIndex, 0);
+        var actionCells = RLTensorOps.Batch(
+            cells.Select(experience => experience is null ? new Vector<T>(actionSize) : experience.Action), actionSize);
+
+        var inputs = Engine.Reshape(Engine.TensorConcatenate(new[] { zCells, actionCells }, 1), new[] { n, steps, latent + actionSize });
+        var zTarget = Engine.Reshape(zNextCells, new[] { n, steps, latent });
+        var rewardTarget = new Tensor<T>(new[] { n, steps, 1 }, Vector<T>.FromEnumerable(
+            cells.Select(experience => experience is null ? NumOps.Zero : experience.Reward).ToList()));
+        var doneTarget = new Tensor<T>(new[] { n, steps, 1 }, Vector<T>.FromEnumerable(
+            cells.Select(experience => experience is not null && experience.Done ? NumOps.One : NumOps.Zero).ToList()));
+        var mask = new Tensor<T>(new[] { n, steps, 1 }, Vector<T>.FromEnumerable(
+            cells.Select(experience => experience is null ? NumOps.Zero : NumOps.One).ToList()));
 
         T inverseValid = NumOps.FromDouble(1.0 / total);
         return _mdnRnn.TrainWithCustomLoss(inputs, output =>
@@ -864,21 +847,17 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         _cycle.ControllerSearch = search;
 
         var generation = cma.Ask(search, Random);
-        var fitness = new T[generation.Points.Count];
-        T totalReturn = NumOps.Zero;
-        for (int k = 0; k < fitness.Length; k++)
-        {
-            T dreamReturn = DreamReturn(generation.Points[k]);
-            totalReturn = NumOps.Add(totalReturn, dreamReturn);
-            // CMA-ES minimises; the paper's fitness is the cumulative reward, so its negation is minimised.
-            fitness[k] = NumOps.Negate(dreamReturn);
-        }
+        // Each candidate is dreamed in order (the rollouts draw from the agent's generator).
+        var dreamReturns = Vector<T>.FromEnumerable(generation.Points.Select(DreamReturn).ToList());
+        T totalReturn = dreamReturns.Length == 0 ? NumOps.Zero : Engine.Sum(dreamReturns);
+        // CMA-ES minimises; the paper's fitness is the cumulative reward, so its negation is minimised.
+        var fitness = Engine.Negate(dreamReturns).ToArray();
         cma.Tell(search, generation, fitness);
 
         // The controller is the distribution's mean, the estimate CMA-ES itself recommends under a noisy fitness.
-        var mean = new Vector<T>(search.Dimension);
-        for (int i = 0; i < mean.Length; i++) mean[i] = NumOps.FromDouble(search.Mean[i]);
-        _controllerParameters = mean;
+        _controllerParameters = search.Dimension == 0
+            ? new Vector<T>(0)
+            : RLTensorOps.Head(Vector<double>.FromArray(search.Mean), search.Dimension).AsTensor().Cast<T>().ToVector();
 
         _lastDreamReturn = NumOps.Divide(totalReturn, NumOps.FromDouble(fitness.Length));
         loss = NumOps.Negate(_lastDreamReturn);
@@ -931,12 +910,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Tensor<T> SampleDreamStartLatents(int rollouts)
     {
         int obsSize = ObservationSize;
-        var starts = new Tensor<T>(new[] { rollouts, obsSize });
-        for (int b = 0; b < rollouts; b++)
-        {
-            var state = _replayBuffer.SequenceFromSlot(Random.Next(_replayBuffer.Count), 1)[0].State;
-            for (int j = 0; j < obsSize; j++) starts[b * obsSize + j] = state[j];
-        }
+        // One uniformly drawn replay state per rollout, in order.
+        var starts = RLTensorOps.Batch(
+            Enumerable.Range(0, rollouts).Select(_ => _replayBuffer.SequenceFromSlot(Random.Next(_replayBuffer.Count), 1)[0].State).ToList(),
+            obsSize);
         var (mean, logVar) = Encode(starts);
         return SampleLatent(mean, logVar);
     }
@@ -949,16 +926,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int latent = _options.LatentSize;
         int outputSize = MdnOutputSize;
-        var nextZ = new Tensor<T>(new[] { rollouts, latent });
-        for (int b = 0; b < rollouts; b++)
-        {
-            int offset = b * outputSize;
-            for (int d = 0; d < latent; d++)
-            {
-                nextZ[b * latent + d] = SampleMixtureLatent(output, offset, d, weights);
-            }
-        }
-        return nextZ;
+        // Row-major (rollout, dimension) order, the order the mixture draws consume the generator.
+        var samples = Enumerable.Range(0, rollouts * latent)
+            .Select(i => SampleMixtureLatent(output, (i / latent) * outputSize, i % latent, weights)).ToList();
+        return new Tensor<T>(new[] { rollouts, latent }, Vector<T>.FromEnumerable(samples));
     }
 
     /// <summary>
@@ -967,22 +938,20 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     private int AccrueDreamStep(Tensor<T> output, bool[] alive, T[] returns)
     {
+        // Live rollouts add their predicted reward; a live rollout whose done logit is > 0 (sigmoid > 0.5) ends.
         int block = MixtureBlock;
-        int outputSize = MdnOutputSize;
-        int ended = 0;
-        for (int b = 0; b < alive.Length; b++)
-        {
-            if (!alive[b]) continue;
-            int offset = b * outputSize;
-            returns[b] = NumOps.Add(returns[b], output[offset + 3 * block]);
-            // sigmoid(l) > 0.5 exactly when l > 0.
-            if (NumOps.GreaterThan(output[offset + 3 * block + 1], NumOps.Zero))
-            {
-                alive[b] = false;
-                ended++;
-            }
-        }
-        return ended;
+        int n = alive.Length;
+        var table = Engine.Reshape(output, new[] { n, MdnOutputSize });
+        var rewards = Engine.Reshape(Engine.TensorSlice(table, new[] { 0, 3 * block }, new[] { n, 1 }), new[] { n });
+        var doneLogits = Engine.Reshape(Engine.TensorSlice(table, new[] { 0, 3 * block + 1 }, new[] { n, 1 }), new[] { n });
+        var current = new Tensor<T>(new[] { n }, Vector<T>.FromArray(returns));
+        var accrued = Engine.TensorWhere(alive, Engine.TensorAdd(current, rewards), current);
+        accrued.AsSpan().CopyTo(returns);
+
+        var terminal = Engine.TensorGreaterThan(doneLogits, NumOps.Zero).Cast<double>().ToVector().ToArray();
+        var ending = Enumerable.Range(0, n).Where(b => alive[b] && terminal[b] > 0.0).ToList();
+        foreach (int b in ending) alive[b] = false;
+        return ending.Count;
     }
 
     /// <summary>The number of controllers scored in the dream so far.</summary>
@@ -1022,10 +991,12 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>Samples a mixture component from softmax(logits / tau).</summary>
     private int SampleComponent(Tensor<T> output, int offset, int mixtures, double temperature, double[] weights)
     {
+        var logits = Engine.TensorSlice(Engine.Reshape(output, new[] { output.Length }), new[] { offset }, new[] { mixtures })
+            .Cast<double>().ToVector().ToArray();
         double max = double.NegativeInfinity;
         for (int k = 0; k < mixtures; k++)
         {
-            weights[k] = NumOps.ToDouble(output[offset + k]) / temperature;
+            weights[k] = logits[k] / temperature;
             if (weights[k] > max) max = weights[k];
         }
         double total = 0.0;
@@ -1050,17 +1021,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         int n = observations.Shape[0];
         int latent = _options.LatentSize;
-        var encoded = _vaeEncoder.Predict(observations);
-        var mean = new Tensor<T>(new[] { n, latent });
-        var logVar = new Tensor<T>(new[] { n, latent });
-        for (int b = 0; b < n; b++)
-        {
-            for (int d = 0; d < latent; d++)
-            {
-                mean[b * latent + d] = encoded[b * 2 * latent + d];
-                logVar[b * latent + d] = encoded[b * 2 * latent + latent + d];
-            }
-        }
+        // Each encoder row is [mean (latent), log variance (latent)].
+        var encoded = Engine.Reshape(_vaeEncoder.Predict(observations), new[] { n, 2 * latent });
+        var mean = Engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { n, latent });
+        var logVar = Engine.TensorSlice(encoded, new[] { 0, latent }, new[] { n, latent });
         return (mean, logVar);
     }
 
@@ -1069,21 +1033,17 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar, Tensor<T> noise)
     {
-        var z = new Tensor<T>(mean.Shape.ToArray());
-        T half = NumOps.FromDouble(0.5);
-        for (int i = 0; i < z.Length; i++)
-        {
-            T std = NumOps.Exp(NumOps.Multiply(logVar[i], half));
-            z[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise[i]));
-        }
-        return z;
+        // z = mean + exp(logVar / 2) * noise
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, noise));
     }
 
     private Tensor<T> GaussianTensor(int[] shape)
     {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = NumOps.FromDouble(NextGaussian());
-        return tensor;
+        // One NextGaussian draw per element, in row-major order.
+        int count = shape.Aggregate(1, (product, size) => product * size);
+        var draws = Vector<double>.FromEnumerable(Enumerable.Range(0, count).Select(_ => NextGaussian()).ToList());
+        return new Tensor<T>(shape, count == 0 ? new Vector<T>(0) : draws.AsTensor().Cast<T>().ToVector());
     }
 
     /// <summary>A standard normal draw from the agent's (seedable) generator, by Box-Muller.</summary>
@@ -1106,11 +1066,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             int input = _controllerLayerSizes[l];
             int output = _controllerLayerSizes[l + 1];
-            var weights = new Tensor<T>(new[] { input, output });
-            for (int i = 0; i < input * output; i++) weights[i] = parameters[offset + i];
+            // W [input, output] row-major, then the [1, output] bias.
+            var weights = new Tensor<T>(new[] { input, output }, parameters.GetSubVector(offset, input * output));
             offset += input * output;
-            var bias = new Tensor<T>(new[] { 1, output });
-            for (int i = 0; i < output; i++) bias[i] = parameters[offset + i];
+            var bias = new Tensor<T>(new[] { 1, output }, parameters.GetSubVector(offset, output));
             offset += output;
             layers.Add((weights, bias));
         }

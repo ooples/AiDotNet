@@ -9,6 +9,8 @@ param(
     [Parameter(Mandatory)] [string] $SourceResult,
     [Parameter(Mandatory)] [string] $RequiresValidation,
     [string] $RequiresTests = 'true',
+    [string] $RequiresGpu = 'false',
+    [string] $GpuResult = 'skipped',
     [string] $SelectResult = 'skipped',
     [string] $BuildResult = 'skipped',
     [string] $BuildCompatResult = 'skipped',
@@ -18,7 +20,6 @@ param(
     [string] $AggregateAnalysisResult = 'skipped',
     [string] $SizeCheckResult = 'skipped',
     [string] $PromotionResult = 'skipped',
-    [string] $CodeQLResult = 'skipped',
     [string] $SonarResult = 'skipped',
     [string] $ValidationGateResult = 'skipped',
     # Paper fidelity runs on pull requests only (the nightly sweep covers everything else), so the
@@ -115,6 +116,8 @@ $gateStage = [CiGateStage] $Stage
 $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
+$requiresGpuNow = ConvertTo-RequiredBoolean $RequiresGpu 'RequiresGpu'
+$gpu = ConvertTo-CiJobConclusion $GpuResult 'required-gpu-contracts'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 $requiresPaperFidelityNow = ConvertTo-RequiredBoolean $RequiresPaperFidelity 'RequiresPaperFidelity'
 
@@ -122,12 +125,11 @@ $source = ConvertTo-CiJobConclusion $SourceResult 'validation-source'
 $select = ConvertTo-CiJobConclusion $SelectResult 'select-shards'
 $build = ConvertTo-CiJobConclusion $BuildResult 'build'
 $buildCompat = ConvertTo-CiJobConclusion $BuildCompatResult 'build-compat'
-$tests = ConvertTo-CiJobConclusion $TestsResult 'test-net10-sharded'
+$tests = ConvertTo-CiJobConclusion $TestsResult 'reconcile-shard-attempts'
 $regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'test-regression-analysis'
 $aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'ci-test-analysis'
 $sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'size-check'
 $promotion = ConvertTo-CiJobConclusion $PromotionResult 'promote-ci-test-analysis'
-$codeql = ConvertTo-CiJobConclusion $CodeQLResult 'codeql'
 $sonar = ConvertTo-CiJobConclusion $SonarResult 'sonarcloud'
 $validationGate = ConvertTo-CiJobConclusion $ValidationGateResult 'validation-gate'
 $paperFidelityPlan = ConvertTo-CiJobConclusion $PaperFidelityPlanResult 'paper-fidelity-plan'
@@ -175,15 +177,15 @@ else {
         # SonarCloud is advisory: it is reported below but never required. Its instrumented build
         # did not finish on any PR or master push checked in 2026-09 (timeouts and lost runners),
         # so requiring it blocked every merge without ever producing an analysis.
+        # CodeQL is not an input at all: it runs after merge from .github/workflows/codeql.yml,
+        # never in the run this gate judges.
         ([CiValidationReuseScope]::None) {
             Add-RequiredSuccess $requirements 'validation-gate' $validationGate
-            Add-RequiredSuccess $requirements 'codeql' $codeql
         }
         ([CiValidationReuseScope]::Validation) {
             if ($requiresRuntimeValidation) {
                 Add-RequiredSuccess $requirements 'promote-ci-test-analysis' $promotion
             }
-            Add-RequiredSuccess $requirements 'codeql' $codeql
         }
         ([CiValidationReuseScope]::Complete) {
             if ($requiresRuntimeValidation) {
@@ -193,6 +195,9 @@ else {
     }
 }
 
+# Kept outside the reuse switch: neither FullReuse nor a diagnostic report can satisfy a GPU
+# requirement declared for this run. Certified exact-tree reuse declares no new execution obligation.
+if ($requiresGpuNow) { Add-RequiredSuccess $requirements 'required-gpu-contracts' $gpu }
 $failed = @($requirements | Where-Object Conclusion -ne ([CiJobConclusion]::Success))
 
 # A job that was cancelled or never ran is not a job that failed. Telling them apart is the point of
@@ -213,8 +218,8 @@ $mode = if ($gateStage -eq [CiGateStage]::Validation) {
 }
 else {
     switch ($reuse) {
-        ([CiValidationReuseScope]::None) { 'current-run validation and quality' }
-        ([CiValidationReuseScope]::Validation) { 'reused validation; current-run quality' }
+        ([CiValidationReuseScope]::None) { 'current-run validation' }
+        ([CiValidationReuseScope]::Validation) { 'reused validation' }
         ([CiValidationReuseScope]::Complete) { 'reused complete CI' }
     }
 }

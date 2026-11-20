@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -36,8 +38,8 @@ public class Winsorizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly WinsorizerLimitType _limitType;
 
     // Fitted parameters
-    private double[]? _lowerBounds;
-    private double[]? _upperBounds;
+    private Vector<T>? _lowerBounds;
+    private Vector<T>? _upperBounds;
     private int _nInputFeatures;
 
     /// <summary>
@@ -58,12 +60,12 @@ public class Winsorizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the computed lower bounds for each feature.
     /// </summary>
-    public double[]? LowerBounds => _lowerBounds;
+    public Vector<T>? LowerBounds => _lowerBounds;
 
     /// <summary>
     /// Gets the computed upper bounds for each feature.
     /// </summary>
-    public double[]? UpperBounds => _upperBounds;
+    public Vector<T>? UpperBounds => _upperBounds;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -127,73 +129,36 @@ public class Winsorizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var mask = ScalerTensorOps.ColumnMask<T>(_nInputFeatures, GetColumnsToProcess(_nInputFeatures));
 
-        _lowerBounds = new double[_nInputFeatures];
-        _upperBounds = new double[_nInputFeatures];
-
-        for (int col = 0; col < _nInputFeatures; col++)
+        // Percentile limits: linearly interpolated percentiles (numpy / pandas default); IQR limits:
+        // Q1 - lower * IQR and Q3 + upper * IQR (feature-engine's Winsorizer). NaN is ignored; an empty column
+        // gets 0. Pass-through columns get the widest bounds.
+        Tensor<T> lower;
+        Tensor<T> upper;
+        if (data.Rows == 0 || _nInputFeatures == 0)
         {
-            if (!processSet.Contains(col))
-            {
-                // Pass-through columns: use extreme bounds
-                _lowerBounds[col] = double.MinValue;
-                _upperBounds[col] = double.MaxValue;
-                continue;
-            }
-
-            // Collect all values for this column
-            var values = new List<double>();
-            for (int i = 0; i < data.Rows; i++)
-            {
-                values.Add(NumOps.ToDouble(data[i, col]));
-            }
-
-            // Sort for percentile calculation
-            values.Sort();
-
-            if (_limitType == WinsorizerLimitType.Percentile)
-            {
-                _lowerBounds[col] = CalculatePercentile(values, _lowerLimit);
-                _upperBounds[col] = CalculatePercentile(values, _upperLimit);
-            }
-            else // IQR type
-            {
-                double q1 = CalculatePercentile(values, 25);
-                double q3 = CalculatePercentile(values, 75);
-                double iqr = q3 - q1;
-
-                _lowerBounds[col] = q1 - _lowerLimit * iqr;
-                _upperBounds[col] = q3 + _upperLimit * iqr;
-            }
+            lower = new Tensor<T>(new[] { _nInputFeatures });
+            upper = new Tensor<T>(new[] { _nInputFeatures });
         }
-    }
-
-    private static double CalculatePercentile(List<double> sortedValues, double percentile)
-    {
-        if (sortedValues.Count == 0)
+        else if (_limitType == WinsorizerLimitType.Percentile)
         {
-            return 0;
+            var x = Tensor<T>.FromMatrix(data);
+            lower = Engine.TensorNanQuantile(x, _lowerLimit / 100.0, 0, false, QuantileInterpolation.Linear);
+            upper = Engine.TensorNanQuantile(x, _upperLimit / 100.0, 0, false, QuantileInterpolation.Linear);
+        }
+        else // IQR type
+        {
+            var x = Tensor<T>.FromMatrix(data);
+            var q1 = Engine.TensorNanQuantile(x, 0.25, 0, false, QuantileInterpolation.Linear);
+            var q3 = Engine.TensorNanQuantile(x, 0.75, 0, false, QuantileInterpolation.Linear);
+            var iqr = Engine.TensorSubtract(q3, q1);
+            lower = Engine.TensorSubtract(q1, Engine.TensorMultiplyScalar(iqr, NumOps.FromDouble(_lowerLimit)));
+            upper = Engine.TensorAdd(q3, Engine.TensorMultiplyScalar(iqr, NumOps.FromDouble(_upperLimit)));
         }
 
-        if (sortedValues.Count == 1)
-        {
-            return sortedValues[0];
-        }
-
-        double index = (percentile / 100.0) * (sortedValues.Count - 1);
-        int lowerIndex = (int)Math.Floor(index);
-        int upperIndex = (int)Math.Ceiling(index);
-
-        if (lowerIndex == upperIndex)
-        {
-            return sortedValues[lowerIndex];
-        }
-
-        // Linear interpolation
-        double fraction = index - lowerIndex;
-        return sortedValues[lowerIndex] + fraction * (sortedValues[upperIndex] - sortedValues[lowerIndex]);
+        _lowerBounds = ScalerTensorOps.MaskedParameters(mask, lower, NumOps.MinValue);
+        _upperBounds = ScalerTensorOps.MaskedParameters(mask, upper, NumOps.MaxValue);
     }
 
     /// <summary>
@@ -208,29 +173,16 @@ public class Winsorizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Winsorizer has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-
-                if (processSet.Contains(j))
-                {
-                    // Winsorize to bounds
-                    value = Math.Max(_lowerBounds[j], Math.Min(_upperBounds[j], value));
-                }
-
-                result[i, j] = NumOps.FromDouble(value);
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return new Matrix<T>(result);
+        // Clip to bounds on the processed columns; the other columns pass through.
+        var clipped = ScalerTensorOps.ClipColumns(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, clipped, data);
     }
 
     /// <summary>

@@ -140,7 +140,8 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
         // Calculate (1 - ix)^(-m-1)
         Complex<T> base_term = new Complex<T>(NumOps.One, NumOps.Zero) - i * xComplex;
         T exponentT = NumOps.FromDouble(-m - 1);
-        Complex<T> denominator_term = complexOps.Power(base_term, new Complex<T>(exponentT, exponentT));
+        // (1 - i x)^-(m + 1): the exponent is real.
+        Complex<T> denominator_term = complexOps.Power(base_term, new Complex<T>(exponentT, NumOps.Zero));
         Complex<T> result = factor * denominator_term;
 
         return result.ToRealOrComplex();
@@ -173,35 +174,33 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        var engine = AiDotNetEngine.Current;
 
         // Perform FFT
-        var spectrum = _fft.Forward(input);
+        var spectrum = Tensor<Complex<T>>.FromVector(_fft.Forward(input));
+        var spectrumReal = engine.TensorReal(spectrum);
+        var spectrumImag = engine.TensorImag(spectrum);
 
-        // Apply Paul wavelet in frequency domain
-        var scalingSpectrum = new Vector<Complex<T>>(size);
-        var waveletSpectrum = new Vector<Complex<T>>(size);
+        // psi is real, so multiplying the spectrum by it (or by 1 - psi) scales both planes.
+        var freq = FrequencyGrid(size);
+        var psi = PaulFourierTransform(freq);
 
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            Complex<T> psi = PaulFourierTransform(freq);
+        // Apply scaling function (low-pass), only inside |freq| <= 0.5
+        var outside = engine.TensorGreaterThan(engine.TensorAbs(freq), NumOps.FromDouble(0.5));
+        var zeros = engine.TensorZerosLike(psi);
+        var scalingSpectrum = engine.TensorComplex(
+            engine.TensorWhere(outside, zeros, engine.TensorMultiply(spectrumReal, psi)),
+            engine.TensorWhere(outside, zeros, engine.TensorMultiply(spectrumImag, psi)));
 
-            // Low-pass (scaling) filter
-            if (NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5)))
-            {
-                scalingSpectrum[i] = complexOps.Multiply(spectrum[i], psi);
-            }
-
-            // High-pass (wavelet) filter
-            waveletSpectrum[i] = complexOps.Multiply(spectrum[i],
-                complexOps.Subtract(new Complex<T>(NumOps.One, NumOps.Zero), psi));
-        }
+        // Apply wavelet function (high-pass)
+        var highPass = engine.ScalarMinusTensor(NumOps.One, psi);
+        var waveletSpectrum = engine.TensorComplex(
+            engine.TensorMultiply(spectrumReal, highPass),
+            engine.TensorMultiply(spectrumImag, highPass));
 
         // Perform inverse FFT
-        var approximation = _fft.Inverse(scalingSpectrum);
-        var detail = _fft.Inverse(waveletSpectrum);
-
+        var approximation = _fft.Inverse(scalingSpectrum.ToVector());
+        var detail = _fft.Inverse(waveletSpectrum.ToVector());
         return (approximation, detail);
     }
 
@@ -231,17 +230,11 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coeffs = new Vector<T>(size);
-
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.LessThanOrEquals(NumOps.Abs(freq), NumOps.FromDouble(0.5))
-                ? PaulFourierTransform(freq).Magnitude
-                : NumOps.Zero;
-        }
-
-        return coeffs;
+        var engine = AiDotNetEngine.Current;
+        var freq = FrequencyGrid(size);
+        var magnitude = engine.TensorSqrt(engine.TensorSquare(PaulFourierTransform(freq)));
+        var outside = engine.TensorGreaterThan(engine.TensorAbs(freq), NumOps.FromDouble(0.5));
+        return engine.TensorWhere(outside, engine.TensorZerosLike(magnitude), magnitude).ToVector();
     }
 
     /// <summary>
@@ -270,15 +263,11 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 1024; // Use a power of 2 for efficient FFT
-        var coeffs = new Vector<T>(size);
+        var engine = AiDotNetEngine.Current;
+        var psi = PaulFourierTransform(FrequencyGrid(size));
 
-        for (int i = 0; i < size; i++)
-        {
-            T freq = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size));
-            coeffs[i] = NumOps.Subtract(NumOps.One, PaulFourierTransform(freq).Magnitude);
-        }
-
-        return coeffs;
+        // 1 - |psi| (the magnitude of the real transform is sqrt(psi^2))
+        return engine.ScalarMinusTensor(NumOps.One, engine.TensorSqrt(engine.TensorSquare(psi))).ToVector();
     }
 
     /// <summary>
@@ -305,20 +294,24 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// good at analyzing phase information.
     /// </para>
     /// </remarks>
-    private Complex<T> PaulFourierTransform(T omega)
+    private Tensor<T> PaulFourierTransform(Tensor<T> omega)
     {
-        if (NumOps.LessThanOrEquals(omega, NumOps.Zero))
-        {
-            return new Complex<T>(NumOps.Zero, NumOps.Zero);
-        }
+        var engine = AiDotNetEngine.Current;
 
-        T factor = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Power(omega, NumOps.FromDouble(_order)));
-        T expTerm = NumOps.Exp(NumOps.Negate(omega));
+        // psi(w) = 2 * w^m * exp(-w) for w > 0 and 0 otherwise; the transform is real.
+        var factor = engine.TensorMultiplyScalar(engine.TensorPower(omega, NumOps.FromDouble(_order)), NumOps.FromDouble(2));
+        var expTerm = engine.TensorExp(engine.TensorNegate(omega));
+        var value = engine.TensorMultiply(factor, expTerm);
+        var positive = engine.TensorGreaterThan(omega, NumOps.Zero);
+        return engine.TensorWhere(positive, value, engine.TensorZerosLike(value));
+    }
 
-        T real = NumOps.Multiply(factor, expTerm);
-        T imag = NumOps.Zero;
-
-        return new Complex<T>(real, imag);
+    /// <summary>
+    /// The normalized frequencies <c>(i - size / 2) / size</c> of the spectrum bins.
+    /// </summary>
+    private static Tensor<T> FrequencyGrid(int size)
+    {
+        return AiDotNetEngine.Current.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(size), NumOps.FromDouble(size));
     }
 
     /// <summary>
@@ -341,23 +334,25 @@ public class PaulWavelet<T> : WaveletFunctionBase<T>
     /// Reconstruct(Decompose(signal)) should equal the original signal.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="approximation"/> and <paramref name="detail"/> differ in length: their spectra have different
+    /// bin spacings and cannot be added.
+    /// </exception>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int size = approximation.Length;
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
+        if (approximation.Length != detail.Length)
+        {
+            throw new ArgumentException("Approximation and detail lengths must match.", nameof(detail));
+        }
 
-        // Transform both to frequency domain
+        // Perform FFT on both approximation and detail
         Vector<Complex<T>> approxSpectrum = _fft.Forward(approximation);
         Vector<Complex<T>> detailSpectrum = _fft.Forward(detail);
 
-        // Combine spectrums
-        var combined = new Vector<Complex<T>>(size);
-        for (int i = 0; i < size; i++)
-        {
-            combined[i] = complexOps.Add(approxSpectrum[i], detailSpectrum[i]);
-        }
+        // Combine the spectra
+        var combined = ComplexWaveletEngineOps<T>.AddTruncated(approxSpectrum, detailSpectrum);
 
-        // Transform back to time domain
+        // Perform inverse FFT
         return _fft.Inverse(combined);
     }
 }

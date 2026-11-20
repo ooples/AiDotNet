@@ -101,6 +101,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </summary>
     private int _previousT;
 
+    /// <inheritdoc />
+    internal override bool SupportsShardedTapeStateConsolidation =>
+        _options.MomentStorage != Enums.OptimizerMomentStorage.Int8Blockwise;
+
     /// <summary>
     /// Initializes a new instance of the AdamWOptimizer class.
     /// </summary>
@@ -256,6 +260,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         {
             _vMax = Vector<T>.Empty();
         }
+        DisposeCachedGpuGradBuffers();
         _t = 0;
 
         // Initialize parameters
@@ -717,7 +722,15 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // every subsequent step produces NaN weights.
         // The guard runs BEFORE _tapeStep++ so a skipped step doesn't
         // advance bias-correction time and distort the next real update.
-        if (HasAnomalousTapeGradients(context)) return;
+        if (TryGetClippedAheadGradNormSq(out double preNormSq))
+        {
+            if (double.IsNaN(preNormSq) || (double.IsInfinity(preNormSq) && (typeof(T) == typeof(float) || HasAnomalousTapeGradients(context))))
+                return;
+        }
+        else if (HasAnomalousTapeGradients(context))
+        {
+            return;
+        }
 
         _tapeStep++;
 
@@ -733,8 +746,12 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // GPU-RESIDENT ADAMW: see AdamOptimizer.Step for the rationale — run the
         // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
         // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise.
-        bool gpuAdam = !masked && typeof(T) == typeof(float) && !_options.UseAMSGrad
-            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine =
+            typeof(T) == typeof(float) && !_options.UseAMSGrad
+                ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
+        bool gpuAdam = gpuEngine is not null && gpuBackend is not null;
 
         int maskOffset = 0;
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
@@ -748,6 +765,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 if (!maskOffsets.Value.Offsets.TryGetValue(param, out parameterMaskOffset))
                     throw new InvalidOperationException("A stepped parameter is not among AdamWOptimizerOptions.MaskParameters.");
             }
+            double paramRateMultiplier = 1.0;
+            bool uniformParameterMasks = TryGetUniformMaskMultiplier(configuredMask, parameterMaskOffset, param.Length, out double paramDecayMultiplier)
+                && TryGetUniformMaskMultiplier(rateMask, parameterMaskOffset, param.Length, out paramRateMultiplier);
+            double effectiveLr = uniformParameterMasks ? learningRateValue * paramRateMultiplier : learningRateValue;
+            double effectiveWeightDecay = uniformParameterMasks ? _options.WeightDecay * paramDecayMultiplier : _options.WeightDecay;
             // Cheap presence check — defer sparse→dense materialization until after
             // the sparse fast path declines, so a sparse-only embedding param isn't
             // ToDense'd into a full [vocab, dim] tensor that the scatter path below
@@ -769,16 +791,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 continue;
             }
 
-            if (!_tapeM.TryGetValue(param, out var m))
-            {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v))
-            {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeV[param] = v;
-            }
+            var m = GetOrCreateShapedOptimizerStateTensor(_tapeM, param, gpuAdam);
+            var v = GetOrCreateShapedOptimizerStateTensor(_tapeV, param, gpuAdam);
 
             // Sparse-embedding scatter path (Tensors#553). Same rationale as the
             // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
@@ -788,15 +802,16 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // which the helper applies per-row when weightDecay > 0. AMSGrad
             // keeps the dense path (vMax invariant requires touching every row).
             if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)
-                && !masked && !_options.UseAMSGrad
+                && (!masked || (uniformParameterMasks && effectiveWeightDecay == 0.0))
+                && !_options.UseAMSGrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v,
-                    learningRateValue,
+                    effectiveLr,
                     _options.Beta1, _options.Beta2,
                     1.0 - Math.Pow(_options.Beta1, _tapeStep),
                     1.0 - Math.Pow(_options.Beta2, _tapeStep),
                     _options.Epsilon,
-                    weightDecay: _options.WeightDecay))
+                    weightDecay: effectiveWeightDecay))
             {
                 continue;
             }
@@ -807,24 +822,33 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            // GPU-resident fused AdamW (no host download); falls back if any tensor isn't GPU-resident.
-            if (gpuAdam && param.Length == grad.Length)
+            if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
             {
-                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamWStep(
-                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
-                        (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                        (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2,
-                        (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
-                {
-                    continue;
-                }
+                grad = Engine.Reshape(grad, param._shape);
+            }
+
+            // GPU-resident fused AdamW: promotes deserialized/host m and v to GPU once, uploads host-only
+            // gradients in-place into reusable per-parameter GPU buffers, and commits updated parameters on device.
+            if (uniformParameterMasks &&
+                gpuEngine is not null &&
+                gpuBackend is not null &&
+                param.Length == grad.Length &&
+                TryExecuteGpuAdamOrAdamWStep(
+                    gpuEngine, gpuBackend, param,
+                    (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                    (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                    (float)effectiveLr, (float)_options.Beta1, (float)_options.Beta2,
+                    (float)_options.Epsilon, (float)effectiveWeightDecay, _tapeStep,
+                    decoupledWeightDecay: true))
+            {
+                continue;
             }
 
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
-            // chunked across the pool. The tensor-op path below runs ~15 full-size engine ops per parameter, each
-            // allocating its result: ~400 ms of a Track B LM step (31M parameters) vs a few ms here.
-            if (!masked && !_options.UseAMSGrad
-                && TryFusedHostAdamWStep(param, grad, m, v, learningRateValue,
+            // chunked across the pool. Per-tensor uniform masks (e.g. 0 on embeddings/LayerNorm/biases, 1 on 2D weights)
+            // fold directly into effectiveLr and effectiveWeightDecay.
+            if (uniformParameterMasks && !_options.UseAMSGrad
+                && TryFusedHostAdamWStep(param, grad, m, v, effectiveLr, effectiveWeightDecay,
                     1.0 - Math.Pow(_options.Beta1, _tapeStep), 1.0 - Math.Pow(_options.Beta2, _tapeStep)))
             {
                 continue;
@@ -903,7 +927,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// lr * mHat / (sqrt(vHat) + eps), decoupled decay of the pre-update parameter. False (nothing done) for a GPU
     /// engine, a non-float element type, or a layout without zero-copy host arrays.
     /// </summary>
-    private bool TryFusedHostAdamWStep(Tensor<T> param, Tensor<T> grad, Tensor<T> m, Tensor<T> v, double lr, double bc1, double bc2)
+    private bool TryFusedHostAdamWStep(Tensor<T> param, Tensor<T> grad, Tensor<T> m, Tensor<T> v, double lr, double effectiveWeightDecay, double bc1, double bc2)
     {
         if (Engine.SupportsGpu || param.Length != grad.Length || param.Length != m.Length || param.Length != v.Length
             || !param.IsContiguous || !grad.IsContiguous || !m.IsContiguous || !v.IsContiguous)
@@ -918,7 +942,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (pA is null || mA is null || vA is null || gA is null) return false;
             AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.AdamWStepHost(pA, pO, gA, gO, mA, mO, vA, vO, length,
                 (float)lr, (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
-                (float)_options.WeightDecay, (float)bc1, (float)bc2);
+                (float)effectiveWeightDecay, (float)bc1, (float)bc2);
         }
         else if (typeof(T) == typeof(double))
         {
@@ -928,7 +952,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             var gA = ((Tensor<double>)(object)grad).GetCpuBackingForStridedRead(out int gO);
             if (pA is null || mA is null || vA is null || gA is null) return false;
             AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.AdamWStepHost(pA, pO, gA, gO, mA, mO, vA, vO, length,
-                lr, _options.Beta1, _options.Beta2, _options.Epsilon, _options.WeightDecay, bc1, bc2);
+                lr, _options.Beta1, _options.Beta2, _options.Epsilon, effectiveWeightDecay, bc1, bc2);
         }
         else
         {
@@ -938,6 +962,69 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         m.IncrementVersion();
         v.IncrementVersion();
         return true;
+    }
+
+    private static bool TryAllFiniteInUnitInterval(Vector<T> mask)
+    {
+        if (mask.Length == 0) return true;
+        if (typeof(T) == typeof(float))
+        {
+            var s = ((Vector<float>)(object)mask).AsSpan();
+            for (int i = 0; i < s.Length; i++)
+            {
+                float v = s[i];
+                if (!(v >= 0f && v <= 1f)) return false;
+            }
+            return true;
+        }
+        if (typeof(T) == typeof(double))
+        {
+            var s = ((Vector<double>)(object)mask).AsSpan();
+            for (int i = 0; i < s.Length; i++)
+            {
+                double v = s[i];
+                if (!(v >= 0.0 && v <= 1.0)) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryGetUniformMaskMultiplier(Vector<T>? mask, int offset, int length, out double value)
+    {
+        if (mask is null || length <= 0)
+        {
+            value = 1.0;
+            return true;
+        }
+        if (typeof(T) == typeof(float))
+        {
+            var s = ((Vector<float>)(object)mask).AsSpan().Slice(offset, length);
+            float first = s[0];
+#if NET8_0_OR_GREATER
+            if (s.IndexOfAnyExcept(first) >= 0) { value = 0.0; return false; }
+#else
+            for (int i = 1; i < s.Length; i++)
+                if (s[i] != first) { value = 0.0; return false; }
+#endif
+            value = first;
+            return true;
+        }
+        if (typeof(T) == typeof(double))
+        {
+            var s = ((Vector<double>)(object)mask).AsSpan().Slice(offset, length);
+            double first = s[0];
+#if NET8_0_OR_GREATER
+            if (s.IndexOfAnyExcept(first) >= 0) { value = 0.0; return false; }
+#else
+            for (int i = 1; i < s.Length; i++)
+                if (s[i] != first) { value = 0.0; return false; }
+#endif
+            value = first;
+            return true;
+        }
+        value = 0.0;
+        return false;
     }
 
     /// <summary>
@@ -955,13 +1042,13 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 nameof(_options.WeightDecayMask));
         }
 
-        if (mask.Length > 0)
+        if (mask.Length > 0 && !TryAllFiniteInUnitInterval(mask))
         {
             // Valid entries are finite and in [0, 1]: NaN/Inf are mapped outside the range first, then an entry is
             // valid exactly when clamping it to [0, 1] leaves it unchanged. One reduction finds any invalid entry and
             // an arg-min locates the first one for the message.
             var maskTensor = mask.AsTensor();
-            var finiteMask = Engine.TensorNanToNum(maskTensor, nan: -1.0, posinf: -1.0, neginf: -1.0);
+            var finiteMask = AiDotNet.Helpers.NanToNumHelper.Apply(Engine, maskTensor, nan: -1.0, posinf: -1.0, neginf: -1.0);
             var valid = Engine.TensorEquals(Engine.TensorClamp(finiteMask, NumOps.Zero, NumOps.One), maskTensor);
             if (NumOps.Equals(Engine.TensorMinValue(valid), NumOps.Zero))
             {
@@ -1245,6 +1332,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             _gpuV?.Dispose();
             _gpuV = null;
             _gpuStateInitialized = false;
+            base.DisposeGpuState();
         }
         if (failures is { Count: 1 })
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();

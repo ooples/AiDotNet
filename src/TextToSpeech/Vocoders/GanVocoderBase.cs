@@ -42,6 +42,8 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     private readonly List<LayerBase<T>> _generatorLayers = new();
     private readonly List<LayerBase<T>> _discriminatorLayers = new();
     private Tensor<T>? _rememberedGeneration;
+    private const string GenerationOutputKey = "gan-generation";
+
     private string? _trainingGroup;
 
     /// <summary>Creates a native (trainable) vocoder.</summary>
@@ -188,6 +190,9 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>Whether the discriminator step comes before the generator step (HiFi-GAN, MelGAN) or after it
     /// (Parallel WaveGAN).</summary>
     protected virtual bool DiscriminatorStepFirst => true;
+    /// <summary>Whether the following critic step must consume this generator step's pre-update waveform.</summary>
+    protected virtual bool RequiresRetainedGeneration => false;
+
 
     // ---------------------------------------------------------------- layers
 
@@ -391,7 +396,14 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         _trainingGroup = group;
         try
         {
+            using var outputs = group == "generator" && RequiresRetainedGeneration
+                && _trainingSteps >= DiscriminatorStartStep ? RetainedOutputCapture<T>.Begin() : null;
             TrainWithCustomObjective(mel, segment, (_, _) => loss(), OptimizerFor(group));
+            if (outputs is not null)
+            {
+                outputs.Complete();
+                _rememberedGeneration = outputs.Get(GenerationOutputKey);
+            }
         }
         finally
         {
@@ -427,7 +439,13 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>Keeps the generator step's output (detached) for the discriminator step that follows it, for references
     /// that train the discriminator on the very generation the generator was just updated with (UnivNet) rather than
     /// a fresh one.</summary>
-    protected void RememberGeneration(Tensor<T> generated) => _rememberedGeneration = Detached(Flat(generated));
+    protected void RememberGeneration(Tensor<T> generated)
+    {
+        if (!GradientRecording.IsRecording<T>()) return;
+        if (!RequiresRetainedGeneration || _trainingGroup != "generator" || _trainingSteps < DiscriminatorStartStep)
+            throw new InvalidOperationException("RememberGeneration requires a declared generator-to-critic handoff.");
+        GradientRecording.RetainOutput(GenerationOutputKey, Engine.StopGradient(Flat(generated)));
+    }
 
     /// <summary>A waveform as <c>[samples]</c>.</summary>
     protected Tensor<T> Flat(Tensor<T> audio) => Engine.Reshape(audio, new[] { audio.Length });
@@ -435,8 +453,8 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>The mean of every element, as a scalar tensor.</summary>
     protected Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    /// <summary>A copy of <paramref name="x"/> that carries no gradient.</summary>
-    protected static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    /// <summary>A view of <paramref name="x"/> that carries no gradient.</summary>
+    protected static Tensor<T> Detached(Tensor<T> x) => AiDotNetEngine.Current.StopGradient(x);
 
     /// <summary>The sum of <paramref name="terms"/>.</summary>
     protected Tensor<T> Sum(IEnumerable<Tensor<T>> terms)
@@ -471,7 +489,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>Feature matching: the sum over layers of the mean L1 distance between the real (detached) and generated
     /// feature maps.</summary>
     protected Tensor<T> FeatureMatching(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)
-        => Sum(Enumerable.Range(0, fake.Count).Select(l => Mean(Engine.TensorAbs(Engine.TensorSubtract(Detached(real[l]), fake[l])))));
+        => Sum(Enumerable.Range(0, fake.Count).Select(l => Mean(Engine.TensorAbs(Engine.TensorSubtract(Engine.StopGradient(real[l]), fake[l])))));
 
     // ---------------------------------------------------------------- groups and optimizers
 

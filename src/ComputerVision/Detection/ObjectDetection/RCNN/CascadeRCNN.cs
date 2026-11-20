@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
     "https://arxiv.org/abs/1712.00726",
     Year = 2018,
     Authors = "Zhaowei Cai, Nuno Vasconcelos")]
-public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
+public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>, IHostProposalVisionModel
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 
@@ -112,7 +112,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     /// mmdetection's cascade config): stage loss weights 1, 0.5, 0.25 and box-regression target weights (10, 10, 5, 5),
     /// (20, 20, 10, 10), (30, 30, 15, 15). A cascade of another depth has no reference values and keeps the defaults.
     /// </summary>
-    private static AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions ReferenceLossOptions(int numStages)
+    internal static AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions ReferenceLossOptions(int numStages)
     {
         var options = new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions();
         if (numStages > 3) return options;

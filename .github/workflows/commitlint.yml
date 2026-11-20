@@ -15,17 +15,21 @@ jobs:
     steps:
       - name: Check out the PR
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Lint commits
-        uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
-        # Loads commitlint.config.mjs — the action's default configFile is
-        # ./commitlint.config.mjs, so the file MUST be named .mjs (a .js was
-        # silently ignored, falling back to config-conventional defaults).
-        # No commitDepth: it does NOT mean "the newest N commits". Setting it to 40 made the action
-        # lint a 40-commit window from the far end of the PR range — every entry hundreds of commits
-        # old, none of them the ones under review. That is worse than the default in both
-        # directions: it still failed on legacy messages while no longer checking any new commit.
-        # The default (the PR's full base..head range) is the correct scope; the branch's ~27
-        # pre-hook messages are a history problem, not a configuration one.
-
-
+      - name: Lint every ordinary commit in the PR
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Retain the existing action's 6.2.1 commitlint dependencies, pinned by image digest.
+        # Its API enumerator stops at 100 commits and discards parent counts. Read the full
+        # local graph instead, excluding only actual multi-parent merge commits.
+        run: |
+          docker run --rm --network none --entrypoint node \
+            --volume "$GITHUB_WORKSPACE:/github/workspace:ro" \
+            --workdir /github/workspace \
+            wagoid/commitlint-github-action@sha256:86a04e0a99128551a7555c269d2b675c3c85f61358cf7dd558f6b873b66f561a \
+            tools/CommitLint/lint-pr-commits.mjs "$PR_BASE_SHA" "$PR_HEAD_SHA"

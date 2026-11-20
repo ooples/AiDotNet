@@ -153,17 +153,17 @@ public class GaussianLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        double variance = _numOps.ToDouble(_noiseVariance);
-        double logNorm = -0.5 * (_log2Pi + Math.Log(variance));
+        var engine = AiDotNetEngine.Current;
+        T variance = _noiseVariance;
+        T half = _numOps.FromDouble(0.5);
+        T logNorm = _numOps.Negate(_numOps.Multiply(half, _numOps.Add(_numOps.FromDouble(_log2Pi), _numOps.Log(variance))));
 
-        double total = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double diff = _numOps.ToDouble(y[i]) - _numOps.ToDouble(f[i]);
-            total += logNorm - 0.5 * diff * diff / variance;
-        }
-
-        return _numOps.FromDouble(total);
+        // Σ_i [logNorm - 0.5 (y_i - f_i)² / σ²]
+        var diff = engine.Subtract(y, f);
+        T sumSquares = engine.DotProduct(diff, diff);
+        return _numOps.Subtract(
+            _numOps.Multiply(_numOps.FromDouble(y.Length), logNorm),
+            _numOps.Divide(_numOps.Multiply(half, sumSquares), variance));
     }
 
     /// <summary>
@@ -187,16 +187,8 @@ public class GaussianLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        double variance = _numOps.ToDouble(_noiseVariance);
-        var grad = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            double diff = _numOps.ToDouble(y[i]) - _numOps.ToDouble(f[i]);
-            grad[i] = _numOps.FromDouble(diff / variance);
-        }
-
-        return grad;
+        var engine = AiDotNetEngine.Current;
+        return engine.Divide(engine.Subtract(y, f), _noiseVariance);
     }
 
     /// <summary>
@@ -218,15 +210,8 @@ public class GaussianLikelihood<T> : ILikelihood<T>
         if (y is null) throw new ArgumentNullException(nameof(y));
         if (f is null) throw new ArgumentNullException(nameof(f));
 
-        double variance = _numOps.ToDouble(_noiseVariance);
-        var hess = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            hess[i] = _numOps.FromDouble(-1.0 / variance);
-        }
-
-        return hess;
+        T value = _numOps.Negate(_numOps.Divide(_numOps.One, _noiseVariance));
+        return Tensor<T>.CreateDefault(new[] { y.Length }, value).ToVector();
     }
 
     /// <summary>
@@ -308,31 +293,17 @@ public class BernoulliLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        double total = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
+        var engine = AiDotNetEngine.Current;
 
-            // Convert -1/+1 labels to 0/1 if needed
-            if (yi < 0) yi = 0;
+        // Convert -1/+1 labels to 0/1 if needed
+        var labels = engine.TensorMax(Tensor<T>.FromVector(y), _numOps.Zero);
+        var latent = Tensor<T>.FromVector(f);
 
-            // Numerically stable log-likelihood
-            // log p(y|f) = y*f - log(1 + exp(f))
-            total += yi * fi - LogOnePlusExp(fi);
-        }
-
-        return _numOps.FromDouble(total);
-    }
-
-    /// <summary>
-    /// Computes log(1 + exp(x)) in a numerically stable way.
-    /// </summary>
-    private static double LogOnePlusExp(double x)
-    {
-        if (x > 35) return x;
-        if (x < -35) return 0;
-        return Math.Log(1 + Math.Exp(x));
+        // Numerically stable log-likelihood
+        // log p(y|f) = y*f - log(1 + exp(f))
+        return _numOps.Subtract(
+            engine.TensorVecDot(labels, latent),
+            engine.TensorSum(engine.Softplus(latent)));
     }
 
     /// <summary>
@@ -355,20 +326,9 @@ public class BernoulliLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        var grad = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
-
-            if (yi < 0) yi = 0; // Convert -1/+1 to 0/1
-
-            double sigma = Sigmoid(fi);
-            grad[i] = _numOps.FromDouble(yi - sigma);
-        }
-
-        return grad;
+        var engine = AiDotNetEngine.Current;
+        var labels = engine.TensorMax(Tensor<T>.FromVector(y), _numOps.Zero); // Convert -1/+1 to 0/1
+        return engine.TensorSubtract(labels, engine.TensorSigmoid(Tensor<T>.FromVector(f))).ToVector();
     }
 
     /// <summary>
@@ -389,16 +349,9 @@ public class BernoulliLikelihood<T> : ILikelihood<T>
         if (y is null) throw new ArgumentNullException(nameof(y));
         if (f is null) throw new ArgumentNullException(nameof(f));
 
-        var hess = new Vector<T>(f.Length);
-
-        for (int i = 0; i < f.Length; i++)
-        {
-            double fi = _numOps.ToDouble(f[i]);
-            double sigma = Sigmoid(fi);
-            hess[i] = _numOps.FromDouble(-sigma * (1 - sigma));
-        }
-
-        return hess;
+        var engine = AiDotNetEngine.Current;
+        var sigma = engine.TensorSigmoid(Tensor<T>.FromVector(f));
+        return engine.TensorNegate(engine.TensorMultiply(sigma, engine.ScalarMinusTensor(_numOps.One, sigma))).ToVector();
     }
 
     /// <summary>
@@ -521,40 +474,20 @@ public class PoissonLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        double total = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = _numOps.ToDouble(f[i]);
+        var engine = AiDotNetEngine.Current;
+        var counts = Tensor<T>.FromVector(y);
 
-            // Clip f to prevent numerical overflow
-            fi = Math.Min(fi, 20);
+        // Clip f to prevent numerical overflow
+        var latent = engine.TensorMin(Tensor<T>.FromVector(f), _numOps.FromDouble(20));
+        var lambda = engine.TensorExp(latent);
 
-            double lambda = Math.Exp(fi);
-            total += yi * fi - lambda - LogFactorial((int)Math.Round(yi));
-        }
+        // log(n!) = lgamma(n + 1) for the rounded count n; negative counts contribute 0.
+        var rounded = engine.TensorMax(Tensor<T>.FromVector(engine.Round(y)), _numOps.Zero);
+        var logFactorial = engine.TensorLgamma(engine.TensorAddScalar(rounded, _numOps.One));
 
-        return _numOps.FromDouble(total);
-    }
-
-    /// <summary>
-    /// Computes log(n!) using Stirling's approximation for large n.
-    /// </summary>
-    private static double LogFactorial(int n)
-    {
-        if (n < 0) return 0;
-        if (n <= 1) return 0;
-        if (n < 20)
-        {
-            double result = 0;
-            for (int i = 2; i <= n; i++)
-            {
-                result += Math.Log(i);
-            }
-            return result;
-        }
-        // Stirling's approximation
-        return n * Math.Log(n) - n + 0.5 * Math.Log(2 * Math.PI * n);
+        return _numOps.Subtract(
+            engine.TensorVecDot(counts, latent),
+            _numOps.Add(engine.TensorSum(lambda), engine.TensorSum(logFactorial)));
     }
 
     /// <summary>
@@ -577,18 +510,9 @@ public class PoissonLikelihood<T> : ILikelihood<T>
         if (y.Length != f.Length)
             throw new ArgumentException("y and f must have the same length.");
 
-        var grad = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double fi = Math.Min(_numOps.ToDouble(f[i]), 20);
-            double lambda = Math.Exp(fi);
-
-            grad[i] = _numOps.FromDouble(yi - lambda);
-        }
-
-        return grad;
+        var engine = AiDotNetEngine.Current;
+        var lambda = engine.TensorExp(engine.TensorMin(Tensor<T>.FromVector(f), _numOps.FromDouble(20)));
+        return engine.TensorSubtract(Tensor<T>.FromVector(y), lambda).ToVector();
     }
 
     /// <summary>
@@ -608,16 +532,9 @@ public class PoissonLikelihood<T> : ILikelihood<T>
         if (y is null) throw new ArgumentNullException(nameof(y));
         if (f is null) throw new ArgumentNullException(nameof(f));
 
-        var hess = new Vector<T>(f.Length);
-
-        for (int i = 0; i < f.Length; i++)
-        {
-            double fi = Math.Min(_numOps.ToDouble(f[i]), 20);
-            double lambda = Math.Exp(fi);
-            hess[i] = _numOps.FromDouble(-lambda);
-        }
-
-        return hess;
+        var engine = AiDotNetEngine.Current;
+        var lambda = engine.TensorExp(engine.TensorMin(Tensor<T>.FromVector(f), _numOps.FromDouble(20)));
+        return engine.TensorNegate(lambda).ToVector();
     }
 
     /// <summary>
@@ -762,15 +679,14 @@ public class StudentTLikelihood<T> : ILikelihood<T>
         double logNorm = LogGamma(0.5 * (nu + 1)) - LogGamma(0.5 * nu)
                        - 0.5 * Math.Log(nu * Math.PI * sigma2);
 
-        double total = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double diff = _numOps.ToDouble(y[i]) - _numOps.ToDouble(f[i]);
-            double z2 = diff * diff / (nu * sigma2);
-            total += logNorm - 0.5 * (nu + 1) * Math.Log(1 + z2);
-        }
-
-        return _numOps.FromDouble(total);
+        // Σ_i [logNorm - 0.5 (ν+1) log(1 + (y_i - f_i)² / (νσ²))]
+        var engine = AiDotNetEngine.Current;
+        var diff = Tensor<T>.FromVector(engine.Subtract(y, f));
+        var z2 = engine.TensorDivideScalar(engine.TensorSquare(diff), _numOps.FromDouble(nu * sigma2));
+        T logTerms = engine.TensorSum(engine.TensorLog1p(z2));
+        return _numOps.Subtract(
+            _numOps.FromDouble(y.Length * logNorm),
+            _numOps.Multiply(_numOps.FromDouble(0.5 * (nu + 1)), logTerms));
     }
 
     /// <summary>
@@ -795,16 +711,11 @@ public class StudentTLikelihood<T> : ILikelihood<T>
 
         double nu = _degreesOfFreedom;
         double sigma2 = _noiseScale * _noiseScale;
-        var grad = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            double diff = _numOps.ToDouble(y[i]) - _numOps.ToDouble(f[i]);
-            double denom = nu * sigma2 + diff * diff;
-            grad[i] = _numOps.FromDouble((nu + 1) * diff / denom);
-        }
-
-        return grad;
+        // (ν+1)(y - f) / (νσ² + (y - f)²)
+        var engine = AiDotNetEngine.Current;
+        var diff = Tensor<T>.FromVector(engine.Subtract(y, f));
+        var denom = engine.TensorAddScalar(engine.TensorSquare(diff), _numOps.FromDouble(nu * sigma2));
+        return engine.TensorDivide(engine.TensorMultiplyScalar(diff, _numOps.FromDouble(nu + 1)), denom).ToVector();
     }
 
     /// <summary>
@@ -818,20 +729,13 @@ public class StudentTLikelihood<T> : ILikelihood<T>
         double nu = _degreesOfFreedom;
         double sigma2 = _noiseScale * _noiseScale;
         double nuSigma2 = nu * sigma2;
-        var hess = new Vector<T>(f.Length);
-
-        for (int i = 0; i < f.Length; i++)
-        {
-            double diff = _numOps.ToDouble(y[i]) - _numOps.ToDouble(f[i]);
-            double diff2 = diff * diff;
-            double denom = nuSigma2 + diff2;
-            double denom2 = denom * denom;
-
-            // ∂²/∂f² = -(ν+1) × (νσ² - (y-f)²) / (νσ² + (y-f)²)²
-            hess[i] = _numOps.FromDouble(-(nu + 1) * (nuSigma2 - diff2) / denom2);
-        }
-
-        return hess;
+        // ∂²/∂f² = -(ν+1) × (νσ² - (y-f)²) / (νσ² + (y-f)²)²
+        var engine = AiDotNetEngine.Current;
+        var diff2 = engine.TensorSquare(Tensor<T>.FromVector(engine.Subtract(y, f)));
+        T nuSigma2T = _numOps.FromDouble(nuSigma2);
+        var numerator = engine.ScalarMinusTensor(nuSigma2T, diff2);
+        var denom2 = engine.TensorSquare(engine.TensorAddScalar(diff2, nuSigma2T));
+        return engine.TensorMultiplyScalar(engine.TensorDivide(numerator, denom2), _numOps.FromDouble(-(nu + 1))).ToVector();
     }
 
     /// <summary>

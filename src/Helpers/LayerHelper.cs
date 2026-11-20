@@ -6028,7 +6028,8 @@ public static partial class LayerHelper<T>
             new DenseLayer<T>(decoderVocabularySize, identityActivation),
             encoderVocabularySize: 32128,
             decoderVocabularySize: decoderVocabularySize,
-            maximumDecoderLength: maxAudioTokens);
+            maximumDecoderLength: maxAudioTokens,
+            maximumEncoderLength: maxTextLength);
     }
 
     /// <summary>
@@ -9802,48 +9803,123 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
+    // The numFeatures that gives RVM's published widths, and the first MobileNetV3-Large block (the stride-2 160-channel
+    // one) that RVM's backbone dilates instead of striding, keeping the last stage at 1/16.
+    private const int RvmPaperFeatures = 32;
+    private const int RvmDilatedBlockStart = 12;
+
     /// <summary>
-    /// Creates default layers for RVM (Robust Video Matting).
+    /// Creates default layers for RVM (Robust Video Matting, Lin et al. 2021), in the order
+    /// <c>RVM</c> binds them.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The network of the paper (Fig. 2): a four-stage stride-2 encoder (1/2 to 1/16) with an LR-ASPP head on the last
+    /// stage, then the recurrent decoder: a bottleneck ConvGRU, three upsampling blocks (upsample, concatenate the
+    /// encoder skip and the downsampled image, 3x3 conv + BatchNorm + ReLU, ConvGRU on half the channels), an output
+    /// block (two 3x3 conv + BatchNorm + ReLU at full resolution) and a 1x1 projection to the foreground residual and
+    /// alpha. Every ConvGRU is a 3x3 <c>ih</c> conv with sigmoid giving the reset and update gates and a 3x3 <c>hh</c>
+    /// conv with tanh giving the candidate.
+    /// </para>
+    /// <para>
+    /// The encoder is MobileNetV3-Large (Howard et al. 2019) cut into the four feature stages RVM reads: the stem
+    /// (3x3 stride-2 conv, BatchNorm, hard-swish) and the first inverted residual block at 1/2; two blocks at 1/4;
+    /// three squeeze-excitation blocks at 1/8; and the remaining nine blocks plus the 1x1 conv, BatchNorm and
+    /// hard-swish to the 960-channel features at 1/16. The blocks are the library's MobileNetV3-Large blocks
+    /// (expansion, squeeze-excitation and activation per block). As in RVM's backbone, the last stage stays at 1/16:
+    /// the reference dilates its final stride-2 block, and this block runs at stride 1 instead, since the inverted
+    /// residual block has no dilation.
+    /// </para>
+    /// <para>
+    /// Widths scale with <paramref name="numFeatures"/> as a width multiplier of <c>numFeatures / 32</c>: the default
+    /// 32 gives the paper's encoder (16, 24, 40, 960 channels), LR-ASPP (128) and decoder (80, 40, 32, 16). Each
+    /// decoder width is even so it splits into two equal halves. The 43 layers are: 21 encoder layers (4, 2, 3 and
+    /// 12 per stage); LR-ASPP conv, BatchNorm, gate conv; bottleneck ConvGRU ih, hh; per upsampling block conv,
+    /// BatchNorm, ConvGRU ih, hh; output conv, BatchNorm, conv, BatchNorm; projection.
+    /// </para>
+    /// <para>
+    /// The list is NOT a forward chain: encoder skips feed the upsampling blocks, the LR-ASPP gate reads the pooled
+    /// last encoder stage rather than the BatchNorm before it, and every ConvGRU also reads its recurrent state.
+    /// <c>RvmRecurrentNetwork</c> wires the layers in that graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> RVM separates a person from the background in every frame of a video and
+    /// produces an alpha matte (how opaque each pixel of the person is) plus the person's colours. It remembers
+    /// what it saw in earlier frames through recurrent (ConvGRU) units, which keeps the matte steady from frame to
+    /// frame. This method builds those layers; the model connects them.</para>
+    /// </remarks>
+    /// <param name="inputChannels">Channels of each input frame (3 for RGB).</param>
+    /// <param name="inputHeight">Frame height in pixels. The convolutions are resolution-independent; this
+    /// documents the expected size.</param>
+    /// <param name="inputWidth">Frame width in pixels, as for <paramref name="inputHeight"/>.</param>
+    /// <param name="numFeatures">Width base: 32 gives the paper's widths, and every width scales with it.</param>
+    /// <returns>The 43 layers in the order listed above.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultRVMLayers(
         int inputChannels = 3,
         int inputHeight = 512,
         int inputWidth = 512,
         int numFeatures = 32)
     {
-        int h = inputHeight;
-        int w = inputWidth;
+        int nf = Math.Max(1, numFeatures);
+        static int Even(int width) => Math.Max(2, width - (width % 2));
+        static IActivationFunction<T> Sigmoid() => new SigmoidActivation<T>();
+        static IActivationFunction<T> Tanh() => new TanhActivation<T>();
 
-        // Encoder (MobileNetV3-style)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // Encoder: MobileNetV3-Large stages at 1/2, 1/4, 1/8, 1/16
+        double alpha = nf / (double)RvmPaperFeatures;
+        int Scaled(int paperWidth) => Even((int)Math.Round(paperWidth * alpha));
+        yield return new ConvolutionalLayer<T>(MakeScaledChannels(16, alpha), 3, 2, 1,
+            activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
+        var blocks = GetMobileNetV3LargeBlocks(alpha).ToArray();
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            var block = blocks[i];
+            yield return new InvertedResidualBlock<T>(
+                outChannels: block.outChannels,
+                expansionRatio: block.expansion,
+                stride: i >= RvmDilatedBlockStart ? 1 : block.stride,
+                useSE: block.useSE,
+                seRatio: 4,
+                activationFunction: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
+        }
 
-        // Recurrent module (GRU-style for temporal consistency)
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        int encoderDepth = MakeScaledChannels(960, alpha);
+        yield return new ConvolutionalLayer<T>(encoderDepth, 1, 1, 0, activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
 
-        // Decoder with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
+        // LR-ASPP: ReLU(BN(conv1x1(x))) * sigmoid(conv1x1(avgpool(x)))
+        int aspp = Scaled(128);
+        yield return new ConvolutionalLayer<T>(aspp, 1, 1, 0, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+        // The gate reads the pooled last encoder stage (encoderDepth channels), not the BatchNorm output before it in
+        // this list: its depth is declared so no shape walk binds it to the ASPP width, and it is marked as a branch root.
+        yield return LayerGraphContract.FromDerivedInput(
+            ConvolutionalLayer<T>.WithInputDepth(encoderDepth, aspp, 1, 1, 0, activationFunction: Sigmoid()), "encoder");
 
-        // Output heads: alpha matte (1 channel) + foreground (3 channels)
-        yield return new ConvolutionalLayer<T>(4, 1, 1, 0); // RGBA output
+        // Bottleneck ConvGRU on half of the LR-ASPP channels
+        yield return new ConvolutionalLayer<T>(aspp, 3, 1, 1, activationFunction: Sigmoid());
+        yield return new ConvolutionalLayer<T>(aspp / 2, 3, 1, 1, activationFunction: Tanh());
+
+        // Upsampling blocks at 1/8, 1/4, 1/2
+        foreach (int width in new[] { Scaled(80), Scaled(40), Scaled(32) })
+        {
+            yield return new ConvolutionalLayer<T>(width, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ConvolutionalLayer<T>(width, 3, 1, 1, activationFunction: Sigmoid());
+            yield return new ConvolutionalLayer<T>(width / 2, 3, 1, 1, activationFunction: Tanh());
+        }
+
+        // Output block at full resolution
+        int output = Scaled(16);
+        yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+
+        // Projection: foreground residual (3) and alpha (1)
+        yield return new ConvolutionalLayer<T>(4, 1, 1, 0);
     }
 
     /// <summary>
@@ -11169,15 +11245,12 @@ public static partial class LayerHelper<T>
         // Node feature encoder
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
-        // Node-order position. LayoutGraph._positionEmbeddings carried a [maxNodes, dim] table as a model field that nothing
-        // read; it indexes a node by its place in the document's reading order, which is precisely
-        // what a position embedding is, so it belongs in the stack rather than in the bin.
-        yield return new LearnedPositionalEmbeddingLayer<T>(maxNodes, hiddenDim);
 
-        // Graph layers with hierarchical structure
+        // GLAM's graph convolutions (Wang et al. 2023) over the page graph LayoutGraph wires in before each
+        // pass. Node order carries no meaning in a graph, so there is no positional embedding.
         for (int i = 0; i < numGraphLayers; i++)
         {
-            yield return new DenseLayer<T>(hiddenDim, reluActivation);
+            yield return new GraphConvolutionalLayer<T>(hiddenDim, hiddenDim, reluActivation, implicitIdentityWhenUnset: true);
             yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }
@@ -27834,102 +27907,68 @@ public static partial class LayerHelper<T>
     }
 
     #endregion
-    #region PointTransformerV3 Layers
+    #region PointTransformerV3 and Sonata Layers
 
     /// <summary>
-    /// Creates encoder layers for the PointTransformerV3 model.
+    /// Creates the default PointTransformerV3 network (Wu et al., CVPR 2024; Pointcept <c>PT-v3m1</c>):
+    /// the serialized-attention backbone with its U-Net decoder, then Pointcept's
+    /// <c>seg_head = Linear(dec_channels[0], num_classes)</c>.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreatePointTransformerV3EncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+    /// <param name="options">The backbone settings; the defaults are the PTv3 m1 base configuration.</param>
+    /// <param name="numClasses">Classes predicted per point.</param>
+    /// <returns>The backbone layer followed by the linear segmentation head.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> These are the two layers a <see cref="AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3{T}"/>
+    /// builds when you do not supply your own: one that turns every point into a feature vector, and
+    /// one that turns each feature vector into class scores.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPointTransformerV3Layers(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options options, int numClasses)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "At least one class is required.");
+        var o = options;
+        var encoder = new AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>(
+            o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths, o.EncoderChannels, o.EncoderNumHeads,
+            o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels, o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio,
+            o.DropPathRate, o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders,
+            new AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet(o.SerializationCurves),
+            PointTransformerV3Revision.M1Base, false, false, o.Seed);
+        return new ILayer<T>[] { encoder, new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null) };
     }
 
     /// <summary>
-    /// Creates decoder layers for the PointTransformerV3 model.
+    /// Creates the default Sonata network (Wu et al., CVPR 2025; Pointcept <c>Sonata v1m1</c>): the
+    /// encoder-only PTv3 m2 backbone whose features are up-cast to full resolution, then the linear
+    /// probe <c>Linear(sum(enc_channels), num_classes)</c> of Sonata's linear-probing protocol.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreatePointTransformerV3DecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
+    /// <param name="options">The backbone settings; the defaults are the Sonata v1m1 base configuration.</param>
+    /// <param name="numClasses">Classes predicted per point.</param>
+    /// <returns>The backbone layer followed by the linear probe.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> These are the two layers a <see cref="AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata{T}"/>
+    /// builds when you do not supply your own.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSonataLayers(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions options, int numClasses)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
-    #region Sonata Layers
-
-    /// <summary>
-    /// Creates encoder layers for the Sonata model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSonataEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "At least one class is required.");
+        var encoder = CreateSonataEncoder(options, options.DropPathRate, options.Seed, options.SerializationCurves);
+        return new ILayer<T>[] { encoder, new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null) };
     }
 
     /// <summary>
-    /// Creates decoder layers for the Sonata model.
+    /// The Sonata backbone (PTv3 m2, coordinates as features, encoder only, with the mask token);
+    /// the student uses the configured drop path and the EMA teacher none.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSonataDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+    internal static AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T> CreateSonataEncoder(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions o, double dropPath, int? seed,
+        IReadOnlyList<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve> curves)
+        => new(o.InputChannels, true, o.GridSize, o.Strides, o.EncoderDepths, o.EncoderChannels, o.EncoderNumHeads,
+            o.EncoderPatchSizes, null, null, null, null, o.MlpRatio, dropPath, o.EnableConditionalPositionalEncoding,
+            o.PreNorm, o.ShuffleOrders, new AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet(curves),
+            PointTransformerV3Revision.M2Sonata, true, true, seed);
 
     #endregion
     #region Concerto Layers
@@ -29114,65 +29153,15 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for the LISA model.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateLISAEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+    private static IEnumerable<ILayer<T>> CreateReferringPyramidEncoderLayers(
+        int inputHeight, int inputWidth, int[] channelDims, int[] depths)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
-
-    /// <summary>
-    /// Creates decoder layers for the LISA model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateLISADecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
-    #region VideoLISA Layers
-
-    /// <summary>
-    /// Creates encoder layers for the VideoLISA model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateVideoLISAEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        // VideoLISA's visual branch is initialized from SAM, whose encoder uses residual
-        // blocks and batch-independent normalization. A Conv(ReLU)->BatchNorm chain is not
-        // equivalent: with the small/single-video batches used for dense segmentation it can
-        // collapse the representation and produce identical masks for distinct frames.
+        // SAM-family referring segmentation encoders require residual blocks and batch-independent
+        // GroupNormalization: at 1/32 spatial bottleneck on small/single-image batches (e.g., 1x1 on
+        // 32x32 inputs), BatchNormalization collapses per-channel variance to zero in training mode
+        // while shifting activations via running statistics in evaluation mode.
         var silu = new SiLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
+        int h = inputHeight, w = inputWidth;
 
         for (int stage = 0; stage < channelDims.Length; stage++)
         {
@@ -29182,13 +29171,12 @@ public static partial class LayerHelper<T>
             int pad = stage == 0 ? 3 : 1;
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
-            h /= stride; w /= stride;
+            h = Math.Max(1, h / stride);
+            w = Math.Max(1, w / stride);
             if (stage == 0)
             {
-                // SAM adds absolute positional information to the patch embeddings before
-                // normalization. Besides preserving spatial identity for mask decoding, placing
-                // it here prevents normalization from making the visual path invariant to a
-                // uniform rescaling of every pixel.
+                // SAM adds absolute positional information to patch embeddings before normalization,
+                // preserving spatial identity and preventing normalization from erasing uniform pixel scaling.
                 yield return new PositionalEncodingLayer<T>(h, w);
             }
             yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
@@ -29200,10 +29188,46 @@ public static partial class LayerHelper<T>
                     new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
                 yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
             }
-
-            inC = outC;
         }
     }
+
+    private static IEnumerable<ILayer<T>> CreateReferringBottleneckDecoderLayers(
+        int decoderDim, int numClasses)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
+
+    /// <summary>
+    /// Creates decoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
+
+    #endregion
+    #region VideoLISA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the VideoLISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the VideoLISA model.
@@ -29273,30 +29297,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateOMGLLaVAEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the OMGLLaVA model.
@@ -29304,14 +29305,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateOMGLLaVADecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
 
     #endregion
     #region PixelLM Layers
@@ -29322,30 +29316,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreatePixelLMEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the PixelLM model.
@@ -29353,14 +29324,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreatePixelLMDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
 
     #endregion
     #region VMamba Layers

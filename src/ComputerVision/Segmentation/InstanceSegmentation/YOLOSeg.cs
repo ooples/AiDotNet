@@ -288,8 +288,6 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         int featW = features.Shape[3];
         int poolSize = 5;
 
-        var output = new Tensor<T>(new[] { 1, channels, poolSize, poolSize });
-
         // Map box to feature space
         double scaleH = (double)featH / Options.InputSize[0];
         double scaleW = (double)featW / Options.InputSize[1];
@@ -302,36 +300,28 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         double binH = (y2 - y1) / poolSize;
         double binW = (x2 - x1) / poolSize;
 
-        for (int c = 0; c < channels; c++)
+        // The sampled row depends only on ph and the column only on pw, so the pool is two index selects
+        // on the first batch item.
+        var rows = new int[poolSize];
+        var cols = new int[poolSize];
+        for (int bin = 0; bin < poolSize; bin++)
         {
-            for (int ph = 0; ph < poolSize; ph++)
-            {
-                for (int pw = 0; pw < poolSize; pw++)
-                {
-                    double sampY = y1 + (ph + 0.5) * binH;
-                    double sampX = x1 + (pw + 0.5) * binW;
-
-                    int fy = MathHelper.Clamp((int)sampY, 0, featH - 1);
-                    int fx = MathHelper.Clamp((int)sampX, 0, featW - 1);
-
-                    output[0, c, ph, pw] = features[0, c, fy, fx];
-                }
-            }
+            double sampY = y1 + (bin + 0.5) * binH;
+            double sampX = x1 + (bin + 0.5) * binW;
+            rows[bin] = MathHelper.Clamp((int)sampY, 0, featH - 1);
+            cols[bin] = MathHelper.Clamp((int)sampX, 0, featW - 1);
         }
 
-        return output;
+        var first = Engine.TensorSlice(features, new[] { 0, 0, 0, 0 }, new[] { 1, channels, featH, featW });
+        var pooledRows = Engine.TensorIndexSelect(first, new Tensor<int>(new[] { poolSize }, new Vector<int>(rows)), 2);
+        return Engine.TensorIndexSelect(pooledRows, new Tensor<int>(new[] { poolSize }, new Vector<int>(cols)), 3);
     }
 
     private Tensor<T> Flatten(Tensor<T> input)
     {
         int total = input.Length;
         var output = new Tensor<T>(new[] { 1, total });
-
-        for (int i = 0; i < total; i++)
-        {
-            output[0, i] = input[i];
-        }
-
+        input.AsSpan().CopyTo(output.AsWritableSpan());
         return output;
     }
 
@@ -352,21 +342,14 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
 
         var cropped = new Tensor<T>(new[] { cropH, cropW });
 
-        for (int h = 0; h < cropH; h++)
-        {
-            for (int w = 0; w < cropW; w++)
-            {
-                int srcH = y1 + h;
-                int srcW = x1 + w;
+        // Cells that fall outside the mask stay zero; the rest are one contiguous window of it.
+        int copyH = Math.Min(cropH, mask.Shape[0] - y1);
+        int copyW = Math.Min(cropW, mask.Shape[1] - x1);
+        if (copyH <= 0 || copyW <= 0)
+            return cropped;
 
-                if (srcH < mask.Shape[0] && srcW < mask.Shape[1])
-                {
-                    cropped[h, w] = mask[srcH, srcW];
-                }
-            }
-        }
-
-        return cropped;
+        var inside = Engine.TensorSlice(mask, new[] { y1, x1 }, new[] { copyH, copyW });
+        return Engine.TensorSetSlice(cropped, inside, new[] { 0, 0 });
     }
 
     private void PasteMask(Tensor<T> fullMask, Tensor<T> croppedMask, BoundingBox<T> box,
@@ -383,15 +366,14 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
         if (boxW <= 0 || boxH <= 0)
             return;
 
-        // Resize cropped mask to box size
+        // Resize cropped mask to box size, then write it into the box one row at a time (bulk row copies).
         var resized = ResizeMask(croppedMask, boxH, boxW);
-
+        var source = resized.AsSpan();
+        var destination = fullMask.AsWritableSpan();
+        int stride = fullMask.Shape[1];
         for (int h = 0; h < boxH; h++)
         {
-            for (int w = 0; w < boxW; w++)
-            {
-                fullMask[y1 + h, x1 + w] = resized[h, w];
-            }
+            source.Slice(h * boxW, boxW).CopyTo(destination.Slice(((y1 + h) * stride) + x1, boxW));
         }
     }
 

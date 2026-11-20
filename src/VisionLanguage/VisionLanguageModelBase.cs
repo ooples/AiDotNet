@@ -769,9 +769,12 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
         T half = NumOps.FromDouble(0.5);
         var unit = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorTanh(logits), half), half);
         var scaled = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(vocabularySize - 1));
-        var zeros = new Tensor<T>(logits._shape);
-        var truncated = Engine.TensorTrunc(Engine.TensorWhere(Engine.TensorIsNan(scaled), zeros, scaled));
-        return Engine.TensorMax(Engine.TensorMin(truncated, NumOps.FromDouble(vocabularySize - 1)), NumOps.Zero);
+        var sanitized = Engine.TensorWhere(
+            Engine.TensorGreaterThan(AiDotNet.Helpers.TensorFiniteness.FiniteMask(Engine, scaled), NumOps.Zero),
+            scaled,
+            Engine.TensorZerosLike(scaled));
+        var truncated = Engine.TensorTrunc(sanitized);
+        return Engine.TensorClamp<T>(truncated, NumOps.Zero, NumOps.FromDouble(vocabularySize - 1));
     }
 
     /// <summary>

@@ -24,13 +24,13 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _jaccardScores;
+    private Vector<T>? _jaccardScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? JaccardScores => _jaccardScores;
+    public Vector<T>? JaccardScores => _jaccardScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,63 +64,34 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        Tensor<T> scores;
+        if (n == 0)
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        }
+        else
+        {
+            // Binarize the target and every column at their medians (value >= median)
+            var x = Tensor<T>.FromMatrix(data);
+            var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+            var yBinary = engine.TensorBroadcastTo(
+                engine.TensorGreaterEqual(y, engine.TensorBroadcastTo(SelectorTensorOps.ColumnMedian(y, keepDims: true), new[] { n, 1 })),
+                new[] { n, p });
+            var xBinary = engine.TensorGreaterEqual(x, engine.TensorBroadcastTo(SelectorTensorOps.ColumnMedian(x, keepDims: true), new[] { n, p }));
+
+            // Jaccard similarity |A and B| / |A or B|, 0 for an empty union
+            var both = engine.TensorMultiply(xBinary, yBinary);
+            var intersection = engine.ReduceSum(both, new[] { 0 }, false);
+            var union = engine.ReduceSum(engine.TensorSubtract(engine.TensorAdd(xBinary, yBinary), both), new[] { 0 }, false);
+            scores = SelectorTensorOps.ZeroUnless(engine.TensorGreaterThan(union, NumOps.Zero), engine.TensorDivide(intersection, union));
         }
 
-        // Binarize target using median
-        double yMedian = GetMedian(y);
-        var yBinary = y.Select(v => v >= yMedian).ToArray();
+        _jaccardScores = scores.ToVector();
 
-        _jaccardScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double xMedian = GetMedian(col);
-            var xBinary = col.Select(v => v >= xMedian).ToArray();
-
-            // Compute Jaccard similarity
-            int intersection = 0, union = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (xBinary[i] || yBinary[i])
-                {
-                    union++;
-                    if (xBinary[i] && yBinary[i])
-                        intersection++;
-                }
-            }
-
-            _jaccardScores[j] = union > 0 ? (double)intersection / union : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _jaccardScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
-    }
-
-    private double GetMedian(double[] values)
-    {
-        var sorted = values.OrderBy(v => v).ToArray();
-        int n = sorted.Length;
-        if (n == 0) return 0;
-        return n % 2 == 0
-            ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2
-            : sorted[n / 2];
     }
 
     /// <inheritdoc />
@@ -136,15 +107,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("JaccardSimilaritySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

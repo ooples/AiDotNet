@@ -572,6 +572,29 @@ internal static class TouchedRegressionProbe
     } catch { $holedBaselineError = $_.Exception.Message }
     Assert-Matches 'incomplete' $holedBaselineError 'a baseline with a missing shard is refused, not silently used'
 
+    # Advisory mode (-AllowIncompleteBaseline without -FailOnPolicy) renders the comparison table over
+    # measured shards while never certifying policyPassed, and still throws if -FailOnPolicy is requested.
+    $holedEnforcedError = $null
+    try {
+        & $analyzer -CurrentResultsPath $missingShardRoot `
+            -BaselineLedgerPath (Join-Path $incompleteOutput 'ledger.json') `
+            -OutputDirectory $holedBaselineOutput -CurrentSha 'ac02' -BaselineSha 'ac01' `
+            -AllowIncompleteBaseline -FailOnPolicy
+    } catch { $holedEnforcedError = $_.Exception.Message }
+    Assert-Matches 'incomplete' $holedEnforcedError 'an incomplete baseline still cannot enforce policy'
+
+    $advisoryBaselineOutput = Join-Path $testRoot 'holed-baseline-advisory'
+    & $analyzer -CurrentResultsPath $missingShardRoot `
+        -BaselineLedgerPath (Join-Path $incompleteOutput 'ledger.json') `
+        -OutputDirectory $advisoryBaselineOutput -CurrentSha 'ac02' -BaselineSha 'ac01' `
+        -AllowIncompleteBaseline
+    $advisoryComparison = Get-Content -LiteralPath (Join-Path $advisoryBaselineOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal 'comparison' $advisoryComparison.mode 'advisory mode emits comparison output'
+    Assert-Equal $false $advisoryComparison.policyPassed 'advisory comparison against an incomplete baseline never certifies policyPassed'
+    $advisorySummary = Get-Content -LiteralPath (Join-Path $advisoryBaselineOutput 'summary.md') -Raw
+    Assert-Matches 'ADVISORY \(incomplete baseline' $advisorySummary 'summary header marks advisory incomplete-baseline status'
+    Assert-Matches '\| Metric \| Baseline \| Current \| Delta \|' $advisorySummary 'summary renders the Baseline | Current | Delta table'
+
     # Backward compatibility: callers that pass no expected set keep the old behaviour, so the
     # change cannot break local or ad-hoc invocations of the analyzer.
     $legacyOutput = Join-Path $testRoot 'missing-shard-legacy'

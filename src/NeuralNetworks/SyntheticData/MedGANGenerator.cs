@@ -1288,9 +1288,9 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var engine = Engine;
         var x = Tensor<T>.FromMatrix(data);
         var min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(
-            engine.TensorNanToNum(x, double.MaxValue, double.PositiveInfinity, double.NegativeInfinity)), [0], keepDims: false));
+            AiDotNet.Helpers.NanToNumHelper.Apply(engine, x, double.MaxValue, double.PositiveInfinity, double.NegativeInfinity)), [0], keepDims: false));
         var max = engine.ReduceMax(
-            engine.TensorNanToNum(x, double.MinValue, double.PositiveInfinity, double.NegativeInfinity), [0], keepDims: false);
+            AiDotNet.Helpers.NanToNumHelper.Apply(engine, x, double.MinValue, double.PositiveInfinity, double.NegativeInfinity), [0], keepDims: false);
         var margin = engine.TensorMultiplyScalar(engine.TensorSubtract(max, min), NumOps.FromDouble(0.1));
         _colMin = engine.TensorSubtract(min, margin).ToVector();
         _colMax = engine.TensorAdd(max, margin).ToVector();

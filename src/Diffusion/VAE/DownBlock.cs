@@ -297,10 +297,7 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            list.Add(parameters[i]);
-        }
+        list.AddRange(parameters);
     }
 
     private static void SetLayerParams(ILayer<T> layer, Vector<T> parameters, ref int index)
@@ -308,10 +305,9 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
         var layerParams = layer.GetParameters();
         var newParams = new Vector<T>(layerParams.Length);
 
-        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
-        {
-            newParams[i] = parameters[index++];
-        }
+        int copyCount = Math.Max(0, Math.Min(layerParams.Length, parameters.Length - index));
+        parameters.AsSpan().Slice(index, copyCount).CopyTo(newParams.AsWritableSpan());
+        index += copyCount;
 
         layer.SetParameters(newParams);
     }

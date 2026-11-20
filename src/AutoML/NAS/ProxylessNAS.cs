@@ -150,27 +150,29 @@ namespace AiDotNet.AutoML.NAS
         public T ComputeExpectedLatency(int inputChannels, int spatialSize)
         {
             T totalLatency = _ops.Zero;
+            var operations = _nasSearchSpace.Operations;
+            if (operations == null)
+            {
+                return totalLatency;
+            }
 
+            // E[latency] = sum over edges and operations of p(op) * latency(op) (ProxylessNAS, Eq. 5). The operation
+            // latency does not depend on the edge, so the per-edge probabilities are summed first.
+            int pricedOps = Math.Min(_numOperations, operations.Count);
+            if (pricedOps == 0)
+            {
+                return totalLatency;
+            }
+
+            var opLatency = new Vector<T>(operations.Take(pricedOps)
+                .Select(op => _hardwareCostModel.EstimateOperationCost(op, inputChannels, inputChannels, spatialSize).Latency));
+
+            var engine = AiDotNetEngine.Current;
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
-                var alpha = _architectureParams[nodeIdx];
-                var probs = NasSamplingHelper.SoftmaxRowsWithTemperature(alpha, _binarizationTemperature, _ops);
-
-                for (int row = 0; row < alpha.Rows; row++)
-                {
-                    for (int col = 0; col < alpha.Columns; col++)
-                    {
-                        if (_nasSearchSpace.Operations != null && col < _nasSearchSpace.Operations.Count)
-                        {
-                            var operation = _nasSearchSpace.Operations[col];
-                            var cost = _hardwareCostModel.EstimateOperationCost(operation, inputChannels, inputChannels, spatialSize);
-
-                            // Weighted latency by operation probability
-                            T weightedLatency = _ops.Multiply(probs[row, col], cost.Latency);
-                            totalLatency = _ops.Add(totalLatency, weightedLatency);
-                        }
-                    }
-                }
+                var probs = NasSamplingHelper.SoftmaxRowsWithTemperature(_architectureParams[nodeIdx], _binarizationTemperature, _ops);
+                var opMass = engine.ReduceSum(Tensor<T>.FromMatrix(probs), new[] { 0 }, false).ToVector();
+                totalLatency = _ops.Add(totalLatency, engine.DotProduct(opMass.GetSubVector(0, pricedOps), opLatency));
             }
 
             return totalLatency;
@@ -200,21 +202,11 @@ namespace AiDotNet.AutoML.NAS
                 // Select top-2 predecessors for each node
                 var edgeScores = new List<(int prevNode, int opIdx, T score)>();
 
+                int[] bestOps = NasSamplingHelper.ArgMaxRows(weights, out T[] bestWeights);
+
                 for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
                 {
-                    int bestOpIdx = 0;
-                    T bestWeight = weights[prevNodeIdx, 0];
-
-                    for (int opIdx = 1; opIdx < _numOperations; opIdx++)
-                    {
-                        if (_ops.GreaterThan(weights[prevNodeIdx, opIdx], bestWeight))
-                        {
-                            bestWeight = weights[prevNodeIdx, opIdx];
-                            bestOpIdx = opIdx;
-                        }
-                    }
-
-                    edgeScores.Add((prevNodeIdx, bestOpIdx, bestWeight));
+                    edgeScores.Add((prevNodeIdx, bestOps[prevNodeIdx], bestWeights[prevNodeIdx]));
                 }
 
                 // Sort by score and keep top-2

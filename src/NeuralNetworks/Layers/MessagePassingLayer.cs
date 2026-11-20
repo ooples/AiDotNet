@@ -424,11 +424,8 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Scale by the scale factor
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        // Copy to tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        // Copy to tensor in bulk
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <inheritdoc/>
@@ -541,11 +538,8 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             return Engine.TensorSlice(tensor2D, [0, 0], [rows, toWidth]);
         }
         // Pad up: concat a zero block of the missing width along the column axis.
-        var zeros = TensorAllocator.Rent<T>([rows, toWidth - fromWidth]);
-        zeros.Fill(NumOps.Zero);
-        var result = Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
-        TensorAllocator.Return(zeros); // Return the rented padding tensor to the pool.
-        return result;
+        var zeros = new Tensor<T>([rows, toWidth - fromWidth]);
+        return Engine.TensorConcatenate(new[] { tensor2D, zeros }, axis: 1);
     }
 
     /// <inheritdoc/>

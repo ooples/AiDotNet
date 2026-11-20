@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Redundancy;
 
@@ -25,14 +26,14 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _nFeaturesToSelect;
     private readonly double _correlationThreshold;
 
-    private double[]? _clusterRepresentativeScores;
+    private Vector<T>? _clusterRepresentativeScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double CorrelationThreshold => _correlationThreshold;
-    public double[]? ClusterRepresentativeScores => _clusterRepresentativeScores;
+    public Vector<T>? ClusterRepresentativeScores => _clusterRepresentativeScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,109 +69,45 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute relevance for each feature
-        var relevance = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-            relevance[j] = Math.Abs(ComputeCorrelation(col, y));
-        }
+        // Relevance |corr(feature, target)| and the feature-feature |correlation| matrix
+        var relevance = engine.TensorAbs(engine.Reshape(
+            FeatureSelectionTensorOps.ColumnCorrelations(x, engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { p }));
+        var correlation = engine.TensorAbs(FeatureSelectionTensorOps.ColumnCorrelations(x, x));
+        T threshold = NumOps.FromDouble(_correlationThreshold);
 
-        // Compute correlation matrix
-        var correlation = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            correlation[j1, j1] = 1;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                var col1 = new double[n];
-                var col2 = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    col1[i] = X[i, j1];
-                    col2[i] = X[i, j2];
-                }
-                double corr = Math.Abs(ComputeCorrelation(col1, col2));
-                correlation[j1, j2] = corr;
-                correlation[j2, j1] = corr;
-            }
-        }
-
-        // Simple agglomerative clustering based on correlation threshold
-        var clusters = new List<List<int>>();
-        var assigned = new bool[p];
-
-        // Sort features by relevance (most relevant first)
-        var sortedByRelevance = Enumerable.Range(0, p)
-            .OrderByDescending(j => relevance[j])
-            .ToList();
-
-        foreach (int j in sortedByRelevance)
-        {
-            if (assigned[j]) continue;
-
-            // Start a new cluster with this feature
-            var cluster = new List<int> { j };
-            assigned[j] = true;
-
-            // Find all highly correlated features
-            foreach (int k in sortedByRelevance)
-            {
-                if (!assigned[k] && correlation[j, k] >= _correlationThreshold)
-                {
-                    cluster.Add(k);
-                    assigned[k] = true;
-                }
-            }
-
-            clusters.Add(cluster);
-        }
-
-        // Select best representative from each cluster (highest relevance)
-        _clusterRepresentativeScores = new double[p];
+        // Agglomerative clustering in order of relevance (most relevant first): each feature not yet in a
+        // cluster leads a new one and absorbs every unassigned feature correlated with it at the threshold or
+        // more. A leader is the most relevant member of its cluster, so the leaders, in that order, are the
+        // cluster representatives.
+        var order = PreprocessingTensorOps.StableOrder(relevance, descending: true);
+        var assigned = new Tensor<T>(new[] { p });
         var representatives = new List<int>();
-
-        foreach (var cluster in clusters.OrderByDescending(c => relevance[c[0]]))
+        int position = 0;
+        while (representatives.Count < _nFeaturesToSelect)
         {
-            int bestRep = cluster.OrderByDescending(j => relevance[j]).First();
-            representatives.Add(bestRep);
-            _clusterRepresentativeScores[bestRep] = relevance[bestRep];
-
-            if (representatives.Count >= _nFeaturesToSelect)
+            var taken = assigned.Cast<int>().AsSpan().ToArray();
+            while (position < order.Length && taken[order[position]] != 0)
+                position++;
+            if (position >= order.Length)
                 break;
+
+            int leader = order[position];
+            representatives.Add(leader);
+            var absorbed = PreprocessingTensorOps.OneMinus(engine.TensorLessThan(
+                engine.Reshape(engine.TensorSlice(correlation, new[] { leader, 0 }, new[] { 1, p }), new[] { p }), threshold));
+            assigned = engine.TensorMax(engine.TensorMax(assigned, absorbed), FeatureSelectionTensorOps.OneHot<T>(leader, p));
         }
 
-        _selectedIndices = representatives.Take(_nFeaturesToSelect).OrderBy(x => x).ToArray();
+        var isRepresentative = new Tensor<T>(new[] { p });
+        foreach (int leader in representatives)
+            isRepresentative = engine.TensorAdd(isRepresentative, FeatureSelectionTensorOps.OneHot<T>(leader, p));
+        _clusterRepresentativeScores = engine.TensorMultiply(isRepresentative, relevance).ToVector();
+        _selectedIndices = representatives.OrderBy(index => index).ToArray();
+
         IsFitted = true;
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            numerator += (x[i] - xMean) * (y[i] - yMean);
-            xSumSq += (x[i] - xMean) * (x[i] - xMean);
-            ySumSq += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
     /// <inheritdoc />
@@ -186,15 +123,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("CorrelationClusterSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

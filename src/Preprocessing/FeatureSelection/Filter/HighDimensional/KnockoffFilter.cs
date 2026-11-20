@@ -31,16 +31,16 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 {
     private readonly double _fdr;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _importanceFunc;
 
-    private double[]? _wStats;
-    private double _threshold;
+    private Vector<T>? _wStats;
+    private T _threshold;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double FDR => _fdr;
-    public double[]? WStatistics => _wStats;
-    public double Threshold => _threshold;
+    public Vector<T>? WStatistics => _wStats;
+    public T Threshold => _threshold;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -48,7 +48,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
     public KnockoffFilter(
         double fdr = 0.1,
-        Func<Matrix<T>, Vector<T>, double[]>? importanceFunc = null,
+        Func<Matrix<T>, Vector<T>, Vector<T>>? importanceFunc = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -58,6 +58,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         _fdr = fdr;
         _importanceFunc = importanceFunc;
+        _threshold = NumOps.Zero;
         _randomState = randomState;
     }
 
@@ -82,138 +83,91 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Convert to double
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         // Generate knockoff features
         var knockoffs = GenerateKnockoffs(X, n, p, random);
 
         // Compute importance for original and knockoff features
-        var augmentedData = new T[n, 2 * p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                augmentedData[i, j] = data[i, j];
-                augmentedData[i, p + j] = NumOps.FromDouble(knockoffs[i, j]);
-            }
-        }
+        var augmentedMatrix = engine.TensorConcatenate(new[] { X, knockoffs }, 1).ToMatrix();
+        var importances = Tensor<T>.FromVector(GetImportances(augmentedMatrix, target));
 
-        var augmentedMatrix = new Matrix<T>(augmentedData);
-        var importances = GetImportances(augmentedMatrix, target, n, 2 * p);
-
-        // Compute W statistics: W_j = |Z_j| - |Z̃_j|
-        _wStats = new double[p];
-        for (int j = 0; j < p; j++)
-            _wStats[j] = Math.Abs(importances[j]) - Math.Abs(importances[p + j]);
+        // Compute W statistics: W_j = |Z_j| - |Z~_j|
+        var absImportances = engine.TensorAbs(importances);
+        var wStats = engine.TensorSubtract(
+            engine.TensorSlice(absImportances, new[] { 0 }, new[] { p }),
+            engine.TensorSlice(absImportances, new[] { p }, new[] { p }));
+        _wStats = wStats.ToVector();
 
         // Compute knockoff threshold
-        _threshold = ComputeThreshold(_wStats, p);
+        _threshold = ComputeThreshold(wStats, p);
 
-        // Select features with W > threshold
-        var selectedList = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_wStats[j] >= _threshold)
-                selectedList.Add(j);
+        // Select features with W >= threshold; if nothing is selected, take the (first) highest W
+        var selectedList = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.AtLeast(wStats, _threshold));
+        if (selectedList.Length == 0)
+            selectedList = new[] { PreprocessingTensorOps.FirstArgMax(wStats) };
 
-        // If nothing selected, take highest W
-        if (selectedList.Count == 0)
-        {
-            int bestIdx = 0;
-            double bestW = _wStats[0];
-            for (int j = 1; j < p; j++)
-            {
-                if (_wStats[j] > bestW)
-                {
-                    bestW = _wStats[j];
-                    bestIdx = j;
-                }
-            }
-            selectedList.Add(bestIdx);
-        }
-
-        _selectedIndices = selectedList.OrderBy(x => x).ToArray();
+        _selectedIndices = selectedList;
         IsFitted = true;
     }
 
-    private double[,] GenerateKnockoffs(double[,] X, int n, int p, Random random)
+    private Tensor<T> GenerateKnockoffs(Tensor<T> X, int n, int p, Random random)
     {
         // Simplified knockoff generation using permutation
         // (Full Model-X knockoffs require more complex covariance estimation)
-        var knockoffs = new double[n, p];
-
+        var engine = Engine;
+        var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
             // Permute feature values
             var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
-            for (int i = 0; i < n; i++)
-                knockoffs[i, j] = X[indices[i], j];
+            columns[j] = engine.TensorIndexSelect(
+                engine.TensorSlice(X, new[] { 0, j }, new[] { n, 1 }), new Tensor<int>(indices, new[] { n }), 0);
         }
 
-        return knockoffs;
+        return p == 0 ? new Tensor<T>(new[] { n, 0 }) : engine.TensorConcatenate(columns, 1);
     }
 
-    private double[] GetImportances(Matrix<T> data, Vector<T> target, int n, int p)
+    private Vector<T> GetImportances(Matrix<T> data, Vector<T> target)
     {
         if (_importanceFunc is not null)
             return _importanceFunc(data, target);
 
-        // Default: absolute correlation with target
-        var importances = new double[p];
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                importances[j] = ssXY / Math.Sqrt(ssXX * ssYY);
-        }
-
-        return importances;
+        // Default: correlation with target (0 when either sum of squares is not above 1e-10)
+        return PreprocessingTensorOps.TargetCorrelations(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)).ToVector();
     }
 
-    private double ComputeThreshold(double[] wStats, int p)
+    /// <summary>
+    /// Knockoff+ threshold (Barber and Candes 2015): the smallest t in {|W_j| : W_j != 0} with
+    /// (1 + #{W_j &lt;= -t}) / max(1, #{W_j &gt;= t}) &lt;= q, or T.MaxValue when no t qualifies.
+    /// </summary>
+    private T ComputeThreshold(Tensor<T> wStats, int p)
     {
-        // Knockoff+ threshold
-        var sortedW = wStats.Where(w => w > 0).OrderByDescending(w => w).ToList();
+        var engine = Engine;
+        var shape = new[] { p, p };
+        var absW = engine.TensorAbs(wStats);
 
-        if (sortedW.Count == 0)
-            return double.MaxValue;
+        // Rows index W_k, columns the candidate t_j = |W_j|
+        var w = engine.TensorBroadcastTo(engine.Reshape(wStats, new[] { p, 1 }), shape);
+        var t = engine.TensorBroadcastTo(engine.Reshape(absW, new[] { 1, p }), shape);
+        // Counted in int (a Half sum of 0/1 indicators stops at 2048) and the ratio taken in double. The comparisons
+        // are direct (W >= t and -W >= t), so a NaN statistic counts on neither side; negated strict comparisons
+        // counted it on both.
+        var numPositive = engine.ReduceSum(
+            engine.TensorGreaterEqual(w, t).Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var numNegative = engine.ReduceSum(
+            engine.TensorGreaterEqual(engine.TensorNegate(w), t).Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var fdp = engine.TensorDivide(engine.TensorAddScalar(numNegative, 1.0), engine.TensorMax(numPositive, 1.0));
+        var valid = engine.TensorMultiply(
+            PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdp, _fdr)).Cast<T>(),
+            engine.TensorGreaterThan(absW, NumOps.Zero));
 
-        foreach (double t in sortedW)
-        {
-            int numPositive = wStats.Count(w => w >= t);
-            int numNegative = wStats.Count(w => w <= -t);
+        if (PreprocessingTensorOps.CountNonZero(valid) == 0)
+            return NumOps.MaxValue;
 
-            double fdp = (1.0 + numNegative) / Math.Max(1, numPositive);
-
-            if (fdp <= _fdr)
-                return t;
-        }
-
-        return double.MaxValue;
+        return engine.TensorMinValue(engine.TensorWhere(valid, absW, PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue)));
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -227,15 +181,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("KnockoffFilter has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

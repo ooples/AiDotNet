@@ -30,7 +30,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly double _threshold;
     private readonly int _nBins;
 
-    private double[]? _suScores;
+    private Vector<T>? _suScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -38,7 +38,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Threshold => _threshold;
     public int NBins => _nBins;
-    public double[]? SUScores => _suScores;
+    public Vector<T>? SUScores => _suScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,194 +73,43 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var suTarget = info.SymmetricUncertainty();
+        _suScores = suTarget.ToVector();
 
-        // Step 1: Compute SU for all features with target
-        _suScores = new double[p];
-        var bins = DiscretizeAll(data);
-
-        for (int j = 0; j < p; j++)
-            _suScores[j] = ComputeSU(bins[j], target, n);
-
-        // Step 2: Filter features above threshold and sort by SU
-        var candidates = Enumerable.Range(0, p)
-            .Where(j => _suScores[j] >= _threshold)
-            .OrderByDescending(j => _suScores[j])
+        // Step 2: features whose SU with the target reaches the threshold, by decreasing SU (ties by index)
+        var below = Engine.TensorLessThan(suTarget, NumOps.FromDouble(_threshold)).Cast<int>().ToArray();
+        var candidates = PreprocessingTensorOps.StableOrder(suTarget, descending: true)
+            .Where(j => below[j] == 0)
             .ToList();
 
         if (candidates.Count == 0)
         {
             // If no features pass threshold, take top features by SU
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _suScores[j])
-                .Take(Math.Min(_nFeaturesToSelect, p))
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(suTarget, Math.Min(_nFeaturesToSelect, p));
             IsFitted = true;
             return;
         }
 
-        // Step 3: Remove redundant features
+        // Step 3: drop every later candidate fj that fi predominates, SU(fi, fj) >= SU(fj, Y)
         var selected = new List<int>();
         int i = 0;
-
         while (i < candidates.Count && selected.Count < _nFeaturesToSelect)
         {
             int fi = candidates[i];
             selected.Add(fi);
-
-            // Remove features that are predominated by fi
+            var kept = Engine.TensorLessThan(info.FeatureSymmetricUncertainty(fi), suTarget).Cast<int>().ToArray();
+            int position = i;
             candidates = candidates
-                .Where((fj, idx) => idx <= i || !IsPredominant(fi, fj, bins, n))
+                .Where((fj, idx) => idx <= position || kept[fj] == 1)
                 .ToList();
-
             i++;
         }
 
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
-    }
-
-    private Dictionary<int, int[]> DiscretizeAll(Matrix<T> data)
-    {
-        int n = data.Rows;
-        int p = data.Columns;
-        var result = new Dictionary<int, int[]>();
-
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            double binWidth = (max - min) / _nBins;
-            if (binWidth < 1e-10) binWidth = 1;
-
-            result[j] = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                result[j][i] = Math.Min((int)((val - min) / binWidth), _nBins - 1);
-            }
-        }
-
-        return result;
-    }
-
-    private double ComputeSU(int[] bins, Vector<T> target, int n)
-    {
-        // Compute entropies and mutual information
-        var binCount = new Dictionary<int, int>();
-        var classCount = new Dictionary<int, int>();
-        var jointCount = new Dictionary<(int, int), int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int bin = bins[i];
-            int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-            if (!binCount.ContainsKey(bin)) binCount[bin] = 0;
-            binCount[bin]++;
-
-            if (!classCount.ContainsKey(c)) classCount[c] = 0;
-            classCount[c]++;
-
-            var key = (bin, c);
-            if (!jointCount.ContainsKey(key)) jointCount[key] = 0;
-            jointCount[key]++;
-        }
-
-        double hX = 0;
-        foreach (var count in binCount.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) hX -= p * Math.Log(p);
-        }
-
-        double hY = 0;
-        foreach (var count in classCount.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) hY -= p * Math.Log(p);
-        }
-
-        double hXY = 0;
-        foreach (var count in jointCount.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) hXY -= p * Math.Log(p);
-        }
-
-        double mi = hX + hY - hXY;
-        double denominator = hX + hY;
-
-        return denominator > 1e-10 ? 2.0 * mi / denominator : 0;
-    }
-
-    private double ComputeSU(int[] bins1, int[] bins2, int n)
-    {
-        var count1 = new Dictionary<int, int>();
-        var count2 = new Dictionary<int, int>();
-        var jointCount = new Dictionary<(int, int), int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            int b1 = bins1[i];
-            int b2 = bins2[i];
-
-            if (!count1.ContainsKey(b1)) count1[b1] = 0;
-            count1[b1]++;
-
-            if (!count2.ContainsKey(b2)) count2[b2] = 0;
-            count2[b2]++;
-
-            var key = (b1, b2);
-            if (!jointCount.ContainsKey(key)) jointCount[key] = 0;
-            jointCount[key]++;
-        }
-
-        double h1 = 0;
-        foreach (var count in count1.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) h1 -= p * Math.Log(p);
-        }
-
-        double h2 = 0;
-        foreach (var count in count2.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) h2 -= p * Math.Log(p);
-        }
-
-        double hJoint = 0;
-        foreach (var count in jointCount.Values)
-        {
-            double p = (double)count / n;
-            if (p > 0) hJoint -= p * Math.Log(p);
-        }
-
-        double mi = h1 + h2 - hJoint;
-        double denominator = h1 + h2;
-
-        return denominator > 1e-10 ? 2.0 * mi / denominator : 0;
-    }
-
-    private bool IsPredominant(int fi, int fj, Dictionary<int, int[]> bins, int n)
-    {
-        if (fi == fj) return false;
-
-        // fj is predominated by fi if SU(fi, fj) >= SU(fj, target)
-        // and _suScores[fi] >= _suScores[fj]
-        double su_fi_fj = ComputeSU(bins[fi], bins[fj], n);
-
-        var suScores = _suScores ?? throw new InvalidOperationException("SU scores have not been computed.");
-        return su_fi_fj >= suScores[fj];
     }
 
     /// <inheritdoc />
@@ -276,15 +125,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("FCBF has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -40,7 +40,7 @@ public partial class DiTToTTS<T>
         {
             using var inferenceScope = new NoGradScope<T>();
             var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 97);
-            if (IsCodecStage) return CodecObjective(sample, random, out _, out _, out _)[0];
+            if (IsCodecStage) return CodecObjective(sample, random)[0];
             return CurrentStage == DiTToTrainingStage.Diffusion
                 ? DiffusionObjective(PrepareDiffusion(sample, random))[0]
                 : LengthObjective(PrepareLength(sample, random))[0];

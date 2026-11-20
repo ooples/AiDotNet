@@ -249,24 +249,20 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
 
         // Top-K tokens by their best class logit (ties keep the lower index, like a stable sort).
         int k = Math.Min(_numQueries, tokens);
-        var classValues = encoderClassAll.ToArray();
-        var rows = new int[batch * k];
-        for (int b = 0; b < batch; b++)
-        {
-            var best = new double[tokens];
-            for (int t = 0; t < tokens; t++)
-            {
-                double m = double.NegativeInfinity;
-                for (int c = 0; c < _numClasses; c++) m = Math.Max(m, _numOps.ToDouble(classValues[(((b * tokens) + t) * _numClasses) + c]));
-                best[t] = m;
-            }
-            var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
-            for (int i = 0; i < k; i++) rows[(b * k) + i] = (b * tokens) + order[i];
-        }
-        var referenceUndetached = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderBoxAll, new[] { batch * tokens, 4 }), rows, 0), new[] { batch, k, 4 });
+        int numClasses = _numClasses;
+        var rows = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "DinoQuerySelection",
+            new[] { encoderClassAll },
+            new[] { batch * k },
+            (inputs, dst) => SelectTopKQueries(inputs[0], batch, tokens, numClasses, k, dst));
+        var referenceUndetached = engine.Reshape(
+            engine.TensorEmbeddingLookupFromFloatIndices(engine.Reshape(encoderBoxAll, new[] { batch * tokens, 4 }), rows),
+            new[] { batch, k, 4 });
         var pass = new DetrPass<T>
         {
-            EncoderClasses = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderClassAll, new[] { batch * tokens, _numClasses }), rows, 0), new[] { batch, k, _numClasses }),
+            EncoderClasses = engine.Reshape(
+                engine.TensorEmbeddingLookupFromFloatIndices(engine.Reshape(encoderClassAll, new[] { batch * tokens, _numClasses }), rows),
+                new[] { batch, k, _numClasses }),
             EncoderBoxes = engine.Sigmoid(referenceUndetached),
             EncoderBoxLogits = referenceUndetached,
             Denoising = denoising
@@ -277,12 +273,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         int total = pad + k;
         var content = engine.TensorBroadcastTo(
             engine.Reshape(engine.TensorSlice(_targetEmbed, new[] { 0, 0 }, new[] { k, _d }), new[] { 1, k, _d }), new[] { batch, k, _d });
-        var anchorValues = referenceUndetached.ToArray();
-        var referenceSigmoid = new double[batch * total * 4];
-        for (int b = 0; b < batch; b++)
-            for (int q = 0; q < k; q++)
-                for (int c = 0; c < 4; c++)
-                    referenceSigmoid[(((b * total) + pad + q) * 4) + c] = Sigmoid(_numOps.ToDouble(anchorValues[(((b * k) + q) * 4) + c]));
+        var referenceSigmoidTensor = engine.StopGradient(engine.Sigmoid(referenceUndetached));
         var target = content;
         Tensor<bool>? mask = null;
         if (denoising is not null)
@@ -298,10 +289,11 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                 engine.Reshape(CvTensorOps<T>.Select(_labelEmbed, labelRows, 0), new[] { batch, pad, _d }),
                 new Tensor<T>(occupied, new[] { batch, pad, _d }));
             target = engine.TensorConcatenate(new[] { labelQueries, content }, 1);
-            for (int b = 0; b < batch; b++)
-                for (int s = 0; s < pad; s++)
-                    for (int c = 0; c < 4; c++)
-                        referenceSigmoid[(((b * total) + s) * 4) + c] = Sigmoid(denoising.UnsigmoidBoxes[(((b * pad) + s) * 4) + c]);
+            var dnSigmoid = new double[batch * pad * 4];
+            for (int idx = 0; idx < dnSigmoid.Length; idx++)
+                dnSigmoid[idx] = Sigmoid(denoising.UnsigmoidBoxes[idx]);
+            referenceSigmoidTensor = engine.TensorConcatenate(
+                new[] { new Tensor<double>(dnSigmoid, new[] { batch, pad, 4 }).Cast<T>(), referenceSigmoidTensor }, 1);
             mask = ContrastiveDenoising<T>.AttendMask(batch, _numHeads, total, denoising);
         }
 
@@ -310,31 +302,28 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         var output = target;
         var refined = new List<Tensor<T>>();
         var hidden = new List<Tensor<T>>();
-        var firstReference = (double[])referenceSigmoid.Clone();
+        var firstReference = referenceSigmoidTensor;
         for (int i = 0; i < _decoder.Count; i++)
         {
-            var referenceBoxes = new T[batch * total * _numLevels * 4];
-            for (int q = 0; q < batch * total; q++)
-                for (int l = 0; l < _numLevels; l++)
-                    for (int c = 0; c < 4; c++)
-                        referenceBoxes[(((q * _numLevels) + l) * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
+            var referenceBoxes = engine.TensorBroadcastTo(
+                engine.Reshape(referenceSigmoidTensor, new[] { batch, total, 1, 4 }),
+                new[] { batch, total, _numLevels, 4 });
             // d/2 per coordinate, so 4 x d/2 = 2d matches _refPointHead's input at any hidden width (128 at d=256).
-            var sineQuery = DetrEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total, _d / 2);
-            var queryPosition = _refPointHead.Forward(new Tensor<T>(sineQuery.Select(v => _numOps.FromDouble(v)).ToArray(), new[] { batch, total, 2 * _d }));
+            var sineQuery = BoxSineEmbeddingTensor(engine, referenceSigmoidTensor, batch, total, _d / 2);
+            var queryPosition = _refPointHead.Forward(sineQuery);
 
-            output = _decoder[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
+            output = _decoder[i].Forward(output, queryPosition, referenceBoxes,
                 memory, shapes, starts, mask);
 
-            var newReference = engine.Sigmoid(engine.TensorAdd(_boxHead.Forward(output), DetrHeads<T>.InverseSigmoidConstant(referenceSigmoid, batch, total)));
+            var newReference = engine.Sigmoid(engine.TensorAdd(_boxHead.Forward(output), DetrHeads<T>.InverseSigmoid(referenceSigmoidTensor)));
             refined.Add(newReference);
-            var newValues = newReference.ToArray();
-            for (int j = 0; j < referenceSigmoid.Length; j++) referenceSigmoid[j] = _numOps.ToDouble(newValues[j]);
+            referenceSigmoidTensor = engine.StopGradient(newReference);
             hidden.Add(_decoderNorm.Forward(output));
         }
 
         for (int i = 0; i < _decoder.Count; i++)
         {
-            var previous = i == 0 ? DetrHeads<T>.InverseSigmoidConstant(firstReference, batch, total) : DetrHeads<T>.InverseSigmoid(refined[i - 1]);
+            var previous = i == 0 ? DetrHeads<T>.InverseSigmoid(firstReference) : DetrHeads<T>.InverseSigmoid(refined[i - 1]);
             var boxLogits = engine.TensorAdd(_boxHead.Forward(hidden[i]), previous);
             var classes = _classHead.Forward(hidden[i]);
             pass.Classes.Add(engine.TensorSlice(classes, new[] { 0, pad, 0 }, new[] { batch, k, _numClasses }));
@@ -350,6 +339,50 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         }
 
         return pass;
+    }
+
+    private static void SelectTopKQueries(Tensor<T> encoderClassAll, int batch, int tokens, int numClasses, int k, Tensor<T> dst)
+    {
+        var classValues = encoderClassAll.Contiguous().Cast<double>().ToArray();
+        var rows = new double[batch * k];
+        for (int b = 0; b < batch; b++)
+        {
+            var best = new double[tokens];
+            for (int t = 0; t < tokens; t++)
+            {
+                double m = double.NegativeInfinity;
+                for (int c = 0; c < numClasses; c++)
+                    m = Math.Max(m, classValues[(((b * tokens) + t) * numClasses) + c]);
+                best[t] = m;
+            }
+            var order = Enumerable.Range(0, tokens).OrderByDescending(t => best[t]).ThenBy(t => t).Take(k).ToArray();
+            for (int i = 0; i < k; i++)
+                rows[(b * k) + i] = (b * tokens) + order[i];
+        }
+        var typed = new Tensor<double>(dst._shape, new Vector<double>(rows)).Cast<T>();
+        typed.AsSpan().CopyTo(dst.AsWritableSpan());
+    }
+
+    private static Tensor<T> BoxSineEmbeddingTensor(IEngine engine, Tensor<T> boxes, int batch, int count, int featsPerCoordinate)
+    {
+        int pairs = featsPerCoordinate / 2;
+        var invFreqValues = new double[pairs];
+        for (int p = 0; p < pairs; p++)
+            invFreqValues[p] = (2.0 * Math.PI) / Math.Pow(10000.0, (2.0 * p) / featsPerCoordinate);
+        var invFreq = new Tensor<double>(invFreqValues, new[] { 1, 1, 1, pairs }).Cast<T>();
+
+        var cx = engine.TensorSlice(boxes, new[] { 0, 0, 0 }, new[] { batch, count, 1 });
+        var cy = engine.TensorSlice(boxes, new[] { 0, 0, 1 }, new[] { batch, count, 1 });
+        var w = engine.TensorSlice(boxes, new[] { 0, 0, 2 }, new[] { batch, count, 1 });
+        var h = engine.TensorSlice(boxes, new[] { 0, 0, 3 }, new[] { batch, count, 1 });
+        var reordered = engine.Reshape(engine.TensorConcatenate(new[] { cy, cx, w, h }, 2), new[] { batch, count, 4, 1 });
+        var angles = engine.TensorMultiply(
+            engine.TensorBroadcastTo(reordered, new[] { batch, count, 4, pairs }),
+            engine.TensorBroadcastTo(invFreq, new[] { batch, count, 4, pairs }));
+        var interleaved = engine.Reshape(
+            engine.TensorStack(new[] { engine.TensorSin(angles), engine.TensorCos(angles) }, 4),
+            new[] { batch, count, 4 * featsPerCoordinate });
+        return interleaved;
     }
 
     private Tensor<T> Normal(int[] shape, Random random)

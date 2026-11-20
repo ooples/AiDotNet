@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -35,7 +36,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly AggregationMethod _method;
     private readonly List<Func<Matrix<T>, Vector<T>, int[]>> _selectors;
 
-    private double[]? _aggregateScores;
+    private Vector<T>? _aggregateScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -43,7 +44,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? AggregateScores => _aggregateScores;
+    public Vector<T>? AggregateScores => _aggregateScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -116,7 +117,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         {
             // Fallback: select first n features
             _selectedIndices = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
-            _aggregateScores = new double[p];
+            _aggregateScores = new Vector<T>(p);
             IsFitted = true;
             return;
         }
@@ -142,149 +143,91 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     {
         int k = _nFeaturesToSelect;
 
-        // Correlation-based selector
+        // Correlation-based selector (absolute Pearson correlation)
+        _selectors.Add((data, target) => RankedTop(Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target))), k));
+
+        // Variance-based selector (population variance)
         _selectors.Add((data, target) =>
         {
-            int n = data.Rows;
-            int p = data.Columns;
-            var correlations = new double[p];
-
-            double yMean = 0;
-            for (int i = 0; i < n; i++)
-                yMean += NumOps.ToDouble(target[i]);
-            yMean /= n;
-
-            for (int j = 0; j < p; j++)
-            {
-                double xMean = 0;
-                for (int i = 0; i < n; i++)
-                    xMean += NumOps.ToDouble(data[i, j]);
-                xMean /= n;
-
-                double ssXY = 0, ssXX = 0, ssYY = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                    double dy = NumOps.ToDouble(target[i]) - yMean;
-                    ssXY += dx * dy;
-                    ssXX += dx * dx;
-                    ssYY += dy * dy;
-                }
-
-                if (ssXX > 1e-10 && ssYY > 1e-10)
-                    correlations[j] = Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-            }
-
-            return correlations
-                .Select((c, idx) => (c, idx))
-                .OrderByDescending(x => x.c)
-                .Take(k)
-                .Select(x => x.idx)
-                .ToArray();
-        });
-
-        // Variance-based selector
-        _selectors.Add((data, target) =>
-        {
-            int n = data.Rows;
-            int p = data.Columns;
-            var variances = new double[p];
-
-            for (int j = 0; j < p; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < n; i++)
-                    mean += NumOps.ToDouble(data[i, j]);
-                mean /= n;
-
-                double variance = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - mean;
-                    variance += diff * diff;
-                }
-                variances[j] = variance / n;
-            }
-
-            return variances
-                .Select((v, idx) => (v, idx))
-                .OrderByDescending(x => x.v)
-                .Take(k)
-                .Select(x => x.idx)
-                .ToArray();
+            var x = Tensor<T>.FromMatrix(data);
+            var centered = Engine.TensorSubtract(x,
+                Engine.TensorBroadcastTo(Engine.ReduceMean(x, new[] { 0 }, true), new[] { data.Rows, data.Columns }));
+            return RankedTop(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, false), k);
         });
 
         // Mutual information approximation
-        _selectors.Add((data, target) =>
-        {
-            int n = data.Rows;
-            int p = data.Columns;
-            var miScores = new double[p];
+        _selectors.Add((data, target) => RankedTop(GaussianMutualInformation(data, target), k));
+    }
 
-            for (int j = 0; j < p; j++)
-            {
-                // Simplified MI using correlation squared as proxy
-                double xMean = 0, yMean = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    xMean += NumOps.ToDouble(data[i, j]);
-                    yMean += NumOps.ToDouble(target[i]);
-                }
-                xMean /= n;
-                yMean /= n;
+    /// <summary>
+    /// Gaussian mutual information proxy <c>-0.5 * ln(1 - r^2 + 1e-10)</c> per feature, 0 when the feature's or the
+    /// target's centred sum of squares is not above 1e-10.
+    /// </summary>
+    private Tensor<T> GaussianMutualInformation(Matrix<T> data, Vector<T> target)
+    {
+        var engine = Engine;
+        int p = data.Columns;
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var r = PreprocessingTensorOps.TargetCorrelations(x, y);
+        var sxx = FeatureScoringTensorOps.ColumnSumSquaredDeviations(x);
+        var zeros = new Tensor<T>(new[] { p });
+        if (!PreprocessingTensorOps.IsAbove(FeatureScoringTensorOps.SumSquaredDeviations(y), floor))
+            return zeros;
 
-                double ssXY = 0, ssXX = 0, ssYY = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                    double dy = NumOps.ToDouble(target[i]) - yMean;
-                    ssXY += dx * dy;
-                    ssXX += dx * dx;
-                    ssYY += dy * dy;
-                }
+        var mi = engine.TensorMultiplyScalar(engine.TensorLog(engine.TensorAddScalar(
+            PreprocessingTensorOps.OneMinus(engine.TensorSquare(r)), floor)), NumOps.FromDouble(-0.5));
+        return engine.TensorWhere(engine.TensorGreaterThan(sxx, floor), mi, zeros);
+    }
 
-                if (ssXX > 1e-10 && ssYY > 1e-10)
-                {
-                    double r = ssXY / Math.Sqrt(ssXX * ssYY);
-                    miScores[j] = -0.5 * Math.Log(1 - r * r + 1e-10);
-                }
-            }
+    /// <summary>The (at most) <paramref name="k"/> best features, best first (stable on ties).</summary>
+    private static int[] RankedTop(Tensor<T> scores, int k) =>
+        PreprocessingTensorOps.StableOrder(scores, descending: true).Take(k).ToArray();
 
-            return miScores
-                .Select((mi, idx) => (mi, idx))
-                .OrderByDescending(x => x.mi)
-                .Take(k)
-                .Select(x => x.idx)
-                .ToArray();
-        });
+    /// <summary>
+    /// Sums, over the in-range entries of <paramref name="selection"/>, the weight of each entry's rank
+    /// (<paramref name="rankWeights"/>, or 1 when null) into a [p] tensor.
+    /// </summary>
+    private static Tensor<TS> SelectionScores<TS>(int[] selection, int p, Tensor<TS>? rankWeights)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ranks = Enumerable.Range(0, selection.Length).Where(r => selection[r] >= 0 && selection[r] < p).ToArray();
+        if (ranks.Length == 0)
+            return new Tensor<TS>(new[] { p });
+
+        var features = ranks.Select(r => selection[r]).ToArray();
+        var oneHot = engine.TensorOneHot<TS>(new Tensor<int>(features, new[] { features.Length }), p);
+        if (rankWeights is null)
+            return engine.ReduceSum(oneHot, new[] { 0 }, false);
+
+        var weights = engine.TensorIndexSelect(rankWeights, new Tensor<int>(ranks, new[] { ranks.Length }), 0);
+        return engine.ReduceSum(engine.TensorMultiply(oneHot, engine.TensorBroadcastTo(
+            engine.Reshape(weights, new[] { ranks.Length, 1 }), new[] { ranks.Length, p })), new[] { 0 }, false);
     }
 
     private void AggregateByVoting(List<int[]> allSelections, int p)
     {
-        var votes = new int[p];
+        var votes = new Tensor<T>(new[] { p });
         foreach (var selection in allSelections)
-            foreach (int idx in selection)
-                if (idx >= 0 && idx < p)
-                    votes[idx]++;
+            votes = Engine.TensorAdd(votes, SelectionScores<T>(selection, p, null));
 
-        _aggregateScores = votes.Select(v => (double)v / allSelections.Count).ToArray();
+        _aggregateScores = Engine.TensorDivideScalar(votes, NumOps.FromDouble(allSelections.Count)).ToVector();
 
         int threshold = (int)Math.Ceiling(_votingThreshold * allSelections.Count);
-        var selected = votes
-            .Select((v, idx) => (v, idx))
-            .Where(x => x.v >= threshold)
-            .OrderByDescending(x => x.v)
+        var passing = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(votes, NumOps.FromDouble(threshold))));
+        var order = PreprocessingTensorOps.StableOrder(votes, descending: true);
+        var selected = order
+            .Where(idx => passing.Contains(idx))
             .Take(_nFeaturesToSelect)
-            .Select(x => x.idx)
             .ToList();
 
         if (selected.Count == 0)
         {
-            selected = votes
-                .Select((v, idx) => (v, idx))
-                .OrderByDescending(x => x.v)
+            selected = order
                 .Take(_nFeaturesToSelect)
-                .Select(x => x.idx)
                 .ToList();
         }
 
@@ -293,53 +236,33 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private void AggregateByBordaCount(List<int[]> allSelections, int p)
     {
-        var bordaScores = new double[p];
+        // A selection of length L gives its rank-r entry L - r points. Points are exact integers kept in double and
+        // ranked before the cast to T (Half cannot hold every integer above 2048).
+        var bordaScores = new Tensor<double>(new[] { p });
 
         foreach (var selection in allSelections)
         {
-            for (int rank = 0; rank < selection.Length; rank++)
-            {
-                int idx = selection[rank];
-                if (idx >= 0 && idx < p)
-                    bordaScores[idx] += selection.Length - rank;
-            }
+            int length = selection.Length;
+            var points = new Tensor<double>(Enumerable.Range(0, length).Select(r => (double)(length - r)).ToArray(), new[] { length });
+            bordaScores = Engine.TensorAdd(bordaScores, SelectionScores(selection, p, points));
         }
 
-        _aggregateScores = bordaScores;
-
-        _selectedIndices = bordaScores
-            .Select((s, idx) => (s, idx))
-            .OrderByDescending(x => x.s)
-            .Take(_nFeaturesToSelect)
-            .Select(x => x.idx)
-            .OrderBy(x => x)
-            .ToArray();
+        _aggregateScores = bordaScores.Cast<T>().ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bordaScores, Math.Min(_nFeaturesToSelect, p));
     }
 
     private void AggregateByWeightedVoting(List<int[]> allSelections, int p)
     {
         // Equal weights for now (can be extended with method weights)
-        var weights = Enumerable.Repeat(1.0 / allSelections.Count, allSelections.Count).ToArray();
+        T weight = NumOps.FromDouble(1.0 / allSelections.Count);
 
-        var scores = new double[p];
-        for (int m = 0; m < allSelections.Count; m++)
-        {
-            foreach (int idx in allSelections[m])
-                if (idx >= 0 && idx < p)
-                    scores[idx] += weights[m];
-        }
+        var scores = new Tensor<T>(new[] { p });
+        foreach (var selection in allSelections)
+            scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(SelectionScores<T>(selection, p, null), weight));
 
-        _aggregateScores = scores;
-
-        _selectedIndices = scores
-            .Select((s, idx) => (s, idx))
-            .OrderByDescending(x => x.s)
-            .Take(_nFeaturesToSelect)
-            .Select(x => x.idx)
-            .OrderBy(x => x)
-            .ToArray();
+        _aggregateScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -353,15 +276,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("EnsembleFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

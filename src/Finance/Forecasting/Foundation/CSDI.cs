@@ -69,18 +69,9 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
                 Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The decay points are kept as the fractions the paper states rather than transcribed into the step numbers of a 200-epoch run, which would be wrong at any other length.")]
 public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
-    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
-    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
-    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
-
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _fusedMultiSlotStep?.Dispose();
-            _fusedMultiSlotStep = null;
-        }
         base.Dispose(disposing);
     }
 
@@ -323,8 +314,6 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
         var loss = LossFunction;
 
-        var trainableParams = CollectModelTrainableTensors().ToArray();
-
         // One draw of (t, epsilon) feeds whichever path runs below. Hoisting it out of the
         // fused branch is what lets the eager path reuse DenoiserForwardFromSlots, so the two
         // paths share ONE denoiser graph instead of two hand-written ones that can drift
@@ -339,52 +328,20 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         // of training, so the configured DropoutRate (0.1 by default, the rate Tashiro et
         // al. 2021 report) was silently inert and the model trained an architecture the
         // caller never asked for.
+        // Route through TrainDeclaredObjective so the step packs the fresh (t, epsilon) slot
+        // draw onto the base's per-optimizer fused session AND publishes real parameter
+        // gradients via ScatterFusedGradients / PublishEagerFallbackGradients on both the
+        // compiled fused plan and any eager fallback.
         SetTrainingMode(true);
         try
         {
-            // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
-            // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
-            // by host-sampling a fresh (t, eps) pair and copying values into the
-            // slot tensors -- the compiled forward reads the CURRENT slot data on
-            // every replay. See ooples/AiDotNet#1846.
-            // The fused step resolves lazily created weights itself, so it is tried from the first step: an eager
-            // first step would leave its optimizer moments behind when the plan takes over.
-            if (NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _))
+            TrainDeclaredObjective(new AiDotNet.Training.TrainingObjective<T>(
+                slots,
+                s => loss.ComputeTapeLoss(DenoiserForwardFromSlots(s), s[1]))
             {
-                var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
-                Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
-                Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
-                {
-                    // s[1] = eps_true (noise slot). Loss = MSE(eps_pred, eps_true) via
-                    // the model's LossFunctionBase so custom losses are respected.
-                    return loss.ComputeTapeLoss(pred, s[1]);
-                }
-                if (multiSlotStep.TryStep(
-                        parameterProvider: CollectModelTrainableTensors,
-                        zeroGradAction: null,
-                        freshSlotData: slots,
-                        forward: ForwardFromSlots,
-                        computeLoss: ComputeLossFromSlots,
-                        optimizer: _optimizer,
-                        out T fusedLoss))
-                {
-                    LastLoss = fusedLoss;
-                    return true;
-                }
-            }
-
-            // Eager fallback, used when the fused path cannot engage (non-fuse-able optimizer, non-GPU host): the same
-            // denoiser graph on the network's shared eager step (TrainWithCustomObjective), with the model's registered
-            // loss so custom losses are respected and the constructor's optimizer driving the update. That step
-            // publishes the gradients through the base (so GetParameterGradients reports the real ones rather than the
-            // layer accessors' fabricated zeros) and pins recomputation to THIS draw of (t, eps): a line-searching
-            // optimizer that re-sampled would compare losses from two different diffusion timesteps.
-            var epsilonTarget = slots[1];
-            TrainWithCustomObjective(
-                input,
-                target,
-                (_, _) => loss.ComputeTapeLoss(DenoiserForwardFromSlots(slots), epsilonTarget),
-                _optimizer);
+                Optimizer = _optimizer,
+                Parameters = CollectModelTrainableTensors,
+            });
         }
         finally
         {

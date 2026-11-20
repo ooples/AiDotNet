@@ -358,10 +358,10 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         }
 
         // 4) Pre-compute the labels tensor (cheap, small — N * NumClasses).
-        var labelsData = new T[_sampleCount * _numClasses];
+        var labelsData = new int[_sampleCount * _numClasses];
         for (int i = 0; i < _sampleCount; i++)
-            labelsData[i * _numClasses + _samples[i].ClassIndex] = NumOps.FromDouble(1.0);
-        LoadedLabels = new Tensor<T>(labelsData, [_sampleCount, _numClasses]);
+            labelsData[i * _numClasses + _samples[i].ClassIndex] = 1;
+        LoadedLabels = new Tensor<int>(labelsData, [_sampleCount, _numClasses]).Cast<T>();
 
         // 5) Features tensor stays null — see the class remarks. Audio is decoded
         // lazily per-batch in ExtractBatch.
@@ -585,38 +585,45 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     /// When <paramref name="nativeRate"/> equals <paramref name="targetRate"/> this
     /// collapses to a plain copy loop (still honors nativeOffset for silence crops).
     /// </summary>
-    private void ResampleIntoDestination(
+    internal static void ResampleIntoDestination(
         T[] nativeBuf, int nativeOffset, T[] dst, int dstOffset, int targetLen, int nativeRate, int targetRate)
     {
         int lastIdx = nativeBuf.Length - 1;
         if (nativeRate == targetRate)
         {
-            // No resampling — still respect the offset (used for silence crops).
-            for (int t = 0; t < targetLen; t++)
-            {
-                int idx = nativeOffset + t;
-                if (idx > lastIdx) idx = lastIdx;
-                dst[dstOffset + t] = nativeBuf[idx];
-            }
+            // No resampling — still respect the offset (used for silence crops). Indices past the
+            // end of the buffer clamp to the last sample, so copy the in-range run in bulk and
+            // fill the tail with the last sample.
+            int inRange = Math.Max(0, Math.Min(targetLen, lastIdx + 1 - nativeOffset));
+            if (inRange > 0)
+                Array.Copy(nativeBuf, nativeOffset, dst, dstOffset, inRange);
+            if (inRange < targetLen)
+                dst.AsSpan(dstOffset + inRange, targetLen - inRange).Fill(nativeBuf[lastIdx]);
             return;
         }
 
-        double rateRatio = (double)nativeRate / targetRate;
-        for (int t = 0; t < targetLen; t++)
-        {
-            double srcPos = nativeOffset + t * rateRatio;
-            int floorIdx = (int)Math.Floor(srcPos);
-            // frac = srcPos - floor(srcPos); reuse floorIdx to avoid a second
-            // Math.Floor call per sample in this hot resampling loop.
-            double frac = srcPos - floorIdx;
-            int ceilIdx = floorIdx + 1;
-            if (floorIdx > lastIdx) floorIdx = lastIdx;
-            if (ceilIdx > lastIdx) ceilIdx = lastIdx;
+        if (targetLen <= 0) return;
 
-            double v0 = NumOps.ToDouble(nativeBuf[floorIdx]);
-            double v1 = NumOps.ToDouble(nativeBuf[ceilIdx]);
-            dst[dstOffset + t] = NumOps.FromDouble(v0 * (1.0 - frac) + v1 * frac);
-        }
+        // Form the source position in double with the scalar operation order, then derive its
+        // neighbours and fractional part. Remainder/rate is mathematically equivalent but can round
+        // differently from position - floor(position), changing a Half blend at its rounding midpoint.
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { targetLen };
+        var position = engine.TensorAddScalar(engine.TensorDivide(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, targetLen), (double)nativeRate),
+            Tensor<double>.CreateDefault(shape, (double)targetRate)), (double)nativeOffset);
+        var floor = engine.TensorFloor(position);
+        var floorIndex = floor.Cast<int>();
+        var floorIdx = engine.TensorClamp(floorIndex, 0, lastIdx);
+        var ceilIdx = engine.TensorClamp(engine.TensorAddScalar(floorIndex, 1), 0, lastIdx);
+        var source = new Tensor<T>(nativeBuf, new[] { nativeBuf.Length });
+        var v0 = engine.TensorIndexSelect(source, floorIdx, 0);
+        var v1 = engine.TensorIndexSelect(source, ceilIdx, 0);
+        var w1 = engine.TensorSubtract(position, floor);
+        var w0 = engine.TensorSubtract(engine.TensorFullLike(w1, 1.0), w1);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiply(v0.Cast<double>(), w0), engine.TensorMultiply(v1.Cast<double>(), w1));
+        blended.Cast<T>().AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));
     }
 
     /// <inheritdoc/>

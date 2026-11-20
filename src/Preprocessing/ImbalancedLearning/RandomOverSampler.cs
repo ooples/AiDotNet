@@ -108,16 +108,8 @@ public class RandomOverSampler<T> : OversamplingBase<T>
         {
             // Select a random minority sample
             int idx = classIndices[Random.Next(classIndices.Count)];
-            var original = x.GetRow(idx);
-
-            // Create an exact copy
-            var copy = new Vector<T>(original.Length);
-            for (int j = 0; j < original.Length; j++)
-            {
-                copy[j] = original[j];
-            }
-
-            syntheticSamples.Add(copy);
+            // Add an exact copy
+            syntheticSamples.Add(x.GetRow(idx).Clone());
         }
 
         return syntheticSamples;

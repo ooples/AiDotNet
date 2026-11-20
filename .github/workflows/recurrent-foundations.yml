@@ -13,7 +13,7 @@ permissions:
 jobs:
   opencl-foundations:
     if: ${{ github.event.pull_request.draft != true }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -41,6 +41,7 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !contains(steps.tensors.outputs.version, '-coordination.') }}
         with:
           repository: ooples/AiDotNet.Tensors
           ref: v${{ steps.tensors.outputs.version }}
@@ -49,6 +50,11 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
+      - name: Set up pinned Tensors validation feed
+        id: validation-feed
+        uses: ./library/.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
       - name: Install OpenCL runtime
         run: |
           sudo apt-get update -o Acquire::Retries=3
@@ -57,7 +63,7 @@ jobs:
       - name: Run CPU and OpenCL foundation regressions against companion kernels
         run: >-
           dotnet test tests/AiDotNet.FoundationReview/AiDotNet.FoundationReview.csproj
-          -c Release -f net10.0 -p:UseLocalTensors=true
+          -c Release -f net10.0 -p:UseLocalTensors=${{ steps.validation-feed.outputs.active != 'true' }}
           -p:LocalTensorsRoot=${{ github.workspace }}/companion-tensors
           -p:GeneratePackageOnBuild=false --logger 'trx;LogFileName=foundations.trx'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

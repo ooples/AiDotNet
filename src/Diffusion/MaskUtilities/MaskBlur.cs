@@ -69,53 +69,18 @@ public class MaskBlur<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>The blurred mask.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask._shape;
-        var result = new Tensor<T>(shape);
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
+        var engine = AiDotNetEngine.Current;
         int half = _kernelSize / 2;
 
-        // Build Gaussian kernel weights
-        var kernel = new double[_kernelSize, _kernelSize];
-        double kernelSum = 0;
-        double twoSigmaSq = 2.0 * _sigma * _sigma;
+        // Gaussian kernel exp(-(dy^2 + dx^2) / (2 sigma^2)) = g(dy) g(dx), normalized to sum to 1. Built and
+        // normalized in double, then narrowed once: -1 / (2 sigma^2) leaves Half's range for a small sigma, and
+        // 0 * -infinity at the center tap is NaN.
+        var offsets = engine.TensorArange<double>(-half, half + 1, 1);
+        var g = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(offsets), -1.0 / (2.0 * _sigma * _sigma)));
+        var wide = engine.TensorOuter(g, g);
+        var kernel = TensorCopyHelper.CastLogical<double, T>(engine.TensorDivideScalar(wide, engine.TensorSum(wide)));
 
-        for (int dy = -half; dy <= half; dy++)
-        {
-            for (int dx = -half; dx <= half; dx++)
-            {
-                double weight = Math.Exp(-(dy * dy + dx * dx) / twoSigmaSq);
-                kernel[dy + half, dx + half] = weight;
-                kernelSum += weight;
-            }
-        }
-
-        // Normalize kernel
-        for (int ky = 0; ky < _kernelSize; ky++)
-            for (int kx = 0; kx < _kernelSize; kx++)
-                kernel[ky, kx] /= kernelSum;
-
-        // Apply convolution
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double sum = 0;
-
-                for (int dy = -half; dy <= half; dy++)
-                {
-                    for (int dx = -half; dx <= half; dx++)
-                    {
-                        int ny = Math.Max(0, Math.Min(y + dy, height - 1));
-                        int nx = Math.Max(0, Math.Min(x + dx, width - 1));
-                        sum += NumOps.ToDouble(mask[ny, nx]) * kernel[dy + half, dx + half];
-                    }
-                }
-
-                result[y, x] = NumOps.FromDouble(Math.Max(0, Math.Min(sum, 1.0)));
-            }
-        }
-
-        return result;
+        var blurred = MaskVectorOps.ReplicateFilter2D(mask, kernel);
+        return engine.TensorClamp(blurred, NumOps.Zero, NumOps.One);
     }
 }

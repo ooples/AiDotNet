@@ -83,6 +83,267 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// Stores the pre-update timestep for accurate reverse updates.
     /// </summary>
     private int _previousT;
+    // Half parameters need FP32 moments and epsilon; rounding moments back to Half loses
+    // small squared gradients even when the final parameter update is representable.
+    // Native arrays are carried by the shared generated state envelope, including the
+    // most recent update needed to reverse a quantized parameter step exactly.
+    [Buffer] private float[]? _halfMaster;
+    [Buffer] private float[]? _halfM;
+    [Buffer] private float[]? _halfV;
+    [Buffer] private float[]? _halfVMax;
+    [Buffer] private float[]? _halfLastStep;
+    [Buffer] private T[]? _halfPreviousParameters;
+    [Buffer] private T[]? _halfUpdatedParameters;
+
+    // The generated declaration of HalfTapeState is the sole checkpoint owner. These maps are
+    // identity/index views of that same state, not additional serialized copies.
+    [ParameterAlias(nameof(HalfTapeState))]
+    private readonly Dictionary<Tensor<T>, HalfTapeSlot> _halfTapeSlots = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    [ParameterAlias(nameof(HalfTapeState))]
+    private Dictionary<int, HalfTapeSlot>? _halfTapePending;
+    [ParameterAlias(nameof(HalfTapeState))] private int _halfTapeVersion;
+    [ParameterAlias(nameof(HalfTapeState))] private int _halfTapeParameterCount;
+
+    private sealed class HalfTapeSlot
+    {
+        public int[] Shape { get; set; } = Array.Empty<int>();
+        public float[] Master { get; set; } = Array.Empty<float>();
+        public float[] M { get; set; } = Array.Empty<float>();
+        public float[] V { get; set; } = Array.Empty<float>();
+        public float[]? VMax { get; set; }
+        public float[] Published { get; set; } = Array.Empty<float>();
+        public long Age { get; set; }
+    }
+
+    private sealed class HalfTapeCheckpoint : AiDotNet.Models.IValidatableModelState
+    {
+        public int Version { get; set; }
+        public int ParameterCount { get; set; }
+        public Dictionary<int, HalfTapeSlot> Slots { get; set; } = new();
+
+        public void ValidateModelState()
+        {
+            if (Version != 1 || ParameterCount < 0 || Slots is null)
+                throw new InvalidOperationException("Invalid Half Adam tape checkpoint header.");
+            foreach (var entry in Slots)
+            {
+                if (entry.Key < 0 || entry.Key >= ParameterCount || entry.Value is null)
+                    throw new InvalidOperationException("Invalid Half Adam tape checkpoint parameter index.");
+                ValidateHalfTapeSlot(entry.Value);
+            }
+        }
+    }
+
+    [Buffer]
+    private HalfTapeCheckpoint? HalfTapeState
+    {
+        get
+        {
+            if (typeof(T) != typeof(Half)) return null;
+            if ((_halfTapeVersion == 0 && _tapeStep != 0) || _tapeM.Any() || _tapeV.Any() || _tapeVMax.Any())
+                throw new NotSupportedException("Unpromoted Half Adam tape state cannot be checkpointed without FP32 masters and moments.");
+            var snapshot = new HalfTapeCheckpoint { Version = 1, ParameterCount = _halfTapeParameterCount };
+            if (_halfTapePending is not null)
+                foreach (var entry in _halfTapePending) snapshot.Slots.Add(entry.Key, entry.Value);
+            foreach (var entry in _halfTapeSlots)
+                if (TryGetTapeParameterIndex(entry.Key, out int index)) snapshot.Slots[index] = entry.Value;
+            return snapshot;
+        }
+        set
+        {
+            value?.ValidateModelState();
+            ResetHalfTapeState();
+            if (value is null) return;
+            _halfTapeVersion = value.Version;
+            _halfTapeParameterCount = value.ParameterCount;
+            _halfTapePending = value.Slots;
+        }
+    }
+
+    // Sharded tape export currently transports Tensor<T> moments only. It cannot carry these
+    // FP32 slots losslessly when T is Half, so the existing export capability gate must refuse it.
+    internal override bool SupportsShardedTapeStateConsolidation => typeof(T) != typeof(Half);
+
+    private protected override StagedRestore StageDeserialize(byte[] data)
+    {
+        var staged = base.StageDeserialize(data);
+        if (typeof(T) != typeof(Half)) return staged;
+        // Missing promoted state in an old payload must not reuse state from the target instance.
+        // HalfTapeCheckpoint validates at stage time via IValidatableModelState, so commit stays snapshot-free.
+        return new StagedRestore(staged.Options, () =>
+        {
+            ResetHalfTapeState();
+            staged.Commit();
+        }, staged.HasFallibleCommit);
+    }
+
+    private void ResetHalfTapeState()
+    {
+        _halfTapeSlots.Clear();
+        _halfTapePending = null;
+        _halfTapeVersion = 0;
+        _halfTapeParameterCount = 0;
+    }
+
+    private static void ValidateHalfTapeSlot(HalfTapeSlot slot)
+    {
+        long length = 1;
+        if (slot.Shape is null) throw new InvalidOperationException("Half Adam tape state has no shape.");
+        foreach (int dimension in slot.Shape)
+        {
+            if (dimension < 0 || length > int.MaxValue / Math.Max(1, dimension))
+                throw new InvalidOperationException("Half Adam tape state has an invalid shape.");
+            length *= dimension;
+        }
+        if (slot.Age < 0 || slot.Age == long.MaxValue || slot.Master?.Length != length
+            || slot.M?.Length != length || slot.V?.Length != length || slot.Published?.Length != length
+            || (slot.VMax is not null && slot.VMax.Length != length))
+            throw new InvalidOperationException("Half Adam tape state is incomplete or inconsistent; no update was applied.");
+    }
+
+    private void StepHalfTape(TapeStepContext<T> context)
+    {
+        if ((_halfTapeVersion == 0 && _tapeStep != 0) || _tapeM.Any() || _tapeV.Any() || _tapeVMax.Any())
+            throw new NotSupportedException("Unpromoted Half Adam tape state cannot resume without FP32 masters and moments. Reset the optimizer before starting a new run.");
+        if (_halfTapePending is not null && _halfTapeParameterCount != 0
+            && _halfTapeParameterCount != context.Parameters.Count)
+            throw new InvalidOperationException("Half Adam tape checkpoint parameter count does not match this step.");
+
+        // Resolve and validate the entire binding batch before changing any slot, age or parameter.
+        var bindings = new List<(Tensor<T> Parameter, Tensor<T> Gradient, HalfTapeSlot Slot, int[]? SparseRows)>();
+        var restored = new List<(Tensor<T> Parameter, HalfTapeSlot Slot)>();
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int index = 0; index < context.Parameters.Count; index++)
+        {
+            var parameter = context.Parameters[index];
+            if (!seen.Add(parameter))
+                throw new ArgumentException("Half Adam tape parameters must be unique.", nameof(context));
+            if (!TryGetTapeParameterIndex(parameter, out int canonicalIndex) || canonicalIndex != index)
+                throw new InvalidOperationException("Half Adam tape state requires the base canonical parameter order.");
+            HalfTapeSlot? slot = null;
+            if (_halfTapePending is not null && _halfTapePending.TryGetValue(canonicalIndex, out var pending))
+            {
+                slot = pending;
+                restored.Add((parameter, pending));
+            }
+            else _halfTapeSlots.TryGetValue(parameter, out slot);
+            if (slot is not null)
+            {
+                ValidateHalfTapeSlot(slot);
+                if (!parameter.Shape.Span.SequenceEqual(slot.Shape) || (_options.UseAMSGrad && slot.VMax is null))
+                    throw new InvalidOperationException("Half Adam tape parameter shape or AMSGrad state changed; no update was applied.");
+            }
+            int[]? sparseRows = null;
+            Tensor<T> gradient;
+            if (!TryGetHalfSparseRows(context, parameter, out gradient, out sparseRows))
+            {
+                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var resolvedGradient)) continue;
+                gradient = resolvedGradient ?? throw new InvalidOperationException("Half Adam gradient resolution returned no gradient.");
+                if (!parameter.Shape.Equals(gradient.Shape))
+                    throw new ArgumentException("Half Adam tape gradient shape must match its parameter.", nameof(context));
+            }
+            if (slot is null)
+            {
+                var published = parameter.Cast<float>().ToArray();
+                slot = new HalfTapeSlot
+                {
+                    Shape = parameter.Shape.ToArray(), Master = (float[])published.Clone(), Published = published,
+                    M = new float[parameter.Length], V = new float[parameter.Length],
+                    VMax = _options.UseAMSGrad ? new float[parameter.Length] : null,
+                };
+            }
+            bindings.Add((parameter, gradient, slot, sparseRows));
+        }
+        foreach (var binding in restored) _halfTapeSlots[binding.Parameter] = binding.Slot;
+        _halfTapePending = null;
+        _halfTapeVersion = 1;
+        _halfTapeParameterCount = context.Parameters.Count;
+        _tapeStep++;
+        foreach (var binding in bindings)
+        {
+            var slot = binding.Slot;
+            var current = binding.Parameter.Cast<float>().ToArray();
+            if (!current.AsSpan().SequenceEqual(slot.Published)) current.CopyTo(slot.Master, 0);
+            slot.Age++;
+            if (binding.SparseRows is { } rows)
+            {
+                int width = slot.Shape[1];
+                for (int position = 0; position < rows.Length; position++)
+                {
+                    if (rows[position] < 0) continue; // Preserve the existing sparse helper's ignored invalid-row contract.
+                    var rowGradient = Engine.TensorSlice(binding.Gradient, new[] { position, 0 }, new[] { 1, width });
+                    UpdateHalfTapeRegion(slot, rowGradient, rows[position] * width, new[] { 1, width });
+                }
+            }
+            else UpdateHalfTapeRegion(slot, binding.Gradient, 0, slot.Shape);
+            var master = Tensor<float>.FromMemory(slot.Master.AsMemory(), slot.Shape);
+            var published = master.Cast<T>();
+            if (binding.Parameter.IsContiguous)
+                Engine.TensorCopy(published, binding.Parameter);
+            else
+                // TensorCopy requires contiguous output. The bulk logical writer preserves the
+                // parameter view's strides and updates its storage version for GPU cache coherence.
+                binding.Parameter.CopyFromArray(published.ToArray());
+            binding.Parameter.Cast<float>().CopyLogicalTo(slot.Published);
+            _halfTapeSlots[binding.Parameter] = slot;
+        }
+        ReportRetainedOutputUpdateAccepted();
+    }
+
+    private bool TryGetHalfSparseRows(TapeStepContext<T> context, Tensor<T> parameter,
+        out Tensor<T> gradient, out int[]? rows)
+    {
+        gradient = parameter; rows = null;
+        if (_options.UseAMSGrad || parameter.Rank != 2
+            || !SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, parameter)) return false;
+        var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(parameter);
+        if (sparse is null || sparse.Count != 1) return false;
+        var contribution = sparse[0];
+        var indices = contribution.Indices.ToArray();
+        // The existing scatter helper declines duplicates/multiple chunks: their summed effective
+        // gradient takes the dense path, including evolution of the other rows' moments.
+        if (new HashSet<long>(indices).Count != indices.Length) return false;
+        if (contribution.VocabSize != parameter.Shape[0] || contribution.EmbeddingDim != parameter.Shape[1]
+            || contribution.Values.Rank != 2 || contribution.Values.Shape[0] != indices.Length
+            || contribution.Values.Shape[1] != parameter.Shape[1])
+            throw new ArgumentException("Half Adam sparse gradient metadata does not match its parameter.", nameof(context));
+        rows = new int[indices.Length];
+        for (int i = 0; i < indices.Length; i++)
+            rows[i] = indices[i] >= 0 && indices[i] < parameter.Shape[0] ? (int)indices[i] : -1;
+        gradient = contribution.Values;
+        return true;
+    }
+
+    private void UpdateHalfTapeRegion(HalfTapeSlot slot, Tensor<T> sourceGradient, int offset, int[] shape)
+    {
+        int length = sourceGradient.Length;
+        var master = Tensor<float>.FromMemory(slot.Master.AsMemory(offset, length), shape);
+        var mState = Tensor<float>.FromMemory(slot.M.AsMemory(offset, length), shape);
+        var vState = Tensor<float>.FromMemory(slot.V.AsMemory(offset, length), shape);
+        var gradient = sourceGradient.Cast<float>();
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(mState, (float)_options.Beta1),
+            Engine.TensorMultiplyScalar(gradient, (float)(1 - _options.Beta1)));
+        var v = Engine.TensorAdd(Engine.TensorMultiplyScalar(vState, (float)_options.Beta2),
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(gradient, gradient), (float)(1 - _options.Beta2)));
+        Engine.TensorCopy(m, mState); mState.CopyLogicalTo(slot.M.AsSpan(offset, length));
+        Engine.TensorCopy(v, vState); vState.CopyLogicalTo(slot.V.AsSpan(offset, length));
+        Tensor<float> secondMoment = v;
+        if (_options.UseAMSGrad)
+        {
+            var maximumArray = slot.VMax ?? throw new InvalidOperationException("Missing Half AMSGrad state.");
+            var maximum = Tensor<float>.FromMemory(maximumArray.AsMemory(offset, length), shape);
+            secondMoment = Engine.TensorMax(maximum, v);
+            Engine.TensorCopy(secondMoment, maximum); maximum.CopyLogicalTo(maximumArray.AsSpan(offset, length));
+        }
+        var mHat = Engine.TensorDivideScalar(m, (float)(1 - Math.Pow(_options.Beta1, slot.Age)));
+        var vHat = Engine.TensorDivideScalar(secondMoment, (float)(1 - Math.Pow(_options.Beta2, slot.Age)));
+        var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), (float)_options.Epsilon);
+        var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denominator),
+            (float)NumOps.ToDouble(CurrentLearningRate));
+        Engine.TensorCopy(Engine.TensorSubtract(master, update), master);
+        master.CopyLogicalTo(slot.Master.AsSpan(offset, length));
+    }
+
 
     /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.
@@ -205,6 +466,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // previous run's running maximum as a lower bound and suppress
         // early updates in the new run. (PR #1350 round-2 review.)
         _vMaxVector = null;
+        ResetHalfVectorState();
+        ResetHalfTapeState();
         // Reset the NN tape-side state. The flat-vector path got reset
         // above; the tape path uses parameter-tensor-keyed dictionaries
         // (_tapeM, _tapeV, _tapeVMax) and a separate _tapeStep counter
@@ -218,6 +481,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _tapeV.Clear();
         _tapeVMax.Clear();
         _fp32StepCache.Clear();
+        DisposeCachedGpuGradBuffers();
         _tapeStep = 0;
 
         // Initialize parameters
@@ -530,6 +794,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
                 nameof(gradient));
         }
+        if (typeof(T) == typeof(Half))
+            return UpdateHalfParameters(parameters, gradient);
+
 
         if (_m == null || _v == null || _m.Length != parameters.Length || _m.Length != gradient.Length)
         {
@@ -627,6 +894,108 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
 
+    private static Tensor<float> HalfStateTensor(float[] values)
+        => Tensor<float>.FromMemory(values.AsMemory(), new[] { values.Length });
+
+    private void ValidateHalfVectorState()
+    {
+        if (_m.Length != 0 || _v.Length != 0 || (_vMaxVector?.Length ?? 0) != 0)
+            throw new NotSupportedException("Legacy Half Adam moments cannot resume without FP32 master state. Reset the optimizer before starting a new run.");
+        bool hasNativeState = _halfMaster is not null || _halfM is not null || _halfV is not null
+            || _halfVMax is not null || _halfLastStep is not null
+            || _halfPreviousParameters is not null || _halfUpdatedParameters is not null;
+        if (!hasNativeState)
+        {
+            if (_t != 0)
+                throw new NotSupportedException("Half Adam state has a step count but no FP32 master state. Reset the optimizer before starting a new run.");
+            return;
+        }
+        int length = _halfMaster?.Length ?? -1;
+        if (length < 0 || _halfM?.Length != length || _halfV?.Length != length
+            || _halfLastStep?.Length != length || _halfPreviousParameters?.Length != length
+            || _halfUpdatedParameters?.Length != length || _t <= 0 || _previousT != _t - 1
+            || (_options.UseAMSGrad && _halfVMax?.Length != length)
+            || (_halfVMax is not null && _halfVMax.Length != length))
+            throw new InvalidOperationException("Half Adam checkpoint state is incomplete or inconsistent; no update was applied.");
+    }
+
+
+    private void ResetHalfVectorState()
+    {
+        _halfMaster = null;
+        _halfM = null;
+        _halfV = null;
+        _halfVMax = null;
+        _halfLastStep = null;
+        _halfPreviousParameters = null;
+        _halfUpdatedParameters = null;
+    }
+
+    private Vector<T> UpdateHalfParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        ValidateHalfVectorState();
+        int length = parameters.Length;
+        if (_halfM is null || _halfM.Length != length)
+        {
+            ResetHalfVectorState();
+            _t = 0;
+        }
+        bool hasMaster = _halfMaster is not null;
+        var masterArray = _halfMaster ??= new float[length];
+        var master = HalfStateTensor(masterArray);
+        var mArray = _halfM ??= new float[length];
+        var vArray = _halfV ??= new float[length];
+        var lastStep = _halfLastStep ??= new float[length];
+        var previousParameters = _halfPreviousParameters ??= new T[length];
+        var updatedParameters = _halfUpdatedParameters ??= new T[length];
+        // A changed input is an explicit caller weight replacement. Rebase its master
+        // weights while preserving optimizer moments; an unchanged published Half view
+        // must retain the unrounded FP32 residual from previous updates.
+        if (!hasMaster || !parameters.SequenceEqual(updatedParameters))
+            Engine.TensorCopy(parameters.AsTensor().Cast<float>(), master);
+        parameters.AsSpan().CopyTo(previousParameters);
+        _previousT = _t;
+        _t++;
+
+        var engine = Engine;
+        var g = gradient.AsTensor().Cast<float>();
+        var mState = HalfStateTensor(mArray);
+        var vState = HalfStateTensor(vArray);
+        var m = engine.TensorAddScaled(mState, g, (float)_options.Beta1, (float)(1 - _options.Beta1));
+        var v = engine.TensorAdd(engine.TensorMultiplyScalar(vState, (float)_options.Beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), (float)(1 - _options.Beta2)));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
+        // Vector/matrix updates return host-owned values. Commit every native state
+        // array at that same boundary; checkpoint serialization reads these arrays
+        // directly, and later wrapper instances must never observe a stale GPU copy.
+        mState.CopyLogicalTo(mArray);
+        vState.CopyLogicalTo(vArray);
+        Tensor<float> secondMoment = v;
+        if (_options.UseAMSGrad)
+        {
+            var maximumArray = _halfVMax ??= new float[length];
+            var maximum = HalfStateTensor(maximumArray);
+            secondMoment = engine.TensorMax(maximum, v);
+            engine.TensorCopy(secondMoment, maximum);
+            maximum.CopyLogicalTo(maximumArray);
+        }
+        var mHat = engine.TensorDivideScalar(m, (float)(1 - Math.Pow(_options.Beta1, _t)));
+        var vHat = engine.TensorDivideScalar(secondMoment, (float)(1 - Math.Pow(_options.Beta2, _t)));
+        var denominator = engine.TensorAddScalar(engine.TensorSqrt(vHat), (float)_options.Epsilon);
+        var step = engine.TensorMultiplyScalar(engine.TensorDivide(mHat, denominator),
+            (float)NumOps.ToDouble(CurrentLearningRate));
+        var stepState = HalfStateTensor(lastStep);
+        engine.TensorCopy(step, stepState);
+        stepState.CopyLogicalTo(lastStep);
+        engine.TensorCopy(engine.TensorSubtract(master, step), master);
+        master.CopyLogicalTo(masterArray);
+        var updated = master.Cast<T>().AsVector();
+        updated.AsSpan().CopyTo(updatedParameters);
+        return updated;
+    }
+
+
     /// <summary>
     /// Updates a matrix of parameters using the Adam optimization algorithm.
     /// </summary>
@@ -640,6 +1009,16 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     public override Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
     {
+        if (typeof(T) == typeof(Half))
+        {
+            if (parameters.Rows != gradient.Rows || parameters.Columns != gradient.Columns)
+                throw new ArgumentException("Parameter and gradient matrix shapes must match.", nameof(gradient));
+            var updated = UpdateParameters(parameters.ToRowVector(), gradient.ToRowVector());
+            var result = new Matrix<T>(parameters.Rows, parameters.Columns);
+            updated.AsSpan().CopyTo(result.AsWritableSpan());
+            return result;
+        }
+
         int totalSize = parameters.Rows * parameters.Columns;
 
         if (_m == null || _v == null || _m.Length != totalSize)
@@ -771,6 +1150,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc />
+    protected override bool ReportsRetainedOutputUpdateOutcome => true;
+
+    /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
@@ -818,7 +1200,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         bool clipActive = GradientOptions.EnableGradientClipping && !GradientsClippedAhead
             && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0;
-        double globalNormSq = guardActive || clipActive ? GlobalGradientSquaredNorm(context) : 0.0;
+        double globalNormSq = 0.0;
+        if ((guardActive || clipActive) && (clipActive || !TryGetClippedAheadGradNormSq(out globalNormSq)))
+        {
+            globalNormSq = GlobalGradientSquaredNorm(context);
+        }
 
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
         // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
@@ -826,6 +1212,18 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (guardActive && !IsFiniteDouble(globalNormSq)
             && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
+            ReportRetainedOutputUpdateRejected();
+
+            return;
+        }
+
+        if (typeof(T) == typeof(Half))
+        {
+            // Keep the shared clipping/anomaly gates above, then update promoted per-parameter state.
+            // Bias correction belongs to each enrolled parameter's accepted age, not the global step.
+            if (clipActive)
+                ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm, globalNormSq);
+            StepHalfTape(context);
             return;
         }
 
@@ -891,8 +1289,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // The anomaly guard and global-norm clipping above read one scalar back to the host. That keeps this eager
         // tape step out of CUDA-graph capture, but it is not a reason to update on the host: graph capture is the
         // compiled plan's path, which has its own fused optimizer, and this step is never captured.
-        bool gpuAdam = isFloat && !_options.UseAMSGrad
-            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = isFloat && !_options.UseAMSGrad
+            ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
+        bool gpuAdam = gpuEngine is not null && gpuBackend is not null;
 
         // Per-parameter Adam updates are fully INDEPENDENT: each param's m/v/vMax
         // live in the _tapeM/_tapeV/_tapeVMax ConcurrentDictionaries keyed by tensor
@@ -977,16 +1378,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // at the real shape — m / v need to be re-allocated to match,
             // otherwise TensorAdd's result has a length larger than m and
             // TensorCopy throws "Destination array was not long enough".
-            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
-            {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
-            {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeV[param] = v;
-            }
+            bool createStateOnDevice = gpuAdam;
+            var m = GetOrCreateShapedOptimizerStateTensor(_tapeM, param, createStateOnDevice);
+            var v = GetOrCreateShapedOptimizerStateTensor(_tapeV, param, createStateOnDevice);
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
             // first encounter of `param`; the max-accumulation guarantees the
             // denominator √v̂_max is non-decreasing once gradients have been
@@ -996,12 +1390,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             bool useAmsgrad = _options.UseAMSGrad;
             if (useAmsgrad)
             {
-                if (!_tapeVMax.TryGetValue(param, out vMax) || !vMax._shape.SequenceEqual(param._shape))
-                {
-                    vMax = new Tensor<T>(param._shape);
-                    vMax.AsWritableSpan().Clear();
-                    _tapeVMax[param] = vMax;
-                }
+                vMax = GetOrCreateShapedOptimizerStateTensor(_tapeVMax, param, createStateOnDevice: false);
             }
 
             // Sparse-embedding scatter path FIRST — before materializing any dense
@@ -1037,17 +1426,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 grad = Engine.Reshape(grad, param._shape);
             }
 
-            // GPU-resident Adam update (Phase 1): when param/grad/m/v all resolve to GPU buffers, the kernel
-            // updates weights + moments in place on the GPU with no host download. Returns false (-> CPU path)
-            // if any tensor isn't GPU-resident this step. weightDecay=0 (plain Adam; AdamW handles its own).
-            if (gpuAdam)
+            // GPU-resident Adam update: places host-initialized parameters on GPU via AcquireParameterBuffer,
+            // promotes deserialized/host m and v to GPU once via BindResidentBuffer, uploads host-only gradients
+            // in-place into reusable per-parameter GPU buffers, updates weights + moments in place on device,
+            // and commits parameter residency via CommitParameterUpdatedOnDevice.
+            if (gpuEngine is not null && gpuBackend is not null)
             {
                 var pf = (Tensor<float>)(object)param;
                 var gf = (Tensor<float>)(object)grad;
                 var mf = (Tensor<float>)(object)m;
                 var vf = (Tensor<float>)(object)v;
-                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamStep(
-                        pf, gf, mf, vf, (float)lr, (float)b1, (float)b2, (float)eps, 0f, _tapeStep))
+                if (TryExecuteGpuAdamOrAdamWStep(
+                        gpuEngine, gpuBackend, param,
+                        pf, gf, mf, vf,
+                        (float)lr, (float)b1, (float)b2, (float)eps,
+                        weightDecay: 0f, _tapeStep, decoupledWeightDecay: false))
                     return;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
             }
 
@@ -1085,12 +1478,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 // AsWritableSpan which correctly slices into the buffer
                 // at the right offset. Both paths execute the same
                 // numerics — only the destination of writes differs.
-                double[]? paramArr = WritableParameterArray<double>(param);
-                double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
-                double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
-                double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
-                double[]? vMaxArr = useAmsgrad ? (double[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                bool bypassRawDoubleArrays = AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                    || param.HasPendingGpuData
+                    || grad.HasPendingGpuData
+                    || m.HasPendingGpuData
+                    || v.HasPendingGpuData
+                    || (useAmsgrad && vMax is not null && vMax.HasPendingGpuData);
+                double[]? paramArr = bypassRawDoubleArrays ? null : WritableParameterArray<double>(param);
+                double[]? gradArr = bypassRawDoubleArrays ? null : (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                double[]? mArr = bypassRawDoubleArrays ? null : (double[]?)(object?)m.GetLiveBackingArrayOrNull();
+                double[]? vArr = bypassRawDoubleArrays ? null : (double[]?)(object?)v.GetLiveBackingArrayOrNull();
+                double[]? vMaxArr = !bypassRawDoubleArrays && useAmsgrad
+                    ? (double[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull()
+                    : null;
+                if (!bypassRawDoubleArrays
+                    && paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
                     for (int i = 0; i < n; i++)
@@ -1137,9 +1539,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
                     ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
                     ref double vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<double>();
+                    Tensor<double>? vMaxD = null;
                     if (useAmsgrad)
                     {
-                        var vMaxD = (object?)vMax as Tensor<double>
+                        vMaxD = (object?)vMax as Tensor<double>
                             ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.");
                         System.Span<double> vMaxSpan = vMaxD.AsWritableSpan();
                         vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
@@ -1169,20 +1572,47 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
                             lr * mHat / (Math.Sqrt(vHatEff) + eps);
                     }
+                    paramD.IncrementVersion();
+                    mD.IncrementVersion();
+                    vD.IncrementVersion();
+                    if (useAmsgrad && vMaxD is not null)
+                    {
+                        vMaxD.IncrementVersion();
+                    }
+                    if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine residentGpuD)
+                    {
+                        residentGpuD.InvalidateResidentWeightBuffer(paramD);
+                        residentGpuD.InvalidateResidentWeightBuffer(mD);
+                        residentGpuD.InvalidateResidentWeightBuffer(vD);
+                        if (useAmsgrad && vMaxD is not null)
+                        {
+                            residentGpuD.InvalidateResidentWeightBuffer(vMaxD);
+                        }
+                    }
                 }
             }
             else if (isFloat)
             {
-                float[]? paramArr = WritableParameterArray<float>(param);
-                float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
-                float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
-                float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
-                float[]? vMaxArr = useAmsgrad ? (float[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
+                bool bypassRawFloatArrays = gpuAdam
+                    || AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                    || param.HasPendingGpuData
+                    || grad.HasPendingGpuData
+                    || m.HasPendingGpuData
+                    || v.HasPendingGpuData
+                    || (useAmsgrad && vMax is not null && vMax.HasPendingGpuData);
+                float[]? paramArr = bypassRawFloatArrays ? null : WritableParameterArray<float>(param);
+                float[]? gradArr = bypassRawFloatArrays ? null : (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                float[]? mArr = bypassRawFloatArrays ? null : (float[]?)(object?)m.GetLiveBackingArrayOrNull();
+                float[]? vArr = bypassRawFloatArrays ? null : (float[]?)(object?)v.GetLiveBackingArrayOrNull();
+                float[]? vMaxArr = !bypassRawFloatArrays && useAmsgrad
+                    ? (float[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull()
+                    : null;
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
                 float feps = (float)eps, flr = (float)lr;
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                if (!bypassRawFloatArrays
+                    && paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
                     // SIMD (AVX2/FMA) Adam/AMSGrad step — single source of truth in
@@ -1214,13 +1644,33 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
                     System.Span<float> mSpan = mF.AsWritableSpan();
                     System.Span<float> vSpan = vF.AsWritableSpan();
-                    System.Span<float> vMaxSpan = useAmsgrad
+                    Tensor<float>? vMaxF = useAmsgrad
                         ? ((object?)vMax as Tensor<float>
-                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.")).AsWritableSpan()
+                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated."))
+                        : null;
+                    System.Span<float> vMaxSpan = vMaxF is not null
+                        ? vMaxF.AsWritableSpan()
                         : System.Span<float>.Empty;
                     AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
                         paramSpan, gradSpan, mSpan, vSpan, vMaxSpan,
                         fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
+                    paramF.IncrementVersion();
+                    mF.IncrementVersion();
+                    vF.IncrementVersion();
+                    if (useAmsgrad)
+                    {
+                        vMaxF?.IncrementVersion();
+                    }
+                    if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine residentGpuF)
+                    {
+                        residentGpuF.InvalidateResidentWeightBuffer(paramF);
+                        residentGpuF.InvalidateResidentWeightBuffer(mF);
+                        residentGpuF.InvalidateResidentWeightBuffer(vF);
+                        if (vMaxF is not null)
+                        {
+                            residentGpuF.InvalidateResidentWeightBuffer(vMaxF);
+                        }
+                    }
                 }
             }
             else
@@ -1282,6 +1732,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             for (int __i = 0; __i < __params.Count; __i++) ProcessParam(__params[__i]);
         }
+        ReportRetainedOutputUpdateAccepted();
+
     }
 
     /// <summary>
@@ -1314,6 +1766,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 nameof(appliedGradients));
         }
 
+        if (typeof(T) == typeof(Half)) ValidateHalfVectorState();
         // ReverseUpdate reconstructs the forward step from m / v / bias-
         // correction state. Under UseAMSGrad the forward step divides by
         // sqrt(v̂_max) instead of sqrt(v̂), and the running v̂_max from
@@ -1328,6 +1781,19 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 "ReverseUpdate is not supported when UseAMSGrad is enabled — the AMSGrad " +
                 "v̂_max state at the time of the forward step is not snapshotted, so the " +
                 "reverse pass cannot reconstruct the original parameters exactly.");
+        }
+
+        if (typeof(T) == typeof(Half) && _halfLastStep is not null
+            && _halfPreviousParameters is not null && _halfUpdatedParameters is not null)
+        {
+            if (updatedParameters.Length != _halfLastStep.Length)
+                throw new ArgumentException("The parameter shape differs from the most recent Adam step.", nameof(updatedParameters));
+            // Quantization is not invertible. For the actual last result retain the exact input;
+            // otherwise preserve ReverseUpdate's additive correction of the supplied vector.
+            if (updatedParameters.SequenceEqual(_halfUpdatedParameters))
+                return new Vector<T>((T[])_halfPreviousParameters.Clone());
+            return Engine.TensorAdd(updatedParameters.AsTensor().Cast<float>(), HalfStateTensor(_halfLastStep))
+                .Cast<T>().AsVector();
         }
 
         // Ensure previous moment buffers are initialized
@@ -1393,6 +1859,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t = 0;
         // Also clear the AMSGrad per-coord v̂_max so reuse after Reset
         // doesn't carry a stale upper bound into the next training run.
+        ResetHalfVectorState();
+        ResetHalfTapeState();
         _vMaxVector = null;
         // Tape-step moment dictionaries + tape step counter: same
         // rationale — reusing the optimizer with WithParameters-cloned
@@ -1402,6 +1870,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _tapeV.Clear();
         _tapeVMax.Clear();
         _fp32StepCache.Clear();
+        DisposeCachedGpuGradBuffers();
         _tapeStep = 0;
     }
 
@@ -1517,7 +1986,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _gpuV?.Dispose();
         _gpuV = null;
         _gpuStateInitialized = false;
+        base.DisposeGpuState();
     }
+
+    private readonly List<Tensor<float>> _deviceGradsScratch = new();
 
     /// <summary>
     /// Applies PyTorch-style global-norm gradient clipping across every
@@ -1573,10 +2045,42 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private bool AnyGradientIsAnomalous(TapeStepContext<T> context)
     {
+        bool devicePendingVerifiedFinite = false;
+        if (typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            _deviceGradsScratch.Clear();
+            try
+            {
+                foreach (var kvp in context.Gradients)
+                {
+                    if (kvp.Value is { Length: > 0, HasPendingGpuData: true } g)
+                    {
+                        _deviceGradsScratch.Add((Tensor<float>)(object)g);
+                    }
+                }
+
+                if (_deviceGradsScratch.Count > 0)
+                {
+                    using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(_deviceGradsScratch);
+                    if (deviceSum is not null)
+                    {
+                        if (!deviceSum.IsFinite) return true;
+                        devicePendingVerifiedFinite = true;
+                    }
+                }
+            }
+            finally
+            {
+                _deviceGradsScratch.Clear();
+            }
+        }
+
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
+            if (grad is null || grad.Length == 0) continue;
+            if (grad.HasPendingGpuData && devicePendingVerifiedFinite) continue;
             if (HasNonFiniteElement(grad)) return true;
         }
         return false;
@@ -1600,16 +2104,99 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private bool HasNonFiniteElement(Tensor<T> tensor)
     {
         if (tensor.Length == 0) return false;
+        if (!tensor.HasPendingGpuData)
+        {
+            double sq = TrySumOfSquaresHostSimd(tensor, out double hostSq)
+                ? hostSq
+                : SumOfSquares(ContiguousSpan(tensor));
+            if (IsFiniteDouble(sq)) return false;
+            if (typeof(T) == typeof(float) || double.IsNaN(sq)) return true;
+        }
         using var finiteMask = Engine.TensorIsFinite(tensor);
         return Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False;
     }
 
     /// <summary>
-    /// The squared L2 norm of every gradient together: one engine reduction per tensor, summed on the
-    /// engine, read back once.
+    /// The squared L2 norm of every gradient together: computed directly in double on host when gradients are
+    /// already host-current (zero PCIe traffic, zero GPU allocations), via <see cref="AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares"/>
+    /// when gradients are device-resident, or via engine reductions for generic numeric types.
     /// </summary>
     private double GlobalGradientSquaredNorm(TapeStepContext<T> context)
     {
+        double hostSum = 0.0;
+        bool hasUnresolvedGpuGrad = false;
+
+        if (typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            _deviceGradsScratch.Clear();
+            try
+            {
+                foreach (var kvp in context.Gradients)
+                {
+                    var grad = kvp.Value;
+                    if (grad is null || grad.Length == 0) continue;
+                    if (grad.HasPendingGpuData)
+                    {
+                        _deviceGradsScratch.Add((Tensor<float>)(object)grad);
+                    }
+                    else if (TrySumOfSquaresHostSimd(grad, out double sq))
+                    {
+                        hostSum += sq;
+                    }
+                    else
+                    {
+                        hostSum += SumOfSquares(ContiguousSpan(grad));
+                    }
+                }
+
+                if (_deviceGradsScratch.Count == 0)
+                {
+                    return hostSum;
+                }
+
+                using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(_deviceGradsScratch);
+                if (deviceNorm is not null)
+                {
+                    if (!deviceNorm.IsFinite)
+                    {
+                        return deviceNorm.NanCount > 0 ? double.NaN : double.PositiveInfinity;
+                    }
+                    return hostSum + deviceNorm.TotalNormSquared;
+                }
+            }
+            finally
+            {
+                _deviceGradsScratch.Clear();
+            }
+        }
+        else
+        {
+            foreach (var kvp in context.Gradients)
+            {
+                var grad = kvp.Value;
+                if (grad is null || grad.Length == 0) continue;
+                if (grad.HasPendingGpuData)
+                {
+                    hasUnresolvedGpuGrad = true;
+                    break;
+                }
+                if (TrySumOfSquaresHostSimd(grad, out double sq))
+                {
+                    hostSum += sq;
+                }
+                else
+                {
+                    hostSum += SumOfSquares(ContiguousSpan(grad));
+                }
+            }
+
+            if (!hasUnresolvedGpuGrad)
+            {
+                return hostSum;
+            }
+        }
+
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // The norm's temporaries must not come from the training step's arena. Renting them there advanced the
         // arena's tensor ring, so a later rent in the same step reissued a wrapper a caller's tape still held,
@@ -1639,12 +2226,15 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
-            sum += SumOfSquares(grad.Data.Span);
+            if (grad is null || grad.Length == 0) continue;
+            sum += SumOfSquares(ContiguousSpan(grad));
         }
 
         return sum;
     }
+
+    private static Span<T> ContiguousSpan(Tensor<T> tensor)
+        => (tensor.IsContiguous ? tensor : tensor.Contiguous()).Data.Span;
 
     private static bool IsFiniteDouble(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
@@ -1672,12 +2262,36 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // Scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
         // max_norm / (total_norm + 1e-6), the same one the network clip and the fused plan apply.
-        T scale = NumOps.FromDouble(maxNorm / (globalNorm + 1e-6));
+        double scaleFactor = maxNorm / (globalNorm + 1e-6);
+        T scale = NumOps.FromDouble(scaleFactor);
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine =
+            typeof(T) == typeof(float)
+                ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
+            if (grad is null || grad.Length == 0) continue;
+            if (!grad.HasPendingGpuData && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scaleFactor))
+            {
+                if (gpuEngine is not null && gpuBackend is not null)
+                {
+                    var gf = (Tensor<float>)(object)grad;
+                    if (gf._gpuBuffer is { } syncedGpuBuf
+                        && syncedGpuBuf.Handle != IntPtr.Zero
+                        && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+                        && syncedGpuBuf.Size >= gf.Length
+                        && gf._gpuBufferVersion == gf.Version)
+                    {
+                        using var __gpuOp = gpuEngine.EnterGpuOp();
+                        gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scaleFactor, gf.Length);
+                        gf._gpuBufferVersion = gf.Version;
+                    }
+                }
+                continue;
+            }
             Engine.TensorMultiplyScalarInPlace(grad, scale);
         }
     }

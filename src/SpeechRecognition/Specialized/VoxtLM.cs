@@ -145,7 +145,7 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         ThrowIfDisposed();
         var network = _network ?? throw new NotSupportedException("The speech tokenizer belongs to the native network.");
-        network.FitUnits(recordings.Select(r => (IReadOnlyList<double>)Samples(r, 0, Math.Min(r.Length, SampleRate * _options.MaxAudioLengthSeconds))),
+        network.FitUnits(recordings.Select(r => (IReadOnlyList<double>)ExtractHostAudioSamples(r, 0, Math.Min(r.Length, SampleRate * _options.MaxAudioLengthSeconds))),
             iterations, Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
     }
 
@@ -157,7 +157,7 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var network = _network ?? throw new NotSupportedException("Transcription runs on the native network.");
         int[] tokens;
         using (new Tensors.Engines.Autodiff.NoGradScope<T>())
-            tokens = network.Greedy(network.AsrPrompt(Samples(audio, 0, Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds))), _options.MaxTextLength);
+            tokens = network.Greedy(network.AsrPrompt(ExtractHostAudioSamples(audio, 0, Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds))), _options.MaxTextLength);
         return new TranscriptionResult<T>
         {
             Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Length > 0 ? 1.0 : 0.0),
@@ -207,32 +207,18 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (_network is null) base.ResolveLazyLayerShapes();
     }
 
-    private double[] Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new double[count];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
-        return samples;
-    }
-
     private double[] Recording(Tensor<T> input, int row, int rows)
     {
         int samples = input.Length / rows;
-        return Samples(input, row * samples, Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds));
+        return ExtractHostAudioSamples(input, row * samples, Math.Min(samples, SampleRate * _options.MaxAudioLengthSeconds));
     }
 
     // The logits [1, vocabulary] of the transcript's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> FirstLogits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = _network.FirstLogits(_network.AsrPrompt(Recording(input, r, rows)));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
-
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
+    private Tensor<T> FirstLogits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(
+            input,
+            _network,
+            (network, wave) => network.FirstLogits(network.AsrPrompt(ExtractHostAudioSamples(wave, 0, Math.Min(wave.Length, SampleRate * _options.MaxAudioLengthSeconds)))));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input); }
 
@@ -243,47 +229,29 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private int[] Transcript(VoxtLMNetwork<T> network, Tensor<T> target)
     {
         int vocabulary = network.VocabSize;
-        var span = target.Data.Span;
+        double[] values = target.Cast<double>().ToArray();
         if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
         {
             var tokens = new int[target.Length / vocabulary];
             for (int r = 0; r < tokens.Length; r++)
             {
                 int best = network.TextOffset;
+                int rowOffset = r * vocabulary;
                 for (int v = network.TextOffset; v < network.EndToken; v++)
-                    if (NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best])) best = v;
+                    if (values[rowOffset + v] > values[rowOffset + best]) best = v;
                 tokens[r] = best - network.TextOffset;
             }
             return tokens;
         }
-        var ids = new int[target.Length];
+        var ids = new int[values.Length];
         for (int i = 0; i < ids.Length; i++)
         {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= _options.TextVocabSize) throw new ArgumentException($"Text token {value} is outside [0, {_options.TextVocabSize}).", nameof(target));
+            double value = Math.Round(values[i]);
+            if (!(value >= 0 && value < _options.TextVocabSize))
+                throw new ArgumentException($"Text token {value} is outside [0, {_options.TextVocabSize}).", nameof(target));
             ids[i] = (int)value;
         }
         return ids;
-    }
-
-    private Tensor<T> TargetRow(Tensor<T> target, int row, int rows)
-    {
-        if (rows == 1) return target;
-        int perRow = target.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { row, 0 }, new[] { 1, perRow }),
-            target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-    }
-
-    private Tensor<T> BatchLoss(VoxtLMNetwork<T> network, Tensor<T> input, Tensor<T> target, bool training)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = network.AsrLoss(network.AsrPrompt(Recording(input, r, rows)), Transcript(network, TargetRow(target, r, rows)), training, _random);
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
     }
 
     /// <inheritdoc />
@@ -292,7 +260,16 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         var network = _network;
         if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true));
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var prompts = new int[rows][];
+        for (int r = 0; r < rows; r++)
+            prompts[r] = network.AsrPrompt(Recording(input, r, rows));
+        var transcripts = ParseBatchTargetRows(input, target, row => Transcript(network, row));
+
+        TrainWithCustomObjective(
+            input,
+            target,
+            (stepInput, _) => AverageWaveformBatchLoss(stepInput, (r, _) => network.AsrLoss(prompts[r], transcripts[r], training: true, _random)));
         return true;
     }
 
@@ -324,7 +301,12 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target, training: false)[0];
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var prompts = new int[rows][];
+        for (int r = 0; r < rows; r++)
+            prompts[r] = network.AsrPrompt(Recording(input, r, rows));
+        var transcripts = ParseBatchTargetRows(input, target, row => Transcript(network, row));
+        return AverageWaveformBatchLoss(input, (r, _) => network.AsrLoss(prompts[r], transcripts[r], training: false, _random)).AsSpan()[0];
     }
 
     /// <inheritdoc />

@@ -84,23 +84,16 @@ public class ClassificationMetricsDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AUCROC_TiedScores_DependsOnOriginalOrder()
     {
-        // When all probabilities are tied, sort is stable and preserves original order
-        // probs:   [0.5, 0.5, 0.5, 0.5]
-        // actuals: [1,   0,   1,   0]
-        // Sorted desc (stable): (0.5,1), (0.5,0), (0.5,1), (0.5,0)
-        // Step 1: tp=1, fp=0, tpr=0.5, fpr=0 -> area = 0
-        // Step 2: tp=1, fp=1, tpr=0.5, fpr=0.5 -> area = (0.5)*(0.5+0.5)/2 = 0.25
-        // Step 3: tp=2, fp=1, tpr=1.0, fpr=0.5 -> area = 0
-        // Step 4: tp=2, fp=2, tpr=1.0, fpr=1.0 -> area = (0.5)*(1+1)/2 = 0.5
-        // Total = 0.75
-        // Note: Tied scores give order-dependent AUC; only truly random shuffling
-        // of tied scores would yield exactly 0.5 on expectation
+        // Fawcett (2006) Algorithm 1 / Hanley & McNeil (1982) / sklearn.metrics.roc_auc_score:
+        // equal predicted scores form a single ROC threshold (diagonal segment, Mann-Whitney tie weight 0.5),
+        // so all-tied scores [0.5, 0.5, 0.5, 0.5] yield AUC = 0.5 invariant to sample permutation.
         var metric = new AUCROCMetric<double>();
         double[] probs = { 0.5, 0.5, 0.5, 0.5 };
-        double[] actuals = { 1, 0, 1, 0 };
+        double[] actualsFirst = { 1, 0, 1, 0 };
+        double[] actualsSecond = { 0, 1, 0, 1 };
 
-        double result = metric.Compute(probs, actuals);
-        Assert.Equal(0.75, result, Tol);
+        Assert.Equal(0.5, metric.Compute(probs, actualsFirst), Tol);
+        Assert.Equal(0.5, metric.Compute(probs, actualsSecond), Tol);
     }
 
     [Fact(Timeout = 120000)]

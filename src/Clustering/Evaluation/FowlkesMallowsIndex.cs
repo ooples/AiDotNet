@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Enums;
@@ -72,10 +73,12 @@ public class FowlkesMallowsIndex<T> : IClusterMetric<T>, IExternalClusterMetric<
         var trueClasses = new Dictionary<int, int>();
         var predClusters = new Dictionary<int, int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             if (!trueClasses.ContainsKey(trueLabel))
                 trueClasses[trueLabel] = trueClasses.Count;
@@ -91,8 +94,8 @@ public class FowlkesMallowsIndex<T> : IClusterMetric<T>, IExternalClusterMetric<
 
         for (int i = 0; i < n; i++)
         {
-            int trueIdx = trueClasses[(int)numOps.ToDouble(trueLabels[i])];
-            int predIdx = predClusters[(int)numOps.ToDouble(predictedLabels[i])];
+            int trueIdx = trueClasses[trueLabelsIds[i]];
+            int predIdx = predClusters[predictedLabelsIds[i]];
             contingency[predIdx, trueIdx]++;
         }
 

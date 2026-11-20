@@ -193,7 +193,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         EnsureTaskParameterShape(new[] { task });
         return new ATAMLAdaptedModel<T, TInput, TOutput>(
-            MetaModel, AdaptTaskParameters(task), _stateWidth, _algoOptions.NumClasses, NumOps);
+            MetaModel, AdaptTaskParameters(task), _stateWidth, _algoOptions.NumClasses);
     }
 
     /// <inheritdoc/>
@@ -235,8 +235,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>The cross-entropy of the head's logits against the class indices, as a one-element tensor.</summary>
     private Tensor<T> HeadLoss(Tensor<T> states, int[] labels, IReadOnlyList<Tensor<T>> head)
     {
-        var target = new Tensor<T>(new[] { labels.Length });
-        for (int i = 0; i < labels.Length; i++) target[i] = NumOps.FromDouble(labels[i]);
+        var target = new Tensor<int>(labels, new[] { labels.Length }).Cast<T>();
         return AiDotNetEngine.Current.Reshape(LossFunction.ComputeTapeLoss(Logits(states, head), target), new[] { 1 });
     }
 
@@ -254,6 +253,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         }
 
         var adapted = CloneVector(_taskParameters);
+        T innerLearningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             var leaves = Leaves(adapted);
@@ -264,11 +264,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 gradients => gradient = Flatten(gradients, leaves),
                 persistent: true);
 
-            for (int i = 0; i < adapted.Length; i++)
-            {
-                adapted[i] = NumOps.Subtract(adapted[i],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(gradient[i])));
-            }
+            adapted = Engine.Subtract(adapted, Engine.Multiply(gradient, innerLearningRate));
         }
 
         return adapted;
@@ -283,10 +279,10 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         int width = _stateWidth, classes = _algoOptions.NumClasses, position = 0;
         void Take(params int[] shape)
         {
-            var leaf = new Tensor<T>(shape);
-            for (int i = 0; i < leaf.Length; i++) leaf[i] = flat[position + i];
-            position += leaf.Length;
-            leaves.Add(leaf);
+            int size = 1;
+            foreach (int dimension in shape) size *= dimension;
+            leaves.Add(new Tensor<T>(shape, flat.GetSubVector(position, size)));
+            position += size;
         }
 
         Take(width);
@@ -297,19 +293,17 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private Vector<T> Flatten(Dictionary<Tensor<T>, Tensor<T>> gradients, IReadOnlyList<Tensor<T>> leaves)
     {
-        var flat = new Vector<T>(_taskParameters.Length);
-        int offset = 0;
+        // Each leaf's gradient (zero when the tape recorded none) in layout order, cut or zero-padded to theta_T.
+        var parts = new List<Vector<T>>(leaves.Count);
         foreach (var leaf in leaves)
         {
-            if (gradients.TryGetValue(leaf, out var gradient))
-            {
-                for (int i = 0; i < leaf.Length && offset + i < flat.Length; i++) flat[offset + i] = gradient[i];
-            }
-
-            offset += leaf.Length;
+            parts.Add(gradients.TryGetValue(leaf, out var gradient) ? gradient.ToVector() : new Vector<T>(leaf.Length));
         }
 
-        return flat;
+        var flat = parts.Count > 0 ? Vector<T>.Concatenate(parts) : new Vector<T>(0);
+        int length = _taskParameters.Length;
+        if (flat.Length > length) return flat.GetSubVector(0, length);
+        return flat.Length < length ? Vector<T>.Concatenate(flat, new Vector<T>(length - flat.Length)) : flat;
     }
 
     /// <summary>Sizes theta_T once the encoder's state width is known.</summary>
@@ -345,9 +339,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, int.MaxValue);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     #endregion
@@ -374,23 +366,25 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private Vector<T> CloneVector(Vector<T> source)
     {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
-        return copy;
+        return source.Clone();
     }
 
     private Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length && i < values.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+
+        // Adds the overlapping prefix; any tail of sum beyond values is kept as is.
+        if (values.Length >= sum.Length)
+        {
+            return Engine.Add(sum, values.Length == sum.Length ? values : values.GetSubVector(0, sum.Length));
+        }
+
+        return Vector<T>.Concatenate(
+            Engine.Add(sum.GetSubVector(0, values.Length), values),
+            sum.GetSubVector(values.Length, sum.Length - values.Length));
     }
 
-    private Vector<T> Scale(Vector<T> values, T divisor)
-    {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
-    }
+    private Vector<T> Scale(Vector<T> values, T divisor) => Engine.Divide(values, divisor);
 
     #endregion
 }
@@ -410,7 +404,6 @@ internal class ATAMLAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     private readonly Vector<T> _taskParameters;
     private readonly int _stateWidth;
     private readonly int _classes;
-    private readonly INumericOperations<T> _numOps;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -419,8 +412,7 @@ internal class ATAMLAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
         IFullModel<T, TInput, TOutput> encoder,
         Vector<T> taskParameters,
         int stateWidth,
-        int classes,
-        INumericOperations<T> numOps)
+        int classes)
     {
         Guard.NotNull(encoder);
         Guard.NotNull(taskParameters);
@@ -428,7 +420,6 @@ internal class ATAMLAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
         _taskParameters = taskParameters;
         _stateWidth = stateWidth;
         _classes = classes;
-        _numOps = numOps;
     }
 
     /// <inheritdoc/>
@@ -439,43 +430,31 @@ internal class ATAMLAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
         var states = ClassifierOutputs<T>.AsRows(_encoder.Predict(input));
         int rows = states.Shape[0], width = states.Shape[1];
 
-        var scores = new Tensor<T>(new[] { rows, _classes });
-        for (int r = 0; r < rows; r++)
-        {
-            // alpha = theta_ATT . s, then c = alpha * s.
-            T alpha = _numOps.Zero;
-            for (int i = 0; i < width && i < _stateWidth; i++)
-            {
-                alpha = _numOps.Add(alpha, _numOps.Multiply(states[r * width + i], _taskParameters[i]));
-            }
+        // theta_T = [theta_ATT (stateWidth), W (classes x stateWidth), b (classes)]; entries missing from a short
+        // vector contribute nothing, exactly as zeros would.
+        int expected = _stateWidth + _classes * _stateWidth + _classes;
+        var parameters = _taskParameters.Length >= expected
+            ? _taskParameters
+            : Vector<T>.Concatenate(_taskParameters, new Vector<T>(expected - _taskParameters.Length));
+        var flat = Tensor<T>.FromVector(parameters);
+        int m = Math.Min(width, _stateWidth);
 
-            int weightBase = _stateWidth, biasBase = _stateWidth + _classes * _stateWidth;
-            var logits = new double[_classes];
-            for (int c = 0; c < _classes; c++)
-            {
-                T sum = biasBase + c < _taskParameters.Length ? _taskParameters[biasBase + c] : _numOps.Zero;
-                for (int i = 0; i < width && i < _stateWidth; i++)
-                {
-                    T context = _numOps.Multiply(alpha, states[r * width + i]);
-                    int index = weightBase + c * _stateWidth + i;
-                    if (index < _taskParameters.Length)
-                    {
-                        sum = _numOps.Add(sum, _numOps.Multiply(_taskParameters[index], context));
-                    }
-                }
+        var attention = engine.Reshape(engine.TensorSlice(flat, new[] { 0 }, new[] { m }), new[] { m, 1 });
+        var weights = engine.TensorSlice(
+            engine.Reshape(engine.TensorSlice(flat, new[] { _stateWidth }, new[] { _classes * _stateWidth }),
+                new[] { _classes, _stateWidth }),
+            new[] { 0, 0 }, new[] { _classes, m });
+        var bias = engine.Reshape(
+            engine.TensorSlice(flat, new[] { _stateWidth + _classes * _stateWidth }, new[] { _classes }),
+            new[] { 1, _classes });
+        var used = engine.TensorSlice(states, new[] { 0, 0 }, new[] { rows, m });
 
-                logits[c] = _numOps.ToDouble(sum);
-            }
-
-            double max = logits[0];
-            for (int c = 1; c < _classes; c++) if (logits[c] > max) max = logits[c];
-            double total = 0;
-            for (int c = 0; c < _classes; c++) { logits[c] = Math.Exp(logits[c] - max); total += logits[c]; }
-            for (int c = 0; c < _classes; c++)
-            {
-                scores[r * _classes + c] = _numOps.FromDouble(total > 0 ? logits[c] / total : 0.0);
-            }
-        }
+        // alpha = theta_ATT . s, then c = alpha * s, logits = c W^T + b, scores = softmax(logits).
+        var alpha = engine.TensorMatMul(used, attention);
+        var context = engine.TensorMultiply(used, engine.TensorBroadcastTo(alpha, used.Shape.ToArray()));
+        var logits = engine.TensorAdd(engine.TensorMatMul(context, engine.TensorTranspose(weights)),
+            engine.TensorBroadcastTo(bias, new[] { rows, _classes }));
+        var scores = engine.Softmax(logits, 1);
 
         return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
     }

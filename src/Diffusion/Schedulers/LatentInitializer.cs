@@ -56,19 +56,16 @@ public class LatentInitializer<T>
     /// <returns>Gaussian noise latent scaled by initNoiseSigma.</returns>
     public Vector<T> CreateNoiseLatent(int size)
     {
-        var latent = new Vector<T>(size);
-        var sigma = NumOps.FromDouble(_initNoiseSigma);
-
+        // Seeded Box-Muller draws stay one per element in master's order (no engine op consumes a caller Random).
+        var gaussian = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            // Box-Muller transform for Gaussian noise
             double u1 = 1.0 - _random.NextDouble();
             double u2 = _random.NextDouble();
-            double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            latent[i] = NumOps.Multiply(NumOps.FromDouble(gaussian), sigma);
+            gaussian[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
 
-        return latent;
+        return AiDotNetEngine.Current.Multiply(gaussian, NumOps.FromDouble(_initNoiseSigma));
     }
 
     /// <summary>
@@ -79,23 +76,20 @@ public class LatentInitializer<T>
     /// <returns>Image-conditioned noisy latent.</returns>
     public Vector<T> CreateImg2ImgLatent(Vector<T> encodedImage, double strength)
     {
-        var latent = new Vector<T>(encodedImage.Length);
+        var engine = AiDotNetEngine.Current;
         var strengthT = NumOps.FromDouble(strength);
         var oneMinusStrength = NumOps.Subtract(NumOps.One, strengthT);
-        var sigma = NumOps.FromDouble(_initNoiseSigma);
 
+        // Seeded Box-Muller draws stay one per element in master's order (no engine op consumes a caller Random).
+        var gaussian = new Vector<T>(encodedImage.Length);
         for (int i = 0; i < encodedImage.Length; i++)
         {
             double u1 = 1.0 - _random.NextDouble();
             double u2 = _random.NextDouble();
-            double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            var noise = NumOps.Multiply(NumOps.FromDouble(gaussian), sigma);
-
-            latent[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusStrength, encodedImage[i]),
-                NumOps.Multiply(strengthT, noise));
+            gaussian[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
 
-        return latent;
+        var noise = engine.Multiply(gaussian, NumOps.FromDouble(_initNoiseSigma));
+        return engine.Add(engine.Multiply(encodedImage, oneMinusStrength), engine.Multiply(noise, strengthT));
     }
 }

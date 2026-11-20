@@ -65,60 +65,25 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         }
 
         // Approximate Fisher information: E[∇logp(y|x,θ)²] ≈ (1/N) Σ (∂L/∂θ)² for N samples.
-        // We use finite differences with the task data to estimate squared gradients per parameter.
+        // The surrogate loss of a sample x is L(θ) = (θ·x)² over the first min(d, features) entries, and the
+        // gradient of a randomly sampled parameter is its forward difference (L(θ + ε e_idx) - L(θ)) / ε,
+        // which is exactly 2 (θ·x) x_idx + ε x_idx² (zero for parameters past the feature width).
         int d = modelParameters.Length;
-        int numSamples = taskData.Rows;
-        var importance = new double[d];
+        int featureDim = Math.Min(d, taskData.Columns);
 
-        // For each data sample, approximate the gradient via finite differences
-        // on a subset of parameters (full sweep too expensive for large models).
         double epsilon = 1e-5;
         int paramSubsample = Math.Min(d, 200); // Subsample parameters for efficiency.
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
-        for (int s = 0; s < numSamples; s++)
-        {
-            // Extract sample features as a proxy "loss" input.
-            // Use the dot product of parameters with the sample as a surrogate loss.
-            double baseLoss = 0;
-            int featureDim = Math.Min(d, taskData.Columns);
-            for (int i = 0; i < featureDim; i++)
-            {
-                baseLoss += NumOps.ToDouble(modelParameters[i]) * NumOps.ToDouble(taskData[s, i]);
-            }
-
-            baseLoss = baseLoss * baseLoss; // Squared loss surrogate.
-
-            for (int p = 0; p < paramSubsample; p++)
-            {
-                int idx = rng.Next(d);
-                double origVal = NumOps.ToDouble(modelParameters[idx]);
-
-                // Forward difference: (L(θ+ε) - L(θ)) / ε
-                double perturbedLoss = 0;
-                for (int i = 0; i < featureDim; i++)
-                {
-                    double paramVal = i == idx ? origVal + epsilon : NumOps.ToDouble(modelParameters[i]);
-                    perturbedLoss += paramVal * NumOps.ToDouble(taskData[s, i]);
-                }
-
-                perturbedLoss = perturbedLoss * perturbedLoss;
-                double grad = (perturbedLoss - baseLoss) / epsilon;
-
-                // Fisher ≈ gradient squared (diagonal approximation).
-                importance[idx] += grad * grad;
-            }
-        }
-
-        // Normalize by number of samples.
-        double invSamples = numSamples > 0 ? 1.0 / numSamples : 0;
-        var result = new T[d];
-        for (int i = 0; i < d; i++)
-        {
-            result[i] = NumOps.FromDouble(importance[i] * invSamples);
-        }
-
-        var resultVec = new Vector<T>(result);
+        // Half and BFloat16 form the Fisher diagonal in float, as the former double loop did: the per-parameter
+        // sum of squared gradients over N samples passes Half's 65504 (or stops growing at 2048) while the mean
+        // (1 / N) of it still fits.
+        var data = Tensor<T>.FromMatrix(taskData);
+        var parameters = modelParameters.AsTensor();
+        var resultVec = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? FisherDiagonal(data.Cast<float>(), parameters.Cast<float>(), featureDim, paramSubsample, epsilon, rng)
+                .Cast<T>().ToVector()
+            : FisherDiagonal(data, parameters, featureDim, paramSubsample, epsilon, rng).ToVector();
 
         // Accumulate importance across tasks (EWC-style online accumulation).
         if (_accumulatedImportance == null)
@@ -127,16 +92,92 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         }
         else
         {
-            var acc = new T[d];
-            for (int i = 0; i < d; i++)
-            {
-                acc[i] = NumOps.Add(_accumulatedImportance[i], resultVec[i]);
-            }
-
-            _accumulatedImportance = new Vector<T>(acc);
+            _accumulatedImportance = Engine.Add(_accumulatedImportance, resultVec);
         }
 
         return resultVec;
+    }
+
+    /// <summary>
+    /// The sampled Fisher diagonal (1 / N) sum_s (dL_s / dθ_idx)^2 of the surrogate loss, per parameter.
+    /// </summary>
+    /// <remarks>
+    /// Samples are processed in chunks of about <see cref="FisherDrawBatch"/> (sample, draw) pairs, so the index
+    /// arrays and draw intermediates stay bounded instead of growing as N * paramSubsample (a million rows of
+    /// 200 draws is 600 million indices). The draws are taken from <paramref name="rng"/> sample by sample in
+    /// the original order, and the per-chunk sums are added before the single 1 / N normalization.
+    /// </remarks>
+    private static Tensor<TV> FisherDiagonal<TV>(
+        Tensor<TV> data, Tensor<TV> parameters, int featureDim, int paramSubsample, double epsilon, Random rng)
+    {
+        var ops = MathHelper.GetNumericOperations<TV>();
+        int numSamples = data.Shape[0];
+        int columns = data.Shape[1];
+        int d = parameters.Length;
+        int chunkRows = Math.Max(1, FisherDrawBatch / paramSubsample);
+        var importance = new Tensor<TV>(new[] { d });
+        for (int first = 0; first < numSamples; first += chunkRows)
+        {
+            int rows = Math.Min(chunkRows, numSamples - first);
+            var sampledParams = new int[rows * paramSubsample];
+            var flatFeatureIndex = new int[rows * paramSubsample];
+            var inFeatures = new int[rows * paramSubsample];
+            for (int s = 0; s < rows; s++)
+            {
+                for (int p = 0; p < paramSubsample; p++)
+                {
+                    int idx = rng.Next(d);
+                    int k = s * paramSubsample + p;
+                    sampledParams[k] = idx;
+                    inFeatures[k] = idx < featureDim ? 1 : 0;
+                    flatFeatureIndex[k] = s * columns + (idx < featureDim ? idx : 0);
+                }
+            }
+
+            var chunk = Engine.TensorSlice(data, new[] { first, 0 }, new[] { rows, columns });
+            importance = Engine.TensorAdd(importance, FisherSum(
+                chunk, parameters,
+                new Tensor<int>(sampledParams, new[] { sampledParams.Length }),
+                new Tensor<int>(flatFeatureIndex, new[] { flatFeatureIndex.Length }),
+                new Tensor<int>(inFeatures, new[] { inFeatures.Length }),
+                featureDim, paramSubsample, epsilon));
+        }
+
+        return Engine.TensorMultiplyScalar(importance, ops.FromDouble(1.0 / numSamples));
+    }
+
+    /// <summary>(sample, draw) pairs per chunk of <see cref="FisherDiagonal"/>.</summary>
+    private const int FisherDrawBatch = 1 << 16;
+
+    /// <summary>
+    /// The unnormalized sum_s (dL_s / dθ_idx)^2 over one chunk of samples, per parameter.
+    /// </summary>
+    private static Tensor<TV> FisherSum<TV>(
+        Tensor<TV> data, Tensor<TV> parameters, Tensor<int> sampledParams, Tensor<int> drawIndex, Tensor<int> inFeatures,
+        int featureDim, int paramSubsample, double epsilon)
+    {
+        var ops = MathHelper.GetNumericOperations<TV>();
+        int numSamples = data.Shape[0];
+        int columns = data.Shape[1];
+        var features = Engine.TensorSlice(data, new[] { 0, 0 }, new[] { numSamples, featureDim });
+        var theta = Engine.TensorSlice(parameters, new[] { 0 }, new[] { featureDim }).Reshape(new[] { featureDim, 1 });
+        var baseDots = Engine.TensorMatMul(features, theta); // [numSamples, 1]
+
+        // x_idx of every draw (0 outside the feature width), then the forward-difference gradient.
+        int draws = numSamples * paramSubsample;
+        var drawShape = new[] { numSamples, paramSubsample };
+        var sampledFeatures = Engine.TensorMultiply(
+            Engine.TensorGather(data.Reshape(new[] { numSamples * columns }), drawIndex, 0),
+            inFeatures.Cast<TV>()).Reshape(drawShape);
+        var twoBase = Engine.TensorMultiplyScalar(baseDots, ops.FromDouble(2.0));
+        var gradients = Engine.TensorAdd(
+            Engine.TensorMultiply(sampledFeatures, twoBase),
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(sampledFeatures), ops.FromDouble(epsilon)));
+
+        // Fisher ≈ gradient squared (diagonal approximation), accumulated per parameter; the caller normalizes by
+        // the total number of samples.
+        var squared = Engine.TensorSquare(gradients).Reshape(new[] { draws });
+        return Engine.TensorIndexAdd(new Tensor<TV>(new[] { parameters.Length }), 0, sampledParams, squared);
     }
 
     /// <inheritdoc/>
@@ -156,15 +197,15 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
                 $"reference={referenceParameters.Length}, importance={importanceWeights.Length}.");
         }
 
-        T penalty = NumOps.Zero;
-        for (int i = 0; i < currentParameters.Length; i++)
+        if (currentParameters.Length == 0)
         {
-            var diff = NumOps.Subtract(currentParameters[i], referenceParameters[i]);
-            penalty = NumOps.Add(penalty,
-                NumOps.Multiply(importanceWeights[i], NumOps.Multiply(diff, diff)));
+            return NumOps.Zero;
         }
 
-        return NumOps.Multiply(penalty, NumOps.FromDouble(regularizationStrength * 0.5));
+        // Formed and scaled in double: a Half difference of 300 squares past 65504.
+        double penalty = Infrastructure.FederatedTensorMath<T>.WeightedSquaredDistance(
+            currentParameters, referenceParameters, importanceWeights);
+        return NumOps.FromDouble(penalty * regularizationStrength * 0.5);
     }
 
     /// <inheritdoc/>
@@ -172,40 +213,33 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     {
         Guard.NotNull(gradient);
         Guard.NotNull(importanceWeights);
-        int d = gradient.Length;
-        var projected = new T[d];
 
-        // Compute conflict: dot product of gradient with importance direction.
-        double dot = 0, importNorm2 = 0;
-        for (int i = 0; i < d; i++)
+        if (gradient.Length == 0)
         {
-            double g = NumOps.ToDouble(gradient[i]);
-            double imp = NumOps.ToDouble(importanceWeights[i]);
-            dot += g * imp;
-            importNorm2 += imp * imp;
+            return gradient.Clone();
         }
 
-        if (dot < 0 && importNorm2 > 0)
+        // Compute conflict: dot product of gradient with importance direction. The importance vector is first
+        // divided by its largest magnitude; the projection (g . u / |u|^2) u is invariant to that scale and the
+        // squared norm cannot overflow narrow T.
+        T maxImportance = Engine.ReduceMax(Engine.Abs(importanceWeights).AsTensor(), new[] { 0 }, true)[0];
+        if (NumOps.GreaterThan(maxImportance, NumOps.Zero))
         {
-            // Conflict detected: project out the conflicting component.
-            double scale = _correctionStrength * dot / importNorm2;
-            for (int i = 0; i < d; i++)
+            var unit = Engine.Divide(importanceWeights, maxImportance);
+            // Both reductions are taken in double: normalizing the importance does not bound g . u, and two
+            // Half gradient entries of -40000 already sum past -65504.
+            double dot = Infrastructure.FederatedTensorMath<T>.Dot(gradient, unit);
+            double importNorm2 = Infrastructure.FederatedTensorMath<T>.Dot(unit, unit);
+            if (dot < 0)
             {
-                double g = NumOps.ToDouble(gradient[i]);
-                double imp = NumOps.ToDouble(importanceWeights[i]);
-                projected[i] = NumOps.FromDouble(g - scale * imp);
-            }
-        }
-        else
-        {
-            // No conflict: pass gradient through unchanged.
-            for (int i = 0; i < d; i++)
-            {
-                projected[i] = gradient[i];
+                // Conflict detected: project out the conflicting component.
+                T scale = NumOps.FromDouble(_correctionStrength * dot / importNorm2);
+                return Engine.Subtract(gradient, Engine.Multiply(unit, scale));
             }
         }
 
-        return new Vector<T>(projected);
+        // No conflict: pass gradient through unchanged.
+        return gradient.Clone();
     }
 
     /// <inheritdoc/>
@@ -220,25 +254,23 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         }
 
         int d = clientImportances.Values.First().Length;
-        var aggregated = new T[d];
-        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
-        double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
-        if (totalWeight <= 0)
+        var aggregated = new Vector<T>(d);
+        // Normalize over the weights actually applied: participating clients, with 1.0 for a missing entry.
+        double totalWeight = clientImportances.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        bool uniform = totalWeight <= 0;
+        if (uniform)
         {
             totalWeight = clientImportances.Count;
         }
 
         foreach (var (clientId, importance) in clientImportances)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            var wT = NumOps.FromDouble(w / totalWeight);
-            for (int i = 0; i < d; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(importance[i], wT));
-            }
+            double w = uniform ? 1.0 : clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            var clientImportance = importance.Length == d ? importance : importance.GetSubVector(0, d);
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clientImportance, NumOps.FromDouble(w / totalWeight)));
         }
 
-        return new Vector<T>(aggregated);
+        return aggregated;
     }
 
     /// <summary>
@@ -258,46 +290,42 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     public Vector<T> ComputeAdaptiveCorrectionStrength(Vector<T> gradient, Vector<T> importanceWeights)
     {
         int d = gradient.Length;
-        var strength = new T[d];
+        var importance = importanceWeights.Length == d ? importanceWeights : importanceWeights.GetSubVector(0, d);
+        var baseStrength = NumOps.FromDouble(_correctionStrength);
+        if (d == 0)
+        {
+            return new Vector<T>(0);
+        }
 
         // Find max importance for normalization.
-        double maxImportance = 0;
-        for (int i = 0; i < d; i++)
-        {
-            double imp = Math.Abs(NumOps.ToDouble(importanceWeights[i]));
-            if (imp > maxImportance) maxImportance = imp;
-        }
+        var absImportance = Engine.Abs(importance);
+        T maxImportance = Engine.ReduceMax(absImportance.AsTensor(), new[] { 0 }, true)[0];
 
-        if (maxImportance <= 0)
+        if (!NumOps.GreaterThan(maxImportance, NumOps.Zero))
         {
             // No importance data — use uniform base strength.
-            for (int i = 0; i < d; i++)
-            {
-                strength[i] = NumOps.FromDouble(_correctionStrength);
-            }
-
-            return new Vector<T>(strength);
+            return Engine.TensorFullLike(gradient.AsTensor(), baseStrength).ToVector();
         }
 
-        for (int i = 0; i < d; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            double imp = NumOps.ToDouble(importanceWeights[i]);
-            double normalizedImp = Math.Abs(imp) / maxImportance;
+        // Conflict indicator: the gradient opposes the importance direction (sign test, so the product
+        // cannot overflow narrow T).
+        var conflict = Engine.TensorLessThan(
+            Engine.TensorMultiply(Engine.TensorSign(gradient.AsTensor()), Engine.TensorSign(importance.AsTensor())), NumOps.Zero);
 
-            // Conflict indicator: negative means gradient opposes importance direction.
-            double conflict = g * imp < 0 ? 1.0 : 0.0;
-
-            // Adaptive strength = base * normalizedImportance * conflictIndicator
-            strength[i] = NumOps.FromDouble(_correctionStrength * normalizedImp * conflict);
-        }
-
-        return new Vector<T>(strength);
+        // Adaptive strength = base * normalizedImportance * conflictIndicator
+        // (divided before it is scaled: base / max overflows narrow T for a tiny maximum)
+        var normalized = Engine.Multiply(Engine.Divide(absImportance, maxImportance), baseStrength);
+        return Engine.TensorMultiply(normalized.AsTensor(), conflict).ToVector();
     }
 
     /// <summary>
     /// Projects gradient using adaptive per-parameter correction strengths.
     /// </summary>
+    /// <remarks>
+    /// The per-parameter projection of g onto the importance direction is (g * imp / imp²) * imp = g, so a
+    /// conflicting parameter (g * imp &lt; 0) with strength alpha &gt; 0 becomes g * (1 - alpha), whatever
+    /// the magnitude of its importance.
+    /// </remarks>
     /// <param name="gradient">New task gradient.</param>
     /// <param name="importanceWeights">Accumulated importance from old tasks.</param>
     /// <param name="adaptiveStrengths">Per-parameter correction strengths from ComputeAdaptiveCorrectionStrength.</param>
@@ -306,35 +334,21 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         Vector<T> gradient, Vector<T> importanceWeights, Vector<T> adaptiveStrengths)
     {
         int d = gradient.Length;
-        var corrected = new T[d];
-
-        for (int i = 0; i < d; i++)
+        var importance = importanceWeights.Length == d ? importanceWeights : importanceWeights.GetSubVector(0, d);
+        var strengths = adaptiveStrengths.Length == d ? adaptiveStrengths : adaptiveStrengths.GetSubVector(0, d);
+        if (d == 0)
         {
-            double g = NumOps.ToDouble(gradient[i]);
-            double imp = NumOps.ToDouble(importanceWeights[i]);
-            double alpha = NumOps.ToDouble(adaptiveStrengths[i]);
-
-            if (g * imp < 0 && alpha > 0)
-            {
-                // Reduce conflicting component proportionally to adaptive strength.
-                double impNorm2 = imp * imp;
-                if (impNorm2 > 1e-10)
-                {
-                    double projection = g * imp / impNorm2;
-                    corrected[i] = NumOps.FromDouble(g - alpha * projection * imp);
-                }
-                else
-                {
-                    corrected[i] = NumOps.FromDouble(g);
-                }
-            }
-            else
-            {
-                corrected[i] = NumOps.FromDouble(g);
-            }
+            return new Vector<T>(0);
         }
 
-        return new Vector<T>(corrected);
+        var g = gradient.AsTensor();
+        var conflict = Engine.TensorLessThan(
+            Engine.TensorMultiply(Engine.TensorSign(g), Engine.TensorSign(importance.AsTensor())), NumOps.Zero);
+        var active = Engine.TensorMultiply(conflict, Engine.TensorGreaterThan(strengths.AsTensor(), NumOps.Zero));
+
+        // Reduce conflicting component proportionally to adaptive strength.
+        var reduced = Engine.TensorSubtract(g, Engine.TensorMultiply(strengths.AsTensor(), g));
+        return Engine.TensorWhere(active, reduced, g).ToVector();
     }
 
     /// <summary>Gets the accumulated importance from all previous tasks.</summary>

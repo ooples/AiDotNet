@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
@@ -31,6 +32,9 @@ public abstract class RerankerBase<T> : IReranker<T>
     /// Provides mathematical operations for the numeric type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The engine used for vectorized scoring.</summary>
+    private protected static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Gets a value indicating whether this reranker modifies relevance scores.
@@ -211,22 +215,9 @@ public abstract class RerankerBase<T> : IReranker<T>
         if (docsWithScores.Count == 0)
             return documents;
 
-        var scores = docsWithScores.Select(d => d.RelevanceScore).ToList();
-
-        var minScore = scores[0];
-        var maxScore = scores[0];
-        for (var i = 1; i < scores.Count; i++)
-        {
-            var score = scores[i];
-            if (NumOps.LessThan(score, minScore))
-            {
-                minScore = score;
-            }
-            if (NumOps.GreaterThan(score, maxScore))
-            {
-                maxScore = score;
-            }
-        }
+        var scores = new Tensor<T>(docsWithScores.Select(d => d.RelevanceScore).ToArray(), [docsWithScores.Count]);
+        var minScore = Engine.TensorMinValue(scores);
+        var maxScore = Engine.TensorMaxValue(scores);
 
         var range = NumOps.Subtract(maxScore, minScore);
         var epsilon = NumOps.FromDouble(1e-8);
@@ -243,13 +234,77 @@ public abstract class RerankerBase<T> : IReranker<T>
         }
         else
         {
-            foreach (var doc in docsWithScores)
+            var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(scores, minScore), range).ToArray();
+            foreach (var (doc, score) in docsWithScores.Zip(normalized, (doc, score) => (doc, score)))
             {
-                doc.RelevanceScore = NumOps.Divide(NumOps.Subtract(doc.RelevanceScore, minScore), range);
+                doc.RelevanceScore = score;
                 doc.HasRelevanceScore = true;
             }
         }
 
         return documents;
     }
+
+    /// <summary>
+    /// Greedy Maximal Marginal Relevance order (Carbonell and Goldstein 1998): start from the most relevant
+    /// document, then repeatedly pick argmax_i [λ rel_i - (1 - λ) max_{j selected} sim(i, j)].
+    /// </summary>
+    /// <param name="relevance">Relevance of each document, shape [n].</param>
+    /// <param name="similarity">Pairwise document similarity, shape [n, n].</param>
+    /// <param name="lambda">Trade-off between relevance (1) and diversity (0).</param>
+    /// <returns>Document indices in selection order.</returns>
+    private protected static int[] MarginalRelevanceOrder(Tensor<T> relevance, Tensor<T> similarity, T lambda)
+    {
+        int n = relevance.Length;
+        var order = new int[n];
+        if (n == 0) return order;
+
+        var selected = new bool[n];
+        var excluded = Tensor<T>.CreateDefault([n], NumOps.FromDouble(double.NegativeInfinity));
+        var weightedRelevance = Engine.TensorMultiplyScalar(relevance, lambda);
+        var diversityWeight = NumOps.Subtract(NumOps.One, lambda);
+
+        int current = Engine.TensorArgMax(relevance, 0).GetFlat(0);
+        order[0] = current;
+        selected[current] = true;
+        var maxSimilarity = SimilarityRow(similarity, current, n);
+
+        for (int k = 1; k < n; k++)
+        {
+            var score = Engine.TensorSubtract(weightedRelevance, Engine.TensorMultiplyScalar(maxSimilarity, diversityWeight));
+            current = Engine.TensorArgMax(Engine.TensorWhere(selected, excluded, score), 0).GetFlat(0);
+            if (selected[current])
+            {
+                // Every remaining score is -inf or NaN: keep the original order for the rest.
+                current = Array.IndexOf(selected, false);
+            }
+
+            order[k] = current;
+            selected[current] = true;
+            maxSimilarity = Engine.TensorMax(maxSimilarity, SimilarityRow(similarity, current, n));
+        }
+
+        return order;
+    }
+
+    /// <summary>
+    /// Scores documents by final position: the document at rank i (0-based) of n gets (n - i) / n.
+    /// </summary>
+    private protected static void AssignRankScores(IList<Document<T>> ranked)
+    {
+        int n = ranked.Count;
+        if (n == 0) return;
+
+        var count = NumOps.FromDouble(n);
+        var scores = Engine.TensorDivideScalar(
+            Engine.ScalarMinusTensor(count, Engine.TensorArange<T>(0, n, 1)), count).ToArray();
+        for (int i = 0; i < n; i++)
+        {
+            ranked[i].RelevanceScore = scores[i];
+            ranked[i].HasRelevanceScore = true;
+        }
+    }
+
+    private static Tensor<T> SimilarityRow(Tensor<T> similarity, int row, int n)
+        => Engine.Reshape(Engine.TensorNarrow(similarity, 0, row, 1), [n]);
 }

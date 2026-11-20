@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Incremental;
 
@@ -29,7 +30,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _adaptationRate;
     private readonly int _minSamplesForAdaptation;
 
-    private double[]? _performanceScores;
+    private Vector<T>? _performanceScores;
     private int _sampleCount;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -37,7 +38,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double AdaptationRate => _adaptationRate;
-    public double[]? PerformanceScores => _performanceScores;
+    public Vector<T>? PerformanceScores => _performanceScores;
     public int SampleCount => _sampleCount;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
@@ -85,22 +86,25 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int p = data.Columns;
 
         // Initialize on first call
-        if (_performanceScores is null)
-        {
+        bool first = _performanceScores is null;
+        if (first)
             _nInputFeatures = p;
-            _performanceScores = new double[p];
-        }
 
         // Compute performance scores for this batch
         var batchScores = ComputeBatchScores(data, target, n, p);
 
         // Update performance scores with exponential moving average
-        for (int j = 0; j < p; j++)
+        if (_sampleCount == 0 || _performanceScores is null)
         {
-            if (_sampleCount == 0)
-                _performanceScores[j] = batchScores[j];
-            else
-                _performanceScores[j] = (1 - _adaptationRate) * _performanceScores[j] + _adaptationRate * batchScores[j];
+            _performanceScores = batchScores.ToVector();
+        }
+        else
+        {
+            var engine = Engine;
+            var previous = Tensor<T>.FromVector(_performanceScores);
+            _performanceScores = engine.TensorAdd(
+                engine.TensorMultiplyScalar(previous, NumOps.FromDouble(1 - _adaptationRate)),
+                engine.TensorMultiplyScalar(batchScores, NumOps.FromDouble(_adaptationRate))).ToVector();
         }
 
         _sampleCount += n;
@@ -109,36 +113,10 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         UpdateSelection(p);
     }
 
-    private double[] ComputeBatchScores(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
+    /// <summary>|Pearson correlation| of every feature with the target over one batch (0 when undefined).</summary>
+    private Tensor<T> ComputeBatchScores(Matrix<T> data, Vector<T> target, int n, int p) =>
+        FeatureSelectionInformationOps.AbsCorrelationWithTarget(
+            Tensor<T>.FromMatrix(data), Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), NumOps.Zero);
 
     private void UpdateSelection(int p)
     {
@@ -146,11 +124,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             return;
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _performanceScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(Tensor<T>.FromVector(_performanceScores), numToSelect);
 
         IsFitted = true;
     }
@@ -176,15 +150,7 @@ public class AdaptiveFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("AdaptiveFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

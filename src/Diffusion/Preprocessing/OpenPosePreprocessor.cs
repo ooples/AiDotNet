@@ -110,32 +110,30 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
         // for a zero-weight in-repo preprocessor. The edge tensor here
         // preserves silhouette and limb-boundary information that
         // ControlNet conditions on, just without joint labels.
+        var engine = AiDotNetEngine.Current;
         int batch = inShape[0];
         int height = inShape[2];
         int width = inShape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        var channel = PreprocessorFilters.Channel(data, 0);
+        var zero = NumOps.Zero;
 
-        for (int b = 0; b < batch; b++)
+        // |I(h + 1, w) - I(h - 1, w)| on interior rows and |I(h, w + 1) - I(h, w - 1)| on interior columns, 0 elsewhere
+        var edgeH = height > 2
+            ? engine.Pad(engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorNarrow(channel, 2, 2, height - 2), engine.TensorNarrow(channel, 2, 0, height - 2))), 1, 1, 0, 0, zero)
+            : new Tensor<T>(new[] { batch, 1, height, width });
+        var edgeW = width > 2
+            ? engine.Pad(engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorNarrow(channel, 3, 2, width - 2), engine.TensorNarrow(channel, 3, 0, width - 2))), 0, 0, 1, 1, zero)
+            : new Tensor<T>(new[] { batch, 1, height, width });
+        var edge = engine.TensorMin(engine.TensorMultiplyScalar(engine.TensorAdd(edgeH, edgeW), NumOps.FromDouble(2.0)), NumOps.One);
+
+        var result = engine.TensorConcatenate(new[]
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double edgeH = h > 0 && h < height - 1
-                        ? Math.Abs(NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]))
-                        : 0;
-                    double edgeW = w > 0 && w < width - 1
-                        ? Math.Abs(NumOps.ToDouble(data[b, 0, h, w + 1]) - NumOps.ToDouble(data[b, 0, h, w - 1]))
-                        : 0;
-                    double edge = Math.Min(1.0, (edgeH + edgeW) * 2.0);
-
-                    result[b, 0, h, w] = NumOps.FromDouble(edge);
-                    result[b, 1, h, w] = NumOps.FromDouble(edge * 0.5);
-                    result[b, 2, h, w] = NumOps.Zero;
-                }
-            }
-        }
-
+            edge,
+            engine.TensorMultiplyScalar(edge, NumOps.FromDouble(0.5)),
+            new Tensor<T>(new[] { batch, 1, height, width }),
+        }, 1);
         return result;
     }
 }

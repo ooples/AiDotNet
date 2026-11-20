@@ -481,11 +481,15 @@ internal sealed class RandomSearchRLAutoML<T>
             while (!done && steps < _maxStepsPerEpisode)
             {
                 var action = agent.SelectAction(state, explore: explore);
-                var (nextState, reward, isDone, _) = _environment.Step(action);
+                var (nextState, reward, isDone, info) = _environment.Step(action);
 
                 if (train)
                 {
-                    agent.StoreExperience(state, action, reward, nextState, isDone);
+                    // An environment time limit, or the step cap reached in a non-terminal state, truncates the
+                    // episode: the agent bootstraps V(nextState) there and not after a termination.
+                    bool truncated = AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.IsTruncated(info)
+                        || (!isDone && steps + 1 >= _maxStepsPerEpisode);
+                    agent.StoreExperience(state, action, reward, nextState, isDone && !truncated, truncated);
                     _ = agent.Train();
                 }
 

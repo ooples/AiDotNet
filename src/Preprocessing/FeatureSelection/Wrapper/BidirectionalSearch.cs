@@ -29,14 +29,14 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _maxIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxIterations => _maxIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,14 +73,14 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureScores = new double[p];
+        // |Pearson r| of every feature with the target; a subset scores the mean of its features' scores
+        var featureScores = WrapperScoringOps.AbsTargetCorrelations(data, target, Enumerable.Range(0, p).ToArray());
         var selected = new HashSet<int>();
         var notSelected = new HashSet<int>(Enumerable.Range(0, p));
 
@@ -93,7 +93,7 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             notSelected.Remove(f);
         }
 
-        double currentScore = EvaluateSubset(data, target, selected.ToArray(), n, p);
+        T currentScore = EvaluateSubset(featureScores, selected.ToArray());
         bool improved = true;
 
         for (int iter = 0; iter < _maxIterations && improved; iter++)
@@ -104,15 +104,15 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             if (selected.Count < _nFeaturesToSelect)
             {
                 int bestAdd = -1;
-                double bestAddScore = currentScore;
+                T bestAddScore = currentScore;
 
                 foreach (int candidate in notSelected)
                 {
                     selected.Add(candidate);
-                    double score = EvaluateSubset(data, target, selected.ToArray(), n, p);
+                    T score = EvaluateSubset(featureScores, selected.ToArray());
                     selected.Remove(candidate);
 
-                    if (score > bestAddScore)
+                    if (WrapperScoringOps.IsAbove(score, bestAddScore))
                     {
                         bestAddScore = score;
                         bestAdd = candidate;
@@ -132,15 +132,15 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             if (selected.Count > 1)
             {
                 int bestRemove = -1;
-                double bestRemoveScore = currentScore;
+                T bestRemoveScore = currentScore;
 
                 foreach (int candidate in selected.ToList())
                 {
                     selected.Remove(candidate);
-                    double score = EvaluateSubset(data, target, selected.ToArray(), n, p);
+                    T score = EvaluateSubset(featureScores, selected.ToArray());
                     selected.Add(candidate);
 
-                    if (score > bestRemoveScore)
+                    if (WrapperScoringOps.IsAbove(score, bestRemoveScore))
                     {
                         bestRemoveScore = score;
                         bestRemove = candidate;
@@ -157,64 +157,36 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             }
         }
 
-        // Adjust to exact number of features requested
+        // Adjust to exact number of features requested: drop the weakest selected features, then add the strongest
+        // unselected ones (each by its own score; the lowest index first among ties)
+        var ascending = PreprocessingTensorOps.StableOrder(featureScores, descending: false);
         while (selected.Count > _nFeaturesToSelect)
         {
-            int weakest = selected.OrderBy(f => _featureScores[f]).First();
+            int weakest = ascending.First(f => selected.Contains(f));
             selected.Remove(weakest);
             notSelected.Add(weakest);
         }
 
+        var descending = PreprocessingTensorOps.StableOrder(featureScores, descending: true);
         while (selected.Count < _nFeaturesToSelect && notSelected.Any())
         {
-            var scoresForNotSelected = notSelected
-                .Select(f => (f, EvaluateFeature(data, target, f, n)))
-                .OrderByDescending(x => x.Item2);
-            var best = scoresForNotSelected.First().f;
+            int best = descending.First(f => notSelected.Contains(f));
             selected.Add(best);
             notSelected.Remove(best);
         }
 
-        foreach (int s in selected)
-            _featureScores[s] = EvaluateFeature(data, target, s, n);
+        var chosen = selected.ToArray();
+        _featureScores = WrapperScoringOps.ScoresVector(p, NumOps.Zero, chosen, WrapperScoringOps.Gather(featureScores, chosen));
 
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features, int n, int p)
+    private T EvaluateSubset(Tensor<T> featureScores, int[] features)
     {
-        if (features.Length == 0) return 0;
+        if (features.Length == 0) return NumOps.Zero;
 
-        double score = 0;
-        foreach (int f in features)
-            score += EvaluateFeature(data, target, f, n);
-
-        return score / features.Length;
-    }
-
-    private double EvaluateFeature(Matrix<T> data, Vector<T> target, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        return Engine.TensorMean(WrapperScoringOps.Gather(featureScores, features));
     }
 
     /// <inheritdoc />
@@ -230,15 +202,7 @@ public class BidirectionalSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("BidirectionalSearch has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

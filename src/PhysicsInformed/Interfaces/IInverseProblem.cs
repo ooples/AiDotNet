@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.Interfaces
 {
@@ -404,6 +405,6 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <remarks>
         /// High correlation indicates parameters are not independently identifiable.
         /// </remarks>
-        public T[,]? ParameterCorrelations { get; set; }
+        public Tensor<T>? ParameterCorrelations { get; set; }
     }
 }

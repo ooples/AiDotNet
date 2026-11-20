@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -267,51 +269,39 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
             ?? throw new InvalidOperationException("Column embeddings not initialized.");
 
         int batchSize = numericalFeatures.Shape[0];
-        var embedded = new Tensor<T>(new[] { batchSize, TotalEmbeddedFeatures, Options.EmbeddingDimension });
+        int embeddingDim = Options.EmbeddingDimension;
+        var columns = colEmbeddings.Reshape(1, TotalEmbeddedFeatures, embeddingDim);
 
-        // Embed numerical features
-        for (int b = 0; b < batchSize; b++)
+        // Embed numerical features: every scalar goes through the shared 1 -> embedding_dim projection as its own row
+        var values = TabularMetrics.Flat(numericalFeatures, batchSize * NumNumericalFeatures)
+            .Reshape(batchSize * NumNumericalFeatures, 1);
+        var numerical = Engine.TensorAdd(
+            _numericalEmbedding.Forward(values).Reshape(batchSize, NumNumericalFeatures, embeddingDim),
+            Engine.TensorNarrow(columns, 1, 0, NumNumericalFeatures));
+
+        if (NumCategoricalFeatures == 0)
         {
-            for (int f = 0; f < NumNumericalFeatures; f++)
-            {
-                var featureValue = new Tensor<T>(new[] { 1, 1 });
-                featureValue[0] = numericalFeatures[b * NumNumericalFeatures + f];
-
-                var embeddedFeature = _numericalEmbedding.Forward(featureValue);
-
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    int idx = (b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d;
-                    embedded[idx] = NumOps.Add(
-                        embeddedFeature[d],
-                        colEmbeddings[f * Options.EmbeddingDimension + d]);
-                }
-            }
+            return numerical;
         }
 
-        // Embed categorical features
-        if (categoricalIndices != null && _categoricalEmbeddings != null)
+        // Embed categorical features (left at zero when no indices are given)
+        var parts = new Tensor<T>[NumCategoricalFeatures + 1];
+        parts[0] = numerical;
+        var categoricalEmbeddings = _categoricalEmbeddings;
+        for (int f = 0; f < NumCategoricalFeatures; f++)
         {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < NumCategoricalFeatures; f++)
-                {
-                    int catIdx = categoricalIndices[b, f];
-                    int featureIdx = NumNumericalFeatures + f;
-
-                    for (int d = 0; d < Options.EmbeddingDimension; d++)
-                    {
-                        int embIdx = catIdx * Options.EmbeddingDimension + d;
-                        int outIdx = (b * TotalEmbeddedFeatures + featureIdx) * Options.EmbeddingDimension + d;
-                        embedded[outIdx] = NumOps.Add(
-                            _categoricalEmbeddings[f][embIdx],
-                            colEmbeddings[featureIdx * Options.EmbeddingDimension + d]);
-                    }
-                }
-            }
+            int featureIdx = NumNumericalFeatures + f;
+            parts[f + 1] = categoricalIndices != null && categoricalEmbeddings != null
+                ? Engine.TensorAdd(
+                    Engine.TensorIndexSelect(
+                        categoricalEmbeddings[f],
+                        Tensor<int>.FromVector(categoricalIndices.GetColumn(f).GetSubVector(0, batchSize)),
+                        0).Reshape(batchSize, 1, embeddingDim),
+                    Engine.TensorNarrow(columns, 1, featureIdx, 1))
+                : new Tensor<T>(new[] { batchSize, 1, embeddingDim });
         }
 
-        return embedded;
+        return Engine.TensorConcatenate(parts, 1);
     }
 
     /// <summary>
@@ -390,15 +380,8 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         }
 
         // Flatten and apply MLP head
-        var flattened = new Tensor<T>(new[] { batchSize, TotalEmbeddedFeatures * Options.EmbeddingDimension });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < TotalEmbeddedFeatures * Options.EmbeddingDimension; i++)
-            {
-                flattened[b * (TotalEmbeddedFeatures * Options.EmbeddingDimension) + i] =
-                    current[b * TotalEmbeddedFeatures * Options.EmbeddingDimension + i];
-            }
-        }
+        var flattened = TabularMetrics.Flat(current, batchSize * TotalEmbeddedFeatures * Options.EmbeddingDimension)
+            .Reshape(batchSize, TotalEmbeddedFeatures * Options.EmbeddingDimension);
 
         var mlpOutput = flattened;
         foreach (var mlpLayer in _mlpLayers)
@@ -413,126 +396,34 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
     {
         // Column attention: attention over the feature dimension
         // Input shape: [batch, features, embedding_dim]
-        // Each sample attends over its features independently
-        var output = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract features for this sample
-            var sample = new Tensor<T>(new[] { TotalEmbeddedFeatures, Options.EmbeddingDimension });
-            for (int f = 0; f < TotalEmbeddedFeatures; f++)
-            {
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    sample[f * Options.EmbeddingDimension + d] =
-                        input[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d];
-                }
-            }
-
-            // Apply attention
-            var attended = layer.Forward(sample);
-
-            // Copy back
-            for (int f = 0; f < TotalEmbeddedFeatures; f++)
-            {
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    output[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d] =
-                        attended[f * Options.EmbeddingDimension + d];
-                }
-            }
-        }
-
-        return output;
+        // Each sample attends over its features independently: one batched [batch, features, dim] call
+        var samples = input.Reshape(batchSize, TotalEmbeddedFeatures, Options.EmbeddingDimension);
+        return layer.Forward(samples).Reshape(input._shape);
     }
 
     private Tensor<T> ApplyRowAttention(MultiHeadAttentionLayer<T> layer, Tensor<T> input, int batchSize)
     {
         // Row attention: attention over the batch dimension for each feature
         // Input shape: [batch, features, embedding_dim]
-        // Each feature attends across samples
-        var output = new Tensor<T>(input._shape);
-
-        for (int f = 0; f < TotalEmbeddedFeatures; f++)
-        {
-            // Extract this feature across all samples
-            var feature = new Tensor<T>(new[] { batchSize, Options.EmbeddingDimension });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    feature[b * Options.EmbeddingDimension + d] =
-                        input[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d];
-                }
-            }
-
-            // Apply attention
-            var attended = layer.Forward(feature);
-
-            // Copy back
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    output[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d] =
-                        attended[b * Options.EmbeddingDimension + d];
-                }
-            }
-        }
-
-        return output;
+        // Each feature attends across samples: transpose to [features, batch, dim] and attend in one call
+        var byFeature = Engine.TensorPermute(
+            input.Reshape(batchSize, TotalEmbeddedFeatures, Options.EmbeddingDimension), new[] { 1, 0, 2 });
+        var attended = layer.Forward(byFeature);
+        return Engine.TensorPermute(attended, new[] { 1, 0, 2 }).Reshape(input._shape);
     }
 
     private Tensor<T> ApplyFeedForward(FullyConnectedLayer<T> layer, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < TotalEmbeddedFeatures; f++)
-            {
-                var featureVec = new Tensor<T>(new[] { 1, Options.EmbeddingDimension });
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    featureVec[d] = input[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d];
-                }
-
-                var ffnOut = layer.Forward(featureVec);
-
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    output[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d] = ffnOut[d];
-                }
-            }
-        }
-
-        return output;
+        // The feed-forward network acts on every (sample, feature) embedding independently
+        var rows = input.Reshape(batchSize * TotalEmbeddedFeatures, Options.EmbeddingDimension);
+        return layer.Forward(rows).Reshape(input._shape);
     }
 
     private Tensor<T> ApplyLayerNorm(LayerNormalizationLayer<T> norm, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < TotalEmbeddedFeatures; f++)
-            {
-                var featureVec = new Tensor<T>(new[] { 1, Options.EmbeddingDimension });
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    featureVec[d] = input[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d];
-                }
-
-                var normalized = norm.Forward(featureVec);
-
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    output[(b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d] = normalized[d];
-                }
-            }
-        }
-
-        return output;
+        // Layer norm over the embedding dimension of every (sample, feature) embedding
+        var rows = input.Reshape(batchSize * TotalEmbeddedFeatures, Options.EmbeddingDimension);
+        return norm.Forward(rows).Reshape(input._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -568,6 +459,41 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         foreach (var layer in _mlpLayers)
         {
             layer.UpdateParameters(learningRate);
+        }
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the embeddings, the column and row attention, feed-forward and norm layers, the MLP and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        if (_categoricalEmbeddings != null) tensors.AddRange(_categoricalEmbeddings);
+        if (_columnEmbeddings != null) tensors.Add(_columnEmbeddings);
+        var layers = new List<ILayer<T>> { _numericalEmbedding };
+        layers.AddRange(_columnAttentionLayers);
+        if (_rowAttentionLayers != null) layers.AddRange(_rowAttentionLayers);
+        layers.AddRange(_ffnLayers);
+        if (_layerNorms != null) layers.AddRange(_layerNorms);
+        layers.AddRange(_mlpLayers);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
         }
     }
 

@@ -24,13 +24,13 @@ public class TrendSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _trendStrengths;
+    private Vector<T>? _trendStrengths;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TrendStrengths => _trendStrengths;
+    public Vector<T>? TrendStrengths => _trendStrengths;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,60 +54,33 @@ public class TrendSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var strengths = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
 
-        _trendStrengths = new double[p];
-
-        // Time indices
-        var t = Enumerable.Range(0, n).Select(i => (double)i).ToArray();
-        double tMean = t.Average();
-        double tVar = t.Select(x => (x - tMean) * (x - tMean)).Sum();
-
-        for (int j = 0; j < p; j++)
+        // Time indices, centred; tVar = sum (t - tMean)^2
+        var t = engine.TensorArange<T>(0, n, 1);
+        var tCentered = engine.Reshape(engine.TensorSubtractScalar(t, engine.TensorMean(t)), new[] { n, 1 });
+        T tVar = engine.TensorSum(engine.TensorMultiply(tCentered, tCentered));
+        if (n > 0 && !NumOps.LessThan(tVar, NumOps.FromDouble(1e-10)))
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            var yCentered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+            var yVar = SelectorTensorOps.ColumnSumOfSquares(yCentered);
 
-            double yMean = col.Average();
-            double yVar = col.Select(v => (v - yMean) * (v - yMean)).Sum();
+            // Linear regression slope and the R-squared of the fitted trend line
+            var slope = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(yCentered, tCentered), new[] { 0 }, false), tVar);
+            var residual = engine.TensorSubtract(yCentered,
+                engine.TensorMultiply(tCentered, engine.Reshape(slope, new[] { 1, p })));
+            var ssRes = SelectorTensorOps.ColumnSumOfSquares(residual);
+            var r2 = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, NumOps.One),
+                engine.TensorDivide(ssRes, yVar));
 
-            if (yVar < 1e-10 || tVar < 1e-10)
-            {
-                _trendStrengths[j] = 0;
-                continue;
-            }
-
-            // Linear regression slope
-            double covariance = 0;
-            for (int i = 0; i < n; i++)
-                covariance += (t[i] - tMean) * (col[i] - yMean);
-
-            double slope = covariance / tVar;
-
-            // Compute R-squared to measure trend strength
-            double ssTot = yVar;
-            double ssRes = 0;
-            double intercept = yMean - slope * tMean;
-            for (int i = 0; i < n; i++)
-            {
-                double pred = slope * t[i] + intercept;
-                ssRes += (col[i] - pred) * (col[i] - pred);
-            }
-
-            double r2 = ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
-            _trendStrengths[j] = Math.Max(0, r2);
+            strengths = SelectorTensorOps.ZeroUnless(
+                PreprocessingTensorOps.AtLeast(yVar, NumOps.FromDouble(1e-10)), engine.TensorMax(r2, NumOps.Zero));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _trendStrengths[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _trendStrengths = strengths.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(strengths, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -124,15 +97,7 @@ public class TrendSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         if (_selectedIndices is null)
             throw new InvalidOperationException("TrendSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

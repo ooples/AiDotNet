@@ -518,6 +518,7 @@ public class AllLayersCloneTests
         if (t == typeof(string)) return "test";
         if (t.IsEnum) return Enum.GetValues(t).Cast<object>().FirstOrDefault();
         if (t == typeof(int[])) return new[] { 4, 4 };
+        if (t == typeof(Func<Tensor<double>, Tensor<double>>)) return (Func<Tensor<double>, Tensor<double>>)(static x => x);
         if (t.IsArray) return Array.CreateInstance((t.GetElementType() ?? throw new InvalidOperationException("t.GetElementType() is null where it is required.")), 0);
         // Reference types the layer treats as collaborators are left null; a constructor that
         // genuinely requires one will throw and the next overload is tried.

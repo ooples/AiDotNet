@@ -80,22 +80,23 @@ public class SubgraphExpander<T> : FederatedLearningComponentBase<T>
 
         int totalNodes = numOriginalNodes + pseudoCount;
 
-        // Build expanded adjacency (totalNodes x totalNodes, flattened)
-        var expandedAdj = new Tensor<T>(new[] { totalNodes * totalNodes });
-        CopyOriginalAdjacency(adjacency, expandedAdj, numOriginalNodes, totalNodes);
+        // Build expanded adjacency (totalNodes x totalNodes, flattened): the original block in the top-left
+        // corner, zeros elsewhere.
+        var originalAdj = FitToLength(adjacency, numOriginalNodes * numOriginalNodes)
+            .Reshape(new[] { numOriginalNodes, numOriginalNodes });
+        var expandedAdj = Engine.TensorConcatenate(new[]
+        {
+            Engine.TensorConcatenate(new[] { originalAdj, new Tensor<T>(new[] { numOriginalNodes, pseudoCount }) }, 1),
+            new Tensor<T>(new[] { pseudoCount, totalNodes }),
+        }, 0).Reshape(new[] { totalNodes * totalNodes });
 
-        // Build expanded features
-        var expandedFeatures = new Tensor<T>(new[] { totalNodes * featureDim });
-        CopyOriginalFeatures(nodeFeatures, expandedFeatures, numOriginalNodes, featureDim);
-
-        // Generate pseudo-node features
-        GeneratePseudoNodeFeatures(
-            expandedFeatures, nodeFeatures,
-            numOriginalNodes, pseudoCount, featureDim,
-            crossClientFeatures);
+        // Build expanded features: original node rows followed by the generated pseudo-node rows
+        var originalFeatures = FitToLength(nodeFeatures, numOriginalNodes * featureDim);
+        var pseudoFeatures = GeneratePseudoNodeFeatures(originalFeatures, numOriginalNodes, pseudoCount, featureDim, crossClientFeatures);
+        var expandedFeatures = Engine.TensorConcatenate(new[] { originalFeatures, pseudoFeatures }, 0);
 
         // Connect pseudo-nodes to border nodes in adjacency
-        ConnectPseudoNodes(expandedAdj, numOriginalNodes, pseudoCount, totalNodes);
+        expandedAdj = ConnectPseudoNodes(expandedAdj, numOriginalNodes, pseudoCount, totalNodes);
 
         return new ExpandedSubgraph<T>
         {
@@ -106,8 +107,10 @@ public class SubgraphExpander<T> : FederatedLearningComponentBase<T>
         };
     }
 
-    private void GeneratePseudoNodeFeatures(
-        Tensor<T> expandedFeatures,
+    /// <summary>
+    /// Builds the flattened [pseudoCount * featureDim] features of the pseudo-nodes.
+    /// </summary>
+    private Tensor<T> GeneratePseudoNodeFeatures(
         Tensor<T> originalFeatures,
         int numOriginal,
         int pseudoCount,
@@ -116,154 +119,105 @@ public class SubgraphExpander<T> : FederatedLearningComponentBase<T>
     {
         switch (_options.PseudoNodeStrategy)
         {
-            case PseudoNodeStrategy.ZeroFill:
-                // Features already initialized to zero in tensor constructor
-                break;
-
             case PseudoNodeStrategy.FeatureAverage:
-                FillWithAverage(expandedFeatures, originalFeatures, numOriginal, pseudoCount, featureDim);
-                break;
+                return RepeatAverage(originalFeatures, numOriginal, pseudoCount, featureDim);
 
             case PseudoNodeStrategy.GeneratorBased:
-                FillWithGenerator(expandedFeatures, originalFeatures, crossClientFeatures,
-                    numOriginal, pseudoCount, featureDim);
-                break;
+                return FillWithGenerator(originalFeatures, crossClientFeatures, numOriginal, pseudoCount, featureDim);
 
             default:
-                break;
+                // ZeroFill: pseudo-node features stay zero
+                return new Tensor<T>(new[] { pseudoCount * featureDim });
         }
     }
 
-    private void FillWithAverage(
-        Tensor<T> expanded, Tensor<T> original,
-        int numOriginal, int pseudoCount, int featureDim)
+    /// <summary>
+    /// <paramref name="rows"/> copies of the mean original feature vector, flattened.
+    /// </summary>
+    private Tensor<T> RepeatAverage(Tensor<T> originalFeatures, int numOriginal, int rows, int featureDim)
     {
+        if (rows == 0 || featureDim == 0)
+        {
+            return new Tensor<T>(new[] { rows * featureDim });
+        }
+
         // Compute average feature vector
-        var avg = new double[featureDim];
-        for (int i = 0; i < numOriginal; i++)
-        {
-            for (int f = 0; f < featureDim; f++)
-            {
-                int idx = i * featureDim + f;
-                if (idx < original.Shape[0])
-                {
-                    avg[f] += NumOps.ToDouble(original[idx]);
-                }
-            }
-        }
-
-        for (int f = 0; f < featureDim; f++)
-        {
-            avg[f] /= Math.Max(1, numOriginal);
-        }
-
-        // Fill pseudo-nodes with average
-        for (int p = 0; p < pseudoCount; p++)
-        {
-            for (int f = 0; f < featureDim; f++)
-            {
-                int idx = (numOriginal + p) * featureDim + f;
-                if (idx < expanded.Shape[0])
-                {
-                    expanded[idx] = NumOps.FromDouble(avg[f]);
-                }
-            }
-        }
+        var avg = numOriginal == 0
+            ? new Tensor<T>(new[] { 1, featureDim })
+            : Engine.ReduceMean(originalFeatures.Reshape(new[] { numOriginal, featureDim }), new[] { 0 }, true);
+        return Engine.TensorBroadcastTo(avg, new[] { rows, featureDim }).Reshape(new[] { rows * featureDim });
     }
 
-    private void FillWithGenerator(
-        Tensor<T> expanded, Tensor<T> original,
+    private Tensor<T> FillWithGenerator(
+        Tensor<T> originalFeatures,
         Dictionary<int, Tensor<T>> crossClientFeatures,
         int numOriginal, int pseudoCount, int featureDim)
     {
         // Use cross-client features if available, otherwise fall back to noisy average
         if (crossClientFeatures.Count > 0)
         {
-            // Use actual cross-client border node features
-            int pseudoIdx = 0;
+            // Use actual cross-client border node features, in client order, up to pseudoCount rows
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
             foreach (var kvp in crossClientFeatures)
             {
+                if (filled >= pseudoCount) break;
+
                 var otherFeatures = kvp.Value;
-                int otherNodes = otherFeatures.Shape[0] / Math.Max(1, featureDim);
-
-                for (int n = 0; n < otherNodes && pseudoIdx < pseudoCount; n++, pseudoIdx++)
+                int otherNodes = otherFeatures.Length / Math.Max(1, featureDim);
+                int take = Math.Min(otherNodes, pseudoCount - filled);
+                if (take > 0 && featureDim > 0)
                 {
-                    for (int f = 0; f < featureDim; f++)
-                    {
-                        int srcIdx = n * featureDim + f;
-                        int dstIdx = (numOriginal + pseudoIdx) * featureDim + f;
-
-                        if (srcIdx < otherFeatures.Shape[0] && dstIdx < expanded.Shape[0])
-                        {
-                            expanded[dstIdx] = otherFeatures[srcIdx];
-                        }
-                    }
+                    parts.Add(FitToLength(otherFeatures, take * featureDim));
                 }
+
+                filled += take;
             }
 
-            // Fill remaining with average if not enough cross-client features
-            if (pseudoIdx < pseudoCount)
+            // Fill the remaining pseudo-nodes (after the copied ones) with the average
+            if (filled < pseudoCount)
             {
-                FillWithAverage(expanded, original, numOriginal, pseudoCount - pseudoIdx, featureDim);
+                parts.Add(RepeatAverage(originalFeatures, numOriginal, pseudoCount - filled, featureDim));
             }
+
+            return parts.Count == 0 ? new Tensor<T>(new[] { 0 }) : Engine.TensorConcatenate(parts.ToArray(), 0);
         }
-        else
+
+        // No cross-client features: fall back to noisy average
+        var average = RepeatAverage(originalFeatures, numOriginal, pseudoCount, featureDim);
+
+        // Add small noise for diversity
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var noise = new double[pseudoCount * featureDim];
+        for (int k = 0; k < noise.Length; k++)
         {
-            // No cross-client features: fall back to noisy average
-            FillWithAverage(expanded, original, numOriginal, pseudoCount, featureDim);
-
-            // Add small noise for diversity
-            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            for (int p = 0; p < pseudoCount; p++)
-            {
-                for (int f = 0; f < featureDim; f++)
-                {
-                    int idx = (numOriginal + p) * featureDim + f;
-                    if (idx < expanded.Shape[0])
-                    {
-                        double val = NumOps.ToDouble(expanded[idx]);
-                        val += (rng.NextDouble() - 0.5) * 0.1; // Small noise
-                        expanded[idx] = NumOps.FromDouble(val);
-                    }
-                }
-            }
+            noise[k] = (rng.NextDouble() - 0.5) * 0.1; // Small noise
         }
+
+        return Engine.TensorAdd(average, new Tensor<double>(noise, new[] { noise.Length }).Cast<T>());
     }
 
-    private static void CopyOriginalAdjacency(Tensor<T> original, Tensor<T> expanded, int numOriginal, int totalNodes)
+    /// <summary>
+    /// Copies the first <paramref name="length"/> entries of a flattened tensor, zero-padding short ones.
+    /// </summary>
+    private Tensor<T> FitToLength(Tensor<T> source, int length)
     {
-        for (int i = 0; i < numOriginal; i++)
+        var flat = source.Reshape(new[] { source.Length });
+        int covered = Math.Min(length, source.Length);
+        if (covered == length)
         {
-            for (int j = 0; j < numOriginal; j++)
-            {
-                int srcIdx = i * numOriginal + j;
-                int dstIdx = i * totalNodes + j;
-
-                if (srcIdx < original.Shape[0] && dstIdx < expanded.Shape[0])
-                {
-                    expanded[dstIdx] = original[srcIdx];
-                }
-            }
+            return covered == source.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { length });
         }
+
+        return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - covered }) }, 0);
     }
 
-    private static void CopyOriginalFeatures(Tensor<T> original, Tensor<T> expanded, int numOriginal, int featureDim)
-    {
-        int count = Math.Min(numOriginal * featureDim, original.Shape[0]);
-        for (int i = 0; i < count; i++)
-        {
-            if (i < expanded.Shape[0])
-            {
-                expanded[i] = original[i];
-            }
-        }
-    }
-
-    private void ConnectPseudoNodes(Tensor<T> adjacency, int numOriginal, int pseudoCount, int totalNodes)
+    private Tensor<T> ConnectPseudoNodes(Tensor<T> adjacency, int numOriginal, int pseudoCount, int totalNodes)
     {
         // Connect each pseudo-node to a random subset of border nodes
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         int connectionsPerPseudo = Math.Min(3, numOriginal); // Connect to up to 3 original nodes
+        var connected = new bool[totalNodes * totalNodes];
 
         for (int p = 0; p < pseudoCount; p++)
         {
@@ -272,20 +226,12 @@ public class SubgraphExpander<T> : FederatedLearningComponentBase<T>
             for (int c = 0; c < connectionsPerPseudo; c++)
             {
                 int targetNode = rng.Next(numOriginal);
-                int fwdIdx = pseudoIdx * totalNodes + targetNode;
-                int bwdIdx = targetNode * totalNodes + pseudoIdx;
-
-                if (fwdIdx < adjacency.Shape[0])
-                {
-                    adjacency[fwdIdx] = NumOps.FromDouble(1.0);
-                }
-
-                if (bwdIdx < adjacency.Shape[0])
-                {
-                    adjacency[bwdIdx] = NumOps.FromDouble(1.0);
-                }
+                connected[pseudoIdx * totalNodes + targetNode] = true;
+                connected[targetNode * totalNodes + pseudoIdx] = true;
             }
         }
+
+        return Engine.TensorWhere(connected, Engine.TensorFullLike(adjacency, NumOps.One), adjacency);
     }
 
     private int EstimatePseudoNodeCount(Dictionary<int, Tensor<T>> crossClientFeatures, int originalNodes)

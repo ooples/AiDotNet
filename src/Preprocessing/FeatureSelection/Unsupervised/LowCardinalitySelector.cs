@@ -54,26 +54,47 @@ public class LowCardinalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        _cardinalities = new int[p];
-        var selected = new List<int>();
-
-        for (int j = 0; j < p; j++)
+        if (n == 0 || p == 0)
         {
-            var uniqueValues = new HashSet<double>();
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (!double.IsNaN(val))
-                    uniqueValues.Add(Math.Round(val, 10)); // Round to handle floating point
-            }
-
-            _cardinalities[j] = uniqueValues.Count;
-
-            if (_cardinalities[j] >= _minCardinality)
-                selected.Add(j);
+            // No values: every cardinality is 0, below the minimum of at least 1.
+            _cardinalities = new int[p];
+            _selectedIndices = Array.Empty<int>();
+            IsFitted = true;
+            return;
         }
 
-        _selectedIndices = selected.ToArray();
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+
+        // Distinct non-NaN values per column, compared after rounding to 10 decimals.
+        var rounded = engine.TensorDivideScalar(
+            engine.TensorRound(engine.TensorMultiplyScalar(x, NumOps.FromDouble(1e10))), NumOps.FromDouble(1e10));
+        var nan = engine.TensorIsNan(x);
+        var lowest = PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.FromDouble(double.NegativeInfinity));
+        var columnMax = engine.ReduceMax(engine.TensorWhere(nan, lowest, rounded), new[] { 0 }, true);
+
+        // NaNs take the column's largest real value, so they never add a distinct value of their own.
+        var filled = engine.TensorWhere(nan, engine.TensorBroadcastTo(columnMax, new[] { n, p }), rounded);
+        var sorted = engine.TensorSort(filled, 0, false).Values;
+        var distinct = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        if (n > 1)
+        {
+            var changes = engine.TensorNotEquals(
+                engine.TensorSlice(sorted, new[] { 1, 0 }, new[] { n - 1, p }),
+                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { n - 1, p }));
+            distinct = engine.TensorAdd(distinct, engine.ReduceSum(changes, new[] { 0 }, false));
+        }
+
+        // An all-NaN column has no values at all.
+        var realCount = engine.ReduceSum(
+            engine.TensorWhere(nan, PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.Zero),
+                PreprocessingTensorOps.Filled(new[] { n, p }, NumOps.One)), new[] { 0 }, false);
+        var hasReal = engine.TensorGreaterThan(realCount, NumOps.Zero);
+        var cardinalities = engine.TensorMultiply(distinct, hasReal);
+
+        _cardinalities = cardinalities.Cast<int>().ToArray();
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(cardinalities, NumOps.FromDouble(_minCardinality)));
         IsFitted = true;
     }
 
@@ -83,15 +104,7 @@ public class LowCardinalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("LowCardinalitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

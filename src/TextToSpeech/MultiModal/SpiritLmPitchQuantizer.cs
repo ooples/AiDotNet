@@ -191,22 +191,26 @@ internal sealed class SpiritLmPitchQuantizer<T>
     /// the commitment loss, through the straight-through bottleneck; the codebook moves by its moving averages
     /// (<paramref name="random"/> draws restarts).
     /// </summary>
+    private Random? _activeRandom;
+
     public Tensor<T> TrainingLoss(Tensor<T> x, Random random)
     {
         var c = Configuration;
         var z = Encode(x);
         int width = z.Shape[1], frames = z.Shape[2];
-        if (!CodebookInitialized) InitializeCodebook(z, random);
-        var codes = Nearest(z);
-        var quantized = new Tensor<T>(new[] { 1, width, frames });
-        for (int f = 0; f < frames; f++)
-            for (int i = 0; i < width; i++) quantized[0, i, f] = NumOps.FromDouble(Codebook[codes[f], i]);
-        UpdateCodebook(z, codes, random);
+        _activeRandom = random;
+        var quantized = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+            "SpiritLmPitchQuantize",
+            this,
+            stateTag: 1,
+            new[] { z },
+            new[] { 1, width, frames },
+            static (self, _, inputs, dest) => self.ExecuteQuantize(inputs[0], dest));
         var difference = _engine.TensorSubtract(quantized, z);
         var commit = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
             NumOps.FromDouble(1.0 / difference.Length));
         // z + sg(e − z): the decoder's input carries e forward and the gradient to z.
-        var straight = _engine.TensorAdd(z, new Tensor<T>(difference.Shape.ToArray(), difference.ToVector()));
+        var straight = _engine.TensorAdd(z, _engine.StopGradient(difference));
         var reconstruction = Decode(straight);
         int length = Math.Min(reconstruction.Shape[2], x.Shape[2]);
         var weights = new Tensor<T>(new[] { 1, 2, length });
@@ -220,6 +224,21 @@ internal sealed class SpiritLmPitchQuantizer<T>
             _engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { 1, 2, length }))), weights);
         var recon = _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null, false), NumOps.FromDouble(1.0 / (2.0 * length)));
         return _engine.TensorAdd(recon, _engine.TensorMultiplyScalar(commit, NumOps.FromDouble(c.CommitWeight)));
+    }
+
+    private void ExecuteQuantize(Tensor<T> zVal, Tensor<T> dest)
+    {
+        int width = zVal.Shape[1], frames = zVal.Shape[2];
+        bool shouldMutate = !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward;
+        var rng = _activeRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+        if (shouldMutate && !CodebookInitialized) InitializeCodebook(zVal, rng);
+        var codes = Nearest(zVal);
+        var flat = new double[width * frames];
+        for (int f = 0; f < frames; f++)
+            for (int i = 0; i < width; i++)
+                flat[i * frames + f] = Codebook[codes[f], i];
+        new Tensor<double>(flat, new[] { 1, width, frames }).Cast<T>().AsSpan().CopyTo(dest.AsWritableSpan());
+        if (shouldMutate) UpdateCodebook(zVal, codes, rng);
     }
 
     // The latents as rows [frames, width].

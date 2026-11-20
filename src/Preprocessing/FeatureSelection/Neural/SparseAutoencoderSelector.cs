@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -29,13 +30,13 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private readonly double _sparsityTarget;
     private readonly double _sparsityWeight;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,111 +67,105 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
 
         // Normalize
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
+        var x = NeuralSelectorOps.StandardizeSample(Tensor<T>.FromMatrix(data));
+        var rows = NeuralSelectorOps.SplitRows(x);
 
         int h = Math.Min(_hiddenSize, p);
         var rand = RandomHelper.CreateSecureRandom();
 
-        var W1 = new double[p, h];
-        var W2 = new double[h, p];
         double scale = Math.Sqrt(2.0 / (p + h));
-        for (int i = 0; i < p; i++)
-            for (int j = 0; j < h; j++)
-                W1[i, j] = (rand.NextDouble() * 2 - 1) * scale;
-        for (int i = 0; i < h; i++)
-            for (int j = 0; j < p; j++)
-                W2[i, j] = (rand.NextDouble() * 2 - 1) * scale;
-
-        var rhoHat = new double[h];
-        double lr = 0.01;
+        var w1 = NeuralSelectorOps.SymmetricUniform<T>(rand, scale, p, h);
+        var w2 = NeuralSelectorOps.SymmetricUniform<T>(rand, scale, h, p);
+        T rate = NumOps.FromDouble(0.01);
 
         for (int epoch = 0; epoch < _nEpochs; epoch++)
         {
-            Array.Clear(rhoHat, 0, h);
+            // Average activation of every hidden unit over the data with the weights at the start of the epoch,
+            // and the KL sparsity term of the hidden deltas
+            var sparsity = SparsityDelta(MeanActivation(x, w1), _sparsityTarget, _sparsityWeight);
 
             for (int i = 0; i < n; i++)
             {
-                // Forward
-                var hidden = new double[h];
-                for (int j = 0; j < h; j++)
-                {
-                    for (int k = 0; k < p; k++)
-                        hidden[j] += X[i, k] * W1[k, j];
-                    hidden[j] = Sigmoid(hidden[j]);
-                    rhoHat[j] += hidden[j];
-                }
-
-                var output = new double[p];
-                for (int j = 0; j < p; j++)
-                    for (int k = 0; k < h; k++)
-                        output[j] += hidden[k] * W2[k, j];
-
-                // Backward
-                var outputError = new double[p];
-                for (int j = 0; j < p; j++)
-                    outputError[j] = output[j] - X[i, j];
-
-                var hiddenError = new double[h];
-                for (int j = 0; j < h; j++)
-                {
-                    for (int k = 0; k < p; k++)
-                        hiddenError[j] += outputError[k] * W2[j, k];
-                    hiddenError[j] *= hidden[j] * (1 - hidden[j]);
-                }
-
-                // Update
-                for (int j = 0; j < h; j++)
-                    for (int k = 0; k < p; k++)
-                        W2[j, k] -= lr * outputError[k] * hidden[j];
-
-                for (int j = 0; j < p; j++)
-                    for (int k = 0; k < h; k++)
-                        W1[j, k] -= lr * hiddenError[k] * X[i, j];
-            }
-
-            // Sparsity penalty
-            for (int j = 0; j < h; j++)
-            {
-                rhoHat[j] /= n;
-                double sparsityGrad = _sparsityWeight * (-_sparsityTarget / (rhoHat[j] + 1e-10) +
-                                                         (1 - _sparsityTarget) / (1 - rhoHat[j] + 1e-10));
-                for (int k = 0; k < p; k++)
-                    W1[k, j] -= lr * sparsityGrad * 0.01;
+                var (gradW1, gradW2) = SampleGradients(rows[i], w1, w2, sparsity);
+                w2 = NeuralSelectorOps.Step(w2, gradW2, rate);
+                w1 = NeuralSelectorOps.Step(w1, gradW1, rate);
             }
         }
 
-        _featureImportances = new double[p];
-        for (int j = 0; j < p; j++)
-            for (int k = 0; k < h; k++)
-                _featureImportances[j] += Math.Abs(W1[j, k]);
+        var importance = engine.ReduceSum(engine.TensorAbs(w1), new[] { 1 }, false);
+        _featureImportances = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
 
-    private double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-Math.Max(-500, Math.Min(500, x))));
+    /// <summary>The mean sigmoid activation rho_hat [h] of the hidden units over the rows of x [n, p].</summary>
+    internal static Tensor<T> MeanActivation(Tensor<T> x, Tensor<T> w1)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.ReduceMean(engine.TensorSigmoid(engine.TensorMatMul(x, w1)), new[] { 0 }, false);
+    }
+
+    /// <summary>
+    /// The derivative beta (-rho / rho_hat + (1 - rho) / (1 - rho_hat)) of beta sum_j KL(rho || rho_hat_j) with
+    /// respect to rho_hat, which back-propagation adds to the hidden deltas (Ng, sparse autoencoder notes).
+    /// </summary>
+    internal static Tensor<T> SparsityDelta(Tensor<T> meanActivation, double target, double weight)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int h = meanActivation.Length;
+        // rho^ clamped to [eps, 1 - eps], as sparse-autoencoder implementations do, so the KL derivative stays
+        // finite when a unit saturates; with master's 1e-10 added to the denominators it was -target / 0 or
+        // (1 - target) / 0 in Half and float, where 1e-10 is 0 next to 1 and 1 - 1e-10 is 1
+        T eps = ActivationEpsilon();
+        var rhoHat = engine.TensorClamp(meanActivation, eps, ops.Subtract(ops.One, eps));
+        var first = engine.TensorDivide(
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(-target)), rhoHat);
+        var second = engine.TensorDivide(
+            PreprocessingTensorOps.Filled(new[] { h }, ops.FromDouble(1 - target)), PreprocessingTensorOps.OneMinus(rhoHat));
+        return engine.TensorMultiplyScalar(engine.TensorAdd(first, second), ops.FromDouble(weight));
+    }
+
+    /// <summary>
+    /// The per-sample term of the gradient of J = (1/n) sum_i |x_i - sigmoid(x_i W1) W2|^2 / 2 +
+    /// beta sum_j KL(rho || rho_hat_j): with hidden a = sigmoid(x W1) and output error e = a W2 - x, dW2 = a e^T
+    /// and dW1 = x ((W2 e + sparsity) .* a .* (1 - a))^T, so the mean of the terms over the samples is the
+    /// gradient of J. <paramref name="sparsity"/> is <see cref="SparsityDelta"/> at the current rho_hat.
+    /// </summary>
+    /// <summary>
+    /// The clamp margin of the mean activation: 1e-10 (master's guard) doubled until it is non-zero in T and
+    /// <c>1 - eps</c> is below 1 in T, so 1e-10 in double, about 5e-8 in float and 4.2e-4 in Half.
+    /// </summary>
+    internal static T ActivationEpsilon()
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        // the candidates 1e-10 * 2^k (k = 0..63) are formed in double and rounded to T once each, as master's
+        // doubling loop did: forming them in T would round 1e-10 to 0 in Half before the doubling
+        var candidates = engine.TensorMultiplyScalar(
+            engine.TensorExp2(engine.TensorArange<double>(0, 64, 1)), 1e-10).Cast<T>();
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(candidates, ops.Zero),
+            engine.TensorLessThan(PreprocessingTensorOps.OneMinus(candidates), ops.One));
+        return PopulationSearchOps.Value(PopulationSearchOps.At(candidates, PopulationSearchOps.ArgMax(usable)));
+    }
+
+    internal static (Tensor<T> W1, Tensor<T> W2) SampleGradients(Tensor<T> x, Tensor<T> w1, Tensor<T> w2, Tensor<T> sparsity)
+    {
+        var engine = AiDotNetEngine.Current;
+        var hidden = engine.TensorSigmoid(NeuralSelectorOps.VecMat(x, w1));
+        var outputError = engine.TensorSubtract(NeuralSelectorOps.VecMat(hidden, w2), x);
+        var hiddenDelta = engine.TensorMultiply(
+            engine.TensorAdd(NeuralSelectorOps.MatVec(w2, outputError), sparsity),
+            engine.TensorMultiply(hidden, PreprocessingTensorOps.OneMinus(hidden)));
+        return (NeuralSelectorOps.Outer(x, hiddenDelta), NeuralSelectorOps.Outer(hidden, outputError));
+    }
 
     /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
@@ -178,15 +173,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("SparseAutoencoderSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

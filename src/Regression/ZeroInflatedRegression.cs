@@ -564,7 +564,7 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         var solution = SolveSystem(xtwx, xtwz, p + 1);
 
         intercept = solution[0];
-        coefficients = solution.GetSubVector(1, p);
+        coefficients = RegressionEngineOps2.Slice(solution, 1, p);
     }
 
     /// <summary>

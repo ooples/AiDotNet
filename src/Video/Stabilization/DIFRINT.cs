@@ -296,15 +296,11 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         int h = source.Rank == 4 ? source.Shape[2] : source.Shape[1];
         int w = source.Rank == 4 ? source.Shape[3] : source.Shape[2];
 
-        var flow = new Tensor<T>([2, h, w]);
-        var negDx = NumOps.FromDouble(-dx);
-        var negDy = NumOps.FromDouble(-dy);
-        int plane = h * w;
-        for (int p = 0; p < plane; p++)
+        var flow = Engine.TensorConcatenate(new[]
         {
-            flow[p] = negDx;
-            flow[plane + p] = negDy;
-        }
+            Tensor<T>.CreateDefault([1, h, w], NumOps.FromDouble(-dx)),
+            Tensor<T>.CreateDefault([1, h, w], NumOps.FromDouble(-dy)),
+        }, 0);
 
         // Engine read per use rather than captured, so the warp follows a later engine switch.
         return FlowWarpHelper.Warp(AiDotNetEngine.Current, source, flow);
@@ -342,8 +338,7 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -351,8 +346,8 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }

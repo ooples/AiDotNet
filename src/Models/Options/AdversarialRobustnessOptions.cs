@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Models.Options;
@@ -13,6 +14,27 @@ namespace AiDotNet.Models.Options;
 /// - Adversarial defenses (training and preprocessing)
 /// - Certified robustness (provable guarantees)
 /// - Content moderation (for LLM applications)
+/// </para>
+/// <para>
+/// Where each group takes effect when passed to <c>AiModelBuilder.ConfigureAdversarialRobustness</c>:
+/// <list type="bullet">
+/// <item><description>Safety filtering (<see cref="EnableSafetyFiltering"/> through <see cref="SafetyLogFilePath"/>):
+/// copied into the <see cref="SafetyFilterOptions{T}"/> of the <c>SafetyFilter</c> that validates every
+/// <c>Predict</c> input and filters every output. <see cref="EnableSafetyFiltering"/> false removes the filter.</description></item>
+/// <item><description>Adversarial defense (<see cref="EnableAdversarialTraining"/> through
+/// <see cref="TrainingAttackMethod"/>): build runs <c>AdversarialTraining</c> on the trained model with these settings
+/// and <see cref="BatchSize"/>, and the result predicts through the defended model.</description></item>
+/// <item><description>Certification (<see cref="EnableCertifiedRobustness"/> through
+/// <see cref="CertificationNormType"/>): build creates the <see cref="CertificationMethod"/> engine with these settings,
+/// reports certified accuracy, and <c>AiModelResult.PredictCertified</c> certifies single predictions.</description></item>
+/// <item><description>Content moderation (<see cref="EnableContentModeration"/> through
+/// <see cref="HallucinationThreshold"/>): fills the text section of the <c>ConfigureSafety</c> pipeline; settings the
+/// caller passed to <c>ConfigureSafety</c> explicitly win.</description></item>
+/// <item><description>Red teaming (<see cref="EnableRedTeaming"/> through <see cref="RedTeamingCategories"/>): build
+/// runs <see cref="RedTeamingPromptCount"/> prompts from the safety benchmarks of the chosen categories through that
+/// pipeline and attaches the report as <c>AiModelResult.RedTeamingReport</c>.</description></item>
+/// <item><description><see cref="VerboseLogging"/> writes a log line per robustness build step.</description></item>
+/// </list>
 /// </para>
 /// <para><b>For Beginners:</b> This is your one-stop shop for all AI safety and robustness settings.
 /// You can configure how strictly inputs are validated, how the model is protected against attacks,
@@ -93,56 +115,79 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     // ========================================================================
     // ADVERSARIAL ATTACK OPTIONS (for robustness testing)
     // ========================================================================
+    //
+    // These settings are read by the robustness methods of the trained model's result:
+    // AiModelResult.EvaluateRobustness(inputs, labels), EvaluateRobustnessWithAutoAttack,
+    // GenerateAdversarialExample(input, label) and EvaluateConfiguredRobustness. Invalid values are
+    // rejected there with an ArgumentOutOfRangeException or InvalidOperationException naming the setting.
 
     /// <summary>
     /// Gets or sets whether to enable adversarial robustness testing.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> When enabled, the model is tested against adversarial attacks
-    /// during evaluation to measure its robustness.</para>
+    /// <para><b>For Beginners:</b> When enabled, <c>AiModelResult.EvaluateConfiguredRobustness</c> tests the
+    /// model against every attack in <see cref="AttackMethods"/>; when disabled that method refuses to run.</para>
     /// </remarks>
     public bool EnableRobustnessTesting { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the maximum perturbation budget (epsilon) for attacks.
     /// </summary>
+    /// <value>Defaults to 0.1; must be positive. An epsilon passed to a robustness method overrides it.</value>
     public double AttackEpsilon { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the step size for iterative attacks.
     /// </summary>
+    /// <value>Defaults to 0.01; must be positive. PGD steps by this much per iteration.</value>
     public double AttackStepSize { get; set; } = 0.01;
 
     /// <summary>
     /// Gets or sets the number of iterations for iterative attacks.
     /// </summary>
+    /// <value>Defaults to 40; must be at least 1. PGD takes this many steps and Carlini-Wagner this many
+    /// optimizer steps.</value>
     public int AttackIterations { get; set; } = 40;
 
     /// <summary>
     /// Gets or sets the norm type for perturbation constraints.
     /// </summary>
-    /// <value>"L-infinity", "L2", or "L1"</value>
-    public string AttackNormType { get; set; } = "L-infinity";
+    /// <value>Defaults to <see cref="AdversarialNormType.LInfinity"/>. Selects the PGD step (gradient sign for
+    /// L-infinity, normalized gradient for L2), its projection ball and its random start.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how the attack's budget is measured. L-infinity lets every feature
+    /// move by up to epsilon; L2 limits the overall (Euclidean) size of the change to epsilon. It only describes
+    /// what attacks may do; <see cref="CertificationNormType"/> separately sets the norm certificates cover.</para>
+    /// </remarks>
+    public AdversarialNormType AttackNormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
     /// Gets or sets whether to use targeted attacks.
     /// </summary>
+    /// <remarks>
+    /// When enabled the attacks push every input toward <see cref="TargetClass"/>, and the attack success rate
+    /// counts the inputs whose adversarial prediction becomes that class.
+    /// </remarks>
     public bool UseTargetedAttacks { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the target class for targeted attacks.
     /// </summary>
+    /// <value>Defaults to 0; with targeted attacks it must be a valid class index of the model output.</value>
     public int TargetClass { get; set; } = 0;
 
     /// <summary>
     /// Gets or sets whether to use random initialization for attacks.
     /// </summary>
+    /// <value>Defaults to true: PGD starts from a uniformly random point of the epsilon ball.</value>
     public bool UseRandomStartForAttacks { get; set; } = true;
 
     /// <summary>
     /// Gets or sets which attack methods to use for testing.
     /// </summary>
-    public string[] AttackMethods { get; set; } = new[] { "FGSM", "PGD", "CW" };
+    /// <value>Defaults to FGSM, PGD and Carlini-Wagner; must be non-empty and free of duplicates.</value>
+    public AdversarialAttackMethod[] AttackMethods { get; set; } =
+        new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd, AdversarialAttackMethod.CarliniWagner };
 
     // ========================================================================
     // ADVERSARIAL DEFENSE OPTIONS
@@ -163,6 +208,12 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     public double AdversarialTrainingRatio { get; set; } = 0.5;
 
     /// <summary>
+    /// Gets or sets the number of adversarial training epochs run on the trained model at build.
+    /// </summary>
+    /// <value>Defaults to 100, as <see cref="AdversarialDefenseOptions{T}.TrainingEpochs"/>.</value>
+    public int AdversarialTrainingEpochs { get; set; } = 100;
+
+    /// <summary>
     /// Gets or sets the perturbation budget for adversarial training.
     /// </summary>
     public double DefenseEpsilon { get; set; } = 0.1;
@@ -175,7 +226,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the preprocessing method to use.
     /// </summary>
-    public string PreprocessingMethod { get; set; } = "JPEG";
+    public AdversarialPreprocessingMethod PreprocessingMethod { get; set; } = AdversarialPreprocessingMethod.JpegCompression;
 
     /// <summary>
     /// Gets or sets whether to use ensemble defenses.
@@ -190,7 +241,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the attack method to use during adversarial training.
     /// </summary>
-    public string TrainingAttackMethod { get; set; } = "PGD";
+    public AdversarialAttackMethod TrainingAttackMethod { get; set; } = AdversarialAttackMethod.Pgd;
 
     // ========================================================================
     // CERTIFIED ROBUSTNESS OPTIONS
@@ -208,8 +259,14 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the certification method to use.
     /// </summary>
-    /// <value>"RandomizedSmoothing", "IBP", or "CROWN"</value>
-    public string CertificationMethod { get; set; } = "RandomizedSmoothing";
+    /// <value>Defaults to <see cref="CertifiedDefenseMethod.RandomizedSmoothing"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A certification method proves that no change to the input within a given
+    /// size can flip the prediction. Randomized smoothing works with any model by voting over noisy copies of
+    /// the input; interval bound propagation and CROWN read a neural network's layers and bound its outputs
+    /// directly, which is exact about what it proves but only works for the layer types they model.</para>
+    /// </remarks>
+    public CertifiedDefenseMethod CertificationMethod { get; set; } = CertifiedDefenseMethod.RandomizedSmoothing;
 
     /// <summary>
     /// Gets or sets the number of samples for randomized smoothing.
@@ -234,7 +291,14 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for certification.
     /// </summary>
-    public string CertificationNormType { get; set; } = "L2";
+    /// <value>Defaults to <see cref="AdversarialNormType.L2"/>, the norm randomized smoothing certifies.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how the size of an input change is measured when a prediction is
+    /// certified, and it is separate from <see cref="AttackNormType"/>, which sets the budget attacks are given.
+    /// L2 measures the overall (Euclidean) size of the change; L-infinity measures the largest change to any
+    /// single feature. A certificate only covers changes measured in the norm it was computed for.</para>
+    /// </remarks>
+    public AdversarialNormType CertificationNormType { get; set; } = AdversarialNormType.L2;
 
     // ========================================================================
     // CONTENT MODERATION OPTIONS (for LLMs)
@@ -263,13 +327,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the types of PII to filter.
     /// </summary>
-    public string[] PIITypes { get; set; } = new[]
+    public PiiType[] PIITypes { get; set; } = new[]
     {
-        "Email",
-        "PhoneNumber",
-        "SocialSecurityNumber",
-        "CreditCardNumber",
-        "Address"
+        PiiType.Email,
+        PiiType.PhoneNumber,
+        PiiType.SocialSecurityNumber,
+        PiiType.CreditCardNumber,
+        PiiType.Address
     };
 
     /// <summary>
@@ -299,13 +363,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the red teaming categories to test.
     /// </summary>
-    public string[] RedTeamingCategories { get; set; } = new[]
+    public RedTeamingCategory[] RedTeamingCategories { get; set; } = new[]
     {
-        "Jailbreaking",
-        "HarmfulContent",
-        "Misinformation",
-        "PrivacyViolation",
-        "BiasExploration"
+        RedTeamingCategory.Jailbreaking,
+        RedTeamingCategory.HarmfulContent,
+        RedTeamingCategory.Misinformation,
+        RedTeamingCategory.PrivacyViolation,
+        RedTeamingCategory.BiasExploration
     };
 
     // ========================================================================
@@ -386,10 +450,16 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
             EnableSafetyFiltering = true,
             EnableAdversarialTraining = true,
             AdversarialTrainingRatio = 0.5,
-            TrainingAttackMethod = "PGD",
+            TrainingAttackMethod = AdversarialAttackMethod.Pgd,
             DefenseEpsilon = 0.1,
             EnableRobustnessTesting = true,
-            AttackMethods = new[] { "FGSM", "PGD", "CW", "AutoAttack" }
+            AttackMethods = new[]
+            {
+                AdversarialAttackMethod.Fgsm,
+                AdversarialAttackMethod.Pgd,
+                AdversarialAttackMethod.CarliniWagner,
+                AdversarialAttackMethod.AutoAttack
+            }
         };
     }
 }

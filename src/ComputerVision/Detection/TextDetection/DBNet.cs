@@ -216,18 +216,39 @@ public partial class DBNet<T> : TextDetectorBase<T>
     /// </summary>
     private Tensor<T> HardNegativeWeights(Tensor<T> loss, Tensor<T> kernel, Tensor<T> mask, double ratio)
     {
-        var weights = new Tensor<T>(loss.Shape.ToArray());
-        var negatives = new List<(double Loss, int Index)>();
-        int positives = 0;
-        for (int i = 0; i < loss.Length; i++)
-        {
-            if (NumOps.ToDouble(mask[i]) < 0.5) continue;
-            if (NumOps.ToDouble(kernel[i]) > 0.5) { weights[i] = NumOps.One; positives++; }
-            else negatives.Add((NumOps.ToDouble(loss[i]), i));
-        }
-        int keep = (int)Math.Min(negatives.Count, positives * ratio);
-        foreach (var (_, index) in negatives.OrderByDescending(n => n.Loss).Take(keep)) weights[index] = NumOps.One;
-        return weights;
+        return AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "DBNetHardNegativeWeights",
+            new[] { loss, kernel, mask },
+            loss.Shape.ToArray(),
+            (inputs, outputWeights) =>
+            {
+                var lossVals = inputs[0].Cast<double>().ToArray();
+                var kernelVals = inputs[1].Cast<double>().ToArray();
+                var maskVals = inputs[2].Cast<double>().ToArray();
+                var weights = new double[lossVals.Length];
+                var negatives = new List<(double Loss, int Index)>();
+                int positives = 0;
+                for (int i = 0; i < lossVals.Length; i++)
+                {
+                    if (maskVals[i] < 0.5) continue;
+                    if (kernelVals[i] > 0.5)
+                    {
+                        weights[i] = 1.0;
+                        positives++;
+                    }
+                    else
+                    {
+                        negatives.Add((lossVals[i], i));
+                    }
+                }
+
+                int keep = (int)Math.Min(negatives.Count, positives * ratio);
+                foreach (var (_, index) in negatives.OrderByDescending(n => n.Loss).Take(keep))
+                    weights[index] = 1.0;
+
+                var typed = new Tensor<double>(outputWeights._shape, new Vector<double>(weights)).Cast<T>();
+                typed.AsSpan().CopyTo(outputWeights.AsWritableSpan());
+            });
     }
     /// <inheritdoc/>
     protected override List<TextRegion<T>> PostProcess(

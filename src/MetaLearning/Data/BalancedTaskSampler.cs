@@ -122,11 +122,9 @@ public class BalancedTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, T
             }
             else if (candidate.Task.SupportOutput is Vector<T> supportLabels)
             {
-                // Fallback: inspect labels (works when labels are not remapped)
-                var numOps = MathHelper.GetNumericOperations<T>();
-                candidateClasses = new HashSet<int>();
-                for (int i = 0; i < supportLabels.Length; i++)
-                    candidateClasses.Add((int)Math.Round(numOps.ToDouble(supportLabels[i])));
+                // Fallback: inspect labels (works when labels are not remapped), rounded half to even as Math.Round does
+                candidateClasses = new HashSet<int>(
+                    AiDotNetEngine.Current.TensorRound(Tensor<T>.FromVector(supportLabels)).Cast<int>().ToArray());
             }
 
             if (candidateClasses is not null)

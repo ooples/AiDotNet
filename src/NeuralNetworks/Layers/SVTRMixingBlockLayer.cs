@@ -37,7 +37,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     private readonly LayerNormalizationLayer<T> _norm2;
     private readonly DenseLayer<T> _mlpUp;
     private readonly DenseLayer<T> _mlpDown;
-    private Tensor<bool>? _localMaskPlane;
+    private bool[]? _localMaskPlane;
     private readonly object _localMaskLock = new();
 
     private ILayer<T>[] ParameterLayers =>
@@ -141,7 +141,8 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
                 plane = _localMaskPlane;
                 if (plane is null)
                 {
-                    plane = new Tensor<bool>([sequence, sequence]);
+                    // Boolean geometry mask (not numeric data), row-major [query, key].
+                    plane = new bool[sequence * sequence];
                     int radiusY = _windowHeight / 2;
                     int radiusX = _windowWidth / 2;
                     for (int query = 0; query < sequence; query++)
@@ -152,7 +153,7 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
                         {
                             int ky = key / _width;
                             int kx = key % _width;
-                            plane[query, key] = Math.Abs(qy - ky) <= radiusY &&
+                            plane[query * sequence + key] = Math.Abs(qy - ky) <= radiusY &&
                                 Math.Abs(qx - kx) <= radiusX;
                         }
                     }
@@ -163,32 +164,31 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
 
         // The engine currently requires concrete batch/head mask axes. Replicate the cached
         // geometry plane without recomputing the spatial-neighborhood predicate.
-        var mask = new Tensor<bool>([batch, _numHeads, sequence, sequence]);
-        for (int b = 0; b < batch; b++)
-        for (int head = 0; head < _numHeads; head++)
-        for (int query = 0; query < sequence; query++)
-        for (int key = 0; key < sequence; key++)
-            mask[b, head, query, key] = plane[query, key];
-        return mask;
+        int planeLength = sequence * sequence;
+        var data = new bool[batch * _numHeads * planeLength];
+        for (int slice = 0; slice < batch * _numHeads; slice++)
+            Array.Copy(plane, 0, data, slice * planeLength, planeLength);
+        return new Tensor<bool>(data, [batch, _numHeads, sequence, sequence]);
     }
 
     private Tensor<T> DropPath(Tensor<T> branch, int batch)
     {
         if (_dropPathRate <= 0.0 || !IsTrainingMode) return branch;
         double keepProbability = 1.0 - _dropPathRate;
-        long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
-        var random = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
-            : RandomHelper.CreateSecureRandom();
-        var mask = new Tensor<T>(branch.Shape.ToArray());
-        for (int b = 0; b < batch; b++)
+        T scale = NumOps.FromDouble(1.0 / keepProbability);
+        int sampleSize = branch.Length / batch;
+        // The mask is a per-step draw, so a compiled training plan refills it before every replay. The seed comes
+        // from RandomSeed and a counter that advances per fill: once per eager forward and once per replay alike.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(branch.Shape.ToArray(), m =>
         {
-            T value = random.NextDouble() < _dropPathRate
-                ? NumOps.Zero
-                : NumOps.FromDouble(1.0 / keepProbability);
-            int sampleSize = branch.Length / batch;
-            for (int i = 0; i < sampleSize; i++) mask[b * sampleSize + i] = value;
-        }
+            long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+                : RandomHelper.CreateSecureRandom();
+            var span = m.AsWritableSpan();
+            for (int b = 0; b < batch; b++)
+                span.Slice(b * sampleSize, sampleSize).Fill(random.NextDouble() < _dropPathRate ? NumOps.Zero : scale);
+        });
         return Engine.TensorMultiply(branch, mask);
     }
 

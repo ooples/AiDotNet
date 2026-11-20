@@ -127,7 +127,7 @@ public class VideoModelDeclaredInputTests
     {
         var options = new VideoCLIPVideoOptions
         {
-            HiddenDimension = 32,
+            HiddenDimension = 24, // a multiple of the text tower's 12 heads
             NumSpatialBlocks = 1,
             NumTemporalBlocks = 1,
             NumTextBlocks = 1,

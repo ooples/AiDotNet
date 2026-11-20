@@ -102,6 +102,9 @@ public class TextDetectionMetrics<T> where T : struct
             throw new ArgumentNullException(nameof(second));
         }
 
+        if (typeof(T) != typeof(double))
+            return NumOps.FromDouble(TextDetectionMetrics<double>.PolygonIoU(WidePolygon(first), WidePolygon(second)));
+
         T areaFirst = PolygonArea(first);
         T areaSecond = PolygonArea(second);
         if (NumOps.LessThanOrEquals(areaFirst, NumOps.Zero) || NumOps.LessThanOrEquals(areaSecond, NumOps.Zero))
@@ -228,21 +231,24 @@ public class TextDetectionMetrics<T> where T : struct
     /// </summary>
     private static bool IsGreater(T a, T b) => NumOps.GreaterThan(a, b);
 
+    private static (double X, double Y)[] WidePolygon(IReadOnlyList<(T X, T Y)> polygon)
+    {
+        var xs = new Vector<T>(polygon.Select(point => point.X)).AsTensor().Cast<double>().ToArray();
+        var ys = new Vector<T>(polygon.Select(point => point.Y)).AsTensor().Cast<double>().ToArray();
+        return xs.Zip(ys, (x, y) => (x, y)).ToArray();
+    }
+
     /// <summary>
     /// Precision (1 when nothing was predicted), recall (1 when nothing was to be found) and their
     /// harmonic mean (0 when both are 0).
     /// </summary>
     private static (T Precision, T Recall, T HMean) Summarize(int matched, int predictedCount, int truthCount)
     {
-        T matchedT = NumOps.FromDouble(matched);
-        T precision = predictedCount > 0 ? NumOps.Divide(matchedT, NumOps.FromDouble(predictedCount)) : NumOps.One;
-        T recall = truthCount > 0 ? NumOps.Divide(matchedT, NumOps.FromDouble(truthCount)) : NumOps.One;
-        T sum = NumOps.Add(precision, recall);
-        T hmean = NumOps.GreaterThan(sum, NumOps.Zero)
-            ? NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(precision, recall)), sum)
-            : NumOps.Zero;
-
-        return (precision, recall, hmean);
+        double precision = predictedCount > 0 ? (double)matched / predictedCount : 1.0;
+        double recall = truthCount > 0 ? (double)matched / truthCount : 1.0;
+        double sum = precision + recall;
+        double hmean = sum > 0 ? 2.0 * precision * recall / sum : 0.0;
+        return (NumOps.FromDouble(precision), NumOps.FromDouble(recall), NumOps.FromDouble(hmean));
     }
 
     /// <summary>

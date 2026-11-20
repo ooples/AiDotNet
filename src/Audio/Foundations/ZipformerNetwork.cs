@@ -251,6 +251,52 @@ internal sealed class ZipformerNetwork<T>
 
     // ---------------------------------------------------------------- features and Conv-Embed
 
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, _mel.Forward(waveform));
+    }
+
+    public Tensor<T> SpecAugment(Tensor<T> features, Random random)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1];
+        if (_o.FrequencyMasks <= 0 && (_o.TimeMasks <= 0 || (int)(_o.TimeMaskRatio * frames) <= 0))
+            return features;
+
+        int freqMasks = _o.FrequencyMasks;
+        int freqWidth = _o.FrequencyMaskWidth;
+        int timeMasks = _o.TimeMasks;
+        double timeRatio = _o.TimeMaskRatio;
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { frames, bins }, m =>
+        {
+            var span = m.Data.Span;
+            span.Fill((T)NumOps.One);
+            for (int i = 0; i < freqMasks; i++)
+            {
+                int width = random.Next(Math.Min(freqWidth, bins) + 1);
+                int start = random.Next(Math.Max(1, bins - width + 1));
+                int end = Math.Min(bins, start + width);
+                for (int t = 0; t < frames; t++)
+                {
+                    int row = t * bins;
+                    for (int b = start; b < end; b++) span[row + b] = (T)NumOps.Zero;
+                }
+            }
+            int maxLen = (int)(timeRatio * frames);
+            for (int i = 0; i < timeMasks && maxLen > 0; i++)
+            {
+                int len = random.Next(maxLen + 1);
+                int start = random.Next(Math.Max(1, frames - len + 1));
+                int end = Math.Min(frames, start + len);
+                for (int t = start; t < end; t++)
+                {
+                    int row = t * bins;
+                    for (int b = 0; b < bins; b++) span[row + b] = (T)NumOps.Zero;
+                }
+            }
+        });
+        return _engine.TensorMultiply(features, mask);
+    }
+
     /// <summary>Log-mel features <c>[frames, bins]</c>, each bin normalized over the utterance.</summary>
     public double[,] Features(IReadOnlyList<double> waveform)
     {
@@ -290,6 +336,21 @@ internal sealed class ZipformerNetwork<T>
                 for (int b = 0; b < bins; b++) masked[t, b] = 0.0;
         }
         return masked;
+    }
+
+    private Tensor<T> ConvEmbed(Tensor<T> features)
+    {
+        int frames = features.Shape[0], bins = features.Shape[1];
+        var x = _engine.Reshape(features, new[] { 1, 1, frames, bins });
+        x = SwooshR(EmbedConv1.Forward(x));
+        x = SwooshR(EmbedConv2.Forward(x));
+        x = SwooshR(EmbedConv3.Forward(x));
+        // ConvNeXt: depthwise 7x7, pointwise to 384, SwooshL, pointwise back to 128, residual.
+        x = _engine.TensorAdd(x, ConvNeXtProject.Forward(SwooshL(ConvNeXtDepthwisePointwise.Forward(x))));
+        int c = x.Shape[1], t2 = x.Shape[2], f = x.Shape[3];
+        if (t2 <= 0) throw new ArgumentException("The audio is too short for Conv-Embed.");
+        var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { t2, c * f });
+        return BiasNorm(EmbedOut.Forward(steps), EmbedNormBias, EmbedNormLogScale);
     }
 
     private Tensor<T> ConvEmbed(double[,] features)
@@ -461,9 +522,21 @@ internal sealed class ZipformerNetwork<T>
     }
 
     /// <summary>The encoder output <c>[T, OutputDim]</c> at 25 Hz.</summary>
+    public Tensor<T> Encode(Tensor<T> features, bool training)
+    {
+        var x = ConvEmbed(features);
+        return EncodeFromEmbed(x, training);
+    }
+
+    /// <summary>The encoder output <c>[T, OutputDim]</c> at 25 Hz.</summary>
     public Tensor<T> Encode(double[,] features, bool training)
     {
         var x = ConvEmbed(features);
+        return EncodeFromEmbed(x, training);
+    }
+
+    private Tensor<T> EncodeFromEmbed(Tensor<T> x, bool training)
+    {
         var outputs = new List<Tensor<T>>();
         foreach (var stack in Stacks)
         {

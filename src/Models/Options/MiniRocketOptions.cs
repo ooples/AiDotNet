@@ -32,13 +32,16 @@ public class MiniRocketOptions<T> : TimeSeriesClassifierOptions<T>
     public bool UseBias { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the number of bias values to use per dilation.
+    /// Gets or sets the most dilations each kernel is applied at.
     /// </summary>
+    /// <value>The most distinct dilations each kernel is applied at. Defaults to 32.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> More biases capture more thresholds but increase
-    /// computation time and feature dimensionality.</para>
-    /// <para>Default: 9 (percentiles: 0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100)</para>
+    /// <para><b>For Beginners:</b> MiniRocket spreads each kernel's features over exponentially spaced
+    /// dilations (how far apart the kernel's taps are), up to this many distinct dilations; the features per
+    /// kernel are shared out among them, and each feature gets its own bias from a quantile of a training
+    /// example's convolution output.</para>
+    /// <para>Default: 32, the paper's <c>max_dilations_per_kernel</c> (Dempster et al. 2021).</para>
     /// </remarks>
-    public int NumBiasesPerDilation { get; set; } = 9;
+    public int MaxDilationsPerKernel { get; set; } = 32;
 
 }

@@ -1057,8 +1057,8 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             || _lastHiddenState is null
             || _lastHiddenState.Shape[0] != batchSize)
         {
-            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
-            _lastHiddenState.Fill(NumOps.Zero);
+            // Non-pooled zero initial state: GraphMode captures h0 by reference across replays.
+            _lastHiddenState = new Tensor<T>([batchSize, _hiddenSize]);
         }
 
         // ooples/AiDotNet.Tensors#1568: the whole sequence as one fused op (one node on a tape; on a GPU, a few kernels

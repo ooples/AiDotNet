@@ -8,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
@@ -219,10 +220,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             }
             else
             {
-                for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-                {
-                    accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGradients[i]);
-                }
+                accumulatedBodyGradients = Engine.Add(accumulatedBodyGradients, bodyGradients);
             }
         }
 
@@ -230,10 +228,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         {
             // Average body gradients
             T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-            for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-            {
-                accumulatedBodyGradients[i] = NumOps.Divide(accumulatedBodyGradients[i], batchSizeT);
-            }
+            accumulatedBodyGradients = Engine.Divide(accumulatedBodyGradients, batchSizeT);
 
             // Apply gradient clipping if configured
             if (_caviaOptions.GradientClipThreshold.HasValue && _caviaOptions.GradientClipThreshold.Value > 0)
@@ -293,8 +288,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return new CAVIAModel<T, TInput, TOutput>(
             MetaModel,
             context,
-            _caviaOptions,
-            NumOps);
+            _caviaOptions);
     }
 
     /// <summary>
@@ -317,18 +311,12 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private Vector<T> CreateInitialContext()
     {
         int totalContextSize = _caviaOptions.ContextDimension * _caviaOptions.NumContextVectors;
-        var context = new Vector<T>(totalContextSize);
-
         if (Math.Abs(_caviaOptions.ContextInitValue) > 1e-15)
         {
-            T initValue = NumOps.FromDouble(_caviaOptions.ContextInitValue);
-            for (int i = 0; i < totalContextSize; i++)
-            {
-                context[i] = initValue;
-            }
+            return Engine.Fill(totalContextSize, NumOps.FromDouble(_caviaOptions.ContextInitValue));
         }
 
-        return context;
+        return new Vector<T>(totalContextSize);
     }
 
     /// <summary>
@@ -377,13 +365,9 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             // Apply L2 regularization on context if configured
             if (_caviaOptions.UseContextRegularization)
             {
+                // L2 regularization gradient: reg_strength * context
                 T regStrength = NumOps.FromDouble(_caviaOptions.ContextRegularizationStrength);
-                for (int i = 0; i < context.Length; i++)
-                {
-                    // L2 regularization gradient: reg_strength * context
-                    T regGrad = NumOps.Multiply(regStrength, context[i]);
-                    contextGradients[i] = NumOps.Add(contextGradients[i], regGrad);
-                }
+                contextGradients = Engine.Add(contextGradients, Engine.Multiply(context, regStrength));
             }
 
             // Update context: psi = psi - alpha * grad (or the supplied inner optimizer's step)
@@ -502,7 +486,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// </para>
     /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context) =>
-        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _caviaOptions.ContextInjectionMode, NumOps);
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _caviaOptions.ContextInjectionMode);
 }
 
 /// <summary>
@@ -512,14 +496,13 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 internal static class CAVIAContextHelper<T>
 {
     /// <summary>Augments input by injecting context according to the specified injection mode.</summary>
-    public static TInput AugmentInput<TInput>(TInput input, Vector<T> context,
-        CAVIAContextInjectionMode mode, INumericOperations<T> numOps)
+    public static TInput AugmentInput<TInput>(TInput input, Vector<T> context, CAVIAContextInjectionMode mode)
     {
         return mode switch
         {
             CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
-            CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
-            CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
+            CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context),
+            CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context),
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, $"Unknown CAVIAContextInjectionMode: {mode}")
         };
     }
@@ -539,30 +522,19 @@ internal static class CAVIAContextHelper<T>
 
     public static Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
     {
+        var engine = AiDotNetEngine.Current;
         if (tensor.Shape.Length == 1)
         {
-            int newDim = tensor.Shape[0] + context.Length;
-            var result = new Tensor<T>(new int[] { newDim });
-            for (int i = 0; i < tensor.Shape[0]; i++)
-                result[new int[] { i }] = tensor[new int[] { i }];
-            for (int i = 0; i < context.Length; i++)
-                result[new int[] { tensor.Shape[0] + i }] = context[i];
-            return result;
+            return engine.Concat(new[] { tensor, Tensor<T>.FromVector(context) }, 0);
         }
         else if (tensor.Shape.Length == 2)
         {
+            // Every row gets the same context appended after its features.
             int batchSize = tensor.Shape[0];
-            int originalFeatures = tensor.Shape[1];
-            int newFeatures = originalFeatures + context.Length;
-            var result = new Tensor<T>(new int[] { batchSize, newFeatures });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < originalFeatures; f++)
-                    result[new int[] { b, f }] = tensor[new int[] { b, f }];
-                for (int c = 0; c < context.Length; c++)
-                    result[new int[] { b, originalFeatures + c }] = context[c];
-            }
-            return result;
+            var rows = engine.TensorBroadcastTo(
+                engine.Reshape(Tensor<T>.FromVector(context), new[] { 1, context.Length }),
+                new[] { batchSize, context.Length });
+            return engine.Concat(new[] { tensor, rows }, 1);
         }
         throw new NotSupportedException(
             $"Tensor with {tensor.Shape.Length} dimensions is not supported for context concatenation.");
@@ -570,140 +542,109 @@ internal static class CAVIAContextHelper<T>
 
     public static Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
     {
-        int newCols = matrix.Columns + context.Length;
-        var result = new Matrix<T>(matrix.Rows, newCols);
-        for (int row = 0; row < matrix.Rows; row++)
-        {
-            for (int col = 0; col < matrix.Columns; col++)
-                result[row, col] = matrix[row, col];
-            for (int c = 0; c < context.Length; c++)
-                result[row, matrix.Columns + c] = context[c];
-        }
-        return result;
+        return ConcatenateTensorWithContext(Tensor<T>.FromMatrix(matrix), context).ToMatrix();
     }
 
     public static Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
     {
-        var result = new Vector<T>(vector.Length + context.Length);
-        for (int i = 0; i < vector.Length; i++)
-            result[i] = vector[i];
-        for (int i = 0; i < context.Length; i++)
-            result[vector.Length + i] = context[i];
-        return result;
+        return Vector<T>.Concatenate(vector, context);
     }
 
-    public static TInput AddContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
+    public static TInput AddContext<TInput>(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
-            return (TInput)(object)AddContextToTensor(tensor, context, numOps);
+            return (TInput)(object)AddContextToTensor(tensor, context);
         if (input is Matrix<T> matrix)
-            return (TInput)(object)AddContextToMatrix(matrix, context, numOps);
+            return (TInput)(object)AddContextToMatrix(matrix, context);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) for Addition injection mode.");
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-                result[i] = numOps.Add(vector[i], context[i]);
-            return (TInput)(object)result;
+            return (TInput)(object)AiDotNetEngine.Current.Add(vector, context);
         }
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context addition.");
     }
 
-    public static Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
+    public static Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
         {
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor._shape);
-            for (int i = 0; i < tensor.Shape[0]; i++)
-                result[new int[] { i }] = numOps.Add(tensor[new int[] { i }], context[i]);
-            return result;
+            return AiDotNetEngine.Current.TensorAdd(tensor, Tensor<T>.FromVector(context));
         }
         else if (tensor.Shape.Length == 2)
         {
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor._shape);
-            for (int b = 0; b < tensor.Shape[0]; b++)
-                for (int f = 0; f < tensor.Shape[1]; f++)
-                    result[new int[] { b, f }] = numOps.Add(tensor[new int[] { b, f }], context[f]);
-            return result;
+            return AiDotNetEngine.Current.TensorAdd(tensor, ContextRows(tensor.Shape[0], context));
         }
         throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context addition.");
     }
 
-    public static Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
+    public static Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
             throw new ArgumentException(
                 $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) for Addition injection mode.");
-        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-        for (int row = 0; row < matrix.Rows; row++)
-            for (int col = 0; col < matrix.Columns; col++)
-                result[row, col] = numOps.Add(matrix[row, col], context[col]);
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(
+            Tensor<T>.FromMatrix(matrix), ContextRows(matrix.Rows, context)).ToMatrix();
     }
 
-    public static TInput MultiplyContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
+    /// <summary>The context repeated as each of <paramref name="rows"/> rows, shape [rows, context.Length].</summary>
+    private static Tensor<T> ContextRows(int rows, Vector<T> context)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorBroadcastTo(
+            engine.Reshape(Tensor<T>.FromVector(context), new[] { 1, context.Length }),
+            new[] { rows, context.Length });
+    }
+
+    public static TInput MultiplyContext<TInput>(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
-            return (TInput)(object)MultiplyContextWithTensor(tensor, context, numOps);
+            return (TInput)(object)MultiplyContextWithTensor(tensor, context);
         if (input is Matrix<T> matrix)
-            return (TInput)(object)MultiplyContextWithMatrix(matrix, context, numOps);
+            return (TInput)(object)MultiplyContextWithMatrix(matrix, context);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) for Multiplication injection mode.");
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-                result[i] = numOps.Multiply(vector[i], context[i]);
-            return (TInput)(object)result;
+            return (TInput)(object)AiDotNetEngine.Current.Multiply(vector, context);
         }
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context multiplication.");
     }
 
-    public static Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
+    public static Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
         {
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor._shape);
-            for (int i = 0; i < tensor.Shape[0]; i++)
-                result[new int[] { i }] = numOps.Multiply(tensor[new int[] { i }], context[i]);
-            return result;
+            return AiDotNetEngine.Current.TensorMultiply(tensor, Tensor<T>.FromVector(context));
         }
         else if (tensor.Shape.Length == 2)
         {
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor._shape);
-            for (int b = 0; b < tensor.Shape[0]; b++)
-                for (int f = 0; f < tensor.Shape[1]; f++)
-                    result[new int[] { b, f }] = numOps.Multiply(tensor[new int[] { b, f }], context[f]);
-            return result;
+            return AiDotNetEngine.Current.TensorMultiply(tensor, ContextRows(tensor.Shape[0], context));
         }
         throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context multiplication.");
     }
 
-    public static Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
+    public static Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
             throw new ArgumentException(
                 $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) for Multiplication injection mode.");
-        var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-        for (int row = 0; row < matrix.Rows; row++)
-            for (int col = 0; col < matrix.Columns; col++)
-                result[row, col] = numOps.Multiply(matrix[row, col], context[col]);
-        return result;
+        return AiDotNetEngine.Current.TensorMultiply(
+            Tensor<T>.FromMatrix(matrix), ContextRows(matrix.Rows, context)).ToMatrix();
     }
 }
 
@@ -730,7 +671,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     private readonly IFullModel<T, TInput, TOutput> _bodyModel;
     private readonly Vector<T> _adaptedContext;
     private readonly CAVIAOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the CAVIAModel with adapted context.
@@ -738,7 +678,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <param name="bodyModel">The meta-learned body model (frozen during inference).</param>
     /// <param name="adaptedContext">The task-adapted context vector.</param>
     /// <param name="options">CAVIA configuration options.</param>
-    /// <param name="numOps">Numeric operations for type T.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is null.</exception>
     /// <remarks>
     /// <para>
@@ -757,8 +696,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     public CAVIAModel(
         IFullModel<T, TInput, TOutput> bodyModel,
         Vector<T> adaptedContext,
-        CAVIAOptions<T, TInput, TOutput> options,
-        INumericOperations<T> numOps)
+        CAVIAOptions<T, TInput, TOutput> options)
     {
         Guard.NotNull(bodyModel);
         _bodyModel = bodyModel;
@@ -766,8 +704,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         _adaptedContext = adaptedContext;
         Guard.NotNull(options);
         _options = options;
-        Guard.NotNull(numOps);
-        _numOps = numOps;
     }
 
     /// <summary>
@@ -907,5 +843,5 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// </para>
     /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context) =>
-        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode, _numOps);
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode);
 }

@@ -387,11 +387,8 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // Scale by the scale factor
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        // Copy to tensor
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        // Copy to tensor in bulk
+        Engine.TensorCopy(scaled, tensor);
     }
 
     /// <summary>
@@ -667,14 +664,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Create a default identity memory that passes through values
         // Shape: [memoryDimension, memoryDimension] - acts as identity for attention
-        var defaultMemory = new Tensor<T>([memoryDimension, memoryDimension]);
-        for (int i = 0; i < memoryDimension; i++)
-        {
-            for (int j = 0; j < memoryDimension; j++)
-            {
-                defaultMemory[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
-            }
-        }
+        var defaultMemory = Engine.TensorEye<T>(memoryDimension);
 
         var result = Forward(input, defaultMemory);
         // If we promoted, drop the unit batch dim so callers get rank-1 back.

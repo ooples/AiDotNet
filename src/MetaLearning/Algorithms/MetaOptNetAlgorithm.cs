@@ -160,10 +160,7 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         if (_metaOptNetOptions.EncoderL2Regularization > 0)
         {
             T decay = NumOps.FromDouble(_metaOptNetOptions.EncoderL2Regularization);
-            for (int i = 0; i < bodyGradient.Length; i++)
-            {
-                bodyGradient[i] = NumOps.Add(bodyGradient[i], NumOps.Multiply(decay, body[i]));
-            }
+            bodyGradient = Engine.Add(bodyGradient, Engine.Multiply(body, decay));
         }
 
         if (_metaOptNetOptions.GradientClipThreshold.HasValue && _metaOptNetOptions.GradientClipThreshold.Value > 0)
@@ -203,15 +200,11 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
         // One row per class of NumClasses, in class order: a class the task did not contain keeps a zero row, which
         // scores zero for every example.
-        var weights = new Matrix<T>(_metaOptNetOptions.NumClasses, _metaOptNetOptions.EmbeddingDimension);
         var primal = Primal(solved.Coefficients, support);
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
-        {
-            for (int j = 0; j < _metaOptNetOptions.EmbeddingDimension; j++)
-            {
-                weights[episode.ClassSlots[c], j] = primal[c * _metaOptNetOptions.EmbeddingDimension + j];
-            }
-        }
+        var slotRows = Engine.TensorOneHot<T>(
+            new Tensor<int>(episode.ClassSlots, new[] { episode.ClassSlots.Length }), _metaOptNetOptions.NumClasses);
+        var weights = Engine.TensorMatMul(Engine.TensorTranspose(slotRows),
+            Tensor<T>.FromVector(primal, new[] { episode.ClassSlots.Length, _metaOptNetOptions.EmbeddingDimension })).ToMatrix();
 
         return new MetaOptNetModel<T, TInput, TOutput>(MetaModel, weights, _logitScale[0], _metaOptNetOptions);
     }
@@ -309,14 +302,12 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var logSum = engine.TensorLog(engine.ReduceSum(engine.TensorExp(shifted), new[] { 1 }, keepDims: true));
         var logProbabilities = engine.TensorAdd(shifted, engine.TensorNegate(logSum));
 
-        var smoothed = new Tensor<T>(new[] { target.Length, classes });
+        // off everywhere, on at each row's (rounded) label
         T off = Ops.FromDouble(epsilon / classes);
         T on = Ops.FromDouble(1.0 - epsilon + epsilon / classes);
-        for (int r = 0; r < target.Length; r++)
-        {
-            int label = (int)Math.Round(Ops.ToDouble(target[r]));
-            for (int c = 0; c < classes; c++) smoothed[r * classes + c] = c == label ? on : off;
-        }
+        var labels = engine.TensorRound(engine.Reshape(target, new[] { target.Length })).Cast<int>();
+        var smoothed = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorOneHot<T>(labels, classes), Ops.Subtract(on, off)), off);
 
         var product = engine.TensorMultiply(logProbabilities, smoothed);
         return engine.TensorMultiplyScalar(
@@ -332,63 +323,69 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var engine = AiDotNetEngine.Current;
         int n = support.Shape[0], d = support.Shape[1], classes = episode.ClassSlots.Length;
         var labels = SupportLabels(episode, n);
-        var oneHot = new double[n, classes];
-        for (int i = 0; i < n; i++) oneHot[i, labels[i]] = 1.0;
+        var oneHot = engine.TensorOneHot<T>(new Tensor<int>(labels, new[] { n }), classes);
         double? regularizationStrength = _metaOptNetOptions.RegularizationStrength;
 
         if (_metaOptNetOptions.SolverType == ConvexSolverType.LogisticRegression)
         {
-            var features = ToDoubles(support);
             double logisticLambda = regularizationStrength ?? _metaOptNetOptions.LogisticLambda;
-            var (weights, hessianInverse) = ConvexBaseLearners.SolveLogistic(
-                features, oneHot, logisticLambda,
-                _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
+            Tensor<T> solution, hessianInverse;
+            using (new NoGradScope<T>())
+            {
+                (solution, hessianInverse) = ConvexBaseLearners<T>.SolveLogistic(
+                    support, oneHot, logisticLambda,
+                    _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
+            }
 
             // F(W) = Z'(softmax(Z W') - Y) / n + lambda W, zero at the solution; W = W* - Hinv F(W; Z).
-            var solution = FromDoubles(weights, classes, d);
             var probabilities = engine.Softmax(
                 engine.TensorMatMul(support, engine.TensorTranspose(solution)), axis: 1);
             var residual = engine.TensorAdd(
                 engine.TensorMultiplyScalar(
                     engine.TensorMatMul(engine.TensorTranspose(
-                        engine.TensorAdd(probabilities, engine.TensorNegate(FromDoubles(oneHot, n, classes)))), support),
+                        engine.TensorAdd(probabilities, engine.TensorNegate(oneHot))), support),
                     Ops.FromDouble(1.0 / n)),
                 engine.TensorMultiplyScalar(solution, Ops.FromDouble(logisticLambda)));
             return new Solved(Implicit(solution, residual, hessianInverse, classes, d), solution, isDual: false);
         }
 
         var kernelTensor = engine.TensorMatMul(support, engine.TensorTranspose(support));
-        var kernel = ToDoubles(kernelTensor);
 
         if (_metaOptNetOptions.SolverType == ConvexSolverType.SVM)
         {
             double cost = regularizationStrength ?? _metaOptNetOptions.SvmCost;
-            var alpha = ConvexBaseLearners.SolveCrammerSingerDual(
-                kernel, labels, classes, cost, _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
-            var jacobianInverse = ConvexBaseLearners.CrammerSingerJacobianInverse(
-                kernel, alpha, labels, classes, cost, _metaOptNetOptions.SolverTolerance);
+            Tensor<T> alpha, jacobianInverse, multipliers;
+            using (new NoGradScope<T>())
+            {
+                alpha = ConvexBaseLearners<T>.SolveCrammerSingerDual(
+                    kernelTensor, oneHot, cost, _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
+                jacobianInverse = ConvexBaseLearners<T>.CrammerSingerJacobianInverse(
+                    kernelTensor, alpha, oneHot, cost, _metaOptNetOptions.SolverTolerance);
+                multipliers = StationarityConstant(kernelTensor, alpha, oneHot, cost);
+            }
 
             // Stationarity: (K alpha)_nk - [k = y_n] + lambda_nk + nu_n = 0, zero at the solution.
-            var multipliers = StationarityConstant(kernel, alpha, labels, classes, cost);
-            var solution = FromDoubles(alpha, n, classes);
-            var residual = engine.TensorAdd(engine.TensorMatMul(kernelTensor, solution), FromDoubles(multipliers, n, classes));
-            return new Solved(Implicit(solution, residual, jacobianInverse, n, classes), solution, isDual: true);
+            var residual = engine.TensorAdd(engine.TensorMatMul(kernelTensor, alpha), multipliers);
+            return new Solved(Implicit(alpha, residual, jacobianInverse, n, classes), alpha, isDual: true);
         }
 
         double ridge = regularizationStrength ?? _metaOptNetOptions.RidgeLambda;
-        var (dual, inverse) = ConvexBaseLearners.SolveRidgeDual(kernel, oneHot, ridge);
+        Tensor<T> dualTensor, inverse;
+        using (new NoGradScope<T>())
+        {
+            (dualTensor, inverse) = ConvexBaseLearners<T>.SolveRidgeDual(kernelTensor, oneHot, ridge);
+        }
 
         // (K + lambda I) M - Y = 0 at the solution.
-        var dualTensor = FromDoubles(dual, n, classes);
         var ridgeResidual = engine.TensorAdd(
             engine.TensorAdd(engine.TensorMatMul(kernelTensor, dualTensor),
                 engine.TensorMultiplyScalar(dualTensor, Ops.FromDouble(ridge))),
-            engine.TensorNegate(FromDoubles(oneHot, n, classes)));
+            engine.TensorNegate(oneHot));
 
         // (K + lambda I) acts on each class column independently, so the implicit correction is that one [n, n]
         // inverse applied to the residual's columns - not a matrix over the flattened solution as the SVM and
         // logistic Jacobians are.
-        var ridgeCorrection = engine.TensorMatMul(FromDoubles(inverse, n, n), ridgeResidual);
+        var ridgeCorrection = engine.TensorMatMul(inverse, ridgeResidual);
         return new Solved(
             engine.TensorAdd(dualTensor, engine.TensorNegate(ridgeCorrection)), dualTensor, isDual: true);
     }
@@ -396,15 +393,11 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <summary>
     /// <c>theta* - Jinv vec(residual)</c>: the solution's value with the implicit function theorem's derivative.
     /// </summary>
-    private static Tensor<T> Implicit(Tensor<T> solution, Tensor<T> residual, double[,] jacobianInverse, int rows, int columns)
+    private static Tensor<T> Implicit(Tensor<T> solution, Tensor<T> residual, Tensor<T> jacobianInverse, int rows, int columns)
     {
         var engine = AiDotNetEngine.Current;
         int size = rows * columns;
-        var constant = new Tensor<T>(new[] { size, size });
-        for (int i = 0; i < size; i++)
-            for (int j = 0; j < size; j++) constant[i * size + j] = Ops.FromDouble(jacobianInverse[i, j]);
-
-        var correction = engine.TensorMatMul(constant, engine.Reshape(residual, new[] { size, 1 }));
+        var correction = engine.TensorMatMul(jacobianInverse, engine.Reshape(residual, new[] { size, 1 }));
         return engine.TensorAdd(solution, engine.TensorNegate(engine.Reshape(correction, new[] { rows, columns })));
     }
 
@@ -412,38 +405,24 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// The parts of the SVM's stationarity residual that do not depend on the embeddings: <c>-onehot</c> plus the
     /// multipliers of the constraints active at the solution.
     /// </summary>
-    private static double[,] StationarityConstant(double[,] kernel, double[,] alpha, int[] labels, int classes, double cost)
+    /// <remarks>
+    /// <c>nu_n</c> comes from the row's first entry off its bound (<c>-(K alpha - Y)_nk</c> there); with every entry
+    /// pinned the row's multiplier is free and taken as 0. Active entries get <c>lambda_nk = -((K alpha - Y)_nk + nu_n)</c>.
+    /// </remarks>
+    private static Tensor<T> StationarityConstant(Tensor<T> kernel, Tensor<T> alpha, Tensor<T> oneHot, double cost)
     {
-        int n = labels.Length;
-        var product = new double[n, classes];
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < classes; k++)
-            {
-                double sum = 0;
-                for (int j = 0; j < n; j++) sum += kernel[i, j] * alpha[j, k];
-                product[i, k] = sum - (k == labels[i] ? 1.0 : 0.0);
-            }
-
-        var constant = new double[n, classes];
-        for (int i = 0; i < n; i++)
-        {
-            // nu_n comes from any entry off its bound; with every entry pinned the row's multiplier is free.
-            double nu = 0;
-            for (int k = 0; k < classes; k++)
-            {
-                double upper = k == labels[i] ? cost : 0.0;
-                if (upper - alpha[i, k] > 1e-9) { nu = -product[i, k]; break; }
-            }
-
-            for (int k = 0; k < classes; k++)
-            {
-                double upper = k == labels[i] ? cost : 0.0;
-                double lambda = upper - alpha[i, k] > 1e-9 ? 0.0 : -(product[i, k] + nu);
-                constant[i, k] = -(k == labels[i] ? 1.0 : 0.0) + lambda + nu;
-            }
-        }
-
-        return constant;
+        var engine = AiDotNetEngine.Current;
+        var shape = alpha.Shape.ToArray();
+        int n = shape[0];
+        var product = engine.TensorSubtract(engine.TensorMatMul(kernel, alpha), oneHot);
+        var upper = engine.TensorMultiplyScalar(oneHot, Ops.FromDouble(cost));
+        var free = engine.TensorGreaterThan(engine.TensorSubtract(upper, alpha), Ops.FromDouble(1e-9));
+        var first = engine.TensorMultiply(free, engine.TensorEquals(engine.TensorCumSum(free, 1), Ops.One));
+        var nu = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(product, first), new[] { 1 }, keepDims: false)), new[] { n, 1 }),
+            shape);
+        var lambda = engine.TensorWhere(free, engine.TensorZerosLike(alpha), engine.TensorNegate(engine.TensorAdd(product, nu)));
+        return engine.TensorAdd(engine.TensorSubtract(lambda, oneHot), nu);
     }
 
     /// <summary>The primal weights <c>[classes * width]</c> of a solved base learner.</summary>
@@ -463,18 +442,20 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, _metaOptNetOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
+    /// <summary>Each support row's class slot: the last slot whose membership entry exceeds 0.5, else 0.</summary>
     private static int[] SupportLabels(PrototypeEpisode<T> episode, int rows)
     {
-        var labels = new int[rows];
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
-            for (int r = 0; r < rows; r++)
-                if (Ops.ToDouble(episode.Membership[c * rows + r]) > 0.5) labels[r] = c;
-        return labels;
+        var engine = AiDotNetEngine.Current;
+        int classes = episode.ClassSlots.Length;
+        if (classes == 0 || rows == 0) return new int[rows];
+        var shape = new[] { classes, rows };
+        var member = engine.TensorGreaterThan(engine.Reshape(episode.Membership, shape), Ops.FromDouble(0.5));
+        var slot = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, classes, 1), new[] { classes, 1 }), shape);
+        var last = engine.ReduceMax(engine.TensorMultiply(member, slot), new[] { 0 }, keepDims: false);
+        return engine.TensorRound(last).Cast<int>().ToArray();
     }
 
     private (Tensor<T> Support, Tensor<T> Query) Embed(IMetaLearningTask<T, TInput, TOutput> task, PrototypeEpisode<T> episode)
@@ -545,43 +526,19 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
-    private static double[,] ToDoubles(Tensor<T> tensor)
-    {
-        int rows = tensor.Shape[0], columns = tensor.Shape[1];
-        var values = new double[rows, columns];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) values[i, j] = Ops.ToDouble(tensor[i * columns + j]);
-        return values;
-    }
-
-    private static Tensor<T> FromDoubles(double[,] values, int rows, int columns)
-    {
-        var tensor = new Tensor<T>(new[] { rows, columns });
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++) tensor[i * columns + j] = Ops.FromDouble(values[i, j]);
-        return tensor;
-    }
-
     private static Tensor<T> Scalar(Tensor<T> value) => AiDotNetEngine.Current.Reshape(value, new[] { 1 });
 
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null)
         {
-            var copy = new Vector<T>(values.Length);
-            for (int i = 0; i < values.Length; i++) copy[i] = values[i];
-            return copy;
+            return values.Clone();
         }
 
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
-    private static Vector<T> Scale(Vector<T> values, T divisor)
-    {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
-    }
+    private static Vector<T> Scale(Vector<T> values, T divisor) => AiDotNetEngine.Current.Divide(values, divisor);
 
     #endregion
 }

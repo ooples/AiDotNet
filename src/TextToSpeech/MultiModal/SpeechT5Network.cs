@@ -212,7 +212,9 @@ internal sealed class SpeechT5HubertPostnet<T>
             var xn = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(x, x), new[] { 1 }, true));            // [M, 1]
             var en = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(embeddings, embeddings), new[] { 1 }, true)); // [C, 1]
             var dots = _engine.TensorMatMul(x, _engine.TensorTranspose(embeddings));                                       // [M, C]
-            var denominator = _engine.TensorMax(_engine.TensorMatMul(xn, _engine.TensorTranspose(en)), NumOps.FromDouble(1e-8));
+            var eps = NumOps.FromDouble(1e-8);
+            var rawDenom = _engine.TensorMatMul(xn, _engine.TensorTranspose(en));
+            var denominator = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorSubtractScalar(rawDenom, eps)), eps);
             var cosine = _engine.TensorMultiplyScalar(_engine.TensorDivide(dots, denominator), NumOps.FromDouble(1.0 / _c.LogitTemperature));
             var target = new Tensor<int>(new[] { rows.Length });
             var hide = new Tensor<T>(new[] { rows.Length, classes });
@@ -285,7 +287,7 @@ internal sealed class SpeechT5Quantizer<T>
             for (int i = 0; i < noise.Length; i++) noise[i] = NumOps.FromDouble(-Math.Log(-Math.Log(Math.Max(random.NextDouble(), 1e-300))));
             var soft = _engine.Softmax(_engine.TensorMultiplyScalar(_engine.TensorAdd(logits, noise), NumOps.FromDouble(1.0 / Temperature)), axis: 1);
             var hard = OneHot(soft);
-            onehot = _engine.TensorAdd(_engine.TensorSubtract(hard, new Tensor<T>(soft.Shape.ToArray(), soft.ToVector())), soft);
+            onehot = _engine.TensorAdd(_engine.TensorSubtract(hard, _engine.StopGradient(soft)), soft);
         }
         else
         {

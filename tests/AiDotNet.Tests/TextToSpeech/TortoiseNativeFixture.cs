@@ -38,7 +38,7 @@ internal static class TortoiseNativeFixture
 internal static class TortoiseOptionFixture
 {
     internal static bool Handles(string option) => option is "UnivNetUpsampleRates" or "AutoregressiveMelNormalization"
-        or "ClvpSpeechLength" or "ClvpTokenDropout" or "DiffusionConditioningDropout" or "TokenizerCommitmentWeight";
+        or "ClvpSpeechLength" or "ClvpTextLength" or "ClvpTokenDropout" or "DiffusionConditioningDropout" or "TokenizerCommitmentWeight";
 
     internal static void Prepare(TortoiseTTSOptions options, string option)
     {
@@ -50,6 +50,7 @@ internal static class TortoiseOptionFixture
         if (option == "AutoregressiveMelNormalization")
             options.AutoregressiveMelNormalization = Enumerable.Repeat(1.0, options.AutoregressiveMelChannels).ToArray();
         if (option == "ClvpSpeechLength") options.ClvpSpeechLength = 4;
+        if (option == "ClvpTextLength") options.ClvpTextLength = 4;
         if (option == "ClvpTokenDropout") options.TrainingComponent = TortoiseTrainingComponent.Clvp;
         if (option == "DiffusionConditioningDropout") options.TrainingComponent = TortoiseTrainingComponent.Diffusion;
         if (option == "TokenizerCommitmentWeight") options.TrainingComponent = TortoiseTrainingComponent.SpeechTokenizer;
@@ -59,7 +60,7 @@ internal static class TortoiseOptionFixture
     {
         var options = (TortoiseTTSOptions)model.GetOptions();
         var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        if (option is "ClvpSpeechLength" or "ClvpTokenDropout")
+        if (option is "ClvpSpeechLength" or "ClvpTextLength" or "ClvpTokenDropout")
         {
             var text = Enumerable.Range(0, 16).Select(i => 1 + i % (options.VocabSize - 2)).ToArray();
             var speech = Enumerable.Range(0, 16).Select(i => i % options.CodebookSize).ToArray();

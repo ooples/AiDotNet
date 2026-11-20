@@ -138,4 +138,33 @@ public class CosyVoice3ReferenceTests
         var mel = new Tensor<double>(new[] { 1, 4, 3 });
         Assert.Equal(3, hift.PredictF0(mel).Length);
     }
+
+    // CosyVoice's S3 tokenizer reads the log-mel's frame count. Carried in T, as before, a Half model sent 2,049 frames
+    // as 2,048 and 4,095 as 4,096 (Half is exact only to 2,048), and the codes it read back above 2,048 were rounded the
+    // same way. The count now reaches the graph's declared int32 or int64 input exactly, and int64 codes come back exactly.
+    [Theory]
+    [InlineData(2049, "int32")]
+    [InlineData(4095, "int64")]
+    public void SpeechTokenizer_InHalf_GetsTheExactFrameCount(int frames, string lengthType)
+    {
+        var logMel = new Tensor<Half>(new[] { 128, frames });
+        var (features, lengths) = CosyVoiceBase<Half>.SpeechTokenizerInputs(new[] { "feats", "feats_length" }, logMel);
+        Assert.Equal(new[] { 1, 128, frames }, features["feats"].Shape.ToArray());
+        Assert.Equal(new[] { frames }, lengths["feats_length"].ToArray());
+
+        var declared = new List<AiDotNet.Interfaces.IOnnxTensorInfo>
+        {
+            new AiDotNet.Onnx.OnnxTensorInfo { Name = "feats", ElementType = "float", Shape = new[] { 1, 128, -1 } },
+            new AiDotNet.Onnx.OnnxTensorInfo { Name = "feats_length", ElementType = lengthType, Shape = new[] { 1 } },
+        };
+        var onnx = AiDotNet.Onnx.OnnxModel<Half>.BuildInputs(declared, features, lengths).Single(v => v.Name == "feats_length");
+        long sent = lengthType == "int32" ? onnx.AsTensor<int>()[0] : onnx.AsTensor<long>()[0];
+        Assert.Equal(frames, sent);
+
+        var codes = Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor("speech_tokens",
+            new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(new long[] { 2049, 4095, 6560 }, new[] { 1, 3 }));
+        var read = AiDotNet.Onnx.OnnxModel<Half>.IntegersOf(codes);
+        Assert.NotNull(read);
+        Assert.Equal(new[] { 2049, 4095, 6560 }, read?.ToArray());
+    }
 }

@@ -38,11 +38,20 @@ param(
     # indistinguishable from a shard that never existed -- it is simply absent, the counts
     # are taken over whatever did arrive, and the run self-reports fully green. #2086.
     [string[]] $ExpectedShardNames = @(),
-    [switch] $FailOnPolicy
+    [switch] $FailOnPolicy,
+    [switch] $AllowIncompleteBaseline,
+    [string] $EvidenceProvenancePath
 )
 
 $ErrorActionPreference = 'Stop'
 $schemaVersion = 1
+$evidenceVerified = $true
+if ($EvidenceProvenancePath) {
+    try {
+        $provenance = Get-Content -LiteralPath $EvidenceProvenancePath -Raw | ConvertFrom-Json
+        $evidenceVerified = $provenance.verified -is [bool] -and $provenance.verified -eq $true -and $provenance.testedSha -ceq $CurrentSha
+    } catch { $evidenceVerified = $false }
+}
 
 function ConvertTo-ShardKey {
     param([string] $Name)
@@ -108,6 +117,9 @@ function Read-TestLedger {
         $trxFiles = @(Get-ChildItem -LiteralPath $container.FullName -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
         $parseErrors = New-Object System.Collections.Generic.List[string]
         if ($metadataError) { $parseErrors.Add("shard-metadata.json: $metadataError") }
+        if ($metadata -and $metadata.PSObject.Properties['artifactIncomplete'] -and $metadata.artifactIncomplete -eq $true) {
+            $parseErrors.Add('Artifact inventory is incomplete: ' + (@($metadata.diagnosticErrors) -join '; '))
+        }
         $total = 0
         $executed = 0
         $notExecuted = 0
@@ -245,6 +257,12 @@ function Read-TestLedger {
             parseErrors = @($parseErrors)
             testStepOutcome = $stepOutcome
         })
+        # A packed job (TEST_IMPACT_REPACK=on) records how long each slice's test step took; the job's own
+        # duration no longer says. The shard timing table reads it from here. Absent for every other shard,
+        # whose row is then exactly what it was.
+        if ($metadata -and $metadata.PSObject.Properties['testWallSeconds'] -and $null -ne $metadata.testWallSeconds) {
+            $shards[$shards.Count - 1] | Add-Member -NotePropertyName testWallSeconds -NotePropertyValue ([double] $metadata.testWallSeconds)
+        }
     }
 
     $distinctTests = @($allTests | Sort-Object identity, outcome, shard -Unique)
@@ -263,6 +281,10 @@ function Read-LedgerFile {
     $ledger = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
     if ([int] $ledger.schemaVersion -ne $schemaVersion) {
         throw "Unsupported baseline ledger schema '$($ledger.schemaVersion)'; expected '$schemaVersion'."
+    }
+    if (($ledger.PSObject.Properties['diagnosticOnly'] -and $ledger.diagnosticOnly -eq $true) -or
+        ($ledger.PSObject.Properties['evidenceVerified'] -and $ledger.evidenceVerified -ne $true)) {
+        throw 'A diagnostic-only ledger cannot be used as a certified regression baseline.'
     }
     return $ledger
 }
@@ -546,6 +568,9 @@ foreach ($shard in $missingExpectedShards) { $shardRows.Add($shard) }
 # artifact lets the consumer refuse it on its own evidence. #2086.
 $current | Add-Member -MemberType NoteProperty -Name missingExpectedShards `
     -Value @($missingExpectedShards | ForEach-Object { [string] $_.name }) -Force
+$current | Add-Member evidenceVerified $evidenceVerified -Force
+$current | Add-Member diagnosticOnly (-not $evidenceVerified) -Force
+$current | Add-Member baselinePublishable ($evidenceVerified -and $missingExpectedShards.Count -eq 0) -Force
 
 Write-JsonFile $current $ledgerPath
 $shardRows |
@@ -568,6 +593,10 @@ $currentCategories = @(Get-FailureCategories $currentFailures)
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add('# Test regression analysis')
 $lines.Add('')
+if (-not $evidenceVerified) {
+    $lines.Add('> DIAGNOSTIC ONLY: evidence is incomplete or untrusted; these observations cannot certify a baseline or regression verdict.')
+    $lines.Add('')
+}
 
 $baseline = $null
 if ($BaselineLedgerPath) { $baseline = Read-LedgerFile $BaselineLedgerPath }
@@ -585,11 +614,17 @@ if (($BaselineLedgerPath -or $BaselineResultsPath) -and
 # A baseline that was itself missing a dispatched shard has a hole in it. Comparing against it
 # would silently inherit that blind spot: the absent shard is in neither side, so its failures
 # can never be classified as new. Refuse it rather than launder the gap forward. #2086.
+$baselineIncompleteHoles = @()
 if ($baseline -and $baseline.PSObject.Properties['missingExpectedShards']) {
     $baselineHoles = @($baseline.missingExpectedShards | Where-Object { $_ })
     if ($baselineHoles.Count -gt 0) {
-        throw ("Resolved baseline '$BaselineSha' is incomplete: $($baselineHoles.Count) dispatched shard(s) " +
-            "uploaded no artifact ($($baselineHoles -join ', ')). Refusing to compare against a baseline with a hole in it.")
+        if (-not $AllowIncompleteBaseline -or $FailOnPolicy) {
+            throw ("Resolved baseline '$BaselineSha' is incomplete: $($baselineHoles.Count) dispatched shard(s) " +
+                "uploaded no artifact ($($baselineHoles -join ', ')). Refusing to compare against a baseline with a hole in it.")
+        }
+        $baselineIncompleteHoles = $baselineHoles
+        Write-Warning ("Resolved baseline '$BaselineSha' has $($baselineHoles.Count) missing shard(s) " +
+            "($($baselineHoles -join ', ')); generating advisory comparison report over its measured shards.")
     }
 }
 
@@ -604,8 +639,10 @@ if (-not $baseline) {
         counts = $currentStats
         failureCategories = $currentCategories
         missingExpectedShards = @($missingExpectedShards | ForEach-Object { $_.name })
-        baselinePublishable = $inventoryComplete
-        policyPassed = $inventoryComplete
+        baselinePublishable = $inventoryComplete -and $evidenceVerified
+        evidenceVerified = $evidenceVerified
+        diagnosticOnly = -not $evidenceVerified
+        policyPassed = $inventoryComplete -and $evidenceVerified
     }
     # The shard count must include shards that uploaded nothing. Reporting only the artifacts
     # that arrived is what made a run with a dead shard read as "115 shards, 115 passed".
@@ -797,7 +834,8 @@ if (-not $baseline) {
     $netImproved = $fixed.Count -ge $confirmedNew.Count
     $incompleteNotIncreased = $effectiveCurrentIncomplete.Count -le $baselineIncomplete.Count
     $allDispatchedShardsReported = $missingExpectedShards.Count -eq 0
-    $policyPassed = $netImproved -and $incompleteNotIncreased -and
+    $policyPassed = $evidenceVerified -and ($baselineIncompleteHoles.Count -eq 0) -and
+        $netImproved -and $incompleteNotIncreased -and
         $greenToRed.Count -eq 0 -and $touchedSurfaceClean -and $allDispatchedShardsReported
 
     $resolvedBaselineSha = [string] $baseline.sha
@@ -858,9 +896,20 @@ if (-not $baseline) {
         currentFailureCategories = $currentCategories
         touchedTokens = $touchedTokens
     }
+    $comparison | Add-Member evidenceVerified $evidenceVerified -Force
+    $comparison | Add-Member diagnosticOnly (-not $evidenceVerified) -Force
+    $comparison | Add-Member baselinePublishable ($evidenceVerified -and $missingExpectedShards.Count -eq 0) -Force
     Write-JsonFile $comparison $comparisonPath
 
-    $verdict = if ($policyPassed) { 'PASSED' } else { 'FAILED' }
+    $verdict = if (-not $evidenceVerified) {
+        'NOT CERTIFIED (diagnostic only)'
+    } elseif ($baselineIncompleteHoles.Count -gt 0) {
+        "ADVISORY (incomplete baseline: $($baselineIncompleteHoles.Count) missing baseline shard(s))"
+    } elseif ($policyPassed) {
+        'PASSED'
+    } else {
+        'FAILED'
+    }
     $lines.Add("## Policy $verdict")
     $lines.Add('')
     $lines.Add('| Metric | Baseline | Current | Delta |')
@@ -929,6 +978,7 @@ if ($missingExpectedShards.Count -gt 0) {
     exit 1
 }
 
+if ($FailOnPolicy -and -not $evidenceVerified) { exit 1 }
 if ($FailOnPolicy -and $baseline) {
     $result = Get-Content -LiteralPath $comparisonPath -Raw | ConvertFrom-Json
     if (-not $result.policyPassed) { exit 1 }

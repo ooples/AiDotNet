@@ -79,8 +79,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             // Phase 1: Coarse adaptation (high LR)
             double phase1LR = _algoOptions.InnerLearningRate * _algoOptions.Phase1LRMultiplier;
@@ -92,8 +91,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             }
 
             // Save Phase 1 result as anchor for Phase 2 regularization
-            var phase1Params = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) phase1Params[d] = adaptedParams[d];
+            var phase1Params = adaptedParams.Clone();
 
             // Phase 2: Fine adaptation (low LR + regularization toward Phase 1)
             double phase2LR = _algoOptions.InnerLearningRate * _algoOptions.Phase2LRMultiplier;
@@ -101,15 +99,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double gradVal = NumOps.ToDouble(grad[d]);
-                    double regGrad = _algoOptions.PhaseRegWeight
-                                   * (NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(phase1Params[d]));
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(phase2LR * (gradVal + regGrad)));
-                }
+                adaptedParams = Phase2Step(adaptedParams, grad, phase1Params, phase2LR);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -127,8 +117,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         int K = Math.Max(2, _algoOptions.AdaptationSteps); // JMP requires at least 2 steps for both phases
         int K1 = Math.Min(Math.Max((int)(K * _algoOptions.Phase1Fraction), 1), K - 1);
@@ -141,24 +130,27 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR, step == 0);
         }
 
-        var phase1Params = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) phase1Params[d] = adaptedParams[d];
+        var phase1Params = adaptedParams.Clone();
 
         double phase2LR = _algoOptions.InnerLearningRate * _algoOptions.Phase2LRMultiplier;
         for (int step = K1; step < K; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double regGrad = _algoOptions.PhaseRegWeight
-                               * (NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(phase1Params[d]));
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(phase2LR * (NumOps.ToDouble(grad[d]) + regGrad)));
-            }
+            adaptedParams = Phase2Step(adaptedParams, grad, phase1Params, phase2LR);
         }
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
+
+    /// <summary>
+    /// Phase-2 step: theta - lr * (g + lambda * (theta - theta_phase1)), pulling toward the phase-1 anchor.
+    /// </summary>
+    private Vector<T> Phase2Step(Vector<T> parameters, Vector<T> gradient, Vector<T> anchor, double learningRate)
+    {
+        var regularized = Engine.Add(gradient,
+            Engine.Multiply(Engine.Subtract(parameters, anchor), NumOps.FromDouble(_algoOptions.PhaseRegWeight)));
+        return Engine.Subtract(parameters, Engine.Multiply(regularized, NumOps.FromDouble(learningRate)));
     }
 }

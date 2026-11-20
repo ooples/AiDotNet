@@ -79,7 +79,7 @@ public partial class StyleTTS2<T>
     private Tensor<T> SmoothL1(Tensor<T> a, Tensor<T> b)
     {
         var abs = Engine.TensorAbs(Engine.TensorSubtract(a, Engine.Reshape(b, a._shape)));
-        var q = Engine.TensorMin(abs, NumOps.One);
+        var q = Engine.TensorClampMax(abs, NumOps.One);
         var loss = Engine.TensorMultiply(q, Engine.TensorSubtract(abs, Engine.TensorMultiplyScalar(q, NumOps.FromDouble(0.5))));
         return Engine.ReduceMean(loss, Enumerable.Range(0, loss.Rank).ToArray(), keepDims: false);
     }

@@ -100,32 +100,17 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// </remarks>
     /// <param name="policyLogits">Raw logits from the policy network, one per expert.</param>
     /// <returns>Routing weights (softmax probabilities) summing to 1.</returns>
-    public double[] ComputeRoutingWeights(T[] policyLogits)
+    public T[] ComputeRoutingWeights(T[] policyLogits)
     {
         Guard.NotNull(policyLogits);
         int k = Math.Min(policyLogits.Length, _numExperts);
-        var weights = new double[k];
-
-        double maxLogit = double.NegativeInfinity;
-        for (int i = 0; i < k; i++)
+        if (k == 0)
         {
-            double v = NumOps.ToDouble(policyLogits[i]);
-            if (v > maxLogit) maxLogit = v;
+            return [];
         }
 
-        double sumExp = 0;
-        for (int i = 0; i < k; i++)
-        {
-            weights[i] = Math.Exp(NumOps.ToDouble(policyLogits[i]) - maxLogit);
-            sumExp += weights[i];
-        }
-
-        for (int i = 0; i < k; i++)
-        {
-            weights[i] /= sumExp;
-        }
-
-        return weights;
+        // Numerically stable softmax over the first k logits.
+        return Engine.TensorSoftmax(Vector<T>.Wrap(policyLogits, 0, k).AsTensor(), 0).ToArray();
     }
 
     /// <summary>
@@ -134,7 +119,7 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// <param name="expertOutputs">Output from each expert module (K arrays of equal length).</param>
     /// <param name="routingWeights">Routing weights from ComputeRoutingWeights.</param>
     /// <returns>Weighted combination of expert outputs.</returns>
-    public T[] CombineExpertOutputs(T[][] expertOutputs, double[] routingWeights)
+    public T[] CombineExpertOutputs(T[][] expertOutputs, T[] routingWeights)
     {
         Guard.NotNull(expertOutputs);
         Guard.NotNull(routingWeights);
@@ -144,24 +129,13 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
         }
 
         int dim = expertOutputs[0].Length;
-        var combined = new T[dim];
-
-        // Explicitly initialize to zero for clarity (default(T) may not be zero for all T).
-        for (int i = 0; i < dim; i++)
-        {
-            combined[i] = NumOps.Zero;
-        }
-
+        var combined = new Vector<T>(dim);
         for (int k = 0; k < expertOutputs.Length && k < routingWeights.Length; k++)
         {
-            var wT = NumOps.FromDouble(routingWeights[k]);
-            for (int i = 0; i < dim; i++)
-            {
-                combined[i] = NumOps.Add(combined[i], NumOps.Multiply(expertOutputs[k][i], wT));
-            }
+            combined = Engine.Add(combined, Engine.Multiply(Vector<T>.Wrap(expertOutputs[k], 0, dim), routingWeights[k]));
         }
 
-        return combined;
+        return combined.ToArray();
     }
 
     /// <summary>

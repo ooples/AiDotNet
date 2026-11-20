@@ -75,7 +75,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _numClasses;
-    private readonly string _modelSize;
+    private readonly DiTModelSize _modelSize;
 
     // Native mode layers
     private readonly List<ILayer<T>> _patchEmbeddingLayers = [];
@@ -107,7 +107,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     /// <summary>
     /// Gets the model size variant (base/large).
     /// </summary>
-    public string ModelSize => _modelSize;
+    public DiTModelSize ModelSize => _modelSize;
 
     /// <inheritdoc/>
     public IReadOnlyList<LayoutElementType> SupportedElementTypes { get; } =
@@ -275,45 +275,34 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
 
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
         int numPatches = output.Shape[0];
+        if (numPatches == 0)
+            return new List<LayoutRegion<T>>();
 
-        // DiT uses patch-level predictions for layout
+        // DiT uses patch-level predictions for layout: a patch is a region when its best class is not the
+        // background (class 0), is positive and reaches the threshold.
         int patchesPerRow = ImageSize / _patchSize;
-        for (int i = 0; i < numPatches; i++)
+        int classCount = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
+        var (maxClass, maxConf) = DocumentTensorOps.RowMax(Engine, output, classCount);
+        var keep = Engine.TensorMultiply(
+            Engine.TensorMultiply(Engine.TensorGreaterThan(maxConf, NumOps.Zero),
+                DocumentTensorOps.AtLeast(Engine, maxConf, NumOps.FromDouble(threshold))),
+            Engine.TensorGreaterThan(DocumentTensorOps.IntTensor<T>(maxClass), NumOps.Zero));
+        int[] patches = DocumentTensorOps.Hits(Engine, keep);
+        T[] confidence = DocumentTensorOps.Pick(Engine, maxConf, patches);
+        T[] boxes = DocumentTensorOps.ToT<T>(patches.SelectMany(i => new[]
         {
-            double maxConf = 0;
-            int maxClass = 0;
-            int classCount = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
+            (i % patchesPerRow) * _patchSize, (i / patchesPerRow) * _patchSize,
+            ((i % patchesPerRow) + 1) * _patchSize, ((i / patchesPerRow) + 1) * _patchSize
+        }).ToArray());
 
-            for (int c = 0; c < classCount; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                int patchX = i % patchesPerRow;
-                int patchY = i / patchesPerRow;
-
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = new Vector<T>([
-                        NumOps.FromDouble(patchX * _patchSize),
-                        NumOps.FromDouble(patchY * _patchSize),
-                        NumOps.FromDouble((patchX + 1) * _patchSize),
-                        NumOps.FromDouble((patchY + 1) * _patchSize)
-                    ])
-                });
-            }
-        }
-
-        return regions;
+        return patches.Select((i, k) => new LayoutRegion<T>
+        {
+            ElementType = (LayoutElementType)Math.Min(maxClass[i], (int)LayoutElementType.Other),
+            Confidence = confidence[k],
+            Index = i,
+            BoundingBox = new Vector<T>(new[] { boxes[4 * k], boxes[(4 * k) + 1], boxes[(4 * k) + 2], boxes[(4 * k) + 3] })
+        }).ToList();
     }
 
     #endregion
@@ -336,31 +325,16 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
         // Get classification logits from CLS token
-        var predictions = new List<(string Category, double Confidence)>();
         int numClasses = Math.Min(output.Shape.Length > 1 ? output.Shape[1] : _numClasses, AvailableCategories.Count);
 
-        var scores = new List<(int Index, double Score)>();
-        for (int c = 0; c < numClasses; c++)
-        {
-            double score = NumOps.ToDouble(output[0, c]);
-            scores.Add((c, score));
-        }
-
         // Softmax and top-k
-        double maxScore = scores.Max(s => s.Score);
-        double sumExp = scores.Sum(s => Math.Exp(s.Score - maxScore));
-
-        foreach (var (idx, score) in scores.OrderByDescending(s => s.Score).Take(topK))
-        {
-            double prob = Math.Exp(score - maxScore) / sumExp;
-            predictions.Add((AvailableCategories[idx], prob));
-        }
+        var (order, probabilities) = DocumentTensorOps.RankedSoftmax(Engine, DocumentTensorOps.RowHead(Engine, output, 0, numClasses));
+        var predictions = order.Take(topK).Select((idx, k) => (Category: AvailableCategories[idx], Score: probabilities[k])).ToList();
 
         return new DocumentClassificationResult<T>
         {
             PredictedCategory = predictions.First().Category,
-            Confidence = NumOps.FromDouble(predictions.First().Confidence),
-            ConfidenceValue = predictions.First().Confidence,
+            Confidence = predictions.First().Score,
             TopPredictions = predictions,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -398,7 +372,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         sb.AppendLine("DiT Model Summary");
         sb.AppendLine("=================");
         sb.AppendLine($"Mode: {(_useNativeMode ? "Native (Trainable)" : "ONNX (Inference)")}");
-        sb.AppendLine($"Architecture: ViT-{_modelSize}");
+        sb.AppendLine($"Architecture: DiT-{_modelSize}");
         sb.AppendLine($"Hidden Dimension: {_hiddenDim}");
         sb.AppendLine($"Number of Layers: {_numLayers}");
         sb.AppendLine($"Attention Heads: {_numHeads}");
@@ -416,42 +390,15 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     #region Preprocessing
 
     /// <summary>
-    /// Applies DiT's industry-standard preprocessing: ImageNet normalization.
+    /// Applies DiT's preprocessing: BEiT's 0.5 / 0.5 normalization.
     /// </summary>
     /// <remarks>
-    /// DiT (Document Image Transformer) uses ImageNet normalization with
-    /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225] (Microsoft paper).
+    /// DiT (Li et al. 2022) is pretrained BEiT-style, and its released image processor normalizes every
+    /// channel with mean 0.5 and std 0.5 (mapping [0, 1] to [-1, 1]), not with ImageNet statistics.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.HalfStatistics, DocumentTensorOps.HalfStatistics);
 
     /// <summary>
     /// Applies DiT's industry-standard postprocessing: pass-through (classification outputs are already final).
@@ -479,7 +426,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
                 { "patch_size", _patchSize },
                 { "image_size", ImageSize },
                 { "num_classes", _numClasses },
-                { "model_size", _modelSize },
+                { "model_size", _modelSize.ToString() },
                 { "use_native_mode", _useNativeMode }
             },
             ModelDataProvider = () => SafeSerialize()

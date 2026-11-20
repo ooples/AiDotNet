@@ -68,16 +68,21 @@ public class SharpeRatioPortfolioObjective<T>
     /// </summary>
     public (T Mean, T Volatility) Moments(Vector<T> portfolioReturns)
     {
+        var (mean, volatility) = WideMoments(portfolioReturns);
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(volatility));
+    }
+
+    private static (double Mean, double Volatility) WideMoments(Vector<T> portfolioReturns)
+    {
         if (portfolioReturns == null) throw new ArgumentNullException(nameof(portfolioReturns));
         if (portfolioReturns.Length == 0)
             throw new ArgumentException("At least one return is required.", nameof(portfolioReturns));
-
-        var returns = Tensor<T>.FromVector(portfolioReturns);
-        T mean = Engine.TensorMean(returns);
+        var returns = Tensor<T>.FromVector(portfolioReturns).Cast<double>();
+        double mean = Engine.TensorMean(returns);
         var centred = Engine.TensorSubtractScalar(returns, mean);
         // The variance in double, so a Half sum of squares past 65504 does not make the volatility infinite.
         double variance = TensorReductionHelper.SumOfSquaresAsDouble(Engine, centred) / portfolioReturns.Length;
-        return (mean, NumOps.FromDouble(Math.Sqrt(variance)));
+        return (mean, Math.Sqrt(variance));
     }
 
     /// <summary>
@@ -89,8 +94,8 @@ public class SharpeRatioPortfolioObjective<T>
     /// </remarks>
     public T SharpeRatio(Vector<T> portfolioReturns)
     {
-        var (mean, volatility) = Moments(portfolioReturns);
-        return NumOps.LessThanOrEquals(volatility, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(mean, volatility);
+        var (mean, volatility) = WideMoments(portfolioReturns);
+        return volatility <= 0 ? NumOps.Zero : NumOps.FromDouble(mean / volatility);
     }
 
     /// <summary>
@@ -103,7 +108,7 @@ public class SharpeRatioPortfolioObjective<T>
     /// </remarks>
     public T Loss(Vector<T> portfolioReturns)
     {
-        var (mean, volatility) = Moments(portfolioReturns);
+        var (mean, volatility) = WideMoments(portfolioReturns);
 
         // A NON-POSITIVE mean is its own case, not a floored one. Flooring both terms with the same
         // constant destroyed the ordering this objective documents: a degenerate losing series with
@@ -115,18 +120,16 @@ public class SharpeRatioPortfolioObjective<T>
         // which is what "a losing portfolio scores worse than any profitable one" requires. Finite
         // rather than infinity so an optimizer can still compare two losing candidates by how far
         // under water they are.
-        if (NumOps.LessThanOrEquals(mean, NumOps.Zero))
+        if (mean <= 0)
         {
-            return NumOps.Subtract(NumOps.FromDouble(LosingPortfolioPenalty), mean);
+            return NumOps.FromDouble(LosingPortfolioPenalty - mean);
         }
 
         // Zero volatility would send ln(sigma) to -infinity. Floor it so a degenerate series cannot
         // produce a non-finite loss. Only reachable now for a PROFITABLE portfolio, where the mean
         // term is already bounded.
-        T floor = NumOps.FromDouble(MeanReturnFloor);
-        T safeVolatility = NumOps.GreaterThan(volatility, floor) ? volatility : floor;
-
-        return NumOps.Subtract(NumOps.Log(safeVolatility), NumOps.Log(mean));
+        double safeVolatility = Math.Max(volatility, MeanReturnFloor);
+        return NumOps.FromDouble(Math.Log(safeVolatility) - Math.Log(mean));
     }
 
 
@@ -151,8 +154,8 @@ public class SharpeRatioPortfolioObjective<T>
                 $"assetReturns has {assets} assets but weights has {weights.Length}.", nameof(assetReturns));
 
         // r_s = sum_a w_a * R[s, a]: the panel times the weight column.
-        var column = Engine.Reshape(Tensor<T>.FromVector(weights), new[] { assets, 1 });
-        return Engine.Reshape(Engine.TensorMatMul(assetReturns, column), new[] { steps }).ToVector();
+        var column = Engine.Reshape(Tensor<T>.FromVector(weights).Cast<double>(), new[] { assets, 1 });
+        return Engine.Reshape(Engine.TensorMatMul(assetReturns.Cast<double>(), column), new[] { steps }).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -181,17 +184,13 @@ public class SharpeRatioPortfolioObjective<T>
             throw new ArgumentException("At least one asset is required.", nameof(scores));
 
         // Negative (and NaN) scores clamp to exactly zero.
-        var raw = Tensor<T>.FromVector(scores);
+        var raw = Tensor<T>.FromVector(scores).Cast<double>();
         var clamped = Engine.TensorWhere(
-            Engine.TensorGreaterThan(raw, NumOps.Zero), raw, Engine.TensorZerosLike(raw));
-        T sum = Engine.TensorSum(clamped);
-
-        if (NumOps.LessThanOrEquals(sum, NumOps.Zero))
-        {
+            Engine.TensorGreaterThan(raw, 0.0), raw, Engine.TensorZerosLike(raw));
+        double sum = Engine.TensorSum(clamped);
+        if (sum <= 0)
             return Engine.Fill(scores.Length, NumOps.FromDouble(1.0 / scores.Length));
-        }
-
-        return Engine.TensorDivideScalar(clamped, sum).ToVector();
+        return Engine.TensorDivideScalar(clamped, sum).Cast<T>().ToVector();
     }
 
     /// <summary>

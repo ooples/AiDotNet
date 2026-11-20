@@ -26,7 +26,7 @@ public partial class DeterministicBanditEnvironment<T> : IEnvironment<T>
     private readonly int _actionSpaceSize;
     private readonly int _observationSpaceDimension;
     private readonly int _maxSteps;
-    private readonly T[] _armRewards;
+    private readonly Vector<T> _armRewards;
     private Random _random;
     private int _currentStep;
     [AiDotNet.Attributes.TrainableParameter]
@@ -62,13 +62,13 @@ public partial class DeterministicBanditEnvironment<T> : IEnvironment<T>
         _currentStep = 0;
 
         // Initialize deterministic rewards for each arm
-        _armRewards = new T[_actionSpaceSize];
-        for (int i = 0; i < _actionSpaceSize; i++)
-        {
-            // Arm i gives reward i / (actionSpaceSize - 1), so rewards range from 0 to 1
-            double reward = _actionSpaceSize > 1 ? (double)i / (_actionSpaceSize - 1) : 1.0;
-            _armRewards[i] = _numOps.FromDouble(reward);
-        }
+        // Arm i gives reward i / (actionSpaceSize - 1), so rewards range from 0 to 1
+        // (a single arm gives 1).
+        var engine = AiDotNetEngine.Current;
+        _armRewards = _actionSpaceSize > 1
+            ? engine.TensorDivideScalar(
+                engine.TensorArange<T>(0, _actionSpaceSize, 1), _numOps.FromDouble(_actionSpaceSize - 1)).ToVector()
+            : Vector<T>.CreateDefault(Math.Max(_actionSpaceSize, 0), _numOps.One);
 
         // Initialize current state
         _currentState = new Vector<T>(_observationSpaceDimension);
@@ -127,17 +127,7 @@ public partial class DeterministicBanditEnvironment<T> : IEnvironment<T>
             return (int)_numOps.ToDouble(action[0]);
         }
 
-        // One-hot encoded - find max
-        int maxIndex = 0;
-        T maxValue = action[0];
-        for (int i = 1; i < action.Length; i++)
-        {
-            if (_numOps.Compare(action[i], maxValue) > 0)
-            {
-                maxValue = action[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        // One-hot encoded - first arg-max
+        return RLTensorOps.ArgMax(action);
     }
 }

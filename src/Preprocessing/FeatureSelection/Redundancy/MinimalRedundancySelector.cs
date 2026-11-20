@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Redundancy;
 
@@ -24,13 +25,13 @@ public class MinimalRedundancySelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _mrmrScores;
+    private Vector<T>? _mrmrScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MRMRScores => _mrmrScores;
+    public Vector<T>? MRMRScores => _mrmrScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,111 +65,51 @@ public class MinimalRedundancySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Compute relevance (correlation with target) for each feature
-        var relevance = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-            relevance[j] = Math.Abs(ComputeCorrelation(col, y));
-        }
+        // Relevance |corr(feature, target)| and redundancy |corr(feature, feature)|
+        var relevance = engine.TensorAbs(engine.Reshape(
+            FeatureSelectionTensorOps.ColumnCorrelations(x, engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { p }));
+        var correlation = engine.TensorAbs(FeatureSelectionTensorOps.ColumnCorrelations(x, x));
 
-        // Compute feature-feature correlation matrix
-        var correlation = new double[p, p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            correlation[j1, j1] = 1;
-            for (int j2 = j1 + 1; j2 < p; j2++)
-            {
-                var col1 = new double[n];
-                var col2 = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    col1[i] = X[i, j1];
-                    col2[i] = X[i, j2];
-                }
-                double corr = Math.Abs(ComputeCorrelation(col1, col2));
-                correlation[j1, j2] = corr;
-                correlation[j2, j1] = corr;
-            }
-        }
-
-        // Greedy mRMR selection
+        // Greedy mRMR selection; ties go to the lowest feature index
         var selected = new List<int>();
-        var remaining = Enumerable.Range(0, p).ToHashSet();
-        _mrmrScores = new double[p];
-
+        var mrmrScores = new Tensor<T>(new[] { p });
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
-        // First feature: highest relevance
-        int firstFeature = Enumerable.Range(0, p).OrderByDescending(j => relevance[j]).First();
-        selected.Add(firstFeature);
-        remaining.Remove(firstFeature);
-        _mrmrScores[firstFeature] = relevance[firstFeature];
-
-        // Subsequent features: maximize relevance - redundancy
-        while (selected.Count < numToSelect && remaining.Count > 0)
+        if (p > 0)
         {
-            double bestScore = double.MinValue;
-            int bestFeature = -1;
+            // First feature: highest relevance
+            int firstFeature = PreprocessingTensorOps.StableOrder(relevance, descending: true)[0];
+            selected.Add(firstFeature);
+            var chosen = FeatureSelectionTensorOps.OneHot<T>(firstFeature, p);
+            mrmrScores = engine.TensorMultiply(chosen, relevance);
+            var remaining = PreprocessingTensorOps.OneMinus(chosen);
+            var redundancySum = engine.Reshape(engine.TensorSlice(correlation, new[] { 0, firstFeature }, new[] { p, 1 }), new[] { p });
 
-            foreach (int j in remaining)
+            // Subsequent features: maximize relevance - mean redundancy with the selected features
+            while (selected.Count < numToSelect)
             {
-                // Compute average redundancy with selected features
-                double redundancy = selected.Average(s => correlation[j, s]);
+                var score = engine.TensorSubtract(relevance, engine.TensorDivideScalar(redundancySum, FeatureSelectionTensorOps.Count<T>(selected.Count)));
+                var best = FeatureSelectionTensorOps.TopKWhere(score, remaining, 1);
+                if (best.Length == 0)
+                    break;
 
-                // mRMR score
-                double score = relevance[j] - redundancy;
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
+                int bestFeature = best[0];
                 selected.Add(bestFeature);
-                remaining.Remove(bestFeature);
-                _mrmrScores[bestFeature] = bestScore;
-            }
-            else
-            {
-                break;
+                chosen = FeatureSelectionTensorOps.OneHot<T>(bestFeature, p);
+                mrmrScores = engine.TensorAdd(mrmrScores, engine.TensorMultiply(chosen, score));
+                remaining = engine.TensorSubtract(remaining, chosen);
+                redundancySum = engine.TensorAdd(
+                    redundancySum, engine.Reshape(engine.TensorSlice(correlation, new[] { 0, bestFeature }, new[] { p, 1 }), new[] { p }));
             }
         }
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _mrmrScores = mrmrScores.ToVector();
+        _selectedIndices = selected.OrderBy(index => index).ToArray();
+
         IsFitted = true;
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            numerator += (x[i] - xMean) * (y[i] - yMean);
-            xSumSq += (x[i] - xMean) * (x[i] - xMean);
-            ySumSq += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
     /// <inheritdoc />
@@ -184,15 +125,7 @@ public class MinimalRedundancySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("MinimalRedundancySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

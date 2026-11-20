@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Incremental;
 
@@ -28,20 +29,20 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly double _decayFactor;
 
-    private double[]? _runningMeanX;
-    private double[]? _runningMeanY;
-    private double[]? _runningMeanXY;
-    private double[]? _runningMeanX2;
-    private double _runningMeanY2;
+    private Vector<T>? _runningMeanX;
+    private Vector<T>? _runningMeanY;
+    private Vector<T>? _runningMeanXY;
+    private Vector<T>? _runningMeanX2;
+    private T _runningMeanY2;
     private int _sampleCount;
-    private double[]? _correlationScores;
+    private Vector<T>? _correlationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double DecayFactor => _decayFactor;
-    public double[]? CorrelationScores => _correlationScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public int SampleCount => _sampleCount;
@@ -62,6 +63,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _nFeaturesToSelect = nFeaturesToSelect;
         _decayFactor = decayFactor;
         _sampleCount = 0;
+        _runningMeanY2 = NumOps.Zero;
     }
 
     /// <inheritdoc />
@@ -85,48 +87,57 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         // Initialize on first call
-        if (_runningMeanX is null)
+        if (_runningMeanX is null || _runningMeanY is null || _runningMeanXY is null || _runningMeanX2 is null)
         {
             _nInputFeatures = p;
-            _runningMeanX = new double[p];
-            _runningMeanY = new double[p];
-            _runningMeanXY = new double[p];
-            _runningMeanX2 = new double[p];
-            _runningMeanY2 = 0;
-            _correlationScores = new double[p];
+            _runningMeanX = new Vector<T>(p);
+            _runningMeanY = new Vector<T>(p);
+            _runningMeanXY = new Vector<T>(p);
+            _runningMeanX2 = new Vector<T>(p);
+            _runningMeanY2 = NumOps.Zero;
+            _correlationScores = new Vector<T>(p);
         }
 
-        // Update running statistics with exponential decay
-        // Local references to avoid null checks in tight loop
-        var runningMeanX = _runningMeanX;
-        var runningMeanY = _runningMeanY;
-        var runningMeanXY = _runningMeanXY;
-        var runningMeanX2 = _runningMeanX2;
-
-        if (runningMeanX is null || runningMeanY is null || runningMeanXY is null || runningMeanX2 is null)
-            throw new InvalidOperationException("Running statistics arrays not initialized.");
-
-        for (int i = 0; i < n; i++)
+        // Update running statistics with exponential decay. Sample i of the batch ends up weighted
+        // (1 - decay) * decay^(n-1-i), and the previous statistics by decay^n, exactly as the per-sample
+        // recurrence m = decay * m + (1 - decay) * value.
+        if (n > 0)
         {
-            double y = NumOps.ToDouble(target[i]);
-            _runningMeanY2 = _decayFactor * _runningMeanY2 + (1 - _decayFactor) * y * y;
+            T decay = NumOps.FromDouble(_decayFactor);
+            var age = new int[n];
+            for (int i = 0; i < n; i++)
+                age[i] = n - 1 - i;
+            var decayPowers = engine.TensorPower(
+                PreprocessingTensorOps.Filled(new[] { 1, n }, decay), new Tensor<int>(age, new[] { 1, n }).Cast<T>());
+            var weights = engine.TensorMultiplyScalar(decayPowers, NumOps.FromDouble(1 - _decayFactor)); // [1, n]
+            T carry = engine.TensorSum(engine.TensorPower(
+                PreprocessingTensorOps.Filled(new[] { 1 }, decay), PreprocessingTensorOps.Filled(new[] { 1 }, FeatureSelectionTensorOps.Count<T>(n))));
 
-            for (int j = 0; j < p; j++)
-            {
-                double x = NumOps.ToDouble(data[i, j]);
+            var X = Tensor<T>.FromMatrix(data);
+            var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+            var yBroadcast = engine.TensorBroadcastTo(y, new[] { n, p });
 
-                runningMeanX[j] = _decayFactor * runningMeanX[j] + (1 - _decayFactor) * x;
-                runningMeanY[j] = _decayFactor * runningMeanY[j] + (1 - _decayFactor) * y;
-                runningMeanXY[j] = _decayFactor * runningMeanXY[j] + (1 - _decayFactor) * x * y;
-                runningMeanX2[j] = _decayFactor * runningMeanX2[j] + (1 - _decayFactor) * x * x;
-            }
-
-            _sampleCount++;
+            _runningMeanX = Decay(_runningMeanX, carry, weights, X, p);
+            _runningMeanY = Decay(_runningMeanY, carry, weights, yBroadcast, p);
+            _runningMeanXY = Decay(_runningMeanXY, carry, weights, engine.TensorMultiply(X, yBroadcast), p);
+            _runningMeanX2 = Decay(_runningMeanX2, carry, weights, engine.TensorSquare(X), p);
+            _runningMeanY2 = NumOps.Add(NumOps.Multiply(carry, _runningMeanY2), engine.TensorSum(engine.TensorMatMul(weights, engine.TensorSquare(y))));
         }
+
+        _sampleCount += n;
 
         UpdateScores(p);
+    }
+
+    /// <summary>carry * previous + weights * values, per feature ([p]).</summary>
+    private Vector<T> Decay(Vector<T> previous, T carry, Tensor<T> weights, Tensor<T> values, int p)
+    {
+        var engine = Engine;
+        var decayed = engine.TensorMultiplyScalar(Tensor<T>.FromVector(previous), carry);
+        return engine.TensorAdd(decayed, engine.Reshape(engine.TensorMatMul(weights, values), new[] { p })).ToVector();
     }
 
     private void UpdateScores(int p)
@@ -136,24 +147,22 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             _correlationScores is null)
             return;
 
-        for (int j = 0; j < p; j++)
-        {
-            double varX = _runningMeanX2[j] - _runningMeanX[j] * _runningMeanX[j];
-            double varY = _runningMeanY2 - _runningMeanY[j] * _runningMeanY[j];
-            double covXY = _runningMeanXY[j] - _runningMeanX[j] * _runningMeanY[j];
+        var engine = Engine;
+        var meanX = Tensor<T>.FromVector(_runningMeanX);
+        var meanY = Tensor<T>.FromVector(_runningMeanY);
+        var varX = engine.TensorSubtract(Tensor<T>.FromVector(_runningMeanX2), engine.TensorSquare(meanX));
+        var varY = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, _runningMeanY2), engine.TensorSquare(meanY));
+        var covXY = engine.TensorSubtract(Tensor<T>.FromVector(_runningMeanXY), engine.TensorMultiply(meanX, meanY));
 
-            if (varX > 1e-10 && varY > 1e-10)
-                _correlationScores[j] = Math.Abs(covXY / Math.Sqrt(varX * varY));
-            else
-                _correlationScores[j] = 0;
-        }
+        T threshold = NumOps.FromDouble(1e-10);
+        var defined = engine.TensorMultiply(engine.TensorGreaterThan(varX, threshold), engine.TensorGreaterThan(varY, threshold));
+        var ones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        var safeVariance = engine.TensorWhere(defined, engine.TensorMultiply(varX, varY), ones);
+        var scores = engine.TensorWhere(defined, engine.TensorAbs(engine.TensorDivide(covXY, engine.TensorSqrt(safeVariance))), new Tensor<T>(new[] { p }));
+        _correlationScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _correlationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -164,7 +173,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _runningMeanY = null;
         _runningMeanXY = null;
         _runningMeanX2 = null;
-        _runningMeanY2 = 0;
+        _runningMeanY2 = NumOps.Zero;
         _sampleCount = 0;
         _correlationScores = null;
         _selectedIndices = null;
@@ -172,6 +181,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -184,15 +194,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("StreamingFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

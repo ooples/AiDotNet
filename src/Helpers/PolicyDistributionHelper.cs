@@ -47,31 +47,12 @@ public static class PolicyDistributionHelper<T>
     /// </remarks>
     public static Tensor<T> ComputeDiscreteLogProb(IEngine engine, Tensor<T> logits, int[] actionIndices)
     {
-        // log_softmax = logits - log(sum(exp(logits))) — numerically stable via log-sum-exp
-        var softmaxed = engine.Softmax(logits);
-        var safeSoftmax = engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
-        var logProbs = engine.TensorLog(safeSoftmax);
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (actionIndices is null) throw new ArgumentNullException(nameof(actionIndices));
 
-        // Gather log-prob at each action index via an engine-routed mask
-        // multiply + reduce. The previous implementation copied values via
-        // the indexer (`result[i] = logProbs[i * numActions + idx]`) which
-        // broke the gradient tape — the freshly-constructed `result`
-        // tensor has no producer node, so `tape.ComputeGradients` returns
-        // zero w.r.t. the policy network's parameters and the optimizer
-        // applies a no-op update. The same gradient-break-on-indexer-copy
-        // pattern is documented in feedback_tensor_reshape_gradient.md.
-        //
-        // The mask is a one-hot tensor of the same shape as `logProbs`
-        // ([batch, numActions]) with `mask[i, actionIndices[i]] = 1`.
-        // Multiply element-wise and reduce along the action axis to gather
-        // the selected log-prob per sample — all engine ops, all tape-tracked.
         int batchSize = actionIndices.Length;
         int numActions = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Length;
-        // Explicit bounds validation here gives a clear ArgumentException
-        // before the per-element mask write. The previous implementation
-        // failed late with a less actionable IndexOutOfRangeException at
-        // `maskData[i * numActions + actionIndices[i]]` when an index
-        // was out of range, and never caught a batch-size mismatch at all.
         int logitsBatch = logits.Shape.Length > 1 ? logits.Shape[0] : 1;
         if (batchSize != logitsBatch)
         {
@@ -79,6 +60,7 @@ public static class PolicyDistributionHelper<T>
                 $"actionIndices length ({batchSize}) must match logits batch size ({logitsBatch}).",
                 nameof(actionIndices));
         }
+
         var maskData = new T[batchSize * numActions];
         for (int i = 0; i < batchSize; i++)
         {
@@ -91,9 +73,29 @@ public static class PolicyDistributionHelper<T>
             }
             maskData[i * numActions + idx] = NumOps.One;
         }
+
+        var logits2D = logits.Shape.Length == 1 ? engine.Reshape(logits, [1, numActions]) : logits;
+        var logProbs = engine.TensorLogSoftmax(logits2D, axis: 1);
         var mask = new Tensor<T>(maskData, [batchSize, numActions]);
-        var masked = engine.TensorMultiply(logProbs, mask);
-        return engine.ReduceSum(masked, [1], keepDims: false);
+        return SelectDiscreteLogProbFromLogProbs(engine, logProbs, mask);
+    }
+
+    /// <summary>
+    /// Selects per-sample log-probabilities using a validated one-hot action mask without multiplying
+    /// unselected <c>-Infinity</c> lanes by zero (which produces IEEE-754 <c>NaN</c> in forward/backward).
+    /// </summary>
+    internal static Tensor<T> SelectDiscreteLogProbFromLogProbs(
+        IEngine engine,
+        Tensor<T> logProbs,
+        Tensor<T> oneHotActions)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (logProbs is null) throw new ArgumentNullException(nameof(logProbs));
+        if (oneHotActions is null) throw new ArgumentNullException(nameof(oneHotActions));
+
+        var zeros = engine.TensorZerosLike(logProbs);
+        var selected = engine.TensorWhere(oneHotActions, logProbs, zeros);
+        return engine.ReduceSum(selected, [1], keepDims: false);
     }
 
     /// <summary>
@@ -110,14 +112,33 @@ public static class PolicyDistributionHelper<T>
     /// We add entropy as a bonus to the loss to encourage the agent to keep exploring
     /// rather than getting stuck always choosing the same action.
     ///
-    /// Formula: H = -sum(p * log(p)) for each action probability p.
+    /// Formula: H = -sum(p * log(p)) for each action probability p, using the convention 0 * log(0) = 0.
     /// </remarks>
     public static Tensor<T> ComputeDiscreteEntropy(IEngine engine, Tensor<T> logits)
     {
-        var softmaxed = engine.Softmax(logits);
-        var safeSoftmax = engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
-        var logProbs = engine.TensorLog(safeSoftmax);
-        var pLogP = engine.TensorMultiply(softmaxed, logProbs);
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+
+        int actionAxis = logits.Shape.Length > 1 ? 1 : 0;
+        var logProbs = engine.TensorLogSoftmax(logits, axis: actionAxis);
+        return ComputeDiscreteEntropyFromLogProbs(engine, logProbs);
+    }
+
+    /// <summary>
+    /// Computes discrete entropy directly from log-softmax outputs while gating zero-probability lanes via
+    /// <see cref="IEngine.TensorWhere{T}(Tensor{T}, Tensor{T}, Tensor{T})"/> so masked or underflowed
+    /// <c>-Infinity</c> log-probabilities never evaluate <c>0 * (-Infinity) = NaN</c> in forward or backward.
+    /// </summary>
+    internal static Tensor<T> ComputeDiscreteEntropyFromLogProbs(IEngine engine, Tensor<T> logProbs)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (logProbs is null) throw new ArgumentNullException(nameof(logProbs));
+
+        var finiteMask = TensorFiniteness.FiniteMask(engine, logProbs);
+        var zeros = engine.TensorZerosLike(logProbs);
+        var safeLogProbs = engine.TensorWhere(finiteMask, logProbs, zeros);
+        var safeProbs = engine.TensorWhere(finiteMask, engine.TensorExp(safeLogProbs), zeros);
+        var pLogP = engine.TensorMultiply(safeProbs, safeLogProbs);
         var negPLogP = engine.TensorNegate(pLogP);
 
         // Sum over action dimension (axis 1) to get per-sample entropy
@@ -277,6 +298,59 @@ public static class PolicyDistributionHelper<T>
         // log(1) is 0, so an unscaled policy is unaffected and no float comparison is needed.
         return engine.TensorAddScalar(corrected, NumOps.FromDouble(-actionSize * Math.Log(scale)));
     }
+    /// <summary>
+    /// Computes per-sample action log-probabilities and distribution entropies for either a continuous
+    /// diagonal-Gaussian policy (<c>[batchSize, 2 * actionSize]</c> containing means followed by log-stds)
+    /// or a discrete categorical policy (<c>[batchSize, numActions]</c> logits).
+    /// </summary>
+    internal static (Tensor<T> LogProbs, Tensor<T> Entropy) ComputePolicyLogProbAndEntropy(
+        IEngine engine,
+        Tensor<T> policyOutput,
+        bool isContinuous,
+        int batchSize,
+        int actionSize,
+        Tensor<T>? continuousActions,
+        int[] discreteActionIndices)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (policyOutput is null) throw new ArgumentNullException(nameof(policyOutput));
+
+        if (isContinuous)
+        {
+            var means = engine.TensorSlice(policyOutput, [0, 0], [batchSize, actionSize]);
+            var logStds = engine.TensorSlice(policyOutput, [0, actionSize], [batchSize, actionSize]);
+            var actions = continuousActions ?? throw new InvalidOperationException("Continuous actions tensor is required for continuous policies.");
+            return (
+                ComputeGaussianLogProb(engine, means, logStds, actions),
+                ComputeGaussianEntropy(engine, logStds));
+        }
+
+        return (
+            ComputeDiscreteLogProb(engine, policyOutput, discreteActionIndices),
+            ComputeDiscreteEntropy(engine, policyOutput));
+    }
+
+    /// <summary>
+    /// Computes the negated entropy-regularized policy objective <c>-mean(surrogateObjective) - entropyCoefficient * mean(entropy)</c>
+    /// shared by advantage actor-critic (A2C, A3C) and proximal policy optimization (PPO).
+    /// </summary>
+    internal static Tensor<T> ComputeEntropyRegularizedPolicyLoss(
+        IEngine engine,
+        Tensor<T> surrogateObjective,
+        Tensor<T> entropy,
+        T entropyCoefficient)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (surrogateObjective is null) throw new ArgumentNullException(nameof(surrogateObjective));
+        if (entropy is null) throw new ArgumentNullException(nameof(entropy));
+
+        var objectiveAxes = Enumerable.Range(0, surrogateObjective.Shape.Length).ToArray();
+        var entropyAxes = Enumerable.Range(0, entropy.Shape.Length).ToArray();
+        var meanObjective = engine.ReduceMean(surrogateObjective, objectiveAxes, keepDims: false);
+        var meanEntropy = engine.ReduceMean(entropy, entropyAxes, keepDims: false);
+        return engine.TensorNegate(engine.TensorAdd(meanObjective, engine.TensorMultiplyScalar(meanEntropy, entropyCoefficient)));
+    }
+
     /// <summary>
     /// Rejects a scale that cannot describe a valid action range.
     /// </summary>

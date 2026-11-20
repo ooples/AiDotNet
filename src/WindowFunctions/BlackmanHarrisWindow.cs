@@ -27,16 +27,6 @@ namespace AiDotNet.WindowFunctions;
 public class BlackmanHarrisWindow<T> : IWindowFunction<T>
 {
     /// <summary>
-    /// The numeric operations provider for performing calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// This field stores an object that provides operations like addition, multiplication, and
-    /// trigonometric functions for the generic numeric type T. It's essential for implementing
-    /// the window function's mathematical formula across different numeric types.
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="BlackmanHarrisWindow{T}"/> class.
     /// </summary>
     /// <remarks>
@@ -46,7 +36,6 @@ public class BlackmanHarrisWindow<T> : IWindowFunction<T>
     /// </remarks>
     public BlackmanHarrisWindow()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -74,18 +63,8 @@ public class BlackmanHarrisWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        for (int n = 0; n < windowSize; n++)
-        {
-            T nT = _numOps.FromDouble(n);
-            T term1 = _numOps.Multiply(_numOps.FromDouble(0.35875), _numOps.One);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(0.48829), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term3 = _numOps.Multiply(_numOps.FromDouble(0.14128), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(4 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term4 = _numOps.Multiply(_numOps.FromDouble(0.01168), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(6 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            window[n] = _numOps.Subtract(_numOps.Add(_numOps.Subtract(term1, term2), term3), term4);
-        }
-
-        return window;
+        // Generalized cosine window (scipy.signal.windows.blackmanharris), built with engine ops.
+        return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.35875, 0.48829, 0.14128, 0.01168);
     }
 
     /// <summary>
