@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -62,9 +63,10 @@ public partial class MultiLatentAttentionLayer<T>
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (state is null) throw new ArgumentNullException(nameof(state));
         int b = state.BatchSize, d = _modelDimension, h = _numHeads, hd = _headDimension, l = _latentDimension;
-        bool rank3 = input.Shape.Length == 3;
-        if ((rank3 && (input.Shape[0] != b || input.Shape[1] != 1 || input.Shape[2] != d))
-            || (!rank3 && (input.Shape.Length != 2 || input.Shape[0] != b || input.Shape[1] != d)))
+        // One position per sequence: [B, 1, D] or [B, D].
+        bool onePositionRank3 = input.Shape.Length == 3 && input.Shape[1] == 1 && input.Shape[2] == d;
+        bool onePositionRank2 = input.Shape.Length == 2 && input.Shape[1] == d;
+        if (input.Shape[0] != b || !(onePositionRank3 || onePositionRank2))
             throw new ArgumentException(
                 $"Step expects one position per sequence, [{b}, 1, {d}] or [{b}, {d}]; got [{string.Join(",", input.Shape)}].", nameof(input));
         if (state.LatentDimension != l)
@@ -91,6 +93,17 @@ public partial class MultiLatentAttentionLayer<T>
         var gate = Engine.Swish(Engine.TensorAdd(Engine.TensorMatMul(x, _outputGateWeights), Engine.Reshape(_outputGateBias, new[] { 1, d })));
         var projected = Engine.TensorAdd(Engine.TensorMatMul(Engine.TensorMultiply(attn, gate), _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, d }));
-        return Engine.Reshape(ApplyActivation(projected), input._shape);
+        return Engine.Reshape(StepActivation(projected), input._shape);
+    }
+
+    // A step is never followed by the eager backward that drains the layer's pre-activation cache, and a new layer is in
+    // training mode by default, so a decode loop would keep one projected tensor per token for the layer's life.
+    // Outside a tape the activation therefore runs in a no-grad scope, which does not retain it. Under a tape nothing
+    // is retained either way, and the step stays differentiable.
+    private Tensor<T> StepActivation(Tensor<T> projected)
+    {
+        if (GradientTape<T>.Current is not null) return ApplyActivation(projected);
+        using var noGrad = new NoGradScope<T>();
+        return ApplyActivation(projected);
     }
 }
