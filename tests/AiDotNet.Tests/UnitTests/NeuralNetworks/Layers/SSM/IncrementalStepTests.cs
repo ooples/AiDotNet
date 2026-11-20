@@ -103,6 +103,18 @@ public class IncrementalStepTests
     }
 
     [Fact]
+    public void MultiLatentAttention_Step_RefusesToAppendPastTheCacheCapacity()
+    {
+        var layer = new MultiLatentAttentionLayer<double>(SeqLen, ModelDim, Heads, latentDimension: 8);
+        layer.SetTrainingMode(false);
+        var state = layer.CreateStepState(Batch, capacity: 3);
+        var x = RandomInput(3);
+        for (int t = 0; t < 3; t++) layer.Step(Position(x, t), state);
+        Assert.Equal(3, state.Position);
+        Assert.Throws<InvalidOperationException>(() => layer.Step(Position(x, 3), state));
+    }
+
+    [Fact]
     public void Step_RejectsMoreThanOnePosition()
     {
         var gdn = new GatedDeltaNetLayer<double>(SeqLen, ModelDim, Heads);
