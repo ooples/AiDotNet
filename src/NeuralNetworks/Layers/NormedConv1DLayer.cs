@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -320,50 +321,44 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         {
             var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
                 NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
-            var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
+            // [rows, 1] broadcast over each row. A tiled [rows, per] scale gave the same forward, but the tile's backward
+            // is a scalar loop over every kernel element, and it took over half of a HiFi-GAN V1 training step.
+            var scale = Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms);
             return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
         }
 
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
         // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
         // stored u and v unchanged.
-        double[] uVec = new double[rows], vVec = new double[per];
-        for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
+        // The power iteration runs as engine ops on the stored vectors, off the tape: reading the kernel back to the
+        // host element by element (and tiling 1/σ over it) took a fifth of a HiFi-GAN V1 training step.
+        var uRow = Engine.Reshape(_u, new[] { 1, rows });
+        var vColumn = Engine.Reshape(_v, new[] { per, 1 });
         if (IsTrainingMode)
         {
-            var vHost = v.ToVector();
-            void Normalize(double[] a)
+            using (new NoGradScope<T>())
             {
-                double n = Math.Sqrt(a.Sum(x => x * x));
-                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+                var nextV = UnitLength(Engine.TensorMatMul(uRow, v));                                        // [1, per]
+                var nextU = UnitLength(Engine.TensorMatMul(v, Engine.Reshape(nextV, new[] { per, 1 })));    // [rows, 1]
+                nextU.AsSpan().CopyTo(_u.AsWritableSpan());
+                nextV.AsSpan().CopyTo(_v.AsWritableSpan());
             }
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
-            for (int r = 0; r < rows; r++)
-            {
-                double s = 0;
-                for (int c = 0; c < per; c++) s += NumOps.ToDouble(vHost[r * per + c]) * vVec[c];
-                uVec[r] = s;
-            }
-            Normalize(uVec);
-            for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
-            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
             Engine.InvalidatePersistentTensor(_u);
             Engine.InvalidatePersistentTensor(_v);
+            // Copies, so the next step's in-place update cannot change what this step's tape saved for sigma.
+            uRow = Engine.Reshape(_u.Clone(), new[] { 1, rows });
+            vColumn = Engine.Reshape(_v.Clone(), new[] { per, 1 });
         }
-        var uT = new Tensor<T>(new[] { 1, rows });
-        var vT = new Tensor<T>(new[] { per, 1 });
-        for (int r = 0; r < rows; r++) uT[0, r] = NumOps.FromDouble(uVec[r]);
-        for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
-        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
-        var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
-        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uRow, v), vColumn);                             // [1, 1]
+        return InvalidateComputedKernelCaches(Engine.Reshape(
+            Engine.TensorMultiply(v, Engine.TensorPow(sigma, NumOps.FromDouble(-1))), _direction._shape));
+    }
+
+    // x / max(‖x‖, 1e-12), as torch.nn.functional.normalize does in spectral_norm's power iteration.
+    private Tensor<T> UnitLength(Tensor<T> x)
+    {
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), null));
+        return Engine.TensorMultiply(x, Engine.TensorReciprocal(Engine.TensorMax(norm, NumOps.FromDouble(1e-12))));
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)
@@ -412,8 +407,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         int outTime = y.Shape[3];
         if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
-        var bias = Engine.TensorTile(Engine.Reshape(_bias, new[] { 1, _out, 1, 1 }), new[] { batch, 1, 1, outTime });
-        return Engine.Reshape(Engine.TensorAdd(y, bias), new[] { batch, _out, outTime });
+        // The [1, out, 1, 1] bias broadcasts over batch and time. Tiling it first materialized a full-size copy whose
+        // backward is a scalar loop over every output element.
+        return Engine.Reshape(Engine.TensorAdd(y, Engine.Reshape(_bias, new[] { 1, _out, 1, 1 })), new[] { batch, _out, outTime });
     }
 
     /// <summary>
