@@ -13493,11 +13493,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(true);
+        AiDotNet.Tensors.Helpers.TensorArena? stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
         try
         {
             var objectives = DefineTrainingObjectives(input, target);
             if (objectives is null)
             {
+                stepArena.Dispose();
+                stepArena = null;
                 if (_applyingLearningRule) return false;
                 _applyingLearningRule = true;
                 try
@@ -13529,6 +13532,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         finally
         {
+            stepArena?.Dispose();
             SetTrainingMode(wasTraining);
         }
     }

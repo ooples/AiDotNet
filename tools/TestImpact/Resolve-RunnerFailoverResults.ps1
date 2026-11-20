@@ -20,9 +20,9 @@ $source = Invoke-FailoverApi "repos/$Repository/actions/artifacts/$SourceArtifac
 Assert-FailoverSourceArtifact $source $SourceArtifactId $SourceArtifactDigest $TestedSha $RunId
 $jobs = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/attempts/$RunAttempt/jobs" -Paginate)
 $artifacts = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/artifacts" -Paginate)
-[object[]]$runners = if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
-    @(Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken)
-} else { @() }
+$runners = @(if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
+    Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken
+})
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $downloadRoot = Join-Path $env:RUNNER_TEMP "shard-reconciliation-$RunId-$RunAttempt"
 New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
@@ -61,7 +61,7 @@ foreach ($physical in $matrix) {
             [string]$entries[0].primaryJob.id -cne [string]$primary.id) { throw 'Plan does not identify the immutable original shard/job.' }
         $alternateJobs = @($jobs | Where-Object { $_.name -ceq "Alternate attempt ($($physical.framework)) - $($physical.name)" })
         if ($alternateJobs.Count -gt 1) { throw 'More than one alternate attempt exists.' }
-        $annotations = if ($primary.conclusion -eq 'failure') { @(Get-FailoverAnnotations $primary $Repository ([string]$run.head_sha)) } else { @() }
+        $annotations = @(if ($primary.conclusion -eq 'failure') { Get-FailoverAnnotations $primary $Repository ([string]$run.head_sha) })
         $attempt = 'primary'; $alternate = $null
         if (-not (Test-FailoverSuccessfulJob $primary)) {
             if (-not (Test-FailoverInfrastructureFailure $primary $annotations)) { throw 'Primary test/compiler/unknown failure cannot be recovered.' }

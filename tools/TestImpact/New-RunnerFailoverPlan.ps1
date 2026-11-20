@@ -20,9 +20,9 @@ if ([string]$run.run_attempt -cne $RunAttempt -or $run.conclusion -eq 'cancelled
 $source = Invoke-FailoverApi "repos/$Repository/actions/artifacts/$SourceArtifactId"
 Assert-FailoverSourceArtifact $source $SourceArtifactId $SourceArtifactDigest $TestedSha $RunId
 $jobs = @(Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId/attempts/$RunAttempt/jobs" -Paginate)
-$runners = if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
-    @(Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken)
-} else { @() }
+$runners = @(if ($TrustedSameRepository -and $SelfHostedRunnerToken) {
+    Invoke-FailoverApi "repos/$Repository/actions/runners" -Paginate -Token $SelfHostedRunnerToken
+})
 $alternate = [Collections.Generic.List[object]]::new()
 $attempts = [Collections.Generic.List[object]]::new()
 $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -32,7 +32,7 @@ foreach ($shard in $matrix) {
     $matches = @($jobs | Where-Object { $_.name -ceq $name })
     if ($matches.Count -ne 1 -or $matches[0].status -ne 'completed') { throw "Missing, duplicate or unfinished primary job '$name'." }
     $job = $matches[0]
-    $annotations = if ($job.conclusion -eq 'failure') { @(Get-FailoverAnnotations $job $Repository ([string]$run.head_sha)) } else { @() }
+    $annotations = @(if ($job.conclusion -eq 'failure') { Get-FailoverAnnotations $job $Repository ([string]$run.head_sha) })
     $entry = [ordered]@{ shard = $shard; primaryJob = $job; annotations = $annotations; recoveryAuthorized = $false; reason = 'Primary must independently prove success.' }
     if (Test-FailoverInfrastructureFailure $job $annotations) {
         try {

@@ -144,13 +144,13 @@ function Invoke-FailoverApi {
         $uri = "https://api.github.com/$Path${separator}per_page=50&page=$page"
         $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri $uri
         if (-not $Paginate) { return $response }
-        $property = if ($null -ne $response) {
+        $property = if ($null -ne $response -and $response -isnot [System.Collections.IList]) {
             @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
         } else { $null }
-        [object[]]$batch = if ($property) { @($response.$property) } elseif ($null -eq $response) { @() } else { @($response) }
+        $batch = @(if ($property) { $response.$property } elseif ($null -ne $response) { $response })
         $items += $batch; $page++
     } while ($batch.Count -eq 50)
-    return $items
+    return ,$items
 }
 
 function Assert-FailoverSourceArtifact {
@@ -289,7 +289,7 @@ function Get-FailoverExpectedCoverage {
 }
 
 function New-FailoverAlternateShard {
-    param($Shard, $Job, [object[]] $Runners, [bool] $TrustedSameRepository, [bool] $AlreadyRetried = $false)
+    param($Shard, $Job, [AllowEmptyCollection()] [object[]] $Runners = @(), [bool] $TrustedSameRepository, [bool] $AlreadyRetried = $false)
     if ($AlreadyRetried -or (Get-FailoverProperty $Shard 'failoverAttempt' '') -or
         (Get-FailoverProperty $Shard 'failoverOriginalJobId' '')) { throw 'Only one alternate attempt is permitted.' }
     $pool = Get-FailoverJobPool $Job $Runners
@@ -329,7 +329,7 @@ function Assert-FailoverLogicalInventory {
 }
 
 function Assert-FailoverPublishedProof {
-    param($Proof, $Certificate, [object[]] $Artifacts)
+    param($Proof, $Certificate, [AllowEmptyCollection()] [object[]] $Artifacts = @())
     if ($Certificate.schemaVersion -ne 4 -or $Proof.schemaVersion -ne 1 -or $Proof.complete -isnot [bool] -or -not $Proof.complete -or
         @($Proof.errors).Count -ne 0 -or [string]$Proof.testedSha -cne [string]$Certificate.testedSha -or
         [string]$Proof.runId -cne [string]$Certificate.runId -or
