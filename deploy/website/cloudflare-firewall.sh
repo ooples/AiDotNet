@@ -28,7 +28,8 @@ ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null
 
 # Add the current ranges (ufw skips ones already present), then drop only ranges Cloudflare no
-# longer publishes. Port 443 is never closed in between.
+# longer publishes. Port 443 is never closed in between. The range is taken from each status row by
+# pattern, not by column: an IPv6 row can carry a "(v6)" token that shifts the columns.
 while read -r cidr; do
   ufw allow proto tcp from "$cidr" to any port 443 comment "$comment" >/dev/null
 done < <(grep -E '^[0-9a-f:.]+/[0-9]+$' "$ranges")
@@ -36,7 +37,9 @@ while read -r cidr; do
   if ! grep -qxF "$cidr" "$ranges"; then
     ufw delete allow proto tcp from "$cidr" to any port 443 >/dev/null
   fi
-done < <(ufw status | grep "# $comment" | awk '{print $3}' | sort -u)
+done < <(ufw status \
+  | sed -nE "s~^.*[[:space:]]ALLOW( IN)?[[:space:]]+([0-9a-fA-F:.]+/[0-9]+)[[:space:]]+# ${comment}[[:space:]]*\$~\2~p" \
+  | sort -u)
 
 ufw --force enable >/dev/null
 echo "Port 443 admits $count Cloudflare ranges; SSH stays open on $ssh_port."
