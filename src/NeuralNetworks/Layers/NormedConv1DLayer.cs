@@ -484,13 +484,13 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             BindInputContract(input.Shape.ToArray()).Validate(input);
         Tensor<T>? computedKernel = null;
         if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CONV_BIAS_RESIDUAL") == "1"
-            && !_transposed && _groups == 1 && _useBias && input.Rank == 3 && input.Shape[1] == _in
+            && FusedConvResidual is { } convResidual && !_transposed && _groups == 1 && _useBias && input.Rank == 3 && input.Shape[1] == _in
             && residual.Rank == 3 && residual.Shape[0] == input.Shape[0] && residual.Shape[1] == _out)
         {
             computedKernel = Kernel();
             var input4 = Engine.Reshape(input, new[] { input.Shape[0], _in, 1, input.Shape[2] });
             var residual4 = Engine.Reshape(residual, new[] { residual.Shape[0], _out, 1, residual.Shape[2] });
-            if (((DirectGpuTensorEngine)Engine).TryConvBiasResidualInference(input4, computedKernel, _bias, residual4,
+            if (convResidual((DirectGpuTensorEngine)Engine, input4, computedKernel, _bias, residual4,
                 1, _stride, 0, _padding, 1, _dilation, alpha, writeActivation, out var fusedSum, out var fusedActivated))
             {
                 activated = fusedActivated is not null
@@ -500,11 +500,11 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         var y = ForwardConvolution(input, computedKernel);
         int batch = y.Shape[0], outTime = y.Shape[3];
-        if (_useBias && residual.Rank == 3 && residual.Shape[0] == batch
+        if (FusedBiasResidual is { } biasResidual && _useBias && residual.Rank == 3 && residual.Shape[0] == batch
             && residual.Shape[1] == _out && residual.Shape[2] == outTime)
         {
             var residual4 = Engine.Reshape(residual, new[] { batch, _out, 1, outTime });
-            if (((DirectGpuTensorEngine)Engine).TryChannelBiasResidualInference(y, _bias, residual4, alpha,
+            if (biasResidual((DirectGpuTensorEngine)Engine, y, _bias, residual4, alpha,
                 writeActivation, out var sum4, out var activated4))
             {
                 activated = activated4 is not null ? Engine.Reshape(activated4, new[] { batch, _out, outTime }) : null;
@@ -544,8 +544,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            y = GroupedConvolution.Forward(Engine, x4, kernel,
-                new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation }, _groups);
+            y = GroupedConvolutionForward(x4, kernel);
         }
         return y;
     }
@@ -554,7 +553,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     {
         var y = ForwardConvolution(input);
         int batch = y.Shape[0], outTime = y.Shape[3];
-        if (leakyAfterBias && _useBias && ((DirectGpuTensorEngine)Engine).TryChannelBiasLeakyInference(y, _bias, alpha, out var activated))
+        if (leakyAfterBias && _useBias && FusedBiasLeaky is { } biasLeaky
+            && biasLeaky((DirectGpuTensorEngine)Engine, y, _bias, alpha, out var activated))
             return Engine.Reshape(activated, new[] { batch, _out, outTime });
         // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.
         var biased = _useBias ? Engine.TensorChannelBiasAdd(y, _bias) : y;

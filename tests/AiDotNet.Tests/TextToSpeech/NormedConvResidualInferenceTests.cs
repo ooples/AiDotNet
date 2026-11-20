@@ -149,7 +149,10 @@ public sealed class NormedConvResidualInferenceTests
                 float[]? expectedActivation = ordinaryActivation?.ToArray();
                 before = GpuLaunchProbe.Count;
                 var sum = layer.ForwardResidualInference(input, residual, .1f, writeActivation, out var activated);
-                Assert.Equal(ordinaryLaunches - (writeActivation ? 2 : 1), GpuLaunchProbe.Count - before);
+                bool hasFused = typeof(DirectGpuTensorEngine).GetMethod("TryChannelBiasResidualInference",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) is not null;
+                long expectedLaunches = hasFused ? ordinaryLaunches - (writeActivation ? 2 : 1) : ordinaryLaunches;
+                Assert.Equal(expectedLaunches, GpuLaunchProbe.Count - before);
                 if (activated is not null) Assert.False(sum.SharesStorageWith(activated));
                 unread.Add((sum, activated, expected, expectedActivation));
                 using (GraphCaptureCompatibility.Enter())
