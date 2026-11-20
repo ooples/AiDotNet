@@ -13,7 +13,10 @@ permissions:
 jobs:
   opencl-foundations:
     if: ${{ github.event.pull_request.draft != true }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is moving to 26.04, whose POCL 6.0 (LLVM 18.1.8) aborts the test host while
+    # compiling the recurrent kernels ("LLVM ERROR: Instruction Combining did not reach a fixpoint").
+    # 24.04 ships POCL 5.0, which compiles them. The job passed or failed by which image it drew.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
