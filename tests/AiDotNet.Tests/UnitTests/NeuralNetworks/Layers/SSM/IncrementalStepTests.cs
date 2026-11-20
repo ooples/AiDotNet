@@ -66,6 +66,15 @@ public class IncrementalStepTests
     }
 
     [Fact]
+    public void GatedDeltaNet_Step_WithKernelSizeOne_MatchesForwardAtEveryPosition()
+    {
+        var layer = new GatedDeltaNetLayer<double>(SeqLen, ModelDim, Heads, convKernelSize: 1);
+        var state = layer.CreateStepState(Batch);
+        double err = MaxStepError(layer, x => layer.Step(x, state), () => state = layer.CreateStepState(Batch), resetEveryStep: false);
+        Assert.True(err < 1e-10, $"step vs forward relative error {err:G4}");
+    }
+
+    [Fact]
     public void GatedDeltaNet_Step_WithoutCarriedState_DiffersFromForward()
     {
         var layer = new GatedDeltaNetLayer<double>(SeqLen, ModelDim, Heads, convKernelSize: 4);
