@@ -18,7 +18,7 @@ def _float_tensors(path: Path):
         raise ValueError("Truncated safetensors header.")
     header = json.loads(raw[8:end])
     tensors, ranges = {}, []
-    for name, field in header.items():
+    for name, field in _object(header, "The safetensors header").items():
         if name == "__metadata__":
             continue
         shape = field["shape"]
@@ -217,14 +217,22 @@ def _check_consumption(run, record, side, mode, *, pid=None):
     return initial
 
 
+def _object(value, what):
+    """Decoded evidence must be a JSON object; anything else is invalid evidence, not a crash."""
+    if not isinstance(value, dict):
+        raise ValueError(what + " is not a JSON object.")
+    return value
+
+
 def lstm_workload_gate(run):
     from measurement_contracts import raw_file
 
     try:
         path = raw_file(run, "lstm_workload")
-        _check_consumption(run, json.loads(path.read_text(encoding="utf-8-sig")), run["side"], "timing", pid=run["pid"])
+        record = _object(json.loads(path.read_text(encoding="utf-8-sig")), "The LSTM workload receipt")
+        _check_consumption(run, record, run["side"], "timing", pid=run["pid"])
         return {"status": "pass"}
-    except (KeyError, TypeError, ValueError, OSError, ImportError, struct.error) as error:
+    except (KeyError, TypeError, ValueError, AttributeError, OSError, ImportError, struct.error) as error:
         return {"status": "unverified", "reason": str(error)}
 
 
@@ -234,15 +242,20 @@ def lstm_correctness_gate(run):
         path = Path(link["path"])
         if _hash(path) != link["sha256"]:
             raise ValueError("LSTM numerical comparison binding changed.")
-        match = json.loads(path.read_text(encoding="utf-8-sig"))
+        match = _object(json.loads(path.read_text(encoding="utf-8-sig")), "The LSTM comparison binding")
         if match.get("schema") != "lstm-classification-comparison-v1":
             raise ValueError("Expected a paired LSTM numerical comparison binding.")
         observations = {}
         for side in ("aidotnet", "pytorch"):
             side_path = _bound_file(path.parent, match[side], nested=True)
-            proof = json.loads(side_path.read_text(encoding="utf-8-sig"))
-            workload = json.loads(_bound_file(side_path.parent, proof["workload"]).read_text(encoding="utf-8-sig"))
+            proof = _object(json.loads(side_path.read_text(encoding="utf-8-sig")), "The LSTM numerical receipt")
+            workload = _object(json.loads(_bound_file(side_path.parent, proof["workload"]).read_text(encoding="utf-8-sig")),
+                               "The LSTM workload receipt")
             initial = _check_consumption(run, workload, side, "numeric")
+            # One numerical process writes both receipts. Observations from one run paired with the workload
+            # receipt of another would pass every other metadata check. The separate timing run has its own PID.
+            if type(proof.get("pid")) is not int or proof["pid"] != workload.get("pid"):
+                raise ValueError("The LSTM numerical receipt and its workload receipt name different processes.")
             if (proof.get("schema") != "lstm-classification-numerical-v1" or proof.get("model") != "lstm"
                     or proof.get("completed_updates") != 3 or proof.get("gradient_definition") != "post_global_norm_clip_1"
                     or any(proof.get(key) != workload[key] for key in ("framework", "device", "fixture_manifest_sha256",
@@ -250,7 +263,7 @@ def lstm_correctness_gate(run):
                 raise ValueError("LSTM numerical receipt does not describe the matched optimizer updates.")
             observations[side] = _bound_file(side_path.parent, proof["observations"])
         return compare_lstm_trajectory(observations["aidotnet"], observations["pytorch"], initial)
-    except (KeyError, TypeError, ValueError, OSError, ImportError, struct.error) as error:
+    except (KeyError, TypeError, ValueError, AttributeError, OSError, ImportError, struct.error) as error:
         return {"status": "unverified", "reason": str(error)}
 
 

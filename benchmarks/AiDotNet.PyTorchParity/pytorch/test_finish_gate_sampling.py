@@ -36,5 +36,23 @@ class SamplingTests(unittest.TestCase):
         self.assertFalse(finish_gate.crosses_phase_boundary({"unix_ms": 260}, [100, 200]))
 
 
+class MalformedEvidenceTests(unittest.TestCase):
+    def test_a_json_array_as_lstm_evidence_is_unverified_not_an_exception(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+
+        import lstm_equivalence
+        with tempfile.TemporaryDirectory(prefix="parity-evidence-") as temp:
+            binding = Path(temp) / "comparison.json"
+            binding.write_text("[]", encoding="utf-8")
+            run = {"correctness_receipt": {"path": str(binding), "sha256": hashlib.sha256(b"[]").hexdigest()}}
+            result = lstm_equivalence.lstm_correctness_gate(run)
+            self.assertEqual(result["status"], "unverified")
+            self.assertIn("not a JSON object", result["reason"])
+        self.assertRaisesRegex(ValueError, "not a JSON object", lstm_equivalence._object, [], "Evidence")
+        self.assertEqual(lstm_equivalence._object({"a": 1}, "Evidence"), {"a": 1})
+
+
 if __name__ == "__main__":
     unittest.main()
