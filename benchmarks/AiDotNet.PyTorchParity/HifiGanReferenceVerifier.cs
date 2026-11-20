@@ -149,8 +149,16 @@ internal static class HifiGanReferenceVerifier
         Tolerance tolerance, GradientTotals? total = null, ComparisonKind kind = ComparisonKind.Standard)
     {
         // The engine represents reductions as rank-zero tensors; the reference serializes each scalar as [1].
-        int[] shape = actual.Length == 1 && source.ShapeOf(key)?.Aggregate(1L, (a, b) => a * b) == 1
-            ? Array.Empty<int>() : actual.Shape.ToArray();
+        // Only a stored [1] is that scalar form: the reader does not check axes for an empty requested shape, so any
+        // other one-element shape that differs from the actual tensor's is rejected here.
+        int[] shape = actual.Shape.ToArray();
+        if (actual.Length == 1 && source.ShapeOf(key) is { } stored
+            && !stored.Select(d => (long)d).SequenceEqual(shape.Select(d => (long)d)))
+        {
+            if (stored.Length != 1 || stored[0] != 1)
+                throw new InvalidDataException($"Scalar reference '{key}' must be stored as [1], not [{string.Join(", ", stored)}].");
+            shape = Array.Empty<int>();
+        }
         var expected = source.Read(key, shape);
         return Compare(name, actual.ToArray(), expected, tolerance, total, kind);
     }
@@ -248,7 +256,13 @@ internal static class HifiGanReferenceVerifier
     {
         var checks = new List<Check>();
         var errors = new List<string>();
-        var manifest = JObject.Parse(File.ReadAllText(Path.Combine(directory, "manifest.json")));
+        // One snapshot supplies both the protocol and the receipt's hash, so the receipt cannot name a manifest that
+        // replaced this one while the verification ran.
+        byte[] manifestBytes = File.ReadAllBytes(Path.Combine(directory, "manifest.json"));
+        string manifestSha256 = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
+        JObject manifest;
+        using (var manifestReader = new StreamReader(new MemoryStream(manifestBytes)))
+            manifest = JObject.Parse(manifestReader.ReadToEnd());
         string device = AiDotNetEngine.Current.SupportsGpu ? "cuda" : "cpu";
         var tolerance = device == "cuda" ? new Tolerance(2e-4, 3e-3, .03, .995)
             : new Tolerance(2e-5, 1e-3, .01, .999);
@@ -367,7 +381,7 @@ internal static class HifiGanReferenceVerifier
         var receipt = new
         {
             schema = "hifigan-v1-equivalence-receipt-v1", model = "hifigan-v1", device, pass,
-            reference_manifest_sha256 = Hash(Path.Combine(directory, "manifest.json")),
+            reference_manifest_sha256 = manifestSha256,
             engine = AiDotNetEngine.Current.Name, tolerance, fused_steps = fused, eager_steps = eager,
             comparison_policy = new
             {

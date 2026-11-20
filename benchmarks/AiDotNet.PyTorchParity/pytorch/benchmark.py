@@ -1444,10 +1444,11 @@ class PannsCnn14(nn.Module):
 
     @staticmethod
     def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-        """Standard-normal log-mel features and multi-hot labels with two random tags per clip."""
+        """Standard-normal log-mel features and multi-hot labels with two distinct random tags per clip."""
         x = torch.randn(batch_size, 1, PANNS_FRAMES, PANNS_MELS)
         y = torch.zeros(batch_size, PANNS_CLASSES)
-        y.scatter_(1, torch.randint(0, PANNS_CLASSES, (batch_size, PANNS_TAGS)), 1.0)
+        # The top-k of independent uniform draws is a sample without replacement: randint could repeat a class.
+        y.scatter_(1, torch.rand(batch_size, PANNS_CLASSES).topk(PANNS_TAGS, dim=1).indices, 1.0)
         return x.to(device), y.to(device)
 
 

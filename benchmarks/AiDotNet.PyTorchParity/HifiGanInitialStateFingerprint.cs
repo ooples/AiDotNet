@@ -58,14 +58,23 @@ internal static class HifiGanInitialStateFingerprint
         string inputHash = Convert.ToHexString(all.GetHashAndReset());
         if (learnedElements != benchmark.ParameterCount) throw new InvalidOperationException("State inventory missed learned parameters.");
         string Hash(string file) { using var stream = File.OpenRead(file); return Convert.ToHexString(SHA256.HashData(stream)); }
-        File.WriteAllText(output, JsonSerializer.Serialize(new
+        string json = JsonSerializer.Serialize(new
         {
             schema = "hifigan-full-initial-state-fingerprint-v1", diagnostic_only = true, pid = Environment.ProcessId,
             seed, engine = AiDotNetEngine.Current.Name, complete_stored_state_sha256 = stateHash, input_sha256 = inputHash,
             parameter_elements = learnedElements, learned_tensor_count = learnedCount, spectral_buffer_count = spectralBuffers,
             ai_sha256 = Hash(typeof(HiFiGAN<float>).Assembly.Location), tensors_sha256 = Hash(typeof(Tensor<float>).Assembly.Location),
             harness_sha256 = Hash(Assembly.GetExecutingAssembly().Location), tensors
-        }, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        }, new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        // Two diagnostics can both pass the existence check above. Publish by moving a private file into place
+        // without overwrite, so the second one fails instead of replacing the first receipt.
+        string pending = output + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(pending, json);
+            File.Move(pending, output, overwrite: false);
+        }
+        finally { File.Delete(pending); }
         Console.WriteLine($"Initial state={stateHash}; input={inputHash}; learned={learnedElements}.");
         return 0;
     }

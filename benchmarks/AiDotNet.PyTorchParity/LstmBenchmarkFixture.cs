@@ -270,8 +270,12 @@ internal sealed class LstmBenchmarkFixture
 
     internal void WriteNumerics(AiDotNetLstmModel model)
     {
-        var directory = Directory.CreateDirectory(_options.LstmNumerics!);
-        if (!string.Equals(Path.GetFullPath(directory.FullName), Path.GetDirectoryName(_receipt), StringComparison.OrdinalIgnoreCase))
+        var directory = Directory.CreateDirectory(_options.LstmNumerics
+            ?? throw new InvalidOperationException("Numerical receipts require a numerics directory."));
+        // The numerical receipt names workload.json by basename, so the two must be one directory. Fold case only
+        // where the filesystem does: /tmp/Run and /tmp/run are different directories elsewhere.
+        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(Path.GetFullPath(directory.FullName), Path.GetDirectoryName(_receipt), pathComparison))
             throw new ArgumentException("Numeric receipts must share one directory.");
         string observations = Path.Combine(directory.FullName, "observations.safetensors");
         string receiptPath = Path.Combine(directory.FullName, "numeric-receipt.json");
@@ -291,7 +295,8 @@ internal sealed class LstmBenchmarkFixture
             float[] gradients = net.GetParameterGradients().ToArray();
             double norm = Math.Sqrt(gradients.Sum(v => (double)v * v));
             if (!double.IsFinite(norm) || norm + 1e-6 >= 1.0)
-                throw new InvalidDataException("The canonical LSTM trajectory requires observing an active gradient clip.");
+                throw new InvalidDataException("The canonical LSTM numerical path requires a finite pre-clip gradient norm below the "
+                    + "clipping threshold of 1: the exported gradients are the applied ones only while the clip is inactive.");
             preClipNorms.Add(norm);
             foreach (var (name, v) in Fields(net, gradients)) raw.Add(prefix + "gradient/" + name, v);
             foreach (var (name, v) in Fields(net)) raw.Add(prefix + "state/" + name, v);
