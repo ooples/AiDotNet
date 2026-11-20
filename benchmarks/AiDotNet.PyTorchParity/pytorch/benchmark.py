@@ -11,7 +11,10 @@ inference batch size gets its own specialized graph instead of the
 automatic-dynamic symbolic graph a second batch size would otherwise trigger.
 --compile-mode selects the TorchInductor mode (reduce-overhead adds CUDA
 graphs) and --optimizer-impl selects AdamW's implementation (fused on CPU and
-CUDA). ../run_matrix.py runs several of these PyTorch configurations against
+CUDA). Dynamo does not trace nn.LSTM or nn.GRU by default and runs them eagerly;
+--compile-rnn sets torch._dynamo.config.allow_rnn so they compile as well. The
+report's protocol block records how many graphs Dynamo compiled for each model.
+../run_matrix.py runs several of these PyTorch configurations against
 AiDotNet and compares AiDotNet to the fastest one. Pin both sides to the same
 CPU thread count:
     python benchmark.py --threads 8 ...
@@ -1695,6 +1698,11 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     # Static shapes: training at one batch size and then inferring at several would otherwise make Dynamo mark the batch
     # dimension dynamic and time a symbolic-shape graph. Each shape and grad mode gets its own graph, so allow enough.
     compile_options: dict[str, object] = {"dynamic": False, "mode": args.compile_mode}
+    if args.compile_rnn:
+        if not args.compile:
+            raise SystemExit("--compile-rnn only applies under --compile")
+        torch._dynamo.config.allow_rnn = True
+    compiled_graphs: dict[str, int] = {}
     if args.compile:
         torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 8 + 2 * len(inference_batches))
     # CUDA graphs only exist on a CUDA device; reduce-overhead on the CPU runs the default Inductor code.
@@ -1723,6 +1731,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
                                         inference_batches, args.warmup_min_ms, cuda_graphs)
+        if args.compile:
+            # Graphs Dynamo compiled for this model (training and inference). Zero means torch.compile ran it eagerly.
+            total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+            compiled_graphs[name] = total - sum(compiled_graphs.values())
         model_results.append(ModelResult(name, str(device), parameters, training, inference, MODEL_NOTES.get(name, "")))
 
     return {
@@ -1738,6 +1750,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "compile_mode": args.compile_mode if args.compile else None,
             "dynamic_shapes": False if args.compile else None,
             "cuda_graphs": cuda_graphs,
+            "compile_rnn": bool(args.compile_rnn),
+            "compiled_graphs": compiled_graphs if args.compile else None,
             "optimizer_impl": args.optimizer_impl,
             "epochs": args.epochs,
             "train_batches": args.train_batches,
@@ -1776,6 +1790,8 @@ def main() -> None:
     parser.add_argument("--compile-mode", default="default",
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
                         help="torch.compile mode under --compile. reduce-overhead records CUDA graphs on a CUDA device.")
+    parser.add_argument("--compile-rnn", action="store_true",
+                        help="Under --compile, also trace nn.LSTM/nn.GRU (torch._dynamo.config.allow_rnn); otherwise they run eagerly.")
     parser.add_argument("--optimizer-impl", default="default", choices=["default", "fused"],
                         help="AdamW implementation: PyTorch's default choice (foreach on CUDA) or the fused kernel.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
