@@ -30,12 +30,15 @@ public sealed class FusedPersistenceOwnershipTests
 
     private static long NativeSequence() => (long)StaticField(typeof(GpuMemoryTracker), "s_seq");
 
-    private static object[] LiveProbeAllocations(long afterSequence)
+    private static object[] LiveProbeAllocations(long afterSequence, ISet<long>? idlePooled = null)
     {
         var live = (IEnumerable)StaticField(typeof(GpuMemoryTracker), "s_live");
         var records = new List<object>();
         foreach (object pair in live)
         {
+            // The tracker is keyed by native pointer and forgets one only on native free, so a probe buffer
+            // resting in the backend pool is still listed. That is released ownership, not a retained probe.
+            if (idlePooled is not null && idlePooled.Contains((long)Member(pair, "Key"))) continue;
             object record = Member(pair, "Value");
             long sequence = (long)Member(record, "Seq");
             string site = (string)Member(record, "Site");
@@ -94,9 +97,28 @@ public sealed class FusedPersistenceOwnershipTests
         return (Tensor<float>)Member(first, "Item3");
     }
 
-    private static void AssertNoProbeAllocations(long sequence, string metadata = "")
+    // Native pointers of the buffers resting idle in the backend's buffer pool.
+    private static HashSet<long> IdlePooledPointers(DirectGpuTensorEngine device)
     {
-        var records = LiveProbeAllocations(sequence);
+        object backend = device.GetBackend();
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var poolField = backend.GetType().GetFields(instance).FirstOrDefault(field =>
+            field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition().Name == "GpuBufferPool`1")
+            ?? throw new Xunit.Sdk.XunitException(backend.GetType().Name + " has no buffer pool to inspect.");
+        object pool = Present(poolField.GetValue(backend), "the backend buffer pool");
+        var bucketsField = pool.GetType().GetField("_buckets", instance)
+            ?? throw new Xunit.Sdk.XunitException("The buffer pool has no '_buckets' field.");
+        var idle = new HashSet<long>();
+        foreach (object bucket in (IEnumerable)Present(bucketsField.GetValue(pool), "the pool buckets"))
+            foreach (object affinity in (IEnumerable)Member(Member(bucket, "Value"), "Buffers"))
+                foreach (object buffer in (IEnumerable)Member(affinity, "Value"))
+                    idle.Add(((IGpuBuffer)buffer).Handle.ToInt64());
+        return idle;
+    }
+
+    private static void AssertNoProbeAllocations(long sequence, string metadata = "", ISet<long>? idlePooled = null)
+    {
+        var records = LiveProbeAllocations(sequence, idlePooled);
         var sites = records.Select(r => (string)Member(r, "Site"));
         Assert.True(records.Length == 0, string.Join(Environment.NewLine, sites) + metadata);
     }
@@ -179,7 +201,14 @@ public sealed class FusedPersistenceOwnershipTests
             {
                 float actual = stepper.Step(Request(layer, optimizer));
                 Assert.True(stepper.LastStepFused, stepper.Session.LastMissReason);
-                if (gpu && step == 0) sequence = NativeSequence();
+                if (gpu && step == 0)
+                {
+                    // The first step is the one that runs the persistence probe; later steps fall inside the
+                    // recheck interval and normally create none. Against the pre-step baseline, every probe
+                    // buffer must already be back in the pool rather than owned by a surviving snapshot.
+                    AssertNoProbeAllocations(sequence, " (first step)", IdlePooledPointers(Present(device, "the GPU engine")));
+                    sequence = NativeSequence();
+                }
                 if (gpu && step > 0) AssertNoProbeAllocations(sequence);
                 float expected = TapeTrainingStepper<float>.EagerStep(Request(reference, referenceOptimizer));
                 Assert.True(Math.Abs(actual - expected) <= 1e-4f * Math.Max(1f, Math.Abs(expected)));
