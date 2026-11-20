@@ -75,6 +75,10 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     private bool _disposed;
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     internal Wav2Vec2Network<T>? Network => _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 

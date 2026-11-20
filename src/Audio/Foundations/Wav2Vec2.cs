@@ -70,6 +70,10 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     private bool _useNativeMode;
     private bool _disposed;
     private Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private Wav2Vec2Pretraining<T>? _pretraining;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 

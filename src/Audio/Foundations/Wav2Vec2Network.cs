@@ -227,22 +227,12 @@ internal sealed class Wav2Vec2Network<T>
         states.Add(hidden);
         foreach (var layer in EncoderLayers)
         {
-            // LayerDrop: in training each layer is skipped with probability LayerDrop. The choice is a per-step draw and
-            // the skip a blend (h + keep·(layer(h) − h)), so a compiled plan replays it; a skipped layer still draws its
-            // dropout masks, which only shifts the generator on the steps that skip.
-            if (!training)
-            {
-                hidden = Encode(layer, hidden, training, random);
-            }
-            else
-            {
-                double rate = c.LayerDrop;
-                var kept = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { 1 }, t => t.AsWritableSpan()[0] = random.NextDouble() < rate ? NumOps.Zero : NumOps.One);
-                var encoded = Encode(layer, hidden, training, random);
-                hidden = rate <= 0 ? encoded
-                    : _engine.TensorAdd(hidden, _engine.TensorMultiply(_engine.TensorBroadcastTo(_engine.Reshape(kept, new[] { 1, 1, 1 }), hidden._shape),
-                        _engine.TensorSubtract(encoded, hidden)));
-            }
+            // LayerDrop: in training each layer is skipped with probability LayerDrop. A skipped layer does not run, so
+            // it is not in the step's graph, gets no gradient and is not stepped by the optimizer (no momentum update, no
+            // weight decay), as in fairseq and transformers. A compiled plan has one fixed graph and could only blend the
+            // layer out with a zero multiplier, which still steps it; the models that own this network therefore
+            // declare TrainingForwardSkipsLayersPerStep when LayerDrop is positive and train on the eager tape.
+            if (!(training && random.NextDouble() < c.LayerDrop)) hidden = Encode(layer, hidden, training, random);
             states.Add(hidden);
         }
         if (c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
