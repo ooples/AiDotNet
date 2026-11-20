@@ -45,8 +45,8 @@ internal sealed class CsrAttentionOperations<T>
 
         var create = (Func<Tensor<T>, TPattern?>)fromDense.MakeGenericMethod(typeof(T)).CreateDelegate(typeof(Func<Tensor<T>, TPattern?>));
         var everyRowHasEdge = (Func<TPattern, bool>)allRows.CreateDelegate(typeof(Func<TPattern, bool>));
-        var aggregate = (Func<IEngine, Tensor<T>, Tensor<T>, TPattern, double, double, Random?, Tensor<T>>)
-            operation.MakeGenericMethod(typeof(T)).CreateDelegate(typeof(Func<IEngine, Tensor<T>, Tensor<T>, TPattern, double, double, Random?, Tensor<T>>));
+        var aggregate = OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, TPattern, double, double, Random?, Tensor<T>>>(
+            operation.MakeGenericMethod(typeof(T)));
         return new CsrAttentionOperations<T>(adjacency =>
         {
             var pattern = create(adjacency);

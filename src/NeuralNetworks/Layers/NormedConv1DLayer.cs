@@ -384,8 +384,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         if (operation is null) return null;
         try
         {
-            return (Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>)operation.MakeGenericMethod(typeof(T))
-                .CreateDelegate(typeof(Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>));
+            return OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>>(
+                operation.MakeGenericMethod(typeof(T)));
         }
         catch (NotSupportedException) { return null; }
         catch (ArgumentException) { return null; }
