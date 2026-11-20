@@ -385,15 +385,84 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
             : null;
 
         // Apply Flash Attention — tape records the op so backward flows through
-        // FlashAttentionBackward automatically via the gradient tape.
-        var attentionOutput = Engine.FlashAttention(
-            queries,
-            keys,
-            values,
-            scale,
-            _config.UseCausalMask,
-            out _,
-            attentionBias: aliBiBias);
+        // FlashAttentionBackward automatically via the gradient tape. Under GraphMode,
+        // decompose into primitive recorded ops so compiled training plans replay fresh Q/K/V.
+        Tensor<T> attentionOutput;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            double resolvedScale = scale ?? (1.0 / Math.Sqrt(_headDimension));
+            if (!_config.UseCausalMask && aliBiBias == null)
+            {
+                attentionOutput = Engine.ScaledDotProductAttention(
+                    queries, keys, values, mask: null, scale: resolvedScale, out _);
+            }
+            else
+            {
+                int seqQ = queries.Shape[2];
+                int seqK = keys.Shape[2];
+                int bh = batchSize * _headCount;
+                var q3 = Engine.Reshape(queries, new[] { bh, seqQ, _headDimension });
+                var kT3 = Engine.Reshape(
+                    Engine.TensorPermute(keys, new[] { 0, 1, 3, 2 }),
+                    new[] { bh, _headDimension, seqK });
+                var v3 = Engine.Reshape(values, new[] { bh, seqK, _headDimension });
+                var scores = Engine.TensorMultiplyScalar(
+                    Engine.BatchMatMul(q3, kT3),
+                    NumOps.FromDouble(resolvedScale));
+
+                if (aliBiBias != null)
+                {
+                    var bias4 = aliBiBias.Rank == 3
+                        ? Engine.TensorBroadcastTo(
+                            Engine.Reshape(aliBiBias, new[] { 1, _headCount, seqQ, seqK }),
+                            new[] { batchSize, _headCount, seqQ, seqK })
+                        : aliBiBias;
+                    scores = Engine.TensorAdd(scores, Engine.Reshape(bias4, new[] { bh, seqQ, seqK }));
+                }
+                else if (_config.UseCausalMask)
+                {
+                    Tensor<T> causalPlane;
+                    using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                    using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                    {
+                        int keyOffset = seqK - seqQ;
+                        var qPos = Engine.Reshape(
+                            Engine.TensorAddScalar(Engine.TensorArange<int>(0, seqQ), keyOffset),
+                            new[] { seqQ, 1 });
+                        var kPos = Engine.Reshape(Engine.TensorArange<int>(0, seqK), new[] { 1, seqK });
+                        var future = Engine.TensorLessThan(
+                            Engine.TensorBroadcastTo(qPos, new[] { seqQ, seqK }),
+                            Engine.TensorBroadcastTo(kPos, new[] { seqQ, seqK })).Cast<T>();
+                        var masked = Tensor<T>.CreateDefault(
+                            new[] { seqQ, seqK },
+                            NumOps.FromDouble(double.NegativeInfinity));
+                        var zeros2D = new Tensor<T>(new[] { seqQ, seqK });
+                        causalPlane = Engine.Reshape(
+                            Engine.TensorWhere(future, masked, zeros2D),
+                            new[] { 1, seqQ, seqK });
+                    }
+                    scores = Engine.TensorAdd(
+                        scores,
+                        Engine.TensorBroadcastTo(causalPlane, new[] { bh, seqQ, seqK }));
+                }
+
+                var probs = Engine.Softmax(scores, -1);
+                attentionOutput = Engine.Reshape(
+                    Engine.BatchMatMul(probs, v3),
+                    new[] { batchSize, _headCount, seqQ, _headDimension });
+            }
+        }
+        else
+        {
+            attentionOutput = Engine.FlashAttention(
+                queries,
+                keys,
+                values,
+                scale,
+                _config.UseCausalMask,
+                out _,
+                attentionBias: aliBiBias);
+        }
 
         // Reshape back to [batch, seq, embedding] via tape-tracked shape ops.
         var permutedOut = Engine.TensorPermute(attentionOutput, new[] { 0, 2, 1, 3 });

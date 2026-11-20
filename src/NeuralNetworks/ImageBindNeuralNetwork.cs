@@ -988,23 +988,16 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         // Stack frame features and add temporal positional embeddings
         var stackedFeatures = Tensor<T>.CreateDefault([frameFeatures.Count, _hiddenDim], NumOps.Zero);
+        var stackedSpan = stackedFeatures.AsWritableSpan();
         for (int i = 0; i < frameFeatures.Count; i++)
         {
-            for (int j = 0; j < Math.Min(frameFeatures[i].Length, _hiddenDim); j++)
-            {
-                stackedFeatures[i, j] = frameFeatures[i][j];
-            }
+            int kept = Math.Min(frameFeatures[i].Length, _hiddenDim);
+            frameFeatures[i].AsSpan().Slice(0, kept).CopyTo(stackedSpan.Slice(i * _hiddenDim, kept));
         }
 
         if (_videoTemporalPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < stackedFeatures.Shape[0] && i < _videoTemporalPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _hiddenDim && j < _videoTemporalPositionalEmbeddings.Shape[1]; j++)
-                {
-                    stackedFeatures[i, j] = NumOps.Add(stackedFeatures[i, j], _videoTemporalPositionalEmbeddings[i, j]);
-                }
-            }
+            stackedFeatures = AddLeadingBlock(stackedFeatures, _videoTemporalPositionalEmbeddings, zeroOutside: false);
         }
 
         // Apply temporal transformer
@@ -1078,30 +1071,21 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         // Project each timestep
         var embedded = Tensor<T>.CreateDefault([timesteps, _hiddenDim], NumOps.Zero);
+        var embeddedSpan = embedded.AsWritableSpan();
+        var imuValues = imuData.ToArray();
         for (int t = 0; t < timesteps; t++)
         {
-            var timestepData = Tensor<T>.CreateDefault([1, features], NumOps.Zero);
-            for (int f = 0; f < features; f++)
-            {
-                timestepData[0, f] = imuData[t, f];
-            }
+            // A fresh [1, features] copy of timestep t
+            var timestepData = new Tensor<T>(imuValues.AsSpan(t * features, features).ToArray(), [1, features]);
             var embeddedTimestep = _imuEmbedding.Forward(timestepData);
-            for (int j = 0; j < _hiddenDim && j < embeddedTimestep.Shape[1]; j++)
-            {
-                embedded[t, j] = embeddedTimestep[0, j];
-            }
+            int kept = Math.Min(_hiddenDim, embeddedTimestep.Shape[1]);
+            embeddedTimestep.ToArray().AsSpan(0, kept).CopyTo(embeddedSpan.Slice(t * _hiddenDim, kept));
         }
 
         // Add positional embeddings
         if (_imuPositionalEmbeddings is not null)
         {
-            for (int i = 0; i < timesteps && i < _imuPositionalEmbeddings.Shape[0]; i++)
-            {
-                for (int j = 0; j < _hiddenDim && j < _imuPositionalEmbeddings.Shape[1]; j++)
-                {
-                    embedded[i, j] = NumOps.Add(embedded[i, j], _imuPositionalEmbeddings[i, j]);
-                }
-            }
+            embedded = AddLeadingBlock(embedded, _imuPositionalEmbeddings, zeroOutside: false);
         }
 
         var current = embedded;
@@ -1233,70 +1217,49 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         int numMelBins = AudioMelBins;
         int numFrames = Math.Max(1, numSamples / hopLength);
 
-        var melSpec = Tensor<T>.CreateDefault([numMelBins, numFrames], NumOps.Zero);
+        if (numMelBins == 0) return Tensor<T>.CreateDefault([numMelBins, numFrames], NumOps.Zero);
 
-        // Simple energy-based features as placeholder
-        for (int frame = 0; frame < numFrames; frame++)
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int start = frame * hopLength;
-            double energy = 0;
-            int count = 0;
+            // The signal is the waveform itself, or its first row
+            var signal = new Tensor<T>(waveform.ToArray().AsSpan(0, numSamples).ToArray(), [numSamples]).Cast<double>();
+            var squares = Engine.TensorSquare(signal);
 
-            for (int i = start; i < Math.Min(start + hopLength * 2, numSamples); i++)
+            // Energy and its positive log floor must remain representable for low-precision samples.
+            var frameEnergies = new double[numFrames];
+            for (int frame = 0; frame < numFrames; frame++)
             {
-                double val = waveform.Shape.Length == 1
-                    ? NumOps.ToDouble(waveform[i])
-                    : NumOps.ToDouble(waveform[0, i]);
-                energy += val * val;
-                count++;
+                int start = frame * hopLength;
+                int count = Math.Max(0, Math.Min(start + hopLength * 2, numSamples) - start);
+                frameEnergies[frame] = count > 0
+                    ? Engine.TensorSum(Engine.TensorSlice(squares, [start], [count])) / count
+                    : 0.0;
             }
+            var logEnergy = Engine.TensorLog(Engine.TensorAddScalar(new Tensor<double>(frameEnergies, [numFrames]), 1e-10));
 
-            if (count > 0) energy /= count;
-            double logEnergy = Math.Log(energy + 1e-10);
-
-            for (int mel = 0; mel < numMelBins; mel++)
-            {
-                // Simple frequency-dependent scaling
-                double scale = 1.0 - (double)mel / numMelBins * 0.5;
-                melSpec[mel, frame] = NumOps.FromDouble(logEnergy * scale);
-            }
+            var melIndex = Engine.TensorArange<double>(0, numMelBins);
+            var scale = Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(melIndex, (double)numMelBins), -0.5), 1.0);
+            return Engine.TensorOuter(scale, logEnergy).Cast<T>();
         }
-
-        return melSpec;
     }
 
     private Tensor<T> EnsureSingleChannel(Tensor<T> input)
     {
         if (input.Shape.Length == 2)
         {
-            // [H, W] -> [1, H, W]
-            var result = Tensor<T>.CreateDefault([1, input.Shape[0], input.Shape[1]], NumOps.Zero);
-            for (int h = 0; h < input.Shape[0]; h++)
-            {
-                for (int w = 0; w < input.Shape[1]; w++)
-                {
-                    result[0, h, w] = input[h, w];
-                }
-            }
-            return result;
+            // [H, W] -> [1, H, W], as a copy
+            return new Tensor<T>(input.ToArray(), [1, input.Shape[0], input.Shape[1]]);
         }
         else if (input.Shape.Length == 3 && input.Shape[0] > 1)
         {
             // [C, H, W] -> [1, H, W] (take mean)
-            var result = Tensor<T>.CreateDefault([1, input.Shape[1], input.Shape[2]], NumOps.Zero);
-            for (int h = 0; h < input.Shape[1]; h++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                for (int w = 0; w < input.Shape[2]; w++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int c = 0; c < input.Shape[0]; c++)
-                    {
-                        sum = NumOps.Add(sum, input[c, h, w]);
-                    }
-                    result[0, h, w] = NumOps.Divide(sum, NumOps.FromDouble(input.Shape[0]));
-                }
+                var channels = new Tensor<T>(input.ToArray(), [input.Shape[0], input.Shape[1], input.Shape[2]]);
+                return Engine.TensorDivideScalar(
+                    Engine.ReduceSum(channels, new[] { 0 }, keepDims: true), NumOps.FromDouble(input.Shape[0]));
             }
-            return result;
         }
 
         return input;
@@ -1305,17 +1268,15 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private Tensor<T> ExpandToThreeChannels(Tensor<T> input)
     {
         var singleChannel = EnsureSingleChannel(input);
-        var result = Tensor<T>.CreateDefault([3, singleChannel.Shape[1], singleChannel.Shape[2]], NumOps.Zero);
+        int height = singleChannel.Shape[1], width = singleChannel.Shape[2];
 
+        // Channel 0 copied into all three channels
+        var plane = singleChannel.ToArray().AsSpan(0, height * width);
+        var result = Tensor<T>.CreateDefault([3, height, width], NumOps.Zero);
+        var resultSpan = result.AsWritableSpan();
         for (int c = 0; c < 3; c++)
         {
-            for (int h = 0; h < singleChannel.Shape[1]; h++)
-            {
-                for (int w = 0; w < singleChannel.Shape[2]; w++)
-                {
-                    result[c, h, w] = singleChannel[0, h, w];
-                }
-            }
+            plane.CopyTo(resultSpan.Slice(c * height * width, height * width));
         }
 
         return result;
@@ -1350,36 +1311,49 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         int hiddenDim = sequence.Shape[1];
 
         var result = Tensor<T>.CreateDefault([seqLen + 1, hiddenDim], NumOps.Zero);
+        var resultSpan = result.AsWritableSpan();
 
-        for (int j = 0; j < hiddenDim && j < clsToken.Shape[1]; j++)
-        {
-            result[0, j] = clsToken[0, j];
-        }
-
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                result[i + 1, j] = sequence[i, j];
-            }
-        }
+        // Row 0 is the CLS token's first row, then the sequence rows
+        int clsKept = Math.Min(hiddenDim, clsToken.Shape[1]);
+        clsToken.ToArray().AsSpan(0, clsKept).CopyTo(resultSpan);
+        sequence.ToArray().AsSpan(0, seqLen * hiddenDim).CopyTo(resultSpan.Slice(hiddenDim));
 
         return result;
     }
 
     private Tensor<T> AddPositionalEmbeddings(Tensor<T> sequence, Tensor<T> posEmbeddings)
     {
-        int seqLen = sequence.Shape[0];
-        int hiddenDim = sequence.Shape[1];
+        // sequence + positions over the block both cover; zero elsewhere
+        return AddLeadingBlock(sequence, posEmbeddings, zeroOutside: true);
+    }
 
-        var result = Tensor<T>.CreateDefault([seqLen, hiddenDim], NumOps.Zero);
+    /// <summary>
+    /// Adds <paramref name="addend"/> to the leading block of the [rows, cols] <paramref name="target"/> that both
+    /// cover. Outside that block the result keeps <paramref name="target"/>, or is zero when
+    /// <paramref name="zeroOutside"/> is set. The result is fresh values off the tape, as the scalar loops built.
+    /// </summary>
+    private Tensor<T> AddLeadingBlock(Tensor<T> target, Tensor<T> addend, bool zeroOutside)
+    {
+        int rows = target.Shape[0], cols = target.Shape[1];
+        int blockRows = Math.Min(rows, addend.Shape[0]);
+        int blockCols = Math.Min(cols, addend.Shape[1]);
+        var result = zeroOutside
+            ? Tensor<T>.CreateDefault([rows, cols], NumOps.Zero)
+            : new Tensor<T>(target.ToArray(), [rows, cols]);
+        if (blockRows == 0 || blockCols == 0) return result;
 
-        for (int i = 0; i < seqLen && i < posEmbeddings.Shape[0]; i++)
+        T[] block;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < hiddenDim && j < posEmbeddings.Shape[1]; j++)
-            {
-                result[i, j] = NumOps.Add(sequence[i, j], posEmbeddings[i, j]);
-            }
+            block = Engine.TensorAdd(
+                Engine.TensorSlice(target, [0, 0], [blockRows, blockCols]),
+                Engine.TensorSlice(addend, [0, 0], [blockRows, blockCols])).ToArray();
+        }
+
+        var resultSpan = result.AsWritableSpan();
+        for (int i = 0; i < blockRows; i++)
+        {
+            block.AsSpan(i * blockCols, blockCols).CopyTo(resultSpan.Slice(i * cols, blockCols));
         }
 
         return result;
@@ -1389,11 +1363,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         int hiddenDim = sequence.Shape[1];
         var result = new Vector<T>(hiddenDim);
-
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            result[j] = sequence[0, j];
-        }
+        sequence.ToArray().AsSpan(0, hiddenDim).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -1405,15 +1375,13 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         var result = new Vector<T>(hiddenDim);
 
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, tensor[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
+        if (hiddenDim == 0) return result;
+
+        // Column sums over the sequence, divided by its length.
+        var sums = seqLen > 0
+            ? Engine.ReduceSum(Engine.TensorSlice(tensor, [0, 0], [seqLen, hiddenDim]), new[] { 0 }, keepDims: false)
+            : new Tensor<T>([hiddenDim]);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(seqLen)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -1423,19 +1391,13 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         if (projection is null)
             return features;
 
-        var tensor = Tensor<T>.CreateDefault([1, features.Length], NumOps.Zero);
-        for (int i = 0; i < features.Length; i++)
-        {
-            tensor[0, i] = features[i];
-        }
+        var tensor = new Tensor<T>(features.ToArray(), [1, features.Length]);
 
         var projected = projection.Forward(tensor);
 
         var result = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension && i < projected.Shape[1]; i++)
-        {
-            result[i] = projected[0, i];
-        }
+        int kept = Math.Min(_embeddingDimension, projected.Shape[1]);
+        projected.ToArray().AsSpan(0, kept).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -1447,43 +1409,67 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     private List<T> Softmax(List<T> values)
     {
-        double maxVal = values.Max(v => NumOps.ToDouble(v));
-        var expValues = values.Select(v => Math.Exp(NumOps.ToDouble(v) - maxVal)).ToList();
-        double sumExp = expValues.Sum();
-        return expValues.Select(e => NumOps.FromDouble(e / sumExp)).ToList();
+        if (values.Count == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+
+        // Keep the maximum, exponentials and reduction wide, including for Half and decimal.
+        var logits = new Tensor<T>(values.ToArray(), [values.Count]).Cast<double>();
+        var isNaN = Engine.TensorIsNan(logits);
+        var floor = new Tensor<double>([values.Count]);
+        floor.Fill(double.NegativeInfinity);
+        var numbers = Engine.TensorWhere(isNaN, floor, logits);
+        double max = numbers.GetFlat(Engine.TensorArgMax(numbers, 0)[0]);
+        var exps = Engine.TensorExp(Engine.TensorSubtractScalar(logits, max));
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).Cast<T>().ToArray().ToList();
     }
 
     private Vector<T> MeanFusion(List<Vector<T>> embeddings)
     {
         int dim = embeddings[0].Length;
+        var sum = SumOfPrefixes(embeddings, null);
         var result = new Vector<T>(dim);
-
-        for (int j = 0; j < dim; j++)
-        {
-            T sum = NumOps.Zero;
-            foreach (var emb in embeddings)
-            {
-                if (j < emb.Length)
-                    sum = NumOps.Add(sum, emb[j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(embeddings.Count));
-        }
+        if (dim > 0)
+            Engine.TensorDivideScalar(Tensor<T>.FromVector(sum), NumOps.FromDouble(embeddings.Count)).CopyTo(result.AsWritableSpan());
 
         return Normalize(result);
+    }
+
+    /// <summary>
+    /// Sums the vectors (optionally each scaled by its weight) over the first vector's length, in list
+    /// order: each vector adds to its common prefix and leaves the rest of the sum untouched.
+    /// </summary>
+    private Vector<T> SumOfPrefixes(List<Vector<T>> vectors, List<T>? weights)
+    {
+        int length = vectors[0].Length;
+        var sum = new Tensor<T>([length]);
+        if (length == 0) return new Vector<T>(0);
+
+        for (int i = 0; i < vectors.Count; i++)
+        {
+            var vec = vectors[i];
+            int common = Math.Min(length, vec.Length);
+            if (common == 0) continue;
+            var part = Tensor<T>.FromVector(vec.Length == common ? vec : vec.GetSubVector(0, common));
+            if (weights is not null) part = Engine.TensorMultiplyScalar(part, weights[i]);
+            var added = Engine.TensorAdd(common == length ? sum : Engine.TensorSlice(sum, [0], [common]), part);
+            sum = common == length
+                ? added
+                : Engine.TensorConcatenate(new[] { added, Engine.TensorSlice(sum, [common], [length - common]) }, 0);
+        }
+
+        return sum.ToVector();
     }
 
     private Vector<T> ConcatFusion(List<Vector<T>> embeddings)
     {
         int totalDim = embeddings.Sum(e => e.Length);
         var result = new Vector<T>(totalDim);
+        var resultSpan = result.AsWritableSpan();
 
         int offset = 0;
         foreach (var emb in embeddings)
         {
-            for (int i = 0; i < emb.Length; i++)
-            {
-                result[offset + i] = emb[i];
-            }
+            emb.AsSpan().CopyTo(resultSpan.Slice(offset));
             offset += emb.Length;
         }
 
@@ -1501,21 +1487,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         var softmaxWeights = Softmax(weights);
 
-        int dim = embeddings[0].Length;
-        var result = new Vector<T>(dim);
-
-        for (int j = 0; j < dim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < embeddings.Count; i++)
-            {
-                if (j < embeddings[i].Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(softmaxWeights[i], embeddings[i][j]));
-                }
-            }
-            result[j] = sum;
-        }
+        var result = SumOfPrefixes(embeddings, softmaxWeights);
 
         return Normalize(result);
     }

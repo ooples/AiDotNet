@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -61,19 +62,15 @@ public class QuantileLossMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double y = NumOps.ToDouble(actuals[i]);
-            double yHat = NumOps.ToDouble(predictions[i]);
-            double error = y - yHat;
-
-            // Pinball loss: asymmetric penalty
-            double loss = error >= 0 ? _quantile * error : (_quantile - 1) * error;
-            totalLoss += loss;
-        }
-
-        return NumOps.FromDouble(totalLoss / predictions.Length);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var error = engine.TensorSubtract(actual, pred);
+        var over = engine.TensorMultiplyScalar(error, _quantile);
+        var under = engine.TensorMultiplyScalar(error, _quantile - 1);
+        var nonNegative = engine.TensorGreaterEqual(error, engine.TensorZerosLike(error));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorWhere(nonNegative, over, under)));
     }
 
     /// <inheritdoc />
@@ -96,18 +93,17 @@ public class QuantileLossMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

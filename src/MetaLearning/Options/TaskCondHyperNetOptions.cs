@@ -76,12 +76,6 @@ public class TaskCondHyperNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
     /// </summary>
     public int ChunkSize { get; set; } = 16;
 
-    /// <summary>
-    /// L2 regularization weight on task embedding magnitude.
-    /// Default: 0.01.
-    /// </summary>
-    public double EmbeddingRegWeight { get; set; } = 0.01;
-
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public TaskCondHyperNetOptions(IFullModel<T, TInput, TOutput> metaModel)
@@ -100,6 +94,6 @@ public class TaskCondHyperNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
         EmbeddingDim = EmbeddingDim, HyperHiddenDim = HyperHiddenDim,
-        ChunkSize = ChunkSize, EmbeddingRegWeight = EmbeddingRegWeight
+        ChunkSize = ChunkSize
     };
 }

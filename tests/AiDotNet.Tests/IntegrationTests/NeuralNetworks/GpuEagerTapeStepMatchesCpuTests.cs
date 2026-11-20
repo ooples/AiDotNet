@@ -86,7 +86,7 @@ public class GpuEagerTapeStepMatchesCpuTests
         protected override bool SupportsFusedCompiledTraining => false;
     }
 
-    private static EagerNetwork BuildNetwork(int hidden = Hidden)
+    private static EagerNetwork BuildNetwork(int hidden = Hidden, double? maxGradientNorm = null)
     {
         var layers = new List<ILayer<float>>
         {
@@ -99,6 +99,12 @@ public class GpuEagerTapeStepMatchesCpuTests
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
             inputSize: Inputs, outputSize: Outputs, layers: layers);
         var options = new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 };
+        if (maxGradientNorm is { } norm)
+        {
+            options.EnableGradientClipping = true;
+            options.GradientClippingMethod = GradientClippingMethod.ByNorm;
+            options.MaxGradientNorm = norm;
+        }
         return new EagerNetwork(architecture, new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null, options));
     }
 
@@ -287,6 +293,95 @@ public class GpuEagerTapeStepMatchesCpuTests
         finally
         {
             gpu.Dispose();
+        }
+    }
+
+    // Far below this model's gradient norm, so the optimizer's clip scales every gradient.
+    private const double TinyClipNorm = 1e-4;
+
+    /// <summary>
+    /// The published gradient surface is the gradient the step computed, on either engine. On the GPU engine a layer
+    /// keeps the step's device gradients until something reads them, and the optimizer's own global-norm clip (on by
+    /// default) then scales the step's gradient tensors in place. A layer that referenced those tensors instead of
+    /// copying them published the clipped gradient on the GPU while the CPU engine published the unclipped one. The
+    /// second step checks that the layer's reused device copies are refilled, not left holding the first step.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Gpu_published_gradients_match_the_cpu_engine_when_the_optimizer_clips(bool withoutParameterBuffer)
+    {
+        var gpu = new DirectGpuTensorEngine();
+        try
+        {
+            if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+                Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+            Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+
+            float[] init;
+            var previous = AiDotNetEngine.Current;
+            AiDotNetEngine.Current = new CpuEngine();
+            try
+            {
+                var seedNet = BuildNetwork(Hidden, TinyClipNorm);
+                seedNet.Predict(Data().X);
+                init = seedNet.GetParameters().ToArray();
+            }
+            finally
+            {
+                AiDotNetEngine.Current = previous;
+            }
+
+            var cpu = PublishedGradientsPerStep(new CpuEngine(), init, withoutParameterBuffer);
+            var onGpu = PublishedGradientsPerStep(gpu, init, withoutParameterBuffer);
+            for (int s = 0; s < cpu.Count; s++)
+            {
+                Assert.Equal(cpu[s].Length, onGpu[s].Length);
+                double normSq = 0.0, maxAbs = 0.0;
+                foreach (float g in cpu[s])
+                {
+                    normSq += (double)g * g;
+                    maxAbs = Math.Max(maxAbs, Math.Abs(g));
+                }
+                Assert.True(Math.Sqrt(normSq) > 100 * TinyClipNorm,
+                    $"step {s}: gradient norm {Math.Sqrt(normSq):G4} is too small for the optimizer clip to engage");
+                double tolerance = 2e-3 * maxAbs;
+                for (int i = 0; i < cpu[s].Length; i++)
+                    Assert.True(Math.Abs(onGpu[s][i] - cpu[s][i]) <= tolerance,
+                        $"step {s}, gradient {i}: GPU published {onGpu[s][i]:G6}, CPU published {cpu[s][i]:G6} "
+                        + $"(largest |gradient| {maxAbs:G4})");
+            }
+        }
+        finally
+        {
+            gpu.Dispose();
+        }
+    }
+
+    private static List<float[]> PublishedGradientsPerStep(IEngine engine, float[] initialParameters, bool withoutParameterBuffer)
+    {
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = engine;
+        try
+        {
+            var net = BuildNetwork(Hidden, TinyClipNorm);
+            var (x, y) = Data();
+            net.SetTrainingMode(true);
+            net.Predict(x);                                   // materialize the lazy layers
+            net.SetTrainingMode(true);
+            net.UpdateParameters(new Vector<float>((float[])initialParameters.Clone()));
+            if (withoutParameterBuffer) SkipParameterBuffer(net);
+            var published = new List<float[]>();
+            for (int s = 0; s < 2; s++)
+            {
+                net.Train(x, y);
+                published.Add(net.GetParameterGradients().ToArray());
+            }
+            return published;
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previous;
         }
     }
 }

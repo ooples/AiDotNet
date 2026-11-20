@@ -30,13 +30,13 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int[]? _forbiddenFeatures;
     private readonly int[][]? _featureGroups;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -107,39 +107,10 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                     $"Forbidden feature indices out of range [0, {p}): [{string.Join(", ", outOfRange)}]");
         }
 
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Compute feature scores (correlation with target)
-        _featureScores = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            _featureScores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
+        // Compute feature scores (|correlation| with target; 0 for a (near-)constant feature or target)
+        var scores = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+        _featureScores = scores.ToVector();
 
         // Initialize selection with mandatory features
         var selected = new HashSet<int>();
@@ -154,9 +125,8 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Get candidate features (excluding forbidden and already selected)
         var forbidden = _forbiddenFeatures?.ToHashSet() ?? new HashSet<int>();
-        var candidates = Enumerable.Range(0, p)
+        var candidates = PreprocessingTensorOps.StableOrder(scores, descending: true)
             .Where(j => !selected.Contains(j) && !forbidden.Contains(j))
-            .OrderByDescending(j => _featureScores[j])
             .ToList();
 
         // Add features respecting group constraints
@@ -202,15 +172,7 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("ConstraintBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

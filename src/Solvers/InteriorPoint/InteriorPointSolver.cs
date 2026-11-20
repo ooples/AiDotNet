@@ -266,6 +266,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
     private static Problem BuildProblem(
         LinearProgramStandardForm<T> standard, Matrix<T>? quadratic)
     {
+        var engine = SolverTensorOps<T>.Engine;
         int rowCount = standard.Rows.Count;
         int structuralCount = standard.VariableCount;
 
@@ -277,29 +278,44 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         int columnCount = structuralCount + slackCount;
 
-        var a = new Matrix<T>(rowCount, columnCount);
-        var b = new Vector<T>(rowCount);
-
-        int slackCursor = structuralCount;
-        for (int r = 0; r < rowCount; r++)
+        Matrix<T> a;
+        if (rowCount == 0)
         {
-            var row = standard.Rows[r];
-            for (int c = 0; c < structuralCount; c++) a[r, c] = row[c];
-
-            b[r] = standard.RightHandSides[r];
-
-            if (!standard.IsEquality[r])
+            a = new Matrix<T>(rowCount, columnCount);
+        }
+        else
+        {
+            // A row still reading "<=" absorbs its slack with +1; one the rewrite negated into ">=" needs -1.
+            // The slack entries are scattered as flat positions with a sign id (0 -> -1, 1 -> +1).
+            var positions = new int[slackCount];
+            var signs = new int[slackCount];
+            int slackCursor = 0;
+            for (int r = 0; r < rowCount; r++)
             {
-                // A row still reading "<=" absorbs its slack with +1; one the rewrite negated into
-                // ">=" needs -1.
-                a[r, slackCursor++] = standard.RowWasNegated[r]
-                    ? NumOps.Negate(NumOps.One)
-                    : NumOps.One;
+                if (standard.IsEquality[r]) continue;
+                positions[slackCursor] = r * slackCount + slackCursor;
+                signs[slackCursor] = standard.RowWasNegated[r] ? 0 : 1;
+                slackCursor++;
             }
+
+            var structural = engine.TensorStack(standard.Rows.Select(row => SolverTensorOps<T>.AsTensor(row)).ToArray(), 0);
+            var blocks = new List<Tensor<T>> { structural };
+            if (slackCount > 0)
+            {
+                var slack = engine.TensorIndexAdd(
+                    Tensor<T>.CreateDefault(new[] { rowCount * slackCount }, NumOps.Zero),
+                    0,
+                    new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions)),
+                    engine.TensorTake(engine.TensorArange<T>(-1, 2, 2), new Tensor<int>(new[] { signs.Length }, new Vector<int>(signs))));
+                blocks.Add(engine.Reshape(slack, new[] { rowCount, slackCount }));
+            }
+
+            a = (blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 1)).Contiguous().ToMatrix();
         }
 
-        var objective = new Vector<T>(columnCount);
-        for (int i = 0; i < structuralCount; i++) objective[i] = standard.Objective[i];
+        var b = new Vector<T>(standard.RightHandSides);
+
+        var structuralObjective = engine.TensorNarrow(SolverTensorOps<T>.AsTensor(standard.Objective), 0, 0, structuralCount).Contiguous();
 
         Matrix<T>? projectedQuadratic = null;
         if (quadratic is not null)
@@ -310,17 +326,25 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             // minimizer, and the reported objective is evaluated on the caller's own data anyway.
             // The slack variables extend the Hessian with zero rows and columns — they appear in no
             // quadratic term.
-            projectedQuadratic = new Matrix<T>(columnCount, columnCount);
-            for (int i = 0; i < structuralCount; i++)
+            var hessian = SolverTensorOps<T>.AsTensor(projected);
+            if (slackCount > 0)
             {
-                for (int j = 0; j < structuralCount; j++)
-                {
-                    projectedQuadratic[i, j] = projected[i, j];
-                }
-
-                objective[i] = NumOps.Add(objective[i], linearCorrection[i]);
+                hessian = engine.TensorConcatenate(
+                    new[] { hessian, Tensor<T>.CreateDefault(new[] { structuralCount, slackCount }, NumOps.Zero) }, 1);
+                hessian = engine.TensorConcatenate(
+                    new[] { hessian, Tensor<T>.CreateDefault(new[] { slackCount, columnCount }, NumOps.Zero) }, 0);
             }
+
+            projectedQuadratic = hessian.Contiguous().ToMatrix();
+            structuralObjective = engine.TensorAdd(
+                structuralObjective,
+                engine.TensorNarrow(SolverTensorOps<T>.AsTensor(linearCorrection), 0, 0, structuralCount));
         }
+
+        var objective = slackCount == 0
+            ? structuralObjective.Contiguous().ToVector()
+            : engine.TensorConcatenate(
+                new[] { structuralObjective, Tensor<T>.CreateDefault(new[] { slackCount }, NumOps.Zero) }, 0).ToVector();
 
         return new Problem(a, b, objective, projectedQuadratic);
     }
@@ -344,11 +368,9 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
     private static Vector<T>? NegateForKktConvention(Vector<T>? duals)
     {
         if (duals is null) return null;
+        if (duals.Length == 0) return new Vector<T>(0);
 
-        var converted = new Vector<T>(duals.Length);
-        for (int i = 0; i < duals.Length; i++) converted[i] = NumOps.Negate(duals[i]);
-
-        return converted;
+        return SolverTensorOps<T>.Engine.TensorNegate(SolverTensorOps<T>.AsTensor(duals)).ToVector();
     }
 
     private static (Vector<T>? Inequality, Vector<T>? Equality) SplitDuals(
@@ -359,7 +381,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             return (null, null);
         }
 
-        var duals = outcome.RowDuals;
+        var duals = SolverTensorOps<T>.AsTensor(outcome.RowDuals);
 
         // Reported as the iteration computes them, which is the LP shadow-price convention the
         // simplex solver also uses -- InteriorPointSolverIntegrationTests.Solve_DualValues_
@@ -368,25 +390,26 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         Vector<T>? inequality = null;
         if (standard.InequalityRowCount > 0)
         {
-            inequality = new Vector<T>(standard.InequalityRowCount);
-            for (int r = 0; r < standard.InequalityRowCount; r++)
-            {
-                inequality[r] = standard.RowWasNegated[r] ? NumOps.Negate(duals[r]) : duals[r];
-            }
+            inequality = RestoreSigns(standard, duals, 0, standard.InequalityRowCount);
         }
 
         Vector<T>? equality = null;
         if (standard.EqualityRowCount > 0)
         {
-            equality = new Vector<T>(standard.EqualityRowCount);
-            for (int r = 0; r < standard.EqualityRowCount; r++)
-            {
-                int row = standard.InequalityRowCount + r;
-                equality[r] = standard.RowWasNegated[row] ? NumOps.Negate(duals[row]) : duals[row];
-            }
+            equality = RestoreSigns(standard, duals, standard.InequalityRowCount, standard.EqualityRowCount);
         }
 
         return (inequality, equality);
+    }
+
+    // The duals of rows [start, start + count), negated back where the rewrite negated the row.
+    private static Vector<T> RestoreSigns(LinearProgramStandardForm<T> standard, Tensor<T> duals, int start, int count)
+    {
+        var engine = SolverTensorOps<T>.Engine;
+        var block = engine.TensorNarrow(duals, 0, start, count).Contiguous();
+        var negated = new bool[count];
+        Array.Copy(standard.RowWasNegated, start, negated, 0, count);
+        return engine.TensorWhere(SolverTensorOps<T>.Mask(negated), engine.TensorNegate(block), block).ToVector();
     }
 
     /// <summary>
@@ -460,11 +483,11 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             }
 
             // --- Predictor: aim straight at complementarity zero and see how far that would get ---
-            var affineTarget = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                affineTarget[i] = NumOps.Negate(NumOps.Multiply(x[i], s[i]));
-            }
+            var engine = SolverTensorOps<T>.Engine;
+            var xTensor = SolverTensorOps<T>.AsTensor(x);
+            var sTensor = SolverTensorOps<T>.AsTensor(s);
+            var complementarityProducts = engine.TensorMultiply(xTensor, sTensor);
+            var affineTarget = engine.TensorNegate(complementarityProducts).ToVector();
 
             var affine = newton.SolveDirection(
                 problem, x, s, primalResidual, dualResidual, affineTarget);
@@ -492,13 +515,9 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
             // --- Corrector: re-aim at sigma*mu, compensating for the predictor's own curvature ---
             T centeringTarget = NumOps.FromDouble(sigma * complementarity);
-            var correctorTarget = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                correctorTarget[i] = NumOps.Subtract(
-                    NumOps.Subtract(centeringTarget, NumOps.Multiply(x[i], s[i])),
-                    NumOps.Multiply(affine.Dx[i], affine.Ds[i]));
-            }
+            var correctorTarget = engine.TensorSubtract(
+                engine.ScalarMinusTensor(centeringTarget, complementarityProducts),
+                engine.TensorMultiply(SolverTensorOps<T>.AsTensor(affine.Dx), SolverTensorOps<T>.AsTensor(affine.Ds))).ToVector();
 
             var step = newton.SolveDirection(
                 problem, x, s, primalResidual, dualResidual, correctorTarget);
@@ -547,12 +566,10 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         if (problem.Q is null)
         {
-            for (int i = 0; i < n; i++)
+            if (n > 0 && SolverTensorOps<T>.First(
+                    SolverTensorOps<T>.Engine.TensorLessThan(SolverTensorOps<T>.AsTensor(problem.C), NumOps.Zero)) is not null)
             {
-                if (NumOps.LessThan(problem.C[i], NumOps.Zero))
-                {
-                    return new Outcome(LinearProgramStatus.Unbounded, null, null, 0);
-                }
+                return new Outcome(LinearProgramStatus.Unbounded, null, null, 0);
             }
 
             return new Outcome(LinearProgramStatus.Optimal, new Vector<T>(n), null, 0);
@@ -625,11 +642,9 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         var transposed = TransposeMultiply(problem.A, candidate);
 
-        double worstViolation = 0.0;
-        for (int i = 0; i < problem.ColumnCount; i++)
-        {
-            worstViolation = Math.Max(worstViolation, ToDouble(transposed[i]) / magnitude);
-        }
+        // max_i(t_i / magnitude) is (max_i t_i) / magnitude: both the conversion and the division by a positive
+        // magnitude are monotone. Math.Max carried any NaN through to the end.
+        double worstViolation = Math.Max(0.0, LargestOrNaN(transposed) / magnitude);
 
         double alignment = ToDouble(problem.B.DotProduct(candidate)) / magnitude;
 
@@ -677,31 +692,24 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         {
             int n = problem.ColumnCount;
             int m = problem.RowCount;
+            var engine = SolverTensorOps<T>.Engine;
+            var a = SolverTensorOps<T>.AsTensor(problem.A);
+            var xTensor = SolverTensorOps<T>.AsTensor(x);
+            var sTensor = SolverTensorOps<T>.AsTensor(s);
 
             Vector<T>? diagonalInverse = null;
             LuDecomposition<T>? kernel = null;
 
             // Row r of this matrix holds K⁻¹ applied to row r of A — that is, the columns of K⁻¹Aᵀ,
             // which is everything the normal-equations product needs.
-            var kernelInverseTransposed = new Matrix<T>(m, n);
+            Tensor<T> kernelInverseTransposed;
 
             if (problem.Q is null)
             {
                 // K = Z⁻¹S is diagonal, so K⁻¹ has entries z_i / s_i.
-                diagonalInverse = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    diagonalInverse[i] = NumOps.Divide(x[i], s[i]);
-                }
-
-                for (int r = 0; r < m; r++)
-                {
-                    for (int i = 0; i < n; i++)
-                    {
-                        kernelInverseTransposed[r, i] =
-                            NumOps.Multiply(problem.A[r, i], diagonalInverse[i]);
-                    }
-                }
+                var inverse = engine.TensorDivide(xTensor, sTensor);
+                diagonalInverse = inverse.ToVector();
+                kernelInverseTransposed = engine.TensorMultiply(a, engine.Reshape(inverse, new[] { 1, n }));
             }
             else
             {
@@ -722,14 +730,10 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
                 // rather than the iteration cap. Declaring x ≥ 0 on the same problem — which avoids
                 // the split — reached the optimum in 10 iterations.
                 T kernelDelta = NumOps.FromDouble(regularization);
-                var k = new Matrix<T>(n, n);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++) k[i, j] = problem.Q[i, j];
-
-                    k[i, i] = NumOps.Add(
-                        NumOps.Add(k[i, i], NumOps.Divide(s[i], x[i])), kernelDelta);
-                }
+                var q = SolverTensorOps<T>.AsTensor(problem.Q);
+                var ratio = engine.Reshape(engine.TensorDivide(sTensor, xTensor), new[] { n, 1 });
+                var diagonal = engine.TensorAddScalar(engine.TensorAdd(q, ratio), kernelDelta);
+                var k = engine.TensorWhere(engine.TensorEye<T>(n), diagonal, q).Contiguous().ToMatrix();
 
                 try
                 {
@@ -740,40 +744,18 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
                     return null;
                 }
 
+                var solvedRows = new Tensor<T>[m];
                 for (int r = 0; r < m; r++)
                 {
-                    var row = new Vector<T>(n);
-                    for (int i = 0; i < n; i++) row[i] = problem.A[r, i];
-
-                    var solved = kernel.Solve(row);
-                    for (int i = 0; i < n; i++) kernelInverseTransposed[r, i] = solved[i];
-                }
-            }
-
-            var normalMatrix = new Matrix<T>(m, m);
-            T delta = NumOps.FromDouble(regularization);
-
-            for (int r = 0; r < m; r++)
-            {
-                for (int c = 0; c <= r; c++)
-                {
-                    T accumulator = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        accumulator = NumOps.Add(
-                            accumulator,
-                            NumOps.Multiply(kernelInverseTransposed[r, i], problem.A[c, i]));
-                    }
-
-                    // A K⁻¹ Aᵀ is symmetric because K is, so only half of it is computed.
-                    normalMatrix[r, c] = accumulator;
-                    normalMatrix[c, r] = accumulator;
+                    solvedRows[r] = SolverTensorOps<T>.AsTensor(kernel.Solve(engine.TensorSliceAxis(a, 0, r).ToVector()));
                 }
 
-                // Redundant rows make this matrix singular, and a redundant row is not a user error
-                // — the standard-form rewrite can introduce one on its own.
-                normalMatrix[r, r] = NumOps.Add(normalMatrix[r, r], delta);
+                kernelInverseTransposed = engine.TensorStack(solvedRows, 0);
             }
+
+            // Redundant rows make this matrix singular, and a redundant row is not a user error
+            // — the standard-form rewrite can introduce one on its own.
+            var normalMatrix = MirroredProduct(kernelInverseTransposed, a, NumOps.FromDouble(regularization));
 
             try
             {
@@ -805,15 +787,13 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             Vector<T> dualResidual,
             Vector<T> complementarityTarget)
         {
-            int n = problem.ColumnCount;
+            var engine = SolverTensorOps<T>.Engine;
+            var xTensor = SolverTensorOps<T>.AsTensor(x);
+            var target = SolverTensorOps<T>.AsTensor(complementarityTarget);
 
             // inner = Z⁻¹ rc − rd
-            var inner = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                inner[i] = NumOps.Subtract(
-                    NumOps.Divide(complementarityTarget[i], x[i]), dualResidual[i]);
-            }
+            var inner = engine.TensorSubtract(
+                engine.TensorDivide(target, xTensor), SolverTensorOps<T>.AsTensor(dualResidual)).ToVector();
 
             var w = ApplyKernelInverse(inner);
 
@@ -825,13 +805,9 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
             var dx = Add(ApplyKernelInverse(TransposeMultiply(problem.A, dy)), w);
 
             // ds = Z⁻¹ (rc − S dz), the equation dz was eliminated from
-            var ds = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                ds[i] = NumOps.Divide(
-                    NumOps.Subtract(complementarityTarget[i], NumOps.Multiply(s[i], dx[i])),
-                    x[i]);
-            }
+            var ds = engine.TensorDivide(
+                engine.TensorSubtract(target, engine.TensorMultiply(SolverTensorOps<T>.AsTensor(s), SolverTensorOps<T>.AsTensor(dx))),
+                xTensor).ToVector();
 
             return (dx, dy, ds);
         }
@@ -840,14 +816,25 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         {
             if (_diagonalInverse is null) return (_kernel ?? throw new InvalidOperationException("_kernel is null where it is required.")).Solve(vector);
 
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                result[i] = NumOps.Multiply(_diagonalInverse[i], vector[i]);
-            }
-
-            return result;
+            return SolverTensorOps<T>.Engine.TensorMultiply(
+                SolverTensorOps<T>.AsTensor(_diagonalInverse), SolverTensorOps<T>.AsTensor(vector)).ToVector();
         }
+    }
+
+    /// <summary>
+    /// <c>left · rightᵀ</c> ([m, m]) with its lower triangle (diagonal included) mirrored onto the upper one, as the
+    /// half-computed symmetric products did, and <paramref name="delta"/> added to the diagonal.
+    /// </summary>
+    private static Matrix<T> MirroredProduct(Tensor<T> left, Tensor<T> right, T delta)
+    {
+        var engine = SolverTensorOps<T>.Engine;
+        int m = left.Shape[0];
+        var product = engine.TensorMatMul(left, engine.TensorTranspose(right));
+        // Lower triangle (diagonal included) by integer coordinates: indices held in T merge above 2048 for Half.
+        var lower = engine.TensorTril(Tensor<T>.CreateDefault(new[] { m, m }, NumOps.One));
+        var mirrored = engine.TensorWhere(lower, product, engine.TensorTranspose(product));
+        return engine.TensorWhere(engine.TensorEye<T>(m), engine.TensorAddScalar(mirrored, delta), mirrored)
+            .Contiguous().ToMatrix();
     }
 
     /// <summary>
@@ -872,26 +859,9 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         int m = problem.RowCount;
         int n = problem.ColumnCount;
 
-        var gram = new Matrix<T>(m, m);
         T delta = NumOps.FromDouble(Math.Max(_options.Regularization, 1e-12));
-
-        for (int r = 0; r < m; r++)
-        {
-            for (int c = 0; c <= r; c++)
-            {
-                T accumulator = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    accumulator = NumOps.Add(
-                        accumulator, NumOps.Multiply(problem.A[r, i], problem.A[c, i]));
-                }
-
-                gram[r, c] = accumulator;
-                gram[c, r] = accumulator;
-            }
-
-            gram[r, r] = NumOps.Add(gram[r, r], delta);
-        }
+        var a = SolverTensorOps<T>.AsTensor(problem.A);
+        var gram = MirroredProduct(a, a, delta);
 
         Vector<T> leastSquaresPrimal;
         Vector<T> y;
@@ -912,13 +882,8 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
         {
             // A Gram matrix too ill-conditioned to factor still leaves a usable neutral start; the
             // iteration recovers from a poor start, just more slowly.
-            var neutralPrimal = new Vector<T>(n);
-            var neutralSlack = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                neutralPrimal[i] = NumOps.One;
-                neutralSlack[i] = NumOps.One;
-            }
+            var neutralPrimal = Tensor<T>.CreateDefault(new[] { n }, NumOps.One).ToVector();
+            var neutralSlack = Tensor<T>.CreateDefault(new[] { n }, NumOps.One).ToVector();
 
             return (neutralPrimal, new Vector<T>(m), neutralSlack, null);
         }
@@ -979,73 +944,58 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
     private static Vector<T> Advance(Vector<T> current, Vector<T> direction, double step)
     {
-        var result = new Vector<T>(current.Length);
+        if (current.Length == 0) return new Vector<T>(0);
+        var engine = SolverTensorOps<T>.Engine;
         T scaled = NumOps.FromDouble(step);
-        for (int i = 0; i < current.Length; i++)
-        {
-            result[i] = NumOps.Add(current[i], NumOps.Multiply(scaled, direction[i]));
-        }
-
-        return result;
+        return engine.TensorAdd(
+            SolverTensorOps<T>.AsTensor(current),
+            engine.TensorMultiplyScalar(SolverTensorOps<T>.AsTensor(direction), scaled)).ToVector();
     }
 
     private static Vector<T> Multiply(Matrix<T> matrix, Vector<T> vector)
     {
-        var result = new Vector<T>(matrix.Rows);
-        for (int r = 0; r < matrix.Rows; r++)
-        {
-            T accumulator = NumOps.Zero;
-            for (int c = 0; c < matrix.Columns; c++)
-            {
-                accumulator = NumOps.Add(accumulator, NumOps.Multiply(matrix[r, c], vector[c]));
-            }
-
-            result[r] = accumulator;
-        }
-
-        return result;
+        if (matrix.Rows == 0) return new Vector<T>(0);
+        if (matrix.Columns == 0) return new Vector<T>(matrix.Rows);
+        return SolverTensorOps<T>.MatVec(SolverTensorOps<T>.AsTensor(matrix), SolverTensorOps<T>.AsTensor(vector)).ToVector();
     }
 
     private static Vector<T> TransposeMultiply(Matrix<T> matrix, Vector<T> vector)
     {
-        var result = new Vector<T>(matrix.Columns);
-        for (int c = 0; c < matrix.Columns; c++)
-        {
-            T accumulator = NumOps.Zero;
-            for (int r = 0; r < matrix.Rows; r++)
-            {
-                accumulator = NumOps.Add(accumulator, NumOps.Multiply(matrix[r, c], vector[r]));
-            }
-
-            result[c] = accumulator;
-        }
-
-        return result;
+        if (matrix.Columns == 0) return new Vector<T>(0);
+        if (matrix.Rows == 0) return new Vector<T>(matrix.Columns);
+        return SolverTensorOps<T>.TransposedMatVec(SolverTensorOps<T>.AsTensor(matrix), SolverTensorOps<T>.AsTensor(vector)).ToVector();
     }
 
     private static Vector<T> Add(Vector<T> left, Vector<T> right)
     {
-        var result = new Vector<T>(left.Length);
-        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Add(left[i], right[i]);
-        return result;
+        if (left.Length == 0) return new Vector<T>(0);
+        return SolverTensorOps<T>.Engine.TensorAdd(SolverTensorOps<T>.AsTensor(left), SolverTensorOps<T>.AsTensor(right)).ToVector();
     }
 
     private static Vector<T> Subtract(Vector<T> left, Vector<T> right)
     {
-        var result = new Vector<T>(left.Length);
-        for (int i = 0; i < left.Length; i++) result[i] = NumOps.Subtract(left[i], right[i]);
-        return result;
+        if (left.Length == 0) return new Vector<T>(0);
+        return SolverTensorOps<T>.Engine.TensorSubtract(SolverTensorOps<T>.AsTensor(left), SolverTensorOps<T>.AsTensor(right)).ToVector();
     }
 
     private static double Minimum(Vector<T> vector)
     {
-        double smallest = double.PositiveInfinity;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            smallest = Math.Min(smallest, ToDouble(vector[i]));
-        }
-
+        // Math.Min carried any NaN through to the end; otherwise the smallest converted entry is the converted
+        // smallest entry, since the conversion is monotone.
+        if (vector.Length == 0) return 0.0;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        if (SolverTensorOps<T>.First(SolverTensorOps<T>.NaN(values)) is not null) return double.NaN;
+        double smallest = ToDouble(SolverTensorOps<T>.Engine.TensorMinValue(values));
         return double.IsPositiveInfinity(smallest) ? 0.0 : smallest;
+    }
+
+    // The largest entry as a double, NaN when any entry is NaN, negative infinity when empty.
+    private static double LargestOrNaN(Vector<T> vector)
+    {
+        if (vector.Length == 0) return double.NegativeInfinity;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        if (SolverTensorOps<T>.First(SolverTensorOps<T>.NaN(values)) is not null) return double.NaN;
+        return ToDouble(SolverTensorOps<T>.Engine.TensorMaxValue(values));
     }
 
     private static double Norm(Vector<T> vector)

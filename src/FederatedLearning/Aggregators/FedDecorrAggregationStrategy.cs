@@ -14,12 +14,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 ///
 /// <para>Local training objective:</para>
 /// <code>
-/// L = L_task + lambda * ||C - I||_F^2
+/// L = L_task + lambda * (1 / D^2) * ||C||_F^2
 ///
 /// where:
-///   C = (X^T * X) / N       (correlation matrix of batch features)
+///   C = (Z^T * Z) / N       (correlation matrix of the column-standardised batch features Z)
 ///   X is the [N x D] feature matrix (N samples, D feature dimensions)
-///   I is the D x D identity matrix
 ///   ||.||_F^2 is the squared Frobenius norm
 /// </code>
 ///
@@ -27,7 +26,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// encouraging each feature dimension to capture unique information.</para>
 ///
 /// <para>Reference: Shi, Y., et al. (2023). "Towards Understanding and Mitigating Dimensional Collapse
-/// in Heterogeneous Federated Learning." ICML 2023.</para>
+/// in Heterogeneous Federated Learning." ICLR 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
@@ -71,7 +70,7 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
     /// </remarks>
     /// <param name="features">Feature matrix [N x D] where N is batch size and D is feature dimension.
     /// Each row is one sample's feature representation from the model's penultimate layer.</param>
-    /// <returns>The decorrelation loss: lambda * ||C - I||_F^2.</returns>
+    /// <returns>The decorrelation loss: lambda * (1 / D^2) * ||C||_F^2.</returns>
     public T ComputeDecorrelationLoss(Matrix<T> features)
     {
         Guard.NotNull(features);
@@ -83,63 +82,14 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
             return NumOps.Zero;
         }
 
-        // Step 1: Center features (subtract column means).
-        var means = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(features[i, j]);
-            }
-
-            means[j] = sum / n;
-        }
-
-        // Step 2: Compute standard deviations for normalization.
-        var stds = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(features[i, j]) - means[j];
-                sumSq += diff * diff;
-            }
-
-            stds[j] = Math.Sqrt(sumSq / n);
-            if (stds[j] < 1e-8)
-            {
-                stds[j] = 1e-8; // Prevent division by zero.
-            }
-        }
-
-        // Step 3: Compute correlation matrix C[i,j] = sum_k((x_k_i - mean_i)(x_k_j - mean_j)) / (N * std_i * std_j)
-        // Then compute ||C - I||_F^2 = sum_ij (C[i,j] - delta_ij)^2
-        double frobeniusNormSq = 0;
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double corr = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    double xi = (NumOps.ToDouble(features[k, i]) - means[i]) / stds[i];
-                    double xj = (NumOps.ToDouble(features[k, j]) - means[j]) / stds[j];
-                    corr += xi * xj;
-                }
-
-                corr /= n;
-
-                // C[i,j] - I[i,j]
-                double target = (i == j) ? 1.0 : 0.0;
-                double diff = corr - target;
-                frobeniusNormSq += diff * diff;
-            }
-        }
-
-        return NumOps.FromDouble(_decorrelationWeight * frobeniusNormSq);
+        // Shi et al. 2023: L_FedDecorr = (1 / d^2) * ||K||_F^2, K the correlation matrix of the batch.
+        // Half / BFloat16 are evaluated in float: the column variances, the 1e-8 std floor and ||K||_F^2 (up to
+        // d^2) do not fit Half.
+        var x = Tensor<T>.FromMatrix(features);
+        double frobeniusSq = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? Engine.TensorSumOfSquares(ComputeCorrelationTensor(x.Cast<float>()))
+            : NumOps.ToDouble(Engine.TensorSumOfSquares(ComputeCorrelationTensor(x)));
+        return NumOps.FromDouble(_decorrelationWeight * frobeniusSq / ((double)d * d));
     }
 
     /// <summary>
@@ -147,7 +97,7 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
     /// </summary>
     /// <param name="taskLoss">The base task loss.</param>
     /// <param name="features">Feature matrix [N x D] from the model's penultimate layer.</param>
-    /// <returns>L_total = L_task + lambda * ||C - I||_F^2.</returns>
+    /// <returns>L_total = L_task + lambda * (1 / D^2) * ||C||_F^2.</returns>
     public T ComputeTotalLoss(T taskLoss, Matrix<T> features)
     {
         var decorrelationLoss = ComputeDecorrelationLoss(features);
@@ -165,52 +115,32 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
         int n = features.Rows;
         int d = features.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
-
-        for (int j = 0; j < d; j++)
+        if (n == 0 || d == 0)
         {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(features[i, j]);
-            }
-
-            means[j] = sum / n;
-
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(features[i, j]) - means[j];
-                sumSq += diff * diff;
-            }
-
-            stds[j] = Math.Sqrt(sumSq / n);
-            if (stds[j] < 1e-8)
-            {
-                stds[j] = 1e-8;
-            }
+            return new Matrix<T>(d, d);
         }
 
-        var corrMatrix = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double corr = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    double xi = (NumOps.ToDouble(features[k, i]) - means[i]) / stds[i];
-                    double xj = (NumOps.ToDouble(features[k, j]) - means[j]) / stds[j];
-                    corr += xi * xj;
-                }
-
-                corrMatrix[i, j] = NumOps.FromDouble(corr / n);
-            }
-        }
-
+        var x = Tensor<T>.FromMatrix(features);
+        var corrMatrix = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? ComputeCorrelationTensor(x.Cast<float>()).Cast<T>().ToMatrix()
+            : ComputeCorrelationTensor(x).ToMatrix();
         return corrMatrix;
+    }
+
+    /// <summary>
+    /// K = Z^T Z / N where Z is the batch standardised per column (population std, floored at 1e-8).
+    /// </summary>
+    private static Tensor<TV> ComputeCorrelationTensor<TV>(Tensor<TV> x)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int n = x.Shape[0];
+        int d = x.Shape[1];
+        var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(Engine.ReduceMean(x, new[] { 0 }, true), new[] { n, d }));
+        var std = Engine.TensorClampMin(
+            Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true)),
+            ops.FromDouble(1e-8));
+        var z = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, new[] { n, d }));
+        return Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(z), z), ops.FromDouble(n));
     }
 
     /// <summary>Gets the decorrelation regularization weight (lambda).</summary>

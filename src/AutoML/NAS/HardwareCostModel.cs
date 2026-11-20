@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -315,6 +316,7 @@ namespace AiDotNet.AutoML.NAS
             if (architecture == null || architecture.Operations.Count == 0)
                 return totalCost;
 
+            var opCosts = new List<HardwareCost<T>>(architecture.Operations.Count);
             foreach (var (toNode, fromNode, operation) in architecture.Operations)
             {
                 var fromChannels = architecture.NodeChannels.TryGetValue(fromNode, out var fromNodeChannels)
@@ -325,11 +327,13 @@ namespace AiDotNet.AutoML.NAS
                     ? toNodeChannels
                     : fromChannels;
 
-                var opCost = EstimateOperationCost(operation, fromChannels, toChannels, spatialSize);
-                totalCost.Latency = _ops.Add(totalCost.Latency, opCost.Latency);
-                totalCost.Energy = _ops.Add(totalCost.Energy, opCost.Energy);
-                totalCost.Memory = _ops.Add(totalCost.Memory, opCost.Memory);
+                opCosts.Add(EstimateOperationCost(operation, fromChannels, toChannels, spatialSize));
             }
+
+            var engine = AiDotNetEngine.Current;
+            totalCost.Latency = engine.Sum(new Vector<T>(opCosts.Select(c => c.Latency)));
+            totalCost.Energy = engine.Sum(new Vector<T>(opCosts.Select(c => c.Energy)));
+            totalCost.Memory = engine.Sum(new Vector<T>(opCosts.Select(c => c.Memory)));
 
             return totalCost;
         }

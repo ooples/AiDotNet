@@ -41,7 +41,7 @@ public static class LanguageModelMetrics<T>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">Shapes are inconsistent or empty.</exception>
     public static T Perplexity(Tensor<T> predictions, int[] targets, bool fromLogits = true)
-        => NumOps.Exp(MeanCrossEntropy(predictions, targets, fromLogits));
+        => NumOps.FromDouble(Math.Exp(MeanCrossEntropy(predictions, targets, fromLogits)));
 
     /// <summary>
     /// Computes the mean cross-entropy (average negative log-likelihood, in nats) of the true tokens.
@@ -54,7 +54,7 @@ public static class LanguageModelMetrics<T>
     /// <c>exp</c> of this, so it is &gt;= 1 — this method overrides the inherited perplexity return text.)
     /// </returns>
     public static T CrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits = true)
-        => MeanCrossEntropy(predictions, targets, fromLogits);
+        => NumOps.FromDouble(MeanCrossEntropy(predictions, targets, fromLogits));
 
     /// <summary>
     /// Computes top-k accuracy: the fraction of positions whose true token is among the model's k
@@ -78,36 +78,36 @@ public static class LanguageModelMetrics<T>
 
         // The true token is in the top k iff strictly fewer than k other tokens outscore it.
         var outscores = engine.TensorGreaterThan(predictions, engine.TensorBroadcastTo(targetScores, new[] { n, v }));
-        var strictlyGreater = engine.ReduceSum(outscores, new[] { 1 }, keepDims: false);
-        T hits = engine.TensorSum(engine.TensorLessThan(strictlyGreater, NumOps.FromDouble(k)));
-        return NumOps.Divide(hits, NumOps.FromDouble(n));
+        var strictlyGreater = engine.ReduceSum(outscores.Cast<int>(), new[] { 1 }, keepDims: false);
+        int hits = engine.TensorSum(engine.TensorLessThan(strictlyGreater, k));
+        return NumOps.FromDouble((double)hits / n);
     }
 
     // ---- shared numerics ----
 
-    private static T MeanCrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits)
+    private static double MeanCrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits)
     {
         if (predictions is null) throw new ArgumentNullException(nameof(predictions));
         if (targets is null) throw new ArgumentNullException(nameof(targets));
         var (n, v) = ValidateShape(predictions, targets);
 
         var engine = AiDotNetEngine.Current;
-        var targetScores = engine.Reshape(TargetScores(predictions, targets, n, v), new[] { n });
+        var targetScores = engine.Reshape(TargetScores(predictions, targets, n, v).Cast<double>(), new[] { n });
 
-        Tensor<T> nll;
+        Tensor<double> nll;
         if (fromLogits)
         {
             // Numerically stable log-softmax: nll = logSumExp(row - row[target]). Centering on the target
             // logit before the reduction keeps the result small, so large logits (e.g. 2^24 in float)
             // do not round the fractional loss away as logSumExp(row) - row[target] would.
-            var centered = engine.TensorSubtract(predictions,
+            var centered = engine.TensorSubtract(predictions.Cast<double>(),
                 engine.TensorBroadcastTo(targetScores.Reshape(new[] { n, 1 }), new[] { n, v }));
             nll = engine.TensorLogSumExp(centered, 1, keepDims: false);
         }
         else
         {
             // Guard against log(0) for a zero-probability true token.
-            nll = engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(targetScores, NumOps.FromDouble(1e-12))));
+            nll = engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(targetScores, 1e-12)));
         }
 
         return engine.TensorMean(nll);

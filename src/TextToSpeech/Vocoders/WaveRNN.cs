@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -58,6 +59,8 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     }
 
     private WaveRNNOptions PaperOptions => (WaveRNNOptions)VocoderSettings;
+
+    private WaveRnnCore<T> Core => _core ?? throw new InvalidOperationException("The WaveRNN network has not been created.");
 
     /// <inheritdoc />
     public override int UpsampleFactor => PaperOptions.UpsampleScales.Aggregate(1, (a, b) => a * b);
@@ -123,14 +126,12 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <remarks>Tacotron 2's log-mel spectrogram.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var rows = _features!.LogMel(samples);
-        int frames = rows.GetLength(0), bands = rows.GetLength(1);
-        var mel = new Tensor<T>(new[] { 1, bands, frames });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
-        return mel;
+        var features = _features ?? throw new InvalidOperationException("The WaveRNN network has not been created.");
+        // Computed in double and narrowed once, whatever T is.
+        var rows = features.LogMel(TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(audio, new[] { audio.Length })));
+        int frames = rows.Shape[0], bands = rows.Shape[1];                                     // [frames, bands]
+        return TensorCopyHelper.CastLogical<double, T>(
+            Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, bands, frames }));
     }
 
     /// <summary>The 16-bit value (0..65535) of a sample in [−1, 1].</summary>
@@ -139,61 +140,139 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <summary>The sample in [−1, 1] of a 16-bit value.</summary>
     internal static double FromSixteenBit(int s) => s / 32767.5 - 1;
 
-    // A byte scaled to [−1, 1] (§2: "encoded as scalars in [0, 255] and scaled to the interval [−1, 1]").
-    private static double Scaled(int b) => b / 127.5 - 1;
-
     /// <summary>The coarse (high) and fine (low) bytes of a waveform <c>[samples]</c>.</summary>
     public (int[] Coarse, int[] Fine) Split(Tensor<T> audio)
     {
-        var coarse = new int[audio.Length];
-        var fine = new int[audio.Length];
-        for (int i = 0; i < audio.Length; i++)
-        {
-            int s = ToSixteenBit(NumOps.ToDouble(audio[i]));
-            coarse[i] = s >> 8;
-            fine[i] = s & 255;
-        }
-        return (coarse, fine);
+        // ToSixteenBit per sample, in double whatever T is (65535 is not representable in every T): round half to
+        // even of (clamp(x, -1, 1) + 1) * 32767.5, then the high and low bytes.
+        var x = Engine.Reshape(TensorCopyHelper.CastLogical<T, double>(audio), new[] { audio.Length });
+        var sixteen = Engine.TensorClamp(
+            Engine.TensorRound(Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Engine.TensorClamp(x, -1.0, 1.0), 1.0), 32767.5)),
+            0.0, 65535.0);
+        var high = Engine.TensorFloor(Engine.TensorDivideScalar(sixteen, 256.0));
+        var low = Engine.TensorSubtract(sixteen, Engine.TensorMultiplyScalar(high, 256.0));
+        return (TensorCopyHelper.CastLogical<double, int>(high).ToArray(), TensorCopyHelper.CastLogical<double, int>(low).ToArray());
+    }
+
+    // Bytes b as b / 127.5 - 1 in T, shaped [1, channels, count] (§2: "encoded as scalars in [0, 255] and scaled to
+    // the interval [−1, 1]").
+    private static Tensor<T> ScaledBytes(int[] bytes, int channels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var values = engine.TensorAddScalar(
+            engine.TensorDivideScalar(new Tensor<int>(bytes, new[] { 1, channels, bytes.Length / channels }).Cast<double>(), 127.5), -1.0);
+        return TensorCopyHelper.CastLogical<double, T>(values);
     }
 
     private Tensor<T> Condition(Tensor<T> mel, int samples)
-        => Engine.TensorSlice(_core!.Upsample(mel), new[] { 0, 0, 0 }, new[] { 1, mel.Shape[1], samples });
+        => Engine.TensorSlice(Core.Upsample(mel), new[] { 0, 0, 0 }, new[] { 1, mel.Shape[1], samples });
 
     /// <summary>The coarse and fine logits <c>[1, 256, samples]</c> of every sample of <paramref name="audio"/>
     /// given its previous samples and coarse byte (teacher forcing; the sample before the first is silence).</summary>
     public (Tensor<T> Coarse, Tensor<T> Fine) Logits(Tensor<T> mel, Tensor<T> audio)
+        => LogitsFromBytes(mel, QuantizedBytes(Engine, audio));
+
+    // A same-T discrete data node keeps the original double quantizer off the graph while declaring
+    // its current waveform dependency. No derivative flows through byte rounding or teacher forcing.
+    internal static Tensor<T> QuantizedBytes(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> audio)
+    {
+        void Compute(AiDotNet.Tensors.Engines.IEngine replayEngine, Tensor<T> output)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noDoubleGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            var x = replayEngine.Reshape(TensorCopyHelper.CastLogical<T, double>(audio), new[] { audio.Length });
+            var sixteen = replayEngine.TensorClamp(replayEngine.TensorRound(replayEngine.TensorMultiplyScalar(
+                replayEngine.TensorAddScalar(replayEngine.TensorClamp(x, -1.0, 1.0), 1.0), 32767.5)), 0.0, 65535.0);
+            var high = replayEngine.TensorFloor(replayEngine.TensorDivideScalar(sixteen, 256.0));
+            var low = replayEngine.TensorSubtract(sixteen, replayEngine.TensorMultiplyScalar(high, 256.0));
+            var value = TensorCopyHelper.CastLogical<double, T>(replayEngine.TensorStack(new[] { high, low }, 0));
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, output);
+        }
+        var shape = new[] { 2, audio.Length };
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var value = new Tensor<T>(shape);
+            Compute(engine, value);
+            return value;
+        }
+        return scope.RecordUnary(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "WaveRnnQuantizedBytes", audio, shape, Compute, static (_, _, _, _, _, _) => { });
+    }
+
+    private static Tensor<T> ScaleByteTensor(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> bytes)
+    {
+        void Compute(AiDotNet.Tensors.Engines.IEngine replayEngine, Tensor<T> output)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noDoubleGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            var values = replayEngine.TensorAddScalar(
+                replayEngine.TensorDivideScalar(TensorCopyHelper.CastLogical<T, double>(bytes), 127.5), -1.0);
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine,
+                TensorCopyHelper.CastLogical<double, T>(values), output);
+        }
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var value = new Tensor<T>(bytes._shape);
+            Compute(engine, value);
+            return value;
+        }
+        return scope.RecordUnary(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "WaveRnnScaledBytes", bytes, bytes._shape, Compute, static (_, _, _, _, _, _) => { });
+    }
+
+    private (Tensor<T> Coarse, Tensor<T> Fine) LogitsFromBytes(Tensor<T> mel, Tensor<T> bytes)
     {
         mel = MelInput(mel);
-        var (coarse, fine) = Split(Flat(audio));
-        int n = coarse.Length;
-        var previous = new Tensor<T>(new[] { 1, 2, n });
-        var current = new Tensor<T>(new[] { 1, 1, n });
+        int n = bytes.Shape[1];
+        Tensor<T> Row(int index) => Engine.Reshape(Engine.TensorSlice(bytes, new[] { index, 0 }, new[] { 1, n }),
+            new[] { 1, 1, n });
+        var coarse = Row(0);
+        var fine = Row(1);
         int silence = ToSixteenBit(0);
-        for (int t = 0; t < n; t++)
+        Tensor<T> Previous(Tensor<T> row, int initial)
         {
-            previous[0, 0, t] = NumOps.FromDouble(Scaled(t > 0 ? coarse[t - 1] : silence >> 8));
-            previous[0, 1, t] = NumOps.FromDouble(Scaled(t > 0 ? fine[t - 1] : silence & 255));
-            current[0, 0, t] = NumOps.FromDouble(Scaled(coarse[t]));
+            if (n == 0) return row;
+            var first = Tensor<T>.CreateDefault(new[] { 1, 1, 1 }, NumOps.FromDouble(initial));
+            return n == 1 ? first : Engine.TensorConcatenate(new[]
+                { first, Engine.TensorSlice(row, new[] { 0, 0, 0 }, new[] { 1, 1, n - 1 }) }, 2);
         }
-        var inputs = _core!.Inputs(previous, current, Condition(mel, n));
-        var h = new Tensor<T>(new[] { 1, _core.Hidden, 1 });
+        var scaled = ScaleByteTensor(Engine, Engine.TensorConcatenate(new[]
+            { Previous(coarse, silence >> 8), Previous(fine, silence & 255), coarse }, 1));
+        var previous = Engine.TensorNarrow(scaled, 1, 0, 2);
+        var current = Engine.TensorNarrow(scaled, 1, 2, 1);
+        var inputs = Core.Inputs(previous, current, Condition(mel, n));
+        var h = new Tensor<T>(new[] { 1, Core.Hidden, 1 });
         var states = new Tensor<T>[n];
         for (int t = 0; t < n; t++)
         {
-            h = _core.Step(h, Engine.TensorSlice(inputs, new[] { 0, 0, t }, new[] { 1, 3 * _core.Hidden, 1 }));
+            h = Core.Step(h, Engine.TensorSlice(inputs, new[] { 0, 0, t }, new[] { 1, 3 * Core.Hidden, 1 }));
             states[t] = h;
         }
         var all = Engine.TensorConcatenate(states, 2);
-        return (_core.CoarseLogits(all), _core.FineLogits(all));
+        return (Core.CoarseLogits(all), Core.FineLogits(all));
     }
 
     /// <inheritdoc />
     /// <remarks>The negative log-likelihood per sample, −log P(c_t) − log P(f_t | c_t).</remarks>
     protected override Tensor<T> TrainingObjective(Tensor<T> mel, Tensor<T> audio, Random random)
     {
-        var (coarse, fine) = Split(audio);
-        var (coarseLogits, fineLogits) = Logits(mel, audio);
-        return Engine.TensorAdd(ClassCrossEntropy(coarseLogits, coarse), ClassCrossEntropy(fineLogits, fine));
+        var bytes = QuantizedBytes(Engine, audio);
+        var (coarseLogits, fineLogits) = LogitsFromBytes(mel, bytes);
+        int n = audio.Length;
+        Tensor<T> Targets(int row) => Engine.Reshape(Engine.TensorSlice(bytes, new[] { row, 0 }, new[] { 1, n }),
+            new[] { 1, 1, n });
+        Tensor<T> CrossEntropy(Tensor<T> logits, Tensor<T> targets)
+        {
+            var shape = logits.Shape.ToArray();
+            var classes = Engine.Reshape(Engine.TensorArange<T>(0, 256), new[] { 1, 256, 1 });
+            var oneHot = Engine.TensorEquals(Engine.TensorBroadcastTo(classes, shape),
+                Engine.TensorBroadcastTo(targets, shape));
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(oneHot,
+                LogSoftmaxOverClasses(logits)), new[] { 0, 1, 2 }, keepDims: false), NumOps.FromDouble(-1.0 / n));
+        }
+        return Engine.TensorAdd(CrossEntropy(coarseLogits, Targets(0)), CrossEntropy(fineLogits, Targets(1)));
     }
 
     /// <inheritdoc />
@@ -203,28 +282,25 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     {
         int samples = mel.Shape[2] * UpsampleFactor;
         var condition = Condition(mel, samples);
-        var core = _core!;
+        var core = Core;
         var h = new Tensor<T>(new[] { 1, core.Hidden, 1 });
-        var wave = new Tensor<T>(new[] { 1, 1, samples });
+        var wave = new double[samples];
         int silence = ToSixteenBit(0), previousCoarse = silence >> 8, previousFine = silence & 255;
+        var blindCoarse = new Tensor<T>(new[] { 1, 1, 1 });
         for (int t = 0; t < samples; t++)
         {
-            var previous = new Tensor<T>(new[] { 1, 2, 1 });
-            previous[0, 0, 0] = NumOps.FromDouble(Scaled(previousCoarse));
-            previous[0, 1, 0] = NumOps.FromDouble(Scaled(previousFine));
+            var previous = ScaledBytes(new[] { previousCoarse, previousFine }, 2);
             var column = Engine.TensorSlice(condition, new[] { 0, 0, t }, new[] { 1, mel.Shape[1], 1 });
             // The current coarse byte reaches only the fine half, so any value gives the coarse half's state.
-            var blind = core.Step(h, core.Inputs(previous, new Tensor<T>(new[] { 1, 1, 1 }), column));
+            var blind = core.Step(h, core.Inputs(previous, blindCoarse, column));
             int c = SampleClass(core.CoarseLogits(blind), random);
-            var current = new Tensor<T>(new[] { 1, 1, 1 });
-            current[0, 0, 0] = NumOps.FromDouble(Scaled(c));
-            h = core.Step(h, core.Inputs(previous, current, column));
+            h = core.Step(h, core.Inputs(previous, ScaledBytes(new[] { c }, 1), column));
             int f = SampleClass(core.FineLogits(h), random);
-            wave[0, 0, t] = NumOps.FromDouble(FromSixteenBit((c << 8) | f));
+            wave[t] = FromSixteenBit((c << 8) | f);
             previousCoarse = c;
             previousFine = f;
         }
-        return wave;
+        return new Tensor<double>(wave, new[] { 1, 1, samples }).Cast<T>();
     }
 
     /// <summary>The fraction of the recurrent weights that are zero.</summary>
@@ -232,10 +308,8 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     {
         get
         {
-            var kernel = _core!.Recurrent.Kernel();
-            int zeros = 0;
-            for (int i = 0; i < kernel.Length; i++) if (NumOps.ToDouble(kernel[i]) == 0) zeros++;
-            return zeros / (double)kernel.Length;
+            var kernel = Core.Recurrent.Kernel();
+            return (kernel.Length - Engine.TensorCountNonzero(kernel)) / (double)kernel.Length;
         }
     }
 
@@ -254,42 +328,42 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         {
             double progress = Math.Min(1.0, since / (double)o.PruningSteps);
             double z = o.SparsityTarget * (1 - Math.Pow(1 - progress, 3));
-            _mask = PruningMask(z);
+            // The mask is reapplied on every step until the next interval, so it is built outside any caller arena
+            // (the facade trains inside one): an arena reset would reissue its storage and prune unintended weights.
+            using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+            {
+                _mask = PruningMask(z);
+            }
         }
-        _core!.Recurrent.MaskKernel(_mask);
+        Core.Recurrent.MaskKernel(_mask);
     }
 
     // The mask keeping all but the fraction z of each gate matrix's blocks with the smallest summed |w|.
     private Tensor<T> PruningMask(double z)
     {
         var o = PaperOptions;
-        var kernel = _core!.Recurrent.Kernel();
-        int hidden = _core.Hidden, br = o.PruneBlockRows, bc = o.PruneBlockColumns;
+        var kernel = Core.Recurrent.Kernel();
+        int hidden = Core.Hidden, br = o.PruneBlockRows, bc = o.PruneBlockColumns;
         if (hidden % br != 0 || hidden % bc != 0)
             throw new InvalidOperationException($"The pruning block {br}x{bc} must tile the {hidden}x{hidden} gate matrices.");
-        var mask = new Tensor<T>(kernel._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = NumOps.One;
         int rowsOfBlocks = hidden / br, colsOfBlocks = hidden / bc, blocks = rowsOfBlocks * colsOfBlocks;
         int pruned = (int)Math.Floor(z * blocks);
+
+        // Summed |w| of each block: the kernel viewed as [gate, block row, row, block column, column]
+        int[] blockShape = { 3, rowsOfBlocks, br, colsOfBlocks, bc };
+        var magnitudes = Engine.ReduceSum(
+            Engine.Reshape(Engine.TensorAbs(TensorCopyHelper.CastLogical<T, double>(kernel)), blockShape), new[] { 2, 4 }, false).ToArray();
+        var keep = new int[3 * blocks];
         for (int gate = 0; gate < 3; gate++)
         {
-            var magnitude = new (double Value, int Index)[blocks];
-            for (int b = 0; b < blocks; b++)
-            {
-                int r0 = gate * hidden + b / colsOfBlocks * br, c0 = b % colsOfBlocks * bc;
-                double sum = 0;
-                for (int r = 0; r < br; r++)
-                    for (int c = 0; c < bc; c++) sum += Math.Abs(NumOps.ToDouble(kernel[(r0 + r) * hidden + c0 + c]));
-                magnitude[b] = (sum, b);
-            }
-            foreach (var (_, b) in magnitude.OrderBy(m => m.Value).ThenBy(m => m.Index).Take(pruned))
-            {
-                int r0 = gate * hidden + b / colsOfBlocks * br, c0 = b % colsOfBlocks * bc;
-                for (int r = 0; r < br; r++)
-                    for (int c = 0; c < bc; c++) mask[(r0 + r) * hidden + c0 + c] = NumOps.Zero;
-            }
+            int offset = gate * blocks;
+            var order = Enumerable.Range(0, blocks).OrderBy(b => magnitudes[offset + b]).ThenBy(b => b);
+            var prunedBlocks = new HashSet<int>(order.Take(pruned));
+            for (int b = 0; b < blocks; b++) keep[offset + b] = prunedBlocks.Contains(b) ? 0 : 1;
         }
-        return mask;
+
+        var blockMask = new Tensor<int>(keep, new[] { 3, rowsOfBlocks, 1, colsOfBlocks, 1 }).Cast<T>();
+        return Engine.Reshape(Engine.TensorBroadcastTo(blockMask, blockShape), kernel._shape);
     }
 
     /// <inheritdoc />

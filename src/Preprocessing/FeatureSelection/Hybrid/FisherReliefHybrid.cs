@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 
@@ -28,18 +29,18 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _fisherWeight;
     private readonly int _nNeighbors;
 
-    private double[]? _fisherScores;
-    private double[]? _reliefScores;
-    private double[]? _hybridScores;
+    private Vector<T>? _fisherScores;
+    private Vector<T>? _reliefScores;
+    private Vector<T>? _hybridScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double FisherWeight => _fisherWeight;
-    public double[]? FisherScores => _fisherScores;
-    public double[]? ReliefScores => _reliefScores;
-    public double[]? HybridScores => _hybridScores;
+    public Vector<T>? FisherScores => _fisherScores;
+    public Vector<T>? ReliefScores => _reliefScores;
+    public Vector<T>? HybridScores => _hybridScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -80,128 +81,147 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (p == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
         // Compute Fisher Scores
-        _fisherScores = ComputeFisherScores(data, target, n, p);
+        var fisher = ComputeFisherScores(X, y, n, p);
 
         // Compute ReliefF Scores
-        _reliefScores = ComputeReliefScores(data, target, n, p);
+        var relief = ComputeReliefScores(X, y, n, p);
 
-        // Normalize both score arrays
-        var normalizedFisher = Normalize(_fisherScores);
-        var normalizedRelief = Normalize(_reliefScores);
+        // Normalize both score arrays and combine them
+        var hybrid = engine.TensorAdd(
+            engine.TensorMultiplyScalar(Normalize(fisher), NumOps.FromDouble(_fisherWeight)),
+            engine.TensorMultiplyScalar(Normalize(relief), NumOps.FromDouble(1 - _fisherWeight)));
 
-        // Combine scores
-        _hybridScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _hybridScores[j] = _fisherWeight * normalizedFisher[j] + (1 - _fisherWeight) * normalizedRelief[j];
+        _fisherScores = fisher.ToVector();
+        _reliefScores = relief.ToVector();
+        _hybridScores = hybrid.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hybridScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hybrid, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeFisherScores(Matrix<T> data, Vector<T> target, int n, int p)
+    /// <summary>
+    /// Two-class Fisher criterion per feature, (mean0 - mean1)^2 / (var0 + var1) with population variances; the
+    /// classes are target &lt; 0.5 and target &gt;= 0.5, and every score is 0 when a class has fewer than 2 samples.
+    /// </summary>
+    private Tensor<T> ComputeFisherScores(Tensor<T> X, Tensor<T> y, int n, int p)
     {
-        var scores = new double[p];
+        var engine = Engine;
+        var class0 = engine.TensorLessThan(y, NumOps.FromDouble(0.5));
+        var class1 = PreprocessingTensorOps.OneMinus(class0);
+        int count0 = PreprocessingTensorOps.CountNonZero(class0);
+        int count1 = n - count0;
+        if (count0 < 2 || count1 < 2)
+            return new Tensor<T>(new[] { p });
 
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count < 2 || class1.Count < 2)
-            return scores;
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean0 = class0.Sum(i => NumOps.ToDouble(data[i, j])) / class0.Count;
-            double mean1 = class1.Sum(i => NumOps.ToDouble(data[i, j])) / class1.Count;
-
-            double var0 = class0.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean0, 2)) / class0.Count;
-            double var1 = class1.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean1, 2)) / class1.Count;
-
-            double denom = var0 + var1;
-            scores[j] = denom > 1e-10 ? Math.Pow(mean0 - mean1, 2) / denom : 0;
-        }
-
-        return scores;
+        var mean0 = ClassMean(X, class0, count0, n);
+        var mean1 = ClassMean(X, class1, count1, n);
+        var var0 = ClassMean(engine.TensorSquare(engine.TensorSubtract(X, mean0)), class0, count0, n);
+        var var1 = ClassMean(engine.TensorSquare(engine.TensorSubtract(X, mean1)), class1, count1, n);
+        var denom = engine.Reshape(engine.TensorAdd(var0, var1), new[] { p });
+        var numerator = engine.Reshape(engine.TensorSquare(engine.TensorSubtract(mean0, mean1)), new[] { p });
+        var defined = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+        var safeDenom = engine.TensorWhere(defined, denom, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        return engine.TensorWhere(defined, engine.TensorDivide(numerator, safeDenom), new Tensor<T>(new[] { p }));
     }
 
-    private double[] ComputeReliefScores(Matrix<T> data, Vector<T> target, int n, int p)
+    /// <summary>Column means ([1, p]) over the rows of one class (a 0/1 mask of length n).</summary>
+    private Tensor<T> ClassMean(Tensor<T> X, Tensor<T> mask, int count, int n)
     {
-        var scores = new double[p];
+        var engine = Engine;
+        var sums = engine.TensorMatMul(engine.Reshape(mask, new[] { 1, n }), X);
+        return engine.TensorDivideScalar(sums, FeatureSelectionTensorOps.Count<T>(count));
+    }
+
+    /// <summary>
+    /// ReliefF (Kononenko 1994) over m = min(50, n) evenly spaced instances: per-feature differences are scaled by
+    /// the feature range, neighbours are the k nearest by the sum of those differences (Manhattan), and the misses
+    /// of every other class C are weighted by P(C) / (1 - P(class of the instance)).
+    /// </summary>
+    private Tensor<T> ComputeReliefScores(Tensor<T> X, Tensor<T> y, int n, int p)
+    {
+        var engine = Engine;
+        var scores = new Tensor<T>(new[] { 1, p });
         int sampleSize = Math.Min(50, n);
+        if (sampleSize == 0)
+            return engine.Reshape(scores, new[] { p });
+
+        // diff(A, I1, I2) = |I1[A] - I2[A]| / (max(A) - min(A)); a constant feature never differs
+        var range = engine.Reshape(engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), PreprocessingTensorOps.ColumnMin(X)), new[] { 1, p });
+        var safeRange = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero), range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var scaled = engine.TensorDivide(X, safeRange);
+
+        var classIds = FeatureSelectionInformationOps.ClassIndices(y, out int classCount);
+        var classOf = classIds.AsSpan().ToArray();
+        var membership = engine.TensorOneHot<T>(classIds, classCount); // [n, C]
+        var priors = engine.ReduceMean(membership, new[] { 0 }, false); // [C]
+
+        // weight[c_R, C] = P(C) / (1 - P(c_R)) for C != c_R
+        var notOwn = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(classCount));
+        var rest = engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.OneMinus(priors), new[] { classCount, 1 }), new[] { classCount, classCount });
+        var safeRest = engine.TensorWhere(engine.TensorGreaterThan(rest, NumOps.Zero), rest, PreprocessingTensorOps.Filled(new[] { classCount, classCount }, NumOps.One));
+        var missWeights = engine.TensorMultiply(
+            engine.TensorDivide(engine.TensorBroadcastTo(engine.Reshape(priors, new[] { 1, classCount }), new[] { classCount, classCount }), safeRest), notOwn);
+
+        T perUpdate = NumOps.Multiply(FeatureSelectionTensorOps.Count<T>(sampleSize), FeatureSelectionTensorOps.Count<T>(_nNeighbors));
+        var everyRow = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
 
         for (int s = 0; s < sampleSize; s++)
         {
             int idx = s * n / sampleSize;
-            double targetVal = NumOps.ToDouble(target[idx]);
+            var instance = engine.TensorSlice(scaled, new[] { idx, 0 }, new[] { 1, p });
+            var differences = engine.TensorAbs(engine.TensorSubtract(scaled, engine.TensorBroadcastTo(instance, new[] { n, p }))); // [n, p]
+            var closeness = engine.TensorNegate(engine.ReduceSum(differences, new[] { 1 }, false)); // [n], larger = nearer
+            var notSelf = engine.TensorSubtract(everyRow, FeatureSelectionTensorOps.OneHot<T>(idx, n));
 
-            var distances = new List<(int Index, double Dist, bool SameClass)>();
-            for (int i = 0; i < n; i++)
+            int own = classOf[idx];
+            for (int c = 0; c < classCount; c++)
             {
-                if (i == idx) continue;
+                var candidates = engine.TensorMultiply(notSelf, engine.Reshape(engine.TensorSlice(membership, new[] { 0, c }, new[] { n, 1 }), new[] { n }));
+                var nearest = FeatureSelectionTensorOps.TopKWhere(closeness, candidates, _nNeighbors);
+                if (nearest.Length == 0)
+                    continue;
 
-                double dist = 0;
-                for (int j = 0; j < p; j++)
+                var neighbourDiffs = engine.ReduceSum(
+                    engine.TensorIndexSelect(differences, new Tensor<int>(nearest, new[] { nearest.Length }), 0), new[] { 0 }, true); // [1, p]
+                if (c == own)
                 {
-                    double diff = NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[i, j]);
-                    dist += diff * diff;
+                    scores = engine.TensorSubtract(scores, engine.TensorDivideScalar(neighbourDiffs, perUpdate));
                 }
-
-                bool sameClass = NumOps.Compare(target[i], NumOps.FromDouble(targetVal)) == 0;
-                distances.Add((i, dist, sameClass));
-            }
-
-            var hits = distances.Where(d => d.SameClass).OrderBy(d => d.Dist).Take(_nNeighbors).ToList();
-            var misses = distances.Where(d => !d.SameClass).OrderBy(d => d.Dist).Take(_nNeighbors).ToList();
-
-            foreach (var hit in hits)
-            {
-                for (int j = 0; j < p; j++)
+                else
                 {
-                    double diff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[hit.Index, j]));
-                    scores[j] -= diff / ((double)sampleSize * _nNeighbors);
-                }
-            }
-
-            foreach (var miss in misses)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double diff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[miss.Index, j]));
-                    scores[j] += diff / ((double)sampleSize * _nNeighbors);
+                    var weight = engine.TensorBroadcastTo(engine.TensorSlice(missWeights, new[] { own, c }, new[] { 1, 1 }), new[] { 1, p });
+                    scores = engine.TensorAdd(scores, engine.TensorDivideScalar(engine.TensorMultiply(neighbourDiffs, weight), perUpdate));
                 }
             }
         }
 
-        return scores;
+        return engine.Reshape(scores, new[] { p });
     }
 
-    private double[] Normalize(double[] scores)
+    /// <summary>Min-max scaling to [0, 1]; every score becomes 0.5 when the range is below 1e-10.</summary>
+    private Tensor<T> Normalize(Tensor<T> scores)
     {
-        double min = scores.Min();
-        double max = scores.Max();
-        double range = max - min;
+        var engine = Engine;
+        T min = engine.TensorMinValue(scores);
+        T range = NumOps.Subtract(engine.TensorMaxValue(scores), min);
+        if (NumOps.LessThan(range, NumOps.FromDouble(1e-10)))
+            return PreprocessingTensorOps.Filled(scores.Shape.ToArray(), NumOps.FromDouble(0.5));
 
-        if (range < 1e-10)
-            return scores.Select(_ => 0.5).ToArray();
-
-        return scores.Select(s => (s - min) / range).ToArray();
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(scores, min), range);
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -214,15 +234,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("FisherReliefHybrid has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

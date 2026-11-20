@@ -125,14 +125,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Vertex AI API returned an empty or invalid response.");
         }
 
-        var embeddingValues = result.Predictions[0].Embeddings.Values;
-        var values = new T[embeddingValues.Length];
-        for (int i = 0; i < embeddingValues.Length; i++)
-        {
-            values[i] = NumOps.FromDouble(embeddingValues[i]);
-        }
-
-        return new Vector<T>(values);
+        return FromApiValues(result.Predictions[0]?.Embeddings?.Values, _dimension, "Vertex AI");
     }
 
     /// <summary>
@@ -179,17 +172,7 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Vertex AI API returned an empty or mismatched response.");
         }
 
-        var matrix = new Matrix<T>(texts.Count, _dimension);
-        for (int i = 0; i < result.Predictions.Count; i++)
-        {
-            var embeddingValues = result.Predictions[i].Embeddings.Values;
-            for (int j = 0; j < embeddingValues.Length; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(embeddingValues[j]);
-            }
-        }
-
-        return matrix;
+        return FromApiRows(result.Predictions.Select(p => p?.Embeddings?.Values).ToList(), texts.Count, _dimension, "Vertex AI");
     }
 
     private class VertexAIPredictionResponse

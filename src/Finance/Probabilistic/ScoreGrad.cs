@@ -1104,66 +1104,13 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
-    {
-        int contextLen = ContextLength * _numFeatures;
-        int shift = Math.Min(prediction.Length, contextLen);
-        if (contextLen > 0 && input.Length >= contextLen)
-        {
-            // [input after the first shift values, up to contextLen | leading predictions], detached.
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var parts = new List<Tensor<T>>(2);
-            if (contextLen - shift > 0)
-                parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, shift, contextLen - shift).Contiguous());
-            if (shift > 0)
-                parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, shift).Contiguous());
-            return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
-        }
-
-        var inputVec = input.ToVector();
-        var predVec = prediction.ToVector();
-        var shifted = new T[contextLen];
-
-        int shiftAmount = Math.Min(predVec.Length, contextLen);
-        for (int i = 0; i < contextLen - shiftAmount; i++)
-        {
-            shifted[i] = inputVec[i + shiftAmount];
-        }
-        for (int i = 0; i < shiftAmount; i++)
-        {
-            shifted[contextLen - shiftAmount + i] = predVec[i];
-        }
-
-        return new Tensor<T>(new[] { contextLen }, new Vector<T>(shifted));
-    }
+        => ShiftFlatWindow(input, prediction, prediction.Length, windowLength: ContextLength * _numFeatures);
 
     /// <summary>
     /// Concatenates multiple predictions into one tensor.
     /// </summary>
-    /// <param name="predictions">List of predictions.</param>
-    /// <returns>Concatenated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ScoreGrad model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the ScoreGrad architecture.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        int totalLen = predictions.Sum(p => p.ToVector().Length);
-        var result = new T[totalLen];
-        int offset = 0;
-
-        foreach (var pred in predictions)
-        {
-            var predVec = pred.ToVector();
-            for (int i = 0; i < predVec.Length; i++)
-            {
-                result[offset + i] = predVec[i];
-            }
-            offset += predVec.Length;
-        }
-
-        return new Tensor<T>(new[] { totalLen }, new Vector<T>(result));
-    }
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        => ConcatenateFlatPredictions(predictions);
 
     /// <summary>
     /// Computes quantiles from samples.

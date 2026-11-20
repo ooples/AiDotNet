@@ -120,7 +120,28 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         int totalSamples = interactions.Count;
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * totalFeatDim];
-        var labelsData = new T[totalSamples];
+        var labelsData = new int[totalSamples];
+
+        // Hash embedding for unknown nodes: sin((node + 1) * (f + 1)), f = 0 .. halfNode - 1, for every
+        // distinct unknown node at once as one engine outer product; rows are then copied out. It is formed
+        // in double and cast to T once, like the scalar Math.Sin: in half precision the product overflows to
+        // infinity (and sin to NaN) and node ids above 2048 are not exact.
+        int halfNodeDim = nodeFeatDim / 2;
+        var hashRow = new Dictionary<int, int>();
+        var hashNodes = new List<int>();
+        foreach (var interaction in interactions)
+        {
+            foreach (int node in new[] { interaction.src, interaction.dst })
+            {
+                if (!nodeFeatureMap.ContainsKey(node) && !hashRow.ContainsKey(node))
+                {
+                    hashRow[node] = hashNodes.Count;
+                    hashNodes.Add(node + 1);
+                }
+            }
+        }
+
+        var hashEmbeddings = HashEmbeddings(hashNodes.ToArray(), halfNodeDim);
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -139,8 +160,8 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             else
             {
                 // Simple hash embedding for unknown nodes
-                for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + f] = NumOps.FromDouble(Math.Sin((src + 1.0) * (f + 1.0)));
+                if (halfNode > 0)
+                    Array.Copy(hashEmbeddings, hashRow[src] * halfNode, featuresData, featOff, halfNode);
             }
 
             if (nodeFeatureMap.TryGetValue(dst, out var dstFeats))
@@ -150,19 +171,19 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             }
             else
             {
-                for (int f = 0; f < halfNode; f++)
-                    featuresData[featOff + halfNode + f] = NumOps.FromDouble(Math.Sin((dst + 1.0) * (f + 1.0)));
+                if (halfNode > 0)
+                    Array.Copy(hashEmbeddings, hashRow[dst] * halfNode, featuresData, featOff + halfNode, halfNode);
             }
 
             // Edge features
             for (int f = 0; f < edgeFeatDim; f++)
                 featuresData[featOff + nodeFeatDim + f] = NumOps.FromDouble(edgeFeats[f]);
 
-            labelsData[i] = NumOps.FromDouble(label);
+            labelsData[i] = label;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, totalFeatDim });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
@@ -230,5 +251,19 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
     {
         var (bf, bl) = ExtractBatch(indices);
         return new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(bf, bl);
+    }
+
+    /// <summary>
+    /// Row-major <c>[nodes, halfNodeDim]</c> table of <c>sin(node * (f + 1))</c> for the given (already
+    /// one-based) node values, formed in double and cast to <typeparamref name="T"/> once.
+    /// </summary>
+    internal static T[] HashEmbeddings(int[] nodesPlusOne, int halfNodeDim)
+    {
+        if (halfNodeDim <= 0 || nodesPlusOne.Length == 0) return new T[0];
+
+        var engine = AiDotNetEngine.Current;
+        var ramp = new Tensor<int>(Enumerable.Range(1, halfNodeDim).ToArray(), new[] { halfNodeDim }).Cast<double>();
+        var nodes = new Tensor<int>(nodesPlusOne, new[] { nodesPlusOne.Length }).Cast<double>();
+        return engine.TensorSin(engine.TensorOuter(nodes, ramp)).Cast<T>().Contiguous().AsSpan().ToArray();
     }
 }

@@ -29,8 +29,6 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 [PipelineStage(PipelineStage.Training)]
 public class ZeroTerminalSNRSchedule<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Rescales alpha cumulative products to enforce zero terminal SNR.
     /// </summary>
@@ -41,18 +39,14 @@ public class ZeroTerminalSNRSchedule<T>
         int len = alphasCumprod.Length;
         if (len == 0) return alphasCumprod;
 
-        var result = new Vector<T>(len);
-        double first = NumOps.ToDouble(alphasCumprod[0]);
-        double last = NumOps.ToDouble(alphasCumprod[len - 1]);
-
-        for (int i = 0; i < len; i++)
-        {
-            double val = NumOps.ToDouble(alphasCumprod[i]);
-            // Rescale: shift and scale so first stays the same and last becomes 0
-            double rescaled = (val - last) / (first - last) * first;
-            result[i] = NumOps.FromDouble(Math.Max(0, rescaled));
-        }
-
-        return result;
+        // Lin et al. (2024), Algorithm 1: rescale sqrt(alpha_cumprod) so the last value is 0 and the first is
+        // unchanged, then square back. The rescaled table is formed in double and rounded to T once (master's
+        // precision): in T (Half) the square root, shift, scale and square would each round again.
+        var engine = AiDotNetEngine.Current;
+        var sqrtAlphas = engine.TensorSqrt(alphasCumprod.AsTensor().Cast<double>());
+        double first = sqrtAlphas[0];
+        double last = sqrtAlphas[len - 1];
+        var rescaled = engine.TensorMultiplyScalar(engine.TensorAddScalar(sqrtAlphas, -last), first / (first - last));
+        return engine.TensorSquare(rescaled).Cast<T>().ToVector();
     }
 }

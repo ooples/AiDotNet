@@ -28,13 +28,13 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly int _nFeaturesToSelect;
     private readonly double _minCorrelation;
 
-    private double[]? _correlations;
+    private Vector<T>? _correlations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Correlations => _correlations;
+    public Vector<T>? Correlations => _correlations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,94 +69,53 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        // pair counts and sign sums run in double, as master did: they pass 2048 (n > 45) in Half, and the 1e-10
+        // tie tolerance is 0 in Half, which made no pair tied
+        var x = FilterStatisticTensorOps.AsTensor(data).Cast<double>();
+        var y = FilterStatisticTensorOps.AsTensor(target).Cast<double>();
+        const double tolerance = 1e-10;
 
-        // Extract target values
-        var targetValues = new double[n];
-        for (int i = 0; i < n; i++)
-            targetValues[i] = NumOps.ToDouble(target[i]);
-
-        _correlations = new double[p];
-
-        for (int j = 0; j < p; j++)
+        // the n x n pair grid runs one block of rows at a time and is reduced at once, so only a block x n slice is
+        // ever held (four full [n, n] grids of double were 3.2 GB at 10000 rows)
+        var signSums = new double[p];
+        var tieSums = new double[p];
+        double yTiedSum = 0;
+        foreach (var block in FeatureScoringTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
         {
-            // Extract feature values
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = NumOps.ToDouble(data[i, j]);
-
-            // Count concordant and discordant pairs
-            long concordant = 0;
-            long discordant = 0;
-            long tiesX = 0;
-            long tiesY = 0;
-
-            for (int i = 0; i < n - 1; i++)
+            int start = block[0];
+            var (yTied, ySign) = PairSigns(y, start, block.Length, tolerance);
+            yTiedSum += Engine.TensorSum(yTied);
+            for (int j = 0; j < p; j++)
             {
-                for (int k = i + 1; k < n; k++)
-                {
-                    double xDiff = featureValues[k] - featureValues[i];
-                    double yDiff = targetValues[k] - targetValues[i];
-
-                    if (Math.Abs(xDiff) < 1e-10 && Math.Abs(yDiff) < 1e-10)
-                    {
-                        // Tie in both
-                        continue;
-                    }
-                    else if (Math.Abs(xDiff) < 1e-10)
-                    {
-                        // Tie in X only
-                        tiesX++;
-                    }
-                    else if (Math.Abs(yDiff) < 1e-10)
-                    {
-                        // Tie in Y only
-                        tiesY++;
-                    }
-                    else if ((xDiff > 0 && yDiff > 0) || (xDiff < 0 && yDiff < 0))
-                    {
-                        concordant++;
-                    }
-                    else
-                    {
-                        discordant++;
-                    }
-                }
+                var (xTied, xSign) = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), start, block.Length, tolerance);
+                signSums[j] += Engine.TensorSum(Engine.TensorMultiply(xSign, ySign));
+                tieSums[j] += Engine.TensorSum(xTied);
             }
-
-            // Kendall Tau-b (adjusted for ties)
-            long nPairs = (long)n * (n - 1) / 2;
-            double numerator = concordant - discordant;
-            double denominator = Math.Sqrt((nPairs - tiesX) * (double)(nPairs - tiesY));
-
-            _correlations[j] = denominator > 1e-10 ? numerator / denominator : 0;
         }
 
-        // Select features above threshold or top by absolute correlation
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (Math.Abs(_correlations[j]) >= _minCorrelation)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => Math.Abs(_correlations[j]))
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _correlations
-                .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-                .OrderByDescending(x => x.Corr)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        double pairs = (double)n * (n - 1) / 2;
+        double yTies = (yTiedSum - n) * 0.5;
+        var xTies = Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(new Tensor<double>(tieSums, new[] { p }), (double)n), 0.5);
+        var numerator = Engine.TensorMultiplyScalar(new Tensor<double>(signSums, new[] { p }), 0.5);
+        var untiedX = Engine.TensorNegate(Engine.TensorSubtractScalar(xTies, pairs));
+        var denominator = Engine.TensorMultiplyScalar(Engine.TensorSqrt(untiedX), Math.Sqrt(pairs - yTies));
+        var correlations = FilterStatisticTensorOps.GuardedDivide(numerator, denominator, 1e-10, 0.0).Cast<T>();
+        _correlations = correlations.ToVector();
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(
+            Engine.TensorAbs(correlations), NumOps.FromDouble(_minCorrelation), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
+    }
+
+    // For the rows i in [start, start + count) and every k of a 1-D tensor: 1 where |v[k] - v[i]| < tolerance, and
+    // the sign of v[k] - v[i] (0 when tied); [count, n].
+    private (Tensor<double> Tied, Tensor<double> Sign) PairSigns(Tensor<double> values, int start, int count, double tolerance)
+    {
+        int n = values.Length;
+        var difference = Engine.TensorSubtract(
+            FilterStatisticTensorOps.RowBroadcast(values, count),
+            FilterStatisticTensorOps.ColumnBroadcast(Engine.TensorNarrow(values, 0, start, count), n));
+        var tied = Engine.TensorLessThan(Engine.TensorAbs(difference), tolerance);
+        return (tied, Engine.TensorMultiply(Engine.TensorSign(difference), PreprocessingTensorOps.OneMinus(tied)));
     }
 
     /// <inheritdoc />
@@ -172,15 +131,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("KendallTau has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

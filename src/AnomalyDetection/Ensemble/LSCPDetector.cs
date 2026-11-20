@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -323,7 +324,8 @@ public partial class LSCPDetector<T> : AnomalyDetectorBase<T>
                 AnomalyTensorOps.SelectColumns(query, features), AnomalyTensorOps.SelectColumns(reference, features));
             var (_, order) = AnomalyTensorOps.StableSortRows(distances, descending: false);
             var nearest = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
-            counts = engine.TensorAdd(counts, engine.Scatter(Tensor<T>.CreateZeros(new[] { m, n }), nearest, ones, 1));
+            counts = engine.TensorAdd(counts, engine.TensorScatterReduce(
+                Tensor<T>.CreateZeros(new[] { m, n }), 1, nearest, ones, ScatterReduceMode.Sum));
         }
 
         // Bar per row: Threshold, or (second largest count - 1) when fewer than 2 rows exceed Threshold

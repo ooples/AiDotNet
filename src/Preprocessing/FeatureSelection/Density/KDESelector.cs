@@ -25,14 +25,14 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly int _nFeaturesToSelect;
     private readonly double _bandwidth;
 
-    private double[]? _separationScores;
+    private Vector<T>? _separationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Bandwidth => _bandwidth;
-    public double[]? SeparationScores => _separationScores;
+    public Vector<T>? SeparationScores => _separationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,110 +68,74 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+
+        // Standardize features (population std; a feature with std not above 1e-10 is left as is)
+        var mean = engine.ReduceMean(X, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(mean, new[] { n, p }));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
+        var standardized = engine.TensorWhere(
+            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p }),
+            engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p })), X);
+
+        // Compute class-specific densities at evaluation points (50 points from each feature's min to max)
+        int nEvalPoints = 50;
+        var minVal = PreprocessingTensorOps.ColumnMin(standardized);
+        var evalPoints = FeatureScoringTensorOps.EvenGrid(
+            minVal, engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(standardized), minVal), nEvalPoints);
+
+        // Compute KDE for each class
+        var classDensities = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
+            classDensities[c] = ComputeKDE(
+                FeatureScoringTensorOps.Rows(standardized, FeatureScoringTensorOps.GroupMembers(classIndex, c)), evalPoints);
+
+        // Compute separation score: average symmetric KL divergence between class densities
+        var totalSeparation = new Tensor<T>(new[] { p });
+        int pairs = 0;
+        for (int ci = 0; ci < k; ci++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            for (int cj = ci + 1; cj < k; cj++)
+            {
+                totalSeparation = engine.TensorAdd(totalSeparation, ComputeSymmetricKL(classDensities[ci], classDensities[cj]));
+                pairs++;
+            }
         }
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _separationScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Standardize feature
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            if (std > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - mean) / std;
-
-            // Compute class-specific densities at evaluation points
-            double minVal = col.Min();
-            double maxVal = col.Max();
-            int nEvalPoints = 50;
-            var evalPoints = Enumerable.Range(0, nEvalPoints)
-                .Select(i => minVal + (maxVal - minVal) * i / (nEvalPoints - 1))
-                .ToArray();
-
-            // Compute KDE for each class
-            var classDensities = new Dictionary<int, double[]>();
-            foreach (var c in classes)
-            {
-                var classData = classIndices[c].Select(i => col[i]).ToArray();
-                classDensities[c] = ComputeKDE(classData, evalPoints);
-            }
-
-            // Compute separation score: average KL divergence between class densities
-            double totalSeparation = 0;
-            int pairs = 0;
-            for (int ci = 0; ci < classes.Count; ci++)
-            {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    double kl = ComputeSymmetricKL(classDensities[classes[ci]], classDensities[classes[cj]]);
-                    totalSeparation += kl;
-                    pairs++;
-                }
-            }
-
-            _separationScores[j] = pairs > 0 ? totalSeparation / pairs : 0;
-        }
+        var scores = pairs > 0 ? engine.TensorDivideScalar(totalSeparation, NumOps.FromDouble(pairs)) : totalSeparation;
+        _separationScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _separationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeKDE(double[] data, double[] evalPoints)
+    private Tensor<T> ComputeKDE(Tensor<T> data, Tensor<T> evalPoints)
     {
-        var densities = new double[evalPoints.Length];
-        double normFactor = 1.0 / (data.Length * _bandwidth * Math.Sqrt(2 * Math.PI));
+        var engine = Engine;
+        T normFactor = NumOps.Divide(NumOps.One,
+            NumOps.FromDouble(data.Shape[0] * _bandwidth * Math.Sqrt(2 * Math.PI)));
+        var sums = FeatureScoringTensorOps.GaussianKernelSums(evalPoints, data, NumOps.FromDouble(_bandwidth));
 
-        for (int i = 0; i < evalPoints.Length; i++)
-        {
-            double sum = 0;
-            foreach (double x in data)
-            {
-                double u = (evalPoints[i] - x) / _bandwidth;
-                sum += Math.Exp(-0.5 * u * u);
-            }
-            densities[i] = sum * normFactor + 1e-10; // Add small constant to avoid log(0)
-        }
-
-        return densities;
+        // Add small constant to avoid log(0)
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(sums, normFactor), PreprocessingTensorOps.Tolerance<T>(1e-10));
     }
 
-    private double ComputeSymmetricKL(double[] p, double[] q)
+    private Tensor<T> ComputeSymmetricKL(Tensor<T> p, Tensor<T> q)
     {
-        double klPQ = 0, klQP = 0;
-        for (int i = 0; i < p.Length; i++)
-        {
-            if (p[i] > 1e-10 && q[i] > 1e-10)
-            {
-                klPQ += p[i] * Math.Log(p[i] / q[i]);
-                klQP += q[i] * Math.Log(q[i] / p[i]);
-            }
-        }
-        return (klPQ + klQP) / 2;
+        // Sum over the evaluation points where both densities are above 1e-10
+        var engine = Engine;
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var both = engine.TensorMultiply(engine.TensorGreaterThan(p, floor), engine.TensorGreaterThan(q, floor));
+        var klPQ = engine.TensorMultiply(p, engine.TensorLog(engine.TensorDivide(p, q)));
+        var klQP = engine.TensorMultiply(q, engine.TensorLog(engine.TensorDivide(q, p)));
+        var terms = engine.TensorWhere(both, engine.TensorAdd(klPQ, klQP), new Tensor<T>(p.Shape.ToArray()));
+        return engine.TensorDivideScalar(engine.ReduceSum(terms, new[] { 0 }, false), NumOps.FromDouble(2));
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -185,15 +149,7 @@ public class KDESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("KDESelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -26,14 +27,14 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly double _gamma;
 
-    private double[]? _fisherScores;
+    private Vector<T>? _fisherScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Gamma => _gamma;
-    public double[]? FisherScores => _fisherScores;
+    public Vector<T>? FisherScores => _fisherScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,91 +70,40 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+
+        // Class labels (rounded to the nearest integer)
+        var labels = engine.TensorRound(Tensor<T>.FromVector(target)).Cast<int>().AsSpan().ToArray();
+        var classes = labels.Distinct().OrderBy(c => c).ToArray();
+        var classIndex = new int[n];
         for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+            classIndex[i] = Array.BinarySearch(classes, labels[i]);
+        var membership = engine.TensorOneHot<T>(new Tensor<int>(classIndex, new[] { n }), classes.Length); // [n, c]
+        var classCounts = engine.ReduceSum(membership, new[] { 0 }, false); // [c]
 
-        var classes = y.Distinct().ToList();
+        // Each sample's kernel row sum sum_j k(x_i, x_j) under the single-feature RBF kernel
+        T negativeGamma = NumOps.FromDouble(-_gamma);
+        var rowSums = FeatureSelectionTensorOps.KernelRowSums(
+            x, column => FeatureSelectionTensorOps.RbfColumnKernel(column, negativeGamma)); // [n, p]
 
-        _fisherScores = new double[p];
-
-        // For each feature, compute kernel Fisher score
-        for (int j = 0; j < p; j++)
-        {
-            // Use only this feature for kernel computation
-            var featureVals = new double[n];
-            for (int i = 0; i < n; i++)
-                featureVals[i] = X[i, j];
-
-            // Compute kernel values and class-conditional means
-            double overallMean = 0;
-            var classMeans = new Dictionary<int, double>();
-            var classKernelSums = new Dictionary<int, double>();
-            var classCounts = new Dictionary<int, int>();
-
-            foreach (var c in classes)
-            {
-                classMeans[c] = 0;
-                classKernelSums[c] = 0;
-                classCounts[c] = 0;
-            }
-
-            // Compute pairwise kernel values
-            for (int i = 0; i < n; i++)
-            {
-                double kernelSum = 0;
-                for (int i2 = 0; i2 < n; i2++)
-                {
-                    double diff = featureVals[i] - featureVals[i2];
-                    double k = Math.Exp(-_gamma * diff * diff);
-                    kernelSum += k;
-                }
-                classMeans[y[i]] += kernelSum;
-                classCounts[y[i]]++;
-                overallMean += kernelSum;
-            }
-
-            overallMean /= n;
-            foreach (var c in classes)
-                if (classCounts[c] > 0)
-                    classMeans[c] /= classCounts[c];
-
-            // Between-class scatter (in kernel space)
-            double betweenScatter = 0;
-            foreach (var c in classes)
-            {
-                double diff = classMeans[c] - overallMean;
-                betweenScatter += classCounts[c] * diff * diff;
-            }
-
-            // Within-class scatter (in kernel space)
-            double withinScatter = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double kernelSum = 0;
-                for (int i2 = 0; i2 < n; i2++)
-                {
-                    double diff = featureVals[i] - featureVals[i2];
-                    kernelSum += Math.Exp(-_gamma * diff * diff);
-                }
-                double deviation = kernelSum - classMeans[y[i]];
-                withinScatter += deviation * deviation;
-            }
-
-            _fisherScores[j] = withinScatter > 1e-10 ? betweenScatter / withinScatter : 0;
-        }
+        // Fisher score of the row sums: between-class over within-class scatter
+        var overallMean = engine.ReduceMean(rowSums, new[] { 0 }, true); // [1, p]
+        var classMeans = engine.TensorDivide(
+            engine.TensorMatMul(engine.TensorTranspose(membership), rowSums),
+            engine.Reshape(classCounts, new[] { classes.Length, 1 })); // [c, p]
+        var between = engine.Reshape(engine.TensorMatMul(
+            engine.Reshape(classCounts, new[] { 1, classes.Length }),
+            engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean))), new[] { p });
+        var within = engine.ReduceSum(
+            engine.TensorSquare(engine.TensorSubtract(rowSums, engine.TensorMatMul(membership, classMeans))), new[] { 0 }, false);
+        var defined = engine.TensorGreaterThan(within, NumOps.FromDouble(1e-10));
+        var safeWithin = engine.TensorWhere(defined, within, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var scores = engine.TensorWhere(defined, engine.TensorDivide(between, safeWithin), new Tensor<T>(new[] { p }));
+        _fisherScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fisherScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -171,15 +121,7 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("KernelFisherSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -308,10 +308,12 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
 
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
-        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
+        var mask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
+        _dropoutMask = mask;
+        AiDotNet.Training.CompiledStepRandom<T>.RecordCustom(mask, RefreshMaskTensorInPlace);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
-        return Engine.TensorMultiply(input, _dropoutMask);
+        return Engine.TensorMultiply(input, mask);
     }
 
     /// <summary>
@@ -330,20 +332,28 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         if (!IsTrainingMode || _dropoutMask is null || _dropoutMask.Length == 0)
             return;
 
+        RefreshMaskTensorInPlace(_dropoutMask);
+        _dropoutMask.IncrementVersion();
+        Engine.InvalidatePersistentTensor(_dropoutMask);
+    }
+
+    private void RefreshMaskTensorInPlace(Tensor<T> targetMask)
+    {
+        if (!IsTrainingMode || targetMask.Length == 0)
+            return;
+
         ulong counter = AdvanceSeedCounter();
         int? perCallSeed = RandomSeed.HasValue
             ? DeriveSeed32(RandomSeed.Value, counter)
             : (int?)null;
 
         using var refreshedMask = Engine.TensorDropoutMask<T>(
-            _dropoutMask._shape, _dropoutRate, _scale, perCallSeed);
-        if (refreshedMask.Length != _dropoutMask.Length)
+            targetMask._shape, _dropoutRate, _scale, perCallSeed);
+        if (refreshedMask.Length != targetMask.Length)
             throw new InvalidOperationException(
-                $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
+                $"Compiled dropout mask length changed from {targetMask.Length} to {refreshedMask.Length}.");
 
-        refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
-        _dropoutMask.IncrementVersion();
-        Engine.InvalidatePersistentTensor(_dropoutMask);
+        refreshedMask.AsSpan().CopyTo(targetMask.AsWritableSpan());
     }
 
     /// <summary>

@@ -82,7 +82,7 @@ internal sealed class DiTToProbabilisticRvq<T>
     /// while straight-through reconstruction and commitment train the encoder.</summary>
     internal (Tensor<T> Quantized, Tensor<T> VariationalLoss, Tensor<T> CommitmentLoss) TrainingForward(Tensor<T> latents)
     {
-        Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), new Vector<T>(x.ToArray()));
+        Tensor<T> Detached(Tensor<T> x) => _engine.StopGradient(x);
         int frames = latents.Shape[0];
         var probabilities = _engine.Softmax(IndexTtsOps.Value(ScaleLogits), 1);
         var tail = new Tensor<T>(new[] { Depth, Depth });
@@ -92,8 +92,6 @@ internal sealed class DiTToProbabilisticRvq<T>
             _engine.TensorTile(_engine.TensorExp(IndexTtsOps.Value(MaximumScaleLogit)), new[] { 1, Depth }));
         var tables = new List<Tensor<T>>();
         var selected = new List<Tensor<T>>();
-        var residual = latents.ToArray().Select(NumOps.ToDouble).ToArray();
-        var sum = new Tensor<T>(new[] { frames, Dimension });
         for (int d = 0; d < Depth; d++)
         {
             var raw = Codebooks[d].Forward(IndexTtsOps.Ids<T>(Enumerable.Range(0, Vocabulary).ToArray()));
@@ -103,26 +101,24 @@ internal sealed class DiTToProbabilisticRvq<T>
             var table = _engine.TensorMultiply(_engine.TensorDivide(raw, _engine.TensorTile(norm, new[] { 1, Dimension })),
                 _engine.TensorTile(scale, new[] { Vocabulary, Dimension }));
             tables.Add(table);
-            var ids = new int[frames];
-            for (int f = 0; f < frames; f++)
-            {
-                double best = double.PositiveInfinity;
-                for (int k = 0; k < Vocabulary; k++)
-                {
-                    double distance = 0;
-                    for (int j = 0; j < Dimension; j++)
-                    {
-                        double delta = residual[f * Dimension + j] - NumOps.ToDouble(table[k, j]);
-                        distance += delta * delta;
-                    }
-                    if (distance < best) { best = distance; ids[f] = k; }
-                }
-                for (int j = 0; j < Dimension; j++) residual[f * Dimension + j] -= NumOps.ToDouble(table[ids[f], j]);
-            }
-            var chosen = _engine.TensorIndexSelect(table, new Tensor<int>(new[] { frames }, new Vector<int>(ids)), 0);
-            selected.Add(chosen);
-            sum = _engine.TensorAdd(sum, chosen);
         }
+        // The greedy nearest-code search is a choice, not a function to differentiate: one node that reruns it on every
+        // compiled replay from that step's latents and tables, giving each stage's one-hot codes [frames, vocabulary].
+        // The codeword itself is the one-hot row times the table, so the table still takes its gradient.
+        var searchInputs = new Tensor<T>[Depth + 1];
+        searchInputs[0] = latents;
+        for (int d = 0; d < Depth; d++) searchInputs[d + 1] = tables[d];
+        var codes = GreedyResidualCodes(searchInputs, frames, Depth, Vocabulary, Dimension);
+        Tensor<T>? sum = null;
+        for (int d = 0; d < Depth; d++)
+        {
+            var oneHot = _engine.Reshape(_engine.TensorSlice(codes, new[] { d, 0, 0 }, new[] { 1, frames, Vocabulary }),
+                new[] { frames, Vocabulary });
+            var chosen = _engine.TensorMatMul(oneHot, tables[d]);
+            selected.Add(chosen);
+            sum = sum is null ? chosen : _engine.TensorAdd(sum, chosen);
+        }
+        sum ??= new Tensor<T>(new[] { frames, Dimension });
         var logVariance = IndexTtsOps.Value(LogVariance);
         var variance = _engine.TensorExp(logVariance);
         Tensor<T>? loss = null;
@@ -145,6 +141,43 @@ internal sealed class DiTToProbabilisticRvq<T>
         var commitment = _engine.TensorSubtract(latents, Detached(sum));
         commitment = _engine.ReduceMean(_engine.TensorMultiply(commitment, commitment), new[] { 0, 1 }, true);
         return (_engine.TensorAdd(latents, Detached(_engine.TensorSubtract(sum, latents))), loss!, commitment);
+    }
+
+    // Each frame's residual takes its nearest codeword at every stage in turn (first index on a tie), in double, as the
+    // eager search did: codes[d, f, k] is 1 for stage d's choice k at frame f.
+    // A static method so the node's computation captures only its sizes: a compiled plan compares what a node's
+    // delegate holds, and an instance it cannot compare.
+    private static Tensor<T> GreedyResidualCodes(Tensor<T>[] inputs, int frames, int depth, int vocabulary, int dimension)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("DiTToGreedyResidualCodes", inputs,
+            new[] { depth, frames, vocabulary }, (values, codes) => GreedyResidualCodes(values, codes, depth, vocabulary, dimension));
+
+    private static void GreedyResidualCodes(Tensor<T>[] inputs, Tensor<T> codes, int depth, int vocabulary, int dimension)
+    {
+        int frames = inputs[0].Shape[0];
+        var residual = inputs[0].ToArray().Select(NumOps.ToDouble).ToArray();
+        var values = codes.AsWritableSpan();
+        values.Clear();
+        for (int d = 0; d < depth; d++)
+        {
+            var table = inputs[d + 1].ToArray().Select(NumOps.ToDouble).ToArray();
+            for (int f = 0; f < frames; f++)
+            {
+                int best = 0;
+                double bestDistance = double.PositiveInfinity;
+                for (int k = 0; k < vocabulary; k++)
+                {
+                    double distance = 0;
+                    for (int j = 0; j < dimension; j++)
+                    {
+                        double delta = residual[f * dimension + j] - table[k * dimension + j];
+                        distance += delta * delta;
+                    }
+                    if (distance < bestDistance) { bestDistance = distance; best = k; }
+                }
+                for (int j = 0; j < dimension; j++) residual[f * dimension + j] -= table[best * dimension + j];
+                values[(d * frames + f) * vocabulary + best] = NumOps.One;
+            }
+        }
     }
 
     internal double[] Scales()

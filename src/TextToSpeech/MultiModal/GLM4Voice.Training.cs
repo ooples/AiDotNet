@@ -284,7 +284,9 @@ public partial class GLM4Voice<T>
         {
             var output = tokenizer.Encode(features, valid, training: true, random);
             last = output;
-            return Engine.TensorAdd(tokenizer.AsrLoss(decoderInput, labels, output.Hidden, output.Valid, true, random), tokenizer.CommitmentLoss(output));
+            var objective = Engine.TensorAdd(tokenizer.AsrLoss(decoderInput, labels, output.Hidden, output.Valid, true, random), tokenizer.CommitmentLoss(output));
+            // Zero, and no gradient: it records this step's codes for the EMA update below.
+            return Engine.TensorAdd(objective, Engine.TensorMultiplyScalar(tokenizer.TrainingStatistics(output), NumOps.Zero));
         }, TokenizerOptimizer());
         // The release updates the EMA codebook in the training forward; the codebook takes no gradient.
         if (last is not null)

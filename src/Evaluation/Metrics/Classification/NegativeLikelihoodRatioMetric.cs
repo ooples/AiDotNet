@@ -49,17 +49,7 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.One;
 
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-
-            if (pred && actual) tp++;
-            else if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
 
         double sensitivity = (tp + fn) > 0 ? (double)tp / (tp + fn) : 0;
         double specificity = (tn + fp) > 0 ? (double)tn / (tn + fp) : 0;
@@ -89,18 +79,17 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.One, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

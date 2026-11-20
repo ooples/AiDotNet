@@ -75,11 +75,16 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     private static readonly object _initLock = new object();
 
     /// <summary>
+    /// Initial value of the rank-sized scaling vector (the paper's and PEFT's d_initial).
+    /// </summary>
+    private const double InitialRankScaling = 0.1;
+
+    /// <summary>
     /// Scaling vector d (outputSize) - trainable per-layer parameter.
     /// </summary>
     /// <remarks>
-    /// This vector scales the output of the shared matrices on a per-dimension basis.
-    /// It is initialized to ones so VeRA has no effect initially.
+    /// This vector scales the output of the shared matrices on a per-dimension basis (the paper's b).
+    /// It is initialized to zero, as in Kopiczko et al. (2024) and PEFT, so VeRA has no effect initially.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
@@ -89,8 +94,8 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// Scaling vector b (rank) - trainable per-layer parameter.
     /// </summary>
     /// <remarks>
-    /// This vector scales the intermediate rank-dimensional representation.
-    /// It is initialized to ones so VeRA has no effect initially.
+    /// This vector scales the intermediate rank-dimensional representation (the paper's d).
+    /// It is initialized to d_initial = 0.1, as in Kopiczko et al. (2024) and PEFT.
     /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
@@ -269,18 +274,10 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
         // IMPORTANT: Initialize scaling vectors here because this is called from the base constructor
         // BEFORE ParameterCount is accessed. If we wait until the VeRAAdapter constructor body,
         // the base constructor will try to access ParameterCount which uses these vectors, causing NullReferenceException.
+        // The output-sized vector starts at zero so the adapter starts as the base layer; the
+        // rank-sized vector starts at d_initial so the output-sized vector receives a gradient.
         _scalingVectorD = new Tensor<T>([outputSize]);
-        _scalingVectorB = new Tensor<T>([rank]);
-
-        for (int i = 0; i < outputSize; i++)
-        {
-            _scalingVectorD[i] = NumOps.One;
-        }
-
-        for (int i = 0; i < rank; i++)
-        {
-            _scalingVectorB[i] = NumOps.One;
-        }
+        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.FromDouble(InitialRankScaling));
 
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
@@ -314,65 +311,28 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
         // Compute: input * A (shared, frozen) → [batchSize, rank]
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."));
+        Tensor<T> afterA = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]),
+            Tensor<T>.FromMatrix(_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.")));
 
         // Apply scaling vector b element-wise: afterA * diag(b) → [batchSize, rank]
-        Matrix<T> afterB = new Matrix<T>(batchSize, _scalingVectorB.Length);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < _scalingVectorB.Length; j++)
-            {
-                afterB[i, j] = NumOps.Multiply(afterA[i, j], _scalingVectorB[j]);
-            }
-        }
+        Tensor<T> afterB = Engine.TensorMultiply(afterA, Engine.Reshape(_scalingVectorB, [1, _scalingVectorB.Length]));
 
         // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
-        Matrix<T> afterSharedB = afterB.Multiply(_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized."));
+        Tensor<T> afterSharedB = Engine.TensorMatMul(
+            afterB,
+            Tensor<T>.FromMatrix(_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
 
         // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
-        Matrix<T> afterD = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                afterD[i, j] = NumOps.Multiply(afterSharedB[i, j], _scalingVectorD[j]);
-            }
-        }
+        Tensor<T> afterD = Engine.TensorMultiply(afterSharedB, Engine.Reshape(_scalingVectorD, [1, outputSize]));
 
         // Apply alpha/rank scaling
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-        afterD = afterD.Multiply(scaling);
-
-        // Convert back to tensor
-        Vector<T> veraOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                veraOutputData[idx++] = afterD[i, j];
-            }
-        }
-
-        Tensor<T> veraOutput = new Tensor<T>(new[] { batchSize, outputSize }, veraOutputData);
+        Tensor<T> veraOutput = Engine.TensorMultiplyScalar(afterD, scaling);
 
         // Sum base output and VeRA output
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], veraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, veraOutput);
 
         return result;
     }
@@ -391,19 +351,9 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update scaling vector d
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            T update = NumOps.Multiply(_scalingVectorDGradient[i], learningRate);
-            _scalingVectorD[i] = NumOps.Subtract(_scalingVectorD[i], update);
-        }
-
-        // Update scaling vector b
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            T update = NumOps.Multiply(_scalingVectorBGradient[i], learningRate);
-            _scalingVectorB[i] = NumOps.Subtract(_scalingVectorB[i], update);
-        }
+        // Update scaling vectors d and b: v -= learningRate * dv
+        Engine.TensorSubtractInPlace(_scalingVectorD, Tensor<T>.FromVector(Engine.Multiply(_scalingVectorDGradient, learningRate)));
+        Engine.TensorSubtractInPlace(_scalingVectorB, Tensor<T>.FromVector(Engine.Multiply(_scalingVectorBGradient, learningRate)));
 
         // Update base layer if not frozen
         if (!_freezeBaseLayer)
@@ -451,53 +401,26 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
 
         // First apply b scaling to A: A_scaled = A * diag(b)
-        Matrix<T> aScaled = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                aScaled[i, j] = NumOps.Multiply(_sharedMatrixA[i, j], _scalingVectorB[j]);
-            }
-        }
+        Tensor<T> aScaled = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(_sharedMatrixA), Engine.Reshape(_scalingVectorB, [1, rank]));
 
         // Multiply by B: intermediate = A_scaled * B
-        Matrix<T> intermediate = aScaled.Multiply(_sharedMatrixB);
+        Tensor<T> intermediate = Engine.TensorMatMul(aScaled, Tensor<T>.FromMatrix(_sharedMatrixB));
 
-        // Apply d scaling: W_vera = intermediate * diag(d) * scaling
-        Matrix<T> veraWeights = new Matrix<T>(inputSize, outputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                veraWeights[i, j] = NumOps.Multiply(
-                    NumOps.Multiply(intermediate[i, j], _scalingVectorD[j]),
-                    scaling);
-            }
-        }
-
-        // Transpose to match DenseLayer format [outputSize, inputSize]
-        Matrix<T> veraWeightsTransposed = veraWeights.Transpose();
+        // Apply d scaling: W_vera = intermediate * diag(d) * scaling ([inputSize, outputSize])
+        Matrix<T> veraWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(intermediate, Engine.Reshape(_scalingVectorD, [1, outputSize])), scaling).ToMatrix();
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create merged parameters
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], veraWeightsTransposed[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. DenseLayer stores its weights input-major and FullyConnectedLayer
+        // output-major ([outputSize, inputSize]), so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? veraWeights.Transpose() : veraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

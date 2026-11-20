@@ -503,14 +503,16 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         // row instead of the [B, heads, queryLen, contextLen] score matrix. Nothing in this
         // layer reads those scores — the field below was written on every forward and only ever
         // cleared — so materializing them cost cross-attention memory for no consumer.
-        var attended = Engine.FlashAttention(
-            Q,
-            K,
-            V,
-            scale: 1.0 / Math.Sqrt(_headDim),
-            isCausal: false,
-            out _,
-            attentionBias: null);
+        var attended = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? Engine.ScaledDotProductAttention(Q, K, V, mask: null, scale: 1.0 / Math.Sqrt(_headDim), out _)
+            : Engine.FlashAttention(
+                Q,
+                K,
+                V,
+                scale: 1.0 / Math.Sqrt(_headDim),
+                isCausal: false,
+                out _,
+                attentionBias: null);
         LastAttentionKernelPath = AttentionKernelPath.FusedFlashAttention;
 
         // Reshape back: [B, numHeads, queryLen, headDim] -> [B, queryLen, queryDim]
@@ -694,21 +696,16 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     private void UpdateWeight(Tensor<T> weight, Tensor<T> gradient, T learningRate)
     {
-        var wSpan = weight.AsWritableSpan();
-        var gSpan = gradient.AsSpan();
-        for (int i = 0; i < wSpan.Length; i++)
-        {
-            wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(gSpan[i], learningRate));
-        }
+        // w -= g * lr, written back into the same tensor so its handle is unchanged.
+        var updated = Engine.TensorSubtract(
+            weight, Engine.TensorMultiplyScalar(Engine.Reshape(gradient, weight._shape), learningRate));
+        updated.CopyTo(weight.AsWritableSpan());
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)
     {
         var span = dest.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-        {
-            span[i] = source[offset + i];
-        }
+        source.GetSubVector(offset, span.Length).AsSpan().CopyTo(span);
     }
 
     /// <inheritdoc />

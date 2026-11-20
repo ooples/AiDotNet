@@ -378,31 +378,32 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private Vector<T> HouseholderVector(Vector<T> x)
     {
-        T norm = x.Norm();
+        if (x.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
 
-        // If the input vector has zero norm, return a zero vector
-        // (no Householder transformation needed)
-        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-14)))
+        // Computed in double so small normal Half entries (e.g. 1e-4, whose square 1e-8 underflows Half to 0) and
+        // large entries (> 256, whose square overflows Half) still produce an exact unit reflection vector, and the
+        // 1e-14 zero-norm guard does not underflow to 0 in Half.
+        var wide = TensorCopyHelper.CastLogical<T, double>(x.AsTensor()).ToVector();
+        double norm = wide.Norm();
+        if (norm < 1e-14 || double.IsNaN(norm))
         {
             return new Vector<T>(x.Length);
         }
 
-        Vector<T> v = x.Clone();
-        // Use opposite sign to avoid cancellation
-        v[0] = NumOps.LessThan(x[0], NumOps.Zero)
-            ? NumOps.Subtract(v[0], norm)
-            : NumOps.Add(v[0], norm);
+        double x0 = wide[0];
+        wide[0] = x0 < 0.0 ? x0 - norm : x0 + norm;
 
-        T vNorm = v.Norm();
-
-        // If the Householder vector has zero norm, return a zero vector
-        if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
+        double vNorm = wide.Norm();
+        if (vNorm < 1e-14 || double.IsNaN(vNorm))
         {
             return new Vector<T>(x.Length);
         }
 
-        // VECTORIZED: Normalize using Engine division
-        return (Vector<T>)Engine.Divide(v, vNorm);
+        var normalized = Engine.TensorDivideScalar(wide.AsTensor(), vNorm);
+        return TensorCopyHelper.CastLogical<double, T>(normalized).ToVector();
     }
 
     /// <summary>

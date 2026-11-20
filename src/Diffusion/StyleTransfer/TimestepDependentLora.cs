@@ -2,6 +2,10 @@ using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Parameters;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
+using System.Runtime.InteropServices;
 
 namespace AiDotNet.Diffusion.StyleTransfer;
 
@@ -66,7 +70,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed partial class TimestepDependentLora<T>
+public sealed partial class TimestepDependentLora<T> : IParameterSource<T>, IParameterChunkSource<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
@@ -80,12 +84,17 @@ public sealed partial class TimestepDependentLora<T>
 
     // The frozen initialization triplet. Subtracting its masked product is what makes the adapter
     // the identity at init WITHOUT forcing B or S to start at zero (see the class remarks).
-    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _downInit;
-    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _upInit;
-    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _singularInit;
+
+    // Canonical live views: forward, optimizer and checkpoint state share these exact tensors.
+    private readonly Tensor<T> _downTensor;
+    private readonly Tensor<T> _upTensor;
+    private readonly Tensor<T> _singularTensor;
+    private readonly Tensor<T> _downInitialTensor;
+    private readonly Tensor<T> _upInitialTensor;
+    private readonly Tensor<T> _singularInitialTensor;
 
     // Cached [inputDim, outputDim] delta for _cachedTimestep. Invalidated by InvalidateCache().
     [Scratch]
@@ -158,6 +167,12 @@ public sealed partial class TimestepDependentLora<T>
         _downInit = DownProjection.Clone();
         _upInit = UpProjection.Clone();
         _singularInit = SingularValues.Clone();
+        _downTensor = MatrixView(DownProjection);
+        _upTensor = MatrixView(UpProjection);
+        _singularTensor = VectorView(SingularValues);
+        _downInitialTensor = MatrixView(_downInit);
+        _upInitialTensor = MatrixView(_upInit);
+        _singularInitialTensor = VectorView(_singularInit);
     }
 
     /// <summary>
@@ -191,15 +206,17 @@ public sealed partial class TimestepDependentLora<T>
     /// path are also against this repository's standing guidance.
     /// </para>
     /// <para>
-    /// Cached because a denoising loop revisits the same timestep across blocks and the parameters do
-    /// not move within a forward pass. <see cref="InvalidateCache"/> must be called after any write to
+    /// Inference caches the delta when a denoising loop revisits a timestep. Tape and graph recordings
+    /// always rebuild it so their factors stay connected. <see cref="InvalidateCache"/> must be called after any inference-time write to
     /// A, B or S, or the cache would serve a delta computed from stale weights.
     /// </para>
     /// </remarks>
     public Tensor<T> EffectiveDeltaTransposed(int timestep)
     {
         int effective = EffectiveRank(timestep);
-        if (_cachedDelta is not null && _cachedTimestep == timestep) return _cachedDelta;
+        bool inferenceCache = !GraphMode.IsActive && !GradientRecording.IsRecording<T>();
+        if (!inferenceCache) InvalidateCache();
+        else if (_cachedDelta is not null && _cachedTimestep == timestep) return _cachedDelta;
 
         int inputDim = DownProjection.Columns;
         int outputDim = UpProjection.Rows;
@@ -212,43 +229,82 @@ public sealed partial class TimestepDependentLora<T>
         //
         // Shapes: Am is [effective, inputDim] with row r pre-scaled by s[r]; Bm is [outputDim,
         // effective]. Bm x Am gives dW as [outputDim, inputDim]; the caller wants it transposed.
-        var trainedDown = ScaledRowTensor(DownProjection, SingularValues, effective, inputDim);
-        var initialDown = ScaledRowTensor(_downInit, _singularInit, effective, inputDim);
-        var trainedUp = LeadingColumnTensor(UpProjection, effective, outputDim);
-        var initialUp = LeadingColumnTensor(_upInit, effective, outputDim);
-
-        var deltaWeight = Engine.TensorSubtract(
-            Engine.TensorMatMul(trainedUp, trainedDown),
-            Engine.TensorMatMul(initialUp, initialDown));
+        var trainedDown = ScaledRowTensor(_downTensor, _singularTensor, effective, inputDim);
+        var trainedUp = LeadingColumnTensor(_upTensor, effective, outputDim);
+        Tensor<T> initialWeight;
+        using (new NoGradScope<T>())
+        {
+            var initialDown = ScaledRowTensor(_downInitialTensor, _singularInitialTensor, effective, inputDim);
+            var initialUp = LeadingColumnTensor(_upInitialTensor, effective, outputDim);
+            initialWeight = Engine.TensorMatMul(initialUp, initialDown);
+        }
+        var deltaWeight = Engine.TensorSubtract(Engine.TensorMatMul(trainedUp, trainedDown), initialWeight);
 
         var delta = Engine.TensorPermute(deltaWeight, new[] { 1, 0 });
 
-        _cachedDelta = delta;
-        _cachedTimestep = timestep;
+        if (inferenceCache)
+        {
+            _cachedDelta = delta;
+            _cachedTimestep = timestep;
+        }
         return delta;
     }
 
     /// <summary>Builds <c>[effective, inputDim]</c> with row r scaled by <c>singular[r]</c>.</summary>
-    private static Tensor<T> ScaledRowTensor(Matrix<T> down, Vector<T> singular, int effective, int inputDim)
+    private static Tensor<T> ScaledRowTensor(Tensor<T> down, Tensor<T> singular, int effective, int inputDim)
     {
-        var tensor = new Tensor<T>(new[] { effective, inputDim });
-        for (int r = 0; r < effective; r++)
-        {
-            var scale = singular[r];
-            for (int i = 0; i < inputDim; i++) tensor[(r * inputDim) + i] = Ops.Multiply(down[r, i], scale);
-        }
-        return tensor;
+        // Leading `effective` rows of A, row r scaled by s[r].
+        var rows = Engine.TensorSlice(down, new[] { 0, 0 }, new[] { effective, inputDim });
+        var scales = Engine.Reshape(Engine.TensorSlice(singular, new[] { 0 }, new[] { effective }), new[] { effective, 1 });
+        return Engine.TensorMultiply(rows, Engine.TensorBroadcastTo(scales, new[] { effective, inputDim }));
     }
 
     /// <summary>Builds <c>[outputDim, effective]</c> from the leading columns of <paramref name="up"/>.</summary>
-    private static Tensor<T> LeadingColumnTensor(Matrix<T> up, int effective, int outputDim)
+    private static Tensor<T> LeadingColumnTensor(Tensor<T> up, int effective, int outputDim)
     {
-        var tensor = new Tensor<T>(new[] { outputDim, effective });
-        for (int o = 0; o < outputDim; o++)
+        // Leading `effective` columns of B.
+        return Engine.TensorSlice(up, new[] { 0, 0 }, new[] { outputDim, effective });
+    }
+
+    private static Tensor<T> MatrixView(Matrix<T> matrix)
+        => Tensor<T>.FromMemory(MemoryMarshal.AsMemory(matrix.AsMemory()), new[] { matrix.Rows, matrix.Columns });
+
+    private static Tensor<T> VectorView(Vector<T> vector)
+        => Tensor<T>.FromMemory(MemoryMarshal.AsMemory(vector.AsMemory()), new[] { vector.Length });
+
+    /// <summary>The complete state length, including the frozen initialization triplet.</summary>
+    public long ParameterCount => 2L * ((long)_downTensor.Length + _upTensor.Length + _singularTensor.Length);
+
+    /// <summary>Yields A, B, S followed by their frozen initial values, in checkpoint order.</summary>
+    public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+    {
+        yield return new ParameterChunk<T>("A", ParameterSlotRole.Trainable, _downTensor);
+        yield return new ParameterChunk<T>("B", ParameterSlotRole.Trainable, _upTensor);
+        yield return new ParameterChunk<T>("S", ParameterSlotRole.Trainable, _singularTensor);
+        yield return new ParameterChunk<T>("A_init", ParameterSlotRole.Frozen, _downInitialTensor);
+        yield return new ParameterChunk<T>("B_init", ParameterSlotRole.Frozen, _upInitialTensor);
+        yield return new ParameterChunk<T>("S_init", ParameterSlotRole.Frozen, _singularInitialTensor);
+    }
+
+    /// <summary>Reads the same complete state described by <see cref="GetParameterStateChunks"/>.</summary>
+    public Vector<T> GetParameters()
+        => ParameterChunkBuffer.ToVector(GetParameterStateChunks().Select(chunk => chunk.Tensor));
+
+    /// <summary>Restores complete state without replacing the live optimizer tensors.</summary>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException("T-LoRA state must contain A, B, S and their frozen initialization triplet.", nameof(parameters));
+        int offset = 0;
+        foreach (var chunk in GetParameterStateChunks())
         {
-            for (int r = 0; r < effective; r++) tensor[(o * effective) + r] = up[o, r];
+            parameters.AsSpan().Slice(offset, chunk.Tensor.Length).CopyTo(chunk.Tensor.AsWritableSpan());
+            chunk.Tensor.IncrementVersion();
+            Engine.InvalidatePersistentTensor(chunk.Tensor);
+            offset += chunk.Tensor.Length;
         }
-        return tensor;
+        InvalidateCache();
     }
 
     /// <summary>
@@ -283,28 +339,7 @@ public sealed partial class TimestepDependentLora<T>
                 nameof(source));
         }
 
-        CopyMatrix(source.DownProjection, DownProjection);
-        CopyMatrix(source.UpProjection, UpProjection);
-        CopyVector(source.SingularValues, SingularValues);
-
-        CopyMatrix(source._downInit, _downInit);
-        CopyMatrix(source._upInit, _upInit);
-        CopyVector(source._singularInit, _singularInit);
-
-        InvalidateCache();
-    }
-
-    private static void CopyMatrix(Matrix<T> from, Matrix<T> to)
-    {
-        for (int r = 0; r < to.Rows; r++)
-        {
-            for (int c = 0; c < to.Columns; c++) to[r, c] = from[r, c];
-        }
-    }
-
-    private static void CopyVector(Vector<T> from, Vector<T> to)
-    {
-        for (int i = 0; i < to.Length; i++) to[i] = from[i];
+        SetParameters(source.GetParameters());
     }
 
     /// <summary>
@@ -328,21 +363,16 @@ public sealed partial class TimestepDependentLora<T>
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
+        // delta is dW^T as [inputDim, outputDim], so the output is input (truncated to inputDim) times delta.
         var delta = EffectiveDeltaTransposed(timestep);
         int inputDim = DownProjection.Columns;
         int outputDim = UpProjection.Rows;
-        var output = new Vector<T>(outputDim);
+        int used = Math.Min(inputDim, input.Length);
+        if (used == 0) return new Vector<T>(outputDim);
 
-        for (int o = 0; o < outputDim; o++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < inputDim && i < input.Length; i++)
-            {
-                sum += Ops.ToDouble(delta[(i * outputDim) + o]) * Ops.ToDouble(input[i]);
-            }
-            output[o] = Ops.FromDouble(sum);
-        }
-        return output;
+        var rows = used == inputDim ? delta : Engine.TensorSlice(delta, new[] { 0, 0 }, new[] { used, outputDim });
+        var x = (used == input.Length ? input : input.GetSubVector(0, used)).AsTensor().Reshape(new[] { 1, used });
+        return Engine.TensorMatMul(x, rows).Reshape(new[] { outputDim }).ToVector();
     }
 
     /// <summary>
@@ -376,11 +406,7 @@ public sealed partial class TimestepDependentLora<T>
         var upTransposed = OrthonormalRows(rank, outputDim, random);
 
         // B needs orthonormal COLUMNS, so transpose the orthonormal-rows result.
-        var up = new Matrix<T>(outputDim, rank);
-        for (int o = 0; o < outputDim; o++)
-        {
-            for (int k = 0; k < rank; k++) up[o, k] = upTransposed[k, o];
-        }
+        var up = Engine.TensorTranspose(Tensor<T>.FromMatrix(upTransposed)).ToMatrix();
 
         // S from the spectrum of a small rank x rank Gaussian: O(rank^3), and genuinely a spread of
         // singular values rather than a constant, so the per-direction scales differ as they do in the
@@ -393,12 +419,8 @@ public sealed partial class TimestepDependentLora<T>
         }
 
         var spectrum = new SvdDecomposition<T>(seedMatrix).S;
-        var singular = new Vector<T>(rank);
-        for (int k = 0; k < rank; k++)
-        {
-            // SvdDecomposition orders descending; reverse so index 0 is the smallest.
-            singular[k] = spectrum[rank - 1 - k];
-        }
+        // SvdDecomposition orders descending; reverse so index 0 is the smallest.
+        var singular = Engine.TensorFlip(spectrum.GetSubVector(0, rank).AsTensor(), new[] { 0 }).ToVector();
 
         return (down, up, singular);
     }
@@ -416,38 +438,31 @@ public sealed partial class TimestepDependentLora<T>
     /// </summary>
     private static Matrix<T> OrthonormalRows(int rows, int columns, Random random)
     {
-        var basis = new double[rows][];
+        // Seeded Gaussian draws, row-major in master's order, one per element (no engine op consumes a caller
+        // Random).
+        var gaussian = new Matrix<T>(rows, columns);
         for (int r = 0; r < rows; r++)
         {
-            var row = new double[columns];
-            for (int c = 0; c < columns; c++) row[c] = NextGaussian(random);
-
-            for (int prev = 0; prev < r; prev++)
-            {
-                double dot = 0.0;
-                for (int c = 0; c < columns; c++) dot += row[c] * basis[prev][c];
-                for (int c = 0; c < columns; c++) row[c] -= dot * basis[prev][c];
-            }
-
-            double norm = 0.0;
-            for (int c = 0; c < columns; c++) norm += row[c] * row[c];
-            norm = Math.Sqrt(norm);
-
-            // rank <= min(inputDim, outputDim) is enforced in the constructor, so a degenerate row here
-            // means numerical collapse rather than an over-large rank. Redrawing would break seeded
-            // reproducibility, so leave it zero and let the orthonormality tests catch it.
-            if (norm > 1e-9)
-            {
-                for (int c = 0; c < columns; c++) row[c] /= norm;
-            }
-            basis[r] = row;
+            for (int c = 0; c < columns; c++) gaussian[r, c] = Ops.FromDouble(NextGaussian(random));
         }
 
-        var matrix = new Matrix<T>(rows, columns);
+        // Modified Gram-Schmidt: subtract the projections on the accepted rows one at a time, then normalize.
+        // rank <= min(inputDim, outputDim) is enforced in the constructor, so a degenerate row here means
+        // numerical collapse; the type-aware epsilon keeps it (near) zero for the orthonormality tests to catch.
+        var epsilon = Ops.FromDouble(Math.Pow(2.0, -Ops.PrecisionBits));
+        var source = Tensor<T>.FromMatrix(gaussian);
+        var basis = new List<Tensor<T>>(rows);
         for (int r = 0; r < rows; r++)
         {
-            for (int c = 0; c < columns; c++) matrix[r, c] = Ops.FromDouble(basis[r][c]);
+            var row = Engine.TensorSlice(source, new[] { r, 0 }, new[] { 1, columns });
+            foreach (var previous in basis)
+            {
+                var dot = Engine.TensorMatMul(row, Engine.TensorTranspose(previous));
+                row = Engine.TensorSubtract(row, Engine.TensorMultiply(previous, Engine.TensorBroadcastTo(dot, new[] { 1, columns })));
+            }
+            basis.Add(Engine.TensorNormalize(row, 1, epsilon));
         }
-        return matrix;
+
+        return rows == 0 ? new Matrix<T>(0, columns) : Engine.TensorConcatenate(basis.ToArray(), 0).ToMatrix();
     }
 }

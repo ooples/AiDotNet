@@ -105,45 +105,85 @@ internal sealed class MeloSynthesizer<T>
         var zP = Flow.Forward(z, g, reverse: false, training, random);
 
         // Monotonic alignment search on the prior's log-likelihood of z_p [T, L], with noise σ = std · scale.
-        int[] durations;
         int d = c.InterChannels;
-        var negCent = new double[frames, tokens];
-        double sum = 0, sumSquares = 0;
-        for (int f = 0; f < frames; f++)
-            for (int l = 0; l < tokens; l++)
-            {
-                double v = 0;
-                for (int k = 0; k < d; k++)
-                {
-                    double lp = NumOps.ToDouble(logsP[0, k, l]), m = NumOps.ToDouble(mP[0, k, l]), zz = NumOps.ToDouble(zP[0, k, f]);
-                    double s = Math.Exp(-2 * lp);
-                    v += -0.5 * Math.Log(2 * Math.PI) - lp - 0.5 * zz * zz * s + zz * m * s - 0.5 * m * m * s;
-                }
-                negCent[f, l] = v;
-                sum += v;
-                sumSquares += v * v;
-            }
+        Tensor<T>? masNoiseTensor = null;
         if (masNoiseScale > 0)
         {
-            int n = frames * tokens;
-            double mean = sum / n, std = Math.Sqrt(Math.Max(0, (sumSquares - n * mean * mean) / (n - 1)));
-            for (int f = 0; f < frames; f++)
-                for (int l = 0; l < tokens; l++)
-                    negCent[f, l] += std * (masNoise is null ? Gaussian(random) : masNoise[f, l]) * masNoiseScale;
+            if (masNoise is not null)
+            {
+                var scaledMasNoise = new double[frames * tokens];
+                for (int f = 0; f < frames; f++)
+                    for (int l = 0; l < tokens; l++)
+                        scaledMasNoise[f * tokens + l] = masNoise[f, l] * masNoiseScale;
+                masNoiseTensor = new Tensor<double>(scaledMasNoise, new[] { frames, tokens }).Cast<T>();
+            }
+            else
+            {
+                masNoiseTensor = Gaussian(new[] { frames, tokens }, random, masNoiseScale);
+            }
         }
-        var scores = new double[tokens, frames];
-        for (int f = 0; f < frames; f++)
-            for (int l = 0; l < tokens; l++) scores[l, f] = negCent[f, l];
-        durations = MonotonicAlignment.MaximumPath(scores);
-        var attn = Path(durations, frames);                                                                  // [L, T]
 
-        var w = new Tensor<T>(new[] { 1, 1, tokens });
-        var logwAligned = new Tensor<T>(new[] { 1, 1, tokens });
-        for (int l = 0; l < tokens; l++)
-        {
-            w[0, 0, l] = NumOps.FromDouble(durations[l]);
-            logwAligned[0, 0, l] = NumOps.FromDouble(Math.Log(durations[l] + 1e-6));
-        }
+        T one = NumOps.One;
+        var masInputs = masNoiseTensor is null ? new[] { zP, mP, logsP } : new[] { zP, mP, logsP, masNoiseTensor };
+        var attn = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "MeloMonotonicAlignmentPath",
+            masInputs,
+            new[] { tokens, frames },
+            (inputs, dest) =>
+            {
+                var zPVals = inputs[0].Cast<double>().ToArray();
+                var mPVals = inputs[1].Cast<double>().ToArray();
+                var logsPVals = inputs[2].Cast<double>().ToArray();
+                var noiseVals = inputs.Length > 3 ? inputs[3].Cast<double>().ToArray() : null;
+                var negCent = new double[frames, tokens];
+                double sum = 0, sumSquares = 0;
+                for (int f = 0; f < frames; f++)
+                    for (int l = 0; l < tokens; l++)
+                    {
+                        double v = 0;
+                        for (int k = 0; k < d; k++)
+                        {
+                            double lp = logsPVals[k * tokens + l];
+                            double m = mPVals[k * tokens + l];
+                            double zz = zPVals[k * frames + f];
+                            double s = Math.Exp(-2 * lp);
+                            v += -0.5 * Math.Log(2 * Math.PI) - lp - 0.5 * zz * zz * s + zz * m * s - 0.5 * m * m * s;
+                        }
+                        negCent[f, l] = v;
+                        sum += v;
+                        sumSquares += v * v;
+                    }
+                if (noiseVals is not null)
+                {
+                    int n = frames * tokens;
+                    double mean = sum / n;
+                    double std = n > 1 ? Math.Sqrt(Math.Max(0, (sumSquares - n * mean * mean) / (n - 1))) : 0.0;
+                    for (int f = 0; f < frames; f++)
+                        for (int l = 0; l < tokens; l++)
+                            negCent[f, l] += std * noiseVals[f * tokens + l];
+                }
+                var scores = new double[tokens, frames];
+                for (int f = 0; f < frames; f++)
+                    for (int l = 0; l < tokens; l++)
+                        scores[l, f] = negCent[f, l];
+                var stepDurations = MonotonicAlignment.MaximumPath(scores);
+                var span = dest.AsWritableSpan();
+                span.Clear();
+                int pathStart = 0;
+                for (int l = 0; l < stepDurations.Length; l++)
+                {
+                    int pathEnd = Math.Min(frames, pathStart + stepDurations[l]);
+                    for (int f = pathStart; f < pathEnd; f++)
+                        span[l * frames + f] = one;
+                    pathStart += stepDurations[l];
+                }
+            });
+
+        var w = _engine.Reshape(_engine.ReduceSum(attn, new[] { 1 }, keepDims: false), new[] { 1, 1, tokens });
+        var logwAligned = _engine.TensorLog(_engine.TensorAddScalar(w, NumOps.FromDouble(1e-6)));
+        int[] durations = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? Array.Empty<int>()
+            : w.Cast<int>().ToArray();
         var sdpLoss = _engine.TensorMultiplyScalar(StochasticDuration.NegativeLogLikelihood(hidden, w, g, durationTraining && training, random, durationNoise),
             NumOps.FromDouble(1.0 / tokens));
         var logw = Duration.Forward(hidden, g, durationTraining && training, random);

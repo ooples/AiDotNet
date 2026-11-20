@@ -204,9 +204,8 @@ internal sealed class EfficientNetTrunk<T>
     private Tensor<T> DropPath(Tensor<T> x, double rate, Random random)
     {
         var shape = x.Shape.ToArray();
-        var mask = new Tensor<T>(new[] { shape[0], 1, 1, 1 });
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int b = 0; b < shape[0]; b++) mask[b] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(new[] { shape[0], 1, 1, 1 }, random, rate);
         return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(mask, shape));
     }
 

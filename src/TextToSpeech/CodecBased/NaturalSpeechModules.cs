@@ -55,7 +55,8 @@ internal sealed class NaturalSpeechDurationPredictor<T>
     /// <summary>The log durations <c>[1, 1, n]</c> of the phoneme hidden states <c>[1, h, n]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> hidden, bool training, Random random)
     {
-        var x = MeloOps.Detach(hidden);
+        // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+        var x = _engine.StopGradient(hidden);
         foreach (var (conv, norm) in _layers)
         {
             x = _engine.ReLU(conv.Forward(x));
@@ -171,8 +172,8 @@ internal sealed class NaturalSpeechUpsampler<T>
             var bn = _engine.Reshape(IndexTtsOps.Value(batchNorm), new[] { 4 * _convOut });
             var gamma = _engine.TensorNarrow(bn, 0, 0, _convOut);
             var beta = _engine.TensorNarrow(bn, 0, _convOut, _convOut);
-            var mean = MeloOps.Detach(_engine.TensorNarrow(bn, 0, 2 * _convOut, _convOut));
-            var variance = MeloOps.Detach(_engine.TensorNarrow(bn, 0, 3 * _convOut, _convOut));
+            var mean = _engine.StopGradient(_engine.TensorNarrow(bn, 0, 2 * _convOut, _convOut));
+            var variance = _engine.StopGradient(_engine.TensorNarrow(bn, 0, 3 * _convOut, _convOut));
             var scale = _engine.TensorDivide(gamma, _engine.TensorSqrt(_engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5))));
             var shape = new[] { n, _convOut };
             rows = _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorSubtract(rows, _engine.TensorBroadcastTo(_engine.Reshape(mean, new[] { 1, _convOut }), shape)),
@@ -181,6 +182,13 @@ internal sealed class NaturalSpeechUpsampler<T>
         }
         // The paper: layer normalization, then Swish.
         return Swish(norm.Forward(rows));
+    }
+
+    /// <summary>m = max(1, round(Σd)): the frames the durations <c>[n]</c> expand to.</summary>
+    public static int FramesOf(Tensor<T> durations)
+    {
+        double total = durations.Cast<double>().ToArray().Sum();
+        return Math.Max(1, (int)Math.Round(total));
     }
 
     private Tensor<T> RunMlp(List<DenseLayer<T>> mlp, Tensor<T> x)
@@ -197,23 +205,24 @@ internal sealed class NaturalSpeechUpsampler<T>
     /// The frame-level prior <c>(mean, log-scale)</c>, each <c>[1, out, m]</c> with m = round(Σd), and the attention
     /// weights, of phoneme hidden states <c>[1, h, n]</c> and durations <c>[n]</c> (on the tape).
     /// </summary>
-    public (Tensor<T> Mean, Tensor<T> LogScale, int Frames) Forward(Tensor<T> hidden, Tensor<T> durations, bool training, Random random)
+    /// <param name="frames">m when the caller already knows it (from the durations' values outside a compiled trace, or
+    /// from the target's shape); otherwise it is read from <paramref name="durations"/>, which a training trace cannot
+    /// replay.</param>
+    public (Tensor<T> Mean, Tensor<T> LogScale, int Frames) Forward(Tensor<T> hidden, Tensor<T> durations, bool training, Random random, int? frames = null)
     {
         int n = hidden.Shape[2];
-        double total = 0;
-        for (int i = 0; i < n; i++) total += NumOps.ToDouble(durations.GetFlat(i));
-        int m = Math.Max(1, (int)Math.Round(total));
+        int m = frames ?? FramesOf(durations);
         var rows = _engine.TensorTranspose(_engine.Reshape(hidden, new[] { _hidden, n }));              // H [n, h]
         var values = InputProjection is not null ? InputProjection.Forward(rows) : rows;
         // Token boundary grid: e_k = cumsum(d), s_k = e_k − d; S[t, k] = t − s_k, E[t, k] = e_k − t for t = 1..m.
-        var ones = new Tensor<T>(new[] { n, n });
+        var lower = new double[n * n];
         for (int i = 0; i < n; i++)
-            for (int j = 0; j <= i; j++) ones[i, j] = NumOps.One;
+            for (int j = 0; j <= i; j++) lower[i * n + j] = 1;
+        var ones = new Tensor<double>(lower, new[] { n, n }).Cast<T>();
         var d = _engine.Reshape(durations, new[] { 1, n });
         var e = _engine.TensorMatMul(d, _engine.TensorTranspose(ones));                                // [1, n] cumulative
         var s = _engine.TensorSubtract(e, d);
-        var t = new Tensor<T>(new[] { m, 1 });
-        for (int i = 0; i < m; i++) t[i, 0] = NumOps.FromDouble(i + 1);
+        var t = new Tensor<double>(Enumerable.Range(1, m).Select(i => (double)i).ToArray(), new[] { m, 1 }).Cast<T>();
         var grid = new[] { m, n };
         var S = _engine.TensorSubtract(_engine.TensorBroadcastTo(t, grid), _engine.TensorBroadcastTo(s, grid));
         var E = _engine.TensorSubtract(_engine.TensorBroadcastTo(e, grid), _engine.TensorBroadcastTo(t, grid));
@@ -473,13 +482,7 @@ internal static class NaturalSpeechOps
             var stacked = engine.TensorConcatenate(new[] { diag, up, left }, 1);                           // [count, 3]
             // −γ log Σ e^{−a/γ}, stabilized by the (detached) minimum.
             var scaled = engine.TensorMultiplyScalar(stacked, ops.FromDouble(-1.0 / gamma));
-            var max = new Tensor<T>(new[] { count, 1 });
-            for (int r = 0; r < count; r++)
-            {
-                double best = double.NegativeInfinity;
-                for (int k = 0; k < 3; k++) best = Math.Max(best, ops.ToDouble(scaled[r, k]));
-                max[r, 0] = ops.FromDouble(best);
-            }
+            var max = engine.StopGradient(engine.ReduceMax(scaled, new[] { 1 }, keepDims: true));         // [count, 1]
             var shifted = engine.TensorSubtract(scaled, engine.TensorBroadcastTo(max, new[] { count, 3 }));
             var lse = engine.TensorAdd(engine.TensorLog(engine.ReduceSum(engine.TensorExp(shifted), new[] { 1 }, keepDims: true)), max);
             var softmin = engine.TensorMultiplyScalar(lse, ops.FromDouble(-gamma));

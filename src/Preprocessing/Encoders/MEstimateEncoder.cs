@@ -33,8 +33,8 @@ public class MEstimateEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly MEstimateHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, double>>? _encodingMap;
-    private double _globalMean;
+    private Dictionary<int, CategoryValueMap<T>>? _encodingMap;
+    private T _globalMean = MathHelper.GetNumericOperations<T>().Zero;
     private int _nInputFeatures;
 
     /// <summary>
@@ -50,7 +50,7 @@ public class MEstimateEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the global target mean.
     /// </summary>
-    public double GlobalMean => _globalMean;
+    public T GlobalMean => _globalMean;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -100,52 +100,21 @@ public class MEstimateEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nInputFeatures = data.Columns;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
         // Compute global mean
-        int n = target.Length;
-        double targetSum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            targetSum += NumOps.ToDouble(target[i]);
-        }
-        _globalMean = targetSum / n;
+        var y = Tensor<T>.FromVector(target);
+        _globalMean = engine.TensorMean(y);
+        T m = NumOps.FromDouble(_m);
+        T prior = NumOps.Multiply(m, _globalMean);
 
-        _encodingMap = new Dictionary<int, Dictionary<double, double>>();
-
+        // M-estimate per category: (sum + m * prior) / (count + m)
+        _encodingMap = new Dictionary<int, CategoryValueMap<T>>();
         foreach (int col in columnsToProcess)
         {
-            var categoryStats = new Dictionary<double, (double Sum, int Count)>();
-
-            // Collect statistics per category
-            for (int i = 0; i < n; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (!categoryStats.TryGetValue(categoryValue, out var stats))
-                {
-                    stats = (0, 0);
-                }
-
-                categoryStats[categoryValue] = (stats.Sum + targetValue, stats.Count + 1);
-            }
-
-            // Compute M-estimate encoding for each category
-            var colEncoding = new Dictionary<double, double>();
-
-            foreach (var kvp in categoryStats)
-            {
-                double categoryValue = kvp.Key;
-                var (sum, count) = kvp.Value;
-
-                // M-estimate formula: (n * mean + m * prior) / (n + m)
-                // which simplifies to: (sum + m * prior) / (n + m)
-                double encodedValue = (sum + _m * _globalMean) / (count + _m);
-                colEncoding[categoryValue] = encodedValue;
-            }
-
-            _encodingMap[col] = colEncoding;
+            _encodingMap[col] = CategoryValueMap<T>.FromTargetStatistics(PreprocessingTensorOps.Column(data, col), y,
+                (counts, sums) => engine.TensorDivide(engine.TensorAddScalar(sums, prior), engine.TensorAddScalar(counts, m)));
         }
 
         IsFitted = true;
@@ -170,47 +139,9 @@ public class MEstimateEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MEstimateEncoder has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-
-                if (_encodingMap.TryGetValue(j, out var colEncoding) &&
-                    colEncoding.TryGetValue(categoryValue, out double encodedValue))
-                {
-                    result[i, j] = NumOps.FromDouble(encodedValue);
-                }
-                else
-                {
-                    switch (_handleUnknown)
-                    {
-                        case MEstimateHandleUnknown.UseGlobalMean:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                        case MEstimateHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                    }
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        return CategoryValueMap<T>.EncodeColumns(data, processSet, _encodingMap, _ => _globalMean,
+            _handleUnknown == MEstimateHandleUnknown.Error);
     }
 
     /// <summary>

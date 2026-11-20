@@ -109,14 +109,18 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     /// <returns>Attention explanation with attention weights.</returns>
     public AttentionExplanation<T> Explain(Vector<T> instance)
     {
-        var inputTensor = new Tensor<T>(new[] { 1, _sequenceLength });
-        var dataSpan = inputTensor.Data.Span;
-        for (int i = 0; i < instance.Length && i < _sequenceLength; i++)
+        // The first sequenceLength tokens, zero-padded to the sequence length
+        int count = Math.Min(instance.Length, _sequenceLength);
+        var tokens = new Tensor<T>(new[] { _sequenceLength });
+        if (count > 0)
         {
-            dataSpan[i] = instance[i];
+            tokens = count < _sequenceLength
+                ? AiDotNetEngine.Current.TensorConcatenate(
+                    new[] { instance.GetSubVector(0, count).AsTensor(), new Tensor<T>(new[] { _sequenceLength - count }) }, 0)
+                : instance.GetSubVector(0, count).AsTensor();
         }
 
-        return ExplainTensor(inputTensor);
+        return ExplainTensor(tokens.Reshape(new[] { 1, _sequenceLength }));
     }
 
     /// <summary>
@@ -127,7 +131,7 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     public AttentionExplanation<T> ExplainTensor(Tensor<T> input)
     {
         // Collect attention weights from all layers
-        var allLayerAttention = new List<T[,,]>();
+        var allLayerAttention = new List<Tensor<T>>();
 
         if (_getAttentionWeights != null)
         {
@@ -141,21 +145,11 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
         else
         {
             // Create placeholder attention (uniform distribution)
+            T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_sequenceLength));
             for (int layer = 0; layer < _numLayers; layer++)
             {
-                var layerAttn = new T[_numHeads, _sequenceLength, _sequenceLength];
-                double uniformWeight = 1.0 / _sequenceLength;
-
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    for (int i = 0; i < _sequenceLength; i++)
-                    {
-                        for (int j = 0; j < _sequenceLength; j++)
-                        {
-                            layerAttn[h, i, j] = NumOps.FromDouble(uniformWeight);
-                        }
-                    }
-                }
+                var layerAttn = AiDotNetEngine.Current.TensorFullLike(
+                    new Tensor<T>(new[] { _numHeads, _sequenceLength, _sequenceLength }), uniformWeight);
                 allLayerAttention.Add(layerAttn);
             }
         }
@@ -167,13 +161,13 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
         var rollout = ComputeAttentionRollout(avgAttentionPerLayer);
 
         // Compute token importance (sum of attention received)
-        var tokenImportance = ComputeTokenImportance(rollout);
+        var tokenImportance = ComputeTokenImportance(rollout).ToArray();
 
         return new AttentionExplanation<T>
         {
             LayerAttention = allLayerAttention,
             AverageAttentionPerLayer = avgAttentionPerLayer,
-            AttentionRollout = rollout,
+            AttentionRollout = rollout.ToMatrix(),
             TokenImportance = tokenImportance,
             NumLayers = _numLayers,
             NumHeads = _numHeads,
@@ -217,34 +211,28 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
             throw new ArgumentOutOfRangeException(nameof(head),
                 $"Head {head} must be in range [-1, {explanation.NumHeads}).");
 
-        var result = new Dictionary<int, T>();
-
+        Vector<T> weights;
         if (layer < 0)
         {
             // Use rollout
-            for (int j = 0; j < explanation.SequenceLength; j++)
-            {
-                result[j] = explanation.AttentionRollout[queryPosition, j];
-            }
+            weights = explanation.AttentionRollout.GetRow(queryPosition);
         }
         else if (head < 0)
         {
             // Use layer average
-            for (int j = 0; j < explanation.SequenceLength; j++)
-            {
-                result[j] = explanation.AverageAttentionPerLayer[layer][queryPosition, j];
-            }
+            weights = explanation.AverageAttentionPerLayer[layer].GetRow(queryPosition);
         }
         else
         {
             // Use specific head
-            for (int j = 0; j < explanation.SequenceLength; j++)
-            {
-                result[j] = explanation.LayerAttention[layer][head, queryPosition, j];
-            }
+            var engine = AiDotNetEngine.Current;
+            weights = engine.TensorSliceAxis(engine.TensorSliceAxis(explanation.LayerAttention[layer], 0, head), 0, queryPosition)
+                .ToVector();
         }
 
-        return result;
+        return Enumerable.Select(weights, (weight, position) => (position, weight))
+            .Take(explanation.SequenceLength)
+            .ToDictionary(entry => entry.position, entry => entry.weight);
     }
 
     /// <summary>
@@ -268,7 +256,7 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     /// <summary>
     /// Extracts attention matrix from tensor.
     /// </summary>
-    private T[,,] ExtractAttentionMatrix(Tensor<T> attnTensor)
+    private Tensor<T> ExtractAttentionMatrix(Tensor<T> attnTensor)
     {
         // Validate tensor shape: expect [batch, heads, seq, seq] or [heads, seq, seq]
         if (attnTensor.Rank < 3 || attnTensor.Rank > 4)
@@ -280,50 +268,17 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
                 $"Attention tensor has {attnTensor.Length} elements but expected at least {expectedElements} " +
                 $"(numHeads={_numHeads}, sequenceLength={_sequenceLength}).", nameof(attnTensor));
 
-        var result = new T[_numHeads, _sequenceLength, _sequenceLength];
-        var attnSpan = attnTensor.Data.Span;
-
-        // Assuming shape is [batch, heads, seq, seq] or [heads, seq, seq]
-        int offset = attnTensor.Shape.Length == 4 ? 1 : 0;
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            for (int i = 0; i < _sequenceLength; i++)
-            {
-                for (int j = 0; j < _sequenceLength; j++)
-                {
-                    int idx = h * _sequenceLength * _sequenceLength + i * _sequenceLength + j;
-                    result[h, i, j] = idx < attnSpan.Length
-                        ? attnSpan[idx]
-                        : NumOps.Zero;
-                }
-            }
-        }
-
-        return result;
+        // The leading [heads, seq, seq] block in row-major order (the first batch entry for rank 4)
+        return new Tensor<T>(new[] { _numHeads, _sequenceLength, _sequenceLength },
+            attnTensor.ToVector().GetSubVector(0, expectedElements));
     }
 
     /// <summary>
     /// Computes average attention across heads.
     /// </summary>
-    private T[,] ComputeAverageAcrossHeads(T[,,] headAttention)
+    private Matrix<T> ComputeAverageAcrossHeads(Tensor<T> headAttention)
     {
-        var avg = new T[_sequenceLength, _sequenceLength];
-
-        for (int i = 0; i < _sequenceLength; i++)
-        {
-            for (int j = 0; j < _sequenceLength; j++)
-            {
-                double sum = 0;
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    sum += NumOps.ToDouble(headAttention[h, i, j]);
-                }
-                avg[i, j] = NumOps.FromDouble(sum / _numHeads);
-            }
-        }
-
-        return avg;
+        return AiDotNetEngine.Current.ReduceMean(headAttention, new[] { 0 }, false).ToMatrix();
     }
 
     /// <summary>
@@ -336,63 +291,29 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     /// residual connections (which add identity to attention).
     /// </para>
     /// </remarks>
-    private T[,] ComputeAttentionRollout(List<T[,]> layerAttention)
+    private Tensor<T> ComputeAttentionRollout(List<Matrix<T>> layerAttention)
     {
+        var engine = AiDotNetEngine.Current;
+
         // Start with identity matrix (residual connection)
-        var rollout = new T[_sequenceLength, _sequenceLength];
-        for (int i = 0; i < _sequenceLength; i++)
-        {
-            rollout[i, i] = NumOps.One;
-        }
+        var identity = engine.TensorEye<T>(_sequenceLength);
+        var rollout = identity;
+        T half = NumOps.FromDouble(0.5);
 
         // Multiply through layers
         foreach (var layerAttn in layerAttention)
         {
             // Add identity for residual connection: (attention + I) / 2
-            var attnWithResidual = new T[_sequenceLength, _sequenceLength];
-            for (int i = 0; i < _sequenceLength; i++)
-            {
-                for (int j = 0; j < _sequenceLength; j++)
-                {
-                    double val = NumOps.ToDouble(layerAttn[i, j]);
-                    if (i == j) val = (val + 1) / 2;
-                    else val = val / 2;
-                    attnWithResidual[i, j] = NumOps.FromDouble(val);
-                }
-            }
+            var attnWithResidual = engine.TensorMultiplyScalar(engine.TensorAdd(Tensor<T>.FromMatrix(layerAttn), identity), half);
 
-            // Re-normalize rows to sum to 1
-            for (int i = 0; i < _sequenceLength; i++)
-            {
-                double rowSum = 0;
-                for (int j = 0; j < _sequenceLength; j++)
-                {
-                    rowSum += NumOps.ToDouble(attnWithResidual[i, j]);
-                }
-                if (rowSum > 0)
-                {
-                    for (int j = 0; j < _sequenceLength; j++)
-                    {
-                        attnWithResidual[i, j] = NumOps.FromDouble(NumOps.ToDouble(attnWithResidual[i, j]) / rowSum);
-                    }
-                }
-            }
+            // Re-normalize rows to sum to 1 (rows with a non-positive sum stay as they are)
+            var rowSums = engine.ReduceSum(attnWithResidual, new[] { 1 }, true);
+            var positive = engine.TensorGreaterThan(rowSums, NumOps.Zero);
+            var divisors = engine.TensorWhere(positive, rowSums, engine.TensorFullLike(rowSums, NumOps.One));
+            attnWithResidual = engine.TensorDivide(attnWithResidual, engine.TensorBroadcastTo(divisors, attnWithResidual.Shape.ToArray()));
 
             // Matrix multiplication: rollout = attnWithResidual * rollout
-            var newRollout = new T[_sequenceLength, _sequenceLength];
-            for (int i = 0; i < _sequenceLength; i++)
-            {
-                for (int j = 0; j < _sequenceLength; j++)
-                {
-                    double sum = 0;
-                    for (int k = 0; k < _sequenceLength; k++)
-                    {
-                        sum += NumOps.ToDouble(attnWithResidual[i, k]) * NumOps.ToDouble(rollout[k, j]);
-                    }
-                    newRollout[i, j] = NumOps.FromDouble(sum);
-                }
-            }
-            rollout = newRollout;
+            rollout = engine.TensorMatMul(attnWithResidual, rollout);
         }
 
         return rollout;
@@ -401,32 +322,18 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     /// <summary>
     /// Computes overall token importance from attention rollout.
     /// </summary>
-    private T[] ComputeTokenImportance(T[,] rollout)
+    private Tensor<T> ComputeTokenImportance(Tensor<T> rollout)
     {
-        var importance = new T[_sequenceLength];
+        var engine = AiDotNetEngine.Current;
 
-        // Sum attention received from all positions (column sum)
-        for (int j = 0; j < _sequenceLength; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < _sequenceLength; i++)
-            {
-                sum += NumOps.ToDouble(rollout[i, j]);
-            }
-            importance[j] = NumOps.FromDouble(sum / _sequenceLength);
-        }
+        // Mean attention received from all positions (column mean)
+        var importance = engine.ReduceMean(rollout, new[] { 0 }, false);
 
         // Normalize
-        double maxVal = importance.Max(x => NumOps.ToDouble(x));
-        if (maxVal > 0)
-        {
-            for (int j = 0; j < _sequenceLength; j++)
-            {
-                importance[j] = NumOps.FromDouble(NumOps.ToDouble(importance[j]) / maxVal);
-            }
-        }
-
-        return importance;
+        T maxVal = engine.TensorMaxValue(importance);
+        return NumOps.GreaterThan(maxVal, NumOps.Zero)
+            ? engine.TensorDivideScalar(importance, maxVal)
+            : importance;
     }
 }
 
@@ -441,18 +348,18 @@ public class AttentionExplanation<T>
     /// <summary>
     /// Gets or sets attention weights for each layer [layer][head, query, key].
     /// </summary>
-    public List<T[,,]> LayerAttention { get; set; } = new();
+    public List<Tensor<T>> LayerAttention { get; set; } = new();
 
     /// <summary>
     /// Gets or sets average attention per layer (across heads) [layer][query, key].
     /// </summary>
-    public List<T[,]> AverageAttentionPerLayer { get; set; } = new();
+    public List<Matrix<T>> AverageAttentionPerLayer { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the attention rollout matrix [query, key].
     /// Shows accumulated attention through all layers.
     /// </summary>
-    public T[,] AttentionRollout { get; set; } = new T[0, 0];
+    public Matrix<T> AttentionRollout { get; set; } = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Gets or sets the overall token importance (derived from rollout).
@@ -510,7 +417,7 @@ public class AttentionExplanation<T>
         var sorted = GetSortedTokenImportance().Take(10);
         foreach (var (pos, label, imp) in sorted)
         {
-            lines.Add($"  [{pos}] {label}: {NumOps.ToDouble(imp):F4}");
+            lines.Add($"  [{pos}] {label}: {imp:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

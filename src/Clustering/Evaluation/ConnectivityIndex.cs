@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -84,9 +85,10 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
         // Use configured distance metric or default to Euclidean
         var metric = _distanceMetric ?? new EuclideanDistance<T>();
 
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int iLabel = (int)_numOps.ToDouble(labels[i]);
+            int iLabel = labelsIds[i];
 
             // Find L nearest neighbors
             var neighbors = FindNearestNeighbors(data, i, L, n, metric);
@@ -95,7 +97,7 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
             for (int j = 0; j < neighbors.Length; j++)
             {
                 int neighborIdx = neighbors[j];
-                int neighborLabel = (int)_numOps.ToDouble(labels[neighborIdx]);
+                int neighborLabel = labelsIds[neighborIdx];
 
                 if (neighborLabel != iLabel)
                 {
@@ -109,19 +111,12 @@ public class ConnectivityIndex<T> : IClusterMetric<T>
 
     private int[] FindNearestNeighbors(Matrix<T> data, int pointIdx, int L, int n, IDistanceMetric<T> metric)
     {
-        var distances = new List<(int idx, double dist)>();
-        var pointI = data.GetRow(pointIdx);
-
-        for (int j = 0; j < n; j++)
-        {
-            if (j == pointIdx) continue;
-
-            var pointJ = data.GetRow(j);
-            double dist = _numOps.ToDouble(metric.Compute(pointI, pointJ));
-
-            distances.Add((j, dist));
-        }
-
-        return distances.OrderBy(x => x.dist).Take(L).Select(x => x.idx).ToArray();
+        // Distances from the point to every row in one batched call; stable ordering keeps ties in index order
+        var distances = metric.ComputeToAll(data.GetRow(pointIdx), data).ToArray();
+        return Enumerable.Range(0, n)
+            .Where(j => j != pointIdx)
+            .OrderBy(j => distances[j])
+            .Take(L)
+            .ToArray();
     }
 }

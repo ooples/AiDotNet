@@ -910,28 +910,34 @@ public class MetaLearningCoverageIntegrationTests
         var predictions = relationModel.Predict(task.QuerySetX);
         var parameters = relationModel.GetParameters();
 
-        var query = new Vector<double>(2);
-        query[0] = 1.0;
-        query[1] = 2.0;
-        var support = new Vector<double>(2);
-        support[0] = 0.5;
-        support[1] = -0.5;
+        var convModule = new RelationModule<double>(2, RelationModuleType.Convolution);
+        var attnModule = new RelationModule<double>(2, RelationModuleType.Attention);
+        var transformerModule = new RelationModule<double>(2, RelationModuleType.Transformer);
+        var pairBatch = new Tensor<double>(new[] { 2, 4 });
+        pairBatch[0, 0] = 1.0;
+        pairBatch[0, 1] = 2.0;
+        pairBatch[0, 2] = 0.5;
+        pairBatch[0, 3] = -0.5;
+        pairBatch[1, 0] = -0.25;
+        pairBatch[1, 1] = 0.75;
+        pairBatch[1, 2] = 0.5;
+        pairBatch[1, 3] = -0.5;
 
-        var modelType = typeof(RelationNetworkModel<double, Matrix<double>, Vector<double>>);
-        var diff = InvokePrivate<Tensor<double>>(relationModel, modelType, "ComputeDifferenceFeatures", query, support);
-        var product = InvokePrivate<Tensor<double>>(relationModel, modelType, "ComputeProductFeatures", query, support);
+        var convScores = convModule.Forward(pairBatch);
+        var attnScores = attnModule.Forward(pairBatch);
+        var transformerScores = transformerModule.Forward(pairBatch);
 
-        var sample = new Tensor<double>(new[] { 2 });
-        sample[0] = 0.3;
-        sample[1] = 0.7;
-        var encoded = InvokePrivate<Vector<double>>(relationModel, modelType, "EncodeSample", sample);
+        var directModuleModel = new RelationNetworkModel<double, Matrix<double>, Vector<double>>(
+            model, module, task.SupportSetX, task.SupportSetY, options);
+        var directPredictions = directModuleModel.Predict(task.QuerySetX);
 
         Assert.False(double.IsNaN(loss));
         Assert.Equal(options.NumClasses, predictions.Length);
         Assert.True(parameters.Length > 0);
-        Assert.Equal(2, diff.Length);
-        Assert.Equal(2, product.Length);
-        Assert.Equal(2, encoded.Length);
+        Assert.Equal(2, convScores.Length);
+        Assert.Equal(2, attnScores.Length);
+        Assert.Equal(2, transformerScores.Length);
+        Assert.Equal(task.QuerySetX.Rows, directPredictions.Length);
         Assert.NotNull(relationModel.GetModelMetadata());
     }
 
@@ -1083,11 +1089,13 @@ public class MetaLearningCoverageIntegrationTests
         var internalWeights = new Vector<double>(options.MemorySize);
         internalWeights[0] = 1.0;
         (internalMemory ?? throw new InvalidOperationException("internalMemory is null where it is required.")).Write(internalWeights, erase, add);
-        var regularized = InvokePrivate<double>(
+        var baseLossTensor = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        var regularizedTensor = InvokePrivate<Tensor<double>>(
             algorithm,
             typeof(NTMAlgorithm<double, Matrix<double>, Tensor<double>>),
-            "AddMemoryRegularization",
-            1.0);
+            "AddMemoryRegularizationTerms",
+            baseLossTensor);
+        double regularized = regularizedTensor[0];
 
         // One score row per query example, [rows, classes].
         Assert.Equal(task.QuerySetX.Rows, predictions.Shape[0]);

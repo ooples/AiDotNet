@@ -28,14 +28,14 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _miScores;
+    private Vector<T>? _miScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? MIScores => _miScores;
+    public Vector<T>? MIScores => _miScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,84 +73,38 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        // Get unique class labels
-        var classLabels = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-            classLabels.Add((int)Math.Round(NumOps.ToDouble(target[i])));
+        var engine = Engine;
+        T count = NumOps.FromDouble(n);
 
-        int nClasses = classLabels.Count;
-        var labelList = classLabels.OrderBy(x => x).ToList();
+        // Class labels (rounded target values) and range-scaled feature bins (0 for a constant feature)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int nClasses = classes.Length;
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, nClasses);
+        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
 
-        // Count class frequencies
-        var classCounts = new int[nClasses];
-        for (int i = 0; i < n; i++)
-        {
-            int cIdx = labelList.IndexOf((int)Math.Round(NumOps.ToDouble(target[i])));
-            classCounts[cIdx]++;
-        }
+        // Joint, feature and class probabilities
+        var cellShape = new[] { p, _nBins, nClasses };
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
+        var pJoint = engine.TensorDivideScalar(joint, count);
+        var pFeature = engine.TensorBroadcastTo(engine.TensorDivideScalar(engine.ReduceSum(joint, new[] { 2 }, true), count), cellShape);
+        var pClass = engine.TensorBroadcastTo(engine.Reshape(engine.TensorDivideScalar(
+            engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>(), count), new[] { 1, 1, nClasses }), cellShape);
 
-        _miScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            double range = maxVal - minVal;
-
-            // Build joint distribution
-            var jointCounts = new int[_nBins, nClasses];
-            var featureCounts = new int[_nBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                int fBin = range > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1)))
-                    : 0;
-                int cIdx = labelList.IndexOf((int)Math.Round(NumOps.ToDouble(target[i])));
-
-                jointCounts[fBin, cIdx]++;
-                featureCounts[fBin]++;
-            }
-
-            // Compute mutual information
-            double mi = 0;
-            for (int f = 0; f < _nBins; f++)
-            {
-                for (int c = 0; c < nClasses; c++)
-                {
-                    if (jointCounts[f, c] > 0)
-                    {
-                        double pJoint = (double)jointCounts[f, c] / n;
-                        double pFeature = (double)featureCounts[f] / n;
-                        double pClass = (double)classCounts[c] / n;
-
-                        if (pFeature > 0 && pClass > 0)
-                            mi += pJoint * Math.Log(pJoint / (pFeature * pClass) + 1e-10);
-                    }
-                }
-            }
-
-            _miScores[j] = Math.Max(0, mi);
-        }
+        // Mutual information (nats) over the non-empty joint cells, clamped at 0
+        var occupied = engine.TensorGreaterThan(joint, NumOps.Zero);
+        var ones = PreprocessingTensorOps.Filled(cellShape, NumOps.One);
+        var ratio = engine.TensorDivide(pJoint, engine.TensorWhere(occupied, engine.TensorMultiply(pFeature, pClass), ones));
+        var terms = engine.TensorWhere(occupied, engine.TensorMultiply(pJoint,
+            engine.TensorLog(engine.TensorAddScalar(ratio, PreprocessingTensorOps.Tolerance<T>(1e-10)))), new Tensor<T>(cellShape));
+        var miScores = engine.TensorMax(engine.ReduceSum(terms, new[] { 1, 2 }, false), NumOps.Zero);
+        _miScores = miScores.ToVector();
 
         // Select top features by MI
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _miScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(miScores, numToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -164,15 +118,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("MutualInfoClassification has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

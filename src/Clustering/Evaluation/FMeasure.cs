@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -80,10 +81,12 @@ public class FMeasure<T> : IExternalClusterMetric<T>
         var trueClasses = new HashSet<int>();
         var predClusters = new HashSet<int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             trueClasses.Add(trueLabel);
             predClusters.Add(predLabel);
@@ -155,10 +158,12 @@ public class FMeasure<T> : IExternalClusterMetric<T>
         var trueClasses = new HashSet<int>();
         var predClusters = new HashSet<int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             trueClasses.Add(trueLabel);
             predClusters.Add(predLabel);
@@ -237,10 +242,12 @@ public class FMeasure<T> : IExternalClusterMetric<T>
         // Group by true class
         var classToPoints = new Dictionary<int, List<int>>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             if (!clusterToPoints.ContainsKey(predLabel))
             {
@@ -260,8 +267,8 @@ public class FMeasure<T> : IExternalClusterMetric<T>
 
         for (int i = 0; i < n; i++)
         {
-            int trueLabel = (int)_numOps.ToDouble(trueLabels[i]);
-            int predLabel = (int)_numOps.ToDouble(predictedLabels[i]);
+            int trueLabel = trueLabelsIds[i];
+            int predLabel = predictedLabelsIds[i];
 
             var clusterPoints = clusterToPoints[predLabel];
             var classPoints = classToPoints[trueLabel];
@@ -270,7 +277,7 @@ public class FMeasure<T> : IExternalClusterMetric<T>
             int correctInCluster = 0;
             foreach (int j in clusterPoints)
             {
-                if ((int)_numOps.ToDouble(trueLabels[j]) == trueLabel)
+                if (trueLabelsIds[j] == trueLabel)
                 {
                     correctInCluster++;
                 }
@@ -280,7 +287,7 @@ public class FMeasure<T> : IExternalClusterMetric<T>
             int correctInClass = 0;
             foreach (int j in classPoints)
             {
-                if ((int)_numOps.ToDouble(predictedLabels[j]) == predLabel)
+                if (predictedLabelsIds[j] == predLabel)
                 {
                     correctInClass++;
                 }

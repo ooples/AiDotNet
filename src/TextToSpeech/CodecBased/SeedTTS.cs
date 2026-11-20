@@ -146,7 +146,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         using var _ = new NoGradScope<T>();
-        var generated = _tokenLanguageModel!.Generate(combinedText, promptSpeech, new Random(_options.GenerationSeed));
+        var generated = (_tokenLanguageModel ?? throw new InvalidOperationException("The token language model is not initialized.")).Generate(combinedText, promptSpeech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
         var tokenTensor = Tokens(generated);
         var acoustic = _tokenDiffusion!.Refine(tokenTensor, timbre);
         return PostprocessAudio(_acousticVocoder!.Decode(acoustic));
@@ -182,20 +182,22 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             throw new NotSupportedException("Timbre extraction requires the native Seed-TTS paper pipeline.");
         using var _ = new NoGradScope<T>();
         var features = _speechTokenizer.Analyze(referenceAudio);
-        var pooled = new Tensor<T>(new[] { _options.AcousticDimension });
-        for (int d = 0; d < pooled.Length; d++)
-        {
-            double sum = 0;
-            for (int frame = 0; frame < features.Shape[0]; frame++) sum += NumOps.ToDouble(features[frame, d]);
-            pooled[d] = NumOps.FromDouble(sum / features.Shape[0]);
-        }
+        // Time-average of the first AcousticDimension feature channels.
+        var pooled = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSlice(features, new[] { 0, 0 }, new[] { features.Shape[0], _options.AcousticDimension }),
+                new[] { 0 }, keepDims: false),
+            NumOps.FromDouble(features.Shape[0]));
         var embedding = _timbreEncoder.Forward(pooled);
-        double norm = Math.Sqrt(Enumerable.Range(0, embedding.Length)
-            .Sum(i => Math.Pow(NumOps.ToDouble(embedding[i]), 2)));
-        if (norm > 1e-12)
-            for (int i = 0; i < embedding.Length; i++)
-                embedding[i] = NumOps.FromDouble(NumOps.ToDouble(embedding[i]) / norm);
-        return embedding;
+        // Unit L2 norm when the norm exceeds 1e-12; the norm is taken after scaling by the peak magnitude so its sum of
+        // squares cannot overflow a narrow T.
+        if (embedding.Length == 0) return embedding;
+        var peak = Engine.TensorMaxValue(Engine.TensorAbs(embedding));
+        if (NumOps.Equals(peak, NumOps.Zero)) return embedding;
+        var scaled = Engine.TensorDivideScalar(embedding, peak);
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(scaled)));
+        return NumOps.GreaterThan(NumOps.Multiply(peak, scaledNorm), NumOps.FromDouble(1e-12))
+            ? Engine.TensorDivideScalar(scaled, scaledNorm)
+            : embedding;
     }
 
     protected override TtsSupervision RequiredSupervision => _options.TrainingComponent switch
@@ -221,10 +223,12 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             _discriminatorTurn = true;
             try
             {
+                // The generator's waveform is the discriminator step's data: computed before its objective, so the codec
+                // GAN's detach copies a value of this step rather than reading the traced generator on the host.
+                Tensor<T> generated;
+                using (new NoGradScope<T>()) generated = Snapshot(CodecTrainingWaveform(sample.Audio!));
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    Tensor<T> generated;
-                    using (new NoGradScope<T>()) generated = CodecTrainingWaveform(sample.Audio!);
                     var real = Engine.TensorNarrow(Engine.Reshape(sample.Audio!, new[] { sample.Audio!.Length }), 0, 0, generated.Length);
                     return _codecGan!.DiscriminatorLoss(real, generated);
                 }, _discriminatorOptimizer!);
@@ -388,7 +392,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             if (sample.SpeakerReference is not null) timbre = TrainingTimbreEmbedding(sample.SpeakerReference);
         }
         return _tokenDiffusion!.DenoisingLoss(AlignTokens(tokenSource, target.Shape[0]), target, timbre,
-            training ? null : new Random(_options.GenerationSeed + 17));
+            training ? null : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed + 17));
     }
 
     private Tensor<T> TrainingTimbreEmbedding(Tensor<T> reference)
@@ -435,21 +439,23 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private Tensor<T> AlignTokens(Tensor<T> source, int frames)
     {
         int[] ids = IdsOf(source, _options.CodebookSize);
-        var aligned = new Tensor<T>(new[] { frames });
-        for (int i = 0; i < frames; i++) aligned[i] = NumOps.FromDouble(ids[Math.Min(i, ids.Length - 1)]);
-        return aligned;
+        var aligned = new int[frames];
+        for (int i = 0; i < frames; i++) aligned[i] = ids[Math.Min(i, ids.Length - 1)];
+        return IdTensor(aligned);
     }
 
     private Tensor<T> NormalizeTokens(Tensor<T> source) => Tokens(IdsOf(source, _options.CodebookSize));
 
     private Tensor<T> Tokens(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
-    private static Tensor<T> Detached(Tensor<T> tensor) => new(tensor._shape, tensor.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> tensor) => Engine.StopGradient(tensor);
+
+    // A host copy of an eager pass's output, taken outside the traced objective.
+    private static Tensor<T> Snapshot(Tensor<T> x) => new(x._shape, x.ToVector());
 
     private int[] IdsOf(Tensor<T> tensor, int vocabulary)
         => FrontEnd.TtsTokenIds.Read(tensor, vocabulary, int.MaxValue, "Seed-TTS");

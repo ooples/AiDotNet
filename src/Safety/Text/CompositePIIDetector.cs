@@ -60,9 +60,23 @@ public class CompositePIIDetector<T> : TextSafetyModuleBase<T>
     }
 
     /// <summary>
-    /// Initializes a new composite PII detector with custom sub-detectors.
+    /// Initializes the default regex + NER composite restricted to the given kinds of PII.
     /// </summary>
-    /// <param name="detectors">The PII detectors to combine.</param>
+    /// <param name="types">The kinds of PII to detect.</param>
+    public CompositePIIDetector(IReadOnlyCollection<PiiType> types)
+    {
+        if (types is null) throw new ArgumentNullException(nameof(types));
+        _detectors = new ITextSafetyModule<T>[]
+        {
+            new ContextAwarePIIDetector<T>(new RegexPIIDetector<T>(types)),
+            new NERPIIDetector<T>(types)
+        };
+    }
+
+    /// <summary>
+    /// Initializes a composite over custom detectors.
+    /// </summary>
+    /// <param name="detectors">The detectors whose findings are combined.</param>
     public CompositePIIDetector(ITextSafetyModule<T>[] detectors)
     {
         _detectors = detectors ?? throw new ArgumentNullException(nameof(detectors));

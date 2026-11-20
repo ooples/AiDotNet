@@ -112,18 +112,8 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         var studentProbs = Softmax(studentOutput, _studentTemperature);
         var teacherProbs = Softmax(centeredTeacher, _teacherTemperature);
 
-        // Compute cross-entropy loss
-        T totalLoss = NumOps.Zero;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _outputDim; d++)
-            {
-                // L = -Σ P_t * log(P_s)
-                var logPs = NumOps.Log(NumOps.Add(studentProbs[b, d], NumOps.FromDouble(1e-8)));
-                totalLoss = NumOps.Subtract(totalLoss, NumOps.Multiply(teacherProbs[b, d], logPs));
-            }
-        }
+        // Compute cross-entropy loss: L = -sum P_t * log(P_s)
+        T totalLoss = CrossEntropySum(teacherProbs, studentProbs);
 
         // Update center with EMA
         if (updateCenter)
@@ -132,6 +122,31 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// -sum over the leading [batch, outputDim] block of P_t * log(P_s + 1e-8).
+    /// </summary>
+    private T CrossEntropySum(Tensor<T> teacherProbs, Tensor<T> studentProbs)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var batchSize = studentProbs.Shape[0];
+
+        // Master read studentProbs[b, d] and teacherProbs[b, d] for b < the student batch and d < outputDim, so a
+        // larger teacher batch used its leading rows and a short one threw on the first missing element. Probe the
+        // same elements in master's first-failure order to keep its exceptions.
+        if (batchSize > 0 && _outputDim > 0)
+        {
+            _ = studentProbs[0, _outputDim - 1];
+            _ = teacherProbs[0, _outputDim - 1];
+            _ = teacherProbs[batchSize - 1, 0];
+        }
+
+        var shape = new[] { batchSize, _outputDim };
+        var logPs = Engine.TensorLog(Engine.TensorAddScalar(
+            Engine.TensorSlice(studentProbs, new[] { 0, 0 }, shape), ObjectiveOps.Epsilon<T>(1e-8)));
+        var pt = Engine.TensorSlice(teacherProbs, new[] { 0, 0 }, shape);
+        return NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(pt, logPs)));
     }
 
     /// <summary>
@@ -144,12 +159,13 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         IList<Tensor<T>> studentOutputs,
         IList<Tensor<T>> teacherOutputs)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (studentOutputs.Count == 0)
             throw new ArgumentException("Must provide at least one student output", nameof(studentOutputs));
         if (teacherOutputs.Count == 0)
             throw new ArgumentException("Must provide at least one teacher output", nameof(teacherOutputs));
 
-        T totalLoss = NumOps.Zero;
+        var pairLosses = new List<T>();
         int pairCount = 0;
 
         // For each teacher output (global views)
@@ -168,14 +184,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
                 var studentProbs = Softmax(studentOut, _studentTemperature);
                 var batchSize = studentProbs.Shape[0];
 
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int d = 0; d < _outputDim; d++)
-                    {
-                        var logPs = NumOps.Log(NumOps.Add(studentProbs[b, d], NumOps.FromDouble(1e-8)));
-                        totalLoss = NumOps.Subtract(totalLoss, NumOps.Multiply(teacherProbs[b, d], logPs));
-                    }
-                }
+                pairLosses.Add(CrossEntropySum(teacherProbs, studentProbs));
 
                 pairCount += batchSize;
             }
@@ -184,7 +193,11 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         // Update center with mean of all teacher outputs
         UpdateCenterFromMultiple(teacherOutputs);
 
-        return pairCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(pairCount)) : NumOps.Zero;
+        if (pairCount == 0)
+            return NumOps.Zero;
+
+        T totalLoss = Engine.TensorSum(new Tensor<T>(pairLosses.ToArray(), new[] { pairLosses.Count }));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(pairCount));
     }
 
     /// <summary>
@@ -193,45 +206,32 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradStudent) ComputeLossWithGradients(
         Tensor<T> studentOutput, Tensor<T> teacherOutput)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = studentOutput.Shape[0];
 
         var centeredTeacher = ApplyCenter(teacherOutput);
         var studentProbs = Softmax(studentOutput, _studentTemperature);
         var teacherProbs = Softmax(centeredTeacher, _teacherTemperature);
 
-        var gradStudent = new T[batchSize * _outputDim];
-        T totalLoss = NumOps.Zero;
+        // Cross-entropy loss
+        T totalLoss = CrossEntropySum(teacherProbs, studentProbs);
 
+        // Gradient: (P_s - P_t) / tau_s, then scaled by 1/batchSize
+        var shape = new[] { batchSize, _outputDim };
         var invStudentTemp = NumOps.FromDouble(1.0 / _studentTemperature);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _outputDim; d++)
-            {
-                // Cross-entropy loss
-                var logPs = NumOps.Log(NumOps.Add(studentProbs[b, d], NumOps.FromDouble(1e-8)));
-                totalLoss = NumOps.Subtract(totalLoss, NumOps.Multiply(teacherProbs[b, d], logPs));
-
-                // Gradient: (P_s - P_t) / τ_s
-                var grad = NumOps.Multiply(
-                    NumOps.Subtract(studentProbs[b, d], teacherProbs[b, d]),
-                    invStudentTemp);
-
-                gradStudent[b * _outputDim + d] = grad;
-            }
-        }
+        var gradStudent = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(
+                Engine.TensorSlice(studentProbs, new[] { 0, 0 }, shape),
+                Engine.TensorSlice(teacherProbs, new[] { 0, 0 }, shape)),
+            invStudentTemp);
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var scale = NumOps.FromDouble(1.0 / batchSize);
-
-        for (int i = 0; i < gradStudent.Length; i++)
-        {
-            gradStudent[i] = NumOps.Multiply(gradStudent[i], scale);
-        }
+        gradStudent = Engine.TensorMultiplyScalar(gradStudent, scale);
 
         UpdateCenter(teacherOutput);
 
-        return (avgLoss, new Tensor<T>(gradStudent, [batchSize, _outputDim]));
+        return (avgLoss, gradStudent);
     }
 
     /// <summary>
@@ -252,115 +252,78 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> ApplyCenter(Tensor<T> output)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // output[:, :outputDim] - center
         var batchSize = output.Shape[0];
-        var result = new T[batchSize * _outputDim];
+        var rows = Engine.TensorSlice(output, new[] { 0, 0 }, new[] { batchSize, _outputDim });
+        return Engine.TensorSubtract(rows, CenterTensor.Reshape(1, _outputDim));
+    }
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _outputDim; d++)
-            {
-                result[b * _outputDim + d] = NumOps.Subtract(output[b, d], _center[d]);
-            }
-        }
+    /// <summary>Zero-copy tensor view of the center.</summary>
+    private Tensor<T> CenterTensor => Vector<T>.Wrap(_center).AsTensor();
 
-        return new Tensor<T>(result, [batchSize, _outputDim]);
+    /// <summary>Column sums of the leading <c>outputDim</c> features of a [batch, features] tensor.</summary>
+    private Tensor<T> ColumnSums(Tensor<T> batch)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var batchSize = batch.Shape[0];
+        var columns = Engine.TensorSlice(batch, new[] { 0, 0 }, new[] { batchSize, _outputDim });
+        return Engine.ReduceSum(columns, new[] { 0 }, keepDims: false);
+    }
+
+    /// <summary>EMA update: center = momentum * center + (1 - momentum) * batchMean.</summary>
+    private void BlendIntoCenter(Tensor<T> batchMean)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var momentum = NumOps.FromDouble(_centerMomentum);
+        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
+        var blended = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(CenterTensor, momentum),
+            Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum));
+        blended.AsSpan().CopyTo(_center);
     }
 
     // Internal so a training step can advance the center once per step, after an objective that may be evaluated
     // more than once.
     internal void UpdateCenter(Tensor<T> teacherOutput)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = teacherOutput.Shape[0];
-        var momentum = NumOps.FromDouble(_centerMomentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
-        for (int d = 0; d < _outputDim; d++)
-        {
-            // Compute batch mean for this dimension
-            T batchMean = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                batchMean = NumOps.Add(batchMean, teacherOutput[b, d]);
-            }
-            batchMean = NumOps.Multiply(batchMean, invBatch);
-
-            // EMA update: center = momentum * center + (1 - momentum) * batch_mean
-            _center[d] = NumOps.Add(
-                NumOps.Multiply(momentum, _center[d]),
-                NumOps.Multiply(oneMinusMomentum, batchMean));
-        }
+        // EMA update toward the batch mean of each dimension
+        BlendIntoCenter(Engine.TensorMultiplyScalar(ColumnSums(teacherOutput), invBatch));
     }
 
     private void UpdateCenterFromMultiple(IList<Tensor<T>> teacherOutputs)
     {
-        var momentum = NumOps.FromDouble(_centerMomentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
-
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Compute mean across all teacher outputs
-        var meanValues = new T[_outputDim];
+        Tensor<T>? columnTotals = null;
         int totalSamples = 0;
 
         foreach (var output in teacherOutputs)
         {
-            var batchSize = output.Shape[0];
-            totalSamples += batchSize;
-
-            for (int d = 0; d < _outputDim; d++)
-            {
-                for (int b = 0; b < batchSize; b++)
-                {
-                    meanValues[d] = NumOps.Add(meanValues[d], output[b, d]);
-                }
-            }
+            totalSamples += output.Shape[0];
+            var sums = ColumnSums(output);
+            columnTotals = columnTotals is null ? sums : Engine.TensorAdd(columnTotals, sums);
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalSamples);
+        var totals = columnTotals ?? new Tensor<T>(new[] { _outputDim });
 
-        for (int d = 0; d < _outputDim; d++)
-        {
-            var batchMean = NumOps.Multiply(meanValues[d], invTotal);
-
-            _center[d] = NumOps.Add(
-                NumOps.Multiply(momentum, _center[d]),
-                NumOps.Multiply(oneMinusMomentum, batchMean));
-        }
+        BlendIntoCenter(Engine.TensorMultiplyScalar(totals, invTotal));
     }
 
     private Tensor<T> Softmax(Tensor<T> input, double temperature)
     {
-        var batchSize = input.Shape[0];
-        var dim = input.Shape[1];
-        var result = new T[batchSize * dim];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invTemp = NumOps.FromDouble(1.0 / temperature);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            T maxVal = input[b, 0];
-            for (int d = 1; d < dim; d++)
-            {
-                if (NumOps.GreaterThan(input[b, d], maxVal))
-                    maxVal = input[b, d];
-            }
-
-            // Compute exp and sum
-            T sumExp = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                var scaled = NumOps.Multiply(NumOps.Subtract(input[b, d], maxVal), invTemp);
-                result[b * dim + d] = NumOps.Exp(scaled);
-                sumExp = NumOps.Add(sumExp, result[b * dim + d]);
-            }
-
-            // Normalize
-            for (int d = 0; d < dim; d++)
-            {
-                result[b * dim + d] = NumOps.Divide(result[b * dim + d], sumExp);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        // exp((x - max) / tau), normalized per row
+        var shifted = Engine.TensorSubtract(input, Engine.ReduceMax(input, new[] { 1 }, keepDims: true));
+        var exps = Engine.TensorExp(Engine.TensorMultiplyScalar(shifted, invTemp));
+        return Engine.TensorDivide(exps, Engine.ReduceSum(exps, new[] { 1 }, keepDims: true));
     }
     /// <summary>
     /// Differentiable DINO cross-entropy: -sum(P_teacher * log P_student).

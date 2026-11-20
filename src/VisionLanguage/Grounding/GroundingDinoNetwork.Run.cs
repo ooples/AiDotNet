@@ -107,34 +107,49 @@ internal sealed partial class GroundingDinoNetwork<T>
         var encoderClass = Contrast(objectQuery, text, mask);
         var coordinateLogits = _engine.TensorAdd(Mlp(EncoderBoxHead, objectQuery), proposals);
         int queries = Math.Min(c.Queries, tokens);
-        var selected = new int[b, queries];
         var maxima = _engine.ReduceMax(encoderClass, new[] { 2 }, keepDims: false, out _);
-        for (int i = 0; i < b; i++)
-        {
-            var order = Enumerable.Range(0, tokens).OrderByDescending(t => NumOps.ToDouble(maxima[i, t])).ThenBy(t => t).Take(queries).ToArray();
-            for (int q = 0; q < queries; q++) selected[i, q] = order[q];
-        }
-        var reference = new Tensor<T>(new[] { b, queries, 4 });
-        for (int i = 0; i < b; i++)
-            for (int q = 0; q < queries; q++)
-                for (int k = 0; k < 4; k++)
-                    reference[i, q, k] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(coordinateLogits[i, selected[i, q], k]))));
+        var selectedRowIndices = AiDotNet.Training.CompiledStepHostValue<T>.Compute(
+            "GroundingDinoQuerySelect",
+            new[] { maxima },
+            new[] { b * queries },
+            (inputs, outputIndices) =>
+            {
+                var maxValues = inputs[0].Cast<double>().ToArray();
+                var rowBuffer = new double[b * queries];
+                for (int i = 0; i < b; i++)
+                {
+                    int rowBase = i * tokens;
+                    var order = Enumerable.Range(0, tokens)
+                        .OrderByDescending(t => maxValues[rowBase + t])
+                        .ThenBy(t => t)
+                        .Take(queries)
+                        .ToArray();
+                    for (int q = 0; q < queries; q++)
+                        rowBuffer[i * queries + q] = rowBase + order[q];
+                }
+                var typedIndices = new Tensor<double>(new[] { b * queries }, new Vector<double>(rowBuffer)).Cast<T>();
+                typedIndices.AsSpan().CopyTo(outputIndices.AsWritableSpan());
+            });
         var target = _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorSlice(_engine.Reshape(Value(QueryEmbedding), new[] { c.Queries, c.Dim }),
             new[] { 0, 0 }, new[] { queries, c.Dim }), new[] { 1, queries, c.Dim }), new[] { b, queries, c.Dim });
         // The encoder's outputs for its auxiliary loss, as the official code takes them (hs_enc and refpoint_embed_undetach):
         // the selected tokens' scores against the encoded text, and their boxes, on the tape.
-        var rows = new int[b * queries];
-        for (int i = 0; i < b; i++)
-            for (int q = 0; q < queries; q++) rows[i * queries + q] = i * tokens + selected[i, q];
         int width = encoderClass.Shape[2];
-        var encoderLogits = _engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
-            _engine.Reshape(encoderClass, new[] { b * tokens, width }), rows, 0), new[] { b, queries, width });
-        var encoderBoxes = _engine.Sigmoid(_engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
-            _engine.Reshape(coordinateLogits, new[] { b * tokens, 4 }), rows, 0), new[] { b, queries, 4 }));
-        var initialReference = reference;
+        var encoderLogits = _engine.Reshape(_engine.TensorEmbeddingLookupFromFloatIndices(
+            _engine.Reshape(encoderClass, new[] { b * tokens, width }), selectedRowIndices), new[] { b, queries, width });
+        var encoderBoxes = _engine.Sigmoid(_engine.Reshape(_engine.TensorEmbeddingLookupFromFloatIndices(
+            _engine.Reshape(coordinateLogits, new[] { b * tokens, 4 }), selectedRowIndices), new[] { b, queries, 4 }));
+        var reference = _engine.StopGradient(encoderBoxes);
         Record("init_reference", reference);
 
         // Decoder with iterative box refinement.
+        int halfDim = c.Dim / 2;
+        int freqPairs = Math.Max(1, halfDim / 2);
+        var invFreqDoubles = new double[freqPairs];
+        for (int pair = 0; pair < freqPairs; pair++)
+            invFreqDoubles[pair] = (2.0 * Math.PI) / Math.Pow(10000.0, (2.0 * pair) / halfDim);
+        var invFreqTensor = new Tensor<double>(new[] { 1, 1, 1, freqPairs }, new Vector<double>(invFreqDoubles)).Cast<T>();
+
         var textBias = KeyMask(mask, c.DecoderHeads, queries, Finfo);
         var hidden = target;
         var intermediate = new List<Tensor<T>>();
@@ -142,13 +157,19 @@ internal sealed partial class GroundingDinoNetwork<T>
         foreach (var layer in DecoderLayers)
         {
             var referenceInput = _engine.TensorBroadcastTo(_engine.Reshape(reference, new[] { b, queries, 1, 4 }), new[] { b, queries, c.Levels, 4 });
-            var sine = new Tensor<T>(new[] { b, queries, 2 * c.Dim });
-            for (int i = 0; i < b; i++)
-                for (int q = 0; q < queries; q++)
-                {
-                    var sineValues = SineFeatures(Enumerable.Range(0, 4).Select(k => NumOps.ToDouble(reference[i, q, k])).ToArray(), c.Dim / 2);
-                    for (int d = 0; d < sineValues.Length; d++) sine[i, q, d] = NumOps.FromDouble(sineValues[d]);
-                }
+            var refX = _engine.TensorSlice(reference, new[] { 0, 0, 0 }, new[] { b, queries, 1 });
+            var refY = _engine.TensorSlice(reference, new[] { 0, 0, 1 }, new[] { b, queries, 1 });
+            var refWH = _engine.TensorSlice(reference, new[] { 0, 0, 2 }, new[] { b, queries, 2 });
+            var swappedCoords = _engine.Reshape(_engine.TensorConcatenate(new[] { refY, refX, refWH }, axis: 2), new[] { b, queries, 4, 1 });
+            var angles = _engine.TensorMultiply(
+                _engine.TensorBroadcastTo(swappedCoords, new[] { b, queries, 4, freqPairs }),
+                _engine.TensorBroadcastTo(invFreqTensor, new[] { b, queries, 4, freqPairs }));
+            var interleaved = _engine.Reshape(
+                _engine.TensorStack(new[] { _engine.TensorSin(angles), _engine.TensorCos(angles) }, axis: 4),
+                new[] { b, queries, 4, freqPairs * 2 });
+            var sine = freqPairs * 2 == halfDim
+                ? _engine.Reshape(interleaved, new[] { b, queries, 2 * c.Dim })
+                : _engine.Reshape(_engine.TensorSlice(interleaved, new[] { 0, 0, 0, 0 }, new[] { b, queries, 4, halfDim }), new[] { b, queries, 2 * c.Dim });
             var queryPosition = Mlp(ReferenceHead, sine);
             var qk = _engine.TensorAdd(hidden, queryPosition);
             hidden = Rows(layer.SelfNorm, _engine.TensorAdd(hidden, Dropout(Attend(layer.SelfAttention, qk, qk, hidden, null), c.Dropout)));
@@ -160,7 +181,7 @@ internal sealed partial class GroundingDinoNetwork<T>
             hidden = Rows(layer.FinalNorm, _engine.TensorAdd(hidden, Dropout(ffn, c.Dropout)));
             // The refined reference feeds the next layer as data (detached).
             var refined = _engine.Sigmoid(_engine.TensorAdd(Mlp(BoxHead, hidden), Logit(_engine, reference)));
-            reference = new Tensor<T>(refined.Shape.ToArray(), new Vector<T>(refined.ToArray()));
+            reference = _engine.StopGradient(refined);
             intermediate.Add(Rows(DecoderNorm, hidden));
             references.Add(reference);
         }
@@ -228,11 +249,12 @@ internal sealed partial class GroundingDinoNetwork<T>
         var scores = _engine.BatchMatMul(query, _engine.TensorPermute(key, new[] { 0, 2, 1 }));                       // [B·h, Nv, Nt]
         // attn − attn.max() (one global maximum), clamped to ±50000; the text side subtracts each row's maximum. Both
         // shifts are constants under the softmaxes that follow, so they are taken as data.
-        double globalMax = scores.ToArray().Max(NumOps.ToDouble);
-        var shifted = _engine.TensorClamp(_engine.TensorAddScalar(scores, NumOps.FromDouble(-globalMax)), NumOps.FromDouble(-50000), NumOps.FromDouble(50000));
+        var globalMax = _engine.StopGradient(_engine.ReduceMax(scores, new[] { 0, 1, 2 }, keepDims: true, out _));
+        var shifted = _engine.TensorClamp(
+            _engine.TensorSubtract(scores, _engine.TensorBroadcastTo(globalMax, scores._shape)),
+            NumOps.FromDouble(-50000), NumOps.FromDouble(50000));
         var transposed = _engine.TensorPermute(shifted, new[] { 0, 2, 1 });                                       // [B·h, Nt, Nv]
-        var rowMax = _engine.ReduceMax(transposed, new[] { 2 }, keepDims: true, out _);
-        var rowMaxData = new Tensor<T>(rowMax.Shape.ToArray(), new Vector<T>(rowMax.ToArray()));
+        var rowMaxData = _engine.StopGradient(_engine.ReduceMax(transposed, new[] { 2 }, keepDims: true, out _));
         var textScores = _engine.TensorClamp(_engine.TensorSubtract(transposed, _engine.TensorBroadcastTo(rowMaxData, transposed._shape)),
             NumOps.FromDouble(-50000), NumOps.FromDouble(50000));
         var textAttention = _engine.Softmax(textScores, axis: 2);

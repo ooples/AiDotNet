@@ -20,61 +20,83 @@ public sealed class GjrGarchModel<T> : ClassicalVolatilityModelBase<T>
 {
     /// <inheritdoc/>
     public override string ModelName => "GJR-GARCH(1,1,1)";
-    /// <inheritdoc/>
-    public override int ParameterCount => 4; // ω, α, γ, β
 
     /// <inheritdoc/>
-    protected override double[] InitialGuess(double sampleVariance)
-        => [0.1 * Math.Max(sampleVariance, 1e-8), 0.03, 0.08, 0.88];
+    public override int ParameterCount => 5; // μ, ω, α, γ, β
 
     /// <inheritdoc/>
-    protected override double[] ToNatural(double[] u)
+    protected override Vector<T> InitialGuess(T sampleVariance)
+        => new(new[]
+        {
+            NumOps.Multiply(NumOps.FromDouble(0.1), Garch11Model<T>.Floor(sampleVariance, 1e-8)),
+            NumOps.FromDouble(0.03),
+            NumOps.FromDouble(0.08),
+            NumOps.FromDouble(0.88),
+        });
+
+    /// <inheritdoc/>
+    protected override Vector<T> ToNatural(Vector<T> u)
     {
-        double omega = Math.Exp(u[0]);
-        double persistence = Garch11Model<T>.Sigmoid(u[1]); // α + γ/2 + β ∈ (0,1)
+        T omega = NumOps.Exp(u[0]);
+        T persistence = Garch11Model<T>.Sigmoid(u[1]); // α + γ/2 + β ∈ (0,1)
         // 3-way split (α, γ/2, β) via softmax with α as reference.
-        double e0 = 1.0, e1 = Math.Exp(u[2]), e2 = Math.Exp(u[3]);
-        double sum = e0 + e1 + e2;
-        double wAlpha = e0 / sum, wGammaHalf = e1 / sum, wBeta = e2 / sum;
-        double alpha = persistence * wAlpha;
-        double gamma = 2.0 * persistence * wGammaHalf;
-        double beta = persistence * wBeta;
-        return [omega, alpha, gamma, beta];
+        T e1 = NumOps.Exp(u[2]);
+        T e2 = NumOps.Exp(u[3]);
+        T sum = NumOps.Add(NumOps.One, NumOps.Add(e1, e2));
+        T alpha = NumOps.Divide(persistence, sum);
+        T gamma = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(persistence, e1)), sum);
+        T beta = NumOps.Divide(NumOps.Multiply(persistence, e2), sum);
+        return new Vector<T>(new[] { omega, alpha, gamma, beta });
     }
 
     /// <inheritdoc/>
-    protected override double[] ToUnconstrained(double[] p)
+    protected override Vector<T> ToUnconstrained(Vector<T> p)
     {
-        double persistence = p[1] + (p[2] / 2.0) + p[3];
-        double wAlpha = p[1] / persistence;
-        double wGammaHalf = (p[2] / 2.0) / persistence;
-        double wBeta = p[3] / persistence;
-        return
-        [
-            Math.Log(Math.Max(p[0], 1e-12)),
+        T gammaHalf = NumOps.Divide(p[2], NumOps.FromDouble(2.0));
+        T persistence = NumOps.Add(NumOps.Add(p[1], gammaHalf), p[3]);
+        T wAlpha = Garch11Model<T>.Floor(NumOps.Divide(p[1], persistence), 1e-9);
+        T wGammaHalf = Garch11Model<T>.Floor(NumOps.Divide(gammaHalf, persistence), 1e-9);
+        T wBeta = Garch11Model<T>.Floor(NumOps.Divide(p[3], persistence), 1e-9);
+        return new Vector<T>(new[]
+        {
+            NumOps.Log(Garch11Model<T>.Floor(p[0], 1e-12)),
             Garch11Model<T>.Logit(persistence),
-            Math.Log(Math.Max(wGammaHalf, 1e-9) / Math.Max(wAlpha, 1e-9)),
-            Math.Log(Math.Max(wBeta, 1e-9) / Math.Max(wAlpha, 1e-9)),
-        ];
+            NumOps.Log(NumOps.Divide(wGammaHalf, wAlpha)),
+            NumOps.Log(NumOps.Divide(wBeta, wAlpha)),
+        });
     }
 
     /// <inheritdoc/>
-    protected override double NextVariance(double prevVariance, double prevReturn, double[] p)
+    protected override T NextVariance(T prevVariance, T prevResidual, Vector<T> p)
     {
-        double shock = prevReturn * prevReturn;
-        double leverage = prevReturn < 0 ? p[2] * shock : 0.0;
-        return p[0] + (p[1] * shock) + leverage + (p[3] * prevVariance);
+        T shock = NumOps.Multiply(prevResidual, prevResidual);
+        T leverage = NumOps.LessThan(prevResidual, NumOps.Zero) ? NumOps.Multiply(p[2], shock) : NumOps.Zero;
+        return NumOps.Add(NumOps.Add(NumOps.Add(p[0], NumOps.Multiply(p[1], shock)), leverage),
+            NumOps.Multiply(p[3], prevVariance));
     }
 
     /// <inheritdoc/>
-    protected override double UnconditionalVariance(double[] p)
+    /// <remarks>arch's <c>garch_recursion</c> with o = 1: σ²_0 = ω + (α + γ/2 + β)·backcast, then
+    /// σ²_t = ω + α·ε²_(t-1) + γ·ε²_(t-1)·1[ε_(t-1) &lt; 0] + β·σ²_(t-1).</remarks>
+    protected override Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> p)
     {
-        double denom = 1.0 - p[1] - (p[2] / 2.0) - p[3];
-        return denom > 1e-9 ? p[0] / denom : p[0] / 1e-9;
+        var engine = AiDotNetEngine.Current;
+        var squared = engine.TensorSquare(residuals);
+        var negative = engine.TensorLessThan(residuals, NumOps.Zero);
+        var symmetric = engine.TensorMultiplyScalar(Lagged(squared, backcast), p[1]);
+        var leverage = engine.TensorMultiplyScalar(
+            Lagged(engine.TensorMultiply(squared, negative), NumOps.Multiply(NumOps.FromDouble(0.5), backcast)), p[2]);
+        var drive = engine.TensorAddScalar(engine.TensorAdd(symmetric, leverage), p[0]);
+        return LinearRecurrence(drive, p[3], backcast);
     }
 
     /// <inheritdoc/>
-    protected override double MeanReversionSpeed(double[] p) => p[1] + (p[2] / 2.0) + p[3];
+    protected override T UnconditionalVariance(Vector<T> p)
+        => NumOps.Divide(p[0], Garch11Model<T>.Floor(NumOps.Subtract(NumOps.One, MeanReversionSpeed(p)), 1e-9));
+
+    /// <inheritdoc/>
+    protected override T MeanReversionSpeed(Vector<T> p)
+        => NumOps.Add(NumOps.Add(p[1], NumOps.Divide(p[2], NumOps.FromDouble(2.0))), p[3]);
 
     /// <inheritdoc/>
     protected override ClassicalVolatilityModelBase<T> CreateInstance() => new GjrGarchModel<T>();

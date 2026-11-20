@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Manifold;
 
@@ -28,13 +29,13 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nNeighbors;
     private readonly double _sigma;
 
-    private double[]? _laplacianScores;
+    private Vector<T>? _laplacianScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? LaplacianScores => _laplacianScores;
+    public Vector<T>? LaplacianScores => _laplacianScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -62,86 +63,41 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
         int k = Math.Min(_nNeighbors, n - 1);
 
-        // Build k-NN similarity graph
-        var W = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            var distances = new List<(int idx, double dist)>();
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-                double dist = 0;
-                for (int d = 0; d < p; d++)
-                    dist += (X[i, d] - X[j, d]) * (X[i, d] - X[j, d]);
-                distances.Add((j, dist));
-            }
+        // k-NN heat-kernel similarity graph, symmetrized (i ~ j when either is among the other's neighbours)
+        var squaredDistances = FeatureSelectionTensorOps.PairwiseSquaredDistances(x);
+        var neighbors = FeatureSelectionTensorOps.KNearestMask(squaredDistances, k);
+        var adjacency = engine.TensorMax(neighbors, engine.TensorTranspose(neighbors));
+        var heat = engine.TensorExp(engine.TensorDivideScalar(
+            engine.TensorNegate(squaredDistances), NumOps.FromDouble(2 * _sigma * _sigma)));
+        var w = engine.TensorMultiply(adjacency, heat);
 
-            var neighbors = distances.OrderBy(x => x.dist).Take(k).ToList();
-            foreach (var (idx, dist) in neighbors)
-            {
-                double sim = Math.Exp(-dist / (2 * _sigma * _sigma));
-                W[i, idx] = sim;
-                W[idx, i] = sim; // Make symmetric
-            }
-        }
+        // Degrees D = W 1
+        var degree = engine.ReduceSum(w, new[] { 1 }, true); // [n, 1]
+        T degreeSum = engine.TensorSum(degree);
 
-        // Compute degree matrix
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                D[i] += W[i, j];
+        // f~ = f - (f'D1 / 1'D1) 1 for every feature column f
+        var weighted = engine.TensorMultiply(x, degree);
+        var alpha = engine.TensorDivideScalar(
+            engine.ReduceSum(weighted, new[] { 0 }, true), NumOps.Add(degreeSum, NumOps.FromDouble(1e-10)));
+        var centered = engine.TensorSubtract(x, alpha);
 
-        double Dsum = D.Sum();
-
-        // Compute Laplacian score for each feature
-        _laplacianScores = new double[p];
-        for (int d = 0; d < p; d++)
-        {
-            // Get feature column
-            var f = new double[n];
-            for (int i = 0; i < n; i++) f[i] = X[i, d];
-
-            // Compute f~ = f - (f'D1 / 1'D1) * 1
-            double fD1 = 0;
-            for (int i = 0; i < n; i++) fD1 += f[i] * D[i];
-            double alpha = fD1 / (Dsum + 1e-10);
-
-            var fTilde = new double[n];
-            for (int i = 0; i < n; i++) fTilde[i] = f[i] - alpha;
-
-            // Laplacian score = f~'Lf~ / f~'Df~
-            // where L = D - W
-            double numerator = 0;
-            double denominator = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i == j)
-                        numerator += fTilde[i] * D[i] * fTilde[i];
-                    numerator -= fTilde[i] * W[i, j] * fTilde[j];
-                }
-                denominator += fTilde[i] * D[i] * fTilde[i];
-            }
-
-            _laplacianScores[d] = denominator > 1e-10 ? numerator / denominator : double.MaxValue;
-        }
+        // Laplacian score = f~'L f~ / f~'D f~ with L = D - W
+        var denominator = engine.ReduceSum(engine.TensorMultiply(engine.TensorSquare(centered), degree), new[] { 0 }, false);
+        var smoothness = engine.ReduceSum(engine.TensorMultiply(centered, engine.TensorMatMul(w, centered)), new[] { 0 }, false);
+        var numerator = engine.TensorSubtract(denominator, smoothness);
+        var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var scores = engine.TensorWhere(
+            defined, engine.TensorDivide(numerator, safeDenominator), PreprocessingTensorOps.Filled(new[] { p }, NumOps.MaxValue));
+        _laplacianScores = scores.ToVector();
 
         // Select features with LOWEST Laplacian scores
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderBy(j => _laplacianScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -152,15 +108,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("LaplacianScoreSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

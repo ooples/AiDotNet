@@ -49,6 +49,8 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 [ResearchPaper("Seed-ASR: Understanding Diverse Speech and Contexts with LLM-based Speech Recognition", "https://arxiv.org/abs/2407.04675", Year = 2024, Authors = "Bai et al.")]
 public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
@@ -104,7 +106,7 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
         var network = _network ?? throw new NotSupportedException("Transcription runs on the native network.");
         int[] tokens;
         using (new Tensors.Engines.Autodiff.NoGradScope<T>())
-            tokens = network.Greedy(network.Prompt(network.Speech(Samples(audio), training: false), Context), _options.MaxTextLength);
+            tokens = network.Greedy(network.Prompt(network.Speech(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds), training: false), Context), _options.MaxTextLength);
         return new TranscriptionResult<T>
         {
             Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Length > 0 ? 1.0 : 0.0),
@@ -157,34 +159,9 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
         Layers.AddRange(layers);
     }
 
-    // The 16 kHz waveform's samples, truncated to the longest recording transcribed.
-    private double[] Samples(Tensor<T> audio)
-    {
-        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var samples = new double[length];
-        var span = audio.Data.Span;
-        for (int i = 0; i < length; i++) samples[i] = NumOps.ToDouble(span[i]);
-        return samples;
-    }
-
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
-
-    // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> FirstLogits(Tensor<T> input, bool training)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(Samples(Row(input, r, rows)), training), Context));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> FirstLogits(Tensor<T> input, bool training) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) =>
+            net.FirstLogits(net.Prompt(net.Speech(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds), training), Context)));
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -192,59 +169,20 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
 
-    // The transcript a training target names: ids [length], or one distribution per token [length, vocabulary], read as
-    // its most likely tokens; the end token is never a target.
-    private int[] Transcript(SeedAsrNetwork<T> network, Tensor<T> target)
-    {
-        int vocabulary = _options.VocabSize, end = network.EndToken;
-        var span = target.Data.Span;
-        if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
-        {
-            var tokens = new int[target.Length / vocabulary];
-            for (int r = 0; r < tokens.Length; r++)
-            {
-                int best = -1;
-                for (int v = 0; v < vocabulary; v++)
-                    if (v != end && (best < 0 || NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best]))) best = v;
-                tokens[r] = best;
-            }
-            return tokens;
-        }
-        var ids = new int[target.Length];
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= vocabulary || (int)value == end)
-                throw new ArgumentException($"Token {value} is outside the vocabulary or the end token.", nameof(target));
-            ids[i] = (int)value;
-        }
-        return ids;
-    }
-
-    private Tensor<T> BatchLoss(SeedAsrNetwork<T> network, Tensor<T> input, Tensor<T> target, bool training)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var prompt = network.Prompt(network.Speech(Samples(Row(input, r, rows)), training), Context);
-            var loss = Engine.Reshape(network.Loss(prompt, Transcript(network, Row(target, r, rows))), new[] { 1 });
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-    }
+    private int[] Transcript(SeedAsrNetwork<T> network, Tensor<T> target) =>
+        ParseVocabularyTargetTokens(target, _options.VocabSize, network.EndToken);
 
     /// <inheritdoc />
-    /// <remarks>The transcript's cross-entropy after the prompt, averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true)); }
-        finally { network.Llm.Training = false; }
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(
+            input,
+            target,
+            _network,
+            null,
+            Transcript,
+            (net, wave, transcript) => net.Loss(net.Prompt(net.Speech(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds), training: true), Context), transcript),
+            beforeTrain: net => net.Llm.Training = true,
+            afterTrain: net => net.Llm.Training = false);
 
     /// <inheritdoc />
     /// <remarks>With <see cref="SpeechLlmTrainingScope.EncoderAdapterAndLora"/>, LUISE and the converter with the LLM fixed
@@ -265,12 +203,7 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target, training: false)[0];
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) => EvaluateNativeWaveformBatchObjective(input, target, _network, Transcript, (net, wave, transcript) => net.Loss(net.Prompt(net.Speech(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds), training: false), Context), transcript));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

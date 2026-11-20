@@ -263,6 +263,34 @@ public class VideoMAEPretrainingFidelityTests
     }
 
     [Fact]
+    public void ComputeReconstructionLoss_FloatFlatPatch_TargetsZero()
+    {
+        // A flat patch normalises to zero. A float mean of 0.1f over 512 pixels leaves a constant residue that the
+        // (std + 1e-6) division amplified to about 0.29, so a zero prediction scored a loss instead of none.
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.FourDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputFrames: Frames,
+            inputDepth: Channels,
+            inputHeight: Size,
+            inputWidth: Size,
+            outputSize: 4);
+        var model = new VideoMAE<float>(arch, options: new VideoMAEOptions
+        {
+            NumClasses = 4, NumFrames = Frames, NumFeatures = 16, MaskRatio = 0.5,
+        });
+        int patches = Size / PatchSize;
+        var clip = new Tensor<float>(
+            Enumerable.Repeat(0.1f, Frames * Channels * Size * Size).ToArray(), new[] { 1, Frames, Channels, Size, Size });
+        var zeros = new Tensor<float>(
+            new[] { Frames / TubeletSize, TubeletSize * Channels * PatchSize * PatchSize, patches, patches });
+        var mask = new bool[1, patches, patches];
+        mask[0, 1, 1] = true;
+
+        Assert.True(model.ComputeReconstructionLoss(zeros, clip, mask) < 1e-6f);
+    }
+
+    [Fact]
     public void ComputeReconstructionLoss_ByDefault_TargetsPerPatchNormalisedPixels()
     {
         var model = Model();

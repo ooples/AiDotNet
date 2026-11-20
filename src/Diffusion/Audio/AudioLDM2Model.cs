@@ -767,6 +767,7 @@ public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         var baseLatent = _audioVAE.Encode(inputMel, sampleMode: false);
         baseLatent = _audioVAE.ScaleLatent(baseLatent);
 
+        var strength = NumOps.FromDouble(variationStrength);
         for (int i = 0; i < numVariations; i++)
         {
             var variationSeed = baseSeed + i;
@@ -774,17 +775,7 @@ public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 
             // Add controlled noise
             var noise = SampleNoiseTensor(baseLatent._shape, rng);
-            var noisyLatent = new Tensor<T>(baseLatent._shape);
-            var noisySpan = noisyLatent.AsWritableSpan();
-            var baseSpan = baseLatent.AsSpan();
-            var noiseSpan = noise.AsSpan();
-
-            for (int j = 0; j < noisySpan.Length; j++)
-            {
-                var baseVal = NumOps.ToDouble(baseSpan[j]);
-                var noiseVal = NumOps.ToDouble(noiseSpan[j]);
-                noisySpan[j] = NumOps.FromDouble(baseVal + variationStrength * noiseVal);
-            }
+            var noisyLatent = Engine.TensorAdd(baseLatent, Engine.TensorMultiplyScalar(noise, strength));
 
             // Decode variation
             var unscaled = _audioVAE.UnscaleLatent(noisyLatent);
@@ -821,15 +812,24 @@ public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         latent2 = _audioVAE.ScaleLatent(latent2);
 
         // Interpolate
+        // Interpolation weights t = step / numSteps and their complements 1 - t
+        int count = Math.Max(0, numSteps + 1);
+        var tValues = new double[count];
+        var complementValues = new double[count];
         for (int step = 0; step <= numSteps; step++)
         {
-            var t = (double)step / numSteps;
+            tValues[step] = (double)step / numSteps;
+            complementValues[step] = 1.0 - tValues[step];
+        }
 
+        var tWeights = new Tensor<double>(new[] { count }, new Vector<double>(tValues)).Cast<T>().ToArray();
+        var complementWeights = new Tensor<double>(new[] { count }, new Vector<double>(complementValues)).Cast<T>().ToArray();
+
+        for (int step = 0; step <= numSteps; step++)
+        {
             // interpolated = (1 - t) * latent1 + t * latent2
-            var oneMinusT = NumOps.FromDouble(1.0 - t);
-            var tScalar = NumOps.FromDouble(t);
-            var scaledL1 = Engine.TensorMultiplyScalar<T>(latent1, oneMinusT);
-            var scaledL2 = Engine.TensorMultiplyScalar<T>(latent2, tScalar);
+            var scaledL1 = Engine.TensorMultiplyScalar<T>(latent1, complementWeights[step]);
+            var scaledL2 = Engine.TensorMultiplyScalar<T>(latent2, tWeights[step]);
             var interpolated = Engine.TensorAdd<T>(scaledL1, scaledL2);
 
             // Decode
@@ -929,39 +929,15 @@ internal class ProjectionLayer<T> : IParameterSource<T>
             ? new[] { batchSize, seqLen, _outputDim }
             : new[] { batchSize, _outputDim };
 
-        var output = new Tensor<T>(outputShape);
-        var outSpan = output.AsWritableSpan();
-        var inSpan = input.AsSpan();
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int o = 0; o < _outputDim; o++)
-                {
-                    var sum = _numOps.ToDouble(_bias[o]);
-
-                    for (int i = 0; i < inputDim && i < _inputDim; i++)
-                    {
-                        var inIdx = b * seqLen * inputDim + s * inputDim + i;
-                        if (inIdx < inSpan.Length)
-                        {
-                            var inVal = _numOps.ToDouble(inSpan[inIdx]);
-                            var wVal = _numOps.ToDouble(_weights[o, i]);
-                            sum += inVal * wVal;
-                        }
-                    }
-
-                    var outIdx = b * seqLen * _outputDim + s * _outputDim + o;
-                    if (outIdx < outSpan.Length)
-                    {
-                        outSpan[outIdx] = _numOps.FromDouble(sum);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // output = input[..., :k] @ weights[:, :k]^T + bias with k = min(inputDim, configured input dim)
+        var engine = AiDotNetEngine.Current;
+        int shared = Math.Min(inputDim, _inputDim);
+        var rows = engine.TensorNarrow(engine.Reshape(input, new[] { batchSize * seqLen, inputDim }), 1, 0, shared);
+        var weights = engine.TensorNarrow(
+            new Tensor<T>(_weights.AsSpan().ToArray(), new[] { _outputDim, _inputDim }), 1, 0, shared);
+        var projected = engine.TensorMatMul(rows, engine.TensorTranspose(weights));
+        var bias = engine.TensorBroadcastTo(engine.Reshape(_bias.AsTensor(), new[] { 1, _outputDim }), projected._shape);
+        return engine.Reshape(engine.TensorAdd(projected, bias), outputShape);
     }
 
     /// <summary>
@@ -969,24 +945,8 @@ internal class ProjectionLayer<T> : IParameterSource<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var total = _inputDim * _outputDim + _outputDim;
-        var result = new Vector<T>(total);
-
-        int idx = 0;
-        for (int i = 0; i < _outputDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                result[idx++] = _weights[i, j];
-            }
-        }
-
-        for (int i = 0; i < _outputDim; i++)
-        {
-            result[idx++] = _bias[i];
-        }
-
-        return result;
+        // Row-major weights followed by the bias
+        return Vector<T>.Concatenate(new Vector<T>(_weights.AsSpan().ToArray()), _bias.Clone());
     }
 
     /// <summary>
@@ -998,19 +958,10 @@ internal class ProjectionLayer<T> : IParameterSource<T>
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
-        int idx = 0;
-        for (int i = 0; i < _outputDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                _weights[i, j] = parameters[idx++];
-            }
-        }
-
-        for (int i = 0; i < _outputDim; i++)
-        {
-            _bias[i] = parameters[idx++];
-        }
+        // Row-major weights followed by the bias
+        int weightCount = _inputDim * _outputDim;
+        parameters.AsSpan().Slice(0, weightCount).CopyTo(_weights.AsWritableSpan());
+        parameters.AsSpan().Slice(weightCount, _outputDim).CopyTo(_bias.AsWritableSpan());
     }
 
     /// <summary>

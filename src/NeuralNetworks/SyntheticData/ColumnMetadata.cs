@@ -92,7 +92,20 @@ public class ColumnMetadata
     /// ["Red", "Green", "Blue"]. For numerical columns, this list is empty.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<string> Categories { get; set; }
+    public IReadOnlyList<string> Categories
+    {
+        get => _categories;
+        set
+        {
+            _categories = value;
+            CategoriesInferredFromData = false;
+        }
+    }
+
+    private IReadOnlyList<string> _categories = Array.Empty<string>();
+
+    // Fit-time provenance: inferred labels are observed values, not a caller-declared public domain.
+    internal bool CategoriesInferredFromData { get; set; }
 
     /// <summary>
     /// Gets or sets the minimum observed value for numerical columns.
@@ -174,7 +187,8 @@ public class ColumnMetadata
             Min = Min,
             Max = Max,
             Mean = Mean,
-            Std = Std
+            Std = Std,
+            CategoriesInferredFromData = CategoriesInferredFromData
         };
     }
 

@@ -24,7 +24,6 @@ public static class PointCloudSampling<T>
         }
 
         int numPoints = pointCloud.NumPoints;
-        int numFeatures = pointCloud.NumFeatures;
 
         if (numSamples >= numPoints)
         {
@@ -33,39 +32,21 @@ public static class PointCloudSampling<T>
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
-        var indices = Enumerable.Range(0, numPoints).ToArray();
+        var indices = new int[numPoints];
+        for (int i = 0; i < numPoints; i++)
+        {
+            indices[i] = i;
+        }
+
         for (int i = 0; i < numSamples; i++)
         {
             int j = random.Next(i, numPoints);
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
-        var sampledData = new T[numSamples * numFeatures];
-        Vector<T>? sampledLabels = null;
-
-        if (pointCloud.Labels != null)
-        {
-            var labelData = new T[numSamples];
-            for (int i = 0; i < numSamples; i++)
-            {
-                labelData[i] = pointCloud.Labels[indices[i]];
-            }
-            sampledLabels = new Vector<T>(labelData);
-        }
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int srcIdx = indices[i];
-            int dstBase = i * numFeatures;
-
-            for (int f = 0; f < numFeatures; f++)
-            {
-                sampledData[dstBase + f] = pointCloud.Points[srcIdx, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(sampledData, [numSamples, numFeatures]);
-        return new PointCloudData<T>(tensor, sampledLabels);
+        var chosen = new int[numSamples];
+        Array.Copy(indices, chosen, numSamples);
+        return GatherPoints(pointCloud, chosen);
     }
 
     /// <summary>
@@ -98,60 +79,39 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
+        if (typeof(T) == typeof(Half))
+        {
+            // Half squared distances overflow above 256, which ties every far point at MaxValue: select in float.
+            // Half values round-trip through float exactly, and the draws do not depend on T.
+            return Narrow(PointCloudSampling<float>.FarthestPointSample(Widen<float>(pointCloud), numSamples, seed));
+        }
+
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
 
-        var selectedIndices = new List<int>(numSamples);
-        var minDistances = new double[numPoints];
-        for (int fillIdx = 0; fillIdx < minDistances.Length; fillIdx++) minDistances[fillIdx] = double.MaxValue;
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
+        var selectedIndices = new int[numSamples];
+        var minDistances = engine.TensorFullLike(new Tensor<T>(new[] { numPoints }), NumOps.MaxValue);
+        var minusOne = NumOps.FromDouble(-1);
 
         int firstIdx = random.Next(numPoints);
-        selectedIndices.Add(firstIdx);
-        UpdateDistances(pointCloud, firstIdx, minDistances);
+        selectedIndices[0] = firstIdx;
+        minDistances = UpdateDistances(positions, firstIdx, minDistances);
 
         for (int i = 1; i < numSamples; i++)
         {
-            int farthestIdx = 0;
-            double maxMinDist = -1;
+            // First index of the largest running distance, as the strict "> best" scan from -1 finds it;
+            // NaN distances never win, so they are scored -1 (an all-NaN scan keeps index 0).
+            var scores = engine.TensorWhere(
+                engine.TensorIsNan(minDistances), engine.TensorFullLike(minDistances, minusOne), minDistances);
+            var best = engine.TensorMaxValue(scores);
+            int farthestIdx = engine.TensorNonzero(engine.TensorEquals(scores, best)).ToArray()[0];
 
-            for (int j = 0; j < numPoints; j++)
-            {
-                if (minDistances[j] > maxMinDist)
-                {
-                    maxMinDist = minDistances[j];
-                    farthestIdx = j;
-                }
-            }
-
-            selectedIndices.Add(farthestIdx);
-            UpdateDistances(pointCloud, farthestIdx, minDistances);
+            selectedIndices[i] = farthestIdx;
+            minDistances = UpdateDistances(positions, farthestIdx, minDistances);
         }
 
-        var sampledData = new T[numSamples * numFeatures];
-        Vector<T>? sampledLabels = null;
-
-        if (pointCloud.Labels != null)
-        {
-            var labelData = new T[numSamples];
-            for (int i = 0; i < numSamples; i++)
-            {
-                labelData[i] = pointCloud.Labels[selectedIndices[i]];
-            }
-            sampledLabels = new Vector<T>(labelData);
-        }
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int srcIdx = selectedIndices[i];
-            int dstBase = i * numFeatures;
-
-            for (int f = 0; f < numFeatures; f++)
-            {
-                sampledData[dstBase + f] = pointCloud.Points[srcIdx, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(sampledData, [numSamples, numFeatures]);
-        return new PointCloudData<T>(tensor, sampledLabels);
+        return GatherPoints(pointCloud, selectedIndices);
     }
 
     /// <summary>
@@ -166,11 +126,11 @@ public static class PointCloudSampling<T>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when minDistance is not positive.</exception>
     public static PointCloudData<T> PoissonDiskSample(
         PointCloudData<T> pointCloud,
-        double minDistance,
+        T minDistance,
         int maxSamples = 0,
         int? seed = null)
     {
-        if (minDistance <= 0)
+        if (NumOps.LessThanOrEquals(minDistance, NumOps.Zero))
         {
             throw new ArgumentOutOfRangeException(nameof(minDistance), "Minimum distance must be positive.");
         }
@@ -190,18 +150,32 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        double minDistSq = minDistance * minDistance;
+        if (typeof(T) == typeof(Half))
+        {
+            // Half squared distances and the squared threshold overflow to infinity (infinity < infinity is false,
+            // so every point would be accepted): sample in float.
+            return Narrow(PointCloudSampling<float>.PoissonDiskSample(
+                Widen<float>(pointCloud), NumOps.ToFloat(minDistance), maxSamples, seed));
+        }
 
-        var indices = Enumerable.Range(0, numPoints).ToArray();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        var minDistSq = NumOps.Multiply(minDistance, minDistance);
+
+        var indices = new int[numPoints];
+        for (int i = 0; i < numPoints; i++)
+        {
+            indices[i] = i;
+        }
+
         for (int i = numPoints - 1; i > 0; i--)
         {
             int j = random.Next(i + 1);
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
         var selectedIndices = new List<int>();
-        var selectedPositions = new List<(double X, double Y, double Z)>();
 
         foreach (int idx in indices)
         {
@@ -210,59 +184,28 @@ public static class PointCloudSampling<T>
                 break;
             }
 
-            double x = NumOps.ToDouble(pointCloud.Points[idx, 0]);
-            double y = NumOps.ToDouble(pointCloud.Points[idx, 1]);
-            double z = NumOps.ToDouble(pointCloud.Points[idx, 2]);
-
+            // The candidate is rejected when an already selected point lies strictly closer than the minimum
+            // distance. Only the selected points are measured (the first candidate has none to check), so each
+            // candidate costs work proportional to the sample, not to the whole cloud.
             bool tooClose = false;
-            foreach (var pos in selectedPositions)
+            if (selectedIndices.Count > 0)
             {
-                double dx = x - pos.X;
-                double dy = y - pos.Y;
-                double dz = z - pos.Z;
-                double distSq = dx * dx + dy * dy + dz * dz;
-
-                if (distSq < minDistSq)
-                {
-                    tooClose = true;
-                    break;
-                }
+                var selectedIds = selectedIndices.ToArray();
+                var selected = engine.TensorIndexSelect(
+                    positions, new Tensor<int>(new[] { selectedIds.Length }, new Vector<int>(selectedIds)), 0);
+                var candidate = engine.TensorSlice(positions, new[] { idx, 0 }, new[] { 1, 3 });
+                var offsets = engine.TensorSubtract(selected, engine.TensorBroadcastTo(candidate, selected.Shape.ToArray()));
+                var distancesSq = GeometryEngineOps<T>.RowSquaredNorms(offsets);
+                tooClose = engine.TensorCountNonzero(engine.TensorLessThan(distancesSq, minDistSq)) > 0;
             }
 
             if (!tooClose)
             {
                 selectedIndices.Add(idx);
-                selectedPositions.Add((x, y, z));
             }
         }
 
-        int numSamples = selectedIndices.Count;
-        var sampledData = new T[numSamples * numFeatures];
-        Vector<T>? sampledLabels = null;
-
-        if (pointCloud.Labels != null)
-        {
-            var labelData = new T[numSamples];
-            for (int i = 0; i < numSamples; i++)
-            {
-                labelData[i] = pointCloud.Labels[selectedIndices[i]];
-            }
-            sampledLabels = new Vector<T>(labelData);
-        }
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int srcIdx = selectedIndices[i];
-            int dstBase = i * numFeatures;
-
-            for (int f = 0; f < numFeatures; f++)
-            {
-                sampledData[dstBase + f] = pointCloud.Points[srcIdx, f];
-            }
-        }
-
-        var tensor = new Tensor<T>(sampledData, [numSamples, numFeatures]);
-        return new PointCloudData<T>(tensor, sampledLabels);
+        return GatherPoints(pointCloud, selectedIndices.ToArray());
     }
 
     /// <summary>
@@ -272,12 +215,12 @@ public static class PointCloudSampling<T>
     /// <param name="voxelSize">The size of each voxel in the grid.</param>
     /// <returns>A new downsampled point cloud with one point per occupied voxel.</returns>
     /// <exception cref="ArgumentException">Thrown when point cloud has fewer than 3 features (xyz coordinates).</exception>
-    public static PointCloudData<T> VoxelGridSample(PointCloudData<T> pointCloud, double voxelSize)
+    public static PointCloudData<T> VoxelGridSample(PointCloudData<T> pointCloud, T voxelSize)
     {
         int numPoints = pointCloud.NumPoints;
         int numFeatures = pointCloud.NumFeatures;
 
-        if (numPoints == 0 || voxelSize <= 0)
+        if (numPoints == 0 || NumOps.LessThanOrEquals(voxelSize, NumOps.Zero))
         {
             return pointCloud;
         }
@@ -289,112 +232,149 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
+        if (typeof(T) == typeof(Half) || NumOps.Equals(NumOps.FromDouble(0.5), NumOps.Zero))
+        {
+            // Half voxel sums overflow above 65504 and its counts stop being exact above 2048; integral sums
+            // overflow the type (two int points at 1.5e9) and the cell division truncates. Average in double and
+            // convert only the centroids back.
+            return Narrow(PointCloudSampling<double>.VoxelGridSample(Widen<double>(pointCloud), NumOps.ToDouble(voxelSize)));
+        }
+
         // Compute bounding box minimum for origin-relative voxel indexing
         // This is the standard approach (used by Open3D, PCL, etc.) and ensures
         // consistent voxelization regardless of point cloud position
-        double minX = NumOps.ToDouble(pointCloud.Points[0, 0]);
-        double minY = NumOps.ToDouble(pointCloud.Points[0, 1]);
-        double minZ = NumOps.ToDouble(pointCloud.Points[0, 2]);
-        for (int i = 1; i < numPoints; i++)
+        var engine = AiDotNetEngine.Current;
+        var positions = GeometryEngineOps<T>.Positions(pointCloud.Points);
+        var (min, _) = GeometryEngineOps<T>.RunningColumnBounds(positions);
+        var relative = engine.TensorSubtract(positions, engine.TensorBroadcastTo(min.Reshape(1, 3), positions.Shape.ToArray()));
+        var cells = engine.TensorFloor(engine.TensorDivideScalar(relative, voxelSize));
+
+        // Equal cell coordinates share an id per axis, so the id triple identifies the voxel.
+        var cellIds = new int[3][];
+        for (int axis = 0; axis < 3; axis++)
         {
-            double px = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double py = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double pz = NumOps.ToDouble(pointCloud.Points[i, 2]);
-            if (px < minX) minX = px;
-            if (py < minY) minY = py;
-            if (pz < minZ) minZ = pz;
+            var (_, inverse, _) = engine.TensorUniqueWithInfo(GeometryEngineOps<T>.Column(cells, axis), false, true, false);
+            cellIds[axis] = inverse?.ToArray()
+                ?? throw new InvalidOperationException("TensorUniqueWithInfo returned no inverse indices.");
         }
 
-        var voxelMap = new Dictionary<(int, int, int), List<int>>();
-
+        // Voxels are numbered in order of first appearance, the order the voxel dictionary enumerated them.
+        var voxelOf = new Dictionary<(int, int, int), int>();
+        var members = new List<List<int>>();
+        var groupOf = new int[numPoints];
         for (int i = 0; i < numPoints; i++)
         {
-            double x = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double y = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double z = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
-            int vx = (int)Math.Floor((x - minX) / voxelSize);
-            int vy = (int)Math.Floor((y - minY) / voxelSize);
-            int vz = (int)Math.Floor((z - minZ) / voxelSize);
-
-            var key = (vx, vy, vz);
-            if (!voxelMap.TryGetValue(key, out var indices))
+            var key = (cellIds[0][i], cellIds[1][i], cellIds[2][i]);
+            if (!voxelOf.TryGetValue(key, out int group))
             {
-                indices = [];
-                voxelMap[key] = indices;
+                group = members.Count;
+                voxelOf[key] = group;
+                members.Add([]);
             }
-            indices.Add(i);
+
+            groupOf[i] = group;
+            members[group].Add(i);
         }
 
-        int numSamples = voxelMap.Count;
-        var sampledData = new T[numSamples * numFeatures];
-        Vector<T>? sampledLabels = null;
-        T[]? labelData = pointCloud.Labels != null ? new T[numSamples] : null;
-
-        int sampleIdx = 0;
-        foreach (var (_, indices) in voxelMap)
+        int numSamples = members.Count;
+        var groupIndex = new Tensor<int>(groupOf, new[] { numPoints });
+        var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { numSamples, numFeatures }), 0, groupIndex, pointCloud.Points);
+        // Member counts are taken in int (summing ones in T saturates), then converted once.
+        var countValues = new int[numSamples];
+        for (int g = 0; g < numSamples; g++)
         {
-            int dstBase = sampleIdx * numFeatures;
+            countValues[g] = members[g].Count;
+        }
 
-            for (int f = 0; f < numFeatures; f++)
-            {
-                double sum = 0;
-                foreach (int idx in indices)
-                {
-                    sum += NumOps.ToDouble(pointCloud.Points[idx, f]);
-                }
-                sampledData[dstBase + f] = NumOps.FromDouble(sum / indices.Count);
-            }
+        var counts = new Tensor<int>(countValues, new[] { numSamples, 1 }).Cast<T>();
+        var tensor = engine.TensorDivide(sums, engine.TensorBroadcastTo(counts, sums.Shape.ToArray()));
 
-            if (labelData != null && pointCloud.Labels != null)
+        Vector<T>? sampledLabels = null;
+        if (pointCloud.Labels != null)
+        {
+            var (labelValues, labelInverse, _) = engine.TensorUniqueWithInfo(
+                Tensor<T>.FromVector(pointCloud.Labels), false, true, false);
+            var labelIds = labelInverse?.ToArray()
+                ?? throw new InvalidOperationException("TensorUniqueWithInfo returned no inverse indices.");
+            var majority = new int[numSamples];
+            for (int g = 0; g < numSamples; g++)
             {
-                var labelCounts = new Dictionary<double, int>();
-                foreach (int idx in indices)
+                // Most frequent label; ties go to the label seen first, as the stable descending sort picked.
+                var labelCounts = new Dictionary<int, int>();
+                var firstSeen = new List<int>();
+                foreach (int idx in members[g])
                 {
-                    double label = NumOps.ToDouble(pointCloud.Labels[idx]);
-                    labelCounts.TryGetValue(label, out int count);
+                    int label = labelIds[idx];
+                    if (!labelCounts.TryGetValue(label, out int count))
+                    {
+                        firstSeen.Add(label);
+                    }
+
                     labelCounts[label] = count + 1;
                 }
-                double majorityLabel = labelCounts.OrderByDescending(kv => kv.Value).First().Key;
-                labelData[sampleIdx] = NumOps.FromDouble(majorityLabel);
+
+                int best = firstSeen[0];
+                foreach (int label in firstSeen)
+                {
+                    if (labelCounts[label] > labelCounts[best])
+                    {
+                        best = label;
+                    }
+                }
+
+                majority[g] = best;
             }
 
-            sampleIdx++;
+            var majorityIndex = new Tensor<int>(majority, new[] { numSamples });
+            sampledLabels = engine.TensorIndexSelect(labelValues, majorityIndex, 0).ToVector();
         }
 
-        if (labelData != null)
-        {
-            sampledLabels = new Vector<T>(labelData);
-        }
-
-        var tensor = new Tensor<T>(sampledData, [numSamples, numFeatures]);
         return new PointCloudData<T>(tensor, sampledLabels);
     }
 
-    private static void UpdateDistances(PointCloudData<T> pointCloud, int newPointIdx, double[] minDistances)
+    /// <summary>The cloud (points and labels) converted to <typeparamref name="TWide"/>.</summary>
+    private static PointCloudData<TWide> Widen<TWide>(PointCloudData<T> cloud)
+        => new PointCloudData<TWide>(
+            cloud.Points.Cast<TWide>(),
+            cloud.Labels is null ? null : Tensor<T>.FromVector(cloud.Labels).Cast<TWide>().ToVector());
+
+    /// <summary>A widened cloud converted back to <typeparamref name="T"/>.</summary>
+    private static PointCloudData<T> Narrow<TWide>(PointCloudData<TWide> cloud)
+        => new PointCloudData<T>(
+            cloud.Points.Cast<T>(),
+            cloud.Labels is null ? null : Tensor<TWide>.FromVector(cloud.Labels).Cast<T>().ToVector());
+
+    private static Tensor<T> UpdateDistances(Tensor<T> positions, int newPointIdx, Tensor<T> minDistances)
     {
-        int numPoints = pointCloud.NumPoints;
-        double nx = NumOps.ToDouble(pointCloud.Points[newPointIdx, 0]);
-        double ny = NumOps.ToDouble(pointCloud.Points[newPointIdx, 1]);
-        double nz = NumOps.ToDouble(pointCloud.Points[newPointIdx, 2]);
+        var engine = AiDotNetEngine.Current;
+        int numPoints = positions.Shape[0];
+        var newPoint = engine.TensorSlice(positions, new[] { newPointIdx, 0 }, new[] { 1, 3 });
+        var offsets = engine.TensorSubtract(positions, engine.TensorBroadcastTo(newPoint, positions.Shape.ToArray()));
+        var distances = GeometryEngineOps<T>.RowSquaredNorms(offsets).Reshape(numPoints);
 
-        for (int i = 0; i < numPoints; i++)
+        // Only a strictly smaller distance replaces the running minimum (NaN never does).
+        var updated = engine.TensorWhere(engine.TensorLessThan(distances, minDistances), distances, minDistances);
+        updated[newPointIdx] = NumOps.Zero;
+        return updated;
+    }
+
+    private static PointCloudData<T> GatherPoints(PointCloudData<T> pointCloud, int[] indices)
+    {
+        if (indices.Length == 0)
         {
-            double x = NumOps.ToDouble(pointCloud.Points[i, 0]);
-            double y = NumOps.ToDouble(pointCloud.Points[i, 1]);
-            double z = NumOps.ToDouble(pointCloud.Points[i, 2]);
-
-            double dx = x - nx;
-            double dy = y - ny;
-            double dz = z - nz;
-            double dist = dx * dx + dy * dy + dz * dz;
-
-            if (dist < minDistances[i])
-            {
-                minDistances[i] = dist;
-            }
+            var emptyLabels = pointCloud.Labels != null ? new Vector<T>(new T[0]) : null;
+            return new PointCloudData<T>(new Tensor<T>(new[] { 0, pointCloud.NumFeatures }), emptyLabels);
         }
 
-        minDistances[newPointIdx] = 0;
+        var engine = AiDotNetEngine.Current;
+        var index = new Tensor<int>(indices, new[] { indices.Length });
+        var points = engine.TensorIndexSelect(pointCloud.Points, index, 0);
+        Vector<T>? labels = null;
+        if (pointCloud.Labels != null)
+        {
+            labels = engine.TensorIndexSelect(Tensor<T>.FromVector(pointCloud.Labels), index, 0).ToVector();
+        }
+
+        return new PointCloudData<T>(points, labels);
     }
 }

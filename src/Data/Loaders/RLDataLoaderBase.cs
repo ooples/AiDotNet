@@ -187,7 +187,8 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
     {
         var stopwatch = Stopwatch.StartNew();
         var state = _environment.Reset();
-        var totalReward = NumOps.Zero;
+        // Rewards are collected per step and summed once with the engine after the episode.
+        var stepRewards = new List<T>();
         int steps = 0;
         bool done = false;
         bool success = false;
@@ -213,7 +214,7 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
             _replayBuffer.Add(experience);
 
             // Update state and counters
-            totalReward = NumOps.Add(totalReward, reward);
+            stepRewards.Add(reward);
             state = nextState;
             done = isDone;
             steps++;
@@ -228,6 +229,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
 
         stopwatch.Stop();
         _currentEpisode++;
+
+        var totalReward = stepRewards.Count == 0
+            ? NumOps.Zero
+            : AiDotNetEngine.Current.TensorSum(new Tensor<T>(stepRewards.ToArray(), new[] { stepRewards.Count }));
 
         var result = new EpisodeResult<T>(
             EpisodeNumber: _currentEpisode,

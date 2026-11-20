@@ -251,7 +251,7 @@ public partial class VFIT<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     {
         if (_optimizer is not null) return _optimizer;
         // torch.optim.Adamax with the release's betas and epsilon 1e-8; adjust_learning_rate's table as constant pieces.
-        // A scheduler at step s has seen s batches, and switches once s exceeds a milestone, so each is moved one back.
+        // A scheduler at step s has seen s batches and, as PyTorch's SequentialLR, switches once s reaches a milestone.
         var pieces = new List<ILearningRateScheduler> { new ConstantLRScheduler(_options.LearningRate) };
         pieces.AddRange(_options.LearningRateSteps.Select(rate => (ILearningRateScheduler)new ConstantLRScheduler(rate)));
         var adamax = new AdaMaxOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -261,7 +261,7 @@ public partial class VFIT<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
             Beta2 = _options.Beta2,
             Epsilon = 1e-8,
             UseAdaptiveLearningRate = false,
-            LearningRateScheduler = new SequentialLRScheduler(pieces, _options.LearningRateMilestones.Select(m => m - 1).ToArray()),
+            LearningRateScheduler = new SequentialLRScheduler(pieces, _options.LearningRateMilestones.ToArray()),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         });
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, adamax);

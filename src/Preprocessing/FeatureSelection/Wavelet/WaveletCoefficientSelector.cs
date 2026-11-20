@@ -25,14 +25,14 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _nFeaturesToSelect;
     private readonly int _decompositionLevel;
 
-    private double[]? _waveletScores;
+    private Vector<T>? _waveletScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int DecompositionLevel => _decompositionLevel;
-    public double[]? WaveletScores => _waveletScores;
+    public Vector<T>? WaveletScores => _waveletScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,101 +68,62 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        // Decompose every feature and the target (last column) together with the Haar DWT; an odd-length signal is
+        // extended by repeating its last sample (pywt's default "symmetric" mode), and the final approximation
+        // counts as one more level. The score is the mean |Pearson r| between feature and target coefficients.
+        var current = Engine.TensorConcatenate(new[]
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+            Tensor<T>.FromMatrix(data), Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })
+        }, 1);
+        T sqrt2 = NumOps.FromDouble(Math.Sqrt(2));
+        var totalScore = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        int levels = 0;
 
-        // Decompose target
-        var targetCoeffs = DecomposeWavelet(y, n);
-
-        _waveletScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        for (int level = 0; level < _decompositionLevel && current.Shape[0] >= 2; level++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            var featureCoeffs = DecomposeWavelet(col, n);
-
-            // Compute correlation at each level
-            double totalScore = 0;
-            int minLevels = Math.Min(featureCoeffs.Count, targetCoeffs.Count);
-            for (int level = 0; level < minLevels; level++)
+            int len = current.Shape[0];
+            if (len % 2 == 1)
             {
-                double corr = ComputeCorrelation(featureCoeffs[level], targetCoeffs[level]);
-                totalScore += Math.Abs(corr);
+                current = Engine.TensorConcatenate(new[]
+                {
+                    current, Engine.TensorSlice(current, new[] { len - 1, 0 }, new[] { 1, p + 1 })
+                }, 0);
+                len++;
             }
 
-            _waveletScores[j] = minLevels > 0 ? totalScore / minLevels : 0;
+            var pairs = Engine.Reshape(current, new[] { len / 2, 2, p + 1 });
+            var first = Engine.TensorSliceAxis(pairs, 1, 0);
+            var second = Engine.TensorSliceAxis(pairs, 1, 1);
+            var detail = Engine.TensorDivideScalar(Engine.TensorSubtract(first, second), sqrt2);
+            totalScore = Engine.TensorAdd(totalScore, AbsTargetCorrelations(detail, p));
+            levels++;
+            current = Engine.TensorDivideScalar(Engine.TensorAdd(first, second), sqrt2);
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _waveletScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        totalScore = Engine.TensorAdd(totalScore, AbsTargetCorrelations(current, p));
+        levels++;
+
+        var scores = Engine.TensorDivideScalar(totalScore, NumOps.FromDouble(levels));
+        _waveletScores = scores.ToVector();
+
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private List<double[]> DecomposeWavelet(double[] signal, int n)
+    /// <summary>
+    /// |Pearson r| of the first <paramref name="p"/> columns of <paramref name="coefficients"/> ([m, p + 1]) with
+    /// its last column, 0 when a column is constant or there are fewer than two coefficients, as [p].
+    /// </summary>
+    private Tensor<T> AbsTargetCorrelations(Tensor<T> coefficients, int p)
     {
-        var coefficients = new List<double[]>();
-        var current = (double[])signal.Clone();
+        int m = coefficients.Shape[0];
+        if (m < 2)
+            return PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
 
-        for (int level = 0; level < _decompositionLevel && current.Length >= 2; level++)
-        {
-            int len = current.Length;
-            int halfLen = len / 2;
-            var approx = new double[halfLen];
-            var detail = new double[halfLen];
-
-            for (int i = 0; i < halfLen; i++)
-            {
-                approx[i] = (current[2 * i] + current[2 * i + 1]) / Math.Sqrt(2);
-                detail[i] = (current[2 * i] - current[2 * i + 1]) / Math.Sqrt(2);
-            }
-
-            coefficients.Add(detail);
-            current = approx;
-        }
-
-        coefficients.Add(current);
-        return coefficients;
-    }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = Math.Min(x.Length, y.Length);
-        if (n < 2) return 0;
-
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += x[i];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = x[i] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        var features = Engine.TensorSlice(coefficients, new[] { 0, 0 }, new[] { m, p });
+        var target = Engine.Reshape(Engine.TensorSlice(coefficients, new[] { 0, p }, new[] { m, 1 }), new[] { m });
+        return Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(features, target));
     }
 
     /// <inheritdoc />
@@ -178,15 +139,7 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("WaveletCoefficientSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

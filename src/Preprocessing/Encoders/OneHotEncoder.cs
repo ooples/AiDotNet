@@ -51,7 +51,7 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly OneHotUnknownHandling _handleUnknown;
 
     // Fitted parameters
-    private List<double[]>? _categories;
+    private List<Vector<T>>? _categories;
     private int _nInputFeatures;
     private int _nOutputFeatures;
     private List<int>? _featureIndicesStart;
@@ -74,7 +74,7 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the categories for each encoded column.
     /// </summary>
-    public List<double[]>? Categories => _categories;
+    public List<Vector<T>>? Categories => _categories;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -104,11 +104,10 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
+        var columnsToProcess = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
 
-        _categories = new List<double[]>();
+        _categories = new List<Vector<T>>();
         _featureIndicesStart = new List<int>();
-
         int currentOutputIndex = 0;
 
         for (int col = 0; col < _nInputFeatures; col++)
@@ -118,23 +117,14 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (!columnsToProcess.Contains(col))
             {
                 // Pass-through column (not encoded)
-                _categories.Add(Array.Empty<double>());
+                _categories.Add(new Vector<T>(0));
                 currentOutputIndex += 1;
                 continue;
             }
 
-            var column = data.GetColumn(col);
-
-            // Collect unique values
-            var uniqueValues = new HashSet<double>();
-            for (int i = 0; i < column.Length; i++)
-            {
-                uniqueValues.Add(NumOps.ToDouble(column[i]));
-            }
-
-            // Sort and store categories
-            var sortedCategories = uniqueValues.OrderBy(v => v).ToArray();
-            _categories.Add(sortedCategories);
+            // Sorted distinct values are the categories
+            var sortedCategories = PreprocessingTensorOps.SortedUnique(PreprocessingTensorOps.Column(data, col));
+            _categories.Add(sortedCategories.ToVector());
 
             // Calculate output columns for this feature
             int nOutputCols = _dropFirst ? sortedCategories.Length - 1 : sortedCategories.Length;
@@ -157,73 +147,56 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nOutputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var blocks = new List<Tensor<T>>(_nInputFeatures);
 
-        // Initialize all to zero
-        for (int i = 0; i < numRows; i++)
+        for (int col = 0; col < _nInputFeatures; col++)
         {
-            for (int j = 0; j < _nOutputFeatures; j++)
+            var column = PreprocessingTensorOps.Column(data, col);
+            int nCategories = _categories[col].Length;
+
+            if (!processSet.Contains(col) || nCategories == 0)
             {
-                result[i, j] = NumOps.Zero;
+                // Pass-through: copy value directly
+                blocks.Add(engine.Reshape(column, new[] { numRows, 1 }));
+                continue;
             }
+
+            var position = PreprocessingTensorOps.LookupSorted(Tensor<T>.FromVector(_categories[col]), column, out var found);
+            if (_handleUnknown == OneHotUnknownHandling.Error)
+            {
+                var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                if (missing.Length > 0)
+                    throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {col}");
+            }
+
+            // One-hot rows; unknown values (Ignore) leave all zeros
+            var oneHot = numRows == 0
+                ? new Tensor<T>(new[] { 0, nCategories })
+                : engine.TensorMultiply(
+                    engine.TensorOneHot<T>(position, nCategories),
+                    engine.TensorBroadcastTo(engine.Reshape(found, new[] { numRows, 1 }), new[] { numRows, nCategories }));
+
+            if (!_dropFirst)
+                blocks.Add(oneHot);
+            else if (nCategories > 1)
+                blocks.Add(engine.TensorSlice(oneHot, new[] { 0, 1 }, new[] { numRows, nCategories - 1 })); // first category is the reference
+            else
+                blocks.Add(new Tensor<T>(new[] { numRows, 1 }));
         }
 
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int col = 0; col < _nInputFeatures; col++)
-            {
-                T value = data[i, col];
-                int outputStart = _featureIndicesStart[col];
-
-                if (!processSet.Contains(col) || _categories[col].Length == 0)
-                {
-                    // Pass-through: copy value directly
-                    result[i, outputStart] = value;
-                    continue;
-                }
-
-                // Find category index
-                double doubleValue = NumOps.ToDouble(value);
-                int categoryIndex = Array.IndexOf(_categories[col], doubleValue);
-
-                if (categoryIndex < 0)
-                {
-                    // Unknown category
-                    if (_handleUnknown == OneHotUnknownHandling.Error)
-                    {
-                        throw new ArgumentException($"Unknown category value: {doubleValue} in column {col}");
-                    }
-                    // Ignore: leave all zeros
-                    continue;
-                }
-
-                // Apply one-hot encoding
-                if (_dropFirst)
-                {
-                    // Skip the first category (becomes the reference)
-                    if (categoryIndex > 0)
-                    {
-                        result[i, outputStart + categoryIndex - 1] = NumOps.One;
-                    }
-                }
-                else
-                {
-                    result[i, outputStart + categoryIndex] = NumOps.One;
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        if (blocks.Count == 0)
+            return new Matrix<T>(numRows, 0);
+        return engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
-    /// Reverses the one-hot encoding to get original category values.
+    /// Reverses the one-hot encoding to recover original categorical values.
     /// </summary>
     /// <param name="data">The one-hot encoded data.</param>
-    /// <returns>The original categorical values.</returns>
+    /// <returns>The original categorical data.</returns>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         if (_categories is null || _featureIndicesStart is null)
@@ -231,71 +204,53 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
-        var result = new T[numRows, _nInputFeatures];
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(_nInputFeatures));
+        var X = Tensor<T>.FromMatrix(data);
+        var columns = new List<Tensor<T>>(_nInputFeatures);
+        T half = NumOps.FromDouble(0.5);
 
-        for (int i = 0; i < numRows; i++)
+        for (int col = 0; col < _nInputFeatures; col++)
         {
-            for (int col = 0; col < _nInputFeatures; col++)
+            int outputStart = _featureIndicesStart[col];
+            int nCategories = _categories[col].Length;
+
+            if (!processSet.Contains(col) || nCategories == 0)
             {
-                int outputStart = _featureIndicesStart[col];
-
-                if (!processSet.Contains(col) || _categories[col].Length == 0)
-                {
-                    // Pass-through: copy value back
-                    result[i, col] = data[i, outputStart];
-                    continue;
-                }
-
-                // Find which category has the 1
-                int nCategories = _categories[col].Length;
-                int foundCategory = -1;
-
-                if (_dropFirst)
-                {
-                    // Check if any of the (n-1) columns has a 1
-                    bool allZeros = true;
-                    for (int c = 0; c < nCategories - 1; c++)
-                    {
-                        if (NumOps.Compare(data[i, outputStart + c], NumOps.FromDouble(0.5)) > 0)
-                        {
-                            foundCategory = c + 1; // +1 because first category is dropped
-                            allZeros = false;
-                            break;
-                        }
-                    }
-                    if (allZeros)
-                    {
-                        foundCategory = 0; // First (dropped) category
-                    }
-                }
-                else
-                {
-                    for (int c = 0; c < nCategories; c++)
-                    {
-                        if (NumOps.Compare(data[i, outputStart + c], NumOps.FromDouble(0.5)) > 0)
-                        {
-                            foundCategory = c;
-                            break;
-                        }
-                    }
-                }
-
-                if (foundCategory >= 0 && foundCategory < _categories[col].Length)
-                {
-                    result[i, col] = NumOps.FromDouble(_categories[col][foundCategory]);
-                }
-                else
-                {
-                    // Unknown - return 0
-                    result[i, col] = NumOps.Zero;
-                }
+                // Pass-through: copy value back
+                columns.Add(PreprocessingTensorOps.ColumnVector(X, outputStart));
+                continue;
             }
+
+            var categories = Tensor<T>.FromVector(_categories[col]);
+            if (_dropFirst && nCategories == 1)
+            {
+                // Only the dropped reference category exists
+                columns.Add(engine.TensorIndexSelect(categories, new Tensor<int>(new int[numRows], new[] { numRows }), 0));
+                continue;
+            }
+
+            // The category is the first column above 0.5 (shifted by one when the first category is dropped)
+            int width = _dropFirst ? nCategories - 1 : nCategories;
+            var hot = engine.TensorGreaterThan(engine.TensorSlice(X, new[] { 0, outputStart }, new[] { numRows, width }), half);
+            int[] first = PreprocessingTensorOps.FirstNonZeroPerRow(hot);
+
+            var index = new int[numRows];
+            var known = new bool[numRows];
+            for (int i = 0; i < numRows; i++)
+            {
+                bool any = first[i] < width;
+                index[i] = _dropFirst ? (any ? first[i] + 1 : 0) : (any ? first[i] : 0);
+                known[i] = _dropFirst || any;
+            }
+
+            // Unknown - return 0
+            var values = engine.TensorIndexSelect(categories, new Tensor<int>(index, new[] { numRows }), 0);
+            columns.Add(engine.TensorWhere(known, values, new Tensor<T>(new[] { numRows })));
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
@@ -330,9 +285,10 @@ public class OneHotEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Add names for each category
             int startIdx = _dropFirst ? 1 : 0;
-            for (int c = startIdx; c < _categories[col].Length; c++)
+            var categoryValues = _categories[col].ToArray();
+            for (int c = startIdx; c < categoryValues.Length; c++)
             {
-                names.Add($"{baseName}_{_categories[col][c]}");
+                names.Add($"{baseName}_{categoryValues[c]}");
             }
         }
 

@@ -20,7 +20,11 @@ param(
     [ValidateSet('pull_request', 'merge_group')]
     [string] $EventName,
     [Parameter(Mandatory, ParameterSetName = 'Write')] [bool] $RequiresValidation,
+    [Parameter(Mandatory, ParameterSetName = 'Write')] [bool] $RequiresTests,
     [Parameter(Mandatory, ParameterSetName = 'Write')] [string] $OutFile,
+    [Parameter(Mandatory, ParameterSetName = 'Write')] [string] $RunnerFailoverProofArtifactId,
+    [Parameter(Mandatory, ParameterSetName = 'Write')] [string] $RunnerFailoverProofDigest,
+    [Parameter(Mandatory, ParameterSetName = 'Write')] [string] $RunnerFailoverRunAttempt,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -39,7 +43,11 @@ function New-CiValidationCertificate {
         [Parameter(Mandatory)] [string] $CertificateTestedSha,
         [Parameter(Mandatory)] [string] $CertificateTestedTree,
         [Parameter(Mandatory)] [string] $CertificateEvent,
-        [Parameter(Mandatory)] [bool] $CertificateRequiresValidation
+        [Parameter(Mandatory)] [bool] $CertificateRequiresValidation,
+        [Parameter(Mandatory)] [bool] $CertificateRequiresTests,
+        [Parameter(Mandatory)] [string] $ProofArtifactId,
+        [Parameter(Mandatory)] [string] $ProofDigest,
+        [Parameter(Mandatory)] [string] $ProofRunAttempt
     )
 
     if ($CertificateRunId -lt 1) { throw 'run id must be a positive integer' }
@@ -52,16 +60,21 @@ function New-CiValidationCertificate {
     if ($CertificateEvent -cne 'pull_request' -and $CertificateEvent -cne 'merge_group') {
         throw "unsupported certificate event '$CertificateEvent'"
     }
+    if ($ProofArtifactId -notmatch '^[1-9][0-9]*$' -or $ProofDigest -notmatch '^sha256:[a-f0-9]{64}$' -or
+        $ProofRunAttempt -notmatch '^[1-9][0-9]*$') { throw 'A verified logical-shard proof ID/digest/run-attempt is required.' }
 
+    if ($CertificateRequiresTests -and -not $CertificateRequiresValidation) { throw 'Tests cannot be required when validation is not required.' }
     return [pscustomobject] [ordered]@{
-        schemaVersion = 3
+        schemaVersion = 4
         scope = $CertificateScope.ToString()
         runId = $CertificateRunId
         testedSha = $CertificateTestedSha
         testedTree = $CertificateTestedTree
         event = $CertificateEvent
         requiresValidation = $CertificateRequiresValidation
+        requiresTests = $CertificateRequiresTests
         gateConclusion = 'success'
+        runnerFailoverProof = [pscustomobject]@{ artifactId = $ProofArtifactId; digest = $ProofDigest; runAttempt = $ProofRunAttempt }
     }
 }
 
@@ -80,33 +93,57 @@ if ($SelfTest) {
     $tree = '89abcdef0123456789abcdef0123456789abcdef'
     $validation = New-CiValidationCertificate -CertificateScope Validation `
         -CertificateRunId 12 -CertificateTestedSha $sha -CertificateTestedTree $tree `
-        -CertificateEvent pull_request -CertificateRequiresValidation $true
-    Assert-True ($validation.schemaVersion -eq 3) 'certificate schema is not version 3'
+        -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $true `
+        -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
+    Assert-True ($validation.schemaVersion -eq 4) 'certificate schema is not version 4'
     Assert-True ($validation.scope -ceq 'Validation') 'validation scope was not preserved'
     Assert-True ($validation.requiresValidation -is [bool]) `
         'requiresValidation is not represented as a JSON boolean'
+    Assert-True ($validation.runnerFailoverProof.artifactId -ceq '1' -and
+        $validation.runnerFailoverProof.digest -ceq ('sha256:' + ('a' * 64)) -and
+        $validation.runnerFailoverProof.runAttempt -ceq '1') 'immutable logical shard proof binding was not preserved'
 
     $complete = New-CiValidationCertificate -CertificateScope Complete `
         -CertificateRunId 13 -CertificateTestedSha $sha -CertificateTestedTree $tree `
-        -CertificateEvent merge_group -CertificateRequiresValidation $false
+        -CertificateEvent merge_group -CertificateRequiresValidation $false -CertificateRequiresTests $false `
+        -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
     Assert-True ($complete.scope -ceq 'Complete') 'complete scope was not preserved'
     Assert-True (-not $complete.requiresValidation) 'non-runtime scope was not preserved'
+    $auxiliary = New-CiValidationCertificate -CertificateScope Validation `
+        -CertificateRunId 14 -CertificateTestedSha $sha -CertificateTestedTree $tree `
+        -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $false `
+        -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
+    Assert-True ($auxiliary.requiresValidation -and -not $auxiliary.requiresTests) 'auxiliary-only policy was not preserved'
 
     Assert-Rejected {
         New-CiValidationCertificate -CertificateScope Validation -CertificateRunId 0 `
             -CertificateTestedSha $sha -CertificateTestedTree $tree `
-            -CertificateEvent pull_request -CertificateRequiresValidation $true
+            -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $true `
+            -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
     } 'a zero run id was accepted'
     Assert-Rejected {
         New-CiValidationCertificate -CertificateScope Validation -CertificateRunId 1 `
             -CertificateTestedSha 'not-a-sha' -CertificateTestedTree $tree `
-            -CertificateEvent pull_request -CertificateRequiresValidation $true
+            -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $true `
+            -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
     } 'an invalid tested SHA was accepted'
     Assert-Rejected {
         New-CiValidationCertificate -CertificateScope Validation -CertificateRunId 1 `
             -CertificateTestedSha $sha -CertificateTestedTree 'not-a-tree' `
-            -CertificateEvent pull_request -CertificateRequiresValidation $true
+            -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $true `
+            -ProofArtifactId '1' -ProofDigest ('sha256:' + ('a' * 64)) -ProofRunAttempt '1'
     } 'an invalid tested tree was accepted'
+    foreach ($badBinding in @(
+        @{ ProofArtifactId = '0'; ProofDigest = ('sha256:' + ('a' * 64)); ProofRunAttempt = '1' },
+        @{ ProofArtifactId = '1'; ProofDigest = 'sha256:truncated'; ProofRunAttempt = '1' },
+        @{ ProofArtifactId = '1'; ProofDigest = ('sha256:' + ('a' * 64)); ProofRunAttempt = '0' }
+    )) {
+        Assert-Rejected {
+            New-CiValidationCertificate -CertificateScope Validation -CertificateRunId 1 `
+                -CertificateTestedSha $sha -CertificateTestedTree $tree `
+                -CertificateEvent pull_request -CertificateRequiresValidation $true -CertificateRequiresTests $true @badBinding
+        } 'an invalid proof artifact/digest/attempt binding was accepted'
+    }
 
     if ($failures.Count -gt 0) {
         Write-Host 'New-CiValidationCertificate self-test FAILED:'
@@ -121,10 +158,11 @@ $certificateScope = [CiValidationCertificateScope] $Scope
 $certificate = New-CiValidationCertificate -CertificateScope $certificateScope `
     -CertificateRunId $RunId -CertificateTestedSha $TestedSha `
     -CertificateTestedTree $TestedTree -CertificateEvent $EventName `
-    -CertificateRequiresValidation $RequiresValidation
+    -CertificateRequiresValidation $RequiresValidation -CertificateRequiresTests $RequiresTests `
+    -ProofArtifactId $RunnerFailoverProofArtifactId -ProofDigest $RunnerFailoverProofDigest -ProofRunAttempt $RunnerFailoverRunAttempt
 
 if (Test-Path -LiteralPath $OutFile) { throw "refusing to overwrite $OutFile" }
 $parent = Split-Path -Parent $OutFile
 if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-$certificate | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $OutFile -Encoding utf8
+$certificate | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutFile -Encoding utf8
 exit 0

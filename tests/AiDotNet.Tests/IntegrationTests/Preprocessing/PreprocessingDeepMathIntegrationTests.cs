@@ -35,16 +35,16 @@ public class PreprocessingDeepMathIntegrationTests
     public async Task StandardScaler_HandCalculated_ExactTransformValues()
     {
         // data col0: [1, 2, 3, 4, 5]
-        // mean = 3, variance (sample, n-1) = sum([4,1,0,1,4])/4 = 10/4 = 2.5
-        // std = sqrt(2.5) = 1.58113883...
+        // mean = 3, population variance (ddof=0) = sum([4,1,0,1,4])/5 = 10/5 = 2
+        // std = sqrt(2) = 1.41421356...
         // z-scores = [(1-3)/std, (2-3)/std, (3-3)/std, (4-3)/std, (5-3)/std]
-        //          = [-1.26491, -0.63246, 0, 0.63246, 1.26491]
+        //          = [-1.41421, -0.70711, 0, 0.70711, 1.41421]
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 
         var result = scaler.FitTransform(data);
 
-        double std = Math.Sqrt(2.5);
+        double std = Math.Sqrt(2.0);
         AssertCell(result, 0, 0, (1.0 - 3.0) / std);
         AssertCell(result, 1, 0, (2.0 - 3.0) / std);
         AssertCell(result, 2, 0, 0.0);
@@ -56,14 +56,14 @@ public class PreprocessingDeepMathIntegrationTests
     public async Task StandardScaler_WithoutMean_OnlyDividesByStd()
     {
         // withMean=false: only divide by std, don't subtract mean
-        // data: [2, 4, 6], mean=4, std=sqrt(var)=sqrt(4)=2 (sample var = [(2-4)^2+(4-4)^2+(6-4)^2]/2 = 8/2 = 4)
-        // result should be: [2/2, 4/2, 6/2] = [1, 2, 3]
+        // data: [2, 4, 6], mean=4, population variance = (4+0+4)/3 = 8/3
+        // result should be [2, 4, 6] / sqrt(8/3); centering is disabled, variance still uses the mean
         var scaler = new StandardScaler<double>(withMean: false, withStd: true);
         var data = M(new double[,] { { 2 }, { 4 }, { 6 } });
 
         var result = scaler.FitTransform(data);
 
-        double std = 2.0; // sqrt(4.0)
+        double std = Math.Sqrt(8.0 / 3.0);
         AssertCell(result, 0, 0, 2.0 / std);
         AssertCell(result, 1, 0, 4.0 / std);
         AssertCell(result, 2, 0, 6.0 / std);
@@ -133,32 +133,32 @@ public class PreprocessingDeepMathIntegrationTests
         mean /= result.Rows;
         Assert.True(Math.Abs(mean) < 1e-10, $"Mean should be 0, got {mean}");
 
-        // Compute sample variance of transformed data
+        // Compute population variance (ddof=0, scikit-learn's estimator) of transformed data
         double variance = 0;
         for (int i = 0; i < result.Rows; i++)
         {
             double diff = result[i, 0] - mean;
             variance += diff * diff;
         }
-        variance /= (result.Rows - 1);
-        Assert.True(Math.Abs(variance - 1.0) < 1e-10, $"Sample variance should be 1, got {variance}");
+        variance /= result.Rows;
+        Assert.True(Math.Abs(variance - 1.0) < 1e-10, $"Population variance should be 1, got {variance}");
     }
 
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_MultiColumn_IndependentScaling()
     {
         // Each column should be scaled independently
-        // col0: [0, 10], mean=5, std=sqrt(50)=7.071...
-        // col1: [100, 200], mean=150, std=sqrt(5000)=70.71...
+        // col0: [0, 10], mean=5, std=5
+        // col1: [100, 200], mean=150, std=50
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 0, 100 }, { 10, 200 } });
 
         var result = scaler.FitTransform(data);
 
-        // Both columns should have z-scores of [-1/sqrt(2), 1/sqrt(2)] since n=2
-        // sample variance = (x-mean)^2 / (n-1) = 50 / 1 = 50, std = sqrt(50)
-        double std0 = Math.Sqrt(50.0);
-        double std1 = Math.Sqrt(5000.0);
+        // Both columns should have z-scores of [-1, 1] since n=2
+        // population variance (scikit-learn, ddof=0) = sum((x-mean)^2) / n = 50 / 2 = 25, std = 5
+        double std0 = 5.0;
+        double std1 = 50.0;
         AssertCell(result, 0, 0, (0 - 5.0) / std0);
         AssertCell(result, 1, 0, (10 - 5.0) / std0);
         AssertCell(result, 0, 1, (100 - 150.0) / std1);
@@ -239,18 +239,18 @@ public class PreprocessingDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MinMaxScaler_ConstantColumn_MapsToMidpoint()
+    public async Task MinMaxScaler_ConstantColumn_MapsToFeatureRangeMin()
     {
-        // If min==max (constant column), map to midpoint of feature range
-        // feature range [0, 1], midpoint = 0.5
+        // If min==max (constant column): scikit-learn MinMaxScaler treats a zero data range as 1 (_handle_zeros_in_scale), so a constant column maps to the feature-range minimum
+        // feature range [0, 1], minimum = 0
         var scaler = new MinMaxScaler<double>();
         var data = M(new double[,] { { 5 }, { 5 }, { 5 } });
 
         var result = scaler.FitTransform(data);
 
-        AssertCell(result, 0, 0, 0.5);
-        AssertCell(result, 1, 0, 0.5);
-        AssertCell(result, 2, 0, 0.5);
+        AssertCell(result, 0, 0, 0.0);
+        AssertCell(result, 1, 0, 0.0);
+        AssertCell(result, 2, 0, 0.0);
     }
 
     [Fact(Timeout = 120000)]
@@ -750,14 +750,15 @@ public class PreprocessingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_FitExposesCorrectParameters()
     {
-        // data: [2, 4, 6], mean=4, sample_var=4, std=2
+        // data: [2, 4, 6], mean=4, population variance=8/3, std=sqrt(8/3)
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 2 }, { 4 }, { 6 } });
 
         scaler.Fit(data);
 
         Assert.True(Math.Abs((scaler.Mean ?? throw new InvalidOperationException("scaler.Mean is null where it is required."))[0] - 4.0) < 1e-10, $"Mean: expected 4, got {scaler.Mean[0]}");
-        Assert.True(Math.Abs((scaler.StandardDeviation ?? throw new InvalidOperationException("scaler.StandardDeviation is null where it is required."))[0] - 2.0) < 1e-10, $"Std: expected 2, got {scaler.StandardDeviation[0]}");
+        double expectedStd = Math.Sqrt(8.0 / 3.0);
+        Assert.True(Math.Abs((scaler.StandardDeviation ?? throw new InvalidOperationException("scaler.StandardDeviation is null where it is required."))[0] - expectedStd) < 1e-10, $"Std: expected {expectedStd}, got {scaler.StandardDeviation[0]}");
     }
 
     [Fact(Timeout = 120000)]
@@ -779,8 +780,7 @@ public class PreprocessingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardScaler_SingleRow_StdIsZero_FallbackToOne()
     {
-        // With only one row, sample variance = 0 (n-1 = 0 would cause div-by-zero)
-        // StatisticsHelper.CalculateVariance uses n-1, so with n=1 it returns 0
+        // With only one row, the population variance is 0: a constant column, so the scale falls back to 1
         // Scaler should handle this gracefully (fallback std=1)
         var scaler = new StandardScaler<double>();
         var data = M(new double[,] { { 42 } });
@@ -872,12 +872,9 @@ public class PreprocessingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StandardAndZScore_UseConsistentVarianceFormula()
     {
-        // StandardScaler uses StatisticsHelper.CalculateVariance (sample variance, n-1)
-        // ZScoreClipper uses population variance (n)
-        // This test documents the discrepancy:
+        // Both use the population variance (n), as scikit-learn's StandardScaler does (numpy.std ddof=0)
         // data: [1, 2, 3, 4, 5], mean=3
         // Population var = 10/5 = 2.0, pop std = sqrt(2) = 1.414
-        // Sample var = 10/4 = 2.5, sample std = sqrt(2.5) = 1.581
         var standardScaler = new StandardScaler<double>();
         var zScoreClipper = new ZScoreClipper<double>(threshold: 3.0);
         var data = M(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
@@ -888,9 +885,9 @@ public class PreprocessingDeepMathIntegrationTests
         double stdScalerStd = (standardScaler.StandardDeviation ?? throw new InvalidOperationException("standardScaler.StandardDeviation is null where it is required."))[0];
         double zScoreClipperStd = (zScoreClipper.StandardDeviations ?? throw new InvalidOperationException("zScoreClipper.StandardDeviations is null where it is required."))[0];
 
-        // StandardScaler uses sample std (n-1)
-        Assert.True(Math.Abs(stdScalerStd - Math.Sqrt(2.5)) < 1e-10,
-            $"StandardScaler std should be sqrt(2.5)={Math.Sqrt(2.5)}, got {stdScalerStd}");
+        // StandardScaler uses population std (n)
+        Assert.True(Math.Abs(stdScalerStd - Math.Sqrt(2.0)) < 1e-10,
+            $"StandardScaler std should be sqrt(2.0)={Math.Sqrt(2.0)}, got {stdScalerStd}");
 
         // ZScoreClipper uses population std (n)
         Assert.True(Math.Abs(zScoreClipperStd - Math.Sqrt(2.0)) < 1e-10,

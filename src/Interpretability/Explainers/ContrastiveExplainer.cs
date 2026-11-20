@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -127,27 +128,16 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         }
 
         // Find fact (predicted class) and foil (next most likely class)
-        int factClass = 0;
-        int foilClass = 1;
-        double maxVal = double.MinValue;
-        double secondMaxVal = double.MinValue;
+        // (a top-two scan seeded with MinValue: NaN scores never win)
+        int factQualifies = ExplainerTensorOps<T>.FirstArgMaxAbove(predictions, NumOps.MinValue);
+        int factClass = Math.Max(0, factQualifies);
+        var otherClasses = Enumerable.Range(0, predictions.Length).Where(c => c != factClass).ToArray();
+        var otherScores = AiDotNetEngine.Current.TensorIndexSelect(
+            predictions.AsTensor(), new Tensor<int>(otherClasses, new[] { otherClasses.Length }), 0).ToVector();
+        int bestOther = ExplainerTensorOps<T>.FirstArgMaxAbove(otherScores, NumOps.MinValue);
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double val = NumOps.ToDouble(predictions[i]);
-            if (val > maxVal)
-            {
-                secondMaxVal = maxVal;
-                foilClass = factClass;
-                maxVal = val;
-                factClass = i;
-            }
-            else if (val > secondMaxVal)
-            {
-                secondMaxVal = val;
-                foilClass = i;
-            }
-        }
+        // With no qualifying other score the scan leaves the foil at its start: 0 after the fact moved, else 1
+        int foilClass = bestOther >= 0 ? otherClasses[bestOther] : (factQualifies >= 0 ? 0 : 1);
 
         return Explain(instance, factClass, foilClass);
     }
@@ -183,8 +173,8 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         if (factClass == foilClass)
             throw new ArgumentException("factClass and foilClass must be different.", nameof(foilClass));
 
-        double factScore = NumOps.ToDouble(predictions[factClass]);
-        double foilScore = NumOps.ToDouble(predictions[foilClass]);
+        T factScore = predictions[factClass];
+        T foilScore = predictions[foilClass];
 
         // Find pertinent positives (features that support the fact)
         var pertinentPositives = FindPertinentPositives(instance, factClass, foilClass);
@@ -207,8 +197,8 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
             FoilClassName = _classNames != null && foilClass < _classNames.Length
                 ? _classNames[foilClass]
                 : $"Class {foilClass}",
-            FactScore = NumOps.FromDouble(factScore),
-            FoilScore = NumOps.FromDouble(foilScore),
+            FactScore = factScore,
+            FoilScore = foilScore,
             PertinentPositives = pertinentPositives,
             PertinentNegatives = pertinentNegatives,
             FeatureContributions = featureContributions,
@@ -233,48 +223,70 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// </summary>
     private List<PertinentFeature<T>> FindPertinentPositives(Vector<T> instance, int factClass, int foilClass)
     {
-        var pertinentPositives = new List<PertinentFeature<T>>();
+        var engine = AiDotNetEngine.Current;
+        T originalDiff = GetScoreDifference(instance, factClass, foilClass);
+        var zeros = engine.Fill(instance.Length, NumOps.Zero).AsTensor();
 
+        // Try zeroing out each feature
+        var modifiedPredictions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            double originalVal = NumOps.ToDouble(instance[f]);
-
-            // Try zeroing out this feature
-            var modifiedInstance = instance.Clone();
-            modifiedInstance[f] = NumOps.Zero;
-
-            var modifiedMatrix = CreateSingleRowMatrix(modifiedInstance);
-            var modifiedPred = _predictFunction(modifiedMatrix);
-            int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
-            if (modifiedPred.Length < numClassesNeeded)
-            {
-                modifiedPred = ExpandToClassProbabilities(modifiedPred, numClassesNeeded);
-            }
-
-            double originalDiff = GetScoreDifference(instance, factClass, foilClass);
-            double modifiedFactScore = NumOps.ToDouble(modifiedPred[factClass]);
-            double modifiedFoilScore = NumOps.ToDouble(modifiedPred[foilClass]);
-            double modifiedDiff = modifiedFactScore - modifiedFoilScore;
-
-            // If removing this feature reduces the advantage of fact over foil, it's a pertinent positive
-            if (modifiedDiff < originalDiff - 0.01)
-            {
-                pertinentPositives.Add(new PertinentFeature<T>
-                {
-                    FeatureIndex = f,
-                    FeatureName = _featureNames != null && f < _featureNames.Length ? _featureNames[f] : $"Feature {f}",
-                    CurrentValue = instance[f],
-                    ContrastValue = NumOps.Zero,
-                    ImpactOnFact = NumOps.FromDouble(originalDiff - modifiedDiff),
-                    Explanation = $"This feature value supports the '{GetClassName(factClass)}' prediction"
-                });
-            }
+            var feature = ExplainerTensorOps<T>.RangeIndicator(instance.Length, f, f + 1);
+            var modifiedInstance = engine.TensorWhere(feature, zeros, instance.AsTensor()).ToVector();
+            modifiedPredictions.Add(ClassScores(modifiedInstance, factClass, foilClass));
         }
 
-        return pertinentPositives
-            .OrderByDescending(p => NumOps.ToDouble(p.ImpactOnFact))
+        if (_numFeatures == 0)
+        {
+            return new List<PertinentFeature<T>>();
+        }
+
+        // If removing a feature reduces the advantage of fact over foil (by more than 0.01), it's a pertinent positive
+        var modifiedDiffs = ScoreDifferences(modifiedPredictions, factClass, foilClass);
+        var impacts = engine.TensorSubtract(engine.TensorFullLike(modifiedDiffs, originalDiff), modifiedDiffs);
+        var pertinent = engine.TensorLessThan(modifiedDiffs, NumOps.Subtract(originalDiff, NumOps.FromDouble(0.01))).ToVector().NonZeroIndices().ToList();
+        var impactValues = impacts.ToVector().GetElements(pertinent).ToArray();
+        var currentValues = instance.GetElements(pertinent).ToArray();
+        var ranks = ExplainerTensorOps<T>.DenseRanks(new Vector<T>(impactValues).AsTensor());
+
+        return Enumerable.Range(0, pertinent.Count)
+            .OrderByDescending(k => ranks[k])
             .Take(5)
+            .Select(k => new PertinentFeature<T>
+            {
+                FeatureIndex = pertinent[k],
+                FeatureName = _featureNames != null && pertinent[k] < _featureNames.Length ? _featureNames[pertinent[k]] : $"Feature {pertinent[k]}",
+                CurrentValue = currentValues[k],
+                ContrastValue = NumOps.Zero,
+                ImpactOnFact = impactValues[k],
+                Explanation = $"This feature value supports the '{GetClassName(factClass)}' prediction"
+            })
             .ToList();
+    }
+
+    /// <summary>
+    /// The class scores for an instance, expanded to class probabilities when the model returns fewer.
+    /// </summary>
+    private Vector<T> ClassScores(Vector<T> instance, int factClass, int foilClass)
+    {
+        var pred = _predictFunction(CreateSingleRowMatrix(instance));
+        int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
+        if (pred.Length < numClassesNeeded)
+        {
+            pred = ExpandToClassProbabilities(pred, numClassesNeeded);
+        }
+
+        return pred.GetSubVector(0, numClassesNeeded);
+    }
+
+    /// <summary>
+    /// fact score - foil score for each of the (stacked) class-score vectors.
+    /// </summary>
+    private static Tensor<T> ScoreDifferences(List<Vector<T>> scores, int factClass, int foilClass)
+    {
+        var engine = AiDotNetEngine.Current;
+        var stacked = ExplainerTensorOps<T>.Stack(scores);
+        return engine.TensorSubtract(engine.TensorSliceAxis(stacked, 1, factClass), engine.TensorSliceAxis(stacked, 1, foilClass));
     }
 
     /// <summary>
@@ -361,45 +373,41 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// </summary>
     private Dictionary<int, T> ComputeFeatureContributions(Vector<T> instance, int factClass, int foilClass)
     {
-        var contributions = new Dictionary<int, T>();
-        double epsilon = 1e-4;
+        var engine = AiDotNetEngine.Current;
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-4);
 
+        // Compute gradient of (fact_score - foil_score) w.r.t. each feature by central differences
+        var plusScores = new List<Vector<T>>(_numFeatures);
+        var minusScores = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            // Compute gradient of (fact_score - foil_score) w.r.t. this feature
-            var instancePlus = instance.Clone();
-            var instanceMinus = instance.Clone();
-
-            instancePlus[f] = NumOps.FromDouble(NumOps.ToDouble(instance[f]) + epsilon);
-            instanceMinus[f] = NumOps.FromDouble(NumOps.ToDouble(instance[f]) - epsilon);
-
-            double diffPlus = GetScoreDifference(instancePlus, factClass, foilClass);
-            double diffMinus = GetScoreDifference(instanceMinus, factClass, foilClass);
-
-            double gradient = (diffPlus - diffMinus) / (2 * epsilon);
-            double contribution = gradient * NumOps.ToDouble(instance[f]);
-
-            contributions[f] = NumOps.FromDouble(contribution);
+            var step = engine.Multiply(ExplainerTensorOps<T>.RangeIndicator(instance.Length, f, f + 1).ToVector(), epsilon);
+            plusScores.Add(ClassScores(engine.Add(instance, step), factClass, foilClass));
+            minusScores.Add(ClassScores(engine.Subtract(instance, step), factClass, foilClass));
         }
 
-        return contributions;
+        if (_numFeatures == 0)
+        {
+            return new Dictionary<int, T>();
+        }
+
+        var gradient = engine.TensorDivideScalar(
+            engine.TensorSubtract(ScoreDifferences(plusScores, factClass, foilClass), ScoreDifferences(minusScores, factClass, foilClass)),
+            NumOps.Multiply(NumOps.FromDouble(2), epsilon));
+        var contributions = engine.TensorMultiply(gradient, instance.GetSubVector(0, _numFeatures).AsTensor()).ToVector();
+
+        return Enumerable.Range(0, _numFeatures)
+            .Zip(contributions, (feature, contribution) => (feature, contribution))
+            .ToDictionary(entry => entry.feature, entry => entry.contribution);
     }
 
     /// <summary>
     /// Gets the score difference between fact and foil classes.
     /// </summary>
-    private double GetScoreDifference(Vector<T> instance, int factClass, int foilClass)
+    private T GetScoreDifference(Vector<T> instance, int factClass, int foilClass)
     {
-        var matrix = CreateSingleRowMatrix(instance);
-        var pred = _predictFunction(matrix);
-        int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
-        if (pred.Length < numClassesNeeded)
-        {
-            pred = ExpandToClassProbabilities(pred, numClassesNeeded);
-        }
-        double factScore = NumOps.ToDouble(pred[factClass]);
-        double foilScore = NumOps.ToDouble(pred[foilClass]);
-        return factScore - foilScore;
+        var pred = ClassScores(instance, factClass, foilClass);
+        return NumOps.Subtract(pred[factClass], pred[foilClass]);
     }
 
     /// <summary>
@@ -407,18 +415,7 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// </summary>
     private int GetPredictedClass(Vector<T> predictions)
     {
-        int maxIdx = 0;
-        double maxVal = double.MinValue;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double val = NumOps.ToDouble(predictions[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMaxSkippingNaN(predictions);
     }
 
     private string GetClassName(int classIndex)
@@ -430,10 +427,7 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
 
     private Matrix<T> CreateSingleRowMatrix(Vector<T> row)
     {
-        var matrix = new Matrix<T>(1, row.Length);
-        for (int j = 0; j < row.Length; j++)
-            matrix[0, j] = row[j];
-        return matrix;
+        return ExplainerTensorOps<T>.RowMatrix(row);
     }
 
     /// <summary>
@@ -444,21 +438,17 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// </summary>
     private static Vector<T> ExpandToClassProbabilities(Vector<T> batchPredictions, int numClasses)
     {
-        var classProbs = new Vector<T>(numClasses);
         // Interpret the scalar output as the predicted class index
-        int predictedClass = (int)Math.Round(NumOps.ToDouble(batchPredictions[0]));
+        int predictedClass = NumOps.ToInt32(NumOps.Round(batchPredictions[0]));
         if (predictedClass < 0) predictedClass = 0;
         if (predictedClass >= numClasses) predictedClass = numClasses - 1;
 
         // Create a pseudo-probability distribution: high probability at predicted class
-        for (int c = 0; c < numClasses; c++)
-        {
-            classProbs[c] = c == predictedClass
-                ? NumOps.FromDouble(0.9)
-                : NumOps.FromDouble(0.1 / (numClasses - 1));
-        }
-
-        return classProbs;
+        var engine = AiDotNetEngine.Current;
+        var predicted = ExplainerTensorOps<T>.RangeIndicator(numClasses, predictedClass, predictedClass + 1);
+        T others = NumOps.Divide(NumOps.FromDouble(0.1), NumOps.FromDouble(numClasses - 1));
+        return engine.TensorWhere(predicted, engine.TensorFullLike(predicted, NumOps.FromDouble(0.9)),
+            engine.TensorFullLike(predicted, others)).ToVector();
     }
 }
 
@@ -575,8 +565,8 @@ public class ContrastiveExplanation<T>
         var lines = new List<string>
         {
             $"Contrastive Explanation: Why '{FactClassName}' and not '{FoilClassName}'?",
-            $"  Fact score: {NumOps.ToDouble(FactScore):F4}",
-            $"  Foil score: {NumOps.ToDouble(FoilScore):F4}",
+            $"  Fact score: {FactScore:F4}",
+            $"  Foil score: {FoilScore:F4}",
             ""
         };
 
@@ -585,7 +575,7 @@ public class ContrastiveExplanation<T>
             lines.Add("Pertinent Positives (why it IS this class):");
             foreach (var pp in PertinentPositives)
             {
-                lines.Add($"  - {pp.FeatureName} = {NumOps.ToDouble(pp.CurrentValue):F2}");
+                lines.Add($"  - {pp.FeatureName} = {pp.CurrentValue:F2}");
                 lines.Add($"    {pp.Explanation}");
             }
             lines.Add("");
@@ -596,24 +586,29 @@ public class ContrastiveExplanation<T>
             lines.Add("Pertinent Negatives (how to get the other class):");
             foreach (var pn in PertinentNegatives)
             {
-                lines.Add($"  - {pn.FeatureName}: {NumOps.ToDouble(pn.CurrentValue):F2} -> {NumOps.ToDouble(pn.ContrastValue):F2}");
+                lines.Add($"  - {pn.FeatureName}: {pn.CurrentValue:F2} -> {pn.ContrastValue:F2}");
                 lines.Add($"    {pn.Explanation}");
             }
             lines.Add("");
         }
 
         // Top contributing features
-        var topContrib = FeatureContributions
-            .OrderByDescending(kvp => Math.Abs(NumOps.ToDouble(kvp.Value)))
+        var engine = AiDotNetEngine.Current;
+        var entries = FeatureContributions.ToList();
+        var values = new Vector<T>(entries.Select(kvp => kvp.Value)).AsTensor();
+        var ranks = entries.Count > 0 ? ExplainerTensorOps<T>.DenseRanks(engine.TensorAbs(values)) : Array.Empty<int>();
+        var supports = entries.Count > 0 ? engine.TensorGreaterThan(values, NumOps.Zero).Cast<int>().ToArray() : Array.Empty<int>();
+        var topContrib = Enumerable.Range(0, entries.Count)
+            .OrderByDescending(k => ranks[k])
             .Take(5);
 
         lines.Add("Top Contributing Features:");
-        foreach (var kvp in topContrib)
+        foreach (var k in topContrib)
         {
+            var kvp = entries[k];
             string name = kvp.Key < FeatureNames.Length ? FeatureNames[kvp.Key] : $"Feature {kvp.Key}";
-            double contrib = NumOps.ToDouble(kvp.Value);
-            string direction = contrib > 0 ? "supports" : "opposes";
-            lines.Add($"  {name}: {direction} '{FactClassName}' ({contrib:+0.0000;-0.0000})");
+            string direction = supports[k] != 0 ? "supports" : "opposes";
+            lines.Add($"  {name}: {direction} '{FactClassName}' ({kvp.Value:+0.0000;-0.0000})");
         }
 
         return string.Join(Environment.NewLine, lines);

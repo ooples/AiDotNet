@@ -162,16 +162,21 @@ public sealed class MbPAEpisodicMemory<T>
 
         int take = Math.Min(k, _entries.Count);
 
+        var engine = AiDotNetEngine.Current;
         var distances = new (int Index, double DistanceSquared)[_entries.Count];
         for (int i = 0; i < _entries.Count; i++)
         {
+            // ||key - q||^2 over the common prefix, reduced with engine ops; only the scalar result
+            // goes through the caller's converter.
             var key = _entries[i].Key;
-            double sum = 0.0;
             int len = Math.Min(key.Length, query.Length);
-            for (int d = 0; d < len; d++)
+            double sum = 0.0;
+            if (len > 0)
             {
-                double diff = toDouble(key[d]) - toDouble(query[d]);
-                sum += diff * diff;
+                var diff = engine.Subtract(
+                    len == key.Length ? key : key.GetSubVector(0, len),
+                    len == query.Length ? query : query.GetSubVector(0, len));
+                sum = toDouble(engine.DotProduct(diff, diff));
             }
             distances[i] = (i, sum);
         }

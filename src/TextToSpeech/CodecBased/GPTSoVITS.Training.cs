@@ -219,7 +219,7 @@ public partial class GPTSoVITS<T>
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    private Tensor<T> Detached(Tensor<T> x) => DetachTensor(x);
 
     // discriminator_loss: Σ mean((1 − D(real))²) + mean(D(fake)²).
     private Tensor<T> DiscriminatorLoss(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)
@@ -351,14 +351,17 @@ public partial class GPTSoVITS<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer;
         if (group == "t2s")
         {
-            // WarmupCosineLRSchedule never sets the rate before its first step and locks it at 0.002 after.
+            // WarmupCosineLRSchedule never sets the rate before its first step and locks it at 0.002 after. The scheduler
+            // evaluates the lambda once while it is constructed (PyTorch's LambdaLR does too), before `built` is
+            // assigned; no step has run then, so that call is the first-step rate.
             ScaledAdamOptimizer<T, Tensor<T>, Tensor<T>>? built = null;
             double locked = o.T2SLockedLearningRate / o.T2SLearningRate;
             built = new ScaledAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new ScaledAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = o.T2SLearningRate, Beta1 = 0.9, Beta2 = 0.95, ClippingScale = 2.0, ClippingUpdatePeriod = 1000,
                 GradientAccumulationPeriod = o.T2SAccumulation,
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.T2SLearningRate, _ => built!.StepCount == 0 ? 1.0 : locked),
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.T2SLearningRate,
+                    _ => built is null || built.StepCount == 0 ? 1.0 : locked),
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             });
             optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, built, group);

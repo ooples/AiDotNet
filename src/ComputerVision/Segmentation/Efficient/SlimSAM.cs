@@ -8,7 +8,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 
@@ -193,16 +192,12 @@ public partial class SlimSAM<T> : Common.PromptableSegmentationBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        var onnxInput = CvTensorOps<T>.ToOnnxFloat(input);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
+        var result = CvTensorOps<T>.FromOnnxFloat(outputTensor);
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
@@ -379,28 +374,10 @@ public partial class SlimSAM<T> : Common.PromptableSegmentationBase<T>
     }
 
     private Tensor<T> ModulateFeatures(Tensor<T> features, Tensor<T> spatialMask, int numC, int h, int w)
-    {
-        var modulated = new Tensor<T>(features._shape);
-        for (int c = 0; c < numC; c++)
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    modulated[c, y, x] = NumOps.Multiply(features[c, y, x], spatialMask[y, x]);
-        return modulated;
-    }
+        => Common.SegmentationTensorOps.ModulateBySpatialMask(features, spatialMask, h, w);
 
     private Tensor<T> ReduceChannelsToScoreMap(Tensor<T> output)
-    {
-        int numC = output.Shape[0], h = output.Shape[^2], w = output.Shape[^1];
-        var scoreMap = new Tensor<T>([h, w]);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double s = 0;
-                for (int c = 0; c < numC; c++) s += NumOps.ToDouble(output[c, y, x]);
-                scoreMap[y, x] = NumOps.FromDouble(s / numC);
-            }
-        return scoreMap;
-    }
+        => Common.SegmentationTensorOps.ChannelMean(output);
 
     private PromptedSegmentationResult<T> BuildPromptMaskResult(Tensor<T> scoreMap, int h, int w)
     {

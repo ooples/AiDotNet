@@ -155,7 +155,7 @@ internal sealed class WaveNetNetwork<T>
             x = _engine.TensorMultiplyScalar(_engine.TensorAdd(x, res), half);
             skips = skips is null ? skip : _engine.TensorAdd(skips, skip);
         }
-        return Output(skips!);
+        return Output(skips ?? throw new InvalidOperationException("WaveNet has no residual blocks to produce skips."));
     }
 
     /// <summary>Incremental generation state: the inputs every causal convolution has seen.</summary>
@@ -188,7 +188,9 @@ internal sealed class WaveNetNetwork<T>
     /// function as <see cref="Forward"/> evaluated one step at a time.</summary>
     public Tensor<T> Step(State state, Tensor<T> previous, Tensor<T> condition)
     {
-        state.Inputs.Add(previous);
+        // GC-owned copies, as for the hidden history below: the caller's one-hot may live in the inference arena that
+        // the sampler resets between steps, and a retained arena tensor is overwritten by later allocations.
+        state.Inputs.Add(new Tensor<T>(previous.ToArray(), previous.Shape.ToArray()));
         var x = _input.ForwardTaps(Taps(state.Inputs, 1, _classes));
         Tensor<T>? skips = null;
         var half = NumOps.FromDouble(Math.Sqrt(0.5));
@@ -205,6 +207,6 @@ internal sealed class WaveNetNetwork<T>
             skips = skips is null ? skip : _engine.TensorAdd(skips, skip);
         }
         if (state.Inputs.Count > _kernel) state.Inputs.RemoveAt(0);
-        return Output(skips!);
+        return Output(skips ?? throw new InvalidOperationException("WaveNet has no residual blocks to produce skips."));
     }
 }

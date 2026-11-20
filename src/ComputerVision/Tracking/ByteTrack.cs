@@ -23,6 +23,11 @@ namespace AiDotNet.ComputerVision.Tracking;
 /// - State-of-the-art performance on MOT benchmarks
 /// </para>
 ///
+/// <para>This follows the official BYTETracker: an xyah Kalman filter per track, IoU distance with
+/// detection scores fused in, <c>lapjv</c>-style assignment that accepts a pair only when its cost is at
+/// most the threshold (0.8, 0.5 and 0.7 for the high-score, low-score and unconfirmed rounds), and new
+/// tracks only from detections scoring at least <c>track_thresh + 0.1</c>.</para>
+///
 /// <para>Reference: Zhang et al., "ByteTrack: Multi-Object Tracking by Associating
 /// Every Detection Box", ECCV 2022</para>
 /// </remarks>
@@ -38,13 +43,20 @@ namespace AiDotNet.ComputerVision.Tracking;
     Authors = "Yifu Zhang, Peize Sun, Yi Jiang, Dongdong Yu, Fucheng Weng, Zehuan Yuan, Ping Luo, Wenyu Liu, Xinggang Wang")]
 public class ByteTrack<T> : ObjectTrackerBase<T>
 {
-    private readonly List<STrack<T>> _trackedTracks;
-    private readonly List<STrack<T>> _lostTracks;
-    private readonly double _trackHighThresh;
-    private readonly double _trackLowThresh;
-    private readonly double _newTrackThresh;
-    private readonly int _trackBuffer;
-    private readonly double _matchThresh;
+    private readonly XyahKalmanFilter<T> _kalman;
+    private readonly HashSet<int> _removedTrackIds;
+    private readonly T _trackThresh;
+    private readonly T _lowThresh;
+    private readonly T _detThresh;
+    private readonly T _matchThresh;
+    private readonly T _secondMatchThresh;
+    private readonly T _unconfirmedMatchThresh;
+    private readonly T _duplicateThresh;
+    private readonly bool _fuseScore;
+    private readonly BoxAreaConvention _boxAreaConvention;
+    private readonly int _maxTimeLost;
+    private List<STrack<T>> _trackedTracks;
+    private List<STrack<T>> _lostTracks;
 
     /// <inheritdoc/>
     public override string Name => "ByteTrack";
@@ -52,17 +64,30 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
     /// <summary>
     /// Creates a new ByteTrack tracker.
     /// </summary>
+    /// <param name="options">
+    /// Tracking options. <see cref="TrackingOptions{T}.ConfidenceThreshold"/> is <c>track_thresh</c> and
+    /// <see cref="TrackingOptions{T}.MaxAge"/> is the lost-track buffer. Pass a
+    /// <see cref="ByteTrackOptions{T}"/> to change the association thresholds; otherwise the official
+    /// defaults are used.
+    /// </param>
     public ByteTrack(TrackingOptions<T> options) : base(options)
     {
+        var byteOptions = options as ByteTrackOptions<T> ?? new ByteTrackOptions<T>();
+        _kalman = new XyahKalmanFilter<T>();
+        _removedTrackIds = new HashSet<int>();
         _trackedTracks = new List<STrack<T>>();
         _lostTracks = new List<STrack<T>>();
 
-        // ByteTrack specific thresholds
-        _trackHighThresh = NumOps.ToDouble(options.ConfidenceThreshold);
-        _trackLowThresh = 0.1;
-        _newTrackThresh = Math.Max(_trackHighThresh, 0.3);
-        _trackBuffer = options.MaxAge;
-        _matchThresh = 0.8;
+        _trackThresh = options.ConfidenceThreshold;
+        _lowThresh = byteOptions.LowScoreThreshold;
+        _detThresh = NumOps.Add(_trackThresh, byteOptions.NewTrackScoreMargin);
+        _matchThresh = byteOptions.MatchThreshold;
+        _secondMatchThresh = byteOptions.SecondMatchThreshold;
+        _unconfirmedMatchThresh = byteOptions.UnconfirmedMatchThreshold;
+        _duplicateThresh = byteOptions.DuplicateIouDistance;
+        _fuseScore = byteOptions.FuseScore;
+        _boxAreaConvention = byteOptions.BoxAreaConvention;
+        _maxTimeLost = options.MaxAge;
     }
 
     /// <inheritdoc/>
@@ -70,113 +95,131 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
     {
         var startTime = DateTime.UtcNow;
         FrameCount++;
+        var engine = AiDotNetEngine.Current;
 
-        // Split detections into high and low confidence
-        var highConfDets = new List<Detection<T>>();
-        var lowConfDets = new List<Detection<T>>();
+        var activated = new List<STrack<T>>();
+        var refind = new List<STrack<T>>();
+        var lost = new List<STrack<T>>();
+        var removed = new List<STrack<T>>();
 
-        foreach (var det in detections)
-        {
-            double conf = NumOps.ToDouble(det.Confidence);
-            if (conf >= _trackHighThresh)
-            {
-                highConfDets.Add(det);
-            }
-            else if (conf >= _trackLowThresh)
-            {
-                lowConfDets.Add(det);
-            }
-        }
+        // High: score > track_thresh. Second: low_thresh < score < track_thresh (both strict, as in
+        // the official BYTETracker; a score equal to track_thresh joins neither set).
+        var scores = TrackingAssociation<T>.Scores(detections);
+        int[] highIdx = TrackingAssociation<T>.Where(engine.TensorGreaterThan(scores, _trackThresh));
+        int[] secondIdx = TrackingAssociation<T>.Where(engine.TensorMultiply(
+            engine.TensorGreaterThan(scores, _lowThresh), engine.TensorLessThan(scores, _trackThresh)));
+        var highDets = highIdx.Select(i => new STrack<T>(detections[i], _kalman)).ToList();
+        var secondDets = secondIdx.Select(i => new STrack<T>(detections[i], _kalman)).ToList();
 
-        // Step 1: Add newly detected tracklets to tracked_stracks
-        var unconfirmedTracks = new List<STrack<T>>();
-        var trackedTracks = new List<STrack<T>>();
+        var unconfirmed = _trackedTracks.Where(t => !t.IsActivated).ToList();
+        var tracked = _trackedTracks.Where(t => t.IsActivated).ToList();
 
-        foreach (var track in _trackedTracks)
-        {
-            if (!track.IsActivated)
-            {
-                unconfirmedTracks.Add(track);
-            }
-            else
-            {
-                trackedTracks.Add(track);
-            }
-        }
-
-        // Step 2: Merge tracked tracks and lost tracks
-        var sTrackPool = JoinTracks(trackedTracks, _lostTracks);
-
-        // Predict locations
-        foreach (var track in sTrackPool)
+        // Step 2: first association, tracked + lost tracks against the high-score detections.
+        var pool = JoinTracks(tracked, _lostTracks);
+        foreach (var track in pool)
         {
             track.Predict();
         }
 
-        // Step 3: First association with high confidence detections
-        var (matchedPairs1, unmatchedTracks1, unmatchedDets1) =
-            Associate(sTrackPool, highConfDets, _matchThresh);
-
-        // Update matched tracks
-        foreach (var (trackIdx, detIdx) in matchedPairs1)
+        var dists = IouDistance(pool, highDets);
+        if (_fuseScore)
         {
-            sTrackPool[trackIdx].Update(highConfDets[detIdx], FrameCount);
+            dists = FuseScore(dists, highDets);
         }
 
-        // Step 4: Second association with low confidence detections
-        var remainingTracks = unmatchedTracks1.Select(i => sTrackPool[i]).ToList();
-        var (matchedPairs2, unmatchedTracks2, _) =
-            Associate(remainingTracks, lowConfDets, 0.5); // Lower threshold for low conf
+        var (matches, uTrack, uDetection) = TrackingAssociation<T>.LinearAssignment(dists, _matchThresh);
+        ApplyMatches(matches, pool, highDets, activated, refind);
 
-        foreach (var (trackIdx, detIdx) in matchedPairs2)
-        {
-            remainingTracks[trackIdx].Update(lowConfDets[detIdx], FrameCount);
-        }
+        // Step 3: second association, remaining tracked (not lost) tracks against the low-score detections.
+        var remainingTracked = uTrack.Select(i => pool[i]).Where(t => t.State == TrackState.Confirmed).ToList();
+        dists = IouDistance(remainingTracked, secondDets);
+        var (matches2, uTrack2, _) = TrackingAssociation<T>.LinearAssignment(dists, _secondMatchThresh);
+        ApplyMatches(matches2, remainingTracked, secondDets, activated, refind);
 
-        // Mark remaining as lost
-        var stillUnmatched = unmatchedTracks2.Select(i => remainingTracks[i]).ToList();
-        foreach (var track in stillUnmatched)
+        foreach (int it in uTrack2)
         {
-            if (!track.State.Equals(TrackState.Deleted))
+            var track = remainingTracked[it];
+            if (track.State != TrackState.Lost)
             {
                 track.MarkLost();
+                lost.Add(track);
             }
         }
 
-        // Step 5: Deal with unconfirmed tracks
-        // Associate with remaining high-confidence detections (not matched in Step 3)
-        var remainingHighDets = unmatchedDets1.Select(i => highConfDets[i]).ToList();
-        var (matchedPairs3, unmatchedUnconfirmed, unmatchedDets3) =
-            Associate(unconfirmedTracks, remainingHighDets, 0.7);
-
-        foreach (var (trackIdx, detIdx) in matchedPairs3)
+        // Unconfirmed tracks (one frame old) against the high-score detections left over.
+        var leftoverDets = uDetection.Select(i => highDets[i]).ToList();
+        dists = IouDistance(unconfirmed, leftoverDets);
+        if (_fuseScore)
         {
-            unconfirmedTracks[trackIdx].Update(remainingHighDets[detIdx], FrameCount);
+            dists = FuseScore(dists, leftoverDets);
         }
 
-        // Remove unconfirmed tracks that weren't matched
-        var tracksToRemove = unmatchedUnconfirmed.Select(i => unconfirmedTracks[i]).ToList();
-        foreach (var track in tracksToRemove)
+        var (matches3, uUnconfirmed, uDetection3) = TrackingAssociation<T>.LinearAssignment(dists, _unconfirmedMatchThresh);
+        foreach (var (row, col) in matches3)
         {
-            track.MarkRemoved();
+            unconfirmed[row].Update(leftoverDets[col], FrameCount);
+            activated.Add(unconfirmed[row]);
         }
 
-        // Step 6: Init new tracks from unmatched high confidence detections
-        foreach (int detIdx in unmatchedDets3)
+        foreach (int it in uUnconfirmed)
         {
-            var det = remainingHighDets[detIdx];
-            if (NumOps.ToDouble(det.Confidence) >= _newTrackThresh)
+            unconfirmed[it].MarkRemoved();
+            removed.Add(unconfirmed[it]);
+        }
+
+        // Step 4: start new tracks from unmatched high-score detections scoring at least det_thresh.
+        var newCandidates = uDetection3.Select(i => leftoverDets[i]).ToList();
+        int[] belowDetThresh = newCandidates.Count == 0
+            ? Array.Empty<int>()
+            : engine.TensorLessThan(
+                TrackingAssociation<T>.Scores(newCandidates.Select(t => t.Detection).ToList()), _detThresh)
+                .Cast<int>().ToArray();
+        for (int k = 0; k < newCandidates.Count; k++)
+        {
+            if (belowDetThresh[k] != 0)
             {
-                var newTrack = new STrack<T>(NextTrackId++, det, FrameCount, NumOps);
-                newTrack.Activate(FrameCount);
-                _trackedTracks.Add(newTrack);
+                continue;
+            }
+
+            newCandidates[k].Activate(NextTrackId++, FrameCount);
+            activated.Add(newCandidates[k]);
+        }
+
+        // Step 5: lost tracks past the buffer are removed.
+        foreach (var track in _lostTracks)
+        {
+            if (FrameCount - track.EndFrame > _maxTimeLost)
+            {
+                track.MarkRemoved();
+                removed.Add(track);
             }
         }
 
-        // Update track lists
-        UpdateTrackLists();
+        _trackedTracks = _trackedTracks.Where(t => t.State == TrackState.Confirmed).ToList();
+        _trackedTracks = JoinTracks(_trackedTracks, activated);
+        _trackedTracks = JoinTracks(_trackedTracks, refind);
+        _lostTracks = SubTracks(_lostTracks, _trackedTracks.Select(t => t.TrackId));
+        _lostTracks.AddRange(lost);
+        _lostTracks = SubTracks(_lostTracks, _removedTrackIds);
+        foreach (var track in removed)
+        {
+            _removedTrackIds.Add(track.TrackId);
+        }
 
-        // Build result
+        RemoveDuplicateTracks();
+
+        // A removed id only matters while its track can still be in the lost list (it stays there for the frame
+        // it was removed in, as in byte_tracker.py, and is dropped by the next frame's subtraction). Track ids are
+        // never reused and tracks only enter the lists as new ids, so an id in neither list can never be seen
+        // again: keeping only the live ones gives the reference's subtraction results with a bounded set instead
+        // of one that grows with every removal until Reset.
+        if (_removedTrackIds.Count > 0)
+        {
+            var live = new HashSet<int>(_trackedTracks.Select(t => t.TrackId));
+            live.UnionWith(_lostTracks.Select(t => t.TrackId));
+            _removedTrackIds.IntersectWith(live);
+        }
+
         Tracks.Clear();
         foreach (var track in _trackedTracks)
         {
@@ -194,83 +237,58 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         };
     }
 
-    private (List<(int trackIdx, int detIdx)> matched, List<int> unmatchedTracks, List<int> unmatchedDets)
-        Associate(List<STrack<T>> tracks, List<Detection<T>> detections, double iouThresh)
+    private void ApplyMatches(List<(int Row, int Col)> matches, List<STrack<T>> tracks, List<STrack<T>> dets,
+        List<STrack<T>> activated, List<STrack<T>> refind)
     {
-        var matched = new List<(int trackIdx, int detIdx)>();
-        var unmatchedTracks = new List<int>();
-        var unmatchedDets = new List<int>();
-
-        if (tracks.Count == 0)
+        foreach (var (row, col) in matches)
         {
-            unmatchedDets = Enumerable.Range(0, detections.Count).ToList();
-            return (matched, unmatchedTracks, unmatchedDets);
-        }
-
-        if (detections.Count == 0)
-        {
-            unmatchedTracks = Enumerable.Range(0, tracks.Count).ToList();
-            return (matched, unmatchedTracks, unmatchedDets);
-        }
-
-        // Build IoU cost matrix
-        var costMatrix = new double[tracks.Count, detections.Count];
-
-        for (int t = 0; t < tracks.Count; t++)
-        {
-            var trackBox = tracks[t].GetPredictedBox();
-
-            for (int d = 0; d < detections.Count; d++)
+            var track = tracks[row];
+            if (track.State == TrackState.Confirmed)
             {
-                double iou = ComputeIoU(trackBox, detections[d].Box);
-                costMatrix[t, d] = 1.0 - iou;
+                track.Update(dets[col], FrameCount);
+                activated.Add(track);
+            }
+            else
+            {
+                track.ReActivate(dets[col], FrameCount);
+                refind.Add(track);
             }
         }
-
-        // Hungarian assignment
-        var assignment = HungarianAssignment(costMatrix);
-
-        var matchedDetSet = new HashSet<int>();
-        var matchedTrackSet = new HashSet<int>();
-
-        for (int t = 0; t < assignment.Length; t++)
-        {
-            int d = assignment[t];
-            if (d >= 0 && costMatrix[t, d] < (1.0 - iouThresh))
-            {
-                matched.Add((t, d));
-                matchedTrackSet.Add(t);
-                matchedDetSet.Add(d);
-            }
-        }
-
-        for (int t = 0; t < tracks.Count; t++)
-        {
-            if (!matchedTrackSet.Contains(t))
-            {
-                unmatchedTracks.Add(t);
-            }
-        }
-
-        for (int d = 0; d < detections.Count; d++)
-        {
-            if (!matchedDetSet.Contains(d))
-            {
-                unmatchedDets.Add(d);
-            }
-        }
-
-        return (matched, unmatchedTracks, unmatchedDets);
     }
 
-    private List<STrack<T>> JoinTracks(List<STrack<T>> tracksA, List<STrack<T>> tracksB)
+    private Tensor<T> IouDistance(List<STrack<T>> tracks, List<STrack<T>> dets)
+    {
+        return TrackingAssociation<T>.IouDistance(
+            TrackingAssociation<T>.BoxesToTensor(tracks.Select(t => t.Tlbr).ToList()),
+            TrackingAssociation<T>.BoxesToTensor(dets.Select(t => t.Tlbr).ToList()),
+            _boxAreaConvention);
+    }
+
+    /// <summary>
+    /// <c>fuse_score</c>: the IoU similarity is multiplied by each detection's score, so
+    /// cost = 1 - IoU * score.
+    /// </summary>
+    private Tensor<T> FuseScore(Tensor<T> cost, List<STrack<T>> dets)
+    {
+        if (cost.Length == 0)
+        {
+            return cost;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var scores = engine.Reshape(TrackingAssociation<T>.Scores(dets.Select(d => d.Detection).ToList()), new[] { 1, dets.Count });
+        var similarity = engine.TensorMultiply(
+            engine.ScalarMinusTensor(NumOps.One, cost), engine.TensorBroadcastTo(scores, cost.Shape.ToArray()));
+        return engine.ScalarMinusTensor(NumOps.One, similarity);
+    }
+
+    private static List<STrack<T>> JoinTracks(List<STrack<T>> tracksA, List<STrack<T>> tracksB)
     {
         var result = new List<STrack<T>>(tracksA);
-        var existingIds = tracksA.Select(t => t.TrackId).ToHashSet();
-
+        var existingIds = new HashSet<int>(tracksA.Select(t => t.TrackId));
         foreach (var track in tracksB)
         {
-            if (!existingIds.Contains(track.TrackId))
+            if (existingIds.Add(track.TrackId))
             {
                 result.Add(track);
             }
@@ -279,56 +297,45 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         return result;
     }
 
-    private void UpdateTrackLists()
+    private static List<STrack<T>> SubTracks(List<STrack<T>> tracksA, IEnumerable<int> idsToRemove)
     {
-        // Move lost tracks that have been lost too long to removed
-        var newLost = new List<STrack<T>>();
-        foreach (var track in _lostTracks)
+        var ids = new HashSet<int>(idsToRemove);
+        return tracksA.Where(t => !ids.Contains(t.TrackId)).ToList();
+    }
+
+    /// <summary>
+    /// <c>remove_duplicate_stracks</c>: a tracked/lost pair with IoU distance below 0.15 keeps only the
+    /// track that has been followed longer (ties drop the tracked one).
+    /// </summary>
+    private void RemoveDuplicateTracks()
+    {
+        if (_trackedTracks.Count == 0 || _lostTracks.Count == 0)
         {
-            if (FrameCount - track.EndFrame > _trackBuffer)
+            return;
+        }
+
+        var close = AiDotNetEngine.Current.TensorLessThan(IouDistance(_trackedTracks, _lostTracks), _duplicateThresh);
+        int[] pairs = TrackingAssociation<T>.Where(close);
+        var dupTracked = new HashSet<int>();
+        var dupLost = new HashSet<int>();
+        for (int k = 0; k + 1 < pairs.Length; k += 2)
+        {
+            int p = pairs[k];
+            int q = pairs[k + 1];
+            int timeP = _trackedTracks[p].FrameId - _trackedTracks[p].StartFrame;
+            int timeQ = _lostTracks[q].FrameId - _lostTracks[q].StartFrame;
+            if (timeP > timeQ)
             {
-                track.MarkRemoved();
+                dupLost.Add(q);
             }
             else
             {
-                newLost.Add(track);
-            }
-        }
-        _lostTracks.Clear();
-        _lostTracks.AddRange(newLost);
-
-        // Process tracked tracks
-        var newTracked = new List<STrack<T>>();
-        foreach (var track in _trackedTracks)
-        {
-            if (track.State == TrackState.Lost)
-            {
-                _lostTracks.Add(track);
-            }
-            else if (track.State != TrackState.Deleted)
-            {
-                newTracked.Add(track);
-            }
-            // Deleted tracks are discarded
-        }
-        _trackedTracks.Clear();
-        _trackedTracks.AddRange(newTracked);
-
-        // Move re-activated tracks from lost to tracked
-        var reactivated = new List<STrack<T>>();
-        foreach (var track in _lostTracks)
-        {
-            if (track.IsActivated && track.State == TrackState.Confirmed)
-            {
-                reactivated.Add(track);
+                dupTracked.Add(p);
             }
         }
 
-        foreach (var track in reactivated)
-        {
-            _lostTracks.Remove(track);
-            _trackedTracks.Add(track);
-        }
+        _trackedTracks = _trackedTracks.Where((_, i) => !dupTracked.Contains(i)).ToList();
+        _lostTracks = _lostTracks.Where((_, i) => !dupLost.Contains(i)).ToList();
     }
 
     /// <inheritdoc/>
@@ -337,97 +344,134 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         base.Reset();
         _trackedTracks.Clear();
         _lostTracks.Clear();
+        _removedTrackIds.Clear();
     }
 }
 
 /// <summary>
-/// Single track for ByteTrack (STrack).
+/// Association thresholds of <see cref="ByteTrack{T}"/>; the defaults are those of the official
+/// BYTETracker (Zhang et al. 2022).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class STrack<T>
+public class ByteTrackOptions<T> : TrackingOptions<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private int _classId;
-    private T _confidence;
+    private static readonly INumericOperations<T> Ops = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
 
-    // State: [cx, cy, w, h, vx, vy, vw, vh]
-    private double[] _state;
+    /// <summary>
+    /// Largest IoU distance (1 - IoU, after score fusion) accepted in the first association
+    /// (<c>match_thresh</c>, default 0.8, i.e. IoU of at least 0.2).
+    /// </summary>
+    public T MatchThreshold { get; set; } = Ops.FromDouble(0.8);
 
-    public int TrackId { get; }
-    public int StartFrame { get; private set; }
-    public int EndFrame { get; private set; }
-    public int TrackletLen { get; private set; }
-    public bool IsActivated { get; private set; }
-    public TrackState State { get; private set; }
-    public double Score { get; private set; }
+    /// <summary>Largest IoU distance accepted when matching low-score detections (default 0.5).</summary>
+    public T SecondMatchThreshold { get; set; } = Ops.FromDouble(0.5);
 
-    public STrack(int trackId, Detection<T> detection, int frameId, INumericOperations<T> numOps)
+    /// <summary>Largest IoU distance accepted when matching unconfirmed tracks (default 0.7).</summary>
+    public T UnconfirmedMatchThreshold { get; set; } = Ops.FromDouble(0.7);
+
+    /// <summary>Detections scoring at or below this are discarded (default 0.1).</summary>
+    public T LowScoreThreshold { get; set; } = Ops.FromDouble(0.1);
+
+    /// <summary>
+    /// A new track needs a score of at least <c>ConfidenceThreshold + NewTrackScoreMargin</c>
+    /// (<c>det_thresh = track_thresh + 0.1</c>).
+    /// </summary>
+    public T NewTrackScoreMargin { get; set; } = Ops.FromDouble(0.1);
+
+    /// <summary>
+    /// Whether detection scores are fused into the IoU cost of the high-score and unconfirmed
+    /// associations (<c>fuse_score</c>; the official code skips it only for MOT20). Default true.
+    /// </summary>
+    public bool FuseScore { get; set; } = true;
+
+    /// <summary>
+    /// IoU distance below which a tracked and a lost track are considered duplicates (default 0.15).
+    /// </summary>
+    public T DuplicateIouDistance { get; set; } = Ops.FromDouble(0.15);
+
+    /// <summary>
+    /// How box widths and heights are measured for every IoU the tracker computes. The default,
+    /// <see cref="BoxAreaConvention.PixelInclusive"/>, is the official implementation's cython_bbox
+    /// <c>bbox_ious</c> (width = x2 - x1 + 1); <see cref="BoxAreaConvention.Continuous"/> matches ultralytics.
+    /// </summary>
+    public BoxAreaConvention BoxAreaConvention { get; set; } = BoxAreaConvention.PixelInclusive;
+}
+
+/// <summary>
+/// Single track for ByteTrack (STrack), filtered with the xyah Kalman filter.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+internal sealed class STrack<T>
+{
+    private static readonly INumericOperations<T> NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+    private readonly XyahKalmanFilter<T> _kalman;
+    private Tensor<T>? _mean;
+    private Tensor<T>? _covariance;
+
+    public STrack(Detection<T> detection, XyahKalmanFilter<T> kalman)
     {
-        _numOps = numOps;
-        TrackId = trackId;
-        _classId = detection.ClassId;
-        _confidence = detection.Confidence;
-        Score = numOps.ToDouble(detection.Confidence);
-
-        // Initialize state
-        var (cx, cy, w, h) = BoxToState(detection.Box);
-        _state = new double[] { cx, cy, w, h, 0, 0, 0, 0 };
-
-        StartFrame = frameId;
-        EndFrame = frameId;
-        TrackletLen = 1;
-        IsActivated = false;
+        _kalman = kalman;
+        Detection = detection;
+        ClassId = detection.ClassId;
+        Score = detection.Confidence;
         State = TrackState.Tentative;
     }
 
-    public void Activate(int frameId)
+    /// <summary>The detection this track was created from (or last updated with).</summary>
+    public Detection<T> Detection { get; private set; }
+
+    public int TrackId { get; private set; }
+    public int ClassId { get; private set; }
+    public T Score { get; private set; }
+    public int FrameId { get; private set; }
+    public int StartFrame { get; private set; }
+    public int TrackletLen { get; private set; }
+    public bool IsActivated { get; private set; }
+    public TrackState State { get; private set; }
+    public int EndFrame => FrameId;
+
+    /// <summary>Starts a new tracklet; only tracks born in the first frame start activated.</summary>
+    public void Activate(int trackId, int frameId)
     {
-        IsActivated = true;
-        StartFrame = frameId;
+        TrackId = trackId;
+        (_mean, _covariance) = _kalman.Initiate(ToXyah(Detection.Box));
+        TrackletLen = 0;
         State = TrackState.Confirmed;
+        IsActivated = frameId == 1;
+        FrameId = frameId;
+        StartFrame = frameId;
     }
 
+    /// <summary>Kalman prediction; a track that is not being tracked has its height velocity zeroed first.</summary>
     public void Predict()
     {
-        // Apply velocity
-        _state[0] += _state[4]; // cx += vx
-        _state[1] += _state[5]; // cy += vy
-        _state[2] += _state[6]; // w += vw
-        _state[3] += _state[7]; // h += vh
-
-        // Ensure positive dimensions
-        _state[2] = Math.Max(1, _state[2]);
-        _state[3] = Math.Max(1, _state[3]);
-    }
-
-    public void Update(Detection<T> detection, int frameId)
-    {
-        var (cx, cy, w, h) = BoxToState(detection.Box);
-
-        // Update velocity
-        _state[4] = 0.6 * _state[4] + 0.4 * (cx - _state[0]);
-        _state[5] = 0.6 * _state[5] + 0.4 * (cy - _state[1]);
-        _state[6] = 0.6 * _state[6] + 0.4 * (w - _state[2]);
-        _state[7] = 0.6 * _state[7] + 0.4 * (h - _state[3]);
-
-        // Update state
-        _state[0] = cx;
-        _state[1] = cy;
-        _state[2] = w;
-        _state[3] = h;
-
-        _classId = detection.ClassId;
-        _confidence = detection.Confidence;
-        Score = _numOps.ToDouble(detection.Confidence);
-        EndFrame = frameId;
-        TrackletLen++;
-
-        if (!IsActivated)
+        if (_mean is null || _covariance is null)
         {
-            Activate(frameId);
+            return;
         }
 
-        State = TrackState.Confirmed;
+        var mean = _mean;
+        if (State != TrackState.Confirmed)
+        {
+            mean = _mean.Clone();
+            mean[7, 0] = NumOps.Zero;
+        }
+
+        (_mean, _covariance) = _kalman.Predict(mean, _covariance);
+    }
+
+    public void Update(STrack<T> newTrack, int frameId)
+    {
+        FrameId = frameId;
+        TrackletLen++;
+        Correct(newTrack);
+    }
+
+    public void ReActivate(STrack<T> newTrack, int frameId)
+    {
+        TrackletLen = 0;
+        FrameId = frameId;
+        Correct(newTrack);
     }
 
     public void MarkLost()
@@ -438,53 +482,68 @@ internal class STrack<T>
     public void MarkRemoved()
     {
         State = TrackState.Deleted;
-        IsActivated = false;
     }
 
-    public BoundingBox<T> GetPredictedBox()
+    /// <summary>The box as (x1, y1, x2, y2): from the filter state when there is one, else the detection.</summary>
+    public BoundingBox<T> Tlbr
     {
-        double cx = _state[0];
-        double cy = _state[1];
-        double w = _state[2];
-        double h = _state[3];
+        get
+        {
+            if (_mean is null)
+            {
+                return Detection.Box;
+            }
 
-        double x1 = cx - w / 2;
-        double y1 = cy - h / 2;
-        double x2 = cx + w / 2;
-        double y2 = cy + h / 2;
-
-        return new BoundingBox<T>(
-            _numOps.FromDouble(x1), _numOps.FromDouble(y1),
-            _numOps.FromDouble(x2), _numOps.FromDouble(y2),
-            BoundingBoxFormat.XYXY);
+            T half = NumOps.FromDouble(0.5);
+            T h = _mean[3, 0];
+            T w = NumOps.Multiply(_mean[2, 0], h);
+            T x1 = NumOps.Subtract(_mean[0, 0], NumOps.Multiply(w, half));
+            T y1 = NumOps.Subtract(_mean[1, 0], NumOps.Multiply(h, half));
+            return new BoundingBox<T>(x1, y1, NumOps.Add(x1, w), NumOps.Add(y1, h), BoundingBoxFormat.XYXY);
+        }
     }
 
     public Track<T> ToTrack()
     {
-        var box = GetPredictedBox();
-        return new Track<T>(TrackId, box, _classId, _confidence)
+        var velocityX = _mean is null ? NumOps.Zero : _mean[4, 0];
+        var velocityY = _mean is null ? NumOps.Zero : _mean[5, 0];
+        return new Track<T>(TrackId, Tlbr, ClassId, Score)
         {
-            VelocityX = _state[4],
-            VelocityY = _state[5],
+            VelocityX = velocityX,
+            VelocityY = velocityY,
             TimeSinceUpdate = 0,
-            Age = TrackletLen,
+            Age = FrameId - StartFrame + 1,
             Hits = TrackletLen,
             State = State
         };
     }
 
-    private (double cx, double cy, double w, double h) BoxToState(BoundingBox<T> box)
+    private void Correct(STrack<T> newTrack)
     {
-        double x1 = _numOps.ToDouble(box.X1);
-        double y1 = _numOps.ToDouble(box.Y1);
-        double x2 = _numOps.ToDouble(box.X2);
-        double y2 = _numOps.ToDouble(box.Y2);
+        if (_mean is not null && _covariance is not null)
+        {
+            (_mean, _covariance) = _kalman.Update(_mean, _covariance, ToXyah(newTrack.Detection.Box));
+        }
 
-        double w = x2 - x1;
-        double h = y2 - y1;
-        double cx = x1 + w / 2;
-        double cy = y1 + h / 2;
+        Detection = newTrack.Detection;
+        ClassId = newTrack.ClassId;
+        Score = newTrack.Score;
+        State = TrackState.Confirmed;
+        IsActivated = true;
+    }
 
-        return (cx, cy, w, h);
+    /// <summary>(x1, y1, x2, y2) to (centre x, centre y, width / height, height).</summary>
+    private static Tensor<T> ToXyah(BoundingBox<T> box)
+    {
+        T half = NumOps.FromDouble(0.5);
+        T w = NumOps.Subtract(box.X2, box.X1);
+        T h = NumOps.Subtract(box.Y2, box.Y1);
+        return new Tensor<T>(new[]
+        {
+            NumOps.Add(box.X1, NumOps.Multiply(w, half)),
+            NumOps.Add(box.Y1, NumOps.Multiply(h, half)),
+            NumOps.Divide(w, h),
+            h
+        }, new[] { 4 });
     }
 }

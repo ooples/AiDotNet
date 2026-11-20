@@ -4,6 +4,8 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -138,48 +140,33 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         // Always refit the detector to avoid stale models when data changes
-        // The detector's Fit method handles re-initialization
-        _detector.Fit(data);
+        // The detector's Fit method handles re-initialization. It sees only the columns selected for
+        // anomaly detection (all columns when none are given).
+        _detector.Fit(DetectionInput(data));
 
         // Calculate statistics for replacement modes
         if (_mode == FilterMode.ReplaceWithMedian || _mode == FilterMode.ReplaceWithMean)
         {
             int nFeatures = data.Columns;
-            _columnMedians = new Vector<T>(nFeatures);
-            _columnMeans = new Vector<T>(nFeatures);
-
-            for (int j = 0; j < nFeatures; j++)
+            if (data.Rows == 0 || nFeatures == 0)
             {
-                var column = data.GetColumn(j);
-                var (mean, _) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-                _columnMeans[j] = mean;
-                _columnMedians[j] = CalculateMedian(column);
+                _columnMedians = new Vector<T>(nFeatures);
+                _columnMeans = new Vector<T>(nFeatures);
+                return;
             }
+
+            // Median of an even count is the average of the two middle values (linear interpolation).
+            var x = Tensor<T>.FromMatrix(data);
+            _columnMeans = ScalerTensorOps.ColumnMean(x).ToVector();
+            _columnMedians = Engine.TensorQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear).ToVector();
         }
     }
 
-    private T CalculateMedian(Vector<T> values)
-    {
-        var sorted = values.ToArray();
-        Array.Sort(sorted, (a, b) => NumOps.LessThan(a, b) ? -1 : (NumOps.GreaterThan(a, b) ? 1 : 0));
-
-        int n = sorted.Length;
-        if (n == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        if (n % 2 == 0)
-        {
-            return NumOps.Divide(
-                NumOps.Add(sorted[n / 2 - 1], sorted[n / 2]),
-                NumOps.FromDouble(2));
-        }
-        else
-        {
-            return sorted[n / 2];
-        }
-    }
+    /// <summary>The columns the detector works on: the selected columns, or all of them.</summary>
+    private Matrix<T> DetectionInput(Matrix<T> data) =>
+        ColumnIndices is null || ColumnIndices.Length == 0
+            ? data
+            : PreprocessingTensorOps.SelectColumns(data, GetColumnsToProcess(data.Columns));
 
     /// <summary>
     /// Transforms the data by handling anomalies according to the filter mode.
@@ -189,7 +176,7 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         // Get predictions from the detector (-1 = anomaly, 1 = normal)
-        var predictions = _detector.Predict(data);
+        var predictions = _detector.Predict(DetectionInput(data));
 
         return _mode switch
         {
@@ -203,87 +190,48 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private Matrix<T> RemoveAnomalies(Matrix<T> data, Vector<T> predictions)
     {
-        // Count inliers
-        int inlierCount = 0;
-        T one = NumOps.FromDouble(1);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                inlierCount++;
-            }
-        }
-
-        if (inlierCount == data.Rows)
+        // Keep the inlier rows (prediction 1) in order
+        var inliers = PreprocessingTensorOps.MaskPositions(
+            Engine.TensorEquals(Tensor<T>.FromVector(predictions), NumOps.One));
+        if (inliers.Length == data.Rows)
         {
             return data; // No anomalies, return original
         }
 
-        // Create new matrix with only inliers
-        var result = new T[inlierCount, data.Columns];
-        int rowIdx = 0;
-
-        for (int i = 0; i < data.Rows; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                for (int j = 0; j < data.Columns; j++)
-                {
-                    result[rowIdx, j] = data[i, j];
-                }
-                rowIdx++;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectRows(data, inliers);
     }
 
     private Matrix<T> FlagAnomalies(Matrix<T> data, Vector<T> predictions)
     {
         // Add a new column with anomaly flag (1 = anomaly, 0 = normal)
-        var result = new T[data.Rows, data.Columns + 1];
-        T minusOne = NumOps.FromDouble(-1);
-
-        for (int i = 0; i < data.Rows; i++)
+        int rows = data.Rows;
+        var flag = Engine.Reshape(AnomalyFlags(predictions), new[] { rows, 1 });
+        if (data.Columns == 0)
         {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = data[i, j];
-            }
-
-            // Add flag column: 1 if anomaly (-1 prediction), 0 if normal (1 prediction)
-            result[i, data.Columns] = NumOps.Equals(predictions[i], minusOne)
-                ? NumOps.FromDouble(1)
-                : NumOps.FromDouble(0);
+            return flag.ToMatrix();
         }
 
-        return new Matrix<T>(result);
+        return Engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(data), flag }, 1).ToMatrix();
     }
+
+    /// <summary>1 where the prediction is -1 (anomaly), 0 elsewhere.</summary>
+    private Tensor<T> AnomalyFlags(Vector<T> predictions) =>
+        Engine.TensorEquals(Tensor<T>.FromVector(predictions), NumOps.FromDouble(-1));
 
     private Matrix<T> ReplaceAnomalies(Matrix<T> data, Vector<T> predictions, Vector<T> replacementValues)
     {
-        var result = new T[data.Rows, data.Columns];
-        T minusOne = NumOps.FromDouble(-1);
-
-        for (int i = 0; i < data.Rows; i++)
+        int rows = data.Rows;
+        int columns = data.Columns;
+        if (rows == 0 || columns == 0)
         {
-            bool isAnomaly = NumOps.Equals(predictions[i], minusOne);
-
-            for (int j = 0; j < data.Columns; j++)
-            {
-                if (isAnomaly)
-                {
-                    // Replace with the specified value (median or mean)
-                    result[i, j] = replacementValues[j];
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
+            return new Matrix<T>(rows, columns);
         }
 
-        return new Matrix<T>(result);
+        // Replace anomalous rows with the specified values (median or mean)
+        var anomalous = Engine.TensorBroadcastTo(
+            Engine.Reshape(AnomalyFlags(predictions), new[] { rows, 1 }), new[] { rows, columns });
+        return Engine.TensorWhere(
+            anomalous, ScalerTensorOps.BroadcastRow(replacementValues, rows), Tensor<T>.FromMatrix(data)).ToMatrix();
     }
 
     /// <summary>
@@ -300,18 +248,19 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"Inverse transformation is only supported for FilterMode.Flag, not {_mode}.");
         }
 
-        // Remove the last column (the flag column)
-        var result = new T[data.Rows, data.Columns - 1];
-
-        for (int i = 0; i < data.Rows; i++)
+        if (data.Columns == 0)
         {
-            for (int j = 0; j < data.Columns - 1; j++)
-            {
-                result[i, j] = data[i, j];
-            }
+            throw new ArgumentException("Flagged data must contain the flag column.", nameof(data));
         }
 
-        return new Matrix<T>(result);
+        // Remove the last column (the flag column)
+        if (data.Rows == 0 || data.Columns == 1)
+        {
+            return new Matrix<T>(data.Rows, data.Columns - 1);
+        }
+
+        return Engine.TensorSlice(Tensor<T>.FromMatrix(data), new[] { 0, 0 }, new[] { data.Rows, data.Columns - 1 })
+            .ToMatrix();
     }
 
     /// <summary>
@@ -343,13 +292,17 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         EnsureFitted();
 
-        var predictions = _detector.Predict(data);
+        var predictions = _detector.Predict(DetectionInput(data));
         var mask = new bool[data.Rows];
-        T minusOne = NumOps.FromDouble(-1);
-
-        for (int i = 0; i < predictions.Length; i++)
+        if (predictions.Length == 0)
         {
-            mask[i] = NumOps.Equals(predictions[i], minusOne);
+            return mask;
+        }
+
+        var flags = AnomalyFlags(predictions).Cast<int>().AsSpan();
+        for (int i = 0; i < flags.Length && i < mask.Length; i++)
+        {
+            mask[i] = flags[i] != 0;
         }
 
         return mask;
@@ -363,6 +316,6 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public Vector<T> GetAnomalyScores(Matrix<T> data)
     {
         EnsureFitted();
-        return _detector.ScoreAnomalies(data);
+        return _detector.ScoreAnomalies(DetectionInput(data));
     }
 }

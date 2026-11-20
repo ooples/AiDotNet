@@ -109,7 +109,7 @@ public partial class GatedFusionLayer<T> : LayerBase<T>, IShapeContract
 
         // (1 - G), built as a tensor so the whole expression stays on the tape.
         var ones = new Tensor<T>(gate.Shape.ToArray());
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         var inverseGate = Engine.TensorSubtract(ones, gate);
 
         return Engine.TensorAdd(

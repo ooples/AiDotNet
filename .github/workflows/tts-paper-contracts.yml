@@ -47,6 +47,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
       - name: Build the focused contract assembly
         shell: pwsh
         env:

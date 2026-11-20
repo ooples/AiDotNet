@@ -31,10 +31,10 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nGenerations;
     private readonly double _mutationFactor; // F
     private readonly double _crossoverRate; // CR
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -42,7 +42,7 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MutationFactor => _mutationFactor;
     public double CrossoverRate => _crossoverRate;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,7 +54,7 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int nGenerations = 100,
         double mutationFactor = 0.8,
         double crossoverRate = 0.7,
-        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -93,27 +93,22 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         var scorer = _scorer ?? DefaultScorer;
 
-        // Initialize population with random real-valued vectors in [0, 1]
-        var population = new double[_populationSize, p];
-        var fitness = new double[_populationSize];
+        // Initialize population with random real-valued vectors in [0, 1), drawn from the selector's generator
+        // in master's order
+        var population = new Tensor<T>[_populationSize];
+        var fitness = new T[_populationSize];
 
         for (int i = 0; i < _populationSize; i++)
         {
-            for (int j = 0; j < p; j++)
-                population[i, j] = random.NextDouble();
-            fitness[i] = EvaluateIndividual(data, target, population, i, p, scorer);
+            population[i] = WrapperScoringOps.Draws<T>(random, p);
+            fitness[i] = EvaluateVector(data, target, population[i], p, scorer);
         }
 
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
+        int bestIdx = PreprocessingTensorOps.FirstArgMax(new Tensor<T>(fitness, new[] { _populationSize }));
+        T bestFitness = fitness[bestIdx];
+        T mutationFactor = NumOps.FromDouble(_mutationFactor);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
 
         // DE evolution
         for (int gen = 0; gen < _nGenerations; gen++)
@@ -131,34 +126,29 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 int r2 = candidates[1];
                 int r3 = candidates[2];
 
-                // Mutation: v = r1 + F * (r2 - r3)
-                var mutant = new double[p];
-                for (int j = 0; j < p; j++)
-                {
-                    mutant[j] = population[r1, j] + _mutationFactor * (population[r2, j] - population[r3, j]);
-                    mutant[j] = Math.Max(0, Math.Min(1, mutant[j])); // Clip to [0, 1]
-                }
+                // Mutation: v = r1 + F * (r2 - r3), clipped to [0, 1]
+                var mutant = Engine.TensorClamp(Engine.TensorAdd(population[r1],
+                    Engine.TensorMultiplyScalar(Engine.TensorSubtract(population[r2], population[r3]), mutationFactor)), zero, one);
 
-                // Crossover
-                var trial = new double[p];
+                // Crossover: each dimension comes from the mutant with probability CR, and dimension jRand always does
                 int jRand = random.Next(p); // Ensure at least one dimension from mutant
+                var fromMutant = new List<int>();
                 for (int j = 0; j < p; j++)
                 {
                     if (random.NextDouble() < _crossoverRate || j == jRand)
-                        trial[j] = mutant[j];
-                    else
-                        trial[j] = population[i, j];
+                        fromMutant.Add(j);
                 }
 
+                var trial = Engine.TensorWhere(WrapperScoringOps.Membership<T>(fromMutant.ToArray(), p), mutant, population[i]);
+
                 // Selection
-                double trialFitness = EvaluateVector(data, target, trial, p, scorer);
-                if (trialFitness >= fitness[i])
+                T trialFitness = EvaluateVector(data, target, trial, p, scorer);
+                if (WrapperScoringOps.IsAtLeast(trialFitness, fitness[i]))
                 {
-                    for (int j = 0; j < p; j++)
-                        population[i, j] = trial[j];
+                    population[i] = trial;
                     fitness[i] = trialFitness;
 
-                    if (trialFitness > bestFitness)
+                    if (WrapperScoringOps.IsAbove(trialFitness, bestFitness))
                     {
                         bestFitness = trialFitness;
                         bestIdx = i;
@@ -168,91 +158,40 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
         }
 
         // Extract best solution
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = population[bestIdx, j];
+        var best = population[bestIdx];
+        _featureScores = best.ToVector();
 
         // Convert to binary selection
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(best, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateIndividual(Matrix<T> data, Vector<T> target, double[,] population,
-        int individualIdx, int p, Func<Matrix<T>, Vector<T>, int[], double> scorer)
-    {
-        var vector = new double[p];
-        for (int j = 0; j < p; j++)
-            vector[j] = population[individualIdx, j];
-        return EvaluateVector(data, target, vector, p, scorer);
-    }
-
-    private double EvaluateVector(Matrix<T> data, Vector<T> target, double[] vector,
-        int p, Func<Matrix<T>, Vector<T>, int[], double> scorer)
+    private T EvaluateVector(Matrix<T> data, Vector<T> target, Tensor<T> vector,
+        int p, Func<Matrix<T>, Vector<T>, int[], T> scorer)
     {
         // Select features with value > 0.5 (or top k if fewer)
-        var selected = vector
-            .Select((v, idx) => (Value: v, Index: idx))
-            .Where(x => x.Value > 0.5)
-            .Select(x => x.Index)
-            .ToArray();
+        var selected = PreprocessingTensorOps.MaskPositions(Engine.TensorGreaterThan(vector, NumOps.FromDouble(0.5)));
 
-        // If too few, add the highest scoring ones
+        // If too few, add the highest scoring ones (by decreasing value, the lowest index first among ties)
         if (selected.Length == 0)
         {
-            selected = vector
-                .Select((v, idx) => (Value: v, Index: idx))
-                .OrderByDescending(x => x.Value)
+            selected = PreprocessingTensorOps.StableOrder(vector, descending: true)
                 .Take(Math.Min(_nFeaturesToSelect, p))
-                .Select(x => x.Index)
                 .ToArray();
         }
 
         return scorer(data, target, selected);
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
         if (featureIndices.Length == 0)
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
 
-        int n = data.Rows;
-        double totalCorr = 0;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in featureIndices)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / featureIndices.Length;
+        // Correlation-based score: mean |Pearson r| with the target
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);
     }
 
     /// <inheritdoc />
@@ -268,15 +207,7 @@ public class DifferentialEvolutionFS<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("DifferentialEvolutionFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

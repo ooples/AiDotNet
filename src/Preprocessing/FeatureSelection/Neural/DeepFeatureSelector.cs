@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -28,13 +29,13 @@ public class DeepFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _nEpochs;
     private readonly double _l1Penalty;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,28 +74,14 @@ public class DeepFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
 
         // Normalize
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
+        var x = NeuralSelectorOps.StandardizeSample(Tensor<T>.FromMatrix(data));
+        var rows = NeuralSelectorOps.SplitRows(x);
+        var targets = NeuralSelectorOps.SplitValues(Tensor<T>.FromVector(target));
 
         // Build layer sizes
         var layerSizes = new List<int> { p };
@@ -102,123 +89,63 @@ public class DeepFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
             layerSizes.Add(Math.Min(h, p));
         layerSizes.Add(1); // Output layer
 
-        // Initialize weights
-        var weights = new List<double[,]>();
-        var biases = new List<double[]>();
+        // Initialize weights (He-scaled uniform) and zero biases
+        var weights = new List<Tensor<T>>();
+        var biases = new List<Tensor<T>>();
         for (int l = 0; l < layerSizes.Count - 1; l++)
         {
-            int inSize = layerSizes[l];
-            int outSize = layerSizes[l + 1];
-            double scale = Math.Sqrt(2.0 / inSize);
-
-            var W = new double[inSize, outSize];
-            var b = new double[outSize];
-            for (int i = 0; i < inSize; i++)
-                for (int j = 0; j < outSize; j++)
-                    W[i, j] = (rand.NextDouble() * 2 - 1) * scale;
-            weights.Add(W);
-            biases.Add(b);
+            weights.Add(NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(2.0 / layerSizes[l]), layerSizes[l], layerSizes[l + 1]));
+            biases.Add(new Tensor<T>(new[] { layerSizes[l + 1] }));
         }
 
-        double lr = 0.001;
+        T rate = NumOps.FromDouble(0.001);
+        T l1 = NumOps.FromDouble(_l1Penalty);
+        T zero = NumOps.Zero;
+        int last = weights.Count - 1;
 
         for (int epoch = 0; epoch < _nEpochs; epoch++)
         {
             for (int i = 0; i < n; i++)
             {
-                // Forward pass
-                var activations = new List<double[]>();
-                var preActivations = new List<double[]>();
-
-                var input = new double[p];
-                for (int j = 0; j < p; j++) input[j] = X[i, j];
-                activations.Add(input);
-
+                // Forward pass: ReLU hidden layers, linear output
+                var activations = new List<Tensor<T>> { rows[i] };
+                var preActivations = new List<Tensor<T>>();
                 for (int l = 0; l < weights.Count; l++)
                 {
-                    int inSize = layerSizes[l];
-                    int outSize = layerSizes[l + 1];
-                    var pre = new double[outSize];
-                    var act = new double[outSize];
-
-                    for (int j = 0; j < outSize; j++)
-                    {
-                        pre[j] = biases[l][j];
-                        for (int k = 0; k < inSize; k++)
-                            pre[j] += activations[l][k] * weights[l][k, j];
-
-                        // ReLU for hidden, linear for output
-                        act[j] = (l < weights.Count - 1) ? Math.Max(0, pre[j]) : pre[j];
-                    }
+                    var pre = engine.TensorAdd(NeuralSelectorOps.VecMat(activations[l], weights[l]), biases[l]);
                     preActivations.Add(pre);
-                    activations.Add(act);
+                    activations.Add(l < last ? engine.TensorMax(pre, zero) : pre);
                 }
 
-                // Compute loss gradient
-                double pred = activations[^1][0];
-                double error = pred - y[i];
-
-                // Backward pass
-                var deltas = new List<double[]>();
-                deltas.Add(new double[] { error });
-
-                for (int l = weights.Count - 2; l >= 0; l--)
+                // Squared-error gradient, then back-propagation through the ReLU layers
+                var deltas = new Tensor<T>[weights.Count];
+                deltas[last] = engine.TensorSubtract(activations[weights.Count], targets[i]);
+                for (int l = last - 1; l >= 0; l--)
                 {
-                    int outSize = layerSizes[l + 1];
-                    int nextSize = layerSizes[l + 2];
-                    var delta = new double[outSize];
-
-                    for (int j = 0; j < outSize; j++)
-                    {
-                        double grad = 0;
-                        for (int k = 0; k < nextSize; k++)
-                            grad += deltas[0][k] * weights[l + 1][j, k];
-
-                        // ReLU derivative
-                        delta[j] = grad * (preActivations[l][j] > 0 ? 1 : 0);
-                    }
-                    deltas.Insert(0, delta);
+                    deltas[l] = engine.TensorMultiply(
+                        NeuralSelectorOps.MatVec(weights[l + 1], deltas[l + 1]),
+                        engine.TensorGreaterThan(preActivations[l], zero));
                 }
 
-                // Update weights
+                // Update weights, with the L1 subgradient on the first layer only
                 for (int l = 0; l < weights.Count; l++)
                 {
-                    int inSize = layerSizes[l];
-                    int outSize = layerSizes[l + 1];
+                    var gradient = NeuralSelectorOps.Outer(activations[l], deltas[l]);
+                    if (l == 0)
+                        gradient = engine.TensorAdd(gradient, engine.TensorMultiplyScalar(engine.TensorSign(weights[0]), l1));
 
-                    for (int j = 0; j < inSize; j++)
-                    {
-                        for (int k = 0; k < outSize; k++)
-                        {
-                            double grad = deltas[l][k] * activations[l][j];
-
-                            // L1 regularization on first layer only
-                            if (l == 0)
-                                grad += _l1Penalty * Math.Sign(weights[l][j, k]);
-
-                            weights[l][j, k] -= lr * grad;
-                        }
-                    }
-
-                    for (int k = 0; k < outSize; k++)
-                        biases[l][k] -= lr * deltas[l][k];
+                    weights[l] = NeuralSelectorOps.Step(weights[l], gradient, rate);
+                    biases[l] = NeuralSelectorOps.Step(biases[l], deltas[l], rate);
                 }
             }
         }
 
         // Compute feature importance from first layer weights
-        _featureImportances = new double[p];
-        int firstLayerOut = layerSizes[1];
-        for (int j = 0; j < p; j++)
-            for (int k = 0; k < firstLayerOut; k++)
-                _featureImportances[j] += Math.Abs(weights[0][j, k]);
+        var importance = engine.ReduceSum(engine.TensorAbs(weights[0]), new[] { 1 }, false);
+        _featureImportances = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -236,15 +163,7 @@ public class DeepFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("DeepFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

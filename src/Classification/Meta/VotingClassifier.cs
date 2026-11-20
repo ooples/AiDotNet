@@ -177,26 +177,7 @@ public partial class VotingClassifier<T> : MetaClassifierBase<T>
         {
             // Soft voting: use probabilities
             var probs = PredictProbabilities(input);
-            var predictions = new Vector<T>(input.Rows);
-
-            for (int i = 0; i < input.Rows; i++)
-            {
-                int bestClass = 0;
-                T bestProb = probs[i, 0];
-
-                for (int c = 1; c < NumClasses; c++)
-                {
-                    if (NumOps.Compare(probs[i, c], bestProb) > 0)
-                    {
-                        bestProb = probs[i, c];
-                        bestClass = c;
-                    }
-                }
-
-                predictions[i] = ClassLabels[bestClass];
-            }
-
-            return predictions;
+            return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
         }
         else
         {
@@ -212,52 +193,23 @@ public partial class VotingClassifier<T> : MetaClassifierBase<T>
     {
         if (_weights.Length == 0 || _estimators.Count == 0)
             throw new InvalidOperationException("Model must be trained before making predictions.");
+        if (ClassLabels is null)
+            throw new InvalidOperationException("Model has not been fitted.");
 
-        var predictions = new Vector<T>(input.Rows);
+        var engine = Engine;
+        var samples = LeadingColumns(input, NumFeatures);
+        var votes = new Tensor<T>(new[] { input.Rows, NumClasses });
 
-        for (int i = 0; i < input.Rows; i++)
+        // Each classifier adds its weight to the class it predicts
+        for (int e = 0; e < _estimators.Count; e++)
         {
-            var votes = new double[NumClasses];
-
-            // Get vote from each classifier
-            for (int e = 0; e < _estimators.Count; e++)
-            {
-                // Extract single sample
-                var sample = new Matrix<T>(1, NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    sample[0, j] = input[i, j];
-                }
-
-                var pred = _estimators[e].Predict(sample);
-
-                // Find which class
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    if (NumOps.Compare(pred[0], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
-                    {
-                        votes[c] += _weights[e];
-                        break;
-                    }
-                }
-            }
-
-            // Find class with most weighted votes
-            int bestClass = 0;
-            double maxVotes = votes[0];
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (votes[c] > maxVotes)
-                {
-                    maxVotes = votes[c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
+            var pred = _estimators[e].Predict(samples);
+            votes = engine.TensorAdd(votes,
+                engine.TensorMultiplyScalar(ClassMembership(pred), NumOps.FromDouble(_weights[e])));
         }
 
-        return predictions;
+        // Class with most weighted votes (first class wins ties)
+        return MajorityVoteLabels(votes);
     }
 
     /// <inheritdoc/>
@@ -268,71 +220,41 @@ public partial class VotingClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        var engine = Engine;
+        var probs = new Tensor<T>(new[] { input.Rows, NumClasses });
 
         // Weighted average of probabilities from all classifiers
         for (int e = 0; e < _estimators.Count; e++)
         {
-            Matrix<T> estProbs;
+            Tensor<T> estProbs;
 
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
-                estProbs = probClassifier.PredictProbabilities(input);
+                estProbs = Tensor<T>.FromMatrix(LeadingColumns(probClassifier.PredictProbabilities(input), NumClasses));
             }
             else
             {
                 // Use hard predictions
-                var preds = _estimators[e].Predict(input);
-                estProbs = new Matrix<T>(input.Rows, NumClasses);
-
-                for (int i = 0; i < input.Rows; i++)
+                if (ClassLabels is null)
                 {
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        if (NumOps.Compare(preds[i], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
-                        {
-                            estProbs[i, c] = NumOps.One;
-                        }
-                    }
+                    throw new InvalidOperationException("Model has not been fitted.");
                 }
+
+                estProbs = ClassMembership(_estimators[e].Predict(input));
             }
 
             // Weighted accumulation
-            T weight = NumOps.FromDouble(_weights[e]);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    T weighted = NumOps.Multiply(estProbs[i, c], weight);
-                    probs[i, c] = NumOps.Add(probs[i, c], weighted);
-                }
-            }
+            probs = engine.TensorAdd(probs, engine.TensorMultiplyScalar(estProbs, NumOps.FromDouble(_weights[e])));
         }
 
-        return probs;
+        return probs.ToMatrix();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 
     /// <inheritdoc/>

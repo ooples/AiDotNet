@@ -86,19 +86,7 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         // Select action greedily with respect to value function
-        int bestAction = 0;
-        T bestValue = NumOps.MinValue;
-
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            T actionValue = ComputeActionValue(stateKey, a);
-
-            if (NumOps.GreaterThan(actionValue, bestValue))
-            {
-                bestValue = actionValue;
-                bestAction = a;
-            }
-        }
+        int bestAction = RLTensorOps.ArgMaxAbove(ActionValues(stateKey), NumOps.MinValue, out _);
 
         var result = new Vector<T>(_options.ActionSize);
         result[bestAction] = NumOps.One;
@@ -160,41 +148,48 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         do
         {
-            delta = NumOps.Zero;
+            var oldValues = new List<T>();
+            var newValues = new List<T>();
 
             foreach (var stateKey in _valueTable.Keys.ToList())
             {
                 T oldValue = _valueTable[stateKey];
 
                 // Find max action value (Bellman optimality equation)
-                T maxActionValue = NumOps.MinValue;
-
-                for (int a = 0; a < _options.ActionSize; a++)
-                {
-                    T actionValue = ComputeActionValue(stateKey, a);
-
-                    if (NumOps.GreaterThan(actionValue, maxActionValue))
-                    {
-                        maxActionValue = actionValue;
-                    }
-                }
+                T maxActionValue = RLTensorOps.MaxAbove(ActionValues(stateKey), NumOps.MinValue);
 
                 _valueTable[stateKey] = maxActionValue;
-
-                // Track maximum change
-                T diff = NumOps.Subtract(maxActionValue, oldValue);
-                T absDiff = NumOps.GreaterThanOrEquals(diff, NumOps.Zero) ? diff : NumOps.Negate(diff);
-                if (NumOps.GreaterThan(absDiff, delta))
-                {
-                    delta = absDiff;
-                }
+                oldValues.Add(oldValue);
+                newValues.Add(maxActionValue);
             }
+
+            // Track maximum change: max(0, max |new - old|), a NaN change never counts.
+            delta = SweepChange(oldValues, newValues);
 
             iterations++;
         }
         while (NumOps.GreaterThanOrEquals(delta, NumOps.FromDouble(_options.Theta)) && iterations < _options.MaxIterations);
 
         return NumOps.FromDouble(iterations);
+    }
+
+    /// <summary>The one-step look-ahead value of every action in a state, as a vector.</summary>
+    private Vector<T> ActionValues(string stateKey)
+    {
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize).Select(a => ComputeActionValue(stateKey, a)));
+    }
+
+    /// <summary>max(0, max |new - old|) over a sweep, ignoring NaN changes.</summary>
+    private T SweepChange(List<T> oldValues, List<T> newValues)
+    {
+        if (oldValues.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var change = engine.Abs(engine.Subtract(Vector<T>.FromEnumerable(newValues), Vector<T>.FromEnumerable(oldValues)));
+        return RLTensorOps.MaxAbove(change, NumOps.Zero);
     }
 
     private T ComputeActionValue(string stateKey, int action)
@@ -204,21 +199,21 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        T expectedValue = NumOps.Zero;
-
-        foreach (var (nextStateKey, reward, probability) in _model[stateKey][action])
+        var transitions = _model[stateKey][action];
+        if (transitions.Count == 0)
         {
-            T nextValue = NumOps.Zero;
-            if (_valueTable.ContainsKey(nextStateKey))
-            {
-                nextValue = _valueTable[nextStateKey];
-            }
-
-            T transitionValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, nextValue));
-            expectedValue = NumOps.Add(expectedValue, NumOps.Multiply(probability, transitionValue));
+            return NumOps.Zero;
         }
 
-        return expectedValue;
+        // Expected value sum_s' p(s') * (r + gamma * V(s')), with V = 0 for unseen states.
+        var engine = AiDotNetEngine.Current;
+        var zero = NumOps.Zero;
+        var rewards = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item2));
+        var probabilities = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item3));
+        var nextValues = Vector<T>.FromEnumerable(transitions.Select(
+            transition => _valueTable.TryGetValue(transition.Item1, out var value) ? value : zero));
+        var transitionValues = engine.Add(rewards, engine.Multiply(nextValues, DiscountFactor));
+        return engine.DotProduct(probabilities, transitionValues);
     }
 
     private string GetStateKey(Vector<T> state)
@@ -228,19 +223,7 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />

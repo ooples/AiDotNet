@@ -187,34 +187,13 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         Layers.AddRange(layers);
     }
 
-    // The 16 kHz waveform's samples, truncated to the longest recording transcribed.
-    private double[] Samples(Tensor<T> audio)
-    {
-        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var samples = new double[length];
-        var span = audio.Data.Span;
-        for (int i = 0; i < length; i++) samples[i] = NumOps.ToDouble(span[i]);
-        return samples;
-    }
-
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
+    private double[] Samples(Tensor<T> audio) =>
+        ExtractHostAudioSamples(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds));
 
     // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> FirstLogits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(Samples(Row(input, r, rows))), _options.Instruction));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> FirstLogits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) =>
+            net.FirstLogits(net.Prompt(net.Speech(Samples(wave)), _options.Instruction)));
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -222,30 +201,29 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
-    // The transcript a training target names: ids [length], or one distribution per token [length, vocabulary], read as
-    // its most likely tokens; end tokens are never transcript tokens.
     private int[] Transcript(Phi4AudioNetwork<T> network, Tensor<T> target)
     {
         int vocabulary = _options.VocabSize;
         var ends = new HashSet<int>(network.EndTokens);
-        var span = target.Data.Span;
+        double[] values = target.Cast<double>().ToArray();
         if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
         {
             var tokens = new int[target.Length / vocabulary];
             for (int r = 0; r < tokens.Length; r++)
             {
                 int best = -1;
+                int rowOffset = r * vocabulary;
                 for (int v = 0; v < vocabulary; v++)
-                    if (!ends.Contains(v) && (best < 0 || NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best]))) best = v;
+                    if (!ends.Contains(v) && (best < 0 || values[rowOffset + v] > values[rowOffset + best])) best = v;
                 tokens[r] = best;
             }
             return tokens;
         }
-        var ids = new int[target.Length];
+        var ids = new int[values.Length];
         for (int i = 0; i < ids.Length; i++)
         {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= vocabulary || ends.Contains((int)value))
+            double value = Math.Round(values[i]);
+            if (!(value >= 0 && value < vocabulary) || ends.Contains((int)value))
                 throw new ArgumentException($"Token {value} is outside the vocabulary or an end token.", nameof(target));
             ids[i] = (int)value;
         }
@@ -255,14 +233,11 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     private Tensor<T> BatchLoss(Phi4AudioNetwork<T> network, Tensor<T> input, Tensor<T> target)
     {
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
+        return AverageWaveformBatchLoss(input, (r, wave) =>
         {
-            var prompt = network.Prompt(network.Speech(Samples(Row(input, r, rows))), _options.Instruction);
-            var loss = Engine.Reshape(network.Loss(prompt, Transcript(network, Row(target, r, rows))), new[] { 1 });
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            var prompt = network.Prompt(network.Speech(Samples(wave)), _options.Instruction);
+            return network.Loss(prompt, Transcript(network, SliceBatchTargetRow(target, r, rows)));
+        });
     }
 
     /// <inheritdoc />
@@ -271,8 +246,32 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     {
         var network = _network;
         if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        if (rows == 0) throw new ArgumentException("No audio.", nameof(input));
+        var rowMels = new Tensor<T>[rows];
+        var rowTranscripts = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            rowMels[r] = network.NormalizedMel(network.Features(Samples(SliceBatchAudioRow(input, r, rows))));
+            rowTranscripts[r] = Transcript(network, SliceBatchTargetRow(target, r, rows));
+        }
         network.Llm.Training = true;
-        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target)); }
+        try
+        {
+            TrainWithCustomObjective(rowMels[0], target, (_, _) =>
+            {
+                Tensor<T>? total = null;
+                for (int r = 0; r < rows; r++)
+                {
+                    var prompt = network.Prompt(network.Project(network.Encode(rowMels[r])), _options.Instruction);
+                    var loss = Engine.Reshape(network.Loss(prompt, rowTranscripts[r]), new[] { 1 });
+                    total = total is null ? loss : Engine.TensorAdd(total, loss);
+                }
+                return rows == 1
+                    ? (total ?? throw new ArgumentException("No audio.", nameof(input)))
+                    : Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            });
+        }
         finally { network.Llm.Training = false; }
         return true;
     }

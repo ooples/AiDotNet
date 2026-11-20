@@ -178,10 +178,7 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
         if (_matchingOptions.L2Regularization > 0.0)
         {
             T decay = NumOps.FromDouble(2 * _matchingOptions.L2Regularization);
-            for (int i = 0; i < bodyGradient.Length; i++)
-            {
-                bodyGradient[i] = NumOps.Add(bodyGradient[i], NumOps.Multiply(body[i], decay));
-            }
+            bodyGradient = Engine.Add(bodyGradient, Engine.Multiply(body, decay));
         }
 
         double beta = _matchingOptions.OuterLearningRate;
@@ -314,8 +311,7 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
 
         if (learnedKernel && _kernelWeights.Length == 0)
         {
-            _kernelWeights = new Vector<T>(width * width);
-            for (int i = 0; i < width; i++) _kernelWeights[i * width + i] = NumOps.One;
+            _kernelWeights = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(width)).ToVector();
         }
 
         if (supportContext && _supportContextWeights.Length == 0)
@@ -336,9 +332,7 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, _matchingOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     #endregion
@@ -388,22 +382,12 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
-    private static Vector<T> Scale(Vector<T> values, T divisor)
-    {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
-    }
+    private static Vector<T> Scale(Vector<T> values, T divisor) => AiDotNetEngine.Current.Divide(values, divisor);
 
-    private static Vector<T> CloneVector(Vector<T> source)
-    {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
-    }
+    private static Vector<T> CloneVector(Vector<T> source) => source.Clone();
 
     #endregion
 }
@@ -601,7 +585,7 @@ internal sealed class MatchingMetric<T>
     {
         if (_kernel is not null && gradients.TryGetValue(_kernel, out var kernelGradient))
         {
-            for (int i = 0; i < kernel.Length; i++) kernel[i] = kernelGradient[i];
+            kernelGradient.ToVector().GetSubVector(0, kernel.Length).CopyTo(kernel.AsWritableSpan());
         }
 
         if (_forward is not null && _backward is not null)
@@ -634,7 +618,6 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
 {
     private readonly IFullModel<T, TInput, TOutput> _encoder;
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
     private readonly MatchingMetric<T> _metric;
     private readonly Tensor<T> _support;
     private readonly Tensor<T> _membership;
@@ -677,7 +660,6 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         Guard.NotNull(numOps);
         _encoder = encoder.DeepCopy();
         _options = options;
-        _numOps = numOps;
 
         bool wantsSupportContext = options.UseBidirectionalEncoding || options.UseFullContextEmbedding;
         if ((wantsSupportContext && supportContext.Length == 0) || (options.UseFullContextEmbedding && queryContext.Length == 0))
@@ -687,25 +669,23 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
                 + "MatchingNetworksAlgorithm.Adapt rather than directly.", nameof(options));
         }
 
+        var engine = AiDotNetEngine.Current;
         var labels = ClassifierOutputs<T>.Labels(supportLabels, options.NumClasses);
-        var supportLabelIndices = new int[labels.Length];
-        for (int i = 0; i < supportLabelIndices.Length; i++) supportLabelIndices[i] = (int)Math.Round(numOps.ToDouble(labels[i]));
+        var supportLabelIndices = engine.TensorRound(labels).Cast<int>().ToArray();
         if (supportLabelIndices.Length == 0)
             throw new ArgumentException("The support set is empty, so there is nothing to match against.", nameof(supportLabels));
 
         var episode = PrototypeEpisode<T>.Build(supportLabelIndices, Array.Empty<int>());
         _membership = episode.Membership;
         _classSlots = episode.ClassSlots;
-        _classColumns = new Tensor<T>(new[] { _classSlots.Length, options.NumClasses });
-        for (int c = 0; c < _classSlots.Length; c++) _classColumns[c * options.NumClasses + _classSlots[c]] = numOps.One;
+        _classColumns = engine.TensorOneHot<T>(new Tensor<int>(_classSlots, new[] { _classSlots.Length }), options.NumClasses);
 
         using var noGrad = new NoGradScope<T>();
         var rows = ClassifierOutputs<T>.AsRows(_encoder.Predict(supportInputs));
         int width = rows.Shape[1];
         if (options.AttentionFunction == MatchingNetworksAttentionFunction.Learned && kernel.Length == 0)
         {
-            kernel = new Vector<T>(width * width);
-            for (int i = 0; i < width; i++) kernel[i * width + i] = numOps.One;
+            kernel = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(width)).ToVector();
         }
 
         _metric = new MatchingMetric<T>(options.AttentionFunction, options.Temperature, options.ProcessingSteps,
@@ -731,18 +711,17 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
-            int rows = probabilities.Shape[0], classes = probabilities.Shape[1];
-            var predicted = new Vector<T>(rows);
-            for (int r = 0; r < rows; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (_numOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
-                }
+            int classes = probabilities.Shape[1];
+            var shape = probabilities.Shape.ToArray();
 
-                predicted[r] = _numOps.FromDouble(_classSlots[best]);
-            }
+            // The first most probable slot of each row: every maximal entry is scored by its reversed index
+            // (classes - c), so the lowest maximal slot wins outright, as the scalar scan's strict > did.
+            var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(probabilities, new[] { 1 }, keepDims: true), shape);
+            var reversedIndex = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorArange<T>(classes, 0, -1), new[] { 1, classes }), shape);
+            var best = engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(probabilities, rowMax), reversedIndex), 1);
+            var slotValues = new Tensor<int>(_classSlots, new[] { _classSlots.Length }).Cast<T>();
+            var predicted = engine.TensorTake(slotValues, best).ToVector();
 
             return (TOutput)(object)predicted;
         }

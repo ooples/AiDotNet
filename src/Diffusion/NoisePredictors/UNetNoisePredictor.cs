@@ -504,6 +504,63 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
+        => PredictNoiseCore(noisySample, timestep, conditioning, null);
+
+    /// <summary>
+    /// Predicts noise with an additional embedding added to the projected timestep embedding, as SDXL's
+    /// <c>add_embedding</c> (and diffusers' <c>class_embedding</c>) does: <c>emb = time_mlp(t) + added</c>.
+    /// </summary>
+    /// <param name="noisySample">The noisy latent.</param>
+    /// <param name="timestep">The timestep.</param>
+    /// <param name="conditioning">Optional cross-attention conditioning.</param>
+    /// <param name="addedTimeEmbedding">
+    /// The embedding to add, with <see cref="TimeEmbeddingDim"/> values per batch item: [dim] or [1, dim] (shared by
+    /// the whole batch) or [batch, dim] with the batch size of <paramref name="noisySample"/>.
+    /// </param>
+    /// <returns>The predicted noise.</returns>
+    /// <remarks>Model-to-model plumbing for SDXL's add-embedding and MVDream's camera embedding.</remarks>
+    internal Tensor<T> PredictNoiseWithAddedTimeEmbedding(
+        Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T> addedTimeEmbedding)
+    {
+        if (noisySample is null)
+            throw new ArgumentNullException(nameof(noisySample));
+        if (addedTimeEmbedding is null)
+            throw new ArgumentNullException(nameof(addedTimeEmbedding));
+        // An unbatched [channels, height, width] sample is one batch item.
+        int batch = noisySample.Shape.Length >= 4 ? noisySample.Shape[0] : 1;
+        ValidateAddedTimeEmbedding(addedTimeEmbedding, TimeEmbeddingDim, batch);
+        return PredictNoiseCore(noisySample, timestep, conditioning, addedTimeEmbedding);
+    }
+
+    /// <summary>
+    /// Rejects an added time embedding that is not [dim], [1, dim] or [batch, dim]: an equal element count alone
+    /// would let [2, dim / 2] collapse into one shared row, or [3, dim] pass for a batch of two.
+    /// </summary>
+    internal static void ValidateAddedTimeEmbedding(Tensor<T> added, int dim, int batch)
+    {
+        var shape = added.Shape;
+        bool valid = (shape.Length == 1 && shape[0] == dim)
+            || (shape.Length == 2 && shape[1] == dim && (shape[0] == 1 || shape[0] == batch));
+        if (!valid)
+            throw new ArgumentException(
+                $"The added time embedding must be [{dim}], [1, {dim}] or [{batch}, {dim}]; " +
+                $"got [{string.Join(", ", shape)}].", nameof(added));
+    }
+
+    /// <summary>
+    /// Adds <paramref name="added"/> ([dim], [1, dim] or [batch, dim], validated by the caller) to the projected
+    /// time embedding.
+    /// </summary>
+    private Tensor<T> AddToTimeEmbedding(Tensor<T> timeEmbed, Tensor<T> added)
+    {
+        int dim = timeEmbed.Length;
+        if (added.Length == dim)
+            return Engine.TensorAdd(timeEmbed, added.Reshape(timeEmbed._shape));
+        var batched = new[] { added.Length / dim, dim };
+        return Engine.TensorAdd(Engine.TensorBroadcastTo(timeEmbed.Reshape(new[] { 1, dim }), batched), added.Reshape(batched));
+    }
+
+    private Tensor<T> PredictNoiseCore(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T>? addedTimeEmbedding)
     {
         EnsureLayersInitialized();
         using var streaming = LayerBase<T>.IsInferringShapes ? null : BeginWeightStreamingForward();
@@ -529,6 +586,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Compute timestep embedding (already cached per-timestep in the base class).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
+        if (addedTimeEmbedding is not null)
+            timeEmbed = AddToTimeEmbedding(timeEmbed, addedTimeEmbedding);
 
         Tensor<T> output;
         // #1650/#638 speedup: when enabled and the active engine is a capture-capable CUDA
