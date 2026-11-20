@@ -91,9 +91,17 @@ class ExecutedInductor:
 
     def __call__(self, graph, examples):
         from torch._dynamo.backends.registry import lookup_backend
-        nodes = [str(node.target) for node in graph.graph.nodes if node.op in ("call_function", "call_module", "call_method")
-                 and ("lstm" in str(node.target).lower() or
-                      node.op == "call_module" and isinstance(graph.get_submodule(node.target), torch.nn.LSTM))]
+        def recurrent(node):
+            if node.op == "call_module":
+                return isinstance(graph.get_submodule(node.target), torch.nn.LSTM)
+            if node.op != "call_function":
+                return False
+            if node.target in (torch.lstm, torch._VF.lstm):
+                return True
+            schema = getattr(node.target, "_schema", None)
+            return getattr(schema, "name", None) in {"aten::lstm", "aten::_cudnn_rnn", "aten::mkldnn_rnn_layer"}
+
+        nodes = [str(node.target) for node in graph.graph.nodes if recurrent(node)]
         if not nodes:
             raise RuntimeError("Full Inductor graph did not capture the LSTM call")
         compiled = lookup_backend("inductor")(graph, examples)
