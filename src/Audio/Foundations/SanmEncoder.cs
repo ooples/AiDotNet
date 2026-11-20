@@ -16,7 +16,7 @@ namespace AiDotNet.Audio.Foundations;
 /// <param name="NormEpsilon">The layer norms' epsilon: SenseVoice's own LayerNorm (1e-5), or FunASR's (1e-12) for
 /// Paraformer.</param>
 internal sealed record SanmEncoderConfiguration(int Mels = 80, int LfrM = 7, int LfrN = 6, int Width = 512, int Heads = 4,
-    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5)
+    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5, int SampleRate = 16000)
 {
     /// <summary>The stacked feature width, <c>Mels · LfrM</c> (560).</summary>
     public int InputSize => Mels * LfrM;
@@ -49,7 +49,7 @@ internal sealed class SanmEncoder<T>
         var c = configuration;
         if (c.Width % c.Heads != 0) throw new ArgumentException("The width must divide by the heads.", nameof(configuration));
         if (c.Blocks < 1) throw new ArgumentException("SAN-M needs at least one block.", nameof(configuration));
-        _fbank = new KaldiFbank<T>(engine, 16000, c.Mels, WindowType.Hamming);
+        _fbank = new KaldiFbank<T>(engine, c.SampleRate, c.Mels, WindowType.Hamming);
         _shift = new double[c.InputSize];
         _scale = Enumerable.Repeat(1.0, c.InputSize).ToArray();
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
