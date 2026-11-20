@@ -40,7 +40,7 @@ public sealed class HiFiGanPrivateCpuBindingTests
                     var parameters = layer.GetParameters(); parameters[0] += .07f;
                     layer.SetParameters(parameters);
                 }
-                Array.Fill(result, 777f);
+                for (int fill = 0; fill < result.Length; fill++) result[fill] = 777f;
                 binding.Execute();
                 // Run the binding first so the reference cannot refresh a weight cache for it.
                 var actual = output4.ToArray();
