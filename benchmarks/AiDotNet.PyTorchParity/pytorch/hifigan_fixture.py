@@ -78,14 +78,23 @@ class TensorFile:
     def __init__(self, path: Path):
         if sys.byteorder != "little":
             raise RuntimeError("The fixture's FP32 byte contract is little endian.")
-        self.stream = path.open("rb")
-        prefix = self.stream.read(8)
+        stream = path.open("rb")
+        try:
+            self._read_header(stream, path)
+        except BaseException:
+            # __exit__ never runs for a constructor that raised; do not leave the handle to the traceback.
+            stream.close()
+            raise
+        self.stream = stream
+
+    def _read_header(self, stream, path: Path):
+        prefix = stream.read(8)
         if len(prefix) != 8:
             raise ValueError("Truncated safetensors length.")
         length, = struct.unpack("<Q", prefix)
         if length > 16 * 1024 * 1024:
             raise ValueError("Unbounded safetensors metadata.")
-        self.entries = json.loads(self.stream.read(length))
+        self.entries = json.loads(stream.read(length))
         self.origin = 8 + length
         size = path.stat().st_size - self.origin
         for name, entry in self.entries.items():

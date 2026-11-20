@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 import warnings
 from pathlib import Path
 
@@ -22,6 +23,7 @@ import torch.nn.functional as F
 
 from benchmark import HifiGanV1, HifiMel, HIFI_HOP, HIFI_MELS, HIFI_RATE, HIFI_SEGMENT
 from export_reference import write_safetensors
+from hifigan_fixture import file_hash
 
 
 def ordered_layers(model: HifiGanV1):
@@ -135,7 +137,6 @@ def write_warning_receipt(out: Path, device: torch.device, warnings_seen, comple
 
 def export(out: Path, device: torch.device, seed: int, compile_model: bool, workload_root: Path | None = None):
     warnings_seen = []
-    completed = False
     with warnings.catch_warnings():
         previous_showwarning = warnings.showwarning
         def observe(message, category, filename, lineno, file=None, line=None):
@@ -144,10 +145,15 @@ def export(out: Path, device: torch.device, seed: int, compile_model: bool, work
             previous_showwarning(message, category, filename, lineno, file, line)
         warnings.showwarning = observe
         try:
+            # On success _export writes the one receipt whose digest the manifest records.
             _export(out, device, seed, compile_model, warnings_seen, workload_root)
-            completed = True
-        finally:
-            write_warning_receipt(out, device, warnings_seen, completed)
+        except BaseException:
+            # Best effort: a failing diagnostic write (a full volume, say) must not replace the export's own error.
+            try:
+                write_warning_receipt(out, device, warnings_seen, completed=False)
+            except Exception as receipt_error:
+                print(f"Could not write the failure receipt: {receipt_error!r}", file=sys.stderr)
+            raise
 
 
 def _export(out: Path, device: torch.device, seed: int, compile_model: bool, warnings_seen, workload_root: Path | None = None):
@@ -235,7 +241,8 @@ def _export(out: Path, device: torch.device, seed: int, compile_model: bool, war
         write_safetensors(out / f"step{step + 1}.safetensors", state(model))
     write_safetensors(out / "reference.safetensors", reference)
     names = ("initial", "isolated-gradients", "step1", "step2", "step3", "reference")
-    files = {name + ".safetensors": hashlib.sha256((out / (name + ".safetensors")).read_bytes()).hexdigest() for name in names}
+    # Streamed: a full checkpoint is hundreds of megabytes and the model is still held here.
+    files = {name + ".safetensors": file_hash(out / (name + ".safetensors")) for name in names}
     warning_receipt_hash = write_warning_receipt(out, device, warnings_seen, completed=True)
     manifest = {
         "schema": "hifigan-v1-equivalence-v1", "model": "hifigan-v1", "device": str(device),
@@ -290,7 +297,11 @@ def main():
     args = parser.parse_args()
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA correctness reference requested but CUDA is unavailable.")
-    args.out.mkdir(parents=True, exist_ok=True)
+    # A reused directory could be the workload fixture itself (its manifest would be replaced) or an older
+    # reference left half-updated by a failed export.
+    if args.out.exists():
+        parser.error(f"--out must name a directory that does not exist yet: {args.out}")
+    args.out.mkdir(parents=True)
     export(args.out, torch.device(args.device), args.seed, compile_model=not args.eager,
            workload_root=args.workload_fixture)
 
