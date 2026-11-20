@@ -5,10 +5,16 @@ Twin of the C# harness (../Program.cs): same four reference models
 training + multi-batch inference measurement loop, and the same JSON schema,
 so the two reports compare directly via compare.py.
 
-The performance target uses --compile (TorchInductor), including first-epoch
-and steady-state measurements. Without that flag this script measures an eager
-baseline. Pin both sides to the same device and CPU thread count:
-    python benchmark.py --threads 8 --compile ...
+Execution modes. Without --compile the models run eager. With --compile each
+model is wrapped in torch.compile with static shapes (dynamic=False), so every
+inference batch size gets its own specialized graph instead of the
+automatic-dynamic symbolic graph a second batch size would otherwise trigger.
+--compile-mode selects the TorchInductor mode (reduce-overhead adds CUDA
+graphs) and --optimizer-impl selects AdamW's implementation (fused on CPU and
+CUDA). ../run_matrix.py runs several of these PyTorch configurations against
+AiDotNet and compares AiDotNet to the fastest one. Pin both sides to the same
+CPU thread count:
+    python benchmark.py --threads 8 ...
     dotnet run ... (set AIDOTNET_CPU_THREADS=8)
 
 Usage:
@@ -1352,10 +1358,10 @@ class DCGAN64(nn.Module):
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         return self.generator(z)
 
-    def compile_parts(self) -> None:
+    def compile_parts(self, **compile_options: object) -> None:
         """--compile: train_step calls the two networks directly, so compile them rather than only forward."""
-        self.generator = torch.compile(self.generator)
-        self.discriminator = torch.compile(self.discriminator)
+        self.generator = torch.compile(self.generator, **compile_options)
+        self.discriminator = torch.compile(self.discriminator, **compile_options)
 
     def train_step(self, z: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
         if self._optimizers is None:
@@ -1911,6 +1917,16 @@ def synchronize(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
+def begin_step(cuda_graphs: bool) -> None:
+    """Tell CUDA-graph trees that a new iteration starts, so a replay may reuse the previous iteration's buffers.
+
+    reduce-overhead records CUDA graphs. Without the marker, a training step that follows an un-run backward or an
+    inference call whose output is still alive falls back off the graph fast path.
+    """
+    if cuda_graphs:
+        torch.compiler.cudagraph_mark_step_begin()
+
+
 def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device,
                     model: nn.Module | None = None) -> tuple[torch.Tensor, torch.Tensor]:
     # A row whose data is not "randn input, random class" (DDPM's clean images) generates its own batch.
@@ -1925,13 +1941,17 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
     return x, y
 
 
-def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False, model_name: str = "") -> TrainingResult:
+def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False,
+                       optimizer_impl: str = "default", cuda_graphs: bool = False, model_name: str = "") -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
     # A row whose step updates several networks (the GAN) owns its optimizers and its whole step (train_step).
+    # optimizer_impl "fused" selects AdamW's single-kernel implementation (CPU and CUDA); "default" lets PyTorch pick
+    # (foreach on CUDA).
+    adamw_options = {"fused": True} if optimizer_impl == "fused" else {}
     optimizer = (None if hasattr(model, "train_step")
                  else model.make_optimizer() if hasattr(model, "make_optimizer")
-                 else torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3})))
+                 else torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3}), **adamw_options))
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []
@@ -1959,10 +1979,12 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             mark_phase(model_name, f"training-epoch-{epoch}")
             start_epoch = time.perf_counter()
             for x, y in pool:
+                begin_step(cuda_graphs)
                 if optimizer is None:
                     loss = model.train_step(x, y)
                     if first_loss is None:
-                        first_loss = loss.detach()
+                        # A copy: a CUDA-graph replay overwrites the step's output buffer.
+                        first_loss = loss.detach().clone()
                     continue
 
                 optimizer.zero_grad(set_to_none=True)
@@ -1981,7 +2003,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                     # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
                     loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
-                    first_loss = loss.detach()
+                    # A copy: a CUDA-graph replay overwrites the step's output buffer.
+                    first_loss = loss.detach().clone()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
                 # which attributes time to the backward. Default timing matches AiDotNet's loop.
                 if breakdown:
@@ -2034,7 +2057,8 @@ def json_loss(value: float) -> float | str:
 
 @torch.inference_mode()
 def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
-                        batch_sizes: list[int], warmup_min_ms: float = 0.0, model_name: str = "") -> list[InferenceBatchResult]:
+                        batch_sizes: list[int], warmup_min_ms: float = 0.0, cuda_graphs: bool = False,
+                        model_name: str = "") -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
         mark_phase(model_name, f"inference-b{batch_size}-prepare")
@@ -2046,6 +2070,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
         # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
         warmup_start = time.perf_counter()
         while len(warmup_times) < warmup or (time.perf_counter() - warmup_start) * 1000.0 < warmup_min_ms:
+            begin_step(cuda_graphs)
             start = time.perf_counter()
             model(x)
             synchronize(device)
@@ -2060,6 +2085,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
         rss_peak = process.memory_info().rss / 1024 / 1024
         steady: list[float] = []
         for _ in range(iterations):
+            begin_step(cuda_graphs)
             start = time.perf_counter()
             model(x)
             synchronize(device)
@@ -2181,6 +2207,13 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
 
     # Validated before any model trains: a bad entry used to surface only after the first model's training run.
     inference_batches = parse_inference_batches(args.inference_batches)
+    # Static shapes: training at one batch size and then inferring at several would otherwise make Dynamo mark the batch
+    # dimension dynamic and time a symbolic-shape graph. Each shape and grad mode gets its own graph, so allow enough.
+    compile_options: dict[str, object] = {"dynamic": False, "mode": args.compile_mode}
+    if args.compile:
+        torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 8 + 2 * len(inference_batches))
+    # CUDA graphs only exist on a CUDA device; reduce-overhead on the CPU runs the default Inductor code.
+    cuda_graphs = args.compile and device.type == "cuda" and args.compile_mode == "reduce-overhead"
 
     model_results: list[ModelResult] = []
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
@@ -2213,15 +2246,15 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             # attribute forwarding, which runs the original eager module: compile that path too, so --compile times
             # compiled training rather than only compiled inference.
             if hasattr(model, "compile_parts"):
-                model.compile_parts()
+                model.compile_parts(**compile_options)
             elif hasattr(model, "training_loss"):
-                model.training_loss = torch.compile(model.training_loss)
+                model.training_loss = torch.compile(model.training_loss, **compile_options)
             if lstm_path is not None:
                 model = torch.compile(model, backend=fixture.compilation, fullgraph=True, dynamic=False)
                 if args.lstm_numerics:
                     return fixture.numeric(original, model, args.lstm_numerics)
             else:
-                model = torch.compile(model)
+                model = torch.compile(model, **compile_options)
         if fixture_path is not None:
             model.eval()
             with torch.no_grad():
@@ -2231,11 +2264,12 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
 
         mark_phase(name, "construction-complete")
         mark_phase(name, "training-prepare")
-        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown, name)
+        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown,
+                                      args.optimizer_impl, cuda_graphs, model_name=name)
         mark_phase(name, "training-complete")
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
-                                        inference_batches, args.warmup_min_ms, name)
+                                        inference_batches, args.warmup_min_ms, cuda_graphs, model_name=name)
         if fixture is not None:
             fixture.complete()
 
@@ -2249,16 +2283,28 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         "device": str(device),
         "torch_num_threads": torch.get_num_threads(),
         "cuda_available": torch.cuda.is_available(),
-        "protocol": {"epochs": args.epochs, "train_batches": args.train_batches, "batch_size": args.batch_size,
-                     "inference_iterations": args.inference_iterations, "warmup_iterations": args.warmup_iterations,
-                     "warmup_min_ms": args.warmup_min_ms, "seed": args.seed, "inference_batch_sizes": inference_batches,
-                     "compile": args.compile},
+        # How this PyTorch side executed, so a reader of the report does not have to trust the launcher's command line.
+        "protocol": {
+            "compile": bool(args.compile),
+            "compile_mode": args.compile_mode if args.compile else None,
+            "dynamic_shapes": False if args.compile else None,
+            "cuda_graphs": cuda_graphs,
+            "optimizer_impl": args.optimizer_impl,
+            "epochs": args.epochs,
+            "train_batches": args.train_batches,
+            "batch_size": args.batch_size,
+            "inference_iterations": args.inference_iterations,
+            "warmup_iterations": args.warmup_iterations,
+            "warmup_min_ms": args.warmup_min_ms,
+            "inference_batch_sizes": inference_batches,
+            "seed": args.seed,
+        },
         "results": [asdict(result) for result in model_results],
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark PyTorch MLP/CNN/LSTM/Transformer workloads (eager).")
+    parser = argparse.ArgumentParser(description="Benchmark the PyTorch twins of the AiDotNet parity rows (eager, or torch.compile with --compile).")
     parser.add_argument("--models", default="mlp,cnn,lstm,transformer")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--epochs", type=int, default=3)
@@ -2277,7 +2323,12 @@ def main() -> None:
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
                              "Match the AiDotNet side's AIDOTNET_CPU_THREADS for a fair comparison.")
     parser.add_argument("--compile", action="store_true",
-                        help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
+                        help="Wrap each model in torch.compile (TorchInductor, static shapes) — the 'PyTorch compiled' head-to-head.")
+    parser.add_argument("--compile-mode", default="default",
+                        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
+                        help="torch.compile mode under --compile. reduce-overhead records CUDA graphs on a CUDA device.")
+    parser.add_argument("--optimizer-impl", default="default", choices=["default", "fused"],
+                        help="AdamW implementation: PyTorch's default choice (foreach on CUDA) or the fused kernel.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
     parser.add_argument("--hifigan-fixture", type=Path)
     parser.add_argument("--hifigan-workload-receipt", type=Path)

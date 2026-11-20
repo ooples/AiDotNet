@@ -1584,6 +1584,8 @@ internal static class RunEnvironmentProbe
         GcServer: System.Runtime.GCSettings.IsServerGC,
         GcConcurrent: false,
         EngineDevice: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name,
+        // The engine type alone does not identify the DirectGpu backend (CUDA, OpenCL, HIP ...); the name does.
+        EngineName: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Name,
         // The thread count the CPU kernels actually fan out to (AIDOTNET_CPU_THREADS, else the physical core count),
         // recorded so a "matched threads" comparison can be checked against the report.
         CpuThreads: AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
@@ -1616,6 +1618,7 @@ internal sealed record RunEnvironment(
     bool GcServer,
     bool GcConcurrent,
     string EngineDevice,
+    string EngineName,
     int CpuThreads);
 
 internal static class JsonOptions
