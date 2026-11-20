@@ -30,8 +30,21 @@ class LstmEquivalenceTests(unittest.TestCase):
             ("lstm.bias_ih_l0", (256,)), ("lstm.bias_hh_l0", (256,)), ("head.weight", (10, 64)),
             ("head.bias", (10,)))}
         initial["lstm.bias_hh_l0"].fill(0)
+        # PyTorch packs the gates as i, f, g, o in 64-row blocks. Each block gets its own value, and the canonical
+        # expectation is written out here, so a scorer that swaps two gate slices cannot agree with itself.
+        self.gates = {"i": 1, "f": 2, "g": 3, "o": 4}
+        parameters = {"head/weight": np.full((10, 64), 8, dtype=np.float32),
+                      "head/bias": np.full((10,), 8, dtype=np.float32)}
+        for block, (gate, value) in enumerate(self.gates.items()):
+            rows = slice(block * 64, (block + 1) * 64)
+            initial["lstm.weight_ih_l0"][rows] = value
+            initial["lstm.weight_hh_l0"][rows] = value + 10
+            initial["lstm.bias_ih_l0"][rows] = value + 20
+            parameters[f"lstm/{gate}/weight_ih"] = np.full((64, 32), value, dtype=np.float32)
+            parameters[f"lstm/{gate}/weight_hh"] = np.full((64, 64), value + 10, dtype=np.float32)
+            parameters[f"lstm/{gate}/bias"] = np.full((64,), value + 20, dtype=np.float32)
+        self.initial, self.parameters = initial, parameters
         write_f32(self.root / "initial", initial)
-        parameters = _initial_lstm_parameters(initial)
         self.observations = {f"inference/b{n}/logits": np.ones((n, 10), dtype=np.float32) for n in (1, 8, 16)}
         for step in range(1, 4):
             prefix = f"train/step{step}/"
@@ -45,6 +58,12 @@ class LstmEquivalenceTests(unittest.TestCase):
     def score(self):
         write_f32(self.root / "candidate", self.observations)
         return compare_lstm_trajectory(self.root / "candidate", self.root / "reference", self.root / "initial")
+
+    def test_each_raw_gate_block_maps_to_its_own_canonical_key(self):
+        canonical = _initial_lstm_parameters(self.initial)
+        self.assertEqual(set(self.parameters), set(canonical))
+        for key, expected in self.parameters.items():
+            np.testing.assert_array_equal(expected, canonical[key], err_msg=key)
 
     def test_three_real_updates_and_every_inference_batch(self):
         self.assertEqual({"status": "pass", "checks": 93, "failures": {}}, self.score())

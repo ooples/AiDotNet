@@ -86,6 +86,29 @@ class LstmFixtureTests(unittest.TestCase):
             self.assertFalse(torch.backends.mkldnn.enabled)
         self.assertEqual(original, torch.backends.mkldnn.enabled)
 
+    def test_failed_invocation_records_no_execution_and_the_retry_records_one(self):
+        graph = SimpleNamespace(code="torch.lstm(x)", graph=SimpleNamespace(nodes=[
+            SimpleNamespace(op="call_function", target=torch.lstm)]))
+        attempts = []
+
+        def backend(x):
+            attempts.append(x.shape[0])
+            if len(attempts) == 1:
+                raise RuntimeError("backend failed")
+            return x
+
+        compiler = ExecutedInductor()
+        with patch("torch._dynamo.backends.registry.lookup_backend", return_value=lambda g, args: backend):
+            guarded = compiler(graph, [])
+        with torch.inference_mode():
+            with self.assertRaisesRegex(RuntimeError, "backend failed"):
+                guarded(torch.zeros(8, 32, 32))
+            self.assertEqual({}, compiler.signatures)
+            guarded(torch.zeros(8, 32, 32))
+        self.assertEqual([8, 8], attempts)
+        self.assertEqual(["inference-b8"], list(compiler.signatures))
+        self.assertEqual(1, compiler.signatures["inference-b8"]["executions"])
+
     def test_receipt_counts_only_successful_invocations_bound_to_real_batch_size(self):
         # Isolate the observer here. The independent numerical process runs the real Inductor backend.
         graph = SimpleNamespace(code="torch.lstm(x)", graph=SimpleNamespace(nodes=[
