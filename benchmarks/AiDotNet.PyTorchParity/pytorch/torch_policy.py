@@ -1,4 +1,9 @@
-"""Same-process observation or explicitly disclosed reference policy around an unchanged benchmark."""
+"""Same-process observation or explicitly disclosed reference policy around an unchanged benchmark.
+
+Scoring contract: a formal PyTorch score run must carry the hashed list of native images the process loaded.
+Only the Windows observer produces that list, so formal PyTorch scoring is Windows-only; the gate rejects a
+score run from another platform with that reason. Observation runs work everywhere.
+"""
 import argparse
 import atexit
 import hashlib
@@ -63,7 +68,11 @@ def compare_reference(snapshot, manifest):
 def loaded_native_files():
     """Read already-loaded Windows images. Never create CUDA/vendor handles or load those libraries."""
     if os.name != "nt":
-        return {"status": "unverified", "reason": "This native-image observer currently supports Windows.", "files": []}
+        # Scoring contract: a formal PyTorch score needs the hashed list of loaded native images, and only the
+        # Windows observer below produces it. reference_policy_gate rejects a score run from any other platform
+        # with this reason instead of a generic "unavailable".
+        return {"status": "unverified", "platform": os.name, "files": [],
+                "reason": "Formal PyTorch scoring is Windows-only: the loaded native-image observer supports Windows."}
     import ctypes
     from ctypes import wintypes
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -127,8 +136,11 @@ def main():
         raise ValueError("Policy receipt must be fresh; preserve previous observations.")
     benchmark = args.benchmark.resolve()
     arguments = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments
-    manifest = json.loads(args.reference_manifest.read_text(encoding="utf-8-sig")) if args.reference_manifest else None
-    manifest_hash = sha(args.reference_manifest) if args.reference_manifest else None
+    # Each policy document is read once: the policy applied and the digest in the receipt come from the same
+    # bytes, so a document replaced in between cannot be named by a receipt for the old policy.
+    manifest_bytes = args.reference_manifest.read_bytes() if args.reference_manifest else None
+    manifest = json.loads(manifest_bytes.decode("utf-8-sig")) if manifest_bytes is not None else None
+    manifest_hash = hashlib.sha256(manifest_bytes).hexdigest() if manifest_bytes is not None else None
     if manifest is not None and manifest.get("benchmark_source_sha256") != sha(benchmark):
         raise ValueError("Reference manifest describes a different benchmark source recipe.")
     original_environment = {name: os.environ.get(name) for name in OVERRIDE_ENVIRONMENT}
@@ -136,7 +148,8 @@ def main():
     environment = None
     reference_policy = dict(manifest) if manifest else None
     if args.reference_environment is not None:
-        environment = json.loads(args.reference_environment.read_text(encoding="utf-8-sig"))
+        environment_bytes = args.reference_environment.read_bytes()
+        environment = json.loads(environment_bytes.decode("utf-8-sig"))
         if environment.get("reference_manifest_sha256") != manifest_hash:
             raise ValueError("Reference startup policy does not bind this exact manifest.")
         evidence = environment.get("evidence", [])
@@ -148,7 +161,8 @@ def main():
             if key in reference_policy and reference_policy[key] != value:
                 raise ValueError("A reference policy attestation cannot override a recorded manifest field.")
             reference_policy[key] = value
-        environment_binding = {"path": str(args.reference_environment.resolve()), "sha256": sha(args.reference_environment)}
+        environment_binding = {"path": str(args.reference_environment.resolve()),
+                               "sha256": hashlib.sha256(environment_bytes).hexdigest()}
     setters = []
     if args.mode == "strict-reference":
         if manifest is None or manifest.get("tf32") is not False or manifest.get("deterministic_algorithms") is not True:

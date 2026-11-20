@@ -386,8 +386,11 @@ def reference_policy_gate(run: dict) -> dict:
             raise ValueError("Precision override environment changed during the benchmark.")
         if attestation is not None and any(expected_env.get(key) != value for key, value in attestation.get("environment", {}).items()):
             raise ValueError("Effective precision environment differs from the reference startup policy.")
-        if policy.get("native", {}).get("status") != "observed_loaded_images":
-            raise ValueError("Loaded native-image observation is unavailable.")
+        native = policy.get("native")
+        if not isinstance(native, dict) or native.get("status") != "observed_loaded_images":
+            # A non-Windows producer states that formal scoring is Windows-only; pass that reason through.
+            reason = native.get("reason") if isinstance(native, dict) else None
+            raise ValueError(reason if isinstance(reason, str) and reason else "Loaded native-image observation is unavailable.")
         native_files = policy["native"].get("files")
         if not isinstance(native_files, list) or not native_files or any(
                 not isinstance(item, dict) or not isinstance(item.get("path"), str) or not re.fullmatch("[a-f0-9]{64}", item.get("sha256", ""))
