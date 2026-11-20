@@ -300,6 +300,42 @@ class Sampler:
         return self.samples
 
 
+def hifigan_workload_gate(run: dict) -> dict:
+    """Require this process's own receipt for the shared HiFi-GAN fixture.
+
+    A report can name the requested model, seed, batch sizes and parameter count after running the ordinary
+    workload. Only the receipt written by the fixture consumer proves which state, inputs and crops the scored
+    process used. Both sides are checked against one hashed manifest, so they identify the same workload.
+    """
+    try:
+        manifest_path = Path(run["artifact_paths"]["hifigan_fixture_manifest"])
+        if streaming_sha(manifest_path) != run["artifacts"]["hifigan_fixture_manifest"]:
+            raise ValueError("The HiFi-GAN fixture manifest changed after launch.")
+        manifest = read_json(manifest_path)
+        record = read_json(raw_file(run, "hifigan_workload"))
+        if not isinstance(manifest, dict) or not isinstance(record, dict):
+            raise ValueError("The HiFi-GAN fixture manifest or workload receipt is not a JSON object.")
+        if (record.get("schema") != "hifigan-shared-workload-consumption-v1" or record.get("framework") != run["side"]
+                or type(record.get("pid")) is not int or record["pid"] != run["pid"]):
+            raise ValueError("HiFi-GAN workload receipt differs from the measured process or framework.")
+        if record.get("preflight_pass") is not True or record.get("pass") is not True:
+            raise ValueError("The process did not consume the complete shared HiFi-GAN workload.")
+        if (record.get("fixture_manifest_sha256") != run["artifacts"]["hifigan_fixture_manifest"]
+                or record.get("state_sha256") != manifest["state_sha256"]
+                or record.get("state_tensor_count") != manifest["state_tensor_count"]):
+            raise ValueError("HiFi-GAN workload receipt names a different fixture or initial state.")
+        if record.get("inputs") != manifest["inputs"]:
+            raise ValueError("HiFi-GAN workload receipt consumed different input tensors.")
+        steps = [{key: step[key] for key in ("index", "pool_index", "crop_start")} for step in manifest["training_steps"]]
+        if not steps or record.get("consumed_steps") != steps:
+            raise ValueError("HiFi-GAN workload receipt consumed different training steps or crops.")
+        if record.get("inference_batches_consumed") != manifest["protocol"]["inference_batches"]:
+            raise ValueError("HiFi-GAN workload receipt consumed different inference batches.")
+        return {"status": "pass"}
+    except (KeyError, TypeError, ValueError, OSError) as error:
+        return {"status": "unverified", "reason": str(error) or type(error).__name__}
+
+
 def reference_recipe_gate(run: dict) -> dict:
     """Require the actual hashed reference manifest to name the scored Torch recipe."""
     if run.get("model") == "lstm":
@@ -507,6 +543,13 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
             argv.extend(["--lstm-fixture", str(Path(config["artifacts"]["lstm_fixture_manifest"]).resolve().parent)])
         if "--lstm-workload-receipt" not in argv:
             argv.extend(["--lstm-workload-receipt", str(run_dir / "lstm-workload.json")])
+    if model == "hifigan" and "hifigan_fixture_manifest" in config["artifacts"]:
+        # The gate reads the receipt from the process directory, so a command cannot redirect or omit it.
+        if "--hifigan-workload-receipt" in argv:
+            raise ValueError("The campaign owns --hifigan-workload-receipt; remove it from the command.")
+        if "--hifigan-fixture" not in argv:
+            argv.extend(["--hifigan-fixture", str(Path(config["artifacts"]["hifigan_fixture_manifest"]).resolve().parent)])
+        argv.extend(["--hifigan-workload-receipt", str(run_dir / "hifigan-workload.json")])
     original_argv = argv.copy()
     bootstrap_receipt = None
     if side == "pytorch":
@@ -635,7 +678,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     phases = phase_records(run_dir / "phases.jsonl")
     raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json",
                  "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite",
-                 "lstm_workload": "lstm-workload.json"}
+                 "lstm_workload": "lstm-workload.json", "hifigan_workload": "hifigan-workload.json"}
     metadata["diagnostic_files"] = {key: {"name": name, "sha256": streaming_sha(run_dir / name)}
                                     for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
@@ -823,6 +866,10 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
         workload = lstm_workload_gate(run)
         if workload["status"] != "pass":
             errors.append("LSTM workload: " + workload["reason"])
+    if run["model"] == "hifigan":
+        workload = hifigan_workload_gate(run)
+        if workload["status"] != "pass":
+            errors.append("HiFi-GAN workload: " + workload["reason"])
     if model.get("device") != run["device"]:
         errors.append("device mismatch")
     for name in ("epochs", "train_batches", "batch_size", "inference_iterations", "warmup_iterations", "warmup_min_ms", "seed", "inference_batch_sizes"):
@@ -901,6 +948,8 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
                     allocation_rows[side].append(({}, ["Allocation diagnostic cache coverage is incomplete."]))
                 elif model == "lstm" and lstm_workload_gate(diagnostic)["status"] != "pass":
                     allocation_rows[side].append(({}, ["Allocation diagnostic did not run the matched LSTM workload."]))
+                elif model == "hifigan" and hifigan_workload_gate(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic did not run the matched HiFi-GAN workload."]))
                 else:
                     allocation_rows[side].append(allocation_metrics(diagnostic))
         # Compare computed exact/upper Ai bounds against exact/lower Torch bounds.

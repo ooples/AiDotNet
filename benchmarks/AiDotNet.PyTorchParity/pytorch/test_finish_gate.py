@@ -9,7 +9,7 @@ import psutil
 
 from benchmark_telemetry import cpu_storage_events
 from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_comparison_kinds, hifigan_comparison_policy, hifigan_required_checks, launch, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
-from finish_gate import warmed_cuda_calls_gate
+from finish_gate import hifigan_workload_gate, warmed_cuda_calls_gate
 
 
 class GateTests(unittest.TestCase):
@@ -201,6 +201,66 @@ class GateTests(unittest.TestCase):
                 "path": str(seed), "sha256": {"kernel": "incorrect"}}}}
             with self.assertRaisesRegex(ValueError, "differs"):
                 cache_environment(run, policy, "pytorch")
+
+    def hifigan_workload_run(self, root, side="aidotnet", **changes):
+        steps = [{"index": index, "pool_index": index % 2, "crop_start": index * 3, "cropped_mel": {"sha256": "m"}}
+                 for index in range(9)]
+        manifest = {"state_sha256": "s" * 64, "state_tensor_count": 404, "inputs": {"inference/1/mel": {"sha256": "i"}},
+                    "training_steps": steps, "protocol": {"inference_batches": [1, 8, 16]}}
+        manifest_path = root / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+        manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        record = {"schema": "hifigan-shared-workload-consumption-v1", "framework": side, "pid": 4321,
+                  "preflight_pass": True, "pass": True, "fixture_manifest_sha256": manifest_hash,
+                  "state_sha256": "s" * 64, "state_tensor_count": 404, "inputs": manifest["inputs"],
+                  "consumed_steps": [{key: step[key] for key in ("index", "pool_index", "crop_start")} for step in steps],
+                  "inference_batches_consumed": [1, 8, 16]}
+        record.update(changes)
+        receipt = root / "hifigan-workload.json"
+        receipt.write_text(json.dumps(record))
+        return {"path": str(root), "side": side, "pid": 4321, "model": "hifigan",
+                "artifacts": {"hifigan_fixture_manifest": manifest_hash},
+                "artifact_paths": {"hifigan_fixture_manifest": str(manifest_path)},
+                "diagnostic_files": {"hifigan_workload": {"name": receipt.name,
+                                                          "sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}}}
+
+    def test_hifigan_run_must_carry_its_own_receipt_for_the_shared_fixture(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for side in ("aidotnet", "pytorch"):
+                self.assertEqual({"status": "pass"}, hifigan_workload_gate(self.hifigan_workload_run(root, side)))
+            # The ordinary workload writes no receipt: the report alone cannot stand in for it.
+            run = self.hifigan_workload_run(root)
+            del run["diagnostic_files"]["hifigan_workload"]
+            self.assertEqual("unverified", hifigan_workload_gate(run)["status"])
+            (root / "report.json").write_text(json.dumps({"results": [{"model": "hifigan", "device": "cpu"}]}))
+            errors = metrics(dict(run, mode="score", device="cpu", return_code=0, memory={},
+                                  protocol={"inference_batch_sizes": [1]}))[1]
+            self.assertTrue(any(error.startswith("HiFi-GAN workload: ") for error in errors), errors)
+            for reason, changes in (
+                    ("measured process", {"pid": 9999}),
+                    ("measured process", {"framework": "pytorch"}),
+                    ("complete shared", {"pass": False}),
+                    ("different fixture", {"fixture_manifest_sha256": "0" * 64}),
+                    ("different fixture", {"state_sha256": "0" * 64}),
+                    ("different input", {"inputs": {}}),
+                    ("different training steps", {"consumed_steps": []}),
+                    ("different inference", {"inference_batches_consumed": [1]})):
+                result = hifigan_workload_gate(self.hifigan_workload_run(root, **changes))
+                self.assertEqual("unverified", result["status"], changes)
+                self.assertIn(reason, result["reason"], changes)
+
+    def test_campaign_supplies_the_hifigan_fixture_and_owns_the_receipt_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = root / "fixture" / "manifest.json"
+            manifest.parent.mkdir()
+            manifest.write_text("{}")
+            config = self.launch_config()
+            config["artifacts"] = dict(config.get("artifacts", {}), hifigan_fixture_manifest=str(manifest))
+            config["commands"]["aidotnet"]["argv"] += ["--hifigan-workload-receipt", "elsewhere.json"]
+            with self.assertRaisesRegex(ValueError, "campaign owns --hifigan-workload-receipt"):
+                launch(config, "aidotnet", "hifigan", "cpu", 0, "score", root / "out")
 
     def test_missing_reports_cannot_pass_or_silently_drop_allocator_gates(self):
         with tempfile.TemporaryDirectory() as temporary:
