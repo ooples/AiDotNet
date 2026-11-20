@@ -1366,7 +1366,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     internal bool TryForwardLastHiddenState(Tensor<T> input, out Tensor<T> result)
     {
         result = null!;
-        if (GetType() != typeof(LSTMLayer<T>) || IsTrainingMode || !_isInitialized || !IsShapeResolved ||
+        if (GetType() != typeof(LSTMLayer<T>) || IsTrainingMode || !_isInitialized || !IsShapeResolved || RequiresForwardInputValidation ||
             IsInferringShapes || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ||
             AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ||
             AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null ||

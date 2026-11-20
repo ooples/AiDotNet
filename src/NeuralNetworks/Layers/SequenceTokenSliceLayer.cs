@@ -55,7 +55,7 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>, IShapeContract
     private readonly Position _position;
 
     internal bool CanConsumeLastHiddenState =>
-        GetType() == typeof(SequenceTokenSliceLayer<T>) && IsShapeResolved && _position == Position.Last;
+        GetType() == typeof(SequenceTokenSliceLayer<T>) && IsShapeResolved && !RequiresForwardInputValidation && _position == Position.Last;
 
 
     /// <inheritdoc />
