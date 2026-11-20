@@ -4740,12 +4740,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // a manifest on every layer of every training step would add allocations without adding a
         // check. Semantic domains (indices/masks/custom), generated shape rules and multi-port
         // contracts still take the strict path. Public model boundaries validate unconditionally.
-        var ports = InputPorts;
-        bool needsContractValidation = ports.Count != 1
-            || ports[0].Source != TensorPortSource.External
-            || ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous
-            || ports[0].ShapeConstraint.IsConstrained;
-        if (needsContractValidation)
+        if (RequiresForwardInputValidation)
             BindInputContract(input.Shape.ToArray()).Validate(input);
 
         // Shape-only model traversal must stop at leaves. Composite layers still execute their
@@ -4765,6 +4760,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var output = ForwardTraced(input);
         observer.Record(this, input, output);
         return output;
+    }
+
+    internal bool RequiresForwardInputValidation
+    {
+        get
+        {
+            var ports = InputPorts;
+            return ports.Count != 1 || ports[0].Source != TensorPortSource.External ||
+                ports[0].ValueDomain.Kind != LayerInputDomainKind.Continuous || ports[0].ShapeConstraint.IsConstrained;
+        }
     }
 
     /// <summary>
