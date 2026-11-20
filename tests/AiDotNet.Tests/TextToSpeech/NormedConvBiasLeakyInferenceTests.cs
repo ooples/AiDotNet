@@ -145,13 +145,13 @@ public sealed class NormedConvBiasLeakyInferenceTests
                 bool hasFused = typeof(DirectGpuTensorEngine).GetMethod("TryChannelBiasLeakyInference",
                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) is not null;
                 Assert.Equal(ordinaryLaunches - (hasFused ? 1 : 0), fusedLaunches);
-                Assert.Equal(expected.Select(BitConverter.SingleToInt32Bits), fused.ToArray().Select(BitConverter.SingleToInt32Bits));
+                Assert.Equal(expected.Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), fused.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
                 using (GraphCaptureCompatibility.Enter())
                 {
                     before = GpuLaunchProbe.Count;
                     using var guarded = layer.ForwardLeakyInference(input, .1f);
                     Assert.Equal(ordinaryLaunches, GpuLaunchProbe.Count - before);
-                    Assert.Equal(expected.Select(BitConverter.SingleToInt32Bits), guarded.ToArray().Select(BitConverter.SingleToInt32Bits));
+                    Assert.Equal(expected.Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), guarded.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
                 }
             }
         }

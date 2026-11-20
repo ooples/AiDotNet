@@ -102,8 +102,8 @@ public sealed class GanTrainingInputLifetimeTests
             var initial = model.GetParameters().ToArray();
             foreach (int frames in new[] { 12, 16, 10, 16 })
             {
-                var melValues = Enumerable.Range(0, 8 * frames).Select(i => .1f * MathF.Sin(i * .07f + frames)).ToArray();
-                var audioValues = Enumerable.Range(0, 16 * frames).Select(i => .2f * MathF.Sin(i * .17f + frames)).ToArray();
+                var melValues = Enumerable.Range(0, 8 * frames).Select(i => .1f * (float)Math.Sin(i * .07f + frames)).ToArray();
+                var audioValues = Enumerable.Range(0, 16 * frames).Select(i => .2f * (float)Math.Sin(i * .17f + frames)).ToArray();
                 using var mel = new Tensor<float>(melValues, new[] { 1, 8, frames });
                 using var audio = new Tensor<float>(audioValues, new[] { 16 * frames });
                 using var retainedView = engine.Reshape(mel, new[] { 8, frames });
@@ -113,7 +113,7 @@ public sealed class GanTrainingInputLifetimeTests
                 Assert.Equal(audioValues, audio.ToArray());
                 using var predicted = model.Predict(mel);
                 Assert.Equal(16 * frames, predicted.Length);
-                Assert.All(predicted.ToArray(), value => Assert.True(float.IsFinite(value)));
+                Assert.All(predicted.ToArray(), value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
             }
             Assert.False(initial.SequenceEqual(model.GetParameters().ToArray()));
         }

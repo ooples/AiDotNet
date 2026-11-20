@@ -62,7 +62,7 @@ public sealed class HiFiGanInferenceCacheRegimeTests
             candidate.Train(input, audio);
             var updated = candidate.GetParameters().ToArray();
             Assert.False(trainedParameters.ToArray().SequenceEqual(updated));
-            Assert.All(updated, value => Assert.True(float.IsFinite(value)));
+            Assert.All(updated, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
         }
         finally { AiDotNetEngine.Current = previous; gpu?.Dispose(); }
     }

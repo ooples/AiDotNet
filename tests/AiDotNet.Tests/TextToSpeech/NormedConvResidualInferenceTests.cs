@@ -113,6 +113,8 @@ public sealed class NormedConvResidualInferenceTests
         finally { AiDotNetEngine.Current = previous; }
     }
 
+    // Requires a physical CUDA device: the GPU category keeps it out of the CPU-only shards.
+    [Trait("Category", "GPU")]
     [Theory] [InlineData(false)] [InlineData(true)]
     public void Cuda_saves_launches_and_preserves_unread_carries_across_parameter_updates(bool writeActivation)
     {
@@ -167,9 +169,9 @@ public sealed class NormedConvResidualInferenceTests
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             foreach (var item in unread)
             {
-                Assert.Equal(item.Expected.Select(BitConverter.SingleToInt32Bits), item.Sum.ToArray().Select(BitConverter.SingleToInt32Bits));
+                Assert.Equal(item.Expected.Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), item.Sum.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
                 if (item.Activation is not null)
-                    Assert.Equal(item.ExpectedActivation!.Select(BitConverter.SingleToInt32Bits), item.Activation.ToArray().Select(BitConverter.SingleToInt32Bits));
+                    Assert.Equal((item.ExpectedActivation ?? throw new Xunit.Sdk.XunitException("An activation was produced without an expected value.")).Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), item.Activation.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
                 item.Sum.Dispose(); item.Activation?.Dispose();
             }
             Assert.Equal(originalInput, input.ToArray());
