@@ -2110,13 +2110,18 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     required = getattr(args, "require_matched_workload", False)
     if required and fixture_path is None and lstm_path is None:
         raise ValueError("Matched mode requires an explicit shared workload fixture.")
-    if lstm_path is None and (getattr(args, "lstm_numerics", None) or getattr(args, "lstm_workload_receipt", None)):
+    cpu_mkldnn = getattr(args, "lstm_cpu_mkldnn", None)
+    if lstm_path is None and (getattr(args, "lstm_numerics", None) or getattr(args, "lstm_workload_receipt", None)
+                              or cpu_mkldnn is not None):
         raise ValueError("LSTM receipts require --lstm-fixture")
     if lstm_path is not None:
         if fixture_path is not None or args.models.strip() != "lstm" or not args.compile:
             raise ValueError("A shared LSTM workload requires --models lstm --compile and its own fixture")
         from lstm_fixture import strict_lstm_settings
-        with strict_lstm_settings():
+        cpu = args.device == "cpu" or (args.device == "auto" and not torch.cuda.is_available())
+        if not cpu and cpu_mkldnn is not None:
+            raise ValueError("--lstm-cpu-mkldnn requires the CPU LSTM row")
+        with strict_lstm_settings(cpu_mkldnn=(cpu_mkldnn == "enabled") if cpu_mkldnn is not None else None):
             return _run(args)
     return _run(args)
 
@@ -2243,6 +2248,8 @@ def main() -> None:
     parser.add_argument("--lstm-fixture", type=Path)
     parser.add_argument("--lstm-workload-receipt", type=Path)
     parser.add_argument("--lstm-numerics", type=Path, help="Write three matched AdamW updates and inference observations.")
+    parser.add_argument("--lstm-cpu-mkldnn", choices=("enabled", "disabled"),
+                        help="Select the installed CPU backend only for a shared LSTM run. Omit to keep PyTorch's runtime default.")
     parser.add_argument("--require-matched-workload", action="store_true")
 
     args = parser.parse_args()

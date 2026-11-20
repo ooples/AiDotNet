@@ -72,17 +72,22 @@ def generate(root):
 
 
 @contextmanager
-def strict_lstm_settings():
+def strict_lstm_settings(*, cpu_mkldnn=None):
     old_matmul = torch.get_float32_matmul_precision()
     old_cudnn = torch.backends.cudnn.allow_tf32
+    old_mkldnn = torch.backends.mkldnn.enabled
     try:
         torch.set_float32_matmul_precision("highest")
         torch.backends.cudnn.allow_tf32 = False
+        if cpu_mkldnn is not None:
+            torch.backends.mkldnn.enabled = cpu_mkldnn
         with torch._dynamo.config.patch(allow_rnn=True):
             yield
     finally:
         torch.set_float32_matmul_precision(old_matmul)
         torch.backends.cudnn.allow_tf32 = old_cudnn
+        if cpu_mkldnn is not None:
+            torch.backends.mkldnn.enabled = old_mkldnn
 
 
 class ExecutedInductor:
@@ -131,6 +136,9 @@ class ExecutedInductor:
             raise RuntimeError("Missing executed LSTM Inductor signatures")
         return {"backend": "inductor", "dynamic": False, "fullgraph": True, "signatures": self.signatures,
                 "dtype": str(torch.get_default_dtype()).removeprefix("torch."),
+                "cpu_mkldnn_enabled": torch.backends.mkldnn.enabled,
+                "inductor_alignment_asserts": torch._inductor.config.alignment_asserts,
+                "inductor_size_asserts": torch._inductor.config.size_asserts,
                 "float32_matmul_precision": torch.get_float32_matmul_precision(),
                 "cuda_matmul_allow_tf32": torch.backends.cuda.matmul.allow_tf32,
                 "cudnn_allow_tf32": torch.backends.cudnn.allow_tf32}

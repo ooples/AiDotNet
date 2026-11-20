@@ -80,6 +80,12 @@ class LstmFixtureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Missing executed"):
             compiler.evidence()
 
+    def test_cpu_mkldnn_reference_setting_is_scoped(self):
+        original = torch.backends.mkldnn.enabled
+        with strict_lstm_settings(cpu_mkldnn=False):
+            self.assertFalse(torch.backends.mkldnn.enabled)
+        self.assertEqual(original, torch.backends.mkldnn.enabled)
+
     def test_receipt_counts_only_successful_invocations_bound_to_real_batch_size(self):
         # Isolate the observer here. The independent numerical process runs the real Inductor backend.
         graph = SimpleNamespace(code="torch.lstm(x)", graph=SimpleNamespace(nodes=[
