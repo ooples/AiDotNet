@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -45,7 +46,8 @@ class PolicyTests(unittest.TestCase):
             argv += ["--reference-environment", str(environment_path)]
         argv += ["--", "--device", "cuda"]
         registered = []
-        with patch("sys.argv", argv), patch.dict("sys.modules", torch=self.torch), \
+        # main() adds the benchmark directory to sys.path; a copy keeps that out of later tests.
+        with patch("sys.argv", argv), patch("sys.path", list(sys.path)), patch.dict("sys.modules", torch=self.torch), \
              patch("torch_policy.atexit.register", side_effect=registered.append), \
              patch("torch_policy.runpy.run_path", return_value={}) as run, \
              patch("torch_policy.loaded_native_files", return_value={"status": "fixture", "files": []}):

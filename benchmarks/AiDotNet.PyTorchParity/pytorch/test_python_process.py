@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -16,9 +17,11 @@ class PythonProcessTests(unittest.TestCase):
         self.launch = Mock(pid=100)
         self.launch.poll.return_value = None
 
-    def record(self, pid=200, birth=100.1):
-        self.receipt.write_text(json.dumps({"schema": "benchmark-python-process-v1", "pid": pid,
-                                           "process_create_time": birth}), encoding="utf-8")
+    def record(self, pid=200, birth=100.1, target=None):
+        record = {"schema": "benchmark-python-process-v1", "pid": pid, "process_create_time": birth}
+        if target is not None:
+            record.update(target=str(target), target_sha256=hashlib.sha256(target.read_bytes()).hexdigest())
+        self.receipt.write_text(json.dumps(record), encoding="utf-8")
 
     @staticmethod
     def process(pid, birth, parents=()):
@@ -69,8 +72,12 @@ class PythonProcessTests(unittest.TestCase):
             bootstrap_argv(["python", str(target)], __file__, self.receipt)
 
     def test_changed_target_bytes_cannot_supply_an_identity_receipt(self):
-        self.record()
         target = self.root / "target.py"
+        target.write_text("original", encoding="utf-8")
+        self.record(target=target)
+        # The recorded bytes resolve: the rejection below is for the changed bytes, not for an absent hash.
+        with patch("python_process.psutil.Process", side_effect=[self.process(100, 100), self.process(200, 100.1, [100])]):
+            self.assertEqual(200, resolve_python_process(self.launch, self.receipt, expected_target=target)["pid"])
         target.write_text("changed", encoding="utf-8")
         with patch("python_process.psutil.Process", return_value=self.process(100, 100)), patch("python_process.stop_launch"):
             with self.assertRaisesRegex(ValueError, "source differs"):
