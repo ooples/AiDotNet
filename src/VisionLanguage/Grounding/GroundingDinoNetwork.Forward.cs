@@ -148,18 +148,12 @@ internal sealed partial class GroundingDinoNetwork<T>
             even[i] = i % 2 == 0 ? 1 : 0;
             odd[i] = 1 - even[i];
         }
-        Tensor<T> Broadcast(double[] values) => _engine.TensorBroadcastTo(Constants(new[] { 1, 1, 1, features }, values), shape);
+        Tensor<T> Broadcast(double[] values) => _engine.TensorBroadcastTo(
+            new Tensor<double>(new[] { 1, 1, 1, features }, new Vector<double>(values)).Cast<T>(), shape);
         var angle = _engine.TensorDivide(scaled, Broadcast(divisors));
         var mixed = _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorSin(angle), Broadcast(even)),
             _engine.TensorMultiply(_engine.TensorCos(angle), Broadcast(odd)));
         return _engine.Reshape(mixed, new[] { b, q, n * features });
-    }
-
-    [AiDotNet.Attributes.ScalarKernel("Builds a constant tensor once per call from host values; no traced value is read.")]
-    private static Tensor<T> Constants(int[] shape, double[] values)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        return new Tensor<T>(shape, new Vector<T>(values.Select(ops.FromDouble).ToArray()));
     }
 
     /// <summary>The sine position embedding of an unpadded <c>h × w</c> level, <c>[D, h, w]</c> (y features, then x).</summary>

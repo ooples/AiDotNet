@@ -12590,8 +12590,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Sequential tests start from a clean registry via ResetWeightStreamingForTests (#1722).
         if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
         {
-            _streamingAutoDetectFinalized = true;
-            return;
+            WeightRegistry.PruneDeadEntries();
+            if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                WeightRegistry.PruneDeadEntries();
+            }
+            if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+            {
+                _streamingAutoDetectFinalized = true;
+                return;
+            }
         }
 
         // Above threshold: enable streaming with conservative defaults.
@@ -12664,8 +12675,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
             {
-                _streamingAutoDetectFinalized = true;
-                return;
+                WeightRegistry.PruneDeadEntries();
+                if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+                {
+                    _streamingAutoDetectFinalized = true;
+                    return;
+                }
             }
             ConfigureWeightLifetime(options);
             // Declare the default (inference) execution mode so the zero-copy mmap
@@ -13147,7 +13162,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return 0L;
 
         int curWidth;
-        if (Architecture is { InputType: Enums.InputType.ThreeDimensional, InputDepth: > 0 })
+        if (Architecture is { InputType: Enums.InputType.ThreeDimensional or Enums.InputType.FourDimensional, InputDepth: > 0 })
         {
             curWidth = Architecture.InputDepth;
         }
@@ -13155,7 +13170,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             curWidth = Architecture.InputWidth;
         }
-        else if (Architecture is { InputSize: > 0 })
+        else if (Architecture is { InputType: Enums.InputType.OneDimensional, InputSize: > 0 })
         {
             curWidth = Architecture.InputSize;
         }
