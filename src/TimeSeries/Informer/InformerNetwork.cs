@@ -103,8 +103,15 @@ internal sealed class InformerNetwork<T>
         public DenseLayer<T> Token { get; } = token;
         public DenseLayer<T>? Time { get; } = time;
 
-        internal Tensor<T> AddPositions(IEngine engine, Tensor<T> tokens) =>
-            engine.TensorAdd(tokens, Positions(tokens.Shape[1], tokens.Shape[2]));
+        internal Tensor<T> AddPositions(IEngine engine, Tensor<T> tokens, bool training = false)
+        {
+            int length = tokens.Shape[1], width = tokens.Shape[2];
+            // CUDA training diverges over multiple optimizer steps if this tiled addition is replaced by a
+            // broadcast. Keep the reference training graph, including its fresh constant.
+            var positions = training ? engine.TensorTile(BuildPositions(length, width), new[] { tokens.Shape[0], 1, 1 })
+                : Positions(length, width);
+            return engine.TensorAdd(tokens, positions);
+        }
 
         // Encoder and decoder retain one host-owned, immutable table each. A traced plan or an
         // in-flight forward may still read an older table after a change in sequence length.
@@ -114,20 +121,23 @@ internal sealed class InformerNetwork<T>
             if (cached is not null && cached.Shape[1] == length && cached.Shape[2] == width)
                 return cached;
 
+            var table = BuildPositions(length, width);
+            System.Threading.Volatile.Write(ref _positions, table);
+            return table;
+        }
+
+        private static Tensor<T> BuildPositions(int length, int width)
+        {
             var table = new Tensor<T>(new[] { 1, length, width });
-            var values = table.AsWritableSpan();
-            for (int i = 0; i < width; i += 2)
+            for (int p = 0; p < length; p++)
             {
-                double frequency = Math.Exp(i * -(Math.Log(10000.0) / width));
-                for (int p = 0; p < length; p++)
+                for (int i = 0; i < width; i += 2)
                 {
-                    double angle = p * frequency;
-                    values[p * width + i] = NumOps.FromDouble(Math.Sin(angle));
-                    values[p * width + i + 1] = NumOps.FromDouble(Math.Cos(angle));
+                    double angle = p * Math.Exp(i * -(Math.Log(10000.0) / width));
+                    table[0, p, i] = NumOps.FromDouble(Math.Sin(angle));
+                    table[0, p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
                 }
             }
-
-            System.Threading.Volatile.Write(ref _positions, table);
             return table;
         }
     }
@@ -234,7 +244,7 @@ internal sealed class InformerNetwork<T>
     private Tensor<T> Embed(Embedding e, Tensor<T> x, Tensor<T>? marks, bool training, Random random)
     {
         int length = x.Shape[1];
-        var sum = e.AddPositions(_engine, Dense(e.Token, CircularNeighbours(x)));
+        var sum = e.AddPositions(_engine, Dense(e.Token, CircularNeighbours(x)), training || GradientRecording.IsRecording<T>());
         if (e.Time is not null)
         {
             if (marks is null || marks.Shape[1] != length || marks.Shape[2] != Configuration.TimeFeatures)
