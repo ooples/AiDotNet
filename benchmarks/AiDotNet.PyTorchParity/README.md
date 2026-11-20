@@ -163,3 +163,17 @@ python timeseries.py ../results/ts --device cuda --compile --epochs 6 --threads 
   PyTorch side maps it to the same `MLP` so a shared `--models` list won't error.
 - This project is excluded from `dotnet test` (`IsTestProject=false`); it's a
   manual harness you run on demand.
+
+### Matched LSTM classification
+
+Run these commands from this benchmark directory. Generate the seed-1234 fixture once. It contains six state-dict fields, 20 training batches of 64 labeled sequences, and inference batches of 1, 8 and 16 sequences.
+
+```powershell
+python pytorch/lstm_fixture.py --output results/lstm-fixture
+dotnet run -c Release -- --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --lstm-numerics results/lstm-ai-cpu
+python pytorch/benchmark.py --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --compile --lstm-cpu-mkldnn disabled --lstm-numerics results/lstm-torch-cpu --output results/lstm-torch-cpu/report.json
+```
+
+The numerical run writes the logits, scalar loss, gradients and learned parameters from three successive AdamW updates, followed by inference logits for each batch size. The raw FP32 arrays are in `observations.safetensors`. For timing, omit `--lstm-numerics`, set `--output`, and pass `--lstm-workload-receipt` with a fresh path. The normal timing loop makes 60 updates and each receipt binds the tensors actually used. For CUDA, select `--device cuda` on both commands and omit the CPU setting.
+
+On Windows with PyTorch 2.14.1+cu126, the default oneDNN CPU LSTM decomposition sets the recurrent primitive's training flag to false. Its absent workspace fails Inductor's alignment check and AOT autograd's saved-tensor check during training. The explicit `--lstm-cpu-mkldnn disabled` setting selects the installed ATen decomposition and preserves full-graph Inductor compilation and its assertions. Both the compiler and the backend settings are recorded in the workload receipt. Passing `enabled` reproduces the oneDNN control on the affected runtime. Omitting the option preserves the installed PyTorch setting.

@@ -92,6 +92,6 @@ public class HiFiGANOptions : VocoderOptions
     /// batch of 16).</summary>
     public int UpdatesPerEpoch { get; set; } = 809;
 
-    /// <summary>Gets or sets the seed of the segment crops, for repeatable runs.</summary>
+    /// <summary>Gets or sets the seed of generator/discriminator initialization and segment crops, for repeatable runs.</summary>
     public int SamplingSeed { get; set; }
 }

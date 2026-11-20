@@ -80,7 +80,8 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         var o = PaperOptions;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 11));
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
             singlePrecisionBasis: true);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0,
@@ -92,12 +93,19 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor);
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 13));
         return _discriminators.Layers;
     }
 
     /// <inheritdoc />
     protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
+
+    /// <inheritdoc />
+    private protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+        => GetType() == typeof(HiFiGAN<T>)
+            ? Flat(_generator!.ForwardDetachedForDiscriminator(mel))
+            : base.GenerateDetachedForDiscriminator(mel);
 
     /// <inheritdoc />
     /// <remarks>The reference <c>mel_spectrogram</c>: reflect padding, Hann window, Slaney mel up to
@@ -147,7 +155,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(_lossMel!.Forward(real));
         var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
