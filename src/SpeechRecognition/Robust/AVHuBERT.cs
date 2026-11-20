@@ -302,7 +302,7 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
         _pretrainingOptimizer ??= _suppliedOptimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomObjective(audio, audio, (_, _) => PretrainingLossTensor(audio, lips, clusterTargets, training: true, _random), _pretrainingOptimizer);
+        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, lips, clusterTargets, training: true, _random), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />

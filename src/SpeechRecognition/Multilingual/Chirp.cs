@@ -205,7 +205,7 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         if (_network is null) throw new NotSupportedException("Pre-training runs on the native Chirp network.");
         // A caller's optimizer serves both phases; the paper states no pre-training optimizer.
         _pretrainingOptimizer ??= _suppliedOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        return TrainWithCustomObjective(audio, audio, (_, _) => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
     }
 
     /// <inheritdoc />

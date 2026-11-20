@@ -247,7 +247,7 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         var network = _network;
         if (network is null) return false;
         network.Llm.Training = true;
-        try { TrainWithCustomObjective(input, input, (_, _) => BatchLoss(network, input, target, training: true)); }
+        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true)); }
         finally { network.Llm.Training = false; }
         return true;
     }

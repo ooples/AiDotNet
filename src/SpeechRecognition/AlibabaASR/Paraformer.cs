@@ -253,7 +253,7 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         if (encoder is null || _network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
         var labels = RowLabels(input, target);
-        TrainWithCustomObjective(input, input, (_, _) =>
+        TrainWithCustomLoss(input, _ =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
