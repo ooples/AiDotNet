@@ -12,28 +12,43 @@ import time
 import psutil
 
 
-def bootstrap_argv(argv: list[str], script: str, receipt: Path) -> list[str]:
+def resolve_script(argv: list[str], cwd: str | os.PathLike | None = None) -> Path:
+    """The script the child would run: a relative path resolves against the child's directory, not this one's."""
+    if len(argv) < 2 or Path(argv[1]).suffix.lower() != ".py":
+        raise ValueError("Python bootstrap requires a direct interpreter + script command.")
+    target = Path(argv[1])
+    if not target.is_absolute() and cwd is not None:
+        target = Path(cwd) / target
+    target = target.resolve()
+    if not target.is_file():
+        raise ValueError("Python bootstrap requires a direct interpreter + script command.")
+    return target
+
+
+def bootstrap_argv(argv: list[str], script: str, receipt: Path, cwd: str | os.PathLike | None = None) -> list[str]:
     if receipt.exists():
         raise ValueError("Python bootstrap receipt must be fresh.")
-    if len(argv) < 2 or Path(argv[1]).suffix.lower() != ".py" or not Path(argv[1]).is_file():
-        raise ValueError("Python bootstrap requires a direct interpreter + script command.")
     return [argv[0], str(Path(script).resolve()), "--receipt", str(receipt.resolve()),
-            "--target", str(Path(argv[1]).resolve()), "--", *argv[2:]]
+            "--target", str(resolve_script(argv, cwd)), "--", *argv[2:]]
 
 
 def stop_launch(process) -> None:
     """Terminate only this launch and its descendants when the handshake fails."""
     try:
-        for child in psutil.Process(process.pid).children(recursive=True):
+        try:
+            children = psutil.Process(process.pid).children(recursive=True)
+        except psutil.Error:
+            children = []
+        for child in children:
+            # One descendant that is gone or refuses access must not keep the others, or the launcher, alive.
             try:
                 child.kill()
-            except psutil.NoSuchProcess:
+            except psutil.Error:
                 pass
-    except psutil.NoSuchProcess:
-        pass
-    if process.poll() is None:
-        process.kill()
-    process.wait(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=10)
 
 
 def resolve_python_process(process, receipt: Path, timeout: float = 30,

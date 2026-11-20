@@ -24,7 +24,7 @@ import time
 
 import psutil
 from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, fixed_windows, raw_file
-from python_process import bootstrap_argv, resolve_python_process, stop_launch
+from python_process import bootstrap_argv, resolve_python_process, resolve_script, stop_launch
 from lstm_equivalence import lstm_correctness_gate, lstm_workload_gate
 from torch_policy import compare_reference, sha as streaming_sha
 
@@ -511,7 +511,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         if not bootstrap_script:
             raise ValueError("PyTorch needs a hash-bound real-process bootstrap; a Windows venv launcher PID is not the framework PID.")
         bootstrap_receipt = run_dir / "python-process.json"
-        argv = bootstrap_argv(argv, bootstrap_script, bootstrap_receipt)
+        argv = bootstrap_argv(argv, bootstrap_script, bootstrap_receipt, cwd=command["cwd"])
     nsys = config.get("artifacts", {}).get("nsys") if device == "cuda" and mode == "diagnostic" else None
     profiled_argv = argv.copy() if nsys else None
     if nsys:
@@ -584,7 +584,7 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
             if bootstrap_receipt:
-                identity = resolve_python_process(process, bootstrap_receipt, expected_target=Path(original_argv[1]),
+                identity = resolve_python_process(process, bootstrap_receipt, expected_target=resolve_script(original_argv, command["cwd"]),
                                                   expected_bootstrap=Path(bootstrap_script))
             elif nsys:
                 identity = profiled_dotnet_identity(process, run_dir / "phases.jsonl", model)
