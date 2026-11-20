@@ -154,6 +154,13 @@ public partial class Vocos<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override bool KeepsCentredFrame => true;
 
+    // Vocos trains on the eager tape. Its two objectives alternate on one model, and only one of them traces to
+    // its trained parameters: once that one has run fused, the other cannot be compiled ("the objective's loss
+    // reaches no trained parameter through traced ops") and a committed fused session cannot hand its optimizer
+    // state back to an eager step. Until both objectives trace, neither is offered to the fused session.
+    /// <inheritdoc />
+    protected override bool SupportsFusedCompiledTraining => false;
+
     private Tensor<T> Hinge(Tensor<T> x, double sign)
         => Mean(Engine.ReLU(Engine.TensorAddScalar(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(sign)), NumOps.One)));
 
