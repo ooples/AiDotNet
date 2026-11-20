@@ -21,6 +21,7 @@ Cloudflare, so an attacker who finds the server's IP still can't go around Cloud
 | `setup-vps.sh` | One-time server setup. Safe to run again. |
 | `aidotnet.caddy` | Web server config for `aidotnet.dev`, `www.aidotnet.dev` and the private preview `test.aidotnet.dev` |
 | `cloudflare-firewall.sh` | Opens port 443 to Cloudflare's addresses only. Runs weekly via cron. |
+| `check-preview-secret.sh` | Stops Caddy from starting with an empty or malformed preview secret. Runs before every start. |
 | `publish.sh` | Called by GitHub Actions to upload a build and switch to it with no downtime |
 
 The code playground's "Run" button doesn't use this server. It calls the existing Azure
@@ -185,8 +186,12 @@ Then rerun **Deploy Marketing Website** once, so the cache purge and smoke tests
   Then purge the Cloudflare cache (**Caching → Configuration → Purge Everything**).
 - **Logs:** `/var/log/caddy/aidotnet-www.log` and `aidotnet-test.log`. Visitor IPs show as
   Cloudflare addresses; the real IP is in the `Cf-Connecting-Ip` request header.
-- **Change the preview secret:** edit `/etc/caddy/aidotnet.env`
-  (`AIDOTNET_PREVIEW_SECRET=` followed by 64 hex characters, e.g. from `openssl rand -hex 32`).
-  Run `sudo systemctl restart caddy`, then update the `PREVIEW_BYPASS_SECRET` GitHub secret.
+- **Change the preview secret:** edit `/etc/caddy/aidotnet.env` so it holds exactly one line,
+  `AIDOTNET_PREVIEW_SECRET=` followed by 64 lowercase hex characters (e.g. from `openssl rand -hex 32`).
+  Check it first: `sudo /usr/local/sbin/aidotnet-check-preview-secret && echo ok`.
+  Then run `sudo systemctl restart caddy` (a reload does not re-read the file) and update the
+  `PREVIEW_BYPASS_SECRET` GitHub secret. Caddy runs the same check before every start and refuses
+  to start if the value is empty or malformed. Both sites are then down until the file is fixed;
+  `systemctl status caddy` shows the reason.
 - **Server updates:** `unattended-upgrades` installs security updates automatically; Caddy updates
   with `apt`.

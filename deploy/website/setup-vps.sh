@@ -4,7 +4,7 @@
 #
 #   sudo bash setup-vps.sh --deploy-key /path/to/github-deploy-key.pub [--ssh-port 22]
 #
-# Before running, place the Cloudflare Origin CA certificate and key (README step 3) at
+# Before running, place the Cloudflare Origin CA certificate and key (README step 2) at
 #   /etc/caddy/certs/aidotnet-origin.pem and /etc/caddy/certs/aidotnet-origin.key
 #
 # What it does: installs Caddy, rsync and ufw; creates the aidotnet-deploy account that GitHub
@@ -26,7 +26,7 @@ done
 [ -n "$deploy_key" ] && [ -f "$deploy_key" ] || { echo "Pass --deploy-key <public key file>." >&2; exit 1; }
 grep -qE '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-[a-z0-9-]+) ' "$deploy_key" || { echo "$deploy_key is not an SSH public key." >&2; exit 1; }
 for file in /etc/caddy/certs/aidotnet-origin.pem /etc/caddy/certs/aidotnet-origin.key; do
-  [ -s "$file" ] || { echo "Missing $file. Create the Cloudflare Origin certificate first (README step 3)." >&2; exit 1; }
+  [ -s "$file" ] || { echo "Missing $file. Create the Cloudflare Origin certificate first (README step 2)." >&2; exit 1; }
 done
 
 listener=$(ss -ltnpH 'sport = :443' 2>/dev/null | grep -v '"caddy"' || true)
@@ -40,7 +40,7 @@ fi
 echo "== Packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gnupg rsync ufw unattended-upgrades >/dev/null
+apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gnupg openssl rsync ufw unattended-upgrades >/dev/null
 if ! command -v caddy >/dev/null; then
   curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
@@ -74,14 +74,19 @@ chmod 640 /etc/caddy/certs/aidotnet-origin.pem /etc/caddy/certs/aidotnet-origin.
 
 echo "== Preview secret"
 if [ ! -s /etc/caddy/aidotnet.env ]; then
-  printf 'AIDOTNET_PREVIEW_SECRET=%s\n' "$(openssl rand -hex 32)" > /etc/caddy/aidotnet.env
+  # Generate first, write second: a failed openssl must not leave a file holding an empty secret.
+  secret="$(openssl rand -hex 32)"
+  printf 'AIDOTNET_PREVIEW_SECRET=%s\n' "$secret" > /etc/caddy/aidotnet.env
 fi
 chown root:caddy /etc/caddy/aidotnet.env
 chmod 640 /etc/caddy/aidotnet.env
-grep -qE '^AIDOTNET_PREVIEW_SECRET=[0-9a-f]{64}$' /etc/caddy/aidotnet.env \
-  || { echo "/etc/caddy/aidotnet.env must hold AIDOTNET_PREVIEW_SECRET=<64 hex characters>." >&2; exit 1; }
+# The same check runs before every Caddy start (ExecStartPre below), so a later hand edit of the
+# file cannot put an empty or malformed secret in front of the preview site.
+install -m 755 "$here/check-preview-secret.sh" /usr/local/sbin/aidotnet-check-preview-secret
+/usr/local/sbin/aidotnet-check-preview-secret /etc/caddy/aidotnet.env
 install -d /etc/systemd/system/caddy.service.d
-printf '[Service]\nEnvironmentFile=/etc/caddy/aidotnet.env\n' > /etc/systemd/system/caddy.service.d/aidotnet.conf
+printf '[Service]\nEnvironmentFile=/etc/caddy/aidotnet.env\nExecStartPre=/usr/local/sbin/aidotnet-check-preview-secret /etc/caddy/aidotnet.env\n' \
+  > /etc/systemd/system/caddy.service.d/aidotnet.conf
 systemctl daemon-reload
 
 echo "== Caddy config"

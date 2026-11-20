@@ -60,8 +60,10 @@ https://www.aidotnet.dev {
 
 # Private preview. A request carrying X-AiDotNet-Preview-Bypass with the shared secret receives an
 # HttpOnly cookie; later requests present only the cookie. Everything else gets 401.
-# AIDOTNET_PREVIEW_SECRET comes from /etc/caddy/aidotnet.env (setup-vps.sh refuses to start Caddy
-# without a 64-character hex value, so an empty secret can never match).
+# AIDOTNET_PREVIEW_SECRET comes from /etc/caddy/aidotnet.env. caddy.service runs
+# aidotnet-check-preview-secret before every start (ExecStartPre, installed by setup-vps.sh) and does
+# not start unless the file holds exactly one 64-character hex value, so an empty or malformed
+# secret never reaches the matchers below, including after a hand edit of the file.
 https://test.aidotnet.dev {
 	import aidotnet_tls
 	import aidotnet_site test
