@@ -45,8 +45,8 @@ BATCH_SIZES = [1, 8, 32, 128]
 
 @dataclass
 class ResourceSummary:
-    cpu_percent_avg: float
-    rss_mb_peak: float
+    cpu_percent_avg: float | None
+    rss_mb_peak: float | None
     gpu_util_percent_avg: float | None
     gpu_mem_mb_peak: float | None
 
@@ -79,7 +79,7 @@ class InferenceBatchResult:
     steady_state_latency_ms_p25: float
     steady_state_latency_ms_p75: float
     throughput_samples_per_second: float
-    memory_mb_peak: float
+    memory_mb_peak: float | None
     gpu_tensor_allocated_mb_peak: float | None = None
 
 
@@ -137,8 +137,10 @@ class ResourceMonitor:
 
     def summary(self) -> ResourceSummary:
         return ResourceSummary(
-            cpu_percent_avg=round(statistics.fmean(self.cpu), 3) if self.cpu else 0.0,
-            rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else 0.0,
+            # No samples (the external monitor owns sampling, or the run was shorter than one interval) is
+            # unavailable, not zero.
+            cpu_percent_avg=round(statistics.fmean(self.cpu), 3) if self.cpu else None,
+            rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else None,
             gpu_util_percent_avg=round(statistics.fmean(self.gpu_util), 3) if self.gpu_util else None,
             gpu_mem_mb_peak=round(max(self.gpu_mem), 3) if self.gpu_mem else None,
         )
@@ -2049,11 +2051,13 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             synchronize(device)
             warmup_times.append(time.perf_counter() - start)
 
-        if device.type == "cuda":
+        # The steady marker snapshots the warm-up peaks and then resets them. Reset here only when it did not, so
+        # the marker never records already-reset values as the warm-up peaks.
+        if not mark_phase(model_name, f"inference-b{batch_size}-steady") and device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
+        external_monitor = os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") == "1"
         process = psutil.Process(os.getpid())
         rss_peak = process.memory_info().rss / 1024 / 1024
-        mark_phase(model_name, f"inference-b{batch_size}-steady")
         steady: list[float] = []
         for _ in range(iterations):
             start = time.perf_counter()
@@ -2061,7 +2065,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             synchronize(device)
             elapsed = time.perf_counter() - start
             steady.append(elapsed)
-            if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
+            if not external_monitor:
                 rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
         total = sum(steady)
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
@@ -2078,7 +2082,9 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             steady_state_latency_ms_p25=round(quantile(steady_sorted, 0.25) * 1000, 3),
             steady_state_latency_ms_p75=round(quantile(steady_sorted, 0.75) * 1000, 3),
             throughput_samples_per_second=round((iterations * batch_size) / total, 3),
-            memory_mb_peak=round(rss_peak, 3),
+            # Under the external monitor this process does not sample during steady inference: report the host
+            # peak as unavailable rather than one pre-steady sample. The CUDA allocator peak below is still measured.
+            memory_mb_peak=None if external_monitor else round(rss_peak, 3),
             gpu_tensor_allocated_mb_peak=round(cuda_peak, 3) if device.type == "cuda" else None,
         ))
     return results
@@ -2105,6 +2111,28 @@ def parse_inference_batches(text: str) -> list[int]:
     return batches
 
 
+def _reject_artifact_collisions(args: argparse.Namespace) -> None:
+    """The report and each workload receipt are separate files; one path for two of them loses the first write."""
+    output = getattr(args, "output", None)
+    if output is None:
+        return
+    artifacts = {"--output": Path(output)}
+    numerics = getattr(args, "lstm_numerics", None)
+    if getattr(args, "hifigan_fixture", None) is not None:
+        artifacts["the HiFi-GAN workload receipt"] = Path(
+            getattr(args, "hifigan_workload_receipt", None) or (str(output) + ".workload.json"))
+    if getattr(args, "lstm_fixture", None) is not None:
+        artifacts["the LSTM workload receipt"] = Path(
+            getattr(args, "lstm_workload_receipt", None)
+            or (Path(numerics) / "workload.json" if numerics else str(output) + ".workload.json"))
+    seen: dict[str, str] = {}
+    for label, path in artifacts.items():
+        key = os.path.normcase(os.path.realpath(path))
+        if key in seen:
+            raise ValueError(f"{seen[key]} and {label} resolve to the same file: {path}")
+        seen[key] = label
+
+
 def run(args: argparse.Namespace) -> dict[str, object]:
     fixture_path = getattr(args, "hifigan_fixture", None)
     lstm_path = getattr(args, "lstm_fixture", None)
@@ -2115,6 +2143,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     if lstm_path is None and (getattr(args, "lstm_numerics", None) or getattr(args, "lstm_workload_receipt", None)
                               or cpu_mkldnn is not None):
         raise ValueError("LSTM receipts require --lstm-fixture")
+    if fixture_path is None and getattr(args, "hifigan_workload_receipt", None) is not None:
+        raise ValueError("--hifigan-workload-receipt requires --hifigan-fixture")
+    selected = [item.strip() for item in args.models.split(",") if item.strip()]
+    if "hifigan-v1" in selected and args.batch_size != 1:
+        # Checked here, before the synthetic batch pool is built and retained, not in the first train step.
+        raise ValueError("The hifigan-v1 row trains one utterance per step: use --batch-size 1.")
+    _reject_artifact_collisions(args)
     if lstm_path is not None:
         if fixture_path is not None or args.models.strip() != "lstm" or not args.compile:
             raise ValueError("A shared LSTM workload requires --models lstm --compile and its own fixture")
