@@ -99,8 +99,17 @@ internal sealed class Wav2Vec2Pretraining<T>
     /// <remarks><paramref name="MaskedCount"/> and <paramref name="CodeIdValues"/> stay tensors so a compiled plan can
     /// replay the objective; <see cref="Masked"/> and <see cref="CodeIds"/> read them on the host.</remarks>
     internal sealed record Losses(Tensor<T> Total, Tensor<T> Contrastive, Tensor<T> Diversity, Tensor<T> FeaturePenalty,
-        Tensor<T> MaskedCount, Tensor<T> CodeIdValues)
+        Tensor<T> MaskedCount, Tensor<T> CodeIdValues, int MaxCodeId)
     {
+        /// <summary><see cref="CodeIdValues"/>, for a consumer that needs each id to name its entry exactly.</summary>
+        /// <exception cref="NotSupportedException">The element type cannot hold every id up to
+        /// <see cref="MaxCodeId"/> exactly (binary16 stops at 2048), so a stored id could name a neighbouring entry.</exception>
+        public Tensor<T> ExactCodeIdValues => RepresentsEveryId(MaxCodeId)
+            ? CodeIdValues
+            : throw new NotSupportedException(
+                $"{typeof(T).Name} cannot represent every codebook id up to {MaxCodeId} exactly. Use a wider element "
+                + "type or a smaller codebook.");
+
         /// <summary>The number of masked steps.</summary>
         public int Masked => (int)Math.Round(MathHelper.GetNumericOperations<T>().ToDouble(MaskedCount.ToArray()[0]));
 
@@ -112,13 +121,35 @@ internal sealed class Wav2Vec2Pretraining<T>
             {
                 var ops = MathHelper.GetNumericOperations<T>();
                 int batch = CodeIdValues.Shape[0], length = CodeIdValues.Shape[1];
-                var data = CodeIdValues.ToArray();
+                var data = ExactCodeIdValues.ToArray();
                 var ids = new int[batch, length];
                 for (int b = 0; b < batch; b++)
                     for (int t = 0; t < length; t++) ids[b, t] = (int)Math.Round(ops.ToDouble(data[b * length + t]));
                 return ids;
             }
         }
+    }
+
+    /// <summary>Whether <typeparamref name="T"/> holds every integer from 0 to <paramref name="maxId"/> exactly.</summary>
+    /// <remarks>A binary floating type holds every integer up to a power of two and then only even ones, so the largest
+    /// id and its predecessor (one of which is odd) both surviving a round trip is equivalent to all of them doing so.</remarks>
+    internal static bool RepresentsEveryId(int maxId)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        bool Exact(int value) => value < 0 || ops.ToDouble(ops.FromDouble(value)) == value;
+        return Exact(maxId) && Exact(maxId - 1);
+    }
+
+    /// <summary>The largest combined id Σ_g (V − 1)·V^g of the configured codebooks.</summary>
+    private int MaxCodeId()
+    {
+        long max = 0, place = 1;
+        for (int g = 0; g < Configuration.Groups; g++)
+        {
+            max = checked(max + (Configuration.EntriesPerGroup - 1) * place);
+            place = checked(place * Configuration.EntriesPerGroup);
+        }
+        return checked((int)max);
     }
 
     private Tensor<T> Dense(LayerBase<T> layer, Tensor<T> x)
@@ -166,10 +197,13 @@ internal sealed class Wav2Vec2Pretraining<T>
                 }
                 else
                 {
-                    // The argmax as a one-hot on the engine: the entries equal to their row's maximum (a tie, of measure
-                    // zero under the noise, would mark both).
+                    // The argmax as a one-hot on the engine. Rounding can make two entries share the row's maximum even
+                    // when their noise differs; marking both would add two codevectors and report the sum of their ids.
+                    // Keep the first: the entry at which the running count of maxima along the row is one.
                     var rowMax = _engine.ReduceMax(soft, new[] { 1 }, keepDims: true, out _);
-                    hard = _engine.StopGradient(_engine.TensorEquals(soft, _engine.TensorBroadcastTo(rowMax, soft._shape)));
+                    var isMax = _engine.TensorEquals(soft, _engine.TensorBroadcastTo(rowMax, soft._shape));
+                    var firstMax = _engine.TensorEquals(_engine.TensorCumSum(isMax, 1), NumOps.One);
+                    hard = _engine.StopGradient(_engine.TensorMultiply(isMax, firstMax));
                 }
                 probabilities = _engine.TensorAdd(soft, _engine.TensorSubtract(hard, _engine.StopGradient(soft)));
                 marginalSource = _engine.Softmax(group, axis: 1);
@@ -197,7 +231,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         }
         var quantized = _engine.Reshape(c.Groups == 1 ? parts[0] : _engine.TensorConcatenate(parts, 1), new[] { batch, length, c.CodevectorDim });
         return (quantized, perplexity ?? throw new InvalidOperationException("The quantizer has no codebooks."),
-            _engine.Reshape(ids!, new[] { batch, length }));
+            _engine.Reshape(ids ?? throw new InvalidOperationException("The quantizer has no codebooks."), new[] { batch, length }));
     }
 
     // Gumbel(0, 1) samples, in the order the eager host loop drew them.
@@ -309,6 +343,12 @@ internal sealed class Wav2Vec2Pretraining<T>
         bool redrawPerStep = true)
     {
         int batch = negatives.GetLength(0), length = negatives.GetLength(1), k = negatives.GetLength(2);
+        // The flattened overload infers K from the total count, so a wrong batch or frame axis would be re-read as a
+        // different K and its indices assigned to the wrong utterances without an error.
+        if (batch != output.Hidden.Shape[0] || length != output.Hidden.Shape[1])
+            throw new ArgumentException(
+                $"The negatives are [{batch}, {length}, {k}] but the forward has {output.Hidden.Shape[0]} utterances of "
+                + $"{output.Hidden.Shape[1]} frames.", nameof(negatives));
         var indices = new int[batch * length * k];
         for (int b = 0; b < batch; b++)
             for (int t = 0; t < length; t++)
@@ -325,7 +365,11 @@ internal sealed class Wav2Vec2Pretraining<T>
         var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
         var maskValues = output.MaskValues ?? Wav2Vec2Network<T>.MaskTensor(mask);
         int batch = output.Hidden.Shape[0], length = output.Hidden.Shape[1], p = c.ProjectedDim;
-        int k = negatives.Length / Math.Max(1, batch * length);
+        int steps = Math.Max(1, batch * length);
+        if (negatives.Length % steps != 0)
+            throw new ArgumentException(
+                $"{negatives.Length} distractor indices do not divide into {batch} utterances of {length} frames.", nameof(negatives));
+        int k = negatives.Length / steps;
         var maskedCount = _engine.Reshape(_engine.ReduceSum(maskValues, new[] { 0, 1 }, keepDims: false), new[] { 1 });
         var predicted = Dense(ProjectHidden, output.Hidden);                                                       // [B, L, P]
         var (quantized, perplexity, ids) = Quantize(output.Features, maskValues, maskedCount, training, random, fixedIds, redrawPerStep);
@@ -377,7 +421,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         var penalty = Times(_engine.ReduceMean(_engine.TensorMultiply(raw, raw), Enumerable.Range(0, raw.Rank).ToArray(), keepDims: false), maskedCount);
         var total = _engine.TensorAdd(_engine.TensorAdd(contrastive, _engine.TensorMultiplyScalar(diversity, NumOps.FromDouble(c.DiversityWeight))),
             _engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(c.FeaturePenaltyWeight)));
-        return new Losses(total, contrastive, diversity, penalty, maskedCount, ids);
+        return new Losses(total, contrastive, diversity, penalty, maskedCount, ids, MaxCodeId());
     }
 
     /// <summary>The reference's initialization: weight_proj N(0, 1) with zero bias, codevectors U(0, 1), the two
