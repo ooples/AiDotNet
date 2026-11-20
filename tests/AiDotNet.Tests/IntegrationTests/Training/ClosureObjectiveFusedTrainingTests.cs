@@ -52,7 +52,7 @@ public class ClosureObjectiveFusedTrainingTests
     /// scalar, so such a step can never replay and compiles from its own trace.
     /// </summary>
     private static Func<Tensor<double>> Objective(Tensor<double>[] weights, Func<int> step, Func<int, int> batchOf,
-        Random? noise = null, DropoutLayer<double>? dropout = null, bool perStepScale = false)
+        Random? noise = null, DropoutLayer<double>? dropout = null, bool perStepScale = false, bool clamp = false)
     {
         var engine = AiDotNetEngine.Current;
         return () =>
@@ -63,6 +63,9 @@ public class ClosureObjectiveFusedTrainingTests
             var y = Seeded(new[] { batch, 1 }, 200 + t);
             double scale = perStepScale ? 1.0 + 0.25 * t : 1.25;   // per step: like a diffusion timestep's weight
             var h = engine.Tanh(engine.TensorMatMul(x, weights[0]));
+            // max(h, -0.5): an op whose output shape a storage-free probe cannot compute, so it reads it from a trace.
+            if (clamp)
+                h = engine.TensorMax(h, -0.5);
             if (dropout is not null)
                 h = dropout.Forward(h);
             var predicted = engine.TensorMatMul(h, weights[1]);
@@ -86,7 +89,7 @@ public class ClosureObjectiveFusedTrainingTests
         int GeneratorNext = 0);
 
     private static RunResult Run(bool compile, int steps, Func<int, int> batchOf, int? noiseSeed = null,
-        int? dropoutSeed = null, bool perStepScale = false, Func<int, double>? clipOf = null)
+        int? dropoutSeed = null, bool perStepScale = false, Func<int, double>? clipOf = null, bool clamp = false)
     {
         var original = TensorCodecOptions.Current;
         try
@@ -99,7 +102,7 @@ public class ClosureObjectiveFusedTrainingTests
             var noise = noiseSeed is { } n ? new Random(n) : null;
             using var dropout = dropoutSeed is { } d ? new DropoutLayer<double>(0.5) { RandomSeed = d } : null;
             dropout?.SetTrainingMode(true);
-            var objective = Objective(weights, () => step, batchOf, noise, dropout, perStepScale);
+            var objective = Objective(weights, () => step, batchOf, noise, dropout, perStepScale, clamp);
             for (step = 0; step < steps; step++)
                 TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer,
                     modelGradientClip: clipOf?.Invoke(step) ?? 0.0);
@@ -199,6 +202,23 @@ public class ClosureObjectiveFusedTrainingTests
         int[] batches = { 8, 8, 5, 8 };
         var eager = Run(compile: false, steps: batches.Length, batchOf: t => batches[t]);
         var compiled = Run(compile: true, steps: batches.Length, batchOf: t => batches[t]);
+
+        Assert.Equal(batches.Length, compiled.FusedSteps);
+        Assert.Equal(2, compiled.PlanCount);
+        Assert.False(compiled.Dynamic);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Shape_cached_op_replays_each_signatures_plan_from_its_trace_shapes()
+    {
+        // TensorMax with a scalar is recorded with its trace-time output shape; the probe that picks a step's plan
+        // reads that shape from the cached plans' traces. Without them every probe aborted at the op as a host read
+        // and the second step failed. The batch-5 step must compile its own plan and the later batch-8 steps must
+        // replay the first one again (two plans, not one per switch).
+        int[] batches = { 8, 8, 5, 8, 5, 8 };
+        var eager = Run(compile: false, steps: batches.Length, batchOf: t => batches[t], clamp: true);
+        var compiled = Run(compile: true, steps: batches.Length, batchOf: t => batches[t], clamp: true);
 
         Assert.Equal(batches.Length, compiled.FusedSteps);
         Assert.Equal(2, compiled.PlanCount);

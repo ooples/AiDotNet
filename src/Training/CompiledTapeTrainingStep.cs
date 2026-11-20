@@ -1421,9 +1421,17 @@ public static class CompiledTapeTrainingStep<T>
                 ObjectiveSignature? signature;
                 object[] leaves;
                 string? reason;
+                // The probe looks the output shapes of data-dependent ops (TensorMax with a scalar, TensorWhere, FFT)
+                // up in the cached plans' traces; a step that diverges from all of them before such an op comes back
+                // Mismatched and compiles from its own trace like any other signature miss.
                 using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
-                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
-                if (probe == ClosureGuardResult.Matched && signature is not null)
+                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason,
+                        closure.ProbeShapes);
+                if (probe == ClosureGuardResult.Mismatched)
+                {
+                    reason ??= "the objective diverged from the cached trace";
+                }
+                else if (probe == ClosureGuardResult.Matched && signature is not null)
                 {
                     entry = closure.Find(signature);
                     if (entry is null)

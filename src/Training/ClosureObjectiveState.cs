@@ -210,6 +210,23 @@ internal sealed class ClosureObjectiveState<T>
         }
     }
 
+    /// <summary>
+    /// The trace-time output shapes of every replayable plan held (most recently used first), for the one probe that
+    /// picks this step's plan. A storage-free probe cannot compute the output shape of a data-dependent op (TensorMax
+    /// with a scalar, TensorWhere, an FFT) and looks it up in the traces' shapes instead; without them every probe of
+    /// an objective using such an op aborted as if it read a value on the host. Null when no replayable plan is held.
+    /// </summary>
+    internal CompiledOpShapeCache? ProbeShapes
+    {
+        get
+        {
+            var traces = new List<CompiledOpShapeCache>(_entries.Count);
+            foreach (var e in _entries)
+                if (e.Guard is { } guard) traces.Add(guard.Shapes);
+            return CompiledOpShapeCache.Union(traces);
+        }
+    }
+
     /// <summary>The replayable plan compiled for <paramref name="signature"/>, made most recently used; or null.</summary>
     internal Entry? Find(ObjectiveSignature signature)
     {
