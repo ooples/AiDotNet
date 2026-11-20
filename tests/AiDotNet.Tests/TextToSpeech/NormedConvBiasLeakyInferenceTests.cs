@@ -119,6 +119,9 @@ public sealed class NormedConvBiasLeakyInferenceTests
         using var gpu = new DirectGpuTensorEngine();
         Skip.IfNot(gpu.IsGpuAvailable && gpu.GetBackend() is CudaBackend, "CUDA unavailable.");
         var previous = AiDotNetEngine.Current;
+        // The launch count below assumes the fusion is enabled; an inherited opt-out would take the ordinary forward.
+        string? previousSwitch = Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY");
+        Environment.SetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY", null);
         AiDotNetEngine.Current = gpu;
         try
         {
@@ -153,8 +156,22 @@ public sealed class NormedConvBiasLeakyInferenceTests
                     Assert.Equal(ordinaryLaunches, GpuLaunchProbe.Count - before);
                     Assert.Equal(expected.Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), guarded.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
                 }
+                // The opt-out is the supported fallback: the ordinary launches and the same bits.
+                Environment.SetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY", "0");
+                try
+                {
+                    before = GpuLaunchProbe.Count;
+                    using var optedOut = layer.ForwardLeakyInference(input, .1f);
+                    Assert.Equal(ordinaryLaunches, GpuLaunchProbe.Count - before);
+                    Assert.Equal(expected.Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)), optedOut.ToArray().Select(value => AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(value)));
+                }
+                finally { Environment.SetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY", null); }
             }
         }
-        finally { AiDotNetEngine.Current = previous; }
+        finally
+        {
+            AiDotNetEngine.Current = previous;
+            Environment.SetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CHANNEL_BIAS_LEAKY", previousSwitch);
+        }
     }
 }

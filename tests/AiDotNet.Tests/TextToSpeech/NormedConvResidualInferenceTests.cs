@@ -155,6 +155,8 @@ public sealed class NormedConvResidualInferenceTests
                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) is not null;
                 long expectedLaunches = hasFused ? ordinaryLaunches - (writeActivation ? 2 : 1) : ordinaryLaunches;
                 Assert.Equal(expectedLaunches, GpuLaunchProbe.Count - before);
+                // A requested activation must exist: a null one would skip both this check and the later comparison.
+                if (writeActivation) Assert.NotNull(activated);
                 if (activated is not null) Assert.False(sum.SharesStorageWith(activated));
                 unread.Add((sum, activated, expected, expectedActivation));
                 using (GraphCaptureCompatibility.Enter())

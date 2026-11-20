@@ -36,12 +36,21 @@ public sealed class HiFiGanInferenceCacheRegimeTests
             using var retained = candidate.Predict(input); // Keep the actual returned waveform unread during reclamation.
             using var alias = gpu.Reshape(retained, new[] { retained.Length });
 
-            object pool = typeof(CudaBackend).GetField("_bufferPool", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(gpu.GetBackend())!;
             const BindingFlags internalInstance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            long Requests() => (long)pool.GetType().GetProperty("InferenceRegimeNativeReleaseRequestedBuffers", internalInstance)!.GetValue(pool)!;
+            // The retirement counter exists only in the Tensors source engine (#1793). Probe every member before
+            // draining or modifying the pool, and skip only when the capability is absent from the installed engine.
+            var poolField = typeof(CudaBackend).GetField("_bufferPool", BindingFlags.Instance | BindingFlags.NonPublic);
+            object? pool = poolField?.GetValue(gpu.GetBackend());
+            var requestsProperty = pool?.GetType().GetProperty("InferenceRegimeNativeReleaseRequestedBuffers", internalInstance);
+            var drainAll = pool?.GetType().GetMethod("DrainAll", internalInstance);
+            Skip.If(pool is null || requestsProperty is null || drainAll is null,
+                "The installed Tensors engine does not expose inference-regime cache retirement.");
+            if (pool is null || requestsProperty is null || drainAll is null) return;
+            long Requests() => requestsProperty.GetValue(pool) is long requested
+                ? requested : throw new Xunit.Sdk.XunitException("The retirement counter is not a 64-bit count.");
             // Isolate the idle-cache admission fixture without touching any parameter, result, alias or driver-pool threshold.
-            pool.GetType().GetMethod("DrainAll", internalInstance)!.Invoke(pool, null);
-            var idle = gpu.GetBackend()!.AllocateBuffer(1);
+            drainAll.Invoke(pool, null);
+            var idle = gpu.GetBackend().AllocateBuffer(1);
             idle.Dispose();
             long before = Requests();
             foreach (int batch in new[] { 1, 4, 8 })
