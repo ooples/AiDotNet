@@ -373,7 +373,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
             ? pretraining.Loss(asWav2Vec2, pretraining.DrawNegatives(mask, random), training, random, codes)
             : pretraining.Loss(asWav2Vec2, pretraining.SampleNegatives(mask, random), training, random, codes, redrawPerStep: false);
         if (_options.FixedDraw is not null && codes is null) _fixedDrawCodes[key] = losses.CodeIds;
-        var maskedPrediction = network.MaskedPredictionLoss(output, losses.CodeIdValues);
+        var maskedPrediction = network.MaskedPredictionLoss(output, losses.ExactCodeIdValues);
         // The terms are read on the host only when the values are concrete (the eager tape); a traced step leaves them to
         // the plan, and a replayed step keeps the last eager step's.
         if (maskedPrediction.LazySource is not { IsRealized: false })
