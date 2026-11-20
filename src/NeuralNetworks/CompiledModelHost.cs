@@ -524,7 +524,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
     public Tensor<T> Predict(
         Tensor<T>[] inputs,
         int structureVersion,
-        Func<Tensor<T>> eagerForward)
+        Func<Tensor<T>> eagerForward) => Predict(inputs, structureVersion, eagerForward, null);
+
+    // A forward that accepts all inputs explicitly can trace against plan-owned storage.
+    internal Tensor<T> Predict(
+        Tensor<T>[] inputs,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward,
+        Func<Tensor<T>[], Tensor<T>>? forwardWithOwnedSlots)
     {
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
@@ -582,7 +589,11 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // hit) — either way the plan reflects THIS call's input data, so Execute()
                 // replays the current step. A changing timestep embedding is re-bound, never
                 // baked, which is the whole point of the multi-input path.
-                var plan = cache.GetOrCompileInference(inputs, () => eagerForward());
+                // A slot-aware forward traces against private copies, so rebinding a different
+                // history on the next prediction cannot overwrite the caller's earlier input.
+                var plan = forwardWithOwnedSlots is null
+                    ? cache.GetOrCompileInference(inputs, eagerForward)
+                    : cache.GetOrCompileInference(inputs, forwardWithOwnedSlots);
                 _lastCompiledVersion = structureVersion;
                 var result = plan.Execute();
                 System.Threading.Interlocked.Increment(ref _multiInputReplays);

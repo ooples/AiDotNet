@@ -129,7 +129,7 @@ internal sealed class InformerNetwork<T>
     /// time features <c>[B, ·, TimeFeatures]</c> when the network has them.
     /// </summary>
     public Tensor<T> Forward(Tensor<T> encoderInput, Tensor<T>? encoderMarks, Tensor<T> decoderInput, Tensor<T>? decoderMarks,
-        bool training, Random random)
+        bool training, Random random, Tensor<T>[]? compiledInputs = null)
     {
         var c = Configuration;
         if (decoderInput.Shape[1] != c.LabelLength + c.PredictionLength)
@@ -138,13 +138,14 @@ internal sealed class InformerNetwork<T>
         var x = Embed(EncoderEmbedding, encoderInput, encoderMarks, training, random);
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
-            x = Encode(EncoderLayers[i], x, training, random);
+            x = Encode(EncoderLayers[i], x, training, random, compiledInputs?[i + 1]);
             if (i < Distilling.Count) x = Distil(Distilling[i], x, training);
         }
         var memory = EncoderNorm.Forward(x);
 
         var y = Embed(DecoderEmbedding, decoderInput, decoderMarks, training, random);
-        foreach (var layer in DecoderLayers) y = Decode(layer, y, memory, training, random);
+        for (int i = 0; i < DecoderLayers.Count; i++)
+            y = Decode(DecoderLayers[i], y, memory, training, random, compiledInputs?[1 + EncoderLayers.Count + i]);
         y = Dense(Projection, DecoderNorm.Forward(y));
         int steps = y.Shape[1];
         return _engine.TensorSlice(y, new[] { 0, steps - c.PredictionLength, 0 }, new[] { y.Shape[0], c.PredictionLength, c.Outputs });
@@ -234,13 +235,13 @@ internal sealed class InformerNetwork<T>
     }
 
     // An AttentionLayer: projections, the inner attention, the (mixed) head merge and the output projection.
-    private Tensor<T> Attend(Attention a, Tensor<T> queries, Tensor<T> keys, bool prob, bool masked, bool mix, bool training, Random random)
+    private Tensor<T> Attend(Attention a, Tensor<T> queries, Tensor<T> keys, bool prob, bool masked, bool mix, bool training, Random random, Tensor<T>? sampledCounts = null)
     {
         int batch = queries.Shape[0], lq = queries.Shape[1], heads = Configuration.Heads, e = Configuration.ModelDim / heads;
         var q = Heads(a.Query, queries);
         var k = Heads(a.Key, keys);
         var v = Heads(a.Value, keys);
-        var context = prob ? ProbAttention(q, k, v, masked, training, random) : FullAttention(q, k, v, masked, training, random);   // [B·H, Lq, E]
+        var context = prob ? ProbAttention(q, k, v, masked, training, random, sampledCounts) : FullAttention(q, k, v, masked, training, random);   // [B·H, Lq, E]
         var perHead = _engine.Reshape(context, new[] { batch, heads, lq, e });
         // The inner attention returns [B, L, H, E]; mix transposes it back to [B, H, L, E] before the flat view.
         var merged = mix
@@ -269,7 +270,7 @@ internal sealed class InformerNetwork<T>
     }
 
     // ProbAttention (no attention dropout, as in the reference).
-    private Tensor<T> ProbAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, bool masked, bool training, Random random)
+    private Tensor<T> ProbAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, bool masked, bool training, Random random, Tensor<T>? sampledCounts)
     {
         int bh = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1], e = q.Shape[2];
         int factor = Configuration.Factor;
@@ -284,8 +285,9 @@ internal sealed class InformerNetwork<T>
         Tensor<T> select, chosenBlocked;
         using (GradientTape<T>.NoGrad())
         {
-            var measurement = trainingIndices is null ? SampledQueryMeasurement(q, k, samples, random)
-                : TrainingSampledQueryMeasurement(q, k, trainingIndices);
+            var measurement = sampledCounts is not null ? SampledQueryMeasurementFromCounts(q, k, sampledCounts)
+                : trainingIndices is not null ? TrainingSampledQueryMeasurement(q, k, trainingIndices)
+                : SampledQueryMeasurement(q, k, samples, random);
             select = OrderedTopKSelection<T>.Select(_engine, measurement, top);
             chosenBlocked = masked ? _engine.BatchMatMul(select, _engine.TensorTile(LaterKeys(lq, lk), new[] { bh, 1, 1 })) : select;
         }
@@ -388,6 +390,58 @@ internal sealed class InformerNetwork<T>
         return SparsityMeasurement(dots, keys);
     }
 
+    // The compiled model host rebinds homogeneous leaves on each prediction. Represent the sampled
+    // keys as multiplicities so repeated draws survive without an integer tensor captured as a constant.
+    internal Tensor<T>[]? PrepareInferenceInputs(Tensor<T> history, Random random)
+    {
+        if (Configuration.Attention != InformerAttention.ProbSparse || history.Rank != 3) return null;
+        var lengths = new int[EncoderLayers.Count + DecoderLayers.Count];
+        int length = history.Shape[1];
+        for (int i = 0; i < EncoderLayers.Count; i++)
+        {
+            lengths[i] = length;
+            if (i < Distilling.Count) length = (length - 1) / 2 + 1;
+        }
+        for (int i = EncoderLayers.Count; i < lengths.Length; i++)
+            lengths[i] = Configuration.LabelLength + Configuration.PredictionLength;
+        int width = Configuration.ModelDim / Configuration.Heads;
+        foreach (int keys in lengths)
+        {
+            int samples = Math.Min(Configuration.Factor * (int)Math.Ceiling(Math.Log(keys)), keys);
+            if (keys < 2 || keys > (long)samples * Math.Min(width, 4) || (long)keys * keys > int.MaxValue) return null;
+        }
+        var inputs = new Tensor<T>[lengths.Length + 1];
+        inputs[0] = history;
+        for (int layer = 0; layer < lengths.Length; layer++)
+        {
+            int keys = lengths[layer];
+            int samples = Math.Min(Configuration.Factor * (int)Math.Ceiling(Math.Log(keys)), keys);
+            var fixedKeys = KeySampler?.Invoke(keys, samples, keys);
+            var counts = new Tensor<T>(new[] { 1, keys, keys });
+            var data = counts.AsWritableSpan();
+            for (int i = 0; i < keys; i++)
+                for (int s = 0; s < samples; s++)
+                {
+                    int j = fixedKeys is null ? random.Next(keys) : fixedKeys[i, s];
+                    int pos = i * keys + j;
+                    data[pos] = NumOps.Add(data[pos], NumOps.One);
+                }
+            inputs[layer + 1] = counts;
+        }
+        return inputs;
+    }
+
+    private Tensor<T> SampledQueryMeasurementFromCounts(Tensor<T> q, Tensor<T> k, Tensor<T> sampledCounts)
+    {
+        var dots = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));
+        var counts = _engine.TensorTile(sampledCounts, new[] { q.Shape[0], 1, 1 });
+        var selected = _engine.TensorGreaterThan(counts, NumOps.Zero);
+        var masked = _engine.TensorWhere(selected, dots, OrderedTopKSelection<T>.Filled(dots.Shape.ToArray(), double.NegativeInfinity));
+        var maximum = _engine.ReduceMax(masked, new[] { 2 }, keepDims: false);
+        var sum = _engine.ReduceSum(_engine.TensorMultiply(dots, counts), new[] { 2 }, keepDims: false);
+        return _engine.TensorSubtract(maximum, _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / k.Shape[1])));
+    }
+
     private Tensor<T> SparsityMeasurement(Tensor<T> dots, int keys)
     {
         var sum = _engine.ReduceSum(dots, new[] { 2 }, keepDims: false);
@@ -402,17 +456,17 @@ internal sealed class InformerNetwork<T>
     private Tensor<T> FeedForward(DenseLayer<T> conv1, DenseLayer<T> conv2, Tensor<T> x, bool training, Random random)
         => Drop(Dense(conv2, Drop(Activation(Dense(conv1, x)), training, random)), training, random);
 
-    private Tensor<T> Encode(EncoderLayer l, Tensor<T> x, bool training, Random random)
+    private Tensor<T> Encode(EncoderLayer l, Tensor<T> x, bool training, Random random, Tensor<T>? sampledCounts)
     {
         bool prob = Configuration.Attention == InformerAttention.ProbSparse;
-        x = l.Norm1.Forward(_engine.TensorAdd(x, Drop(Attend(l.SelfAttention, x, x, prob, masked: false, mix: false, training, random), training, random)));
+        x = l.Norm1.Forward(_engine.TensorAdd(x, Drop(Attend(l.SelfAttention, x, x, prob, masked: false, mix: false, training, random, sampledCounts), training, random)));
         return l.Norm2.Forward(_engine.TensorAdd(x, FeedForward(l.Conv1, l.Conv2, x, training, random)));
     }
 
-    private Tensor<T> Decode(DecoderLayer l, Tensor<T> y, Tensor<T> memory, bool training, Random random)
+    private Tensor<T> Decode(DecoderLayer l, Tensor<T> y, Tensor<T> memory, bool training, Random random, Tensor<T>? sampledCounts)
     {
         bool prob = Configuration.Attention == InformerAttention.ProbSparse;
-        y = l.Norm1.Forward(_engine.TensorAdd(y, Drop(Attend(l.SelfAttention, y, y, prob, masked: true, mix: Configuration.Mix, training, random), training, random)));
+        y = l.Norm1.Forward(_engine.TensorAdd(y, Drop(Attend(l.SelfAttention, y, y, prob, masked: true, mix: Configuration.Mix, training, random, sampledCounts), training, random)));
         y = l.Norm2.Forward(_engine.TensorAdd(y, Drop(Attend(l.CrossAttention, y, memory, prob: false, masked: false, mix: false, training, random), training, random)));
         return l.Norm3.Forward(_engine.TensorAdd(y, FeedForward(l.Conv1, l.Conv2, y, training, random)));
     }
@@ -426,6 +480,15 @@ internal sealed class InformerNetwork<T>
         var normed = _engine.Reshape(l.Norm.Forward(_engine.Reshape(conv, new[] { batch * length, d })), new[] { batch, length, d });
         var activated = _engine.ELU(normed);
         int pooled = (length - 1) / 2 + 1;
+        if (!training && !GradientRecording.IsRecording<T>())
+        {
+            // The singleton spatial axis makes 3x3 pooling equivalent to a three-step window over time.
+            // Values-only pooling keeps the argmax on device and avoids three dense window-selection matrices.
+            var channelsFirst = _engine.TensorPermute(activated, new[] { 0, 2, 1 });
+            var spatial = _engine.Reshape(channelsFirst, new[] { batch, d, 1, length });
+            var maxima = _engine.MaxPool2D(spatial, poolSize: 3, stride: 2, padding: 1);
+            return _engine.TensorPermute(_engine.Reshape(maxima, new[] { batch, d, pooled }), new[] { 0, 2, 1 });
+        }
         // Padding never wins the max: ELU outputs are above −1. It has to be finite in every element type, because
         // the one-hot pick below multiplies it by 0: −1e30 is −∞ in Half, and 0 · −∞ made every pooled value NaN.
         var padding = new Tensor<T>(new[] { batch, 1, d });

@@ -11007,7 +11007,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// for the package scratch-corruption bug) AND either an explicit per-model opt-in
     /// (<see cref="EnableInferenceAcceleration"/>, any size) or a foundation-scale model in inference mode.
     /// </summary>
-    private bool InferenceAccelerationEngaged =>
+    protected bool InferenceAccelerationEngaged =>
         s_autoCompiledInferenceEnabled
         && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
 
@@ -11114,6 +11114,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>Rebinds every mutable input of a verified inference plan on each execution.</summary>
+    protected Tensor<T> Accelerate(Tensor<T>[] inputs, Func<Tensor<T>[], Tensor<T>> forward)
+    {
+        if (!InferenceAccelerationEngaged || Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+            return forward(inputs);
+        RefreshCompiledBindings();
+        Tensor<T> Eager() => forward(inputs);
+        var output = _inferenceGate.Run(inputs, _layerStructureVersion, eager: Eager,
+            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, Eager, forward),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NeuralNetworkBase", feature: "MultiInputCompiledInference", enabled: enabled, reason: reason));
+        // Each prediction belongs to the caller. A later replay writes the plan-owned result again.
+        return output.Clone();
     }
 
     // Reused traversal and identity/version snapshots of non-parameter inputs held by compiled plans.

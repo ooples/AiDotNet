@@ -207,6 +207,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
             TimeFeatures: 0, o.LabelLength, o.ForecastHorizon));
         _network.InitializeLikeReference(RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(o.Seed).Initialization));
         Layers.AddRange(layers);
+        EnableInferenceAcceleration();
     }
 
     #endregion
@@ -322,7 +323,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
     #region Forward
 
     // [L, F] or [B, L, F] history → [B, H, F] forecast (the decoder reads [last LabelLength steps; zeros]).
-    private Tensor<T> Forward(Tensor<T> input, bool training)
+    private Tensor<T> Forward(Tensor<T> input, bool training, Tensor<T>[]? compiledInputs = null)
     {
         if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
         var history = input.Rank == 2 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
@@ -331,13 +332,19 @@ public partial class Informer<T> : ForecastingModelBase<T>
                 $"Informer expects [batch, length, {_numFeatures}] (or [length, {_numFeatures}]), got [{string.Join(", ", input.Shape.ToArray())}].",
                 nameof(input));
         return _network.Forward(history, null, _network.DecoderInput(history), null, training,
-            training ? _random : InformerNetwork<T>.InferenceRandom(_options.Seed));
+            training ? _random : InformerNetwork<T>.InferenceRandom(_options.Seed), compiledInputs);
     }
 
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (InferenceAccelerationEngaged && typeof(T) == typeof(float)
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine && _network is not null
+            && _network.PrepareInferenceInputs(input, InformerNetwork<T>.InferenceRandom(_options.Seed)) is { } inputs)
+        {
+            return Accelerate(inputs, slots => Forward(slots[0], training: false, slots));
+        }
         return Forward(input, training: false);
     }
 
