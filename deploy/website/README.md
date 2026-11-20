@@ -149,18 +149,28 @@ All of these are free:
 
 1. **SSL/TLS → Overview:** mode **Full (strict)**.
 2. **SSL/TLS → Edge Certificates:** **Always Use HTTPS** on; **Minimum TLS Version** 1.2.
-3. **Security → Bots:** **Bot Fight Mode** on.
+3. **Security → Bots:** leave **Bot Fight Mode off**. It serves JavaScript challenges that
+   automated clients cannot pass, so it fails every post-deploy smoke test with HTTP 403, and
+   the cache and rate limit below already keep floods off the server.
 4. **Caching → Cache Rules → Create rule:** name it "Cache the public site". Set the
    **Hostname equals `www.aidotnet.dev`** → **Eligible for cache**. Set **Edge TTL → Ignore
-   cache-control header and use this TTL → 1 day**. Leave browser TTL as is. Cloudflare then
-   answers page requests itself, which is what keeps a flood off the server. Every deploy purges
-   this cache automatically. **Never add `test.aidotnet.dev` to this rule**, because the
-   preview is private.
-5. **Security → WAF → Rate limiting rules → Create rule:** if requests from the **same IP** exceed
-   **100 per 10 seconds** on hostname `www.aidotnet.dev`, **Block** for 10 seconds.
-6. **Analytics & Logs → Web Analytics:** enable it for `aidotnet.dev`. This replaces Vercel
+   cache-control header and use this TTL → 1 day**. Under **Cache key**, turn on **Cache
+   deception armor** and set **Query string → Exclude all**: the site is static, so a query
+   string never changes a page, and without this an attacker defeats the cache by adding
+   `?random` to every request. Cloudflare then answers page requests itself, which is what keeps
+   a flood off the server. Every deploy purges this cache automatically. **Never add
+   `test.aidotnet.dev` to this rule**, because the preview is private.
+5. **Caching → Configuration:** **Browser Cache TTL → Respect Existing Headers**. The default
+   (4 hours) overrides the server's `max-age=0` on pages, so visitors would keep seeing the old
+   site for hours after a deploy.
+6. **Security → WAF → Rate limiting rules → Create rule:** if requests from the **same IP** exceed
+   **1000 per 10 seconds** on hostname `www.aidotnet.dev`, **Block** for 10 seconds. Set
+   **Also apply rate limiting to cached assets → off** (count only requests that reach the
+   server). Lower limits fail real traffic: the smoke tests fetch about 12,000 pages right after
+   a deploy has emptied the cache, and one page view loads dozens of files.
+7. **Analytics & Logs → Web Analytics:** enable it for `aidotnet.dev`. This replaces Vercel
    Analytics with cookieless analytics injected by Cloudflare, with no code change needed.
-7. If you're under attack right now: **Overview → Under Attack Mode** on. Turn it off
+8. If you're under attack right now: **Overview → Under Attack Mode** on. Turn it off
    afterwards, because it shows every visitor a check page.
 
 Then rerun **Deploy Marketing Website** once, so the cache purge and smoke tests pass.
