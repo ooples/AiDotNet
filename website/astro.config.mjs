@@ -1,11 +1,13 @@
 import { defineConfig } from 'astro/config';
 import mdx from '@astrojs/mdx';
 
-const isVercel = process.env.VERCEL === '1';
+// AIDOTNET_SITE_ROOT=1 builds for https://www.aidotnet.dev (served from the domain root);
+// otherwise the build targets the GitHub Pages project path /AiDotNet/.
+const isSiteRoot = process.env.AIDOTNET_SITE_ROOT === '1';
 
 export default defineConfig({
-  site: isVercel ? 'https://www.aidotnet.dev' : 'https://ooples.github.io',
-  base: isVercel ? '/' : '/AiDotNet/',
+  site: isSiteRoot ? 'https://www.aidotnet.dev' : 'https://ooples.github.io',
+  base: isSiteRoot ? '/' : '/AiDotNet/',
   integrations: [mdx()],
   markdown: {
     shikiConfig: {

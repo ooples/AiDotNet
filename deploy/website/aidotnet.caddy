@@ -1,0 +1,85 @@
+# aidotnet.dev on the VPS. Installed to /etc/caddy/aidotnet.caddy by setup-vps.sh.
+#
+# Traffic path: visitor -> Cloudflare (DDoS protection, cache, TLS) -> this server on 443 only.
+# The firewall admits port 443 from Cloudflare's address ranges alone, so nobody can reach this
+# server around Cloudflare. TLS between Cloudflare and Caddy uses a Cloudflare Origin CA
+# certificate (Cloudflare SSL mode "Full (strict)"), so no ACME or port 80 is needed.
+#
+# Each site serves /srv/aidotnet/<site>/current, a symlink that publish.sh swaps atomically to a
+# freshly uploaded release directory.
+
+(aidotnet_tls) {
+	tls /etc/caddy/certs/aidotnet-origin.pem /etc/caddy/certs/aidotnet-origin.key
+}
+
+# The static Astro build. args[0] is the Cache-Control for hashed /_astro/* assets, args[1] for
+# everything else.
+(aidotnet_files) {
+	redir /docs /docs/getting-started/ 307
+	redir /docs/ /docs/getting-started/ 307
+
+	@immutable path /_astro/*
+	header @immutable Cache-Control "{args[0]}"
+	@revalidate not path /_astro/*
+	header @revalidate Cache-Control "{args[1]}"
+
+	encode zstd gzip
+	file_server
+}
+
+(aidotnet_site) {
+	header {
+		Strict-Transport-Security "max-age=63072000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+	log {
+		output file /var/log/caddy/aidotnet-{args[0]}.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}
+
+https://aidotnet.dev {
+	import aidotnet_tls
+	redir https://www.aidotnet.dev{uri} 308
+}
+
+https://www.aidotnet.dev {
+	import aidotnet_tls
+	import aidotnet_site www
+	root * /srv/aidotnet/www/current
+	import aidotnet_files "public, max-age=31536000, immutable" "public, max-age=0, must-revalidate"
+}
+
+# Private preview. A request carrying X-AiDotNet-Preview-Bypass with the shared secret receives an
+# HttpOnly cookie; later requests present only the cookie. Everything else gets 401.
+# AIDOTNET_PREVIEW_SECRET comes from /etc/caddy/aidotnet.env (setup-vps.sh refuses to start Caddy
+# without a 64-character hex value, so an empty secret can never match).
+https://test.aidotnet.dev {
+	import aidotnet_tls
+	import aidotnet_site test
+	root * /srv/aidotnet/test/current
+	header X-Robots-Tag "noindex, nofollow"
+
+	@unlock header X-AiDotNet-Preview-Bypass {$AIDOTNET_PREVIEW_SECRET}
+	handle @unlock {
+		header Set-Cookie "aidotnet_preview={$AIDOTNET_PREVIEW_SECRET}; Path=/; Max-Age=86400; Secure; HttpOnly; SameSite=Lax"
+		import aidotnet_files "private, no-store" "private, no-store"
+	}
+
+	@cookie header_regexp Cookie "(^|;[ ]*)aidotnet_preview={$AIDOTNET_PREVIEW_SECRET}(;|$)"
+	handle @cookie {
+		import aidotnet_files "private, no-store" "private, no-store"
+	}
+
+	handle {
+		respond "This preview is private." 401
+	}
+}
