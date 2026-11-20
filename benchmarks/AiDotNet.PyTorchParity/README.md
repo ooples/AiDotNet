@@ -21,7 +21,25 @@ The full comparison runs two launches on CUDA and CPU. Both frameworks use eight
 
 The printed run directory contains the hardware and runtime versions, git revision, binary hashes, commands, exit codes, logs, raw JSON and a CSV with each launch's median training time per update and inference latency in milliseconds. In the CSV, `torch_over_ai` is PyTorch time divided by AiDotNet time. Failed pairs are listed in `completion.json` and the process exits nonzero. The runner first checks the supported models (MLP, CNN, LSTM and Transformer) against a same-weights PyTorch update on each requested device. The other seven rows compare timings and report parameter counts. The PyTorch implementation and its model-specific notes are in [benchmark.py](pytorch/benchmark.py).
 
-By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash. Separate full historical runs are available for [November 13 and November 19](https://github.com/ooples/AiDotNet.Tensors/tree/bench/reproducible-model-families/parity/model-families). The [17-second LSTM recording](https://github.com/ooples/AiDotNet.Tensors/tree/bench/reproducible-model-families/parity/lstm-video) uses a different workload.
+By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash.
+
+### Compare to the archived runs
+
+Each archive contains 88 original framework reports covering every model, device and launch. The CSVs give absolute times and parameter counts for each launch. The November 13 baseline used public mainline commits. The November 19 experiment used an integration of open PRs and the laptop's power state varied. Both include losses and wins. [Historical source revisions and reproduction commands](https://github.com/ooples/AiDotNet.Tensors/tree/a2577f0b1/parity/model-families)
+
+| Run | Training and inference | Individual framework reports |
+| --- | --- | --- |
+| November 13 | [CSV](evidence/2026-11-13.csv) | [ZIP](evidence/2026-11-13.zip) |
+| November 19 | [CSV](evidence/2026-11-19.csv) | [ZIP](evidence/2026-11-19.zip) |
+
+For example, from the repository root, inspect the original CUDA GRU pair:
+
+```shell
+python -m zipfile -e benchmarks/AiDotNet.PyTorchParity/evidence/2026-11-19.zip benchmarks/AiDotNet.PyTorchParity/results/archive-19
+python benchmarks/AiDotNet.PyTorchParity/pytorch/compare.py benchmarks/AiDotNet.PyTorchParity/results/archive-19/aidotnet-1-cuda-gru.json benchmarks/AiDotNet.PyTorchParity/results/archive-19/torch-compile-1-cuda-gru.json
+```
+
+The [17-second LSTM video benchmark](https://github.com/ooples/AiDotNet.Tensors/tree/a2577f0b1/parity/lstm-video) uses a separate fixture and training protocol.
 
 ## Model definitions
 
