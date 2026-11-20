@@ -219,7 +219,7 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             labels[r] = Labels(row);
         }
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)

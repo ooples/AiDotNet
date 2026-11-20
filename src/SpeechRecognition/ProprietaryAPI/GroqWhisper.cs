@@ -173,7 +173,7 @@ public partial class GroqWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             transcripts[r] = whisper.TranscriptTokens(row);
         }
-        TrainWithCustomLoss(input, _ =>
+        TrainWithCustomObjective(input, input, (_, _) =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
