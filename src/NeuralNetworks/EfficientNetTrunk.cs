@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -164,7 +165,7 @@ internal sealed class EfficientNetTrunk<T>
     /// </summary>
     public List<Tensor<T>> Forward(Tensor<T> image, bool training, Random random)
     {
-        var x = _engine.TensorSiLU(StemNorm.Forward(StemConv.Forward(SamePad(image, 3, 2))));
+        var x = ConvNormSwish(StemConv, StemNorm, SamePad(image, 3, 2), FusedActivationType.Swish);
         var outputs = new List<Tensor<T>>(Stages.Count + 1);
         foreach (var stage in Stages)
         {
@@ -172,7 +173,7 @@ internal sealed class EfficientNetTrunk<T>
             outputs.Add(x);
         }
         if (HeadConv is not null && HeadNorm is not null)
-            outputs.Add(_engine.TensorSiLU(HeadNorm.Forward(HeadConv.Forward(x))));
+            outputs.Add(ConvNormSwish(HeadConv, HeadNorm, x, FusedActivationType.Swish));
         return outputs;
     }
 
@@ -180,33 +181,66 @@ internal sealed class EfficientNetTrunk<T>
     {
         var x = input;
         if (block.Expand is not null && block.ExpandNorm is not null)
-            x = _engine.TensorSiLU(block.ExpandNorm.Forward(block.Expand.Forward(x)));
-        x = _engine.TensorSiLU(block.DepthwiseNorm.Forward(block.Depthwise.Forward(SamePad(x, block.Kernel, block.Stride))));
-        x = Excite(block, x);
-        x = block.ProjectNorm.Forward(block.Project.Forward(x));
+            x = ConvNormSwish(block.Expand, block.ExpandNorm, x, FusedActivationType.Swish);
+        x = SamePad(x, block.Kernel, block.Stride);
+        // In inference the depthwise convolution, its batch norm and the Swish run as one fused engine op.
+        if (!ConvolutionBatchNormFolding<T>.TryDepthwiseBatchNormActivation(block.Depthwise, block.DepthwiseNorm, x,
+                FusedActivationType.Swish, out var depthwise))
+            depthwise = _engine.TensorSiLU(block.DepthwiseNorm.Forward(block.Depthwise.Forward(x)));
+        x = Excite(block, depthwise);
+        x = ConvNormSwish(block.Project, block.ProjectNorm, x, FusedActivationType.None);
         if (!block.Residual) return x;
         if (training && block.DropRate > 0) x = DropPath(x, block.DropRate, random);
         return _engine.TensorAdd(x, input);
+    }
+
+    /// <summary>
+    /// <c>act(bn(conv(x)))</c>: in inference one convolution with the batch norm folded into its weights and the Swish
+    /// in its output kernel (<see cref="ConvolutionBatchNormFolding{T}"/>); in training the three recorded ops, which
+    /// the compiled training step fuses (its BatchNorm + Swish node keeps no BatchNorm output).
+    /// </summary>
+    private Tensor<T> ConvNormSwish(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm, Tensor<T> x,
+        FusedActivationType activation)
+    {
+        if (ConvolutionBatchNormFolding<T>.TryForward(conv, norm, x, activation, out var folded)) return folded;
+        var normalized = norm.Forward(conv.Forward(x));
+        return activation == FusedActivationType.Swish ? _engine.TensorSiLU(normalized) : normalized;
     }
 
     /// <summary>Squeeze-and-excitation: the channel means, a Swish bottleneck, and a sigmoid gate on every channel.</summary>
     private Tensor<T> Excite(Block block, Tensor<T> x)
     {
         var pooled = _engine.ReduceMean(x, new[] { 2, 3 }, false);                                       // [B, C]
-        var gate = _engine.TensorSigmoid(block.Excite.Forward(_engine.TensorSiLU(block.Reduce.Forward(pooled))));
-        var shape = x.Shape.ToArray();
+        Tensor<T> gate;
+        if (!block.Reduce.InTrainingMode && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>()
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null)
+        {
+            // Inference: each projection with its activation in the matmul's epilogue.
+            var squeezed = _engine.FusedLinear(pooled, block.Reduce.GetWeights(), block.Reduce.GetBiases(),
+                FusedActivationType.Swish);
+            gate = _engine.FusedLinear(squeezed, block.Excite.GetWeights(), block.Excite.GetBiases(),
+                FusedActivationType.Sigmoid);
+        }
+        else
+        {
+            gate = _engine.TensorSigmoid(block.Excite.Forward(_engine.TensorSiLU(block.Reduce.Forward(pooled))));
+        }
+        var shape = x.Shape;
+        // The [B, C, 1, 1] gate broadcasts over the spatial axes inside the multiply; materializing it at the feature
+        // map's shape first wrote and read a second full-size tensor per block.
         gate = _engine.Reshape(gate, new[] { shape[0], shape[1], 1, 1 });
-        return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(gate, shape));
+        return _engine.TensorMultiply(x, gate);
     }
 
     /// <summary>Drops the whole branch of each sample with probability <paramref name="rate"/>, scaling the kept ones
     /// by 1/(1 − rate).</summary>
     private Tensor<T> DropPath(Tensor<T> x, double rate, Random random)
     {
-        var shape = x.Shape.ToArray();
-        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
-        var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(new[] { shape[0], 1, 1, 1 }, random, rate);
-        return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(mask, shape));
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay. The multiply broadcasts
+        // the [B, 1, 1, 1] mask itself, so no full-size copy of it is materialized.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(new[] { x.Shape[0], 1, 1, 1 }, random, rate);
+        return _engine.TensorMultiply(x, mask);
     }
 
     /// <summary>TensorFlow's "SAME" padding for a stride-2 convolution (stride 1 pads symmetrically inside the
@@ -214,28 +248,12 @@ internal sealed class EfficientNetTrunk<T>
     private Tensor<T> SamePad(Tensor<T> x, int kernel, int stride)
     {
         if (stride == 1) return x;
-        for (int axis = 2; axis <= 3; axis++)
-        {
-            int n = x.Shape[axis];
-            int total = Math.Max(((n + stride - 1) / stride - 1) * stride + kernel - n, 0);
-            int before = total / 2, after = total - before;
-            if (total == 0) continue;
-            var parts = new List<Tensor<T>>(3);
-            var zerosShape = x.Shape.ToArray();
-            if (before > 0)
-            {
-                zerosShape[axis] = before;
-                parts.Add(new Tensor<T>(zerosShape.ToArray()));
-            }
-            parts.Add(x);
-            if (after > 0)
-            {
-                zerosShape[axis] = after;
-                parts.Add(new Tensor<T>(zerosShape.ToArray()));
-            }
-            x = _engine.TensorConcatenate(parts.ToArray(), axis);
-        }
-        return x;
+        int PadOf(int n) => Math.Max(((n + stride - 1) / stride - 1) * stride + kernel - n, 0);
+        int totalH = PadOf(x.Shape[2]), totalW = PadOf(x.Shape[3]);
+        if (totalH == 0 && totalW == 0) return x;
+        // One pad op (on a GPU, one kernel over the resident map) rather than a concatenation with host zero tensors,
+        // which uploaded the zeros on every call.
+        return _engine.Pad(x, totalH / 2, totalH - totalH / 2, totalW / 2, totalW - totalW / 2, NumOps.Zero);
     }
 
     private IEnumerable<(string Name, ConvolutionalLayer<T> Conv, string NormName, BatchNormalizationLayer<T> Norm)> NamedConvolutions()

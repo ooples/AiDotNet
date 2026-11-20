@@ -760,14 +760,17 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// The per-channel affine parameters and running statistics this layer normalizes with in inference, for folding it
     /// into a preceding convolution of <paramref name="channels"/> output channels
     /// (<see cref="ConvolutionBatchNormFolding{T}"/>). False when the layer's features are declared channels-last or
-    /// its parameters do not have one entry per channel (not yet resolved).
+    /// its parameters do not have one entry per channel (not yet resolved), and during a recalibration
+    /// (<see cref="OverwriteRunningStatistics"/>): that forward must normalize with the batch's statistics and store
+    /// them, which only this layer's own forward does; a fold would normalize with the stale running statistics and
+    /// leave them unrecalibrated.
     /// </summary>
     internal bool TryGetFoldingStatistics(int channels, out Tensor<T> gamma, out Tensor<T> beta, out Tensor<T> mean,
         out Tensor<T> variance, out double epsilon)
     {
         gamma = _gamma; beta = _beta; mean = _runningMean; variance = _runningVariance;
         epsilon = NumOps.ToDouble(_epsilon);
-        return Layout != BatchNormDataLayout.ChannelsLast && channels > 0
+        return !OverwriteRunningStatistics && Layout != BatchNormDataLayout.ChannelsLast && channels > 0
             && _gamma.Length == channels && _beta.Length == channels
             && _runningMean.Length == channels && _runningVariance.Length == channels;
     }
