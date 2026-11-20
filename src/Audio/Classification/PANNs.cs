@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -185,7 +185,14 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultPANNsLayers(numMels: _options.NumMels, baseChannels: _options.BaseChannels, numBlocks: _options.NumBlocks, embeddingDim: _options.EmbeddingDim, numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
+        else
+        {
+            // The head is as wide as the architecture asks (527 for AudioSet). The built-in label list is a
+            // 196-name subset of AudioSet's ontology, so sizing the head by it built a 196-way classifier that could
+            // not train against 527-wide AudioSet targets; the labels name the leading outputs.
+            int classes = Architecture.OutputSize > 0 ? Architecture.OutputSize : ClassLabels.Count;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultPANNsLayers(numMels: _options.NumMels, baseChannels: _options.BaseChannels, numBlocks: _options.NumBlocks, embeddingDim: _options.EmbeddingDim, numClasses: classes, dropoutRate: _options.DropoutRate));
+        }
     }
 
     /// <inheritdoc />

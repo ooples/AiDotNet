@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Training;
 
@@ -67,6 +69,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _u;
     [Buffer]
     private Tensor<T> _v;
+
+    private readonly DerivedTensorCache<T> _inferenceWeightKernel = new();
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -195,6 +199,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape, string? gainName,
         string? biasName)
     {
+        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
+        // inference forward built from the old values must not answer for the loaded ones.
+        _inferenceWeightKernel.Invalidate();
         if (gainName is not null && _normalization != ConvolutionNormalization.Weight)
             throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
         if (_normalization == ConvolutionNormalization.Spectral)
@@ -243,6 +250,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     internal void LoadTorchWeights(double[] weight, double[]? gain, double[] bias)
     {
+        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
+        // inference forward built from the old values must not answer for the loaded ones.
+        _inferenceWeightKernel.Invalidate();
         if (weight.Length != _direction.Length)
             throw new ArgumentException($"Expected {_direction.Length} kernel values, got {weight.Length}.", nameof(weight));
         if (bias.Length != _bias.Length)
@@ -315,62 +325,99 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
-        int rows = _direction.Shape[0], per = _direction.Length / rows;
         if (_normalization == ConvolutionNormalization.None) return _direction;
-        var v = Engine.Reshape(_direction, new[] { rows, per });
         if (_normalization == ConvolutionNormalization.Weight)
         {
-            var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
-                NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
-            var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
-            return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
+            // Eval reuses the same effective weights until their sources change. Keeping their owned storage also
+            // lets convolution backends retain a packed kernel instead of packing fresh normalization scratch.
+            if (!IsTrainingMode && !GraphMode.IsActive
+                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed))
+                return _inferenceWeightKernel.GetOrBuild(Engine,
+                    static (engine, sources) => WeightNormalizedKernel(engine, sources[0], sources[1]), _direction, _gain);
+            return WeightNormalizedKernel(Engine, _direction, _gain);
         }
+        int rows = _direction.Shape[0], per = _direction.Length / rows;
+        var v = Engine.Reshape(_direction, new[] { rows, per });
 
-        // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
-        // on StopGradient(W) with accepted-step u/v state update:
-        // v <- StopGradient(W)^T u / ||StopGradient(W)^T u||
-        // u <- StopGradient(W) v / ||StopGradient(W) v||
-        // sigma = u^T W v with u and v held constant. Evaluation uses the stored u and v unchanged.
-        var u = Engine.Reshape(_u, new[] { 1, rows });
-        Tensor<T> uNormed;
-        Tensor<T> vNormed;
-
-        if (IsTrainingMode)
+        // Match torch.nn.utils.parametrizations.spectral_norm: update u from the stored v FIRST, then v from the
+        // new u. The older spectral_norm hook used the opposite order; those orders disagree after a weight update.
+        // Both vectors are kept; σ = uᵀ V v with u and v held constant. Evaluation uses the stored state unchanged.
+        Tensor<T> uT, vT;
+        // Power iteration treats u/v as state, not differentiable functions of the weights. Keep the matrix and
+        // state updates on the engine: downloading V and walking its elements dominated GPU vocoder training.
+        using (new NoGradScope<T>())
         {
-            var wDetached = Engine.StopGradient(v);
-            var vUnnorm = Engine.TensorMatMul(u, wDetached);
-            var vNormSq = Engine.ReduceSum(Engine.TensorMultiply(vUnnorm, vUnnorm), new[] { 1 }, keepDims: true);
-            var vNormInv = Engine.TensorPow(Engine.TensorAddScalar(vNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
-            vNormed = Engine.TensorMultiply(vUnnorm, Engine.TensorTile(vNormInv, new[] { 1, per }));
-
-            var wDetachedT = Engine.TensorTranspose(wDetached);
-            var uUnnorm = Engine.TensorMatMul(vNormed, wDetachedT);
-            var uNormSq = Engine.ReduceSum(Engine.TensorMultiply(uUnnorm, uUnnorm), new[] { 1 }, keepDims: true);
-            var uNormInv = Engine.TensorPow(Engine.TensorAddScalar(uNormSq, NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));
-            uNormed = Engine.TensorMultiply(uUnnorm, Engine.TensorTile(uNormInv, new[] { 1, rows }));
-
-            if (!GraphMode.IsActive && !CompiledStepRandom<T>.InNonStepForward && !GraphMode.IsProbe)
+            uT = Engine.Reshape(_u, new[] { 1, rows });
+            vT = Engine.Reshape(_v, new[] { per, 1 });
+            if (IsTrainingMode)
             {
-                using (GraphMode.SuspendRecording())
+                Tensor<T> Normalize(Tensor<T> x)
                 {
-                    Engine.Reshape(uNormed, new[] { rows }).CopyTo(_u.AsWritableSpan());
-                    Engine.Reshape(vNormed, new[] { per }).CopyTo(_v.AsWritableSpan());
-                    Engine.InvalidatePersistentTensor(_u);
-                    Engine.InvalidatePersistentTensor(_v);
+                    var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(x, x), null));
+                    return Engine.TensorMultiply(x, Engine.TensorReciprocal(Engine.TensorMax(norm, NumOps.FromDouble(1e-12))));
+                }
+                var nextU = Normalize(Engine.TensorMatMul(v, vT));
+                var nextV = Normalize(Engine.TensorMatMul(Engine.Reshape(nextU, new[] { 1, rows }), v));
+                if (CompiledStepRandom<T>.InNonStepForward || GraphMode.IsProbe)
+                {
+                    // A forward that only resolves shapes or probes the step must not advance the accepted state.
+                    uT = Engine.Reshape(nextU, new[] { 1, rows });
+                    vT = Engine.Reshape(nextV, new[] { per, 1 });
+                }
+                else
+                {
+                    Engine.TensorCopyInPlace(_u, Engine.Reshape(nextU, _u._shape));
+                    Engine.TensorCopyInPlace(_v, Engine.Reshape(nextV, _v._shape));
+                    // Snapshot this forward's state so another forward cannot overwrite the vectors its backward uses.
+                    uT = Engine.Reshape(Engine.TensorAddScalar(_u, NumOps.Zero), new[] { 1, rows });
+                    vT = Engine.Reshape(Engine.TensorAddScalar(_v, NumOps.Zero), new[] { per, 1 });
                 }
             }
         }
+        var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
+        var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
+        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+    }
+
+    // The published engine predates the fused operation. Bind it once so newer engines record
+    // a single weight-normalization operation for both forward and backward.
+    private static readonly Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? FusedWeightNorm =
+        BindWeightNorm();
+
+    private static Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? BindWeightNorm()
+    {
+        var operation = typeof(IEngine).GetMethod("TensorWeightNorm");
+        if (operation is null) return null;
+        try
+        {
+            return OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>>(
+                operation.MakeGenericMethod(typeof(T)));
+        }
+        catch (NotSupportedException) { return null; }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
+    {
+        const double epsilon = 1e-24;
+        Tensor<T> kernel;
+        if (FusedWeightNorm is { } normalize)
+        {
+            kernel = normalize(engine, direction, gain, epsilon);
+        }
         else
         {
-            uNormed = u;
-            vNormed = Engine.Reshape(_v, new[] { 1, per });
+            var ops = MathHelper.GetNumericOperations<T>();
+            int rows = direction.Shape[0], per = direction.Length / rows;
+            var matrix = engine.Reshape(direction, new[] { rows, per });
+            var normSquared = engine.ReduceSum(engine.TensorMultiply(matrix, matrix), new[] { 1 }, keepDims: true);
+            var inverseNorm = engine.TensorPow(engine.TensorAddScalar(normSquared, ops.FromDouble(epsilon)), ops.FromDouble(-0.5));
+            var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), inverseNorm);
+            kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
         }
-
-        var uW = Engine.TensorMatMul(uNormed, v);
-        var vNormedT = Engine.TensorTranspose(vNormed);
-        var sigma = Engine.TensorMatMul(uW, vNormedT);
-        var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
-        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+        // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
+        engine.InvalidatePersistentTensor(kernel);
+        return kernel;
     }
 
     private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)
@@ -419,8 +466,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         int outTime = y.Shape[3];
         if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
-        var bias = Engine.TensorTile(Engine.Reshape(_bias, new[] { 1, _out, 1, 1 }), new[] { batch, 1, 1, outTime });
-        return Engine.Reshape(Engine.TensorAdd(y, bias), new[] { batch, _out, outTime });
+        // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.
+        return Engine.Reshape(Engine.TensorChannelBiasAdd(y, _bias), new[] { batch, _out, outTime });
     }
 
     /// <summary>

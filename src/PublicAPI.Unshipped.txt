@@ -1,4 +1,5 @@
 #nullable enable
+override AiDotNet.NeuralNetworks.Layers.GraphConvolutionalLayer<T>.Dispose(bool disposing) -> void
 virtual AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateAccepted() -> void
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateRejected() -> void
@@ -6390,6 +6391,7 @@ override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.CreateDiscriminators() -> Syste
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.Generate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.ComputeInputMel(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.KeepsCentredFrame.get -> bool
+override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.DiscriminatorLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.GeneratorLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, bool adversarial) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -6763,6 +6765,7 @@ AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.VocoderSettings.get -> AiDotNet
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.TrainingSteps.get -> long
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.HasPaperLayers.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.SegmentSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateGenerator() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateDiscriminators() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
@@ -26608,6 +26611,7 @@ override AiDotNet.Diffusion.ThreeD.Magic3DModel<T>.ImageTo3D(AiDotNet.Tensors.Li
 override AiDotNet.Diffusion.ThreeD.Instant3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.PointEModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.ParameterCount.get -> long
