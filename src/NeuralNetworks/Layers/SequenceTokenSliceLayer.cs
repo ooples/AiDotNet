@@ -54,6 +54,10 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>, IShapeContract
 
     private readonly Position _position;
 
+    internal bool CanConsumeLastHiddenState =>
+        GetType() == typeof(SequenceTokenSliceLayer<T>) && IsShapeResolved && _position == Position.Last;
+
+
     /// <inheritdoc />
     /// <remarks>
     /// Selects ONE token from the sequence, so the Time axis is consumed entirely and batch and feature

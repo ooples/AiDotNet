@@ -350,9 +350,20 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         {
             var current = input;
 
-            foreach (var layer in Layers)
+            for (int i = 0; i < Layers.Count; i++)
             {
-                current = layer.Forward(current);
+                var layer = Layers[i];
+                if (layer is LSTMLayer<T> recurrent && i + 1 < Layers.Count &&
+                    Layers[i + 1] is SequenceTokenSliceLayer<T> { CanConsumeLastHiddenState: true } &&
+                    recurrent.TryForwardLastHiddenState(current, out var last))
+                {
+                    current = last;
+                    i++;
+                }
+                else
+                {
+                    current = layer.Forward(current);
+                }
             }
 
             return current;
