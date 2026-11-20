@@ -233,6 +233,37 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
         finally { AiDotNetEngine.Current = previousEngine; }
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(8)]
+    public void GeneralPathUpsamplingWorkspaceStaysOutsideCallerLifetime(int batch)
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            // Double precision is not eligible for the private FP32 route, so this exercises the general path's
+            // stage scratch: the caller-arena limit below fails if its upsampling temporaries stop being recycled.
+            var generator = Create<double>(new[] { 2, 2, 2, 2 }, new[] { 4, 4, 4, 4 });
+            var input = new Tensor<double>(Enumerable.Range(0, batch * 4 * 64)
+                .Select(index => .15 * Math.Sin(index * .11)).ToArray(), new[] { batch, 4, 64 });
+            var original = input.ToArray();
+            double[] expected;
+            using (new NoGradScope<double>()) expected = generator.Forward(input).ToArray();
+
+            using var arena = TensorArena.Create();
+            using var noGrad = new NoGradScope<double>();
+            var output = generator.Forward(input);
+            AssertBitwise(expected, output.ToArray());
+            Assert.Equal(original, input.ToArray());
+            Assert.Equal(0, generator.PrivateCpuInferenceCalls);
+            long largestStageBytes = (long)batch * 16 * 64 * sizeof(double);
+            Assert.True(arena.PeakBackingBytes <= 9 * largestStageBytes,
+                $"Caller retained {arena.PeakBackingBytes} bytes for a {largestStageBytes}-byte stage.");
+        }
+        finally { AiDotNetEngine.Current = previousEngine; }
+    }
+
     private static HiFiGanGenerator<T> Create<T>(int[] rates, int[] kernels, int branches = 3, bool condition = false)
     {
         var generator = new HiFiGanGenerator<T>(AiDotNetEngine.Current, 4, 16, rates, kernels,

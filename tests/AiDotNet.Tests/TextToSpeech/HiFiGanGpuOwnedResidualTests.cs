@@ -60,6 +60,13 @@ public sealed class HiFiGanGpuOwnedResidualTests
             }
             Assert.Equal(expectedFirst, unreadFirst.ToArray());
             Assert.Equal(callerInput, firstInput.ToArray());
+            // Equal values and a set flag would also hold if the reuse predicate never accepted anything.
+            Assert.Equal(0, reference.GpuOwnedResidualReuses);
+            if (depth == 0)
+                // With no residual pairs every branch result is the shared stage input, which is never donated.
+                Assert.Equal(0, candidate.GpuOwnedResidualReuses);
+            else
+                Assert.True(candidate.GpuOwnedResidualReuses > 0, "No private branch result was accumulated in place.");
             for (int i = 0; i < candidate.Layers.Count; i++) Assert.Equal(parameters[i], candidate.Layers[i].GetParameters().ToArray());
         }
         finally

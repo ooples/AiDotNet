@@ -41,8 +41,18 @@ public sealed class HiFiGanGpuMicrobatchTests
             using var owner = TensorScope.Begin();
             using var first = Input(batch, 11);
             var original = first.ToArray();
+            // The parsed limit proves nothing about dispatch: record the chunk sizes each model actually ran.
+            var referenceChunks = new List<int>();
+            var candidateChunks = new List<int>();
+            reference.GpuInferenceChunkDispatched = referenceChunks.Add;
+            candidate.GpuInferenceChunkDispatched = candidateChunks.Add;
             var expectedFirst = reference.Forward(first).ToArray();
             var unread = candidate.Forward(first);
+            Assert.Empty(referenceChunks);
+            var expectedChunks = new List<int>();
+            for (int start = 0; start < batch; start += limit) expectedChunks.Add(Math.Min(limit, batch - start));
+            Assert.Equal(expectedChunks, candidateChunks);
+            if (limit == 2 && batch == 5) Assert.Equal(new[] { 2, 2, 1 }, candidateChunks);
             foreach (int currentBatch in new[] { batch + 1, 1, batch })
             {
                 using var input = Input(currentBatch, 7);

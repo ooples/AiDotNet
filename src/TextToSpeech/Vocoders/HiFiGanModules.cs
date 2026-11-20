@@ -24,6 +24,13 @@ internal sealed partial class HiFiGanGenerator<T>
     private readonly bool _gpuOwnedResidualsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_OWNED_RESIDUALS") == "1";
     private readonly bool _gpuDetachedLifetimesEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_DETACHED_LIFETIMES") == "1";
     private readonly int _gpuInferenceBatchLimit = ReadGpuInferenceBatchLimit();
+    private long _gpuOwnedResidualReuses;
+
+    /// <summary>How many branch or stage results the GPU inference path accumulated into in place.</summary>
+    internal long GpuOwnedResidualReuses => Interlocked.Read(ref _gpuOwnedResidualReuses);
+
+    /// <summary>Receives the sample count of each chunk the GPU micro-batched inference path dispatches.</summary>
+    internal Action<int>? GpuInferenceChunkDispatched { get; set; }
     private string? _gpuLifetimeDiagnosticState;
 
     private readonly IEngine _engine;
@@ -193,6 +200,7 @@ internal sealed partial class HiFiGanGenerator<T>
         for (int start = 0; start < batch; start += _gpuInferenceBatchLimit)
         {
             int count = Math.Min(_gpuInferenceBatchLimit, batch - start);
+            GpuInferenceChunkDispatched?.Invoke(count);
             using var chunk = TensorScope.Begin();
             var input = _engine.TensorSlice(features, new[] { start, 0, 0 }, new[] { count, channels, frames });
             outputs.Add(chunk.Keep(ForwardGpuInference(input, null, gpu)));
@@ -306,6 +314,7 @@ internal sealed partial class HiFiGanGenerator<T>
                     if (CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
                     {
                         _engine.TensorAddInPlace(previousSum, h);
+                        Interlocked.Increment(ref _gpuOwnedResidualReuses);
                         sum = previousSum;
                     }
                     else
@@ -321,6 +330,7 @@ internal sealed partial class HiFiGanGenerator<T>
             if (CanReusePrivateResult(completedSum, stageInput))
             {
                 _engine.TensorMultiplyScalarInPlace(completedSum, _residualAverageScale);
+                Interlocked.Increment(ref _gpuOwnedResidualReuses);
                 x = completedSum;
             }
             else
