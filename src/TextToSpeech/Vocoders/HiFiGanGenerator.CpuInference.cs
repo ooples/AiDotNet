@@ -11,9 +11,16 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 
 internal sealed partial class HiFiGanGenerator<T>
 {
-    // Exclusive per-generator ownership bounds inference to five single-example activation
-    // buffers. Stream independent examples so batch growth does not retain batch-sized scratch.
-    // Concurrent/reentrant calls retain the ordinary execution path.
+    // Reuse five exclusively owned activation slots. Bound batching by bytes so a long
+    // waveform cannot retain scratch proportional to the public batch size.
+    private const int PrivateCpuBatchSlotElements = 16 * 1024 * 1024 / sizeof(float);
+    private readonly int _privateCpuBatchLimit = ReadPrivateCpuBatchLimit();
+
+    private static int ReadPrivateCpuBatchLimit()
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_HIFI_CPU_INFERENCE_BATCH_LIMIT"), out int limit) && limit > 0
+            ? limit : int.MaxValue;
+    }
     private float[][]? _privateCpuBuffers;
     private int _privateCpuBusy;
     private long _privateCpuCalls;
@@ -41,7 +48,7 @@ internal sealed partial class HiFiGanGenerator<T>
             || features.Rank != 3 || !features.IsContiguous || features.Shape[0] <= 0 || features.Shape[2] <= 0
             || !_layers.All(layer => layer is NormedConv1DLayer<T> convolution && convolution.SupportsPrivateCpuInference))
             return false;
-        int fullBatch = features.Shape[0], batch = 1, time = features.Shape[2];
+        int fullBatch = features.Shape[0], time = features.Shape[2];
         int inputCount = checked(features.Shape[1] * time);
         if (!_pre.TryPrivateCpuOutputTime(time, out time)) return false;
         long maximum = Math.Max(inputCount, (long)_pre.OutputChannels * time);
@@ -55,23 +62,27 @@ internal sealed partial class HiFiGanGenerator<T>
         maximum = Math.Max(maximum, sampleOutputCount);
         if (sampleOutputCount <= 0 || sampleOutputCount * fullBatch > int.MaxValue) return false;
         if (maximum <= 0 || maximum > int.MaxValue || Interlocked.CompareExchange(ref _privateCpuBusy, 1, 0) != 0) return false;
-        Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>? views = null;
+        int chunkLimit = Math.Min(fullBatch, _privateCpuBatchLimit);
+        chunkLimit = Math.Min(chunkLimit, Math.Max(1, PrivateCpuBatchSlotElements / (int)maximum));
+        int slotElements = checked(chunkLimit * (int)maximum);
+        int batch = chunkLimit;
+        Dictionary<(int Slot, int Batch, int Channels, int Time), PrivateCpuActivation>? views = null;
         try
         {
             var buffers = _privateCpuBuffers ??= new float[5][];
             for (int i = 0; i < buffers.Length; i++)
-                if (buffers[i] is null || buffers[i].Length < maximum)
-                    buffers[i] = CpuStorageAllocationDiagnostics.NewNumericArray<float>((int)maximum, "workspace.hifi_cpu_private_activation");
+                if (buffers[i] is null || buffers[i].Length < slotElements)
+                    buffers[i] = CpuStorageAllocationDiagnostics.NewNumericArray<float>(slotElements, "workspace.hifi_cpu_private_activation");
             Interlocked.Increment(ref _privateCpuCalls);
             var cpu = _engine.Cast<CpuEngine>();
-            var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();
+            var activeViews = new Dictionary<(int Slot, int Batch, int Channels, int Time), PrivateCpuActivation>();
             views = activeViews;
             var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(AiDotNet.Helpers.TensorReferenceComparer<NormedConv1DLayer<T>>.Instance);
             var numOps = MathHelper.GetNumericOperations<T>();
             T slope = numOps.FromDouble(Slope), finalSlope = numOps.FromDouble(0.01);
             PrivateCpuActivation View(int slot, int channels, int length)
             {
-                var key = (slot, channels, length);
+                var key = (slot, batch, channels, length);
                 if (activeViews.TryGetValue(key, out var cached)) return cached;
                 int count = checked(batch * channels * length);
                 var memory = ((T[])(object)buffers[slot]).AsMemory(0, count);
@@ -111,15 +122,17 @@ internal sealed partial class HiFiGanGenerator<T>
                 return target;
             }
             // Predict performs the single durable public copy. Keep this complete result
-            // arena-owned while each example reuses the same private activation storage.
+            // arena-owned while independent chunks reuse the same private activation storage.
             var complete = TensorAllocator.RentUninitialized<T>(new[] { fullBatch, _post.OutputChannels, outputTime });
             using var sourceKeep = new KeepAliveScope(features);
             using var destinationKeep = new KeepAliveScope(complete);
             var source = features.AsSpanUnmarked();
             var destination = complete.AsWritableSpanUnmarked();
-            for (int example = 0; example < fullBatch; example++)
+            for (int example = 0; example < fullBatch; example += batch)
             {
-                source.Slice(example * inputCount, inputCount).CopyTo(((T[])(object)buffers[4]).AsSpan(0, inputCount));
+                batch = Math.Min(chunkLimit, fullBatch - example);
+                int chunkInputs = checked(batch * inputCount);
+                source.Slice(example * inputCount, chunkInputs).CopyTo(((T[])(object)buffers[4]).AsSpan(0, chunkInputs));
                 var sample = View(4, features.Shape[1], features.Shape[2]);
                 var x = Conv(_pre, sample, 0);
                 for (int stage = 0; stage < _ups.Count; stage++)
@@ -151,11 +164,11 @@ internal sealed partial class HiFiGanGenerator<T>
                     x = sum.Value;
                 }
                 var finalActivation = Activate(x, 1, finalSlope);
-                // Slot0's stage input is dead after finalActivation; it can hold this example's
-                // waveform without another backing array or a view into a public output buffer.
+                // The stage input is dead after the final activation. Its slot can hold
+                // the chunk's waveforms until they are copied into the public batch.
                 var final = Conv(_post, finalActivation, 0, post: true);
                 if (_tanhOutput) cpu.TanhInto(final.Nchw, final.Nchw);
-                final.Logical.AsSpanUnmarked().CopyTo(destination.Slice(checked(example * (int)sampleOutputCount), (int)sampleOutputCount));
+                final.Logical.AsSpanUnmarked().CopyTo(destination.Slice(checked(example * (int)sampleOutputCount), checked(batch * (int)sampleOutputCount)));
             }
             output = complete;
             return true;

@@ -57,6 +57,56 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
     }
 
     [Fact]
+    public void PrivateCpuBatchedPredictionHandlesTailAndObservesChangedWeights()
+    {
+        const string name = "AIDOTNET_HIFI_CPU_INFERENCE_BATCH_LIMIT";
+        string? previousLimit = Environment.GetEnvironmentVariable(name);
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            Environment.SetEnvironmentVariable(name, "2");
+            var generator = Create<float>(new[] { 2, 4, 2 }, new[] { 4, 8, 4 });
+            var input = new Tensor<float>(Enumerable.Range(0, 3 * 4 * 9)
+                .Select(i => .2f * (float)Math.Sin(i * .13)).ToArray(), new[] { 3, 4, 9 });
+            var original = input.ToArray();
+            using var noGrad = new NoGradScope<float>();
+            float[] Reference()
+            {
+                var values = new List<float>();
+                for (int i = 0; i < 3; i++)
+                {
+                    using var single = new Tensor<float>(original.AsSpan(i * 36, 36).ToArray(), new[] { 1, 4, 9 });
+                    using var waveform = generator.Forward(single);
+                    values.AddRange(waveform.ToArray());
+                }
+                return values.ToArray();
+            }
+            var expected = Reference();
+            float[] first;
+            using (var arena = TensorArena.Create())
+                first = generator.Forward(input).ToArray();
+            AssertBitwise(expected, first);
+
+            var layer = generator.Layers.Last();
+            var parameters = layer.GetParameters();
+            parameters[parameters.Length - 1] += .1f;
+            layer.SetParameters(parameters);
+            var updated = Reference();
+            Assert.False(first.SequenceEqual(updated));
+            using (var arena = TensorArena.Create())
+                AssertBitwise(updated, generator.Forward(input).ToArray());
+            Assert.Equal(original, input.ToArray());
+            Assert.Equal(2, generator.PrivateCpuInferenceCalls);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, previousLimit);
+            AiDotNetEngine.Current = previousEngine;
+        }
+    }
+
+    [Fact]
     public void PrivateCpuWorkspacePreservesPublishedOutputsAcrossBatchGrowthAndReuse()
     {
         var previousEngine = AiDotNetEngine.Current;
