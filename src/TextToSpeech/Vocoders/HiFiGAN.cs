@@ -104,7 +104,8 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     private protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
         => GetType() == typeof(HiFiGAN<T>)
-            ? Flat(_generator!.ForwardDetachedForDiscriminator(mel))
+            ? Flat((_generator ?? throw new InvalidOperationException("The generator has not been built."))
+                .ForwardDetachedForDiscriminator(mel))
             : base.GenerateDetachedForDiscriminator(mel);
 
     /// <inheritdoc />
@@ -154,9 +155,10 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         using (new NoGradScope<T>()) realOut = _discriminators.Forward(real);
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
+        var lossMel = _lossMel ?? throw new InvalidOperationException("The mel loss transform has not been built.");
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Engine.StopGradient(_lossMel!.Forward(real));
-        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(lossMel.Forward(real));
+        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(lossMel.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
             Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(PaperOptions.MelLossWeight)));

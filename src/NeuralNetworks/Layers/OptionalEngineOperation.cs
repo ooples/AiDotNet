@@ -9,7 +9,8 @@ internal static class OptionalEngineOperation
     // ordinary interface call once so each forward dispatches to the engine that owns the tensor.
     internal static TDelegate Bind<TDelegate>(MethodInfo method) where TDelegate : Delegate
     {
-        var invoke = typeof(TDelegate).GetMethod("Invoke")!;
+        var invoke = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException(typeof(TDelegate) + " declares no Invoke method.");
         var parameters = invoke.GetParameters().Select(p => Expression.Parameter(p.ParameterType, p.Name)).ToArray();
         var call = method.IsStatic ? Expression.Call(method, parameters) : Expression.Call(parameters[0], method, parameters.Skip(1));
         return Expression.Lambda<TDelegate>(call, parameters).Compile();
@@ -18,7 +19,8 @@ internal static class OptionalEngineOperation
     internal static TDelegate? Find<TDelegate>(Type? owner, string name, Type? elementType = null) where TDelegate : Delegate
     {
         if (owner is null) return null;
-        var signature = typeof(TDelegate).GetMethod("Invoke")!;
+        var signature = typeof(TDelegate).GetMethod("Invoke")
+            ?? throw new InvalidOperationException(typeof(TDelegate) + " declares no Invoke method.");
         var parameters = signature.GetParameters().Select(p => p.ParameterType).ToArray();
         const BindingFlags flags = BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         foreach (var candidate in owner.GetMethods(flags))

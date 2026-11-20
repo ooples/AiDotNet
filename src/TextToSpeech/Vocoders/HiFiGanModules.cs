@@ -519,7 +519,8 @@ internal sealed partial class HiFiGanGenerator<T>
                 // remains an input to the next iteration. Fallbacks keep it live.
                 stageScratch?.Reset();
             }
-            else x = _engine.TensorMultiplyScalar(sum!, average);
+            else x = _engine.TensorMultiplyScalar(
+                sum ?? throw new InvalidOperationException("The residual stage produced no branch output."), average);
         }
         // F.leaky_relu with its default slope 0.01 before the output convolution (reference Generator.forward).
         x = LeakyRelu(x, 0.01);
@@ -884,8 +885,10 @@ internal sealed class DifferentiableMel<T>
         var framed = frames == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);                       // [frames, fft]
         if (_fftWindow is not null && RealFftMagnitude is { } magnitude)
             return magnitude(_engine, _engine.TensorMultiply(framed, _fftWindow), epsilon);
-        var re = _engine.TensorMatMul(framed, _cos!);
-        var im = _engine.TensorMatMul(framed, _sin!);
+        if (_cos is null || _sin is null)
+            throw new InvalidOperationException("The folded-window DFT tables were not built for this transform.");
+        var re = _engine.TensorMatMul(framed, _cos);
+        var im = _engine.TensorMatMul(framed, _sin);
         return _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),
             ops.FromDouble(epsilon)), ops.FromDouble(0.5));
     }

@@ -102,7 +102,7 @@ internal sealed class DerivedTensorCache<T>
         _engine = engine;
         _generation = generation;
         _value = value;
-        if (retireReplaced) Retire(replaced!, replacedEngine);
+        if (retireReplaced && replaced is not null) Retire(replaced, replacedEngine);
         return value;
     }
 
@@ -117,7 +117,7 @@ internal sealed class DerivedTensorCache<T>
         _sourceCount = 0;
         Array.Clear(_sources, 0, MaxSources);
         Array.Clear(_storageIdentities, 0, MaxSources);
-        if (retireReplaced) Retire(replaced!, engine);
+        if (retireReplaced && replaced is not null) Retire(replaced, engine);
     }
 
     /// <summary>Whether the cache was built from exactly these <paramref name="count"/> sources at their current versions.</summary>

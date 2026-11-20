@@ -20,8 +20,10 @@ public abstract partial class NeuralNetworkBase<T>
             if (enter is null)
                 return static (model, input, resultScope, _) => model.CompletePrediction(input, resultScope);
 
-            var bind = typeof(PredictionWorkspace).GetMethod(nameof(BindScope), BindingFlags.NonPublic | BindingFlags.Static)!;
-            return (Prediction)bind.MakeGenericMethod(enter.ReturnType).Invoke(null, new object[] { enter })!;
+            var bind = typeof(PredictionWorkspace).GetMethod(nameof(BindScope), BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new InvalidOperationException("The prediction workspace binder is missing.");
+            return bind.MakeGenericMethod(enter.ReturnType).Invoke(null, new object[] { enter }) as Prediction
+                ?? throw new InvalidOperationException("The prediction workspace binder returned no delegate.");
         }
 
         private static Prediction BindScope<TScope>(MethodInfo enterMethod) where TScope : struct, IDisposable
