@@ -1,0 +1,3 @@
+# Copied as-is to the Linux web server; CRLF would break bash and Caddy there.
+*.sh text eol=lf
+*.caddy text eol=lf

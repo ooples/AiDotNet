@@ -86,7 +86,7 @@ jobs:
       - name: Build website
         run: npm run build   # astro build + pagefind index (postbuild)
         env:
-          VERCEL: '1'
+          AIDOTNET_SITE_ROOT: '1'
           # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
           # static build doesn't OOM on the runner.
           NODE_OPTIONS: '--max-old-space-size=6144'

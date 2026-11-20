@@ -18,7 +18,7 @@ if (!baseURL) {
   throw new Error(
     'PLAYWRIGHT_BASE_URL is required. Set it to the environment you want ' +
     'to test against — e.g. http://localhost:4321 for a local dev server, ' +
-    'a Vercel preview URL for a PR, or https://www.aidotnet.dev for ' +
+    'https://test.aidotnet.dev for the preview, or https://www.aidotnet.dev for ' +
     'production smoke (only do this deliberately — the auth-backed specs ' +
     'mutate real accounts).',
   );
