@@ -566,11 +566,13 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
                     profiled_argv=profiled_argv, protocol=protocol,
                     cache_state=cache_state, gpu_mapping=gpu_mapping,
                     cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
+                    # Only keys present in the final environment: an override that launch filtering removed (a
+                    # disabled diagnostic such as PROFILE_RANGE) stays out of the receipt instead of raising.
                     environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
                         (set(profiler_keys) & set(env)) |
                         ({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "AIDOTNET_DIRECTGPU_BACKENDS"} & set(env)) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
-                         "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
+                         "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"} if key in env})
     blockers = contending_processes()
     if mode == "score" and blockers:
         metadata.update(return_code=-2, memory={}, phase_events=[], contention=[{
@@ -695,7 +697,13 @@ def correctness_gate(run: dict) -> dict:
     path = Path(binding.get("path", ""))
     if not path.is_file() or binding.get("sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
         return {"status": "unverified", "reason": "Missing or changed numerical-equivalence receipt."}
-    receipt = read_json(path)
+    try:
+        receipt = read_json(path)
+    except ValueError:
+        receipt = None
+    if not isinstance(receipt, dict):
+        # Hash-bound but malformed evidence is unverified; it must not abort the campaign before gate.json exists.
+        return {"status": "unverified", "reason": "The numerical-equivalence receipt is not a JSON object."}
     if receipt.get("schema") != "hifigan-v1-equivalence-receipt-v1" or receipt.get("model") != run["model"] or receipt.get("device") != run["device"]:
         return {"status": "unverified", "reason": "Numerical receipt schema/model/device mismatch."}
     budgets = {"cpu": {"absolute": 2e-5, "relative": 1e-3, "gradient_relative": .01, "gradient_cosine": .999},
