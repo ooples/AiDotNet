@@ -242,7 +242,12 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         {
             if (o.VocoderSegmentLength <= 0 || o.VocoderSegmentLength % o.HopSize != 0)
                 throw new ArgumentException($"VocoderSegmentLength must be a positive multiple of HopSize ({o.HopSize}).");
-            _discriminators = new CosyVoiceHiFTDiscriminators<T>(Engine);
+            int discDivisor = Math.Max(1, 512 / Math.Max(1, o.HiftBaseChannels));
+            int[]? periodChannels = discDivisor > 1
+                ? new[] { 32, 128, 512, 1024, 1024 }.Select(w => Math.Max(1, w / discDivisor)).ToArray()
+                : null;
+            int spectrogramChannels = Math.Max(4, 32 / discDivisor);
+            _discriminators = new CosyVoiceHiFTDiscriminators<T>(Engine, periodChannels: periodChannels, spectrogramChannels: spectrogramChannels);
             _discriminatorLayers.AddRange(_discriminators.Layers);
             // The loss mel is the recipe's mel_spec_transform1: 80 bands to Nyquist at the model's FFT and hop.
             _vocoderLosses = new CosyVoiceHiFTLosses<T>(Engine, o.SampleRate, melFft: o.FftSize, melHop: o.HopSize, melWindow: o.FftSize);

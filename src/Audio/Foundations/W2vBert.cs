@@ -496,7 +496,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
                     var fixedDraw = BuildFixedDraw(batch, length, fixedSeed);
                     var output = network.Forward(mel, fixedDraw.Mask, training: false, _random, fixedMaskNoise: fixedDraw.MaskNoise);
                     var asWav2Vec2 = new Wav2Vec2Network<T>.Output(output.Context, output.Features, output.BlockStates, output.Features, fixedDraw.Mask);
-                    var eagerLosses = pretraining.Loss(asWav2Vec2, fixedDraw.Negatives, training: false, _random, fixedIds: null, fixedGumbelNoise: fixedDraw.GumbelNoise);
+                    var eagerLosses = pretraining.Loss(asWav2Vec2, fixedDraw.Negatives, training: true, _random, fixedIds: null, fixedGumbelNoise: fixedDraw.GumbelNoise);
                     codes = eagerLosses.CodeIds;
                     _fixedDrawCodes[key] = codes;
                 }

@@ -73,6 +73,8 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private NoiseRobustWav2Vec2Network<T>? _network;
     private Random _random;
+    [AiDotNet.Attributes.Scratch]
+    private bool _inContinualPretrain;
     internal NoiseRobustWav2Vec2Network<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
@@ -158,7 +160,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
-        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && !_inContinualPretrain && _options.FreezeFeatureEncoder
             && _network is not null && _network.Stack.IsFeatureEncoderLayer(Layers[layerIndex])
             ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
             : declared;
@@ -181,15 +183,23 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
             : new bool[x.Shape[0], net.Frames(x.Shape[1])];
         var stepNegatives = network.Pretraining.SampleNegatives(stepMask, _random);
         using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
-        TrainWithCustomObjective(x, y, (stepX, stepY) =>
+        _inContinualPretrain = true;
+        try
         {
-            var (total, reconstruction) = network.ContinualPretrainingLoss(stepX, stepY, training: true, _random, stepMask, stepNegatives);
-            if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
-                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
-                    "robust-conformer-reconstruction",
-                    Engine.TensorAddScalar(Engine.StopGradient(reconstruction), NumOps.Zero));
-            return total;
-        }, _optimizer);
+            TrainWithCustomObjective(x, y, (stepX, stepY) =>
+            {
+                var (total, reconstruction) = network.ContinualPretrainingLoss(stepX, stepY, training: true, _random, stepMask, stepNegatives);
+                if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                        "robust-conformer-reconstruction",
+                        Engine.TensorAddScalar(Engine.StopGradient(reconstruction), NumOps.Zero));
+                return total;
+            }, _optimizer);
+        }
+        finally
+        {
+            _inContinualPretrain = false;
+        }
         outputs.Complete();
         LastReconstructionLoss = NumOps.ToDouble(outputs.Get("robust-conformer-reconstruction")[0]);
         network.Pretraining.AfterUpdate();

@@ -46,7 +46,8 @@ internal sealed class SpeechGptCore<T>
             }, random);
             if (o.IncludeVocoderDiscriminators)
             {
-                Discriminators = new HiFiGanDiscriminators<T>(engine, new[] { 2, 3, 5, 7, 11 }, 3);
+                int discriminatorWidthDivisor = Math.Max(1, 512 / Math.Max(1, o.VocoderChannels));
+                Discriminators = new HiFiGanDiscriminators<T>(engine, new[] { 2, 3, 5, 7, 11 }, 3, widthDivisor: discriminatorWidthDivisor);
                 discriminatorLayers.AddRange(Discriminators.Layers);
                 // speech-resynthesis' mel loss: n_fft 1024, hop 256, window 1024, 80 bands to the Nyquist frequency.
                 LossMel = new DifferentiableMel<T>(engine, o.SampleRate, 1024, 256, 1024, 80, 0.0, o.SampleRate / 2.0);

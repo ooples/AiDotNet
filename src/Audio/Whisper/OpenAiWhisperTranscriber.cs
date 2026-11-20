@@ -204,6 +204,7 @@ internal sealed class OpenAiWhisperTranscriber<T>
 
     // The largest STFT component after scaling: 128^2 per square and 2 * 128^2 per bin stay below Half's 65,504.
     private const double PowerUnit = 128.0;
+    private static readonly object GraphLogMelSentinel = new();
 
     /// <summary><c>log_mel_spectrogram(audio, n_mels, padding)</c>: a centred, reflect-padded 400-point STFT (hop 160,
     /// periodic Hann), its power without the last frame, the mel filter bank, log10 above 1e-10, floored 8 below the
@@ -218,14 +219,33 @@ internal sealed class OpenAiWhisperTranscriber<T>
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         if (mels != 80 && mels != 128) throw new ArgumentException($"Unsupported n_mels: {mels}", nameof(mels));
+        int half = FftSize / 2, totalLength = audio.Length + Math.Max(0, padding);
+        if (totalLength <= half) throw new ArgumentException("The audio is shorter than the STFT's reflect padding.", nameof(audio));
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && padding >= 0 && padding <= (int.MaxValue >> 2))
+        {
+            int stateTag = (padding << 1) | (mels == 128 ? 1 : 0);
+            return AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+                "WhisperLogMelSpectrogram",
+                GraphLogMelSentinel,
+                stateTag,
+                new[] { audio },
+                new[] { mels, totalLength / HopLength },
+                static (_, tag, inputs, dst) =>
+                {
+                    int tagMels = (tag & 1) == 1 ? 128 : 80;
+                    int tagPadding = tag >> 1;
+                    var computed = LogMelSpectrogram(inputs[0], tagMels, tagPadding);
+                    computed.AsSpan().CopyTo(dst.AsWritableSpan());
+                });
+        }
+
         var engine = AiDotNetEngine.Current;
         // A feature of the waveform, not a differentiable layer: off the gradient tape, as the array code it replaces
         // was. On a tape, log10's backward at a silent frame (mel power 0) is NaN all the way back to the samples.
         using var noGrad = new NoGradScope<T>();
         var x = engine.Reshape(audio, new[] { audio.Length });
         if (padding > 0) x = engine.PadNd(x, new[] { 0, padding }, EnginePadMode.Constant, NumOps.Zero);
-        int half = FftSize / 2, length = x.Length;
-        if (length <= half) throw new ArgumentException("The audio is shorter than the STFT's reflect padding.", nameof(audio));
+        int length = x.Length;
         var padded = engine.PadNd(x, new[] { half, half }, EnginePadMode.Reflect, NumOps.Zero);
         int frames = 1 + length / HopLength, used = frames - 1;
         var stft = Stft.Value;
@@ -235,27 +255,6 @@ internal sealed class OpenAiWhisperTranscriber<T>
         var im = engine.TensorMatMul(framed, stft.Sin);
         T unit = NumOps.FromDouble(PowerUnit);
         var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
-        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-        {
-            var peakTensor = engine.ReduceMax(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)), new[] { 0, 1 }, keepDims: true);
-            var ones = Tensor<T>.CreateDefault(peakTensor._shape, NumOps.One);
-            var scaleTensor = engine.TensorWhere(engine.TensorGreaterThan(peakTensor, NumOps.Zero), peakTensor, ones);
-            var scale2D = engine.TensorBroadcastTo(scaleTensor, re._shape);
-            var powerG = engine.TensorAdd(
-                engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivide(re, scale2D), unit)),
-                engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivide(im, scale2D), unit)));
-            var melG = engine.TensorMatMul(filters, engine.TensorTranspose(powerG));
-            var offsetTensor = engine.TensorMultiplyScalar(
-                engine.TensorSubtractScalar(engine.TensorLog(scaleTensor), NumOps.FromDouble(Math.Log(PowerUnit))),
-                NumOps.FromDouble(2.0 / Math.Log(10.0)));
-            var logG = engine.TensorMax(
-                engine.TensorAdd(engine.TensorLog10(melG), engine.TensorBroadcastTo(offsetTensor, melG._shape)),
-                NumOps.FromDouble(-10.0));
-            var maxTensor = engine.ReduceMax(logG, new[] { 0, 1 }, keepDims: true);
-            var floorTensor = engine.TensorBroadcastTo(engine.TensorSubtractScalar(maxTensor, NumOps.FromDouble(8.0)), logG._shape);
-            var clippedG = engine.TensorMax(logG, floorTensor);
-            return engine.TensorDivideScalar(engine.TensorAddScalar(clippedG, NumOps.FromDouble(4.0)), NumOps.FromDouble(4.0));
-        }
 
         T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
         T scale = NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;

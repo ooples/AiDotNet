@@ -408,8 +408,9 @@ internal static class OptionSensitivityFixtureSetup
             // feeds ready-made patches. The ResNet's global average pooling takes any patch length.
             return OptionSensitivityHarness.Fingerprint(events.GetEventProbabilities(LongWaveform<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel && option == "WindowLength")
-            // The analysis window acts in the model's mel front end (torchaudio MelSpectrogram), which the probe's
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel
+            && option is "WindowLength" or "SampleRate" or "HopSize" or "FftSize")
+            // The STFT and HTK mel front end (torchaudio MelSpectrogram) acts on waveforms, which the probe's
             // ready-made mel targets bypass.
             return OptionSensitivityHarness.Fingerprint(styleMel.ComputeMel(Waveform<T>(16000))
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));

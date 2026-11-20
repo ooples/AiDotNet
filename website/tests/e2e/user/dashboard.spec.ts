@@ -56,4 +56,27 @@ test.describe('Logged-in user — dashboard', () => {
     await page.goto('/signup/');
     await expect(page).toHaveURL(/\/account\/?$/);
   });
+
+  test('the account menu works while the admin-role lookup is still pending', async ({ page }) => {
+    let release!: () => void;
+    let requested!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { requested = resolve; });
+    await page.route('**/rest/v1/profiles?select=role*', async (route) => {
+      requested();
+      await pending;
+      await route.continue();
+    });
+    try {
+      await page.goto('/');
+      await expect(page.locator('#user-menu-btn')).toBeVisible();
+      await started;
+      await page.locator('#user-menu-btn').click();
+      await expect(page.locator('#user-dropdown')).toBeVisible();
+      await expect(page.locator('#nav-sign-out')).toBeVisible();
+    } finally {
+      release();
+      await page.unrouteAll({ behavior: 'wait' });
+    }
+  });
 });

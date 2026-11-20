@@ -63,9 +63,7 @@ public partial class NormedConv1DLayer<T>
             if (_layer._transposed)
                 _cpu.ConvTranspose2DInto(_output4, _input4, kernel, _stride, _padding, _third);
             else _cpu.Conv2DInto(_output4, _input4, kernel, _stride, _padding, _third);
-            _cpu.AddPrivateConvolutionBiasResidual((Tensor<float>)(object)_output4,
-                _layer._useBias ? (Tensor<float>)(object)_layer._bias : null,
-                _residual is null ? null : (Tensor<float>)(object)_residual);
+            _layer.AddPrivateCpuBiasResidual(_cpu, _output4, _residual);
             if (_activate) _cpu.LeakyReLUInto(_output4, _output4, _alpha);
         }
     }

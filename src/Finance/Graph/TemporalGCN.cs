@@ -926,53 +926,13 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
-    {
-        // [input after the first shiftSize values | leading predictions | zeros], detached.
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        int inputSize = input.Length;
-        int shiftSize = Math.Min(_numNodes * _numFeatures, inputSize);
-        int copyLen = Math.Max(0, inputSize - shiftSize);
-        int fill = Math.Max(0, Math.Min(shiftSize, prediction.Length));
-        var parts = new List<Tensor<T>>(3);
-        if (copyLen > 0)
-            parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { inputSize }), 0, inputSize - copyLen, copyLen));
-        if (fill > 0)
-            parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, fill));
-        if (inputSize - copyLen - fill > 0)
-            parts.Add(new Tensor<T>(new[] { inputSize - copyLen - fill }));
-        if (parts.Count == 0)
-            return new Tensor<T>(new[] { inputSize });
-        return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.Select(p => p.Contiguous()).ToArray(), 0);
-    }
+        => ShiftFlatWindow(input, prediction, _numNodes * _numFeatures);
 
     /// <summary>
     /// Concatenates multiple predictions.
     /// </summary>
-    /// <param name="predictions">List of predictions.</param>
-    /// <returns>Concatenated tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TemporalGCN model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the TemporalGCN architecture.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        int totalLen = predictions.Sum(p => p.ToVector().Length);
-        var result = new T[totalLen];
-        int offset = 0;
-
-        foreach (var pred in predictions)
-        {
-            var predVec = pred.ToVector();
-            for (int i = 0; i < predVec.Length; i++)
-            {
-                result[offset + i] = predVec[i];
-            }
-            offset += predVec.Length;
-        }
-
-        return new Tensor<T>(new[] { totalLen }, new Vector<T>(result));
-    }
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        => ConcatenateFlatPredictions(predictions);
 
     /// <summary>
     /// Computes quantiles from samples.

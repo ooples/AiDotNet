@@ -15,6 +15,10 @@ internal sealed partial class HiFiGanGenerator<T>
     // buffers. Stream independent examples so batch growth does not retain batch-sized scratch.
     // Concurrent/reentrant calls retain the ordinary execution path.
     private float[][]? _privateCpuBuffers;
+    private static readonly Func<int, string, float[]>? AllocateTrackedActivation =
+        OptionalEngineOperation.Find<Func<int, string, float[]>>(
+            typeof(Tensor<float>).Assembly.GetType("AiDotNet.Tensors.Helpers.CpuStorageAllocationDiagnostics"),
+            "NewNumericArray", typeof(float));
     private int _privateCpuBusy;
     private long _privateCpuCalls;
     internal long PrivateCpuInferenceCalls => Interlocked.Read(ref _privateCpuCalls);
@@ -61,7 +65,8 @@ internal sealed partial class HiFiGanGenerator<T>
             var buffers = _privateCpuBuffers ??= new float[5][];
             for (int i = 0; i < buffers.Length; i++)
                 if (buffers[i] is null || buffers[i].Length < maximum)
-                    buffers[i] = CpuStorageAllocationDiagnostics.NewNumericArray<float>((int)maximum, "workspace.hifi_cpu_private_activation");
+                    buffers[i] = AllocateTrackedActivation?.Invoke((int)maximum, "workspace.hifi_cpu_private_activation")
+                        ?? new float[(int)maximum];
             Interlocked.Increment(ref _privateCpuCalls);
             var cpu = _engine.Cast<CpuEngine>();
             var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();

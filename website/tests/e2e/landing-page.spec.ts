@@ -33,10 +33,8 @@ test.describe('Landing Page', () => {
 
   test('Browse all features CTA link works', async ({ page }) => {
     const browseLink = page.getByRole('link', { name: /Browse all|View all|See all/i }).first();
-    if (await browseLink.isVisible()) {
-      const href = await browseLink.getAttribute('href');
-      expect(href).toContain('features');
-    }
+    await expect(browseLink).toBeVisible();
+    await expect(browseLink).toHaveAttribute('href', /features/);
   });
 
   test('industry solutions section renders', async ({ page }) => {

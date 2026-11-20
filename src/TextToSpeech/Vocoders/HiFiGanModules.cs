@@ -247,7 +247,7 @@ internal sealed partial class HiFiGanGenerator<T>
             => _gpuOwnedResidualsEnabled && typeof(T) == typeof(float) && ReferenceEquals(_engine, gpu)
                 && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
                 && value.IsContiguous && value._storageOffset == 0
-                && value.GraphVectorIdentity is Vector<T> vector && vector.Length == value.Length
+                && value.DataVector.Length == value.Length
                 && value.DataVector._deviceState is { DeviceValid: true, Buffer: { } buffer }
                 && buffer.Handle != IntPtr.Zero && buffer.Size >= value.Length
                 && !Aliases(value, features) && !Aliases(value, condition) && !Aliases(value, shared);
@@ -763,6 +763,9 @@ internal sealed class DifferentiableMel<T>
     private readonly Tensor<T>? _cos;
     private readonly Tensor<T>? _sin;
     private readonly Tensor<T>? _fftWindow;
+    private static readonly Func<IEngine, Tensor<T>, double, Tensor<T>>? RealFftMagnitude =
+        OptionalEngineOperation.Find<Func<IEngine, Tensor<T>, double, Tensor<T>>>(
+            typeof(IEngine).Assembly.GetType("AiDotNet.Tensors.Engines.RfftMagnitudeEngineExtensions"), "TensorRfftMagnitude", typeof(T));
     private readonly Tensor<T> _mel;
 
     /// <param name="singlePrecisionBasis">librosa's float32 filterbank exactly (its default dtype, as references that keep
@@ -775,7 +778,8 @@ internal sealed class DifferentiableMel<T>
         _fft = fftSize;
         _hop = hopSize;
         int bins = fftSize / 2 + 1;
-        if (typeof(T) == typeof(float) && (engine.Is<CpuEngine>() || (engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())))
+        if (RealFftMagnitude is not null && typeof(T) == typeof(float)
+            && (engine.Is<CpuEngine>() || (engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())))
         {
             // Separate FP32 windowing is part of the real-FFT recipe. Folding a
             // double-precision window into DFT tables changes quiet-band VJPs.
@@ -875,8 +879,8 @@ internal sealed class DifferentiableMel<T>
         for (int f = 0; f < frames; f++)
             rows[f] = _engine.Reshape(_engine.TensorSlice(padded, new[] { f * _hop, 0 }, new[] { _fft, 1 }), new[] { 1, _fft });
         var framed = frames == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);                       // [frames, fft]
-        if (_fftWindow is not null)
-            return _engine.TensorRfftMagnitude(_engine.TensorMultiply(framed, _fftWindow), epsilon);
+        if (_fftWindow is not null && RealFftMagnitude is { } magnitude)
+            return magnitude(_engine, _engine.TensorMultiply(framed, _fftWindow), epsilon);
         var re = _engine.TensorMatMul(framed, _cos!);
         var im = _engine.TensorMatMul(framed, _sin!);
         return _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),

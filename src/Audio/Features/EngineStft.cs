@@ -49,6 +49,29 @@ internal static class EngineStft<T>
     public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode, double epsilon = 0.0)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            int outFrames = FrameCount(audio.Length, fftSize, hop);
+            int outBins = fftSize / 2 + 1;
+            int stateTag = unchecked((((fftSize * 397) ^ hop) * 397 ^ (int)padMode) * 397 ^ epsilon.GetHashCode());
+            return AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+                "EngineStftMagnitude",
+                Tuple.Create(fftSize, hop, padMode, epsilon),
+                stateTag,
+                new[] { audio, window },
+                new[] { outFrames, outBins },
+                static (cfg, _, inputs, dst) =>
+                {
+                    var computed = MagnitudeCore(inputs[0], cfg.Item1, cfg.Item2, inputs[1], cfg.Item3, cfg.Item4);
+                    computed.AsSpan().CopyTo(dst.AsWritableSpan());
+                });
+        }
+
+        return MagnitudeCore(audio, fftSize, hop, window, padMode, epsilon);
+    }
+
+    private static Tensor<T> MagnitudeCore(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode, double epsilon)
+    {
         var engine = AiDotNetEngine.Current;
         // A feature of the waveform, not a differentiable layer: off the gradient tape, as the array code it replaces
         // was (the backward of the magnitude and of a log above it is NaN at a silent frame).

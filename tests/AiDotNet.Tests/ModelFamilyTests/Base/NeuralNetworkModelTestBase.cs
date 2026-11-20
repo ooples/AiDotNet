@@ -3689,10 +3689,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // tell us nothing. Asserting finiteness and not-uniformly-zero is what the surface can support.
         if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> gradientSource) return;
 
-        Vector<T> gradients;
+        long totalGradientCount = 0;
+        long gradientIndex = 0;
+        bool anyNonZero = false;
         try
         {
-            gradients = gradientSource.GetParameterGradients();
+            foreach (var (segment, length) in gradientSource.EnumerateParameterGradientSegments())
+            {
+                totalGradientCount += length;
+                if (segment is null)
+                {
+                    gradientIndex += length;
+                    continue;
+                }
+
+                for (int i = 0; i < segment.Length; i++, gradientIndex++)
+                {
+                    double g = ConvertToDouble(segment[i]);
+                    if (double.IsNaN(g) || double.IsInfinity(g))
+                    {
+                        Assert.False(double.IsNaN(g),
+                            $"Gradient[{gradientIndex}] is NaN after training — the backward pass is producing garbage, "
+                            + "which the parameter scan above cannot see when the optimizer clips or skips it.");
+                        Assert.False(double.IsInfinity(g),
+                            $"Gradient[{gradientIndex}] is Infinity after training — gradient explosion in the backward pass.");
+                    }
+
+                    if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
+                }
+            }
         }
         catch (System.NotSupportedException)
         {
@@ -3700,26 +3725,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        if (gradients.Length == 0) return;
-
-        bool anyNonZero = false;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double g = ConvertToDouble(gradients[i]);
-            if (double.IsNaN(g) || double.IsInfinity(g))
-            {
-                Assert.False(double.IsNaN(g),
-                    $"Gradient[{i}] is NaN after training — the backward pass is producing garbage, "
-                    + "which the parameter scan above cannot see when the optimizer clips or skips it.");
-                Assert.False(double.IsInfinity(g),
-                    $"Gradient[{i}] is Infinity after training — gradient explosion in the backward pass.");
-            }
-
-            if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
-        }
+        if (totalGradientCount == 0) return;
 
         Assert.True(anyNonZero,
-            $"Every one of the {gradients.Length} published gradients is exactly zero after training, "
+            $"Every one of the {totalGradientCount} published gradients is exactly zero after training, "
             + "yet parameters changed — so whatever moved them did not come from this loss. That is the "
             + "signature of a severed tape: a term read through Predict (which runs inside a "
             + "NoGradScope) or a tensor rebuilt element by element contributes no gradient, while an "

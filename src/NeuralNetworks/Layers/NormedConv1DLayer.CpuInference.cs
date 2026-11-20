@@ -36,8 +36,7 @@ public partial class NormedConv1DLayer<T>
             cpu.ConvTranspose2DInto(output4, input4, kernel, new[] { 1, _stride }, new[] { 0, _padding }, new[] { 0, _outputPadding });
         else
             cpu.Conv2DInto(output4, input4, kernel, new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation });
-        cpu.AddPrivateConvolutionBiasResidual((Tensor<float>)(object)output4,
-            _useBias ? (Tensor<float>)(object)_bias : null, residual is null ? null : (Tensor<float>)(object)residual);
+        AddPrivateCpuBiasResidual(cpu, output4, residual);
         if (activate) cpu.LeakyReLUInto(output4, output4, alpha);
     }
 }

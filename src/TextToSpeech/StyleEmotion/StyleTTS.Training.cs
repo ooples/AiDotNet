@@ -75,7 +75,8 @@ public partial class StyleTTS<T>
                         Training.StepInputPacking<T>.Slice(packed, 0, realShape),
                         Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape)),
                     DiscriminatorOptimizer(),
-                    sessionPerOptimizer: true);
+                    sessionPerOptimizer: true,
+                    eagerReason: _options.R1Weight > 0 ? "R1 gradient penalty differentiates a nested tape (createGraph: true)" : null);
             }
             finally
             {

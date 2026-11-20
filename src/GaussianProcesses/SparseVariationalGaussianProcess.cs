@@ -289,8 +289,11 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         AddJitter(_Kuu);
 
         // Cholesky decomposition of Kuu for efficient computation
-        var choleskyKuu = new CholeskyDecomposition<T>(_Kuu);
-        _LKuu = choleskyKuu.L;
+        if (!GaussianProcessEngineOps.TryCholeskyLower(_Kuu, out _LKuu))
+        {
+            var choleskyKuu = new CholeskyDecomposition<T>(_Kuu);
+            _LKuu = choleskyKuu.L;
+        }
 
         // Initialize variational parameters
         _variationalMean = new Vector<T>(numInduce);
@@ -302,7 +305,6 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         // ...then the inducing point LOCATIONS, alternating with the closed form above.
         OptimizeInducingPoints();
     }
-
     /// <summary>
     /// Improves the inducing point locations by ascending the ELBO, re-solving the closed-form
     /// variational parameters at each accepted step.
@@ -333,6 +335,10 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         if (_inducingPoints.Rows == 0 || _inducingPoints.Columns == 0) return;
         if (_X.Rows == 0) return;
 
+        // When every training point is already an inducing point (m == n, Z = X), the variational
+        // inducing approximation equals the exact GP posterior (Titsias 2009), so subset coordinate
+        // search is unnecessary.
+        if (_inducingPoints.Rows >= _X.Rows) return;
         // Bounded: the ELBO is re-evaluated per coordinate, so this is the expensive part of the
         // fit. A handful of sweeps captures nearly all of the gain; _maxIterations bounds it for a
         // caller who wants more.
@@ -407,12 +413,12 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
             ForceSymmetric(_Kuu);
             AddJitter(_Kuu);
 
-            var chol = new CholeskyDecomposition<T>(_Kuu);
-            _LKuu = chol.L;
+            if (!GaussianProcessEngineOps.TryCholeskyLower(_Kuu, out _LKuu))
+                return false;
 
-            OptimizeVariationalParameters();
+            var Kuf = OptimizeVariationalParameters();
 
-            double value = Convert.ToDouble(_numOps.ToDouble(ComputeELBO()));
+            double value = Convert.ToDouble(_numOps.ToDouble(ComputeELBOCore(Kuf)));
             if (double.IsNaN(value) || double.IsInfinity(value)) return false;
 
             elbo = value;
@@ -468,7 +474,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     {
         if (numPoints >= X.Rows)
         {
-            return X;
+            return X.Clone();
         }
 
         var indices = new List<int>();
@@ -510,107 +516,29 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// too small = slow convergence.
     /// </para>
     /// </remarks>
-    private void OptimizeVariationalParameters()
+    private Matrix<T> OptimizeVariationalParameters()
     {
         // Compute kernel matrix between inducing points and training points
         var Kuf = CalculateKernelMatrix(_inducingPoints, _X);
 
-        // Precompute Kuu^(-1) * Kuf using Cholesky solve
-        var KuuInvKuf = new Matrix<T>(_Kuu.Rows, Kuf.Columns);
-        for (int j = 0; j < Kuf.Columns; j++)
-        {
-            var col = Kuf.GetColumn(j);
-            var solved = MatrixSolutionHelper.SolveLinearSystem(_Kuu, col, _decompositionType);
-            KuuInvKuf.SetColumn(j, solved);
-        }
-
         double noiseVariance = Math.Max(_noiseVariance, 1e-10);
         T noisePrecision = _numOps.FromDouble(1.0 / noiseVariance);
 
-        // For Gaussian likelihood, the optimal variational parameters have closed-form solutions:
-        //   S* = (Kuu^{-1} + σ^{-2} Kuf Kuf^T)^{-1}
-        //   m* = σ^{-2} S* Kuf y
-        //
-        // Using iterative gradient descent is unnecessary and numerically unstable (the gradient
-        // magnitude is proportional to σ^{-2} which can be 10^4+, causing divergence).
-        // The closed-form solution is exact and avoids all convergence issues.
-
-        // Step 1: Compute S (variational covariance) — already numerically stable
-        UpdateVariationalCovariance(Kuf, noisePrecision);
-
-        // Step 2: Compute the optimal variational mean.
-        // For the standard SVGP prediction mean = kstar^T Kuu^{-1} m, the optimal m
-        // that minimizes the KL divergence while matching the data is:
-        //   m = Kuu * alpha  where  alpha = (Kuu + σ² (Kuf Kuf^T)^{-1})^{-1} (Kuf Kuf^T)^{-1} Kuf y
-        //
-        // When inducing = training (common case for small datasets), this simplifies to:
-        //   m = Kuu * (Kuu + σ²I)^{-1} * y
-        //
-        // For the general case, we solve: (Kuu + σ² (Kuf Kuf^T)^{-1}) * alpha = Kuf^{-T} * y
-        // But this requires Kuf to be invertible. Instead, use the direct formula:
-        //   m = σ⁻² S Kuf y  (already computed S above)
-        //
-        // HOWEVER: the prediction formula mean = kstar^T * Kuu^{-1} * m with this m gives:
-        //   mean = kstar^T * Kuu^{-1} * σ⁻² * S * Kuf * y
-        //
-        // For inducing=training: = kstar^T * Kuu^{-1} * σ⁻² * (Kuu^{-1}+σ⁻²Kuu)^{-1} * Kuu * y
-        //
-        // This IS correct but requires precise S computation. Let's bypass the complex
-        // covariance computation and solve directly for m = Kuu * alpha where:
-        //   (Kuu + σ² * (Kuf*Kuf^T)^{-1}) * alpha = y  (when inducing=training, Kuf=Kuu)
-        //
-        // Simplified approach: solve (Kuu + σ²I) * alpha = y, then m = Kuu * alpha
-        T noiseVar = _numOps.FromDouble(_noiseVariance);
-        var KuuPlusNoise = GaussianProcessEngineOps.AddToDiagonal(_Kuu, noiseVar);
-
-        // The prediction formula is: mean = kstar^T * Kuu^{-1} * m
-        // For standard GP equivalence (when inducing=training): mean = kstar^T * (K+σ²I)^{-1} * y
-        // We need: Kuu^{-1} * m = (K+σ²I)^{-1} * y, so m = Kuu * (Kuu+σ²I)^{-1} * y
-        //
-        // Solve (Kuu + σ²I) * beta = y, then m = Kuu * beta
-        var beta = MatrixSolutionHelper.SolveLinearSystem(KuuPlusNoise, _y, _decompositionType);
-        _variationalMean = _Kuu.Multiply(beta);
+        // Closed-form optimal Gaussian variational posterior q*(u) = N(u | m*, S*) (Titsias 2009, eq. 10):
+        //   A  = σ^{-1} L_uu^{-1} K_uf
+        //   B  = I + A A^T = L_B L_B^T
+        //   S* = L_uu B^{-1} L_uu^T
+        //   m* = σ^{-1} L_uu B^{-1} (A y)  (equals K_uu (K_uu + σ²I)^{-1} y when Z = X)
+        UpdateVariationalPosterior(Kuf, noisePrecision);
+        return Kuf;
     }
 
     /// <summary>
-    /// Updates the variational covariance based on the data.
+    /// Updates the closed-form variational covariance Cholesky factor and variational mean from <paramref name="Kuf"/>.
     /// </summary>
-    /// <param name="Kuf">Kernel matrix between inducing and training points.</param>
-    /// <param name="noisePrecision">Precision (inverse variance) of observation noise.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The variational covariance represents our uncertainty about
-    /// the function values at inducing points. After seeing data, our uncertainty should decrease.
-    ///
-    /// The optimal variational covariance (in closed form for Gaussian likelihood) is:
-    ///   S = (Kuu^(-1) + Kuf * Kfu / σ²)^(-1)
-    ///
-    /// This balances:
-    /// - Prior uncertainty (from Kuu)
-    /// - Information from data (from Kuf terms)
-    ///
-    /// We store the Cholesky factor of S for numerical stability.
-    /// </para>
-    /// </remarks>
-    private void UpdateVariationalCovariance(Matrix<T> Kuf, T noisePrecision)
+    private void UpdateVariationalPosterior(Matrix<T> Kuf, T noisePrecision)
     {
-        // Numerically stable computation of S = (Kuu^{-1} + σ^{-2} Kuf Kuf^T)^{-1}
-        //
-        // Instead of explicitly computing SInv then inverting (which amplifies numerical error),
-        // we use the Cholesky of Kuu and work in a transformed space:
-        //   Let Luu = chol(Kuu), so Kuu = Luu Luu^T
-        //   Define A = Luu^{-1} Kuf / σ  (scaled, whitened cross-covariance)
-        //   Then SInv = Kuu^{-1} + σ^{-2} Kuf Kuf^T
-        //             = Luu^{-T} (I + A A^T) Luu^{-1}
-        //   So S = Luu (I + A A^T)^{-1} Luu^T
-        //   And chol(S) = Luu * chol((I + A A^T)^{-1})
-        //
-        // The matrix (I + A A^T) is better conditioned than SInv because its eigenvalues
-        // are ≥ 1, avoiding the large condition numbers from noisePrecision * Kuf * Kuf^T.
-
         int m = _Kuu.Rows;
-        int n = Kuf.Columns;
-
         var engine = Engine;
         T sqrtPrecision = _numOps.Sqrt(MathHelper.Max(noisePrecision, _numOps.Zero));
 
@@ -618,14 +546,37 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         var whitened = LinalgDispatch<T>.SolveTriangular(Tensor<T>.FromMatrix(_LKuu), Tensor<T>.FromMatrix(Kuf), upper: false);
         var A = engine.TensorMultiplyScalar(whitened, sqrtPrecision).ToMatrix();
 
-        // Compute B = I + A A^T (m×m, well-conditioned)
+        // Compute B = I + A A^T (m×m, symmetric positive-definite with eigenvalues >= 1)
         var AAT = A.Multiply(A.Transpose());
         var B = GaussianProcessEngineOps.AddToDiagonal(AAT, _numOps.One);
-
-        // Compute S = Luu * B^{-1} * Luu^T, then take its Cholesky.
-        // B^{-1} is computed by solving B * X = I column by column.
         ForceSymmetric(B);
         AddJitter(B);
+
+        var scaledAy = engine.Multiply(A.Multiply(_y), sqrtPrecision);
+
+        if (_decompositionType == MatrixDecompositionType.Cholesky
+            && GaussianProcessEngineOps.TryCholeskyLower(B, out var LB))
+        {
+            // S = L_uu B^{-1} L_uu^T = W^T W where L_B W = L_uu^T
+            var W = LinalgDispatch<T>.SolveTriangular(
+                Tensor<T>.FromMatrix(LB),
+                Tensor<T>.FromMatrix(_LKuu.Transpose()),
+                upper: false).ToMatrix();
+            var S = W.Transpose().Multiply(W);
+            ForceSymmetric(S);
+            AddJitter(S);
+
+            if (!GaussianProcessEngineOps.TryCholeskyLower(S, out _variationalCovCholesky))
+            {
+                _variationalCovCholesky = engine.TensorMultiplyScalar(engine.TensorEye<T>(m), _numOps.FromDouble(0.01)).ToMatrix();
+            }
+
+            // m* = σ^{-1} L_uu B^{-1} (A y)
+            var z = GaussianProcessEngineOps.SolveCholesky(LB, scaledAy);
+            _variationalMean = _LKuu.Multiply(z);
+            return;
+        }
+
         try
         {
             var identity = CreateIdentityMatrix(m);
@@ -637,44 +588,21 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
                 BInv.SetColumn(j, solved);
             }
 
-            // S = Luu * B^{-1} * Luu^T
-            var LuuBInv = _LKuu.Multiply(BInv);
-            var S = LuuBInv.Multiply(_LKuu.Transpose());
-
-            // Take Cholesky of S
+            var S = _LKuu.Multiply(BInv).Multiply(_LKuu.Transpose());
             ForceSymmetric(S);
             AddJitter(S);
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
+
+            var z = MatrixSolutionHelper.SolveLinearSystem(B, scaledAy, _decompositionType);
+            _variationalMean = _LKuu.Multiply(z);
         }
         catch (ArgumentException)
         {
-            // Fallback: use a scaled identity covariance
             _variationalCovCholesky = engine.TensorMultiplyScalar(engine.TensorEye<T>(m), _numOps.FromDouble(0.01)).ToMatrix();
+            var z = MatrixSolutionHelper.SolveLinearSystem(B, scaledAy, _decompositionType);
+            _variationalMean = _LKuu.Multiply(z);
         }
-    }
-
-    /// <summary>
-    /// Computes the predictive mean at training points.
-    /// </summary>
-    /// <param name="KuuInvKuf">Precomputed Kuu^(-1) * Kuf matrix.</param>
-    /// <returns>Predictive mean vector at training points.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The predictive mean is our best guess for the function value
-    /// at each training point, given the current variational parameters.
-    ///
-    /// f_mean = Kfu * Kuu^(-1) * m
-    ///
-    /// Where m is the variational mean at inducing points. This formula "interpolates"
-    /// the function values from inducing points to training points using the kernel.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputePredictiveMean(Matrix<T> KuuInvKuf)
-    {
-        // predictive_mean = Kfu * Kuu^(-1) * m = (Kuu^(-1) * Kuf)^T * m
-        var engine = Engine;
-        return engine.MatrixVectorMultiply(engine.MatrixTranspose(KuuInvKuf), _variationalMean);
     }
 
     /// <inheritdoc/>
@@ -689,8 +617,9 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         var kStar = CalculateKernelVector(_inducingPoints, x);
 
         // Compute Kuu^(-1) * k*
-        var KuuInvKStar = MatrixSolutionHelper.SolveLinearSystem(_Kuu, kStar, _decompositionType);
-
+        var KuuInvKStar = _decompositionType == MatrixDecompositionType.Cholesky
+            ? GaussianProcessEngineOps.SolveCholesky(_LKuu, kStar)
+            : MatrixSolutionHelper.SolveLinearSystem(_Kuu, kStar, _decompositionType);
         // Predictive mean: k*^T * Kuu^(-1) * m
         var engine = Engine;
         T mean = engine.DotProduct(KuuInvKStar, _variationalMean);
@@ -750,22 +679,21 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         if (_X.IsEmpty)
             return _numOps.Zero;
 
-        // Compute kernel matrices
-        var Kuf = CalculateKernelMatrix(_inducingPoints, _X);
+        return ComputeELBOCore(CalculateKernelMatrix(_inducingPoints, _X));
+    }
 
-        // Compute predictive mean and variance at training points
-        var KuuInvKuf = new Matrix<T>(_Kuu.Rows, Kuf.Columns);
-        for (int j = 0; j < Kuf.Columns; j++)
-        {
-            var col = Kuf.GetColumn(j);
-            var solved = MatrixSolutionHelper.SolveLinearSystem(_Kuu, col, _decompositionType);
-            KuuInvKuf.SetColumn(j, solved);
-        }
+    private T ComputeELBOCore(Matrix<T> Kuf)
+    {
+        var engine = Engine;
 
-        var predictiveMean = ComputePredictiveMean(KuuInvKuf);
+        // Solve K_uu^{-1} m once and reuse it for predictiveMean = K_uf^T (K_uu^{-1} m) and m^T K_uu^{-1} m
+        var KuuInvM = _decompositionType == MatrixDecompositionType.Cholesky
+            ? GaussianProcessEngineOps.SolveCholesky(_LKuu, _variationalMean)
+            : MatrixSolutionHelper.SolveLinearSystem(_Kuu, _variationalMean, _decompositionType);
+
+        var predictiveMean = engine.MatrixVectorMultiply(engine.MatrixTranspose(Kuf), KuuInvM);
 
         // Expected log-likelihood (Gaussian)
-        var engine = Engine;
         double noiseVar = Math.Max(_noiseVariance, 1e-10);
         var residuals = engine.Subtract(_y, predictiveMean);
         T logLik = _numOps.Negate(_numOps.Add(
@@ -773,21 +701,28 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
             _numOps.FromDouble(_y.Length * 0.5 * Math.Log(2 * Math.PI * noiseVar))));
 
         // KL divergence: KL(q(u)||p(u))
-        // KL = 0.5 * (tr(Kuu^(-1) * S) + m^T * Kuu^(-1) * m - m + log|Kuu| - log|S|)
-        var S = _variationalCovCholesky.Multiply(_variationalCovCholesky.Transpose());
-
-        // tr(Kuu^(-1) * S)
-        // tr(Kuu^{-1} S) = Σ_ij (Kuu^{-1})_ji S_ji, with Kuu^{-1} built column by column
-        var identity = CreateIdentityMatrix(_Kuu.Rows);
-        var KuuInv = new Matrix<T>(_Kuu.Rows, _Kuu.Rows);
-        for (int i = 0; i < _Kuu.Rows; i++)
+        // tr(Kuu^{-1} S) = tr(L_uu^{-T} L_uu^{-1} L_S L_S^T) = || L_uu^{-1} L_S ||_F^2
+        T trace;
+        if (_decompositionType == MatrixDecompositionType.Cholesky)
         {
-            KuuInv.SetColumn(i, MatrixSolutionHelper.SolveLinearSystem(_Kuu, identity.GetColumn(i), _decompositionType));
+            var whitenedCholS = LinalgDispatch<T>.SolveTriangular(
+                Tensor<T>.FromMatrix(_LKuu),
+                Tensor<T>.FromMatrix(_variationalCovCholesky),
+                upper: false);
+            trace = engine.TensorSum(engine.TensorMultiply(whitenedCholS, whitenedCholS));
         }
-        T trace = engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromMatrix(KuuInv), Tensor<T>.FromMatrix(S)));
+        else
+        {
+            var S = _variationalCovCholesky.Multiply(_variationalCovCholesky.Transpose());
+            var identity = CreateIdentityMatrix(_Kuu.Rows);
+            var KuuInv = new Matrix<T>(_Kuu.Rows, _Kuu.Rows);
+            for (int i = 0; i < _Kuu.Rows; i++)
+            {
+                KuuInv.SetColumn(i, MatrixSolutionHelper.SolveLinearSystem(_Kuu, identity.GetColumn(i), _decompositionType));
+            }
+            trace = engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromMatrix(KuuInv), Tensor<T>.FromMatrix(S)));
+        }
 
-        // m^T * Kuu^(-1) * m
-        var KuuInvM = MatrixSolutionHelper.SolveLinearSystem(_Kuu, _variationalMean, _decompositionType);
         T quadForm = engine.DotProduct(_variationalMean, KuuInvM);
         T logDetKuu = LogDeterminantFromCholesky(_LKuu);
         T logDetS = LogDeterminantFromCholesky(_variationalCovCholesky);

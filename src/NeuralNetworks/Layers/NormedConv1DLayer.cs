@@ -394,11 +394,42 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
     }
 
+    // The published engine predates the fused operation. Bind it once so newer engines record
+    // a single weight-normalization operation for both forward and backward.
+    private static readonly Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? FusedWeightNorm =
+        BindWeightNorm();
+
+    private static Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>? BindWeightNorm()
+    {
+        var operation = typeof(IEngine).GetMethod("TensorWeightNorm");
+        if (operation is null) return null;
+        try
+        {
+            return OptionalEngineOperation.Bind<Func<IEngine, Tensor<T>, Tensor<T>, double, Tensor<T>>>(
+                operation.MakeGenericMethod(typeof(T)));
+        }
+        catch (NotSupportedException) { return null; }
+        catch (ArgumentException) { return null; }
+    }
+
     private static Tensor<T> WeightNormalizedKernel(IEngine engine, Tensor<T> direction, Tensor<T> gain)
     {
-        // A single semantic operation preserves the per-first-dimension gain (also for transposed weights) without
-        // retaining a full squared-weight tensor and two full broadcast-gradient products in a compiled training plan.
-        var kernel = engine.TensorWeightNorm(direction, gain, epsilon: 1e-24);
+        const double epsilon = 1e-24;
+        Tensor<T> kernel;
+        if (FusedWeightNorm is { } normalize)
+        {
+            kernel = normalize(engine, direction, gain, epsilon);
+        }
+        else
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            int rows = direction.Shape[0], per = direction.Length / rows;
+            var matrix = engine.Reshape(direction, new[] { rows, per });
+            var normSquared = engine.ReduceSum(engine.TensorMultiply(matrix, matrix), new[] { 1 }, keepDims: true);
+            var inverseNorm = engine.TensorPow(engine.TensorAddScalar(normSquared, ops.FromDouble(epsilon)), ops.FromDouble(-0.5));
+            var scale = engine.TensorMultiply(engine.Reshape(gain, new[] { rows, 1 }), inverseNorm);
+            kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
+        }
         // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
         engine.InvalidatePersistentTensor(kernel);
         return kernel;
@@ -453,13 +484,13 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             BindInputContract(input.Shape.ToArray()).Validate(input);
         Tensor<T>? computedKernel = null;
         if (Environment.GetEnvironmentVariable("AIDOTNET_GPU_INFERENCE_CONV_BIAS_RESIDUAL") == "1"
-            && !_transposed && _groups == 1 && _useBias && input.Rank == 3 && input.Shape[1] == _in
+            && FusedConvResidual is { } convResidual && !_transposed && _groups == 1 && _useBias && input.Rank == 3 && input.Shape[1] == _in
             && residual.Rank == 3 && residual.Shape[0] == input.Shape[0] && residual.Shape[1] == _out)
         {
             computedKernel = Kernel();
             var input4 = Engine.Reshape(input, new[] { input.Shape[0], _in, 1, input.Shape[2] });
             var residual4 = Engine.Reshape(residual, new[] { residual.Shape[0], _out, 1, residual.Shape[2] });
-            if (((DirectGpuTensorEngine)Engine).TryConvBiasResidualInference(input4, computedKernel, _bias, residual4,
+            if (convResidual((DirectGpuTensorEngine)Engine, input4, computedKernel, _bias, residual4,
                 1, _stride, 0, _padding, 1, _dilation, alpha, writeActivation, out var fusedSum, out var fusedActivated))
             {
                 activated = fusedActivated is not null
@@ -469,11 +500,11 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         var y = ForwardConvolution(input, computedKernel);
         int batch = y.Shape[0], outTime = y.Shape[3];
-        if (_useBias && residual.Rank == 3 && residual.Shape[0] == batch
+        if (FusedBiasResidual is { } biasResidual && _useBias && residual.Rank == 3 && residual.Shape[0] == batch
             && residual.Shape[1] == _out && residual.Shape[2] == outTime)
         {
             var residual4 = Engine.Reshape(residual, new[] { batch, _out, 1, outTime });
-            if (((DirectGpuTensorEngine)Engine).TryChannelBiasResidualInference(y, _bias, residual4, alpha,
+            if (biasResidual((DirectGpuTensorEngine)Engine, y, _bias, residual4, alpha,
                 writeActivation, out var sum4, out var activated4))
             {
                 activated = activated4 is not null ? Engine.Reshape(activated4, new[] { batch, _out, outTime }) : null;
@@ -513,8 +544,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            y = GroupedConvolution.Forward(Engine, x4, kernel,
-                new[] { 1, _stride }, new[] { 0, _padding }, new[] { 1, _dilation }, _groups);
+            y = GroupedConvolutionForward(x4, kernel);
         }
         return y;
     }
@@ -523,7 +553,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     {
         var y = ForwardConvolution(input);
         int batch = y.Shape[0], outTime = y.Shape[3];
-        if (leakyAfterBias && _useBias && ((DirectGpuTensorEngine)Engine).TryChannelBiasLeakyInference(y, _bias, alpha, out var activated))
+        if (leakyAfterBias && _useBias && FusedBiasLeaky is { } biasLeaky
+            && biasLeaky((DirectGpuTensorEngine)Engine, y, _bias, alpha, out var activated))
             return Engine.Reshape(activated, new[] { batch, _out, outTime });
         // Keep the channel semantic explicit: no activation-sized bias tile, and backward reduces batch/time.
         var biased = _useBias ? Engine.TensorChannelBiasAdd(y, _bias) : y;
