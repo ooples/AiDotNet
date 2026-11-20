@@ -462,8 +462,10 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         bool graphIsReplayedData = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
             && GraphStepAdjacency<T>.IsStepData(adjacency);
-        var csrGraph = adjacency2D && UseSparseAttention && !graphIsReplayedData ? GetCsrGraph(adjacency) : null;
-        if (csrGraph is not null && csrGraph.NodeCount == numNodes)
+        var csr = CsrAttentionOperations<T>.Available;
+        var csrGraph = csr is not null && adjacency2D && adjacency.Shape[0] == numNodes && UseSparseAttention && !graphIsReplayedData
+            ? GetCsrGraph(adjacency, csr) : null;
+        if (csrGraph is not null && csr is not null)
         {
             // Wh for every head at once: [B*N, in] @ [in, H*F], laid out [B, N, H, F] as the CSR op reads it.
             var allHeadWeights = _numHeads == 1
@@ -472,7 +474,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             var transformedAll = Engine.TensorMatMul(
                 Engine.Reshape(processInput, [batchSize * numNodes, _inputFeatures]), allHeadWeights);
             bool dropoutActive = _dropoutRate > 0.0 && IsTrainingMode;
-            var aggregatedAll = Engine.GraphAttentionCsr(transformedAll, _attentionWeights, csrGraph,
+            var aggregatedAll = csr.Aggregate(Engine, transformedAll, _attentionWeights, csrGraph,
                 NumOps.ToDouble(_alpha), dropoutActive ? _dropoutRate : 0.0, dropoutActive ? _random : null);
             var combinedSparse = _concatenateHeads || _numHeads == 1
                 ? Engine.Reshape(aggregatedAll, [batchSize, numNodes, _combinedOutputFeatures])
@@ -593,7 +595,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
     // The CSR pattern of the installed 2-D adjacency, rebuilt only when the matrix (or its contents) changes.
     [Scratch]
-    private CsrGraph? _csrGraph;
+    private object? _csrGraph;
     [Scratch]
     private Tensor<T>? _csrGraphSource;
     private int _csrGraphSourceVersion;
@@ -602,14 +604,13 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// The nonzero pattern of <paramref name="adjacency"/> for the sparse attention kernel, or null when some node has
     /// no edge (the dense path's uniform fallback for a fully masked row has no sparse equivalent).
     /// </summary>
-    private CsrGraph? GetCsrGraph(Tensor<T> adjacency)
+    private object? GetCsrGraph(Tensor<T> adjacency, CsrAttentionOperations<T> csr)
     {
         // The storage epoch, not Version: Version does not advance for a write made in inference mode or through
         // another view of the same storage.
         if (ReferenceEquals(adjacency, _csrGraphSource) && adjacency.StorageMutationVersion == _csrGraphSourceVersion)
             return _csrGraph;
-        var graph = CsrGraph.FromDenseAdjacency(adjacency);
-        _csrGraph = graph is not null && graph.EveryRowHasEdge ? graph : null;
+        _csrGraph = csr.CreatePattern(adjacency);
         _csrGraphSource = adjacency;
         _csrGraphSourceVersion = adjacency.StorageMutationVersion;
         return _csrGraph;
