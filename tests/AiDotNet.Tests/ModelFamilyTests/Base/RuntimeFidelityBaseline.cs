@@ -3587,6 +3587,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.SpeechRecognition.Robust.WavLMRobust`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.SpeechRecognition.Robust.WavLMRobust`1::NumMels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.SpeechRecognition.Robust.WavLMRobust`1::SampleRate", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.SpeechRecognition.Specialized.KeywordSpotting`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.SpeechRecognition.Specialized.KeywordSpotting`1::LearningRateDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.SpeechRecognition.Specialized.KeywordSpotting`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },

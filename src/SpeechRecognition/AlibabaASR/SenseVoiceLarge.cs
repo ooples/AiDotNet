@@ -274,7 +274,7 @@ public partial class SenseVoiceLarge<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     {
         var network = _network;
         if (network is null) return false;
-        TrainWithCustomObjective(input, input, (_, _) => BatchLoss(network, input, target));
+        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target));
         return true;
     }
 

@@ -211,7 +211,7 @@ public partial class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             labels[r] = Labels(row);
         }
-        TrainWithCustomObjective(input, input, (_, _) =>
+        TrainWithCustomLoss(input, _ =>
         {
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)

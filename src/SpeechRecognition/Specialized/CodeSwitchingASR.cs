@@ -341,7 +341,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         var network = _network;
         if (network is null) return false;
         var batch = Batch(input, target, network.Boundary);
-        TrainWithCustomObjective(input, input, (_, _) =>
+        TrainWithCustomLoss(input, _ =>
         {
             Tensor<T>? total = null;
             foreach (var (waveform, labels) in batch)
