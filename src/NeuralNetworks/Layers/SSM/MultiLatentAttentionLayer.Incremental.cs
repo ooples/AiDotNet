@@ -5,42 +5,70 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
 /// <summary>
 /// The per-sequence decoding state of a <see cref="MultiLatentAttentionLayer{T}"/>: the compressed latent of every
-/// position consumed so far (the MLA cache, <c>latentDim</c> values per position instead of full keys and values).
-/// Create it with <see cref="MultiLatentAttentionLayer{T}.CreateStepState"/>.
+/// position consumed so far (the MLA cache, <c>latentDim</c> values per position instead of full keys and values), in a
+/// fixed-capacity buffer written at a position held in a tensor. Create it with
+/// <see cref="MultiLatentAttentionLayer{T}.CreateStepState(int, int)"/>.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 public sealed class MultiLatentAttentionStepState<T>
 {
-    internal MultiLatentAttentionStepState(int batchSize, int latentDimension)
+    internal MultiLatentAttentionStepState(int batchSize, int latentDimension, int capacity)
     {
         BatchSize = batchSize;
         LatentDimension = latentDimension;
+        Capacity = capacity;
+        Latents = new Tensor<T>(new[] { batchSize, capacity, latentDimension });
+        CachePosition = new Tensor<T>(new[] { 1 });
     }
 
     /// <summary>The number of sequences this state decodes.</summary>
     public int BatchSize { get; }
 
-    /// <summary>The number of positions cached so far.</summary>
-    public int Position => Latents?.Shape[1] ?? 0;
+    /// <summary>The most positions this state can cache.</summary>
+    public int Capacity { get; }
+
+    /// <summary>
+    /// The number of positions <see cref="MultiLatentAttentionLayer{T}.Step"/> has run on the host. A compiled decode plan
+    /// that replays the step advances the cache on the device without running this code, so there it counts the trace
+    /// only; the device-side count is the cache position itself.
+    /// </summary>
+    public int Position { get; internal set; }
 
     internal int LatentDimension { get; }
 
-    // [B, positions, latentDim], or null before the first position.
-    internal Tensor<T>? Latents { get; set; }
+    // [B, capacity, latentDim]: slot s holds position s's latent, zero until written. Written in place by
+    // IEngine.KvCacheAppend at CachePosition, so a compiled decode plan keeps it in one persistent buffer.
+    internal Tensor<T> Latents { get; }
+
+    // [1]: the number of latents cached, incremented in place on the device by IEngine.KvCacheAppend.
+    internal Tensor<T> CachePosition { get; }
 }
 
 public partial class MultiLatentAttentionLayer<T>
 {
     /// <summary>
-    /// Creates an empty latent cache for <paramref name="batchSize"/> sequences, for use with <see cref="Step"/>.
+    /// Creates an empty latent cache for <paramref name="batchSize"/> sequences holding up to the layer's sequence
+    /// length, for use with <see cref="Step"/>.
     /// </summary>
     /// <param name="batchSize">The number of sequences decoded together.</param>
     /// <returns>An empty cache, equivalent to the start of a sequence.</returns>
-    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize = 1)
+    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize = 1) => CreateStepState(batchSize, _sequenceLength);
+
+    /// <summary>
+    /// Creates an empty latent cache for <paramref name="batchSize"/> sequences holding up to <paramref name="capacity"/>
+    /// positions, for use with <see cref="Step"/>.
+    /// </summary>
+    /// <param name="batchSize">The number of sequences decoded together.</param>
+    /// <param name="capacity">The most positions the cache holds; each step attends over all of them (empty slots are
+    /// masked), so size it to the longest sequence decoded.</param>
+    /// <returns>An empty cache, equivalent to the start of a sequence.</returns>
+    public MultiLatentAttentionStepState<T> CreateStepState(int batchSize, int capacity)
     {
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
-        return new MultiLatentAttentionStepState<T>(batchSize, _latentDimension);
+        if (capacity <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Capacity must be positive.");
+        return new MultiLatentAttentionStepState<T>(batchSize, _latentDimension, capacity);
     }
 
     /// <summary>
@@ -71,20 +99,22 @@ public partial class MultiLatentAttentionLayer<T>
                 $"Step expects one position per sequence, [{b}, 1, {d}] or [{b}, {d}]; got [{string.Join(",", input.Shape)}].", nameof(input));
         if (state.LatentDimension != l)
             throw new ArgumentException("The state was created by a layer of a different shape.", nameof(state));
+        if (state.Position >= state.Capacity)
+            throw new InvalidOperationException($"The latent cache is full ({state.Capacity} positions).");
 
         var x = Engine.Reshape(input, new[] { b, d });
         var latent = Engine.TensorAdd(Engine.TensorMatMul(x, _compressWeights), Engine.Reshape(_compressBias, new[] { 1, l }));
-        var latent3 = Engine.Reshape(latent, new[] { b, 1, l });
-        state.Latents = state.Latents is null ? latent3 : Engine.TensorConcatenate(new[] { state.Latents, latent3 }, 1);
-        var cache = state.Latents;                                                   // [B, t, L]
+        // Written at the device-side position; the mask is 0 for the filled slots and -inf for the rest.
+        var mask = Engine.Reshape(Engine.KvCacheAppend(state.Latents, state.CachePosition, latent), new[] { 1, 1, state.Capacity });
+        var cache = state.Latents;                                                   // [B, P, L]
 
         // Queries absorbed into latent space: qLat[b, h] = W_K^h q[b, h], W_K^h = keyUp[:, h·hd:(h+1)·hd] ([L, hd]).
         var q = Engine.TensorPermute(Engine.Reshape(Engine.TensorMatMul(x, _queryWeights), new[] { b, h, hd }), new[] { 1, 0, 2 });   // [H, B, hd]
         var keyUp = Engine.TensorPermute(Engine.Reshape(_keyUpWeights, new[] { l, h, hd }), new[] { 1, 2, 0 });                     // [H, hd, L]
         var qLat = Engine.TensorPermute(Engine.BatchMatMul(q, keyUp), new[] { 1, 0, 2 });                                           // [B, H, L]
 
-        var scores = Engine.TensorMultiplyScalar(Engine.BatchMatMul(qLat, Engine.TensorPermute(cache, new[] { 0, 2, 1 })),
-            NumOps.FromDouble(1.0 / Math.Sqrt(hd)));                                                                                    // [B, H, t]
+        var scores = Engine.TensorAdd(Engine.TensorMultiplyScalar(Engine.BatchMatMul(qLat, Engine.TensorPermute(cache, new[] { 0, 2, 1 })),
+            NumOps.FromDouble(1.0 / Math.Sqrt(hd))), mask);                                                                                    // [B, H, P]
         var weights = Engine.Softmax(scores, -1);
         var context = Engine.TensorPermute(Engine.BatchMatMul(weights, cache), new[] { 1, 0, 2 });                                  // [H, B, L]
         var valueUp = Engine.TensorPermute(Engine.Reshape(_valueUpWeights, new[] { l, h, hd }), new[] { 1, 0, 2 });                 // [H, L, hd]
@@ -93,6 +123,7 @@ public partial class MultiLatentAttentionLayer<T>
         var gate = Engine.Swish(Engine.TensorAdd(Engine.TensorMatMul(x, _outputGateWeights), Engine.Reshape(_outputGateBias, new[] { 1, d })));
         var projected = Engine.TensorAdd(Engine.TensorMatMul(Engine.TensorMultiply(attn, gate), _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, d }));
+        state.Position++;
         return Engine.Reshape(StepActivation(projected), input._shape);
     }
 
