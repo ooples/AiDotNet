@@ -73,7 +73,7 @@ def paired_gate(ours: list[float | None], theirs: list[float | None], maximum: f
     rng = random.Random(2561)
     draws = sorted(statistics.median(rng.choices(logs, k=len(logs))) for _ in range(resamples))
     upper = math.exp(draws[math.ceil(.95 * len(draws)) - 1])
-    point = statistics.median(ratios)
+    point = midpoint_median(ratios)
     return {"status": "pass" if point <= maximum and upper <= maximum else "fail",
             "median_ratio": point, "upper_95_ratio": upper, "pairs": len(ratios)}
 
@@ -106,6 +106,24 @@ def phase_records(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()] if path.exists() else []
 
 
+def midpoint_median(values: list[float]) -> float:
+    """statistics.median adds the two middle values before halving, which overflows for finite values near the
+    float maximum; low + (high - low) / 2 cannot for the nonnegative ratios scored here."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return ordered[middle - 1] + (ordered[middle] - ordered[middle - 1]) / 2
+
+
+def crosses_phase_boundary(sample: dict, boundaries: list[int]) -> bool:
+    """A device query that started in one phase and returned in another has no known observation phase."""
+    start = sample.get("query_start_unix_ms")
+    if start is None:
+        return False
+    return any(start < boundary <= sample["unix_ms"] for boundary in boundaries)
+
+
 def memory_metrics(samples: list[dict], phases: list[dict]) -> dict[str, float | None]:
     result: dict[str, float | None] = {}
     for metric in ("rss_bytes", "gpu_device_bytes"):
@@ -117,9 +135,12 @@ def memory_metrics(samples: list[dict], phases: list[dict]) -> dict[str, float |
     by_phase: dict[str, list[dict]] = {}
     ordered = sorted(phases, key=lambda event: event["unix_ms"])
     index = -1
+    boundaries = [event["unix_ms"] for event in ordered]
     for sample in sorted(samples, key=lambda item: item["unix_ms"]):
         while index + 1 < len(ordered) and ordered[index + 1]["unix_ms"] <= sample["unix_ms"]:
             index += 1
+        if crosses_phase_boundary(sample, boundaries):
+            continue
         group = phase_group(ordered[index]["phase"]) if index >= 0 else "startup"
         by_phase.setdefault(group, []).append(sample)
     for group in {phase_group(event["phase"]) for event in ordered} | {"startup"}:
@@ -163,6 +184,21 @@ def nvidia_query(gpu_id: str, fields: str) -> str | None:
                                        stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+def nvidia_compute_processes(gpu_id: str) -> set[int] | None:
+    """PIDs with a compute context on the GPU, or None when the driver cannot list them."""
+    try:
+        text = subprocess.check_output(["nvidia-smi", "--id=" + gpu_id, "--query-compute-apps=pid",
+                                        "--format=csv,noheader,nounits"], text=True, timeout=3,
+                                       stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    pids = set()
+    for line in text.splitlines():
+        with contextlib.suppress(ValueError):
+            pids.add(int(line.strip()))
+    return pids
 
 
 def contending_processes(excluded: set[int] | None = None) -> list[dict]:
@@ -218,13 +254,30 @@ class Sampler:
 
     def gpu(self) -> None:
         while not self.stop.is_set():
+            # nvidia-smi can take longer than a short phase. Keep both ends of the query so a reading taken in
+            # one phase is not charged to the phase in which the query happened to return.
+            started = time.time_ns() // 1_000_000
             value = nvidia_query(self.gpu_id, "memory.used")
             if value is not None:
                 with contextlib.suppress(ValueError):
                     with self.lock:
-                        self.samples.append({"unix_ms": time.time_ns() // 1_000_000,
+                        self.samples.append({"unix_ms": time.time_ns() // 1_000_000, "query_start_unix_ms": started,
                                              "gpu_device_bytes": float(value) * 1048576})
+            self.audit_gpu_exclusivity()
             self.stop.wait(.1)
+
+    def audit_gpu_exclusivity(self) -> None:
+        """memory.used is device-wide: another CUDA process on this GPU would be charged to the measured side."""
+        listing = nvidia_compute_processes(self.gpu_id)
+        if listing is None:
+            return
+        own = {self.process.pid}
+        with contextlib.suppress(psutil.Error):
+            own.update(child.pid for child in self.process.children(recursive=True))
+        foreign = sorted(pid for pid in listing if pid not in own)
+        if foreign:
+            self.contention.append({"unix_ms": time.time_ns() // 1_000_000, "kind": "foreign_cuda_process",
+                                    "processes": [{"pid": pid} for pid in foreign]})
 
     def start(self) -> None:
         for thread in self.threads:
@@ -548,19 +601,32 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
                             invalid_reason="Benchmark process identity could not be verified: " + str(error))
             write_json(run_dir / "measurement.json", metadata)
             return {"path": str(run_dir), **metadata}
+        def stop_tree() -> None:
+            # Only children of this launch are terminated; compiler workers must not leak into the next pair.
+            try:
+                with contextlib.suppress(psutil.Error):
+                    for child in psutil.Process(process.pid).children(recursive=True):
+                        with contextlib.suppress(psutil.Error):
+                            child.kill()
+            finally:
+                with contextlib.suppress(OSError):
+                    process.kill()
+                process.wait()
+
         sampler.start()
         try:
-            return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
-        except subprocess.TimeoutExpired:
-            # Only children of this launch are terminated; compiler workers must not leak into the next pair.
-            with contextlib.suppress(psutil.Error):
-                for child in psutil.Process(process.pid).children(recursive=True):
-                    with contextlib.suppress(psutil.Error):
-                        child.kill()
-            process.kill()
-            process.wait()
-            return_code = -1
-        samples = sampler.finish()
+            try:
+                return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
+            except subprocess.TimeoutExpired:
+                stop_tree()
+                return_code = -1
+            except BaseException:
+                # Ctrl+C or any other interruption: a surviving child would keep the CPU or GPU busy during the
+                # next run. Stop and reap it, then let the interruption propagate.
+                stop_tree()
+                raise
+        finally:
+            samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
     raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json",
                  "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite",
@@ -736,7 +802,12 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
         return {}, ["requested model missing"]
     errors = []
     if run.get("mode") == "score" and run.get("contention"):
-        errors.append("external CI worker/testhost contention observed during scoring")
+        kinds = {record.get("kind") for record in run["contention"] if isinstance(record, dict)}
+        if kinds - {"foreign_cuda_process"} or not kinds:
+            errors.append("external CI worker/testhost contention observed during scoring")
+        if "foreign_cuda_process" in kinds:
+            errors.append("another CUDA process used the measured GPU during scoring; device-wide VRAM samples "
+                          "would include its memory")
     if run["model"] == "lstm":
         workload = lstm_workload_gate(run)
         if workload["status"] != "pass":
