@@ -1,4 +1,4 @@
-# Shared execution and verification policy. Lists, coverage rules and defaults are unchanged.
+﻿# Shared execution and verification policy. Lists, coverage rules and defaults are unchanged.
 enum CoverageDisposition {
   Instrument
   Carried
@@ -110,7 +110,8 @@ function Get-ShardCoveragePolicy {
       'Integration T-Z',
       'Integration - Serial Perf',
       'TopLevel - FederatedLearning',
-      'TopLevel - Audio/Onnx/Tokenization'
+      'TopLevel - Audio/Onnx/Tokenization',
+      'TTS Paper Tests'
     )
     $heavyShard = ($heavyShards -contains $shardName) -or ($Heavy)
 

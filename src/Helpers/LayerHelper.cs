@@ -29153,65 +29153,15 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for the LISA model.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateLISAEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+    private static IEnumerable<ILayer<T>> CreateReferringPyramidEncoderLayers(
+        int inputHeight, int inputWidth, int[] channelDims, int[] depths)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
-
-    /// <summary>
-    /// Creates decoder layers for the LISA model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateLISADecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
-    #region VideoLISA Layers
-
-    /// <summary>
-    /// Creates encoder layers for the VideoLISA model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateVideoLISAEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        // VideoLISA's visual branch is initialized from SAM, whose encoder uses residual
-        // blocks and batch-independent normalization. A Conv(ReLU)->BatchNorm chain is not
-        // equivalent: with the small/single-video batches used for dense segmentation it can
-        // collapse the representation and produce identical masks for distinct frames.
+        // SAM-family referring segmentation encoders require residual blocks and batch-independent
+        // GroupNormalization: at 1/32 spatial bottleneck on small/single-image batches (e.g., 1x1 on
+        // 32x32 inputs), BatchNormalization collapses per-channel variance to zero in training mode
+        // while shifting activations via running statistics in evaluation mode.
         var silu = new SiLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
+        int h = inputHeight, w = inputWidth;
 
         for (int stage = 0; stage < channelDims.Length; stage++)
         {
@@ -29221,13 +29171,12 @@ public static partial class LayerHelper<T>
             int pad = stage == 0 ? 3 : 1;
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
-            h /= stride; w /= stride;
+            h = Math.Max(1, h / stride);
+            w = Math.Max(1, w / stride);
             if (stage == 0)
             {
-                // SAM adds absolute positional information to the patch embeddings before
-                // normalization. Besides preserving spatial identity for mask decoding, placing
-                // it here prevents normalization from making the visual path invariant to a
-                // uniform rescaling of every pixel.
+                // SAM adds absolute positional information to patch embeddings before normalization,
+                // preserving spatial identity and preventing normalization from erasing uniform pixel scaling.
                 yield return new PositionalEncodingLayer<T>(h, w);
             }
             yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
@@ -29239,10 +29188,46 @@ public static partial class LayerHelper<T>
                     new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
                 yield return new GroupNormalizationLayer<T>(ChooseVideoLISAGroupCount(outC), outC);
             }
-
-            inC = outC;
         }
     }
+
+    private static IEnumerable<ILayer<T>> CreateReferringBottleneckDecoderLayers(
+        int decoderDim, int numClasses)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
+
+    /// <summary>
+    /// Creates decoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
+
+    #endregion
+    #region VideoLISA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the VideoLISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the VideoLISA model.
@@ -29312,30 +29297,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateOMGLLaVAEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the OMGLLaVA model.
@@ -29343,14 +29305,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateOMGLLaVADecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
 
     #endregion
     #region PixelLM Layers
@@ -29361,30 +29316,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreatePixelLMEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateReferringPyramidEncoderLayers(inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the PixelLM model.
@@ -29392,14 +29324,7 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreatePixelLMDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+        => CreateReferringBottleneckDecoderLayers(decoderDim, numClasses);
 
     #endregion
     #region VMamba Layers

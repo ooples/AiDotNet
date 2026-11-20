@@ -47,7 +47,10 @@ public class CustomObjectiveFusedRoutingTests
 
         internal ObjectiveNetwork(AdamOptimizer<float, Tensor<float>, Tensor<float>> optimizer) : base(
             new NeuralNetworkArchitecture<float>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
-                complexity: NetworkComplexity.Simple, inputSize: 6, outputSize: 2),
+                complexity: NetworkComplexity.Simple, inputSize: 6, outputSize: 2)
+            {
+                RandomSeed = 42
+            },
             optimizer, new MeanSquaredErrorLoss<float>())
         {
             Layers.Add(_hostReadLayer);

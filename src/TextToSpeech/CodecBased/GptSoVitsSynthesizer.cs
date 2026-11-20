@@ -154,7 +154,7 @@ internal sealed class GptSoVitsQuantizer<T>
     public (Tensor<T> Quantized, int[] Codes, Tensor<T> Commitment) Forward(Tensor<T> x, bool training, Random random)
     {
         int t = x.Shape[2];
-        if (!training)
+        if (!training && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
             var evalCodes = Encode(x);
             return (Decode(evalCodes), evalCodes, new Tensor<T>(new[] { 1 }));
@@ -164,11 +164,15 @@ internal sealed class GptSoVitsQuantizer<T>
         var quantized = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
             "GptSoVitsVqQuantized",
             this,
-            stateTag: 1,
+            stateTag: training ? 1 : 0,
             new[] { x },
             x._shape,
-            static (self, _, inputs, dst) => self.ExecuteQuantize(inputs[0], dst));
+            static (self, tag, inputs, dst) => self.ExecuteQuantize(tag == 1, inputs[0], dst));
         var codes = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[t] : _lastCodes;
+        if (!training)
+        {
+            return (quantized, codes, new Tensor<T>(new[] { 1 }));
+        }
         // quantize = x + (quantize - x).detach(); commit = mse(quantize.detach(), x)
         var straight = _engine.TensorAdd(x, MeloOps.Detach(_engine.TensorSubtract(quantized, x)));
         var difference = _engine.TensorSubtract(x, MeloOps.Detach(quantized));
@@ -180,10 +184,10 @@ internal sealed class GptSoVitsQuantizer<T>
     private int[] _lastCodes = Array.Empty<int>();
     private Random? _activeRandom;
 
-    private void ExecuteQuantize(Tensor<T> currentX, Tensor<T> dst)
+    private void ExecuteQuantize(bool updateCodebook, Tensor<T> currentX, Tensor<T> dst)
     {
         int t = currentX.Shape[2];
-        bool advanceState = !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward;
+        bool advanceState = updateCodebook && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward;
         var rng = _activeRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
         if (advanceState && !Initialized) KMeansInitialize(currentX, rng);
         var stepCodes = Encode(currentX);

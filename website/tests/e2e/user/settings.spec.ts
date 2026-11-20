@@ -82,26 +82,52 @@ test.describe('Logged-in user — settings', () => {
     await expect(page.locator('#password-error')).toContainText(/Passwords do not match/i);
   });
 
-  test('Delete Account shows a confirm dialog and then a support-contact alert', async ({ page }) => {
+  test('Delete Account asks for DELETE, and Cancel leaves the account untouched', async ({ page }) => {
+    // The seeded account is shared by every run, so this never confirms: the real deletion (refused
+    // while a subscription bills, then done) is account-billing.spec.ts on a throwaway customer.
+    const deleteCalls: string[] = [];
+    await page.route('**/functions/v1/delete-account*', async route => {
+      deleteCalls.push(route.request().method());
+      await route.fulfill({ status: 409, json: { error: 'blocked_shared_account_test' } });
+    });
+    page.on('dialog', (d) => { throw new Error(`unexpected browser dialog: ${d.message()}`); });
     await page.goto('/account/settings/');
 
-    let dialogCount = 0;
-    const dialogMessages: string[] = [];
-    page.on('dialog', async (dialog) => {
-      dialogCount++;
-      dialogMessages.push(dialog.message());
-      if (dialog.type() === 'confirm') await dialog.accept();
-      else await dialog.dismiss();
-    });
-
     await page.getByRole('button', { name: 'Delete Account' }).click();
+    const dialog = page.locator('#delete-account-modal');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('revokes every license key');
+    async function checkFocusWrap(enabledConfirm: boolean) {
+      await page.locator('#delete-confirm-input').focus();
+      for (const direction of ['Tab', 'Shift+Tab']) {
+        const stops = direction === 'Tab'
+          ? enabledConfirm ? ['#delete-cancel-btn', '#delete-confirm-btn', '#delete-confirm-input'] : ['#delete-cancel-btn', '#delete-confirm-input']
+          : enabledConfirm ? ['#delete-confirm-btn', '#delete-cancel-btn', '#delete-confirm-input'] : ['#delete-cancel-btn', '#delete-confirm-input'];
+        for (const target of stops) {
+          await page.keyboard.press(direction);
+          await expect(page.locator(target)).toBeFocused();
+        }
+        await expect(page.locator('#delete-confirm-input')).toBeFocused();
+      }
+    }
+    await checkFocusWrap(false);
+    const confirm = page.locator('#delete-confirm-btn');
+    await expect(confirm).toBeDisabled();
+    await page.locator('#delete-confirm-input').fill('delete');
+    await expect(confirm, 'only the exact word enables deletion').toBeDisabled();
+    await page.locator('#delete-confirm-input').fill('DELETE');
+    await expect(confirm).toBeEnabled();
+    await checkFocusWrap(true);
 
-    // Two dialogs in sequence: a confirm() ("Are you sure...") followed
-    // by an alert() directing to support. This is intentional — we don't
-    // offer self-service delete yet — so we assert the two-step shape
-    // explicitly so an accidental silent-delete doesn't slip through.
-    await expect.poll(() => dialogCount).toBe(2);
-    expect(dialogMessages[0]).toMatch(/Are you sure you want to delete your account/i);
-    expect(dialogMessages[1]).toMatch(/support@aidotnet\.dev/);
+    await page.locator('#delete-cancel-btn').click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('#delete-account-btn')).toBeFocused();
+    // Reopening starts clean: the typed confirmation does not carry over.
+    await page.locator('#delete-account-btn').click();
+    await expect(page.locator('#delete-confirm-input')).toHaveValue('');
+    await expect(confirm).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    expect(deleteCalls, 'no delete request was sent').toEqual([]);
   });
 });

@@ -35,22 +35,22 @@ test.describe('Desktop Navigation', () => {
     await expect(page).toHaveURL(/\/pricing\//);
   });
 
-  test('back/forward browser navigation works', async ({ page }) => {
+  test('back/forward browser navigation works', async ({ page, baseURL }) => {
     await page.goto(`${BASE}/`);
     await page.locator('nav').getByRole('link', { name: 'Features' }).click();
     await expect(page).toHaveURL(/\/features\//);
     await page.goBack();
-    await expect(page).toHaveURL(/aidotnet\.dev\/?$/);
+    await expect(page).toHaveURL(new URL('/', baseURL).href);
     await page.goForward();
     await expect(page).toHaveURL(/\/features\//);
   });
 });
 
 test.describe('Navigation - All Viewports', () => {
-  test('logo click returns to landing page', async ({ page }) => {
+  test('logo click returns to landing page', async ({ page, baseURL }) => {
     await page.goto(`${BASE}/features/`);
     await page.locator('nav a[href="/"]').first().click();
-    await expect(page).toHaveURL(/aidotnet\.dev\/?$/);
+    await expect(page).toHaveURL(new URL('/', baseURL).href);
   });
 
   test('Get Started CTA navigates to docs', async ({ page }) => {
@@ -79,11 +79,13 @@ test.describe('Mobile Navigation', () => {
 
   test('mobile hamburger menu opens and closes', async ({ page }) => {
     await page.goto(`${BASE}/`);
-    const menuButton = page.locator('button[aria-label*="menu" i], button[aria-label*="Menu" i], nav button').first();
-    if (await menuButton.isVisible()) {
-      await menuButton.click();
-      const mobileMenu = page.locator('[class*="mobile"], [class*="menu"], nav ul, nav div[class*="open"]').first();
-      await expect(mobileMenu).toBeVisible();
-    }
+    const menuButton = page.locator('#mobile-menu-btn');
+    const mobileMenu = page.locator('#mobile-menu');
+    await expect(menuButton).toBeVisible();
+    await expect(mobileMenu).toBeHidden();
+    await menuButton.click();
+    await expect(mobileMenu).toBeVisible();
+    await menuButton.click();
+    await expect(mobileMenu).toBeHidden();
   });
 });

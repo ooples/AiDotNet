@@ -52,3 +52,13 @@ verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = false
+
+# Existing preview uses isolated handler deployments in the same project.
+[functions.billing-portal-preview]
+verify_jwt = false
+[functions.stripe-webhook-preview]
+verify_jwt = false
+[functions.delete-account-preview]
+verify_jwt = false
+[functions.register-community-license-preview]
+verify_jwt = false

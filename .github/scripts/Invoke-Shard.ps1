@@ -303,7 +303,8 @@ if ($serializeShard) {
   # ~70s into serial execution — the footprint, not parallelism, was the
   # remaining cause.)
   $env:DOTNET_gcServer = '0'
-  Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
+  $env:DOTNET_GCConserveMemory = '9'
+  Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0, DOTNET_GCConserveMemory=9) + serial collections"
 
   # CAP THE MANAGED HEAP below the runner's RAM, as heavy-timeout-nightly does (#2087). Uncapped, the GC let
   # garbage accumulate until the 16 GB runner died: Generated D on 4592367280 lost ~13 GB of MemAvailable in ten

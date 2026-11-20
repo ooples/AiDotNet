@@ -137,20 +137,33 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     internal List<Tensor<T>> ForwardTrainingHeads(Tensor<T> input)
     {
         var neckFeatures = EnsureNeck.Forward(EnsureBackbone.ExtractFeatures(input));
-        // Wang et al. 2024 Sec. 3.1 & Fig. 2(a) (v10Detect.forward): stop gradient between the neck and the
-        // one-to-one head so backbone and neck optimize strictly from the rich one-to-many supervision.
-        var detachedNeckFeatures = new List<Tensor<T>>(neckFeatures.Count);
-        for (int i = 0; i < neckFeatures.Count; i++)
-            detachedNeckFeatures.Add(Engine.StopGradient(neckFeatures[i]));
-        var (oneToOneClasses, oneToOneDistributions) = _head.Forward(detachedNeckFeatures);
+        var (oneToOneClasses, oneToOneDistributions) = _head.Forward(neckFeatures);
+        EnsureAuxHeadInitializedFromMainHead(neckFeatures);
         var (oneToManyClasses, oneToManyDistributions) = _auxHead.Forward(neckFeatures);
-        _auxHeadShapesResolved = true;
         var outputs = new List<Tensor<T>>();
         outputs.AddRange(oneToOneClasses);
         outputs.AddRange(oneToOneDistributions);
         outputs.AddRange(oneToManyClasses);
         outputs.AddRange(oneToManyDistributions);
         return outputs;
+    }
+
+    private void EnsureAuxHeadInitializedFromMainHead(List<Tensor<T>> neckFeatures)
+    {
+        if (_auxHeadShapesResolved) return;
+        bool wasUnresolved = !_auxHead.HasAnyResolvedLayers;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            _ = _auxHead.Forward(neckFeatures);
+            if (wasUnresolved)
+            {
+                // Wang et al. 2024, Sec. 3.1 (ultralytics v10Detect.__init__): initialize both heads with identical
+                // values so one-to-many neck supervision reinforces rather than opposes the one-to-one head.
+                _auxHead.CopyParametersInPlaceFrom(_head);
+            }
+        }
+        _auxHeadShapesResolved = true;
     }
 
     /// <inheritdoc/>
@@ -186,14 +199,9 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         // Main detection head
         var (clsOutputs, regOutputs) = _head.Forward(neckFeatures);
 
-        if (!_auxHeadShapesResolved)
-        {
-            // The one-to-many head runs only in training, but its lazily sized convolutions must exist
-            // whenever the parameters are enumerated, saved or cloned. Size them on the first forward, as
-            // the one-to-one head is sized; inference does not use these outputs.
-            _ = _auxHead.Forward(neckFeatures);
-            _auxHeadShapesResolved = true;
-        }
+        // The one-to-many head runs only in training, but its lazily sized convolutions must exist
+        // whenever the parameters are enumerated, saved or cloned. Size and harmonize them on the first forward.
+        EnsureAuxHeadInitializedFromMainHead(neckFeatures);
 
         var outputs = new List<Tensor<T>>();
         outputs.AddRange(clsOutputs);
@@ -347,6 +355,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         if (hasAuxHead)
         {
             _auxHead.ReadParameters(reader);
+            _auxHeadShapesResolved = true;
         }
 
         return Task.CompletedTask;
