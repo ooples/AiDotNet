@@ -49,6 +49,8 @@ def mark_phase(model: str, phase: str) -> bool:
     else:
         record["gpu_memory_interval"] = {"coverage": "inactive_or_uninitialized"}
     if diagnostics:
+        # Evidence for the allocation gate: before initialization the CUDA caching allocator cannot allocate.
+        record["cuda_initialized"] = torch.cuda.is_initialized()
         # Native CUDA caching-allocator requests are distinct from segments acquired from the driver.
         # These counters do not measure Python objects, CPU storage, or allocations inside vendor libraries.
         if torch.cuda.is_initialized() and torch.cuda.get_allocator_backend() == "native" and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":

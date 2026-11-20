@@ -369,6 +369,34 @@ class ContractTests(unittest.TestCase):
         for window, value in values.items():
             self.assertEqual({"bytes": 20 * 256, "count": 20}, value, window)
 
+    def test_missing_counter_at_a_scored_boundary_is_not_zero_without_uninitialized_evidence(self):
+        run = self.run_fixture()
+        phases = checked_phases(run)
+        field, coverage = "gpu_compiled_workspace_loan_requested", "successful_compiled_broker_loans_only"
+        for index, event in enumerate(phases):
+            # Absent through construction and epoch 0, first present at the inference markers.
+            if index >= 6:
+                event["allocator_diagnostics"][field] = {"bytes": (index + 1) * 64, "count": index + 1, "coverage": coverage}
+        with self.assertRaisesRegex(ValueError, "no counter at the scored boundary construction-complete"):
+            provider_values(run, phases, "aidotnet_compiled_workspace_loans")
+
+    def test_torch_cuda_startup_allowance_requires_recorded_uninitialized_state(self):
+        run = self.run_fixture(side="pytorch")
+        phases = checked_phases(run)
+        source = "pytorch_native_caching_allocator_requests"
+        for index, event in enumerate(phases):
+            event["cuda_initialized"] = index >= 3
+            if index >= 3:
+                event["allocators"] = {"gpu_framework_requested": {"bytes": index * 10, "count": index, "source": source}}
+        values = provider_values(run, phases, "torch_cuda_requests")
+        self.assertEqual({"bytes": 0, "count": 0}, values["construction"])
+        self.assertEqual({"bytes": 10, "count": 1}, values["training_epoch_0"])
+        # The same series without the recorded state is unknown, not zero.
+        for event in phases[:3]:
+            del event["cuda_initialized"]
+        with self.assertRaisesRegex(ValueError, "no counter at the scored boundary"):
+            provider_values(run, phases, "torch_cuda_requests")
+
     def test_compiled_workspace_loans_are_requests_and_cannot_be_backing(self):
         run = self.run_fixture()
         phases = checked_phases(run)

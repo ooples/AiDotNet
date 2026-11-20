@@ -136,9 +136,8 @@ def fixed_windows(run: dict) -> dict[str, tuple[str, str]]:
     return windows
 
 
-def counter_windows(run: dict, phases: list[dict], select) -> dict[str, dict[str, int]]:
+def counter_windows(run: dict, phases: list[dict], select, uninitialized=None) -> dict[str, dict[str, int]]:
     values = [select(event) for event in phases]
-    # CUDA may initialize during construction. Absence is allowed only before its first counter.
     first = next((index for index, value in enumerate(values) if value is not None), len(values))
     observed = values[first:]
     if not observed or any(value is None for value in observed):
@@ -147,12 +146,25 @@ def counter_windows(run: dict, phases: list[dict], select) -> dict[str, dict[str
         series = [integer(value.get(unit)) for value in observed]
         if any(a > b for a, b in zip(series, series[1:])):
             raise ValueError("Cumulative allocation counters were reset or decreased.")
-    by_phase = {event["phase"]: value or {"bytes": 0, "count": 0} for event, value in zip(phases, values)}
+    zero = {"bytes": 0, "count": 0}
+    by_phase = {event["phase"]: (event, value) for event, value in zip(phases, values)}
+
+    def boundary(phase):
+        # A missing snapshot does not prove the allocator was idle. It counts as zero only where the process
+        # recorded that the provider could not allocate yet (CUDA may initialize after construction).
+        event, value = by_phase[phase]
+        if value is not None:
+            return value
+        if uninitialized is None or not uninitialized(event):
+            raise ValueError("Allocation provider has no counter at the scored boundary " + phase + ".")
+        return zero
+
     result = {}
     for window, (start, end) in fixed_windows(run).items():
         # Including earlier startup allocations only enlarges Ai's upper bound.
-        baseline = {"bytes": 0, "count": 0} if window == "construction" and run["side"] == "aidotnet" else by_phase[start]
-        result[window] = {unit: by_phase[end][unit] - baseline[unit] for unit in ("bytes", "count")}
+        baseline = zero if window == "construction" and run["side"] == "aidotnet" else boundary(start)
+        final = boundary(end)
+        result[window] = {unit: final[unit] - baseline[unit] for unit in ("bytes", "count")}
     return result
 
 
@@ -217,7 +229,8 @@ def provider_values(run: dict, phases: list[dict], provider: str) -> dict[str, d
             if value is not None and value.get("source") != expected:
                 raise ValueError("Torch CUDA allocator provider semantics differ.")
             return value
-        return counter_windows(run, phases, select)
+        # The caching allocator cannot serve a request before CUDA initializes; the marker records that state.
+        return counter_windows(run, phases, select, lambda event: event.get("cuda_initialized") is False)
     key, coverage = {
         "aidotnet_cpu_requests": ("cpu_storage_requested", "partial_numeric_storage_request_boundaries"),
         "aidotnet_gpu_requests": ("gpu_buffer_requested", "primitive8_32_backend_buffer_api_only"),
