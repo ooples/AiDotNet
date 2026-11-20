@@ -88,10 +88,11 @@ public sealed class HiFiGanCpuResidualAccumulatorTests
                 first = generator.Forward(input).ToArray();
             AssertBitwise(expected, first);
 
-            var layer = generator.Layers.Last();
-            var parameters = layer.GetParameters();
-            parameters[parameters.Length - 1] += .1f;
-            layer.SetParameters(parameters);
+            var projection = Assert.IsType<NormedConv1DLayer<float>>(generator.Layers.Last());
+            int filterLength = projection.TorchWeightShape.Aggregate(1, (count, axis) => count * axis);
+            var replacementFilter = Enumerable.Range(0, filterLength)
+                .Select(i => 0.1 * Math.Cos(i * .31)).ToArray();
+            projection.LoadTorchWeights(replacementFilter, gain: null, bias: new[] { .375 });
             var updated = Reference();
             Assert.False(first.SequenceEqual(updated));
             using (var arena = TensorArena.Create())
