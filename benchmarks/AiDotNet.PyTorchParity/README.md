@@ -1,5 +1,30 @@
 # AiDotNet ⇄ PyTorch parity benchmark
 
+## Run all 11 model families
+
+From the repository root, the following command builds this AiDotNet checkout in Release and runs its models against **Python PyTorch with `torch.compile`**. It covers MLP, CNN, LSTM, Transformer, GRU, ResNet-18, ResNet-50, VGG-11, MobileNetV2, DenseNet-121 and ViT. Each framework runs alone in a fresh process for every model, device and launch.
+
+Use the .NET 10 SDK and a Python 3.13 virtual environment. On Windows, open the x64 Developer PowerShell for Visual Studio with the C++ build tools. For NVIDIA CUDA, install a compatible driver and CUDA development libraries. The published baseline used these wheels:
+
+```shell
+python -m pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu126
+python -m pip install psutil==7.2.2 numpy==2.5.4
+```
+
+On Windows CUDA also run `python -m pip install triton-windows==3.9.0.post30`. For a CPU-only machine, use the PyTorch CPU wheel index and pass `--devices cpu`.
+
+```shell
+python benchmarks/AiDotNet.PyTorchParity/run_matrix.py
+```
+
+The full comparison runs two launches on CUDA and CPU. Both frameworks use eight threads, seed 1234, and three epochs of 20 updates at batch size 64. Inference measures 100 calls at each of batches 1, 8 and 16 after warm-up. The runner alternates framework order between launches. For a quick execution check, run `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models cnn --devices cpu --smoke`. Smoke timings only check execution.
+
+The printed run directory contains the hardware and runtime versions, git revision, binary hashes, commands, exit codes, logs, raw JSON and a CSV with each launch's median training time per update and inference latency in milliseconds. In the CSV, `torch_over_ai` is PyTorch time divided by AiDotNet time. Failed pairs are listed in `completion.json` and the process exits nonzero. The runner first checks the supported models (MLP, CNN, LSTM and Transformer) against a same-weights PyTorch update on each requested device. The other seven rows compare timings and report parameter counts. The PyTorch implementation and its model-specific notes are in [benchmark.py](pytorch/benchmark.py).
+
+By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash. Separate full historical runs are available for [November 13 and November 19](https://github.com/ooples/AiDotNet.Tensors/tree/bench/reproducible-model-families/parity/model-families). The [17-second LSTM recording](https://github.com/ooples/AiDotNet.Tensors/tree/bench/reproducible-model-families/parity/lstm-video) uses a different workload.
+
+## Model definitions
+
 An in-repo twin of the [AIsEval](https://github.com/ooples/AIsEval)
 `aidotnet-benchmarks` harness, with one decisive difference: this project
 references the AiDotNet **source** (`<ProjectReference Include="..\..\src\AiDotNet.csproj" />`),
