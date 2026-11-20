@@ -78,8 +78,11 @@ public class FusedStepPersistenceTests
             var plan = (typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>)
                 .GetProperty("_configuredPlan", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new InvalidOperationException("typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>) .GetProperty(\"_conf... is null where it is required.")).GetValue(null);
             Assert.NotNull(plan);
-            int optimizerStep = (int)((plan.GetType()
-                .GetField("_optimizerStep", BindingFlags.NonPublic | BindingFlags.Instance) ?? throw new InvalidOperationException("plan.GetType() .GetField(\"_optimizerStep\", BindingFlags.NonPublic | BindingFl... is null where it is required.")).GetValue(plan) ?? throw new InvalidOperationException("(plan.GetType() .GetField(\"_optimizerStep\", BindingFlags.NonPublic | BindingF... is null where it is required."));
+            // The public count: a captured optimizer advances it on the device, and the plan's field catches up only
+            // when the count is read (the deferred resolution), so the private field lags a replaying plan.
+            int optimizerStep = (int)((plan.GetType().GetProperty("OptimizerStep") ?? throw new InvalidOperationException(
+                "the configured plan has no OptimizerStep property")).GetValue(plan) ?? throw new InvalidOperationException(
+                "the configured plan's OptimizerStep is null"));
             Assert.True(optimizerStep > BatchSize,
                 $"fused optimizer step counter is {optimizerStep} after {Epochs} epochs of {Rows} rows in batches of " +
                 $"{BatchSize}: the plan's optimizer state was restarted between batches.");
