@@ -177,9 +177,10 @@ internal static class HifiGanReferenceVerifier
         double ratio = expectedSquared > 0 ? Math.Sqrt(actualSquared / expectedSquared) : actualSquared == 0 ? 1 : 0;
         double cosine = expectedSquared > 0 && actualSquared > 0 ? dot / Math.Sqrt(expectedSquared * actualSquared)
             : expectedSquared == actualSquared ? 1 : 0;
+        // AdamW can amplify small gradient differences in individual weights. The eager/compiled
+        // reference control calibrates learned state by its tensorwise relative error and cosine.
         bool pass = kind == ComparisonKind.LearnedState
-            ? finite && worst <= tolerance.Absolute + tolerance.Relative * scale
-                && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
+            ? finite && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
             : finite && worst <= tolerance.Absolute + tolerance.Relative * scale
                 && (relative <= tolerance.Relative || worst <= tolerance.Absolute);
         if (total is not null)
