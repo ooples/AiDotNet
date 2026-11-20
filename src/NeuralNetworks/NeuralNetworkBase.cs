@@ -15193,7 +15193,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Already inside a step of this network (a custom loss run from within its own training step): the eager path,
         // which takes no step lock.
         if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
-        if (GradientValueClip > 0.0 || GradientClippingGroups(CollectModelTrainableTensors()) is not null) return false;
+        // A model can declare per-group norm clipping even when its active objective disables it.
+        // Only resolve the parameters and decline the compiled route when those groups will be used.
+        if (GradientValueClip > 0.0 ||
+            (MaxGradNormValue > 0.0 && GradientClippingGroups(CollectModelTrainableTensors()) is not null)) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
