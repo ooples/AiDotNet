@@ -128,7 +128,36 @@ if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
         Flag("--series-length", 20_000), Flag("--seed", 42), only);
 }
 
+int hifiFingerprintAt = Array.IndexOf(args, "--hash-hifigan-initial-state");
+if (hifiFingerprintAt >= 0)
+{
+    if (hifiFingerprintAt + 1 >= args.Length) throw new ArgumentException("--hash-hifigan-initial-state requires a fresh output path.");
+    int seedAt = Array.IndexOf(args, "--seed");
+    int seed = seedAt >= 0 ? int.Parse(args[seedAt + 1], System.Globalization.CultureInfo.InvariantCulture) : 1234;
+    return HifiGanInitialStateFingerprint.Run(args[hifiFingerprintAt + 1], seed);
+}
+
+int hifiReferenceAt = Array.IndexOf(args, "--verify-hifigan");
+if (hifiReferenceAt >= 0)
+{
+    if (hifiReferenceAt + 1 >= args.Length) throw new ArgumentException("--verify-hifigan requires a reference directory.");
+    string directory = args[hifiReferenceAt + 1];
+    int outputAt = Array.IndexOf(args, "--output");
+    string output = outputAt >= 0 && outputAt + 1 < args.Length ? args[outputAt + 1]
+        : Path.Combine(directory, "aidotnet-equivalence.json");
+    int fixtureAt = Array.IndexOf(args, "--hifigan-fixture");
+    if (fixtureAt >= 0 && fixtureAt + 1 >= args.Length) throw new ArgumentException("Missing explicit shared fixture path.");
+    return HifiGanReferenceVerifier.Run(directory, output, fixtureAt >= 0 ? args[fixtureAt + 1] : null);
+}
+
+
 var benchOptions = BenchmarkOptions.Parse(args);
+if (benchOptions.LstmNumerics is not null)
+{
+    var lstm = new AiDotNetLstmModel(benchOptions.Seed);
+    lstm.AttachFixture(benchOptions).WriteNumerics(lstm);
+    return 0;
+}
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
     // Step-1 equivalence (pytorch/export_reference.py writes the inputs): same weights, same batch, then
@@ -185,7 +214,13 @@ internal sealed record BenchmarkOptions(
     int Seed,
     string OutputPath,
     string? VerifyStep1Dir,
-    int[] InferenceBatchSizes)
+    int[] InferenceBatchSizes,
+    string? HifiGanFixture,
+    bool RequireMatchedWorkload,
+    string? HifiGanWorkloadReceipt,
+    string? LstmFixture = null,
+    string? LstmWorkloadReceipt = null,
+    string? LstmNumerics = null)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -202,6 +237,20 @@ internal sealed record BenchmarkOptions(
 
         var models = map.GetValueOrDefault("models", "mlp,cnn,lstm,transformer")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string? fixturePath = map.GetValueOrDefault("hifigan-fixture");
+        bool requireMatched = bool.Parse(map.GetValueOrDefault("require-matched-workload", "false"));
+        string? lstmFixture = map.GetValueOrDefault("lstm-fixture");
+        if (requireMatched && string.IsNullOrWhiteSpace(fixturePath) && string.IsNullOrWhiteSpace(lstmFixture))
+            throw new ArgumentException("Matched mode requires an explicit shared workload fixture.");
+        if (lstmFixture is not null && (fixturePath is not null || models.Length != 1 || models[0] != "lstm"))
+            throw new ArgumentException("The shared LSTM fixture requires only the LSTM row.");
+        if (lstmFixture is null && (map.ContainsKey("lstm-numerics") || map.ContainsKey("lstm-workload-receipt")))
+            throw new ArgumentException("LSTM evidence requires its explicit fixture.");
+        if (fixturePath is not null && (models.Length != 1 || models[0] != "hifigan-v1"))
+            throw new ArgumentException("The shared fixture requires the single full HiFi row.");
+        if (fixturePath is null && map.ContainsKey("hifigan-workload-receipt"))
+            throw new ArgumentException("A workload receipt requires the shared fixture.");
+
 
         return new BenchmarkOptions(
             models,
@@ -217,7 +266,9 @@ internal sealed record BenchmarkOptions(
             map.GetValueOrDefault("inference-batches", "1,8,32,128")
                 // Empty entries are rejected, not dropped, so a mistyped list fails here as it does in benchmark.py.
                 .Split(',', StringSplitOptions.TrimEntries)
-                .Select(ParsePositiveBatch).ToArray());
+                .Select(ParsePositiveBatch).ToArray(), fixturePath, requireMatched,
+            map.GetValueOrDefault("hifigan-workload-receipt"), lstmFixture, map.GetValueOrDefault("lstm-workload-receipt"),
+            map.GetValueOrDefault("lstm-numerics"));
     }
 
     private static int ParsePositiveBatch(string text)
@@ -240,13 +291,22 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
     {
         // Create each requested model, measure its training and inference
         // phases, and collect those measurements into one framework-level report.
+        HifiBenchmarkFixture? sharedFixture = null;
         var factory = new AiDotNetTensorBackend(options.Seed);
         var results = new List<ModelReport>();
         foreach (var modelName in options.Models)
         {
             var modelStart = Stopwatch.StartNew();
             Console.WriteLine($"[bench] {modelName}: building network…");
-            var model = factory.Create(modelName);
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction");
+            if (options.HifiGanFixture is not null)
+                sharedFixture = new HifiBenchmarkFixture(options.HifiGanFixture, options.Epochs, options.TrainBatches,
+                    options.BatchSize, options.Seed, options.InferenceBatchSizes,
+                    options.HifiGanWorkloadReceipt ?? (options.OutputPath + ".workload.json"));
+            var model = sharedFixture is null ? factory.Create(modelName)
+                : new AiDotNetTensorBackend(options.Seed, sharedFixture).Create(modelName);
+            var lstmFixture = options.LstmFixture is null ? null : ((AiDotNetLstmModel)model).AttachFixture(options);
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction-complete");
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
             TrainingReport? training = null;
             if (model.IsInferenceOnly)
@@ -258,11 +318,15 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 training = BenchmarkTraining(model);
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
             }
-            var inference = BenchmarkInference(model);
+            var inference = BenchmarkInference(model, modelName);
+            lstmFixture?.Complete();
+            BenchmarkPhaseTelemetry.Mark(modelName, "complete");
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
         }
+
+        sharedFixture?.Complete();
 
         return new BenchmarkReport(
             "AiDotNet",
@@ -449,8 +513,10 @@ internal interface IBenchmarkModel
     (Tensor<float> Input, Tensor<float> Label) CurrentBatch { get; set; }
 }
 
-internal sealed class AiDotNetTensorBackend(int seed)
+internal sealed class AiDotNetTensorBackend(int seed, HifiBenchmarkFixture? hifiFixture = null)
 {
+    public AiDotNetTensorBackend(int seed) : this(seed, null) { }
+
     // Each model constructs the real AiDotNet neural-network class with
     // paper-matched layer shapes so the comparison is real-Conv2D vs
     // real-Conv2D, real-LSTM vs real-LSTM, etc. — not "PyTorch real model vs
@@ -504,6 +570,11 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "vae" => new AiDotNetVaeModel(seed),
         "gat" => new AiDotNetGatModel(seed),
         "dcgan" => new AiDotNetDcganModel(seed),
+        // Audio and speech (AudioRows.cs): PANNs CNN14 on 10 s AudioSet log-mel clips [1001, 64]; wav2vec 2.0 BASE CTC
+        // fine-tuning on 2 s of raw 16 kHz audio; HiFi-GAN V1's GAN step on an 8192-sample segment (batch size 1).
+        "panns-cnn14" => new AiDotNetPannsCnn14Model(seed),
+        "wav2vec2-base" => new AiDotNetWav2Vec2BaseModel(seed),
+        "hifigan-v1" => new AiDotNetHifiGanV1Model(seed, hifiFixture),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -831,7 +902,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var _ = Network.Predict(Input);
     }
 
-    public void Backward()
+    public virtual void Backward()
     {
         // PyTorch runs `loss = criterion(model(x), y); loss.backward()` then
         // optimizer.step(). AiDotNet's Train(input, expected) is the equivalent:
@@ -981,7 +1052,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
     }
 }
 
-internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
+internal sealed partial class AiDotNetLstmModel : AiDotNetBenchmarkModel
 {
     public AiDotNetLstmModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };

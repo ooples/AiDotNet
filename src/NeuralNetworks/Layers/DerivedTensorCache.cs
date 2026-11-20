@@ -43,6 +43,22 @@ internal sealed class DerivedTensorCache<T>
     private int _sourceCount;
     private IEngine? _engine;
     private Tensor<T>? _value;
+    private readonly bool _disposeReplacedValues;
+
+    internal DerivedTensorCache(bool disposeReplacedValues = false) => _disposeReplacedValues = disposeReplacedValues;
+
+    private bool OwnsCachedValue(Tensor<T>? value)
+    {
+        if (!_disposeReplacedValues || value is null) return false;
+        for (int i = 0; i < _sourceCount; i++) if (ReferenceEquals(value, _sources[i])) return false;
+        return true;
+    }
+
+    private static void Retire(Tensor<T> value, IEngine? engine)
+    {
+        engine?.InvalidatePersistentTensor(value);
+        value.Dispose();
+    }
 
     /// <summary>
     /// The cached derivation of the given sources, built with <paramref name="build"/> (passed the engine and the
@@ -69,6 +85,9 @@ internal sealed class DerivedTensorCache<T>
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             value = build(engine, sources);
 
+        var replaced = _value;
+        var replacedEngine = _engine;
+        bool retireReplaced = !ReferenceEquals(replaced, value) && OwnsCachedValue(replaced);
         Array.Clear(_sources, 0, MaxSources);
         for (int i = 0; i < count; i++)
         {
@@ -80,16 +99,22 @@ internal sealed class DerivedTensorCache<T>
         _engine = engine;
         _generation = generation;
         _value = value;
+        if (retireReplaced) Retire(replaced!, replacedEngine);
         return value;
     }
 
     /// <summary>Drops the cached value, so the next <see cref="GetOrBuild"/> rebuilds it.</summary>
     internal void Invalidate()
     {
+        var replaced = _value;
+        var engine = _engine;
+        bool retireReplaced = OwnsCachedValue(replaced);
         _value = null;
         _engine = null;
         _sourceCount = 0;
         Array.Clear(_sources, 0, MaxSources);
+        Array.Clear(_storageIdentities, 0, MaxSources);
+        if (retireReplaced) Retire(replaced!, engine);
     }
 
     /// <summary>Whether the cache was built from exactly these <paramref name="count"/> sources at their current versions.</summary>
