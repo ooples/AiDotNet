@@ -976,21 +976,37 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     {
         int n = input.Length;
         var flat = Engine.Reshape(input.Contiguous(), new[] { n });
-        var mean = Engine.StopGradient(Engine.TensorDivideScalar(
-            Engine.Reshape(Engine.ReduceSum(flat, new[] { 0 }, keepDims: false), new[] { 1 }), NumOps.FromDouble(n)));
-        var centered = Engine.TensorSubtract(flat, Engine.TensorBroadcastTo(mean, new[] { n }));
-        // std = s * sqrt(sum((c / s)^2 / n)) for any s > 0. With s = max|c| (plus the smallest normal Half, so a
-        // constant series divides by a positive number) every term is at most 1 / n and the sum at most 1, so a Half
-        // sum of squares cannot pass 65504 and make the std infinite, and the statistics stay on the engine (traced
-        // by a compiled step, no host read).
+        // The mean, not a sum divided afterwards: 1024 Half values of 100 sum to 102400, above Half.MaxValue, although
+        // their mean is 100. The reduction accumulates and divides a narrow element type in a wider one before rounding.
+        var mean = Engine.StopGradient(Engine.Reshape(Engine.ReduceMean(flat, new[] { 0 }, false), new[] { 1 }));
+        // Centre the halved values. |x - mean| is bounded by the instance's range, which for values near the Half limit
+        // (60000 and -60000) exceeds Half.MaxValue; half of it cannot. Halving is exact in a binary type.
+        var half = NumOps.FromDouble(0.5);
+        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(flat, half),
+            Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(mean, half), new[] { n }));
+        // std = 2 * s * sqrt(sum((c / s)^2 / n)) for the halved deviations c and any s > 0. With s = max|c| (plus the
+        // smallest normal Half, so a constant series divides by a positive number) every term is at most 1 / n and the
+        // sum at most 1, so a Half sum of squares cannot pass 65504 and make the std infinite, and the statistics stay
+        // on the engine (traced by a compiled step, no host read).
         var scale = Engine.TensorAddScalar(
             Engine.Reshape(Engine.ReduceMax(Engine.TensorAbs(centered), new[] { 0 }, keepDims: false), new[] { 1 }),
             NumOps.FromDouble(6.103515625e-05));
         var unit = Engine.TensorMultiplyScalar(
             Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, new[] { n })), NumOps.FromDouble(1.0 / Math.Sqrt(n)));
         var rms = Engine.TensorSqrt(Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(unit), new[] { 0 }, keepDims: false), new[] { 1 }));
-        var std = Engine.StopGradient(Engine.TensorAddScalar(Engine.TensorMultiply(rms, scale), NumOps.FromDouble(eps)));
+        // The factor of two restores the scale of the unhalved deviations, so the stored statistics are unchanged.
+        var std = Engine.StopGradient(Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(rms, scale), NumOps.FromDouble(2.0)), NumOps.FromDouble(eps)));
         return (mean, std);
+    }
+
+    /// <summary>(input − mean) / std, formed as (input/2 − mean/2) / (std/2) so the difference cannot overflow a narrow
+    /// element type whose instance range exceeds its largest value.</summary>
+    private Tensor<T> NormalizeByInstance(Tensor<T> input, Tensor<T> mean, Tensor<T> std)
+    {
+        var half = NumOps.FromDouble(0.5);
+        var centered = Engine.TensorSubtract(Engine.TensorMultiplyScalar(input, half), Wide(Engine.TensorMultiplyScalar(mean, half), input));
+        return Engine.TensorDivide(centered, Wide(Engine.TensorMultiplyScalar(std, half), input));
     }
 
     private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
@@ -1025,7 +1041,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
             _instanceMean = mean;
             _instanceStd = std;
 
-            result = Engine.TensorDivide(Engine.TensorSubtract(input, Wide(mean, input)), Wide(std, input));
+            result = NormalizeByInstance(input, mean, std);
         }
         else
         {
