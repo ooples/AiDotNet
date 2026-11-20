@@ -619,6 +619,10 @@ public static class InputContractValidator
             throw new InputContractBindingException(
                 $"{ownerName}.{portName} cannot execute because its value domain is {domain}.");
 
+        // Metadata only, so it runs for an unrealized value too: whether the element type can hold every index of the
+        // domain does not depend on the values, and a domain it cannot hold is invalid before any of them is read.
+        EnsureIntegerRangeRepresentable<T>(domain, ownerName, portName);
+
         // A value a compiled-plan trace has not computed yet has no host values to check: reading them realizes the
         // traced node, which refuses the plan (a closure objective that reads a traced value cannot be replayed), and
         // the read would see only the trace's own values. Eager forwards check them; a compiled step, traced or replayed, does not.
@@ -632,7 +636,6 @@ public static class InputContractValidator
         }
 
         if (domain.Kind == LayerInputDomainKind.Continuous) return;
-        EnsureIntegerRangeRepresentable<T>(domain, ownerName, portName);
 
         var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < input.Length; i++)
