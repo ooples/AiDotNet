@@ -81,7 +81,7 @@ internal sealed class HifiBenchmarkFixture
                     ?? throw new InvalidDataException("Missing shape: " + name);
                 var value = new Tensor<float>(shape);
                 source.CopyTo(name, shape, value);
-                _actualInputs[name] = CheckDescriptor(name, value, Object(_manifest, "inputs")[name]!);
+                _actualInputs[name] = CheckDescriptor(name, value, Req(Object(_manifest, "inputs")[name], name));
                 _inputs.Add(name, value);
             }
         }
@@ -99,7 +99,7 @@ internal sealed class HifiBenchmarkFixture
         }
         foreach (var step in steps)
         {
-            int pool = (int)step["pool_index"]!, start = (int)step["crop_start"]!;
+            int pool = (int)Req(step["pool_index"], "pool_index"), start = (int)Req(step["crop_start"], "crop_start");
             ReadOnlySpan<float> mel = ParityTensorStorage.Read(_pool[pool].Input), audio = ParityTensorStorage.Read(_pool[pool].Label);
             var melDescription = DescribeMelCrop(mel, start);
             var audioDescription = Describe(audio.Slice(start * 256, 8192), new[] { 1, 8192 });
@@ -188,11 +188,11 @@ internal sealed class HifiBenchmarkFixture
     {
         if (_preflight is null || _dataLoads != 6 || _crop.Consumed != 9)
             throw new InvalidDataException("The actual benchmark did not consume the complete canonical workload.");
-        foreach (var pair in _inputs) CheckDescriptor(pair.Key, pair.Value, Object(_manifest, "inputs")[pair.Key]!);
+        foreach (var pair in _inputs) CheckDescriptor(pair.Key, pair.Value, Req(Object(_manifest, "inputs")[pair.Key], pair.Key));
         ValidateFiles();
         _preflight["pass"] = true;
-        _preflight["consumed_steps"] = new JArray(((JArray)_manifest["training_steps"]!).Select(step => new JObject {
-            ["index"]=(int)step["index"]!,["pool_index"]=(int)step["pool_index"]!,["crop_start"]=(int)step["crop_start"]!,
+        _preflight["consumed_steps"] = new JArray(((JArray)Req(_manifest["training_steps"], "training_steps")).Select(step => new JObject {
+            ["index"]=(int)Req(step["index"], "index"),["pool_index"]=(int)Req(step["pool_index"], "pool_index"),["crop_start"]=(int)Req(step["crop_start"], "crop_start"),
         }));
         _preflight["inference_batches_consumed"] = new JArray(1, 8, 16);
         SaveReceipt();
@@ -217,7 +217,7 @@ internal sealed class HifiBenchmarkFixture
         foreach (var entry in Object(fixture, "files_sha256").Properties())
             if (HashFile(Path.Combine(fixtureDirectory, entry.Name)) != (string?)entry.Value)
                 throw new InvalidDataException("Reference fixture file changed.");
-        if (HashFile(Path.Combine(referenceDirectory, "initial.safetensors")) != (string?)fixture["files_sha256"]!["initial.safetensors"])
+        if (HashFile(Path.Combine(referenceDirectory, "initial.safetensors")) != (string?)Req(fixture["files_sha256"], "files_sha256")["initial.safetensors"])
             throw new InvalidDataException("Actual numerical reference initial404 state differs from the benchmark.");
         var recipes = Object(referenceManifest, "recipe_artifacts_sha256");
         RequireKeys(recipes, new[] { "benchmark.py", "benchmark_telemetry.py", "export_reference.py", "export_hifigan_reference.py", "hifigan_fixture.py", "export_hifigan_workload.py" });
@@ -248,14 +248,15 @@ internal sealed class HifiBenchmarkFixture
             string key = "inference/mel/" + batch;
             var value = new Tensor<float>(new[] { batch, 80, 256 });
             reference.CopyTo(key, value.Shape.ToArray(), value);
-            CheckDescriptor(key, value, fixture["inputs"]![$"inference/{batch}/mel"]!);
+            CheckDescriptor(key, value, Req(Req(fixture["inputs"], "inputs")[$"inference/{batch}/mel"], $"inference/{batch}/mel"));
         }
     }
 
     private void SaveReceipt()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_receiptPath)!);
-        File.WriteAllText(_receiptPath, _preflight!.ToString() + "\n");
+        Directory.CreateDirectory(Path.GetDirectoryName(_receiptPath)
+            ?? throw new InvalidOperationException("The workload receipt path has no directory."));
+        File.WriteAllText(_receiptPath, (_preflight ?? throw new InvalidOperationException("The workload was not preflighted.")).ToString() + "\n");
     }
 
     private void ValidateFiles()
@@ -279,17 +280,20 @@ internal sealed class HifiBenchmarkFixture
         RequireKeys(descriptors, names);
         foreach (var name in names)
         {
-            var entry = header[name]!;
+            var entry = Req(header[name], name);
             long elements = 1;
-            foreach (var dim in (JArray)entry["shape"]!) { long value = (long)dim; if (value < 0) throw new InvalidDataException("Negative dimension."); elements = checked(elements * value); }
-            var offsets = (JArray)entry["data_offsets"]!;
+            foreach (var dim in (JArray)Req(entry["shape"], "shape")) { long value = (long)dim; if (value < 0) throw new InvalidDataException("Negative dimension."); elements = checked(elements * value); }
+            var offsets = (JArray)Req(entry["data_offsets"], "data_offsets");
             long begin = (long)offsets[0], end = (long)offsets[1];
-            if ((string?)entry["dtype"] != "F32" || (string?)descriptors[name]!["dtype"] != "F32"
-                || !JToken.DeepEquals(entry["shape"], descriptors[name]!["shape"])
+            if ((string?)entry["dtype"] != "F32" || (string?)Req(descriptors[name], name)["dtype"] != "F32"
+                || !JToken.DeepEquals(entry["shape"], Req(descriptors[name], name)["shape"])
                 || begin < 0 || end < begin || end > stream.Length - 8 - (long)length || end - begin != checked(elements * 4))
                 throw new InvalidDataException("Invalid exact FP32 tensor metadata: " + name);
         }
     }
+
+    private static JToken Req(JToken? token, string name) => token
+        ?? throw new InvalidDataException("The HiFi-GAN fixture lacks '" + name + "'.");
 
     private static JObject Object(JObject parent, string name) => parent[name] as JObject
         ?? throw new InvalidDataException("Missing object: " + name);

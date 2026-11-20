@@ -13,6 +13,10 @@ namespace AiDotNet.PyTorchParity;
 // An explicit standalone diagnostic. Hashing does not run inside benchmark timing/allocation windows.
 internal static class HifiGanInitialStateFingerprint
 {
+    private static object Private(Type type, string field, object owner) =>
+        type.GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(owner)
+        ?? throw new InvalidOperationException(type.Name + " has no value in its private field '" + field + "'.");
+
     internal static int Run(string output, int seed)
     {
         if (File.Exists(output)) throw new IOException("Refusing to overwrite initial-state evidence.");
@@ -35,19 +39,20 @@ internal static class HifiGanInitialStateFingerprint
         }
         foreach (var moduleField in new[] { ("generator", "_generator"), ("discriminator", "_discriminators") })
         {
-            object module = typeof(HiFiGAN<float>).GetField(moduleField.Item2, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model)!;
-            var layers = (IReadOnlyList<LayerBase<float>>)module.GetType().GetProperty("Layers")!.GetValue(module)!;
+            object module = Private(typeof(HiFiGAN<float>), moduleField.Item2, model);
+            var layers = module.GetType().GetProperty("Layers")?.GetValue(module) as IReadOnlyList<LayerBase<float>>
+                ?? throw new InvalidOperationException("The module exposes no layer list.");
             for (int layer = 0; layer < layers.Count; layer++)
             {
                 var conv = (NormedConv1DLayer<float>)layers[layer];
                 var type = typeof(NormedConv1DLayer<float>);
-                var norm = (ConvolutionNormalization)type.GetField("_normalization", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(conv)!;
-                bool bias = (bool)type.GetField("_useBias", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(conv)!;
+                var norm = (ConvolutionNormalization)Private(type, "_normalization", conv);
+                bool bias = (bool)Private(type, "_useBias", conv);
                 foreach (string field in new[] { "_direction", "_gain", "_bias", "_u", "_v" })
                 {
                     string role = field == "_direction" || field == "_gain" && norm == ConvolutionNormalization.Weight || field == "_bias" && bias
                         ? "learned" : (field == "_u" || field == "_v") && norm == ConvolutionNormalization.Spectral ? "spectral_buffer" : "inactive_stored_state";
-                    var tensor = (Tensor<float>)type.GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(conv)!;
+                    var tensor = (Tensor<float>)Private(type, field, conv);
                     Record($"{moduleField.Item1}/{layer:D3}/{field}", tensor, role);
                 }
             }

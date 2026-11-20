@@ -52,24 +52,26 @@ internal sealed class LstmBenchmarkFixture
     {
         _options = options;
         if (network.MaxGradNormValue != 1.0) throw new InvalidDataException("Unexpected model gradient clip norm.");
-        string root = Path.GetFullPath(options.LstmFixture!);
+        string root = Path.GetFullPath(options.LstmFixture
+            ?? throw new InvalidOperationException("An LSTM fixture directory is required."));
         string path = Path.Combine(root, "manifest.json");
         _receipt = Path.GetFullPath(options.LstmWorkloadReceipt ?? (options.LstmNumerics is null
             ? options.OutputPath + ".workload.json" : Path.Combine(options.LstmNumerics, "workload.json")));
         if (File.Exists(_receipt)) throw new IOException("Preserve prior workload receipt: " + _receipt);
-        _manifest = JsonNode.Parse(File.ReadAllBytes(path))!.AsObject();
-        var protocol = _manifest["protocol"]!;
-        if (_manifest["schema"]!.GetValue<string>() != "lstm-classification-shared-v1" || _manifest["model"]!.GetValue<string>() != "lstm"
+        _manifest = (JsonNode.Parse(File.ReadAllBytes(path))
+            ?? throw new InvalidDataException("The LSTM fixture manifest is empty.")).AsObject();
+        var protocol = Req(_manifest["protocol"], "protocol");
+        if (Req(_manifest["schema"], "schema").GetValue<string>() != "lstm-classification-shared-v1" || Req(_manifest["model"], "model").GetValue<string>() != "lstm"
             || options.Epochs != 3 || options.TrainBatches != 20 || options.BatchSize != 64 || options.Seed != 1234
             || !options.InferenceBatchSizes.SequenceEqual(new[] { 1, 8, 16 })
-            || protocol["epochs"]!.GetValue<int>() != options.Epochs || protocol["train_batches"]!.GetValue<int>() != options.TrainBatches
-            || protocol["batch_size"]!.GetValue<int>() != options.BatchSize || protocol["seed"]!.GetValue<int>() != options.Seed
-            || !protocol["inference_batches"]!.Deserialize<int[]>()!.SequenceEqual(options.InferenceBatchSizes))
+            || Req(protocol["epochs"], "epochs").GetValue<int>() != options.Epochs || Req(protocol["train_batches"], "train_batches").GetValue<int>() != options.TrainBatches
+            || Req(protocol["batch_size"], "batch_size").GetValue<int>() != options.BatchSize || Req(protocol["seed"], "seed").GetValue<int>() != options.Seed
+            || !Parsed<int[]>(Req(protocol["inference_batches"], "inference_batches")).SequenceEqual(options.InferenceBatchSizes))
             throw new InvalidDataException("Unexpected shared LSTM protocol.");
-        var optimizer = _manifest["optimizer"]!;
-        if (optimizer["name"]!.GetValue<string>() != "AdamW" || optimizer["lr"]!.GetValue<double>() != 0.001
-            || optimizer["eps"]!.GetValue<double>() != 1e-8 || optimizer["weight_decay"]!.GetValue<double>() != 0.01
-            || optimizer["max_grad_norm"]!.GetValue<double>() != 1.0 || !optimizer["betas"]!.Deserialize<double[]>()!.SequenceEqual(new[] { 0.9, 0.999 }))
+        var optimizer = Req(_manifest["optimizer"], "optimizer");
+        if (Req(optimizer["name"], "name").GetValue<string>() != "AdamW" || Req(optimizer["lr"], "lr").GetValue<double>() != 0.001
+            || Req(optimizer["eps"], "eps").GetValue<double>() != 1e-8 || Req(optimizer["weight_decay"], "weight_decay").GetValue<double>() != 0.01
+            || Req(optimizer["max_grad_norm"], "max_grad_norm").GetValue<double>() != 1.0 || !Parsed<double[]>(Req(optimizer["betas"], "betas")).SequenceEqual(new[] { 0.9, 0.999 }))
             throw new InvalidDataException("Unexpected shared LSTM optimizer.");
         _manifestHash = HashFile(path);
         string initialFile = Path.Combine(root, "initial.safetensors");
@@ -268,6 +270,12 @@ internal sealed class LstmBenchmarkFixture
         WriteJson(_receipt, receipt);
     }
 
+    private static JsonNode Req(JsonNode? node, string name) => node
+        ?? throw new InvalidDataException("The LSTM fixture lacks '" + name + "'.");
+
+    private static TValue Parsed<TValue>(JsonNode node) => node.Deserialize<TValue>()
+        ?? throw new InvalidDataException("An LSTM fixture value is null.");
+
     internal void WriteNumerics(AiDotNetLstmModel model)
     {
         var directory = Directory.CreateDirectory(_options.LstmNumerics
@@ -338,7 +346,8 @@ internal sealed class LstmBenchmarkFixture
 
     private static void WriteJson(string path, Dictionary<string, object> receipt)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException("The receipt path has no directory."));
         using var stream = new FileStream(path, FileMode.CreateNew);
         JsonSerializer.Serialize(stream, receipt);
     }
