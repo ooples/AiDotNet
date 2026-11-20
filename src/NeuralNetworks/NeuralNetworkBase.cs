@@ -13021,6 +13021,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Only their ordinary independent Train path must defer to the parent graph.
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
+                : TrainingForwardSkipsLayersPerStep ? PerStepLayerSkipReason
                 : partialModelClip
                     ? "the model's gradient clip covers only its layer-owned parameters; the plan clips one global norm"
                     : LayerGraphBreakReason(),
@@ -14418,6 +14419,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual bool SupportsFusedCompiledTraining => true;
 
     /// <summary>
+    /// Whether the training forward leaves whole layers out of a step by a per-step draw (LayerDrop).
+    /// </summary>
+    /// <remarks>
+    /// A layer that is skipped is not part of that step's graph, so its parameters receive no gradient and the
+    /// optimizer does not step them: no momentum update and no weight decay, as in the reference implementations. A
+    /// compiled plan has one fixed graph. It can only express the skip as a blend with a zero multiplier, which hands
+    /// the optimizer a zero gradient, and AdamW then still moves the layer by its momentum and decay. Such a model
+    /// therefore trains on the eager tape, for its ordinary step and for its custom objectives alike.
+    /// </remarks>
+    private protected virtual bool TrainingForwardSkipsLayersPerStep => false;
+
+    private const string PerStepLayerSkipReason =
+        "the training forward skips layers per step (LayerDrop); a skipped layer must not be stepped by the optimizer";
+
+    /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
     /// Unlike <see cref="IsFusedTrainingDisabled"/>, this architectural graph-break
@@ -14671,6 +14687,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (TrainingForwardSkipsLayersPerStep)
+            return EmitFusedMissAndFallback(PerStepLayerSkipReason);
         if (IsGradientCheckpointingEnabled)
         {
             // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager
@@ -15248,6 +15266,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Already inside a step of this network (a custom loss run from within its own training step): the eager path,
         // which takes no step lock.
         if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
+        // A closure step ignores the request's graph-break reason (its guard covers per-step host state), but no guard
+        // makes a plan leave a skipped layer's parameters unstepped.
+        if (TrainingForwardSkipsLayersPerStep) return false;
         if (GradientValueClip > 0.0 || GradientClippingGroups(CollectModelTrainableTensors()) is not null) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
