@@ -139,7 +139,9 @@ internal sealed partial class GroundingDinoNetwork<T>
         var odd = new double[features];
         for (int i = 0; i < features; i++)
         {
-            divisors[i] = Math.Pow(10000, 2.0 * (i / 2) / features);
+            // Features come in sine/cosine pairs that share a frequency: pair index = floor(i / 2).
+            int pair = i >> 1;
+            divisors[i] = Math.Pow(10000, 2.0 * pair / features);
             even[i] = i % 2 == 0 ? 1 : 0;
             odd[i] = 1 - even[i];
         }

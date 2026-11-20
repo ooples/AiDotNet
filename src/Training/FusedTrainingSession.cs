@@ -53,6 +53,14 @@ internal sealed class FusedTrainingStepRequest<T>
     public double ModelGradientClip { get; init; }
 
     /// <summary>
+    /// The parameters <see cref="ModelGradientClip"/> covers when it does not cover every trained one; null = all.
+    /// </summary>
+    /// <remarks>A compiled plan clips one global norm, so a request with a scope is not fused (its
+    /// <see cref="GraphBreakReason"/> says so). The eager step it falls back to takes the norm over these parameters'
+    /// gradients and scales only them; the others reach the optimizer unclipped by the model.</remarks>
+    public IReadOnlyList<Tensor<T>>? ModelGradientClipScope { get; init; }
+
+    /// <summary>
     /// Whether the model excludes some of its parameters from the optimizer's L2 term (coupled weight decay); asked only
     /// when the optimizer regularizes with L2. Null = none excluded.
     /// </summary>
@@ -909,6 +917,7 @@ internal sealed class FusedTrainingSession<T>
             ExtraParameters = request.ExtraParameters,
             Selection = request.Selection,
             ModelGradientClip = request.ModelGradientClip,
+            ModelGradientClipScope = request.ModelGradientClipScope,
             ExcludesParametersFromWeightDecay = request.ExcludesParametersFromWeightDecay,
             OnGradients = request.OnGradients,
             RegularizeGradients = request.RegularizeGradients,

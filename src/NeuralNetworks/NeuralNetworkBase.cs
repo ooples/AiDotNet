@@ -12987,7 +12987,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // all of them. The plan clips one global norm: the model's clip is that norm when it covers every trained
         // parameter, absent when it covers none (VoxtLM trains model-owned language-model layers), and has no single-
         // norm form when it covers some.
-        int modelClipped = MaxGradNormValue > 0.0 ? CollectLayerOwnedTrainableTensorsForClipping(parameters).Count : 0;
+        var modelClipScope = MaxGradNormValue > 0.0
+            ? CollectLayerOwnedTrainableTensorsForClipping(parameters)
+            : (IReadOnlyList<Tensor<T>>)Array.Empty<Tensor<T>>();
+        int modelClipped = modelClipScope.Count;
         bool partialModelClip = modelClipped > 0 && modelClipped < parameters.Count;
 
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
@@ -13004,6 +13007,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = parameters,
             Selection = parameters,
             ModelGradientClip = modelClipped == 0 ? 0.0 : MaxGradNormValue,
+            // A partial clip is not fused (GraphBreakReason below); its eager step clips only these gradients by the
+            // model's norm and leaves the model-owned ones to the optimizer's own clip.
+            ModelGradientClipScope = partialModelClip ? modelClipScope : null,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),

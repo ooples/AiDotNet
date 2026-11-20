@@ -286,6 +286,7 @@ internal sealed class TapeTrainingStepper<T>
                 // must too, or a model trains on a different objective whenever compilation declines.
                 RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
                 ModelGradientClip = request.ModelGradientClip,
+                ModelGradientClipScope = request.ModelGradientClipScope,
                 Optimizer = request.Optimizer,
             });
     }
@@ -591,6 +592,9 @@ internal sealed class TapeTrainingStepper<T>
         /// <summary>The model's own global-norm clip (0 = none), applied before the update.</summary>
         public double ModelGradientClip { get; init; }
 
+        /// <summary>The parameters <see cref="ModelGradientClip"/> covers; null = every gradient.</summary>
+        public IReadOnlyList<Tensor<T>>? ModelGradientClipScope { get; init; }
+
         /// <summary>The optimizer the update steps, whose options order the regularization against the clips.</summary>
         public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
 
@@ -598,8 +602,9 @@ internal sealed class TapeTrainingStepper<T>
         internal void RegularizeAndClip(IReadOnlyList<Tensor<T>> parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
         {
             double modelClip = ModelGradientClip;
+            var scope = ModelGradientClipScope;
             TapeTrainingStepper<T>.RegularizeAndClip(Optimizer, parameters, gradients, RegularizeGradients,
-                modelClip > 0.0 ? g => ClipByGlobalNorm(g, modelClip) : null);
+                modelClip > 0.0 ? g => ClipByGlobalNorm(g, modelClip, scope) : null);
         }
 
         /// <summary>Runs after the gradients exist and before the update.</summary>
@@ -782,11 +787,24 @@ internal sealed class TapeTrainingStepper<T>
 
     // PyTorch clip_grad_norm_ on the engine: scale every gradient by max / (norm + 1e-6) when the norm exceeds max.
     internal static void ClipByGlobalNorm(Dictionary<Tensor<T>, Tensor<T>> gradients, double maxNorm)
+        => ClipByGlobalNorm(gradients, maxNorm, null);
+
+    /// <summary>
+    /// Scales the gradients of <paramref name="scope"/> so their joint norm is at most <paramref name="maxNorm"/>;
+    /// a null scope is every gradient. Gradients outside the scope neither enter the norm nor are scaled.
+    /// </summary>
+    internal static void ClipByGlobalNorm(Dictionary<Tensor<T>, Tensor<T>> gradients, double maxNorm,
+        IReadOnlyList<Tensor<T>>? scope)
     {
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
+        var clipped = new List<Tensor<T>>(gradients.Count);
+        if (scope is null) clipped.AddRange(gradients.Values);
+        else
+            foreach (var parameter in scope)
+                if (gradients.TryGetValue(parameter, out var owned)) clipped.Add(owned);
         Tensor<T>? total = null;
-        foreach (var gradient in gradients.Values)
+        foreach (var gradient in clipped)
         {
             if (gradient.Length == 0) continue;
             var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(gradient, gradient), null), new[] { 1 });
@@ -797,7 +815,7 @@ internal sealed class TapeTrainingStepper<T>
         // A NaN norm is left alone rather than spread to every gradient as a NaN scale.
         if (double.IsNaN(norm) || double.IsInfinity(norm) || norm <= maxNorm) return;
         T scale = NumOps.FromDouble(maxNorm / (norm + 1e-6));
-        foreach (var gradient in gradients.Values)
+        foreach (var gradient in clipped)
             engine.TensorMultiplyScalarInPlace(gradient, scale);
     }
 }
