@@ -859,7 +859,8 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     return values, errors
 
 
-def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None) -> dict:
+def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None,
+             protocol: dict | None = None) -> dict:
     if number(maximum) is None or not 0 < maximum <= .9:
         raise ValueError("Every nonzero baseline requires at least a 10% reduction.")
     groups = sorted({(run["model"], run["device"]) for run in runs} | set(required or []))
@@ -939,6 +940,13 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
                       for run in scored}
         if len(signatures) != 1:
             failures.append("source, binaries, or hardware changed within the campaign")
+        # A ratio compares like with like only when every scored process ran one protocol. Each report is checked
+        # against its own launch elsewhere, so a saved index mixing two protocols would otherwise score as matched.
+        protocols = {json.dumps(run.get("protocol"), sort_keys=True) for run in scored}
+        if len(protocols) > 1:
+            failures.append("score protocol differs within the campaign")
+        elif protocol is not None and scored and protocols != {json.dumps(protocol, sort_keys=True)}:
+            failures.append("saved score protocol differs from the requested configuration")
         parameter_counts = set()
         for run in scored:
             report_path = Path(run["path"]) / "report.json"
@@ -978,12 +986,12 @@ def main() -> None:
                             write_json(run_index, runs)
                             if mode == "score" and runs[-1].get("contention"):
                                 required = [(name, target) for name in config["models"] for target in config["devices"]]
-                                write_json(args.output / "gate.json", evaluate(runs, config.get("maximum_ratio", .9), required))
+                                write_json(args.output / "gate.json", evaluate(runs, config.get("maximum_ratio", .9), required, config["protocol"]))
                                 raise SystemExit("Scoring invalidated by an external CI worker/testhost; see measurement.json.")
     else:
         runs = read_json(run_index)
     required = [(model, device) for model in config["models"] for device in config["devices"]]
-    results = evaluate(runs, config.get("maximum_ratio", .9), required)
+    results = evaluate(runs, config.get("maximum_ratio", .9), required, config["protocol"])
     write_json(args.output / "gate.json", results)
     print(json.dumps(results, indent=2))
     raise SystemExit(0 if results and all(row["status"] == "pass" for row in results.values()) else 1)

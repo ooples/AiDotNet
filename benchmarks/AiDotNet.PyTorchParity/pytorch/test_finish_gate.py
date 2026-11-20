@@ -30,6 +30,23 @@ class GateTests(unittest.TestCase):
             self.assertEqual("fail", outcomes["whole_process_rss_bytes"]["status"])
             self.assertEqual("fail", outcomes["training_seconds"]["status"])
 
+    def test_mixed_or_unrequested_score_protocols_cannot_be_scored_as_matched(self):
+        def score(threads_by_side, requested=None):
+            with tempfile.TemporaryDirectory() as temporary:
+                runs = [dict(model="tiny", device="cpu", mode="score", pair=pair, side=side, path=temporary,
+                             protocol={"threads": threads_by_side[side], "inference_batch_sizes": [1]})
+                        for pair in range(5) for side in ("aidotnet", "pytorch")]
+                with patch("finish_gate.metrics", return_value=({"training_seconds": 1.0}, [])),                      patch("finish_gate.correctness_gate", return_value={"status": "pass"}):
+                    return evaluate(runs, .9, protocol=requested)["tiny/cpu"]["protocol_errors"]
+
+        mixed = "score protocol differs within the campaign"
+        unrequested = "saved score protocol differs from the requested configuration"
+        self.assertIn(mixed, score({"aidotnet": 8, "pytorch": 16}))
+        matched = score({"aidotnet": 8, "pytorch": 8}, {"threads": 8, "inference_batch_sizes": [1]})
+        self.assertNotIn(mixed, matched)
+        self.assertNotIn(unrequested, matched)
+        self.assertIn(unrequested, score({"aidotnet": 8, "pytorch": 8}, {"threads": 16, "inference_batch_sizes": [1]}))
+
     def launch_config(self):
         return {"commands": {side: {"argv": ["runner", __file__], "cwd": ".", "env": {"CUDA_VISIBLE_DEVICES": "wrong"}}
                              for side in ("aidotnet", "pytorch")}, "protocol": {"inference_batch_sizes": [1]},
