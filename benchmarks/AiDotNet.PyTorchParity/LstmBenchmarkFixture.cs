@@ -3,8 +3,10 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiDotNet.Agentic.Models.Local;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.PyTorchParity;
 using AiDotNet.Tensors.LinearAlgebra;
 
 internal sealed partial class AiDotNetLstmModel
@@ -83,7 +85,15 @@ internal sealed class LstmBenchmarkFixture
         Verify("initial", _initial);
         using var stream = File.OpenRead(inputsFile);
         var inputs = SafetensorsReader.Read(stream);
+        using var source = TorchCheckpointFile.Open(inputsFile, strictAxes: true);
         if (inputs.Names.Count != 43) throw new InvalidDataException("Expected exactly 43 input tensors.");
+        Tensor<float> Input(string name, int[] shape)
+        {
+            if (inputs.Get(name)?.DataType != "F32") throw new InvalidDataException("Expected F32 " + name);
+            var tensor = new Tensor<float>(shape);
+            source.CopyTo(name, shape, tensor);
+            return tensor;
+        }
         for (int i = 0; i < _training.Length; i++)
         {
             float[] classes = Read(inputs, $"train/{i:D2}/labels", [64]);
@@ -94,11 +104,11 @@ internal sealed class LstmBenchmarkFixture
                 if (classes[row] != index || index < 0 || index >= 10) throw new InvalidDataException("Invalid class index.");
                 oneHot[row * 10 + index] = 1f;
             }
-            _training[i] = (new Tensor<float>(Read(inputs, $"train/{i:D2}/input", [64, 32, 32]), [64, 32, 32]),
+            _training[i] = (Input($"train/{i:D2}/input", [64, 32, 32]),
                 new Tensor<float>(oneHot, [64, 10]));
         }
         foreach (int batch in options.InferenceBatchSizes)
-            _inference.Add(batch, new Tensor<float>(Read(inputs, $"inference/{batch}/input", [batch, 32, 32]), [batch, 32, 32]));
+            _inference.Add(batch, Input($"inference/{batch}/input", [batch, 32, 32]));
         Verify("inputs", Inputs());
     }
 
@@ -128,8 +138,17 @@ internal sealed class LstmBenchmarkFixture
         _updates.Add(index);
     }
 
-    private static object Describe(Raw value) => new { dtype = "F32", shape = value.Shape,
-        sha256 = Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(value.Values.AsSpan()))).ToLowerInvariant() };
+    private static object Describe(Raw value) => Describe(value.Shape, value.Values);
+
+    private static object Describe(int[] shape, ReadOnlySpan<float> values) => new { dtype = "F32", shape,
+        sha256 = Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant() };
+
+    private static object DescribeInput(Tensor<float> tensor)
+    {
+        var result = Describe(tensor.Shape.ToArray(), ParityTensorStorage.Read(tensor));
+        GC.KeepAlive(tensor);
+        return result;
+    }
 
     private static Raw Snapshot(Tensor<float> t) => new(t.Shape.ToArray(), t.ToVector().ToArray());
 
@@ -138,8 +157,8 @@ internal sealed class LstmBenchmarkFixture
         var result = new Dictionary<string, object>();
         for (int i = 0; i < _training.Length; i++)
         {
-            result.Add($"train/{i:D2}/input", Describe(Snapshot(_training[i].Input)));
-            float[] oneHot = _training[i].Label.ToVector().ToArray();
+            result.Add($"train/{i:D2}/input", DescribeInput(_training[i].Input));
+            ReadOnlySpan<float> oneHot = ParityTensorStorage.Read(_training[i].Label);
             var indices = new float[64];
             for (int row = 0; row < indices.Length; row++)
             {
@@ -155,8 +174,9 @@ internal sealed class LstmBenchmarkFixture
                 indices[row] = active;
             }
             result.Add($"train/{i:D2}/labels", Describe(new Raw([64], indices)));
+            GC.KeepAlive(_training[i].Label);
         }
-        foreach (var (b, x) in _inference) result.Add($"inference/{b}/input", Describe(Snapshot(x)));
+        foreach (var (b, x) in _inference) result.Add($"inference/{b}/input", DescribeInput(x));
         return result;
     }
 
