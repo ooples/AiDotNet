@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "pytorch"))
 from compare import _index
 
+CUDA_ENGINE = "Direct GPU Engine (CUDA "
 MODELS = "mlp lstm transformer cnn resnet18 resnet50 vgg11 vit gru mobilenetv2 densenet121".split()
 REFERENCE = ("mlp", "cnn", "lstm", "transformer")
 BATCHES = [1, 8, 16]
@@ -46,6 +47,30 @@ def run(cmd, stem, env):
         raise RuntimeError(f"{stem.name} exited {code}. See {stem.with_suffix('.log')}")
 
 
+class build_lock:
+    """Hold an exclusive cross-process lock, released by the OS if this process dies."""
+    def __init__(self, path):
+        self.path = path
+
+    def __enter__(self):
+        self.file = self.path.open("a+b")
+        if os.name == "nt":
+            import msvcrt
+            while True:
+                try:
+                    self.file.seek(0)
+                    msvcrt.locking(self.file.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError:
+                    pass  # LK_LOCK gives up after 10 s; keep waiting for the other build
+        else:
+            import fcntl
+            fcntl.flock(self.file, fcntl.LOCK_EX)
+
+    def __exit__(self, *exc):
+        self.file.close()
+
+
 def measurements(path, side, model, device, epochs, batches):
     obj = json.loads(path.read_text(encoding="utf-8-sig"))
     ai = side == "aidotnet"
@@ -56,6 +81,8 @@ def measurements(path, side, model, device, epochs, batches):
         env = obj["Environment"]
         if (env["CpuThreads"], env["EngineDevice"]) != (8, {"cpu":"CpuEngine","cuda":"DirectGpuTensorEngine"}[device]):
             raise ValueError("AiDotNet engine/thread count mismatch")
+        if device == "cuda" and not env["EngineName"].startswith(CUDA_ENGINE):
+            raise ValueError(f"AiDotNet measured {env['EngineName']!r}, not the CUDA backend")
     elif obj["device"] != device or obj["torch_num_threads"] != 8 or (device == "cuda" and not obj["cuda_available"]):
         raise ValueError("PyTorch device/thread count mismatch")
     row = _index(obj)[model]
@@ -99,6 +126,8 @@ def main():
     dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
     print(f"Results: {dest}", flush=True)
     env = os.environ.copy()
+    # A CUDA row must not fall back to OpenCL/HIP when CUDA fails to initialise. CPU launches never read this.
+    env["AIDOTNET_DIRECTGPU_BACKENDS"] = "cuda"
     for key in ("AIDOTNET_CPU_THREADS", "AIDOTNET_BLAS_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[key] = "8"
     epochs, batches, iters, warm = (2, 2, 3, 1) if args.smoke else (3, 20, 100, 10)
@@ -119,14 +148,18 @@ def main():
     else:
         build += ["-p:UseLocalTensors=false"]
     save(dest / "protocol.json", info)
-    run(build, dest / "build", env)
-    dll = HERE / "bin/Release/net10.0/AiDotNet.PyTorchParity.dll"
     def digest(p):
         with p.open("rb") as stream:
             return hashlib.file_digest(stream, "sha256").hexdigest()
+    # The build output directory is shared by every invocation, so build, check and copy it under a lock,
+    # then hash and launch only this invocation's private copy.
+    dll = dest / "bin/AiDotNet.PyTorchParity.dll"
+    with build_lock(HERE / ".run_matrix.lock"):
+        run(build, dest / "build", env)
+        shutil.copytree(HERE / "bin/Release/net10.0", dll.parent)
+        if args.tensors and digest(dll.with_name("AiDotNet.Tensors.dll")) != digest(tensors / "src/AiDotNet.Tensors/bin/Release/net10.0/AiDotNet.Tensors.dll"):
+            raise RuntimeError("Loaded Tensors assembly differs from the requested checkout")
     hashes = {p: digest(dll.with_name(p)) for p in (dll.name, "AiDotNet.dll", "AiDotNet.Tensors.dll")}
-    if args.tensors and hashes["AiDotNet.Tensors.dll"] != digest(tensors / "src/AiDotNet.Tensors/bin/Release/net10.0/AiDotNet.Tensors.dll"):
-        raise RuntimeError("Loaded Tensors assembly differs from the requested checkout")
     save(dest / "assemblies.json", hashes)
     if refs:
         ref = dest / "reference"
