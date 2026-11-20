@@ -52,6 +52,10 @@ internal static class OptionSensitivityFixtureSetup
             // Trained on its own two-second recording (TryTrainOption), so its control must not be shared with the
             // options the fixture input trains: whichever ran first would set the other's control.
             : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "wav2vec2-lid-long-recording"
+            // Its observation appends a generated-audio fingerprint the other AudioGen probes do not include. Controls
+            // are cached by fixture and group, so in a shared group whichever probe ran first would set the control
+            // and the fingerprint alone would read as sensitivity.
+            : network is AiDotNet.Audio.AudioGen.AudioGenModel<T> && option == "MaxTextLength" ? "audiogen-prompt-budget"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
