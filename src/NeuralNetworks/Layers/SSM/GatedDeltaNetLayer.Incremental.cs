@@ -14,7 +14,7 @@ public sealed class GatedDeltaNetStepState<T>
     internal GatedDeltaNetStepState(int batchSize, int kernelSize, int numHeads, int headDimension, int modelDimension)
     {
         BatchSize = batchSize;
-        History = new Tensor<T>?[kernelSize - 1];
+        History = kernelSize > 1 ? new Tensor<T>(new[] { kernelSize - 1, batchSize, modelDimension }) : null;
         Memory = new Tensor<T>(new[] { batchSize * numHeads, headDimension, headDimension });
         ModelDimension = modelDimension;
     }
@@ -27,11 +27,14 @@ public sealed class GatedDeltaNetStepState<T>
 
     internal int ModelDimension { get; }
 
-    // History[m - 1] = the input m positions back, [B, D]; null before the sequence start (the forward's zero padding).
-    internal Tensor<T>?[] History { get; }
+    // [K - 1, B, D]: History[m - 1] = the input m positions back, zero before the sequence start (the forward's zero
+    // padding); null when the kernel size is 1. Shifted in place by IEngine.CausalConv1dStep, so a compiled decode plan
+    // keeps it in one persistent buffer.
+    internal Tensor<T>? History { get; }
 
-    // [B·H, headDim (value), headDim (key)], the scan state S of GatedDeltaNetScanForward.
-    internal Tensor<T> Memory { get; set; }
+    // [B·H, headDim (value), headDim (key)], the scan state S of GatedDeltaNetScanForward, updated in place by
+    // IEngine.GatedDeltaNetStep.
+    internal Tensor<T> Memory { get; }
 }
 
 public partial class GatedDeltaNetLayer<T>
@@ -73,42 +76,32 @@ public partial class GatedDeltaNetLayer<T>
         if (input.Shape[0] != b || !(onePositionRank3 || onePositionRank2))
             throw new ArgumentException(
                 $"Step expects one position per sequence, [{b}, 1, {d}] or [{b}, {d}]; got [{string.Join(",", input.Shape)}].", nameof(input));
-        if (state.ModelDimension != d || state.History.Length != _convKernelSize - 1 || state.Memory.Shape[0] != rows || state.Memory.Shape[1] != hd)
+        if (state.ModelDimension != d || (state.History?.Shape[0] ?? 0) != _convKernelSize - 1 || state.Memory.Shape[0] != rows || state.Memory.Shape[1] != hd)
             throw new ArgumentException("The state was created by a layer of a different shape.", nameof(state));
 
         var x = Engine.Reshape(input, new[] { b, d });
 
-        // Causal depthwise conv: w[:, 0] weights this position, w[:, m] the input m positions back.
-        var conv = Engine.TensorMultiply(x, Engine.Reshape(Engine.TensorSlice(_convWeights, new[] { 0, 0 }, new[] { d, 1 }), new[] { 1, d }));
-        for (int m = 1; m < _convKernelSize; m++)
-        {
-            if (state.History[m - 1] is not { } past) continue;
-            var tap = Engine.Reshape(Engine.TensorSlice(_convWeights, new[] { 0, m }, new[] { d, 1 }), new[] { 1, d });
-            conv = Engine.TensorAdd(conv, Engine.TensorMultiply(past, tap));
-        }
-        conv = Engine.TensorAdd(conv, Engine.Reshape(_convBias, new[] { 1, d }));
-        for (int m = state.History.Length - 1; m > 0; m--) state.History[m] = state.History[m - 1];
-        // A snapshot, not x: on the CPU the reshape above is a view of the caller's tensor, and a caller that refills
-        // one input buffer per token would otherwise rewrite the previous position inside the history.
-        if (state.History.Length > 0) state.History[0] = x.Clone();
+        // Causal depthwise conv + SiLU in one step: w[:, 0] weights this position, w[:, m] the input m positions back;
+        // the carried inputs shift in place.
+        var silu = state.History is { } history
+            ? Engine.CausalConv1dStep(history, x, _convWeights, _convBias, silu: true)
+            : Engine.Swish(Engine.TensorAdd(Engine.TensorMultiply(x, Engine.Reshape(_convWeights, new[] { 1, d })),
+                Engine.Reshape(_convBias, new[] { 1, d })));
 
-        var silu = Engine.Swish(conv);
-        var q = Engine.Reshape(Engine.TensorMatMul(silu, _queryWeights), new[] { rows, hd, 1 });
-        var k = Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(silu, _keyWeights), new[] { rows, 1, hd }),
+        var q = Engine.Reshape(Engine.TensorMatMul(silu, _queryWeights), new[] { rows, hd });
+        var k = Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(silu, _keyWeights), new[] { rows, hd }),
             NumOps.FromDouble(1.0 / Math.Sqrt(hd)));
-        var v = Engine.Reshape(Engine.TensorMatMul(silu, _valueWeights), new[] { rows, hd, 1 });
+        var v = Engine.Reshape(Engine.TensorMatMul(silu, _valueWeights), new[] { rows, hd });
         var beta = Engine.Reshape(Engine.Sigmoid(Engine.TensorAdd(Engine.TensorMatMul(silu, _betaWeights),
-            Engine.Reshape(_betaBias, new[] { 1, h }))), new[] { rows, 1, 1 });
+            Engine.Reshape(_betaBias, new[] { 1, h }))), new[] { rows });
         var alpha = Engine.Reshape(Engine.Sigmoid(Engine.TensorAdd(Engine.TensorMatMul(silu, _alphaWeights),
-            Engine.Reshape(_alphaBias, new[] { 1, h }))), new[] { rows, 1, 1 });
+            Engine.Reshape(_alphaBias, new[] { 1, h }))), new[] { rows });
         var gate = Engine.Swish(Engine.TensorAdd(Engine.TensorMatMul(silu, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, d })));
 
-        // Delta rule, all heads at once: S k' and the correction read the memory BEFORE this position's decay.
-        var predicted = Engine.BatchMatMul(state.Memory, Engine.Reshape(k, new[] { rows, hd, 1 }));
-        var delta = Engine.TensorMultiply(Engine.TensorSubtract(v, predicted), beta);
-        state.Memory = Engine.TensorAdd(Engine.TensorMultiply(state.Memory, alpha), Engine.BatchMatMul(delta, k));
-        var o = Engine.Reshape(Engine.BatchMatMul(state.Memory, q), new[] { b, d });
+        // Delta rule, all heads at once, the memory updated in place: S k' and the correction read the memory BEFORE
+        // this position's decay; o = S_new q.
+        var o = Engine.Reshape(Engine.GatedDeltaNetStep(state.Memory, q, k, v, alpha, beta), new[] { b, d });
 
         var projected = Engine.TensorAdd(Engine.TensorMatMul(Engine.TensorMultiply(o, gate), _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, d }));
