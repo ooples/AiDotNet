@@ -72,7 +72,7 @@ internal static class TransducerLoss
         {
             var blanks = Masked(engine.TensorIndexSelect(flat, new Tensor<int>(new[] { blankIndex.Length }, new Vector<int>(blankIndex)), 0), blankValid);
             var emitted = engine.TensorIndexSelect(flat, new Tensor<int>(new[] { labelIndex.Length }, new Vector<int>(labelIndex)), 0);
-            if (fastEmitLambda != 0.0)
+            if (Math.Abs(fastEmitLambda) > 0.0)
                 emitted = engine.TensorSubtract(engine.TensorMultiplyScalar(emitted, ops.FromDouble(1.0 + fastEmitLambda)),
                     engine.TensorMultiplyScalar(engine.StopGradient(emitted), ops.FromDouble(fastEmitLambda)));
             var emissions = Masked(emitted, labelValid);
@@ -106,6 +106,15 @@ internal static class TransducerLoss
         int frames = logProbs.Shape[0], width = logProbs.Shape[1], vocabulary = logProbs.Shape[2], length = labels.Count;
         if (width != length + 1) throw new ArgumentException($"The lattice has {width} label positions for {length} labels.", nameof(logProbs));
         if (frames <= 0) throw new ArgumentException("The lattice has no frames.", nameof(logProbs));
+        ValidateTokens(labels, blank, vocabulary);
+    }
+
+    // An out-of-range token is not an out-of-range read: the flattened gather lands in a neighbouring cell or channel
+    // and the loss is silently wrong.
+    private static void ValidateTokens(IReadOnlyList<int> labels, int blank, int vocabulary)
+    {
+        if (blank < 0 || blank >= vocabulary)
+            throw new ArgumentOutOfRangeException(nameof(blank), blank, $"The blank must be a token in [0, {vocabulary}).");
         foreach (int label in labels)
             if (label < 0 || label >= vocabulary || label == blank)
                 throw new ArgumentException($"Label {label} is outside the vocabulary or is the blank.", nameof(labels));
@@ -202,6 +211,13 @@ internal static class TransducerLoss
         int frames = logProbs.Shape[0], width = logProbs.Shape[1], channels = logProbs.Shape[2], length = labels.Count;
         if (channels != vocabulary + durations.Count) throw new ArgumentException("The last axis must hold the tokens then the durations.", nameof(logProbs));
         if (width != length + 1) throw new ArgumentException($"The lattice has {width} label positions for {length} labels.", nameof(logProbs));
+        if (frames <= 0) throw new ArgumentException("The lattice has no frames.", nameof(logProbs));
+        if (vocabulary <= 0) throw new ArgumentOutOfRangeException(nameof(vocabulary), vocabulary, "The vocabulary must have at least one token.");
+        if (durations.Count == 0) throw new ArgumentException("At least one duration is required.", nameof(durations));
+        // A negative duration would step forward in time (t - d > t) and index outside the intended lattice.
+        foreach (int duration in durations)
+            if (duration < 0) throw new ArgumentException($"Duration {duration} is negative.", nameof(durations));
+        ValidateTokens(labels, blank, vocabulary);
         int count = durations.Count, diagonals = frames + width - 1, steps = diagonals - 1;
         var flat = engine.Reshape(logProbs, new[] { frames * width * channels });
         var negative = ops.FromDouble(OffLattice);
@@ -263,20 +279,22 @@ internal static class TransducerLoss
         var startSpan = start.AsWritableSpan();
         for (int u = 1; u < width; u++) startSpan[u] = negative;
         alpha[0] = start;
+        // log(exp(total) + exp(term)), with an absent total as the empty sum.
+        Tensor<T> Join(Tensor<T>? total, Tensor<T> term) => total is null ? term : engine.TensorLogAddExp(total, term);
+        // Diagonal n's lanes reached over the transitions of one duration: a blank from diagonal n - d, a label from
+        // diagonal n - d - 1 one lane down.
+        Tensor<T> Reached(int n, int i)
+        {
+            int d = durations[i];
+            var viaLabel = engine.TensorAdd(n - d - 1 >= 0 ? Shifted(alpha[n - d - 1]) : offDiagonal, Row(labelEdges[i], n));
+            if (blankEdges[i] is not { } blanks) return viaLabel;
+            var viaBlank = engine.TensorAdd(n - d >= 0 ? alpha[n - d] : offDiagonal, Row(blanks, n));
+            return engine.TensorLogAddExp(viaBlank, viaLabel);
+        }
         for (int n = 1; n <= steps; n++)
         {
             Tensor<T>? total = null;
-            for (int i = 0; i < count; i++)
-            {
-                int d = durations[i];
-                if (blankEdges[i] is { } blanks)
-                {
-                    var viaBlank = engine.TensorAdd(n - d >= 0 ? alpha[n - d] : offDiagonal, Row(blanks, n));
-                    total = total is null ? viaBlank : engine.TensorLogAddExp(total, viaBlank);
-                }
-                var viaLabel = engine.TensorAdd(n - d - 1 >= 0 ? Shifted(alpha[n - d - 1]) : offDiagonal, Row(labelEdges[i], n));
-                total = total is null ? viaLabel : engine.TensorLogAddExp(total, viaLabel);
-            }
+            for (int i = 0; i < count; i++) total = Join(total, Reached(n, i));
             alpha[n] = total ?? offDiagonal;
         }
 
@@ -289,7 +307,7 @@ internal static class TransducerLoss
             var indices = new Tensor<int>(new[] { 2 }, new Vector<int>(new[] { At(t, length) + blank, At(t, length) + vocabulary + i }));
             var edge = engine.ReduceSum(engine.TensorIndexSelect(flat, indices, 0), new[] { 0 }, keepDims: true);
             var term = engine.TensorAdd(engine.TensorSlice(alpha[t + length], new[] { length }, new[] { 1 }), edge);
-            likelihood = likelihood is null ? term : engine.TensorLogAddExp(likelihood, term);
+            likelihood = Join(likelihood, term);
         }
         if (likelihood is null) throw new ArgumentException("No duration reaches the last frame.", nameof(durations));
         return engine.TensorMultiplyScalar(likelihood, ops.FromDouble(-1.0));
