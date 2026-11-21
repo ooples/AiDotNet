@@ -26,7 +26,19 @@ internal static class SoundStormOptionFixture
         for (int f = 0; f < codes.Shape[0]; f++)
             for (int q = 0; q < codes.Shape[1]; q++)
                 codes[f, q] = ops.FromDouble((3 * f + 5 * q + 1) % (q == 0 ? options.SemanticCodes : options.CodebookSize));
-        model.Train(new TtsTrainingSample<T> { Tokens = model.TextToTokens("hello there"), CodecTokens = codes });
+        var sample = new TtsTrainingSample<T> { Tokens = model.TextToTokens("hello there"), CodecTokens = codes };
+        if (option != "DropoutRate")
+        {
+            model.Train(sample);
+            return;
+        }
+        // A semantic-to-acoustic step draws its masked span from the model's generator, and on a 12-frame utterance
+        // that span is often empty: the step's loss is then exactly zero, nothing trains, and the Conformer's dropout
+        // cannot act. Which steps mask nothing depends only on how much of the generator earlier steps consumed, so
+        // a probe could pass or fail on the dropout implementation's draw count alone. Step until one step trains.
+        for (int attempt = 0; attempt < 16; attempt++)
+            if (!ops.Equals(model.Train(sample), ops.Zero)) return;
+        throw new InvalidOperationException("Sixteen semantic-to-acoustic steps in a row masked no position.");
     }
 
     internal static long? Observe<T>(SoundStorm<T> model, string option)
