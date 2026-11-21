@@ -181,7 +181,17 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
     // Exit 2 when every result was diagnostic-only (AIDOTNET_PARITY_TRAIN_STEPS > 1): no verdict, so no success.
     return !anyVerdict ? 2 : allPass ? 0 : 1;
 }
+// Diagnostic: AIDOTNET_BENCH_READBACK_SITES=1 records every device-to-host copy's call site and prints the busiest.
+bool readbackSites = Environment.GetEnvironmentVariable("AIDOTNET_BENCH_READBACK_SITES") == "1";
+// GpuLaunchProbe is internal to AiDotNet.Tensors, so through reflection.
+var probe = typeof(AiDotNet.Tensors.Engines.DirectGpuTensorEngine).Assembly
+    .GetType("AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe", throwOnError: true)!;
+if (readbackSites) probe.GetProperty("CaptureReadbackSites")!.SetValue(null, true);
 var report = new BenchmarkRunner(benchOptions).Run();
+if (readbackSites)
+    foreach (var site in ((string[])probe.GetProperty("ReadbackSites")!.GetValue(null)!)
+                 .OrderByDescending(s => long.Parse(s.Substring(0, s.IndexOf('x')))).Take(25))
+        Console.Error.WriteLine("[readback] " + site);
 var outputPath = Path.GetFullPath(benchOptions.OutputPath);
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions.Default));
@@ -220,7 +230,8 @@ internal sealed record BenchmarkOptions(
     string? HifiGanWorkloadReceipt,
     string? LstmFixture = null,
     string? LstmWorkloadReceipt = null,
-    string? LstmNumerics = null)
+    string? LstmNumerics = null,
+    string Precision = "fp32")
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -268,8 +279,19 @@ internal sealed record BenchmarkOptions(
                 .Split(',', StringSplitOptions.TrimEntries)
                 .Select(ParsePositiveBatch).ToArray(), fixturePath, requireMatched,
             map.GetValueOrDefault("hifigan-workload-receipt"), lstmFixture, map.GetValueOrDefault("lstm-workload-receipt"),
-            map.GetValueOrDefault("lstm-numerics"));
+            map.GetValueOrDefault("lstm-numerics"),
+            Precision: ParsePrecision(map.GetValueOrDefault("precision", "fp32")));
     }
+
+    // --precision: fp32 (default) or bf16, the training step under autocast as benchmark.py's twin runs it under
+    // torch.autocast. fp16 needs loss scaling in both arms (GradScaler in the twin), which neither wires yet.
+    private static string ParsePrecision(string text) => text.Trim().ToLowerInvariant() switch
+    {
+        "fp32" => "fp32",
+        "bf16" => "bf16",
+        "fp16" => throw new ArgumentException("--precision fp16 needs loss scaling in both arms; not wired yet."),
+        _ => throw new ArgumentException($"--precision must be fp32 or bf16; got '{text}'."),
+    };
 
     private static int ParsePositiveBatch(string text)
     {
@@ -362,6 +384,10 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             batches.Add(model.CurrentBatch);
         }
 
+        // The training steps under autocast for --precision bf16 (inference stays FP32 in both arms).
+        using var autocast = options.Precision == "bf16"
+            ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.BFloat16)
+            : null;
         for (var epoch = 0; epoch < options.Epochs; epoch++)
         {
             // PROFILE_RANGE=1 brackets the LAST epoch with cuProfilerStart/Stop, so

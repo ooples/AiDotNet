@@ -25,6 +25,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import argparse
 import json
 import math
@@ -1320,6 +1321,9 @@ class CoraGAT(nn.Module):
         return x.to(device), x[..., :GAT_CLASSES].argmax(dim=-1).to(device)
 
 
+# --precision (main sets it): "fp32" or "bf16".
+PRECISION = "fp32"
+
 DCGAN_LATENT, DCGAN_IMAGE = 100, 64
 
 
@@ -1969,7 +1973,10 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
     start_total = time.perf_counter()
     first_loss: torch.Tensor | None = None
-    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
+    # --precision bf16: the training steps under torch.autocast, as the C# side runs them under AutocastScope.
+    autocast = (torch.autocast(device_type=device.type, dtype=torch.bfloat16) if PRECISION == "bf16"
+                else contextlib.nullcontext())
+    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor, autocast:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
@@ -2298,6 +2305,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "warmup_min_ms": args.warmup_min_ms,
             "inference_batch_sizes": inference_batches,
             "seed": args.seed,
+            "precision": PRECISION,
         },
         "results": [asdict(result) for result in model_results],
     }
@@ -2339,7 +2347,12 @@ def main() -> None:
                         help="Select the installed CPU backend only for a shared LSTM run. Omit to keep PyTorch's runtime default.")
     parser.add_argument("--require-matched-workload", action="store_true")
 
+    parser.add_argument("--precision", default="fp32", choices=["fp32", "bf16"],
+                        help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
+                             "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    global PRECISION
+    PRECISION = args.precision
 
     allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")
     if allocation_trace:
