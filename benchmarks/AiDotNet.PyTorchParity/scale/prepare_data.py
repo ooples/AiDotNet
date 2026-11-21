@@ -51,7 +51,7 @@ SOURCES = {
 # same bytes.
 EXPECTED_SHA256 = {
     "emnist": "fb9bb67e33772a9cc0b895e4ecf36d2cf35be8b709693c3564cea2a019fcda8e",
-    "cinic10": "31b095acb02cd2f6ae8ee3bc0fa4e4eb9a4d5e2c6a1f1ad5d8bbcbf5d3ab3f4b",
+    "cinic10": "31b095acf6d75e25a9e028bae82a07a0f94ff6b00671be2802d34ac4efa81a9e",
 }
 
 SYNTH_TRAIN, SYNTH_TEST, SYNTH_SEED = 1_000_000, 10_000, 2026
