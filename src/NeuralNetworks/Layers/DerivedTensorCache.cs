@@ -4,8 +4,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Holds one tensor derived from up to four source tensors (a stacked gate weight, a folded bias) and rebuilds it only
-/// when it could differ: a source was replaced, a source's <see cref="Tensor{T}.Version"/> moved (every in-place write
-/// advances it: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed. A writer that
+/// when it could differ: a source or its backing storage was replaced, its storage mutation epoch moved (including writes through views or
+/// in inference mode: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed. A writer that
 /// changes a source without advancing its version must call <see cref="Invalidate"/> before the derived tensor is
 /// reused.
 /// </summary>
@@ -39,10 +39,27 @@ internal sealed class DerivedTensorCache<T>
     private long _generation;
 
     private readonly Tensor<T>?[] _sources = new Tensor<T>?[MaxSources];
+    private readonly object?[] _storageIdentities = new object?[MaxSources];
     private readonly int[] _versions = new int[MaxSources];
     private int _sourceCount;
     private IEngine? _engine;
     private Tensor<T>? _value;
+    private readonly bool _disposeReplacedValues;
+
+    internal DerivedTensorCache(bool disposeReplacedValues = false) => _disposeReplacedValues = disposeReplacedValues;
+
+    private bool OwnsCachedValue(Tensor<T>? value)
+    {
+        if (!_disposeReplacedValues || value is null) return false;
+        for (int i = 0; i < _sourceCount; i++) if (ReferenceEquals(value, _sources[i])) return false;
+        return true;
+    }
+
+    private static void Retire(Tensor<T> value, IEngine? engine)
+    {
+        engine?.InvalidatePersistentTensor(value);
+        value.Dispose();
+    }
 
     /// <summary>
     /// The cached derivation of the given sources, built with <paramref name="build"/> (passed the engine and the
@@ -69,27 +86,38 @@ internal sealed class DerivedTensorCache<T>
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             value = build(engine, sources);
 
+        var replaced = _value;
+        var replacedEngine = _engine;
+        bool retireReplaced = !ReferenceEquals(replaced, value) && OwnsCachedValue(replaced);
         Array.Clear(_sources, 0, MaxSources);
+        Array.Clear(_storageIdentities, 0, MaxSources);
         for (int i = 0; i < count; i++)
         {
             _sources[i] = sources[i];
-            _versions[i] = sources[i].Version;
+            _storageIdentities[i] = sources[i].StorageIdentity;
+            _versions[i] = sources[i].StorageMutationVersion;
         }
 
         _sourceCount = count;
         _engine = engine;
         _generation = generation;
         _value = value;
+        if (retireReplaced && replaced is not null) Retire(replaced, replacedEngine);
         return value;
     }
 
     /// <summary>Drops the cached value, so the next <see cref="GetOrBuild"/> rebuilds it.</summary>
     internal void Invalidate()
     {
+        var replaced = _value;
+        var engine = _engine;
+        bool retireReplaced = OwnsCachedValue(replaced);
         _value = null;
         _engine = null;
         _sourceCount = 0;
         Array.Clear(_sources, 0, MaxSources);
+        Array.Clear(_storageIdentities, 0, MaxSources);
+        if (retireReplaced && replaced is not null) Retire(replaced, engine);
     }
 
     /// <summary>Whether the cache was built from exactly these <paramref name="count"/> sources at their current versions.</summary>
@@ -102,7 +130,9 @@ internal sealed class DerivedTensorCache<T>
     }
 
     private bool Matches(int index, Tensor<T>? source)
-        => source is not null && ReferenceEquals((object?)_sources[index], (object)source) && _versions[index] == source.Version;
+        => source is not null && ReferenceEquals((object?)_sources[index], (object)source)
+            && ReferenceEquals(_storageIdentities[index], source.StorageIdentity)
+            && _versions[index] == source.StorageMutationVersion;
 }
 
 /// <summary>

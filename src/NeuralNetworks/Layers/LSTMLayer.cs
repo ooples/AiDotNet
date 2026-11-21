@@ -1243,8 +1243,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // Engines without a fused state adjoint retain their differentiable fallback internally.
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
-        bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
-            && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
+        bool standardActivations = UsesStandardSequenceActivations;
         if (standardActivations && !graphActive && _stateCellClip == 0 && _stateZoneout is null
             && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
@@ -1353,12 +1352,44 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         return output;
     }
 
+    private bool UsesStandardSequenceActivations =>
+        (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>) &&
+        (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
+
+    // A following last-token slice needs this output only. Shape discovery and graph
+    // observers must still see the full sequence and the slice as individual layers.
+    internal bool TryForwardLastHiddenState(Tensor<T> input, out Tensor<T> result)
+    {
+        result = null!;
+        if (GetType() != typeof(LSTMLayer<T>) || IsTrainingMode || !_isInitialized || !IsShapeResolved || RequiresForwardInputValidation ||
+            IsInferringShapes || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ||
+            AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ||
+            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null ||
+            _stateStepping || Math.Abs(_stateCellClip) > 0.0 || _stateZoneout is not null || !UsesStandardSequenceActivations ||
+            (typeof(T) != typeof(float) && typeof(T) != typeof(double)) ||
+            input.Rank != 3 || input.Shape[1] <= 0 || input.Shape[2] != _inputSize)
+            return false;
+
+        try
+        {
+            var last = TryFusedLstmForward(input, differentiable: false, returnSequences: false);
+            if (last is null) return false;
+            _originalInputShape = input._shape;
+            _lastHiddenState = null;
+            _lastCellState = null;
+            result = last;
+            return true;
+        }
+        catch (NotSupportedException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
     /// <summary>
     /// Packs gates in i/f/g/o order on the active device and invokes its sequence primitive.
     /// Tape/graph packing stays connected to the original weights; inference packing is cached by
     /// engine and mutation version so a checkpoint restore or engine change cannot reuse stale weights.
     /// </summary>
-    private Tensor<T>? TryFusedLstmForward(Tensor<T> input, bool differentiable)
+    private Tensor<T>? TryFusedLstmForward(Tensor<T> input, bool differentiable, bool returnSequences = true)
     {
         Tensor<T> wIh, wHh, bias;
         var engine = Engine;
@@ -1382,7 +1413,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             result = engine.LstmSequenceForward(input, _initialHidden, _initialCell, wIh, wHh, bias, null,
                 out _lastHiddenState, out _lastCellState, returnSequences: true);
         else
-            result = engine.LstmSequenceForward(input, null, null, wIh, wHh, bias, null, returnSequences: true);
+            result = engine.LstmSequenceForward(input, null, null, wIh, wHh, bias, null, returnSequences);
 
         // An older engine may return an inference-only result under a tape. Never silently lose gradients.
         if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null

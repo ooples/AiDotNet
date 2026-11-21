@@ -28,6 +28,17 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)attribution-generated/$(Configuration)/$(TargetFramework)</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
+  <!-- These tests call engine members that exist only in the Tensors source tree (AiDotNet.Tensors #1793:
+       IEngine.TensorWeightNorm and DirectGpuTensorEngine.CompiledWorkspaceBroker). The library binds those members by
+       reflection, so it builds against the published package; the tests cannot. They compile and run with
+       -p:UseLocalTensors=true. Delete both groups, and the #if in OwnedDerivedTensorCacheTests, when the package reference includes #1793. -->
+  <PropertyGroup Condition="'$(UseLocalTensors)' == 'true'">
+    <DefineConstants>$(DefineConstants);AIDOTNET_TENSORS_SOURCE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UseLocalTensors)' != 'true'">
+    <Compile Remove="TextToSpeech\HiFiGanInferenceWorkspaceDemandTests.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(EnableTestAttribution)' == 'true' and '$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="../../tools/TestImpact/Attribution.Xunit/Attribution.Xunit.csproj" />
   </ItemGroup>

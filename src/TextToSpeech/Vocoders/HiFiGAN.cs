@@ -74,13 +74,19 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
+    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
+    // seeds the segment crops). A run that sets only SamplingSeed is unchanged; the multiplier keeps (Seed, SamplingSeed)
+    // pairs from colliding on neighbouring values.
+    private int InitializationSeed => unchecked(PaperOptions.SamplingSeed + (PaperOptions.Seed ?? 0) * 7919);
+
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 11));
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
             singlePrecisionBasis: true);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0,
@@ -92,12 +98,20 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor);
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 13));
         return _discriminators.Layers;
     }
 
     /// <inheritdoc />
     protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
+
+    /// <inheritdoc />
+    private protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+        => GetType() == typeof(HiFiGAN<T>)
+            ? Flat((_generator ?? throw new InvalidOperationException("The generator has not been built."))
+                .ForwardDetachedForDiscriminator(mel))
+            : base.GenerateDetachedForDiscriminator(mel);
 
     /// <inheritdoc />
     /// <remarks>The reference <c>mel_spectrogram</c>: reflect padding, Hann window, Slaney mel up to
@@ -146,9 +160,10 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         using (new NoGradScope<T>()) realOut = _discriminators.Forward(real);
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
+        var lossMel = _lossMel ?? throw new InvalidOperationException("The mel loss transform has not been built.");
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
-        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(lossMel.Forward(real));
+        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(lossMel.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
             Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(PaperOptions.MelLossWeight)));

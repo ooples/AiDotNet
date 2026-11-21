@@ -7541,30 +7541,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IDisposable? noGrad = differentiable ? null : new NoGradScope<T>();
         try
         {
-            var output = PredictInInferenceMode(input);
-            RequireArchitectureAgreesWithOutput(output);
-            // The default PredictCore records the first forward and retries weight-streaming detection; an override that
-            // answers from its own path (FeedForwardNeuralNetwork's fused dense predict) never did, so detection never
-            // finalized and every Predict ran it again: both SetTrainingMode transitions built and SHA-256 hashed the
-            // parameter layout, about a sixth of a GPU MLP's batch-32 inference. Recorded here for every model.
-            // Retried until detection finalizes (a count that threw is read again next call), with lazy-shape resolution
-            // deferred as in the mode transitions: a branch this forward did not visit must not be resolved from the
-            // architecture's shape instead of its eventual input.
-            _firstForwardCompleted = true;
-            if (!_streamingAutoDetectFinalized)
-            {
-                bool priorRetryDefer = _deferLazyShapeResolutionToForward;
-                _deferLazyShapeResolutionToForward = true;
-                try
-                {
-                    TryAutoEnableWeightStreaming();
-                }
-                finally
-                {
-                    _deferLazyShapeResolutionToForward = priorRetryDefer;
-                }
-            }
-            return resultScope is null ? output : resultScope.Keep(output);
+            var engine = !differentiable && !GraphCaptureCompatibility.IsActive ? Engine : null;
+            return PredictionWorkspace.Run(this, input, resultScope, engine);
         }
         finally
         {
@@ -17414,7 +17392,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // reductions started from different weights through this entry point than through every other one.
         if (GradientValueClip > 0.0)
             return RefuseUnsupportedDeclaredBreak("The declared closure step clips model gradients by value.");
-        if (HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
+        // A model can declare per-group norm clipping even when its active objective disables it; the groups decline the
+        // compiled route only when they will be used.
+        if (MaxGradNormValue > 0.0 && HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
             return RefuseUnsupportedDeclaredBreak("The declared closure step uses custom gradient clipping groups.");
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.

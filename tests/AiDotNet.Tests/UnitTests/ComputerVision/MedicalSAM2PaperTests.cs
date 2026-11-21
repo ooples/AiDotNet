@@ -66,7 +66,7 @@ public class MedicalSAM2PaperTests
     }
 
     [Fact]
-    public void Resampling_DrawsInProportionToSimilarity_AndRejectsNegativeSimilarities()
+    public void Resampling_DrawsInProportionToSimilarity_AndNeverDrawsANegativeSimilarity()
     {
         var bank = Bank(2);
         bank.Add(Vector(1, 0), Vector(1, 0), 0.9);
@@ -77,7 +77,15 @@ public class MedicalSAM2PaperTests
         for (int i = 0; i < 4000; i++)
             foreach (var e in bank.Resample(Vector(1, 0), random)) { draws++; if (e.EmbeddingKey[0] == 1.0) first++; }
         Assert.InRange(first / (double)draws, 1 / 1.6 - 0.02, 1 / 1.6 + 0.02);
-        Assert.Throws<InvalidOperationException>(() => bank.Resample(Vector(-1, 0.1), random));
+        // Eq. 4 is a probability only for non-negative similarities. To (-1, 2) the first memory's is negative and the
+        // second's positive, so every draw is the second: a memory pointing away from the frame is never drawn.
+        for (int i = 0; i < 200; i++)
+            Assert.All(bank.Resample(Vector(-1, 2), random), e => Assert.Equal(0.6, e.EmbeddingKey[0], 12));
+        // To (-1, 0.1) both are negative, so nothing ranks them and the draw is uniform.
+        int firstOfUnranked = 0, unrankedDraws = 0;
+        for (int i = 0; i < 4000; i++)
+            foreach (var e in bank.Resample(Vector(-1, 0.1), random)) { unrankedDraws++; if (e.EmbeddingKey[0] == 1.0) firstOfUnranked++; }
+        Assert.InRange(firstOfUnranked / (double)unrankedDraws, 0.48, 0.52);
         var softmax = Bank(2, resampling: MemoryBankResampling.Softmax);
         softmax.Add(Vector(1, 0), Vector(1, 0), 0.9);
         softmax.Add(Vector(0, 1), Vector(0, 1), 0.9);

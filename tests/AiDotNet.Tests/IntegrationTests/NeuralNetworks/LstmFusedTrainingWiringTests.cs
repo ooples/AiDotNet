@@ -21,6 +21,38 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 [Collection("NonParallelIntegration")]
 public class LstmFusedTrainingWiringTests
 {
+    [Fact]
+    public void LastHiddenInferenceMatchesTheFullSequenceAcrossChangingInputsAndWeights()
+    {
+        var layer = new LSTMLayer<float>(hiddenSize: 8);
+        var last = new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last);
+        var first = new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.First);
+        layer.SetTrainingMode(false);
+        last.SetTrainingMode(false);
+        first.SetTrainingMode(false);
+        var input = Rand([2, 5, 4], 17);
+        var full = layer.Forward(input);
+        var expected = last.Forward(full);
+        _ = first.Forward(full);
+        Assert.True(last.CanConsumeLastHiddenState);
+        Assert.False(first.CanConsumeLastHiddenState);
+        Assert.True(layer.TryForwardLastHiddenState(input, out var actual));
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
+        Assert.InRange(Mse(actual, expected), 0f, 1e-12f);
+
+        var changed = Rand([2, 5, 4], 18);
+        var weights = layer.GetParameters();
+        weights[0] += .25f;
+        layer.SetParameters(weights);
+        var updated = last.Forward(layer.Forward(changed));
+        Assert.True(layer.TryForwardLastHiddenState(changed, out var updatedLast));
+        Assert.InRange(Mse(updatedLast, updated), 0f, 1e-12f);
+        Assert.True(Mse(updatedLast, actual) > 1e-8f);
+
+        layer.SetTrainingMode(true);
+        Assert.False(layer.TryForwardLastHiddenState(input, out _));
+    }
+
     private static Tensor<float> Rand(int[] shape, int seed, float scale = 0.4f)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);

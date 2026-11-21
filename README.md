@@ -67,6 +67,8 @@ The model and component counts are in the generated table at the top of this pag
 |---|---|---|---|
 | Tensor engine | Managed .NET, with optional native accelerators (oneDNN, CLBlast, GPU backends) | Native LibTorch | Native TensorFlow runtime |
 
+Run the end-to-end training and inference comparison against Python PyTorch on your own CPU or GPU. [11-model benchmark and commands](benchmarks/AiDotNet.PyTorchParity/README.md#run-all-11-model-families)
+
 ---
 
 ## Quick Start by Task

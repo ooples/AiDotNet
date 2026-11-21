@@ -212,10 +212,10 @@ internal sealed class Sam2VideoTracker<T>
     /// </summary>
     private Tensor<T> ConditionOnBank(Tensor<T> features)
     {
-        if (Bank!.Count == 0) return features;
+        if (Bank is not { } bank || bank.Count == 0) return features;
         int md = Memory.MemoryDim, g = _net.Configuration.Grid;
         Tensor<T> Sequence(Tensor<T> map) => _engine.TensorPermute(_engine.Reshape(map, new[] { 1, md, g * g }), new[] { 0, 2, 1 });
-        var drawn = Bank.Resample(features, BankRandom);
+        var drawn = bank.Resample(features, BankRandom);
         var position = Sequence(_net.SinePositional(md, g, g));
         var memory = _engine.TensorConcatenate(drawn.Select(e => Sequence(e.Memory)).ToArray(), 1);
         var positions = _engine.TensorConcatenate(drawn.Select(_ => position).ToArray(), 1);

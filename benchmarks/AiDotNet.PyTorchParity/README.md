@@ -1,5 +1,48 @@
 # AiDotNet ⇄ PyTorch parity benchmark
 
+## Run all 11 model families
+
+From the repository root, the following command builds this AiDotNet checkout in Release and runs its models against **Python PyTorch with `torch.compile`**. It covers MLP, CNN, LSTM, Transformer, GRU, ResNet-18, ResNet-50, VGG-11, MobileNetV2, DenseNet-121 and ViT. Each framework runs alone in a fresh process for every model, device and launch.
+
+Use the .NET 10 SDK and a Python 3.13 virtual environment. On Windows, open the x64 Developer PowerShell for Visual Studio with the C++ build tools. For NVIDIA CUDA, install a compatible driver and CUDA development libraries. The published baseline used these wheels:
+
+```shell
+python -m pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu126
+python -m pip install psutil==7.2.2 numpy==2.5.4
+```
+
+On Windows CUDA also run `python -m pip install triton-windows==3.9.0.post30`. For a CPU-only machine, use the PyTorch CPU wheel index and pass `--devices cpu`.
+
+```shell
+python benchmarks/AiDotNet.PyTorchParity/run_matrix.py
+```
+
+The full comparison runs two launches on CUDA and CPU. Both frameworks use eight threads, seed 1234, and three epochs of 20 updates at batch size 64. Inference measures 100 calls at each of batches 1, 8 and 16 after warm-up. The runner alternates framework order between launches. For a quick execution check, run `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models cnn --devices cpu --smoke`. Smoke timings only check execution.
+
+The printed run directory contains the hardware and runtime versions, git revision, binary hashes, commands, exit codes, logs, raw JSON and a CSV with each launch's median training time per update and inference latency in milliseconds. In the CSV, `torch_over_ai` is PyTorch time divided by AiDotNet time. Failed pairs are listed in `completion.json` and the process exits nonzero. The runner first checks the supported models (MLP, CNN, LSTM and Transformer) against a same-weights PyTorch update on each requested device. The other seven rows compare timings and report parameter counts. The PyTorch implementation and its model-specific notes are in [benchmark.py](pytorch/benchmark.py).
+
+By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash.
+
+### Compare to the archived runs
+
+Each archive contains 88 original framework reports covering every model, device and launch. The CSVs give absolute times and parameter counts for each launch. The November 13 baseline used public mainline commits. The November 19 experiment used an integration of open PRs and the laptop's power state varied. Both include losses and wins. [Historical source revisions and reproduction commands](https://github.com/ooples/AiDotNet.Tensors/tree/a2577f0b1/parity/model-families)
+
+| Run | Training and inference | Individual framework reports |
+| --- | --- | --- |
+| November 13 | [CSV](evidence/2026-11-13.csv) | [ZIP](evidence/2026-11-13.zip) |
+| November 19 | [CSV](evidence/2026-11-19.csv) | [ZIP](evidence/2026-11-19.zip) |
+
+For example, from the repository root, inspect the original CUDA GRU pair:
+
+```shell
+python -m zipfile -e benchmarks/AiDotNet.PyTorchParity/evidence/2026-11-19.zip benchmarks/AiDotNet.PyTorchParity/results/archive-19
+python benchmarks/AiDotNet.PyTorchParity/pytorch/compare.py benchmarks/AiDotNet.PyTorchParity/results/archive-19/aidotnet-1-cuda-gru.json benchmarks/AiDotNet.PyTorchParity/results/archive-19/torch-compile-1-cuda-gru.json
+```
+
+The [17-second LSTM video benchmark](https://github.com/ooples/AiDotNet.Tensors/tree/a2577f0b1/parity/lstm-video) uses a separate fixture and training protocol.
+
+## Model definitions
+
 An in-repo twin of the [AIsEval](https://github.com/ooples/AIsEval)
 `aidotnet-benchmarks` harness, with one decisive difference: this project
 references the AiDotNet **source** (`<ProjectReference Include="..\..\src\AiDotNet.csproj" />`),
@@ -163,3 +206,17 @@ python timeseries.py ../results/ts --device cuda --compile --epochs 6 --threads 
   PyTorch side maps it to the same `MLP` so a shared `--models` list won't error.
 - This project is excluded from `dotnet test` (`IsTestProject=false`); it's a
   manual harness you run on demand.
+
+### Matched LSTM classification
+
+Run these commands from this benchmark directory. Generate the seed-1234 fixture once. It contains six state-dict fields, 20 training batches of 64 labeled sequences, and inference batches of 1, 8 and 16 sequences.
+
+```powershell
+python pytorch/lstm_fixture.py --output results/lstm-fixture
+dotnet run -c Release -- --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --lstm-numerics results/lstm-ai-cpu
+python pytorch/benchmark.py --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --compile --lstm-cpu-mkldnn disabled --lstm-numerics results/lstm-torch-cpu --output results/lstm-torch-cpu/report.json
+```
+
+The numerical run writes the logits, scalar loss, gradients and learned parameters from three successive AdamW updates, followed by inference logits for each batch size. The raw FP32 arrays are in `observations.safetensors`. For timing, omit `--lstm-numerics`, set `--output`, and pass `--lstm-workload-receipt` with a fresh path. The normal timing loop makes 60 updates and each receipt binds the tensors actually used. For CUDA, select `--device cuda` on both commands and omit the CPU setting.
+
+On Windows with PyTorch 2.14.1+cu126, the default oneDNN CPU LSTM decomposition sets the recurrent primitive's training flag to false. Its absent workspace fails Inductor's alignment check and AOT autograd's saved-tensor check during training. The explicit `--lstm-cpu-mkldnn disabled` setting selects the installed ATen decomposition and preserves full-graph Inductor compilation and its assertions. Both the compiler and the backend settings are recorded in the workload receipt. Passing `enabled` reproduces the oneDNN control on the affected runtime. Omitting the option preserves the installed PyTorch setting.
