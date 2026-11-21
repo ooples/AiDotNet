@@ -19,6 +19,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import argparse
 import json
 import math
@@ -1312,6 +1313,9 @@ class CoraGAT(nn.Module):
         return x.to(device), x[..., :GAT_CLASSES].argmax(dim=-1).to(device)
 
 
+# --precision (main sets it): "fp32" or "bf16".
+PRECISION = "fp32"
+
 DCGAN_LATENT, DCGAN_IMAGE = 100, 64
 
 
@@ -1940,7 +1944,10 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
     start_total = time.perf_counter()
     first_loss: torch.Tensor | None = None
-    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
+    # --precision bf16: the training steps under torch.autocast, as the C# side runs them under AutocastScope.
+    autocast = (torch.autocast(device_type=device.type, dtype=torch.bfloat16) if PRECISION == "bf16"
+                else contextlib.nullcontext())
+    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor, autocast:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
@@ -2149,7 +2156,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "protocol": {"epochs": args.epochs, "train_batches": args.train_batches, "batch_size": args.batch_size,
                      "inference_iterations": args.inference_iterations, "warmup_iterations": args.warmup_iterations,
                      "warmup_min_ms": args.warmup_min_ms, "seed": args.seed, "inference_batch_sizes": inference_batches,
-                     "compile": args.compile},
+                     "compile": args.compile, "precision": PRECISION},
         "results": [asdict(result) for result in model_results],
     }
 
@@ -2176,7 +2183,12 @@ def main() -> None:
     parser.add_argument("--compile", action="store_true",
                         help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
+    parser.add_argument("--precision", default="fp32", choices=["fp32", "bf16"],
+                        help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
+                             "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    global PRECISION
+    PRECISION = args.precision
 
     allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")
     if allocation_trace:
