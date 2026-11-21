@@ -186,7 +186,33 @@ def condition_flags(before, after):
         flags.add("ci-job")
     if gpu_busy(before):
         flags.add("busy-gpu")
+    if gpu_clock_low(after):
+        flags.add("gpu-clock-low")
     return sorted(flags)
+
+
+# A CUDA launch whose GPU, busy at its end, ran below this fraction of its maximum SM clock is flagged gpu-clock-low,
+# and the runner refuses to start CUDA measurements when its load probe sustains less.
+LOW_CLOCK_FRACTION = 0.6
+
+
+def gpu_clock_low(state):
+    """True when the GPU was working (P0, over 30% utilization) at under LOW_CLOCK_FRACTION of its maximum SM clock."""
+    gpu = state.get("gpu") or {}
+    try:
+        return (gpu.get("pstate") == "P0" and float(gpu["utilization.gpu"]) > 30
+                and float(gpu["clocks.sm"]) < LOW_CLOCK_FRACTION * float(gpu["clocks.max.sm"]))
+    except (KeyError, ValueError):
+        return False
+
+
+def gpu_clock_probe(env):
+    """Run pytorch/gpu_clock_probe.py: the SM clock the GPU sustains under a matrix-multiplication load."""
+    output = subprocess.run([sys.executable, str(HERE / "pytorch/gpu_clock_probe.py")], cwd=HERE, env=env, text=True,
+                            capture_output=True, check=True).stdout
+    probe = json.loads(output.strip().splitlines()[-1])
+    probe["time"] = now()
+    return probe
 
 
 def gpu_busy(state):
@@ -538,6 +564,8 @@ def main():
     parser.add_argument("--tensors", type=Path, help="Build against this Tensors checkout instead of the repository's NuGet dependency.")
     parser.add_argument("--output", type=Path, default=HERE / "results", help="Parent for unique run directories")
     parser.add_argument("--allow-battery", action="store_true", help="Run even when the machine is on battery power")
+    parser.add_argument("--allow-gpu-clock-cap", action="store_true",
+                        help="Run CUDA measurements even when the GPU sustains under 60%% of its maximum SM clock")
     parser.add_argument("--summarize", type=Path, metavar="RUN_DIR",
                         help="Only rebuild RUN_DIR's CSVs and table from its raw reports, into RUN_DIR/regenerated")
     parser.add_argument("--scale", type=Path, metavar="DATA_ROOT",
@@ -644,6 +672,16 @@ def main():
 
     if "cuda" in info["devices"] and not torch.cuda.is_available():
         parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
+    if "cuda" in info["devices"] and shutil.which("nvidia-smi"):
+        # Checked on every start, including a resume: the platform can cap a laptop GPU between sessions.
+        probe = gpu_clock_probe(env)
+        info.setdefault("gpuClockProbes", []).append(probe)
+        save(dest / "protocol.json", info)
+        print(f"GPU sustained {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load", flush=True)
+        if probe["medianSmClock"] < LOW_CLOCK_FRACTION * probe["maxSmClock"] and not args.allow_gpu_clock_cap:
+            sys.exit(f"The GPU sustains only {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load, so "
+                     "its timings would describe the cap. Check the charger and the performance profile, or pass "
+                     "--allow-gpu-clock-cap.")
     dll = dest / "bin/AiDotNet.PyTorchParity.dll"
     common = info["common"]
     refs = info["referenceModels"]

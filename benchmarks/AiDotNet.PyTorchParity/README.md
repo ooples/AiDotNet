@@ -48,6 +48,7 @@ The full run takes several hours on a laptop. For a quick execution check, run `
   | `unstable` | One side's slowest launch exceeded its fastest by more than 1.5× |
   | `parameters-differ` | The two models have different trainable parameter counts |
   | `missing-launches` | A launch failed, so the row has fewer than the requested launches |
+  | `gpu-clock-low` | A CUDA launch ended with the GPU busy below 60% of its maximum SM clock |
 
 The printed run directory contains the following:
 
@@ -63,63 +64,67 @@ In both CSVs, `torch_over_ai` is PyTorch's time divided by AiDotNet's, so a valu
 
 By default the build uses the AiDotNet.Tensors NuGet package pinned in `Directory.Packages.props`. To test a source build, pass `--tensors /path/to/AiDotNet.Tensors`. The runner then checks that the loaded assembly is that build's.
 
-### Results from November 20, 2026
+### Results from November 21, 2026
 
-The machine was a Ryzen 7 4800H laptop on AC power, with a 6 GB GTX 1660 Ti, NVIDIA driver 617.42, Windows 11, .NET 10 and PyTorch 2.14.1+cu126. The run used commit `37597f19` with AiDotNet.Tensors 0.151.0 from NuGet and five launches. Each row compares AiDotNet with PyTorch's fastest configuration for that row. GRU, ViT and MobileNetV2 carry ⚑ on every row because their parameter counts differ slightly (`parameters-differ`).
+The machine was a Ryzen 7 4800H laptop on AC power, with a 6 GB GTX 1660 Ti, NVIDIA driver 617.42, Windows 11, .NET 10 and PyTorch 2.14.1+cu126. The run used commit `b23d88ba` with AiDotNet.Tensors 0.151.0 from NuGet and five launches, and finished at 03:58 UTC on November 21. Each row compares AiDotNet with PyTorch's fastest configuration for that row, including the configurations that compile the LSTM and GRU. GRU, ViT and MobileNetV2 carry ⚑ on every row because their parameter counts differ slightly (`parameters-differ`).
 
 **CUDA**: PyTorch time ÷ AiDotNet time, median of launches (range of launches). Above 1 means AiDotNet took less time. ⚑ marks a row with a flag in summary.csv.
 
 | Model | Training, batch 64 | Inference, batch 1 | Inference, batch 8 | Inference, batch 16 |
 | --- | ---: | ---: | ---: | ---: |
-| mlp | 6.53 (5.92–7.33) | 1.43 (0.92–1.81) ⚑ | 1.67 (1.60–1.78) | 1.63 (0.69–1.75) ⚑ |
-| lstm | 6.55 (6.14–6.67) | 1.48 (1.01–1.60) ⚑ | 1.91 (1.75–1.97) | 1.83 (1.75–2.70) ⚑ |
-| transformer | 2.06 (1.85–2.35) | 0.40 (0.34–0.54) ⚑ | 0.57 (0.53–0.67) | 0.71 (0.66–1.08) ⚑ |
-| cnn | 2.37 (2.14–2.56) | 0.87 (0.30–1.30) ⚑ | 1.41 (1.34–2.12) ⚑ | 1.50 (1.25–1.58) |
-| resnet18 | 1.30 (1.18–1.54) | 2.12 (1.95–2.51) | 1.99 (0.93–2.12) ⚑ | 2.00 (1.38–2.10) |
-| resnet50 | 1.71 (1.51–1.80) | 1.42 (1.33–1.47) | 1.48 (1.33–1.51) | 1.32 (1.30–1.36) |
-| vgg11 | 1.18 (1.16–1.18) | 2.21 (2.13–2.33) | 1.69 (1.54–1.77) | 1.41 (1.39–1.47) |
-| vit | 1.02 (1.02–1.02) ⚑ | 0.62 (0.55–0.66) ⚑ | 1.01 (0.83–1.04) ⚑ | 0.93 (0.92–0.95) ⚑ |
-| gru | 8.73 (7.99–10.06) ⚑ | 1.73 (1.47–2.49) ⚑ | 2.29 (2.24–3.17) ⚑ | 2.65 (1.67–2.82) ⚑ |
-| mobilenetv2 | 0.61 (0.58–0.62) ⚑ | 1.77 (1.26–1.79) ⚑ | 0.96 (0.93–2.90) ⚑ | 0.86 (0.81–0.89) ⚑ |
-| densenet121 | 1.00 (0.99–1.01) | 1.34 (1.27–1.49) | 1.70 (1.69–1.71) | 1.31 (1.30–1.31) |
+| mlp | 7.08 (6.45–7.51) | 1.25 (1.04–1.40) ⚑ | 1.72 (1.52–1.91) | 1.59 (1.58–1.90) |
+| lstm | 5.82 (5.64–7.91) | 1.18 (1.16–1.98) | 1.52 (1.44–2.89) ⚑ | 1.77 (1.63–1.81) |
+| transformer | 2.29 (2.07–2.39) | 0.40 (0.36–0.58) ⚑ | 0.63 (0.55–0.79) | 1.12 (0.78–1.44) ⚑ |
+| cnn | 2.32 (2.28–2.54) | 1.06 (1.00–1.09) | 1.83 (1.18–2.85) ⚑ | 1.47 (1.47–1.55) |
+| resnet18 | 2.14 (1.99–2.33) | 2.78 (1.93–3.02) ⚑ | 1.92 (1.48–2.09) | 1.69 (1.68–1.78) |
+| resnet50 | 2.33 (2.22–2.44) | 1.38 (1.36–1.41) | 1.25 (1.25–1.30) | 1.18 (1.18–1.22) |
+| vgg11 | 1.20 (1.19–1.20) | 2.36 (2.05–3.05) | 1.71 (1.62–2.73) ⚑ | 1.40 (1.34–1.64) |
+| vit | 1.00 (0.99–1.00) ⚑ | 1.21 (1.00–1.33) ⚑ | 0.97 (0.97–1.01) ⚑ | 0.90 (0.90–0.93) ⚑ |
+| gru | 8.36 (7.31–8.67) ⚑ | 1.58 (1.18–2.77) ⚑ | 1.95 (1.86–4.50) ⚑ | 2.41 (2.40–8.95) ⚑ |
+| mobilenetv2 | 0.64 (0.62–0.99) ⚑ | 0.96 (0.71–1.98) ⚑ | 0.72 (0.65–1.55) ⚑ | 0.54 (0.53–0.61) ⚑ |
+| densenet121 | 0.92 (0.92–0.92) | 1.91 (1.87–1.94) | 1.72 (1.71–1.72) | 1.26 (1.26–1.26) |
 
 **CPU**: PyTorch time ÷ AiDotNet time, median of launches (range of launches). Above 1 means AiDotNet took less time. ⚑ marks a row with a flag in summary.csv.
 
 | Model | Training, batch 64 | Inference, batch 1 | Inference, batch 8 | Inference, batch 16 |
 | --- | ---: | ---: | ---: | ---: |
-| mlp | 2.65 (2.55–3.00) | 3.95 (3.73–4.10) | 4.28 (3.54–4.95) | 4.72 (4.17–4.82) |
-| lstm | 2.28 (2.10–2.30) | 3.97 (3.85–4.09) | 1.58 (1.46–2.30) | 1.93 (1.75–2.09) |
-| transformer | 1.65 (1.34–1.73) | 2.18 (2.11–2.28) | 3.00 (2.89–3.11) | 2.77 (2.31–3.05) |
-| cnn | 1.14 (0.98–1.59) | 3.86 (3.49–5.18) | 2.53 (2.44–2.91) | 1.67 (1.36–2.52) ⚑ |
-| resnet18 | 4.67 (4.02–4.67) | 2.18 (1.96–2.59) | 1.95 (1.72–2.05) | 1.63 (1.45–1.78) |
-| resnet50 | 3.06 (2.86–3.22) | 1.68 (1.33–1.98) ⚑ | 1.55 (1.42–1.97) ⚑ | 1.60 (1.40–1.60) |
-| vgg11 | 1.43 (1.39–1.50) | 2.01 (1.95–2.26) | 2.88 (2.74–3.48) | 1.26 (1.23–1.50) |
-| vit | 1.24 (1.13–1.41) ⚑ | 1.28 (1.19–1.92) ⚑ | 1.09 (0.96–1.23) ⚑ | 1.34 (1.22–1.46) ⚑ |
-| gru | 2.35 (1.90–2.56) ⚑ | 15.40 (11.49–16.09) ⚑ | 6.59 (6.47–7.33) ⚑ | 4.77 (4.66–5.77) ⚑ |
-| mobilenetv2 | 1.73 (1.63–1.80) ⚑ | 2.54 (2.22–2.67) ⚑ | 1.94 (1.84–2.09) ⚑ | 1.36 (1.27–1.50) ⚑ |
-| densenet121 | 1.24 (1.08–1.31) | 1.39 (1.09–1.58) | 1.21 (0.91–1.36) | 1.29 (1.17–1.49) |
+| mlp | 2.67 (2.67–3.04) | 4.69 (4.23–5.79) | 5.60 (4.55–6.33) | 3.72 (3.72–4.40) ⚑ |
+| lstm | 2.08 (1.70–2.52) ⚑ | 4.01 (3.89–4.73) | 1.78 (1.64–2.28) ⚑ | 2.03 (2.02–2.43) |
+| transformer | 1.43 (1.36–1.57) | 2.15 (1.92–2.67) | 2.76 (2.06–3.00) | 2.72 (2.55–2.83) |
+| cnn | 1.07 (0.93–1.40) | 3.64 (3.56–5.71) ⚑ | 2.02 (1.88–2.70) | 1.50 (1.41–2.19) ⚑ |
+| resnet18 | 4.73 (4.65–4.98) | 2.26 (2.20–3.16) | 1.83 (1.49–2.02) | 1.57 (1.38–2.20) |
+| resnet50 | 3.03 (2.94–3.26) | 1.57 (1.54–1.64) | 1.61 (1.53–1.73) | 1.46 (1.25–1.52) |
+| vgg11 | 1.32 (1.24–1.47) | 2.01 (1.74–2.34) | 2.98 (2.75–3.05) | 1.29 (1.19–1.33) |
+| vit | 1.36 (1.30–1.37) ⚑ | 1.18 (1.16–1.56) ⚑ | 1.23 (1.10–1.29) ⚑ | 1.41 (1.23–1.48) ⚑ |
+| gru | 1.49 (1.24–1.59) ⚑ | 9.17 (7.88–9.27) ⚑ | 5.09 (4.86–6.92) ⚑ | 4.12 (4.00–4.89) ⚑ |
+| mobilenetv2 | 1.64 (1.34–1.84) ⚑ | 2.39 (2.15–2.84) ⚑ | 1.87 (1.82–1.96) ⚑ | 1.35 (1.31–1.44) ⚑ |
+| densenet121 | 1.22 (1.03–1.26) | 1.38 (1.33–1.40) | 1.24 (1.13–1.25) | 1.28 (1.23–1.30) |
 
 Where AiDotNet took longer, or the result is too close to call:
 
-- **CUDA training.** MobileNetV2 is slower (0.61). DenseNet-121 (1.00) and ViT (1.02) are even.
-- **CUDA inference.** The Transformer is slower at every batch size (0.40–0.71). ViT is slower at batch 1 (0.62) and batch 16 (0.93). MobileNetV2 is slower at batches 8 and 16 (0.96, 0.86), and the CNN at batch 1 (0.87).
-- **CPU.** AiDotNet's median is lower on every row. On some rows a single launch went the other way: CNN training (0.98), ViT at batch 8 (0.96) and DenseNet-121 at batch 8 (0.91).
+- **CUDA training.** MobileNetV2 (0.64) and DenseNet-121 (0.92) are slower. ViT is even (1.00).
+- **CUDA inference.** The Transformer is slower at batches 1 and 8 (0.40, 0.63). ViT is slower at batches 8 and 16 (0.97, 0.90), and MobileNetV2 at every batch size (0.96, 0.72, 0.54).
+- **CPU.** AiDotNet's median is lower on every row. One CNN training launch went the other way (0.93).
 
-Most `unstable` flags are on CUDA inference calls that take less than a millisecond. At that scale, one launch of either framework can take up to three times as long as another. The range column shows how far the launches spread. No row was flagged `battery`, `busy-cpu`, `busy-gpu`, `ci-job` or `missing-launches`. The run was interrupted once by a switch to battery power. Its one battery-flagged process is kept under `superseded/` in the ZIP, and the process was rerun on AC power.
+Compiling the recurrent models changed two rows. PyTorch's compiled GRU is faster than its eager GRU on the CPU, so the CPU GRU rows fell from 2.35× to 1.49× (training) and from 15.40× to 9.17× (batch 1) against the [first November 20 run](#archived-runs), which compared against eager PyTorch only. On CUDA, the compiled GRU won every row, and the compiled LSTM won inference at batches 1 and 8. Eager cuDNN stayed PyTorch's fastest LSTM training on CUDA, and eager oneDNN the fastest CPU LSTM.
 
-The fastest PyTorch configuration for most CUDA rows was `torch-cudagraphs-fused` (10 of 11 training rows and 28 of 33 inference rows). On CPU it was `torch-compile-fused` for every training row.
+The fastest PyTorch configuration was `torch-cudagraphs-fused` for 9 of 11 CUDA training rows and 27 of 33 CUDA inference rows. On the CPU it was `torch-compile-fused` for 9 of 11 training rows.
+
+Most `unstable` flags are on CUDA inference calls that take less than a millisecond. At that scale, one launch of either framework can take up to three times as long as another. The range column shows how far the launches spread. No row in the tables was flagged `battery`, `busy-cpu`, `busy-gpu`, `ci-job` or `missing-launches`. Launch 5 first ran while the machine was also clearing disk space, and one of its processes ended on battery power. That launch was rerun on an idle machine on AC power, and then four CUDA rows whose receipts read 20–22% system CPU were rerun again. Every replaced process is kept under `superseded/` in the ZIP.
 
 These results come from one Windows laptop. On Windows, PyTorch's GPU compiler uses the community `triton-windows` build, and Windows display-driver scheduling adds GPU launch overhead that Linux does not have. We have not run this on Linux yet, so these numbers do not show how the two frameworks compare there.
 
 | Run | Summary | Every launch | Every report, receipt and log |
 | --- | --- | --- | --- |
-| November 20 | [Table](evidence/2026-11-20.md) · [CSV](evidence/2026-11-20-summary.csv) | [CSV](evidence/2026-11-20.csv) | [ZIP](evidence/2026-11-20.zip) |
+| November 21 | [Table](evidence/2026-11-21.md) · [CSV](evidence/2026-11-21-summary.csv) | [CSV](evidence/2026-11-21.csv) | [ZIP](evidence/2026-11-21.zip) |
 
-To rebuild the tables from the raw reports, run `python -m zipfile -e benchmarks/AiDotNet.PyTorchParity/evidence/2026-11-20.zip benchmarks/AiDotNet.PyTorchParity/results/archive-20`, then `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --summarize benchmarks/AiDotNet.PyTorchParity/results/archive-20`.
+To rebuild the tables from the raw reports, run `python -m zipfile -e benchmarks/AiDotNet.PyTorchParity/evidence/2026-11-21.zip benchmarks/AiDotNet.PyTorchParity/results/archive-21`, then `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --summarize benchmarks/AiDotNet.PyTorchParity/results/archive-21`.
 
-### Archived runs from November 13 and 19
+### Archived runs
 
-These two runs came before this runner. Their reports are kept exactly as recorded. Each archive holds the 88 original framework reports: 11 models, two devices, two frameworks and two launches. Do not use them for performance claims. They differ from the current protocol in these ways:
+<a id="archived-runs"></a>The first November 20 run used this runner at commit `37597f19`, before PyTorch's LSTM and GRU were compiled. All three of its PyTorch configurations ran those two models eagerly, because `torch.compile` skips them unless `allow_rnn` is set. Its other rows match the run above within launch-to-launch spread. It is kept for comparison: [Table](evidence/2026-11-20.md) · [CSV](evidence/2026-11-20-summary.csv) · [Every launch](evidence/2026-11-20.csv) · [ZIP](evidence/2026-11-20.zip).
+
+The November 13 and 19 runs came before this runner. Their reports are kept exactly as recorded. Each archive holds the 88 original framework reports: 11 models, two devices, two frameworks and two launches. Do not use them for performance claims. They differ from the current protocol in these ways:
 
 - PyTorch ran in one configuration: `torch.compile` default mode with PyTorch's default AdamW. Inference at batch sizes 8 and 16 used the shape-generic (dynamic-shape) graph that `torch.compile` creates after it sees a second batch size.
 - Each model ran in two launches, and AiDotNet always ran first.
