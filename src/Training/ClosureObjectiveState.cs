@@ -52,8 +52,8 @@ internal sealed class ClosureObjectiveState<T>
         internal Entry(
             ICompiledTrainingPlan<T> plan,
             ClosureObjectiveGuard<T>? guard,
-            object[]? leaves = null,
-            CompiledOpShapeCache? shapes = null)
+            object[]? leaves,
+            CompiledOpShapeCache? shapes)
         {
             Plan = plan;
             _leaves = leaves ?? Array.Empty<object>();
@@ -219,6 +219,20 @@ internal sealed class ClosureObjectiveState<T>
             foreach (var e in _entries) if (e.Guard is not null) n++;
             return n;
         }
+    }
+
+    /// <summary>
+    /// Builds a storage-free signature using the most recent replayable trace's audited shape metadata. Materialized
+    /// recorders cannot run in a probe, so an empty shape cache would reject every later step that contains one.
+    /// The returned signature still has to match a cached plan before its leaves may be rebound.
+    /// </summary>
+    internal ClosureGuardResult Probe(Func<Tensor<T>> objective, Tensor<T>[] parameters,
+        out ObjectiveSignature? signature, out object[] leaves, out string? reason)
+    {
+        foreach (var entry in _entries)
+            if (entry.Guard is not null && entry.Shapes is { } recordedShapes)
+                return ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, recordedShapes);
+        return ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
     }
 
     /// <summary>The replayable plan compiled for <paramref name="signature"/>, made most recently used; or null.</summary>

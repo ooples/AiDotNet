@@ -128,6 +128,18 @@ if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
         Flag("--series-length", 20_000), Flag("--seed", 42), only);
 }
 
+int hifiReferenceAt = Array.IndexOf(args, "--verify-hifigan");
+if (hifiReferenceAt >= 0)
+{
+    if (hifiReferenceAt + 1 >= args.Length) throw new ArgumentException("--verify-hifigan requires a reference directory.");
+    string directory = args[hifiReferenceAt + 1];
+    int outputAt = Array.IndexOf(args, "--output");
+    string output = outputAt >= 0 && outputAt + 1 < args.Length ? args[outputAt + 1]
+        : Path.Combine(directory, "aidotnet-equivalence.json");
+    return HifiGanReferenceVerifier.Run(directory, output);
+}
+
+
 var benchOptions = BenchmarkOptions.Parse(args);
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
@@ -246,7 +258,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         {
             var modelStart = Stopwatch.StartNew();
             Console.WriteLine($"[bench] {modelName}: building network…");
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction");
             var model = factory.Create(modelName);
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction-complete");
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
             TrainingReport? training = null;
             if (model.IsInferenceOnly)
@@ -255,10 +269,13 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             }
             else
             {
-                training = BenchmarkTraining(model);
+                BenchmarkPhaseTelemetry.Mark(modelName, "training-prepare");
+                training = BenchmarkTraining(model, modelName);
+                BenchmarkPhaseTelemetry.Mark(modelName, "training-complete");
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
             }
-            var inference = BenchmarkInference(model);
+            var inference = BenchmarkInference(model, modelName);
+            BenchmarkPhaseTelemetry.Mark(modelName, "complete");
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
@@ -269,10 +286,10 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             Environment.Version.ToString(),
             RunEnvironmentProbe.Capture(),
             AiDotNetProbe.Describe(),
-            results);
+            results, options);
     }
 
-    private TrainingReport BenchmarkTraining(IBenchmarkModel model)
+    private TrainingReport BenchmarkTraining(IBenchmarkModel model, string modelName)
     {
         // Track per-epoch duration plus the synthetic data-loading and gradient
         // phases, while a background monitor samples process resources.
@@ -302,6 +319,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // `nsys profile --capture-range=cudaProfilerApi` records steady-state steps only (the twin does the same).
             var profileEpoch = BenchStats.ProfileRangeRequested && epoch == options.Epochs - 1;
             if (profileEpoch) { BenchStats.SynchronizeDevice(); BenchStats.ProfilerStart(); }
+            BenchmarkPhaseTelemetry.Mark(modelName, $"training-epoch-{epoch}");
             var epochTimer = Stopwatch.StartNew();
             for (var batch = 0; batch < options.TrainBatches; batch++)
             {
@@ -331,6 +349,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             epochTimer.Stop();
             if (profileEpoch) BenchStats.ProfilerStop();
             epochSeconds.Add(epochTimer.Elapsed.TotalSeconds);
+            BenchmarkPhaseTelemetry.Mark(modelName, $"training-epoch-{epoch}-complete");
         }
 
         total.Stop();
@@ -353,7 +372,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             model.LastLoss);
     }
 
-    private List<InferenceReport> BenchmarkInference(IBenchmarkModel model)
+    private List<InferenceReport> BenchmarkInference(IBenchmarkModel model, string modelName)
     {
         // Measure inference at multiple batch sizes so the report captures both
         // latency and throughput behavior under different request shapes.
@@ -361,7 +380,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         var process = Process.GetCurrentProcess();
         foreach (var batchSize in options.InferenceBatchSizes)
         {
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-prepare");
             model.LoadSyntheticBatch(batchSize);
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-warmup");
 
             // Warmup iterations prime JIT compilation and tensor internals before
             // steady-state measurements are recorded. A count alone is not enough: .NET runs a method as
@@ -383,6 +404,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // psutil rss (whole-process resident set incl. native allocs),
             // so both report the same kind of memory number.
             process.Refresh();
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-steady");
             var peakBefore = process.WorkingSet64 / 1024d / 1024d;
             var steady = new List<double>(options.InferenceIterations);
 
@@ -406,6 +428,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
             if (profileInference) BenchStats.ProfilerStop();
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-complete");
             process.Refresh();
             var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
             var totalSteady = steady.Sum();
@@ -504,6 +527,11 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "vae" => new AiDotNetVaeModel(seed),
         "gat" => new AiDotNetGatModel(seed),
         "dcgan" => new AiDotNetDcganModel(seed),
+        // Audio and speech (AudioRows.cs): PANNs CNN14 on 10 s AudioSet log-mel clips [1001, 64]; wav2vec 2.0 BASE CTC
+        // fine-tuning on 2 s of raw 16 kHz audio; HiFi-GAN V1's GAN step on an 8192-sample segment (batch size 1).
+        "panns-cnn14" => new AiDotNetPannsCnn14Model(seed),
+        "wav2vec2-base" => new AiDotNetWav2Vec2BaseModel(seed),
+        "hifigan-v1" => new AiDotNetHifiGanV1Model(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -1264,6 +1292,12 @@ internal sealed class ResourceMonitor : IDisposable
 
     private ResourceMonitor()
     {
+        // The gate runner uses the same external sampler for both frameworks.
+        if (Environment.GetEnvironmentVariable("AIDOTNET_BENCH_EXTERNAL_MONITOR") == "1")
+        {
+            _task = Task.CompletedTask;
+            return;
+        }
         _task = Task.Run(async () =>
         {
             while (!_cts.IsCancellationRequested)
@@ -1504,7 +1538,7 @@ internal static class RunEnvironmentProbe
         CpuThreads: AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
 }
 
-internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
+internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results, BenchmarkOptions Protocol);
 internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport? Training, List<InferenceReport> Inference);
 // SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
 // AiDotNet first epoch is dominated by JIT + autotune warmup (~2.1 s) and drops to

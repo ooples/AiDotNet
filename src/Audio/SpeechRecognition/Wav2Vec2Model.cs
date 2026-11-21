@@ -439,7 +439,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         ThrowIfDisposed();
 
         // Preprocess audio
-        var features = PreprocessAudio(audio);
+        var features = PreprocessAudio(_useNativeMode && audio.Rank > 1
+            ? Engine.Reshape(audio, new[] { audio.Length }) : audio);
 
         // Get model output
         Tensor<T> logits;
@@ -529,6 +530,16 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         // all-ones and cancels any input scaling, collapsing the model's output (failing
         // DifferentInputs / ScaledInput). The sibling ASR models that pass these invariants
         // (UniSpeech, RobustConformer) likewise treat the given tensor as the prepared feature stream.
+        int targetLength = SampleRate * _maxAudioLengthSeconds;
+        // A batch of clips [batch, samples] stays a batch: flattening it concatenated the clips into one long
+        // waveform (and truncated it to one clip's window), so a batched Predict transcribed the wrong signal.
+        if (rawAudio.Rank == 2 && rawAudio.Shape[0] > 1)
+        {
+            return rawAudio.Shape[1] <= targetLength
+                ? rawAudio
+                : Engine.TensorSlice(rawAudio, new[] { 0, 0 }, new[] { rawAudio.Shape[0], targetLength });
+        }
+
         return TruncateAudioWaveform(rawAudio, _maxAudioLengthSeconds);
     }
 
@@ -610,6 +621,40 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => RunModel(input, training: true);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The CTC objective (Graves et al. 2006) of transformers' Wav2Vec2ForCTC: log-softmax over the vocabulary, then the
+    /// CTC loss of each utterance's label ids (blank 0) over all of its frames, averaged over the batch. It applies when
+    /// the target holds label ids, one row per utterance (<c>[batch, labels]</c> for <c>[batch, samples]</c>, or
+    /// <c>[labels]</c> for one waveform); a per-frame target (<c>[..., frames, vocabulary]</c>) keeps the standard step
+    /// with the model's loss function. The CTC loss was declared but never reached: the base Train scored the logits
+    /// against the labels with mean squared error.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode || _network is null || target.Rank != input.Rank || target.Rank > 2) return false;
+        int rows = target.Rank == 1 ? 1 : target.Shape[0];
+        if (input.Rank == 2 && input.Shape[0] != rows)
+            throw new ArgumentException($"The CTC targets have {rows} rows for {input.Shape[0]} waveforms.", nameof(target));
+        int perRow = target.Length / rows;
+        // Label ids are rounded in bulk, so a float code such as 1.9999999 reads as label 2.
+        int[] labels = Engine.TensorRound(target).Cast<int>().ToArray();
+        foreach (int label in labels)
+            if (label <= 0 || label >= _vocabSize)
+                throw new ArgumentException($"CTC label {label} is the blank or outside the {_vocabSize}-symbol vocabulary.", nameof(target));
+        var targetLengths = Enumerable.Repeat(perRow, rows).ToArray();
+        TrainWithCustomLoss(input, logits =>
+        {
+            if (logits.Rank == 2) logits = Engine.Reshape(logits, new[] { 1, logits.Shape[0], logits.Shape[1] });
+            int frames = logits.Shape[1];
+            var timeMajor = Engine.TensorPermute(Engine.TensorLogSoftmax(logits, axis: -1), new[] { 1, 0, 2 });
+            var perUtterance = Engine.TensorCTCLoss(timeMajor, new Tensor<int>(labels, new[] { labels.Length }),
+                Enumerable.Repeat(frames, rows).ToArray(), targetLengths, 0);
+            return Engine.ReduceMean(perUtterance, new[] { 0 }, keepDims: false);
+        }, _optimizer);
+        return true;
+    }
 
     /// <inheritdoc />
     /// <remarks>With <see cref="Wav2Vec2ModelOptions.FreezeFeatureEncoder"/> the convolutional feature encoder's

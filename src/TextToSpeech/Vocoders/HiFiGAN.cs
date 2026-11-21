@@ -74,6 +74,11 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
+    // The native generator retains only parameters and owned normalized-weight caches. Its activations are
+    // per-call results; the Predict funnel keeps the returned waveform and frees the other GPU intermediates.
+    // Custom architecture layers and ONNX execution have not made this lifetime declaration.
+    protected override bool ReleasesInferenceIntermediates => HasPaperLayers && _generator is not null;
+
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
@@ -147,7 +152,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(_lossMel!.Forward(real));
         var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),

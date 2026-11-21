@@ -2,6 +2,12 @@ using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Tensors.Helpers;
+
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -14,6 +20,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 internal sealed class HiFiGanGenerator<T>
 {
     private const double Slope = 0.1;
+    private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
+    private string? _gpuLifetimeDiagnosticState;
+
     private readonly IEngine _engine;
     private readonly List<LayerBase<T>> _layers = new();
     private readonly NormedConv1DLayer<T> _pre;
@@ -22,6 +31,7 @@ internal sealed class HiFiGanGenerator<T>
     private readonly List<List<(List<NormedConv1DLayer<T>> First, List<NormedConv1DLayer<T>> Second)>> _blocks = new();
     private readonly NormedConv1DLayer<T> _post;
     private readonly bool _resblockType1;
+    private readonly T _residualAverageScale;
     private readonly bool _tanhOutput;
     private readonly int _outputReflectPad;
 
@@ -53,6 +63,10 @@ internal sealed class HiFiGanGenerator<T>
     {
         _engine = engine;
         _resblockType1 = resblockType1;
+        // Every upsampling stage has the same parallel residual branches. This is one architecture scalar,
+        // converted before the stage loops; an empty stage still fails at its existing missing-branch guard.
+        var scalarOps = MathHelper.GetNumericOperations<T>();
+        _residualAverageScale = resblockKernels.Length == 0 ? scalarOps.Zero : scalarOps.FromDouble(1.0 / resblockKernels.Length);
         _tanhOutput = tanhOutput;
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
@@ -155,15 +169,158 @@ internal sealed class HiFiGanGenerator<T>
     }
 
     private Tensor<T> LeakyRelu(Tensor<T> x, double slope)
+        => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(slope));
+
+    private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        // max(x, slope · x) = slope · x + (1 − slope) · relu(x)
-        return _engine.TensorAdd(_engine.TensorMultiplyScalar(x, ops.FromDouble(slope)),
-            _engine.TensorMultiplyScalar(_engine.ReLU(x), ops.FromDouble(1 - slope)));
+        using var forward = TensorScope.Begin();
+        long snapshot = gpu.ActivationCacheTimestampSnapshot();
+        var released = new HashSet<object>(AiDotNet.Tensors.Engines.Autodiff.ReferenceEqualityComparer<object>.Instance);
+
+        // Carries are our own results, but an identity/view may share a still-live boundary or caller storage.
+        static bool Aliases(Tensor<T> left, Tensor<T>? right)
+        {
+            if (right is null) return false;
+            if (ReferenceEquals(left, right) || left.SharesStorageWith(right)) return true;
+            var a = left.DataVector._deviceState?.Buffer ?? left._gpuBuffer;
+            var b = right.DataVector._deviceState?.Buffer ?? right._gpuBuffer;
+            if (a is null || b is null || a.Handle == IntPtr.Zero || b.Handle == IntPtr.Zero) return false;
+            var aRoot = AiDotNet.Tensors.Engines.DirectGpu.GpuBufferViewRoot.Of(a);
+            var bRoot = AiDotNet.Tensors.Engines.DirectGpu.GpuBufferViewRoot.Of(b);
+            return ReferenceEquals(aRoot, bRoot) || aRoot.Handle == bRoot.Handle;
+        }
+        void ReleaseConsumed(Tensor<T>? value, Tensor<T> keep, Tensor<T>? shared = null, Tensor<T>? sum = null)
+        {
+            if (value is null || Aliases(value, features) || Aliases(value, condition)
+                || Aliases(value, keep) || Aliases(value, shared) || Aliases(value, sum)
+                || !released.Add(value.StorageIdentity)) return;
+            if (value.DataVector._deviceState is { Buffer: not null })
+            {
+                // The same stream-ordered ownership path TensorScope uses for tensor-owned results.
+                gpu.ReleaseDeadDeviceStorage(value, afterQueuedWork: true);
+            }
+            else
+            {
+                // Some native outputs belong to the activation cache instead of their vector. Release only this
+                // consumed carry's keys, never a pre-existing caller tensor or an engine's normalized-kernel cache.
+                object vector = value.DataVector;
+                var array = value.GetBackingArrayForCacheLookupUnsafe();
+                gpu.EvictActivationsCreatedAfter(snapshot, protect: null, mode: ActivationReleaseMode.Release,
+                    releasableOnly: key => ReferenceEquals(key, vector) || (array is not null && ReferenceEquals(key, array)),
+                    afterQueuedWork: true);
+            }
+        }
+
+        Tensor<T> x;
+        using (var pre = TensorScope.Begin())
+        {
+            x = _pre.Forward(features);
+            if (condition is not null && Condition is not null)
+                x = _engine.TensorAdd(x, _engine.TensorTile(Condition.Forward(condition), new[] { 1, 1, x.Shape[2] }));
+            pre.Keep(x);
+        }
+        for (int i = 0; i < _ups.Count; i++)
+        {
+            var previous = x;
+            using (var up = TensorScope.Begin())
+            {
+                x = _ups[i].Forward(LeakyRelu(previous, Slope));
+                if (condition is not null && _stageConditions.Count > 0)
+                    x = _engine.TensorAdd(x, _engine.TensorTile(_stageConditions[i].Forward(condition), new[] { 1, 1, x.Shape[2] }));
+                up.Keep(x);
+            }
+            ReleaseConsumed(previous, x);
+            var stageInput = x;
+            Tensor<T>? sum = null;
+            foreach (var (first, second) in _blocks[i])
+            {
+                var h = stageInput;
+                for (int n = 0; n < first.Count; n++)
+                {
+                    var residual = h;
+                    using (var pair = TensorScope.Begin())
+                    {
+                        var t = first[n].Forward(LeakyRelu(residual, Slope));
+                        if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
+                        h = _engine.TensorAdd(t, residual);
+                        pair.Keep(h);
+                    }
+                    ReleaseConsumed(residual, h, stageInput, sum);
+                }
+                if (sum is null) sum = h;
+                else
+                {
+                    var previousSum = sum;
+                    using (var combine = TensorScope.Begin())
+                        sum = combine.Keep(_engine.TensorAdd(previousSum, h));
+                    ReleaseConsumed(previousSum, sum, stageInput);
+                    ReleaseConsumed(h, sum, stageInput);
+                }
+            }
+            var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
+            using (var average = TensorScope.Begin())
+                x = average.Keep(_engine.TensorMultiplyScalar(completedSum, _residualAverageScale));
+            ReleaseConsumed(completedSum, x);
+            ReleaseConsumed(stageInput, x);
+        }
+        Tensor<T> output;
+        using (var post = TensorScope.Begin())
+        {
+            var h = LeakyRelu(x, 0.01);
+            if (_outputReflectPad > 0) h = VocoderOps.ReflectPad(_engine, h, _outputReflectPad, 0);
+            var y = _post.Forward(h);
+            output = post.Keep(_tanhOutput ? _engine.Tanh(y) : y);
+        }
+        ReleaseConsumed(x, output);
+        return forward.Keep(output);
     }
+
+
+    private void TraceGpuInferenceEligibility(Tensor<T> features, DirectGpuTensorEngine gpu)
+    {
+        int trainingLayers = _layers.Count(layer => layer.InTrainingMode);
+        int reasons = (gpu.ResidentStepActive ? 1 : 0)
+            | (gpu.InferenceCaptureActive ? 2 : 0)
+            | (AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive ? 4 : 0)
+            | (GradientTape<T>.Current is not null ? 8 : 0)
+            | (GraphMode.IsActive ? 16 : 0)
+            | (GraphCaptureCompatibility.IsActive ? 32 : 0)
+            | (AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ? 64 : 0)
+            | (trainingLayers > 0 ? 128 : 0);
+        string shape = string.Join(",", features.Shape.ToArray());
+        string signature = $"{reasons}:{shape}";
+        if (System.Threading.Interlocked.Exchange(ref _gpuLifetimeDiagnosticState, signature) == signature) return;
+        System.Diagnostics.Trace.TraceInformation($"[HIFI-GPU-LIFETIME] enabled={reasons == 0} reasons={reasons} shape=[{shape}] " +
+            $"resident={gpu.ResidentStepActive} inference_capture={gpu.InferenceCaptureActive} " +
+            $"release_deferred={AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive} " +
+            $"current_tape={GradientTape<T>.Current is not null} any_tape={AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()} " +
+            $"recording={GradientRecording.IsRecording<T>()} graph={GraphMode.IsActive} compatibility={GraphCaptureCompatibility.IsActive} " +
+            $"observer={AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null} " +
+            $"training_layers={trainingLayers}/{_layers.Count} outer_scope={TensorScope.Current is not null}");
+    }
+
 
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
     {
+        if (s_gpuLifetimeDiagnostics && _engine.TryGet<DirectGpuTensorEngine>(out var diagnosticGpu))
+            TraceGpuInferenceEligibility(features, diagnosticGpu);
+
+        if (_engine.TryGet<DirectGpuTensorEngine>(out var gpu)
+            && !gpu.ResidentStepActive && !gpu.InferenceCaptureActive
+            && !AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive
+            && GradientTape<T>.Current is null && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+            && _layers.All(layer => !layer.InTrainingMode))
+            return ForwardGpuInference(features, condition, gpu);
+
+
+        // The native forward bypasses the generic layer walk's scratch recycling. Keep each branch's residual
+        // boundary, not every convolution's normalization and activation temporaries. A private arena never
+        // resets caller-owned input/condition tensors. GPU boundaries stay resident on their existing path.
+        bool recycle = InferenceArenaSettings.RecycleLayerScratch && TensorArena.Current is not null
+            && !_pre.InTrainingMode && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
+            && !_engine.Is<DirectGpuTensorEngine>();
+        using var scratch = recycle ? TensorArena.CreateDetached() : null;
         var ops = MathHelper.GetNumericOperations<T>();
         var x = _pre.Forward(features);
         if (condition is not null && Condition is not null)
@@ -176,14 +333,29 @@ internal sealed class HiFiGanGenerator<T>
             Tensor<T>? sum = null;
             foreach (var (first, second) in _blocks[i])
             {
+                using var active = scratch?.Activate();
                 var h = x;
                 for (int n = 0; n < first.Count; n++)
                 {
                     var t = first[n].Forward(LeakyRelu(h, Slope));
                     if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
                     h = _engine.TensorAdd(t, h);
+                    if (scratch is not null) h = scratch.DetachBoundaryAndReset(h);
                 }
-                sum = sum is null ? h : _engine.TensorAdd(sum, h);
+                if (sum is null)
+                {
+                    if (scratch is null) sum = h;
+                    else
+                    {
+                        // Own the first branch's sum outside the recyclable carry pool. Consume later branches
+                        // into this owned sum before they are recycled, preserving the original addition order.
+                        using (TensorArena.Suspend())
+                        using (TensorScope.Suspend())
+                            sum = new Tensor<T>(h.ToArray(), h.Shape.ToArray());
+                    }
+                }
+                else if (scratch is null) sum = _engine.TensorAdd(sum, h);
+                else _engine.TensorAddInPlace(sum, h);
             }
             x = _engine.TensorMultiplyScalar(sum!, ops.FromDouble(1.0 / _blocks[i].Count));
         }
@@ -193,6 +365,7 @@ internal sealed class HiFiGanGenerator<T>
         var y = _post.Forward(x);
         return _tanhOutput ? _engine.Tanh(y) : y;
     }
+
 }
 
 /// <summary>
@@ -328,11 +501,7 @@ internal sealed class HiFiGanDiscriminators<T>
     }
 
     private Tensor<T> LeakyRelu(Tensor<T> x)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        return _engine.TensorAdd(_engine.TensorMultiplyScalar(x, ops.FromDouble(_slope)),
-            _engine.TensorMultiplyScalar(_engine.ReLU(x), ops.FromDouble(1 - _slope)));
-    }
+        => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(_slope));
 
     /// <summary>Every sub-discriminator's score and feature maps for <paramref name="audio"/> <c>[samples]</c>.</summary>
     public List<(Tensor<T> Score, List<Tensor<T>> Features)> Forward(Tensor<T> audio)

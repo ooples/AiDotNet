@@ -123,17 +123,17 @@ internal sealed class WhisperSpeechT2S<T>
         if (SemanticEmbeddings.Special is not null) Fill(SemanticEmbeddings.Special, c.EmbeddingsStd);
         void Linear(DenseLayer<T> layer, int inputs, int outputs, double std)
         {
+            // Drawn straight into the layer, weights then biases, as the release draws them.
             TorchParameters.Linear(_engine, layer, inputs, outputs,
-                Enumerable.Range(0, inputs * outputs).Select(_ => WhisperSpeechOps.TruncatedNormal(random, std)).ToArray(),
-                Enumerable.Range(0, outputs).Select(_ => WhisperSpeechOps.TruncatedNormal(random, std)).ToArray());
+                () => WhisperSpeechOps.TruncatedNormal(random, std), () => WhisperSpeechOps.TruncatedNormal(random, std));
         }
         int w = c.Width;
         foreach (var block in EncoderBlocks.Concat(DecoderBlocks))
         {
             foreach (var attention in new[] { block.Attention, block.CrossAttention }.Where(a => a is not null))
             {
-                TorchParameters.Linear(_engine, attention!.Query, w, w, new double[w * w], new double[w]);
-                TorchParameters.Linear(attention.Key, w, w, Enumerable.Range(0, w * w).Select(_ => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / w)).ToArray());
+                TorchParameters.Linear(_engine, attention!.Query, w, w, static () => 0.0, static () => 0.0);
+                TorchParameters.Linear(attention.Key, w, w, () => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / w));
                 Linear(attention.Value, w, w, c.InitStd / w);
                 Linear(attention.Output, w, w, c.InitStd / w);
             }

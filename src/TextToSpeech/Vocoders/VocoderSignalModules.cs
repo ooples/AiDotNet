@@ -461,11 +461,10 @@ internal sealed class InverseStft<T>
         Tensor<T> framesTime;
         if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
         {
-            // IRFft supplies Hermitian expansion, normalization and the tape backward.
+            // The engine's IRFFT supplies Hermitian expansion, normalization and the backward, and it is a traced op:
+            // the static Fft.IRFft reads its input on the host, which a compiled training step cannot replay.
             var packed = _engine.Reshape(_engine.TensorStack(new[] { re, im }, 2), new[] { frames, 2 * bins });
-            var time = typeof(T) == typeof(float)
-                ? (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<float>)(object)packed, _fft)
-                : (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<double>)(object)packed, _fft);
+            var time = _engine.IRFFT(packed, _fft);
             framesTime = _engine.TensorMultiply(time, _engine.TensorBroadcastTo(_windowTensor, time.Shape.ToArray()));
         }
         else
