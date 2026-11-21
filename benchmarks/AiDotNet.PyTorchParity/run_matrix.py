@@ -2,6 +2,9 @@
 
 Every model, device and launch runs AiDotNet and each applicable PyTorch configuration in its own fresh process, in an
 order that rotates between launches. AiDotNet is compared against the fastest PyTorch configuration for each row.
+
+--scale DATA_ROOT runs the large-data comparison instead: whole epochs over the real and synthetic datasets that
+scale/prepare_data.py wrote to DATA_ROOT, with the test split scored after every epoch (scale/scale_matrix.py).
 """
 import argparse
 import csv
@@ -22,6 +25,8 @@ from importlib import metadata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "scale"))
+import scale_matrix  # noqa: E402
 sys.path.insert(0, str(HERE / "pytorch"))
 from compare import _index
 
@@ -248,9 +253,8 @@ class build_lock:
         self.file.close()
 
 
-def measurements(path, side, model, device, epochs, batches):
-    """Validate one report against the protocol and return (parameter count, [train ms/update, inference ms...])."""
-    obj = json.loads(path.read_text(encoding="utf-8-sig"))
+def check_protocol(obj, side, model, device):
+    """Check that a report ran the requested framework, device, threads and PyTorch configuration."""
     ai = side == "aidotnet"
     rows = obj["Results" if ai else "results"]
     if len(rows) != 1 or obj["Framework" if ai else "framework"] != ("AiDotNet" if ai else "PyTorch"):
@@ -275,6 +279,14 @@ def measurements(path, side, model, device, epochs, batches):
         graphs = (obj["protocol"].get("compiled_graphs") or {}).get(model)
         if graphs == 0 and (model not in RNN_MODELS or expected["compile_rnn"]):
             raise ValueError("torch.compile compiled no graph for this model")
+
+
+def measurements(path, side, model, device, epochs, batches):
+    """Validate one report against the protocol and return (parameter count, [train ms/update, inference ms...])."""
+    obj = json.loads(path.read_text(encoding="utf-8-sig"))
+    ai = side == "aidotnet"
+    rows = obj["Results" if ai else "results"]
+    check_protocol(obj, side, model, device)
     row = _index(obj)[model]
     if row.device != device or row.training is None or set(row.inference) != set(BATCHES):
         raise ValueError("Incomplete or mismatched benchmark row")
@@ -370,9 +382,51 @@ def markdown(summary):
 COLUMNS = ("model", "device", "launch", "framework", "configuration", "operation", "batch", "parameters", "ms", "flags")
 
 
+def scale_sides(info, device, model):
+    """AiDotNet plus the PyTorch configurations a large-data row runs: the fastest one from --scale-torch-from, or all."""
+    chosen = (info["scale"].get("torch") or {}).get(device, {}).get(model)
+    return ["aidotnet", chosen] if chosen else sides_for(info, device, model)
+
+
+def scale_jobs(info):
+    """(launch, device, model, dataset, epochs, sides) for every large-data process, sides in launch order."""
+    for launch in range(1, info["launches"] + 1):
+        for device in info["devices"]:
+            for model in info["models"]:
+                for dataset, epochs in info["scale"]["plan"][device][model]:
+                    sides = scale_sides(info, device, model)
+                    shift = (launch - 1) % len(sides)
+                    yield launch, device, model, dataset, epochs, sides[shift:] + sides[:shift]
+
+
+def collect_scale(dest, info):
+    rows, problems = [], []
+    for launch, device, model, dataset, epochs, sides in scale_jobs(info):
+        for side in sides:
+            tag = dest / scale_matrix.tag_name(side, launch, device, model, dataset)
+            try:
+                receipt = json.loads(tag.with_suffix(".receipt.json").read_text(encoding="utf-8"))
+                if receipt["exitCode"] != 0:
+                    raise RuntimeError(f"exited {receipt['exitCode']}")
+                report = tag.with_suffix(".json")
+                check_protocol(json.loads(report.read_text(encoding="utf-8-sig")), side, model, device)
+                result = scale_matrix.validate(report, side, model, device, info["scale"]["datasets"][dataset], epochs)
+            except (KeyError, ValueError, OSError, RuntimeError, TypeError) as error:
+                problems.append(f"{tag.name}: {error}")
+                continue
+            for epoch in result["epochs"]:
+                rows.append(dict(model=model, device=device, dataset=dataset, launch=launch,
+                                 framework="AiDotNet" if side == "aidotnet" else "PyTorch", configuration=side, **epoch,
+                                 parameters=result["parameters"], rss_mb_peak=result["rss_mb_peak"],
+                                 gpu_mem_mb_peak=result["gpu_mem_mb_peak"], flags=";".join(receipt.get("flags", []))))
+    return rows, problems
+
+
 def collect(dest):
     """Read and validate every report a run directory should contain. Return (measurement rows, problems)."""
     info = json.loads((dest / "protocol.json").read_text(encoding="utf-8"))
+    if info.get("scale"):
+        return collect_scale(dest, info)
     common = info["common"]
     epochs, batches = int(common[common.index("--epochs") + 1]), int(common[common.index("--train-batches") + 1])
     rows, problems = [], []
@@ -399,6 +453,9 @@ def collect(dest):
 
 def write_outputs(dest, rows, launches):
     """measurements.csv (every launch), summary.csv (medians, ranges, flags) and summary.md (the README table)."""
+    if rows and "dataset" in rows[0]:
+        scale_matrix.write_outputs(dest, rows)
+        return
     with (dest / "measurements.csv").open("w", newline="", encoding="utf-8") as out:
         table = csv.writer(out, lineterminator="\n")
         table.writerow([c if c != "ms" else "median_ms" for c in COLUMNS])
@@ -483,6 +540,11 @@ def main():
     parser.add_argument("--allow-battery", action="store_true", help="Run even when the machine is on battery power")
     parser.add_argument("--summarize", type=Path, metavar="RUN_DIR",
                         help="Only rebuild RUN_DIR's CSVs and table from its raw reports, into RUN_DIR/regenerated")
+    parser.add_argument("--scale", type=Path, metavar="DATA_ROOT",
+                        help="Large-data comparison over the datasets scale/prepare_data.py wrote to DATA_ROOT")
+    parser.add_argument("--scale-torch-from", type=Path, metavar="SUMMARY_CSV",
+                        help="With --scale, run only the fastest PyTorch configuration per training row of this run_matrix "
+                             "summary.csv (default: every configuration)")
     parser.add_argument("--resume", type=Path, metavar="RUN_DIR",
                         help="Continue an interrupted run with its recorded settings and binaries; completed processes are kept")
     args = parser.parse_args()
@@ -517,11 +579,30 @@ def main():
         epochs, batches, iters, warm = (2, 2, 3, 1) if args.smoke else (3, 20, 100, 10)
         common = ["--epochs", str(epochs), "--train-batches", str(batches), "--batch-size", "64", "--inference-batches", "1,8,16",
                   "--inference-iterations", str(iters), "--warmup-iterations", str(warm), "--warmup-min-ms", "1000", "--seed", "1234"]
+        scale = None
+        if args.scale:
+            unsupported = [m for m in args.models if m not in scale_matrix.DATASETS]
+            if unsupported:
+                parser.error(f"No large-data datasets for: {', '.join(unsupported)}")
+            plan = scale_matrix.default_plan(args.devices, args.models)
+            names = sorted({dataset for device in plan.values() for jobs in device.values() for dataset, _ in jobs})
+            missing = [n for n in names if not (args.scale / n / "meta.json").is_file()]
+            if missing:
+                parser.error(f"Run scale/prepare_data.py first; missing under {args.scale}: {', '.join(missing)}")
+            torch_choice = None
+            if args.scale_torch_from:
+                found = scale_matrix.fastest_configurations(args.scale_torch_from)
+                torch_choice = {d: {m: found[d][m] for m in args.models} for d in args.devices}
+            scale = dict(dataRoot=str(args.scale.resolve()), plan=plan, torch=torch_choice,
+                         torchFrom=str(args.scale_torch_from) if args.scale_torch_from else None,
+                         datasets={n: json.loads((args.scale / n / "meta.json").read_text(encoding="utf-8")) for n in names})
+            common = ["--batch-size", "64", "--seed", "1234"]
         import psutil
         args.output.mkdir(exist_ok=True, parents=True)
         dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
         print(f"Results: {dest}", flush=True)
         info = dict(started=now(), models=args.models, devices=args.devices, launches=launches, smoke=args.smoke, common=common,
+                    scale=scale,
                     threads=THREADS, referenceModels=[m for m in REFERENCE if m in args.models],
                     torchConfigurations={d: arms[d] for d in args.devices},
                     configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
@@ -579,7 +660,20 @@ def main():
             lines = stem.with_suffix(".log").read_text(encoding="utf-8", errors="replace").splitlines()
             if not all(any(line.startswith(f"[step1] {m}: PASS") for line in lines) for m in refs):
                 raise RuntimeError(f"Missing first-update verdict. See {stem.with_suffix('.log')}")
-    for launch in range(1, info["launches"] + 1):
+    for launch, device, model, dataset, epochs, sides in (scale_jobs(info) if info.get("scale") else ()):
+        root = Path(info["scale"]["dataRoot"])
+        for side in sides:
+            tag = dest / scale_matrix.tag_name(side, launch, device, model, dataset)
+            if completed(tag):
+                continue
+            cmd = (["dotnet", str(dll)] if side == "aidotnet" else
+                   [sys.executable, str(HERE / "pytorch/benchmark.py"), *ARMS[side]["flags"], "--threads", str(THREADS)])
+            try:
+                run([*cmd, "--models", model, "--device", device, *common, "--epochs", str(epochs), "--data", str(root / dataset),
+                     "--output", str(tag.with_suffix(".json"))], tag, env, device, args.allow_battery)
+            except RuntimeError as error:
+                print(error, flush=True)
+    for launch in range(1, 0 if info.get("scale") else info["launches"] + 1):
         for device in info["devices"]:
             for model in info["models"]:
                 sides = sides_for(info, device, model)
@@ -602,7 +696,7 @@ def main():
     save(dest / "completion.json", dict(finished=now(), failures=problems))
     if problems:
         sys.exit("\n".join(problems))
-    print(dest / "summary.md")
+    print(dest / ("scale-summary.md" if info.get("scale") else "summary.md"))
 
 
 if __name__ == "__main__":
