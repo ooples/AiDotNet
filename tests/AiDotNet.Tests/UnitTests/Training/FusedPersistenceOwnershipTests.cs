@@ -32,7 +32,11 @@ public sealed class FusedPersistenceOwnershipTests
     private static void RequireGpu(DirectGpuTensorEngine device)
     {
         if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+        {
             Assert.True(device.IsGpuAvailable, "Native GPU required; this test must execute.");
+            // The required lane must not silently skip: tracking has to be on from process start.
+            Assert.True(GpuMemoryTracker.Enabled, "AIDOTNET_REQUIRE_GPU_TESTS=1 requires AIDOTNET_GPU_MEMTRACK=1 at test process startup.");
+        }
         Skip.IfNot(device.IsGpuAvailable, "No native GPU is available.");
         // Ownership is observed through the native allocation tracker, which is fixed at process start.
         Skip.IfNot(GpuMemoryTracker.Enabled, "Set AIDOTNET_GPU_MEMTRACK=1 before test process startup to run the native-ownership case.");
