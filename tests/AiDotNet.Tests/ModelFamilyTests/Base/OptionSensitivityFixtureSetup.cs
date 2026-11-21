@@ -53,9 +53,6 @@ internal static class OptionSensitivityFixtureSetup
             // TryTrainOption trains this option on a two-second recording, not the fixture input, so its control must too.
             : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "lid-two-second-recording"
             : network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> && option is "PostNetLearningRate" or "PostNetTemperature" ? "portaspeech-postnet"
-            // Trained on its own two-second recording (TryTrainOption), so its control must not be shared with the
-            // options the fixture input trains: whichever ran first would set the other's control.
-            : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "wav2vec2-lid-long-recording"
             // Its observation appends a generated-audio fingerprint the other AudioGen probes do not include. Controls
             // are cached by fixture and group, so in a shared group whichever probe ran first would set the control
             // and the fingerprint alone would read as sensitivity.
