@@ -74,14 +74,19 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
+    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
+    // seeds the segment crops). A run that sets only SamplingSeed is unchanged; the multiplier keeps (Seed, SamplingSeed)
+    // pairs from colliding on neighbouring values.
+    private int InitializationSeed => unchecked(PaperOptions.SamplingSeed + (PaperOptions.Seed ?? 0) * 7919);
+
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
-            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 11));
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 11));
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
             singlePrecisionBasis: true);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0,
@@ -94,7 +99,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     {
         var o = PaperOptions;
         _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 13));
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 13));
         return _discriminators.Layers;
     }
 
