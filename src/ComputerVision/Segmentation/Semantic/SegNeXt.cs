@@ -204,7 +204,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithCustomLoss(input, _ =>
+            TrainWithCustomObjective(input, input, (_, _) =>
                 PixelCrossEntropy(SpatialResampling.Resize(Engine, network.Forward(input, training: true, _trainingRandom, Bases(input.Shape[0])), height, width), target),
                 Optimizer);
         }

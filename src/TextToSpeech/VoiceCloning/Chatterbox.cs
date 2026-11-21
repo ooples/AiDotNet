@@ -357,7 +357,10 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         if (CurrentStage != CosyVoiceTrainingStage.LanguageModel)
             return base.TrainOnSample(sample);
         if (_t3Optimizer is null) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildT3Objective(sample), _t3Optimizer);
+        // The speech tokenizer and the voice encoder are fixed, so the token ids and the speaker condition are this
+        // step's data, prepared before it: the traced objective is T3's loss alone.
+        var (text, speech, condition) = PrepareT3Inputs(sample);
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => T3.Loss(text, speech, condition), _t3Optimizer);
     }
 
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
@@ -379,6 +382,12 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     private Tensor<T> BuildT3Objective(TtsTrainingSample<T> sample)
     {
+        var (text, speech, condition) = PrepareT3Inputs(sample);
+        return T3.Loss(text, speech, condition);
+    }
+
+    private (int[] Text, int[] Speech, ChatterboxT3Condition<T> Condition) PrepareT3Inputs(TtsTrainingSample<T> sample)
+    {
         if (!HasPaperLayers)
             throw new NotSupportedException("The T3 objective needs the release's native layers.");
         var text = IdsOf(sample.Tokens);
@@ -398,9 +407,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         var reference = sample.SpeakerReference ?? sample.Audio
             ?? throw new ArgumentException("T3 training needs a speaker recording in SpeakerReference or Audio.", nameof(sample));
         var condition = PrepareT3VoiceCondition(reference);
-        return T3.Loss(text, speech,
-            new ChatterboxT3Condition<T>(condition.SpeakerEmbedding, condition.PromptSpeechTokens,
-                _options.Exaggeration));
+        return (text, speech, new ChatterboxT3Condition<T>(condition.SpeakerEmbedding, condition.PromptSpeechTokens, _options.Exaggeration));
     }
 
     public override void SetTrainingMode(bool isTraining)

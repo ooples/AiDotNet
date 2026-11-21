@@ -141,7 +141,19 @@ internal static class TransducerLoss
         IReadOnlyList<int> labels, int blank)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        if (logProbs.Rank != 3) throw new ArgumentException("The lattice must be [frames, labels + 1, tokens + durations].", nameof(logProbs));
         int frames = logProbs.Shape[0], width = logProbs.Shape[1], channels = logProbs.Shape[2], length = labels.Count;
+        if (frames <= 0) throw new ArgumentException("The lattice has no frames.", nameof(logProbs));
+        if (vocabulary <= 0) throw new ArgumentOutOfRangeException(nameof(vocabulary), vocabulary, "The vocabulary must be positive.");
+        if (durations.Count == 0) throw new ArgumentException("At least one duration is required.", nameof(durations));
+        foreach (int duration in durations)
+            if (duration < 0 || duration > frames)
+                throw new ArgumentException($"Duration {duration} is outside [0, {frames}].", nameof(durations));
+        if (blank < 0 || blank >= vocabulary)
+            throw new ArgumentOutOfRangeException(nameof(blank), blank, $"The blank must be a token in [0, {vocabulary}).");
+        foreach (int label in labels)
+            if (label < 0 || label >= vocabulary || label == blank)
+                throw new ArgumentException($"Label {label} is outside the vocabulary or is the blank.", nameof(labels));
         if (channels != vocabulary + durations.Count) throw new ArgumentException("The last axis must hold the tokens then the durations.", nameof(logProbs));
         if (width != length + 1) throw new ArgumentException($"The lattice has {width} label positions for {length} labels.", nameof(logProbs));
         var durationsArr = durations as int[] ?? durations.ToArray();

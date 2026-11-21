@@ -1,5 +1,9 @@
 # AiDotNet Launch Plan - Complete Setup Instructions
 
+> **Hosting moved off Vercel (2026-11).** The website is served from the AiDotNet VPS behind
+> Cloudflare; DNS is managed in Cloudflare. Ignore the Vercel DNS, domain and environment-variable
+> steps below and follow [`deploy/website/README.md`](../deploy/website/README.md) instead.
+
 ## Current State (Updated)
 
 | Component | Status | Notes |
@@ -7,7 +11,7 @@
 | AiDotNet (NuGet) | v0.0.5-preview | 7,300+ classes, 139 modules. Needs 1.0.0 release |
 | AiDotNet.Tensors (NuGet) | v0.8.0 | Separate repo. Custom GPU kernels via P/Invoke (CUDA, OpenCL, HIP, Metal, Vulkan, WebGPU) |
 | AiDotNet.Serving | Code only, NOT deployed | 193 files, 11 controllers, Stripe/auth/licensing built in |
-| Website | **DEPLOYED to Vercel** | **67 pages** built & deployed. Project: `franklins-projects-02a0b5a0/website` |
+| Website | **DEPLOYED to the VPS behind Cloudflare** | See `deploy/website/README.md` |
 | Auth Pages | **BUILT & DEPLOYED** | Login, signup, callback, dashboard, API keys, usage, billing, settings |
 | Supabase Client | **INSTALLED** | `@supabase/supabase-js` added, `src/lib/supabase.ts` created |
 | Supabase DB | **NOT SET UP** | Need correct SUPABASE_ACCESS_TOKEN (current one is wrong/too short) |

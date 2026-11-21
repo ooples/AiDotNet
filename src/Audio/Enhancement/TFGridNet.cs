@@ -291,15 +291,34 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        double rms = ComputeRms(input);
-        if (rms <= 1e-12)
-            return base.ForwardForTraining(input);
+        if (input.Length == 0) return base.ForwardForTraining(input);
+        // The same RMS as ComputeRms, as a detached [1] tensor on the engine, so a compiled training step traces it. A
+        // silent input scales by 1, which is the inference path's unscaled walk.
+        int n = input.Length;
+        var flat = Engine.Reshape(input.Contiguous(), new[] { n });
+        // Divide by the peak before squaring. A sum of squares formed in T overflows a narrow element type (4096 Half
+        // values of 8 need 262144, above Half.MaxValue), and no wider accumulation inside the reduction can repair a
+        // result tensor of T. With |x| / peak <= 1 every square and their mean lie in [0, 1], so the only value formed
+        // at full scale is the final RMS = peak * sqrt(mean), which is no larger than the peak itself.
+        var peak = Engine.Reshape(Engine.ReduceMax(Engine.TensorAbs(flat), new[] { 0 }, false), new[] { 1 });
+        var nonzero = Engine.TensorGreaterThan(peak, NumOps.Zero);
+        // An all-zero input divides by 1; its RMS is then 0 and the scale below falls back to 1.
+        var divisor = Engine.TensorAdd(peak,
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(nonzero, NumOps.FromDouble(-1.0)), NumOps.One));
+        var unit = Engine.TensorDivide(flat, Wide(divisor, flat));
+        var rms = Engine.TensorMultiply(divisor, Engine.TensorSqrt(
+            Engine.Reshape(Engine.ReduceMean(Engine.TensorSquare(unit), new[] { 0 }, false), new[] { 1 })));
+        var audible = Engine.TensorGreaterThan(rms, NumOps.FromDouble(1e-12));
+        var scale = Engine.StopGradient(Engine.TensorAdd(Engine.TensorMultiply(audible, rms),
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(audible, NumOps.FromDouble(-1.0)), NumOps.One)));
 
-        T scale = NumOps.FromDouble(rms);
-        var normalized = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(1.0 / rms));
+        var normalized = Engine.TensorDivide(input, Wide(scale, input));
         var output = base.ForwardForTraining(normalized);
-        return Engine.TensorMultiplyScalar(output, scale);
+        return Engine.TensorMultiply(output, Wide(scale, output));
     }
+
+    private Tensor<T> Wide(Tensor<T> statistic, Tensor<T> like)
+        => Engine.TensorBroadcastTo(Engine.Reshape(statistic, Enumerable.Repeat(1, like.Rank).ToArray()), like._shape);
 
     /// <summary>
     /// Root-mean-square magnitude of the input, used by both the inference (<see cref="PredictCore"/>)

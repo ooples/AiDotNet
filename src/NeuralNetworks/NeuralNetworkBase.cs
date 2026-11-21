@@ -9739,11 +9739,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
             var fullParams = paramsList.ToList();
+            var contextInput = input;
             var context = new TapeStepContext<T>(
                 fullParams, avgGrads, avgLoss,
                 input, target,
-                (inp, tgt) => ForwardForTraining(inp),
-                (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred),
+                // The composite objective re-runs the heads on the step's INPUT; passing the prediction ran the model
+                // on its own output.
+                (inp, tgt) => ForwardForTraining(contextInput = inp),
+                (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), contextInput),
                 parameterBuffer: null);
             // Past the point of no return: weights are about to be written in place (#1624 OOM-retry gate).
             MarkTrainMutationStarted();
@@ -12587,8 +12590,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Sequential tests start from a clean registry via ResetWeightStreamingForTests (#1722).
         if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
         {
-            _streamingAutoDetectFinalized = true;
-            return;
+            WeightRegistry.PruneDeadEntries();
+            if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                WeightRegistry.PruneDeadEntries();
+            }
+            if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+            {
+                _streamingAutoDetectFinalized = true;
+                return;
+            }
         }
 
         // Above threshold: enable streaming with conservative defaults.
@@ -12661,8 +12675,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
             {
-                _streamingAutoDetectFinalized = true;
-                return;
+                WeightRegistry.PruneDeadEntries();
+                if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+                {
+                    _streamingAutoDetectFinalized = true;
+                    return;
+                }
             }
             ConfigureWeightLifetime(options);
             // Declare the default (inference) execution mode so the zero-copy mmap
@@ -13144,7 +13162,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return 0L;
 
         int curWidth;
-        if (Architecture is { InputType: Enums.InputType.ThreeDimensional, InputDepth: > 0 })
+        if (Architecture is { InputType: Enums.InputType.ThreeDimensional or Enums.InputType.FourDimensional, InputDepth: > 0 })
         {
             curWidth = Architecture.InputDepth;
         }
@@ -13152,7 +13170,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             curWidth = Architecture.InputWidth;
         }
-        else if (Architecture is { InputSize: > 0 })
+        else if (Architecture is { InputType: Enums.InputType.OneDimensional, InputSize: > 0 })
         {
             curWidth = Architecture.InputSize;
         }
@@ -15020,6 +15038,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
 
+        // The model's clip is one global norm over the step's whole trained set, eager and fused alike (torch's
+        // clip_grad_norm_ over the joint parameter list): a step that also trains another network's parameters (a
+        // CycleGAN generator step trains both generators) clips them together rather than only the hosting network's.
+        // It is absent when the model's layers own none of the trained parameters (VoxtLM trains model-owned
+        // language-model layers).
+        var modelClipScope = MaxGradNormValue > 0.0
+            ? CollectLayerOwnedTrainableTensorsForClipping(parameters)
+            : (IReadOnlyList<Tensor<T>>)Array.Empty<Tensor<T>>();
+        int modelClipped = modelClipScope.Count;
+
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
         // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
         // time). Selection keeps the trained set exactly the one collected above.
@@ -15033,7 +15061,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Optimizer = resolvedOptimizer,
             ExtraParameters = parameters,
             Selection = parameters,
-            ModelGradientClip = clipCustomObjective ? MaxGradNormValue : 0.0,
+            ModelGradientClip = !clipCustomObjective || modelClipped == 0 ? 0.0 : MaxGradNormValue,
+            // Null: the clip covers every gradient of the step, as the plan's one global norm does.
+            ModelGradientClipScope = null,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
@@ -15046,6 +15076,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Only their ordinary independent Train path must defer to the parent graph.
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
+                : TrainingForwardSkipsLayersPerStep ? PerStepLayerSkipReason
                 : layerGraphBreak,
             // Only an explicit layer declaration may bridge a committed closure step to the plan's optimizer.
             ClosureGraphBreakPolicy = declaredClosureBreak && session.IsCommitted
@@ -15744,7 +15775,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // `tgt`. Moving alignment into the loss callback is what the
             // reviewer suggested and it also keeps the gradient chain intact
             // (we reshape the leaf target, never the tape-tracked prediction).
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => ForwardForTraining(inp);
+            // The composite objective re-runs the heads on the forward's INPUT, not on its prediction.
+            var forwardInput = input;
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => ForwardForTraining(forwardInput = inp);
 
             Tensor<T> ComputeLossAligned(Tensor<T> pred, Tensor<T> tgt)
             {
@@ -15756,7 +15789,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     tgt = Engine.Reshape(tgt, pred._shape);
                 }
-                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), forwardInput);
             }
 
             // ---------------- Mixed-precision (#1354) — unscale gradients + overflow check ----------------
@@ -16523,6 +16556,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual bool SupportsFusedCompiledTraining => true;
 
     /// <summary>
+    /// Whether the training forward leaves whole layers out of a step by a per-step draw (LayerDrop).
+    /// </summary>
+    /// <remarks>
+    /// A layer that is skipped is not part of that step's graph, so its parameters receive no gradient and the
+    /// optimizer does not step them: no momentum update and no weight decay, as in the reference implementations. A
+    /// compiled plan has one fixed graph. It can only express the skip as a blend with a zero multiplier, which hands
+    /// the optimizer a zero gradient, and AdamW then still moves the layer by its momentum and decay. Such a model
+    /// therefore trains on the eager tape, for its ordinary step and for its custom objectives alike.
+    /// </remarks>
+    private protected virtual bool TrainingForwardSkipsLayersPerStep => false;
+
+    private const string PerStepLayerSkipReason =
+        "the training forward skips layers per step (LayerDrop); a skipped layer must not be stepped by the optimizer";
+
+    /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
     /// Unlike <see cref="IsFusedTrainingDisabled"/>, this architectural graph-break
@@ -16776,6 +16824,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (TrainingForwardSkipsLayersPerStep)
+            return EmitFusedMissAndFallback(PerStepLayerSkipReason);
         // The primary loss and every declared composite term (ComposeDeclaredObjective runs each term's tape loss).
         if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> { ReadsTargetOnHost: true })
             return EmitFusedMissAndFallback(
@@ -16813,7 +16863,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"disabled by {GetType().Name}'s configuration (FusedTrainingDisabledByConfiguration), not by a fallback");
         }
         if (FusedSession.IsDisabled)
-            return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
+        {
+            // Keep the cause the disabling step recorded, as the session's own gate does: the bare message hid it from the
+            // audit and the model's diagnostics.
+            const string sticky = "fused path sticky-disabled from prior fallback";
+            string? prior = FusedSession.LastMissReason;
+            return EmitFusedMissAndFallback(prior is null || prior.StartsWith("fused path sticky-disabled", StringComparison.Ordinal)
+                ? prior ?? sticky
+                : sticky + ": " + prior);
+        }
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return EmitFusedMissAndFallback("TensorCodecOptions.EnableCompilation = false");
         // The compiled training cache currently owns persistent storage and shape keys only for
@@ -16910,19 +16968,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
         // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
         var fusedReadoutHead = FusedReadoutForTraining();
+        var fusedForwardInput = input;
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
             Input = input,
             Target = expected,
-            Forward = ReleasingEagerIntermediates(fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout),
+            // The composite objective re-runs the heads on the traced INPUT; passing the prediction ran the model on
+            // its own output (ABCNet's 17 detection channels into its 3-channel trunk).
+            Forward = ReleasingEagerIntermediates(fusedReadoutHead is null
+                ? (Func<Tensor<T>, Tensor<T>>)(x => ForwardForTraining(fusedForwardInput = x))
+                : x => ForwardForTrainingToReadout(fusedForwardInput = x)),
             ComputeLoss = fusedReadoutHead is null
                 ? (pred, tgt) =>
                 {
                     tgt = AlignTargetToOutputShape(pred, tgt);
-                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), fusedForwardInput);
                 }
-                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, h),
+                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, fusedForwardInput),
             Optimizer = resolvedOptimizer,
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,
@@ -17392,6 +17455,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Already inside a step of this network (a custom loss run from within its own training step): the eager path,
         // which takes no step lock.
         if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
+        // A closure step ignores the request's graph-break reason (its guard covers per-step host state), but no guard
+        // makes a plan leave a skipped layer's parameters unstepped.
+        if (TrainingForwardSkipsLayersPerStep) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
         // A model that opts out of fused compiled training is not offered to the closure session either. The session

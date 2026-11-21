@@ -154,10 +154,9 @@ jobs:
           : "${PLAYWRIGHT_ADMIN_EMAIL:?Missing PLAYWRIGHT_ADMIN_EMAIL secret}"
           : "${PLAYWRIGHT_ADMIN_PASSWORD:?Missing PLAYWRIGHT_ADMIN_PASSWORD secret}"
 
-      - name: Wait for Vercel propagation
-        # Vercel's alias swap is nearly instant but the CDN edge can serve
-        # a stale version for a few seconds after deploy. A short sleep is
-        # cheaper than flaky first-run failures on the live smoke pass.
+      - name: Wait for the Cloudflare cache purge to settle
+        # The deploy purges Cloudflare's cache, but edge locations can take a few seconds to drop
+        # their copies. A short sleep is cheaper than flaky first-run failures on the live smoke pass.
         run: sleep 15
 
       - name: Install Supabase CLI
@@ -219,7 +218,7 @@ jobs:
           EXPECTED_PREVIEW_COMMIT: ${{ inputs.expected_preview_commit || github.sha }}
           EXPECTED_PREVIEW_RUN: ${{ inputs.expected_preview_run }}
           PLAYWRIGHT_BASE_URL: ${{ inputs.preview && 'https://test.aidotnet.dev' || 'https://www.aidotnet.dev' }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PREVIEW_BYPASS_SECRET: ${{ secrets.PREVIEW_BYPASS_SECRET }}
           PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
           PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
@@ -240,7 +239,7 @@ jobs:
           REPORT_DIRECTORY: ${{ inputs.preview && 'playwright-report/deployed' || 'playwright-report' }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PREVIEW_BYPASS_SECRET: ${{ secrets.PREVIEW_BYPASS_SECRET }}
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
           PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
           AIDOTNET_AUTH_RUN_DIR: ${{ runner.temp }}/aidotnet-auth-${{ github.run_id }}-${{ matrix.part }}

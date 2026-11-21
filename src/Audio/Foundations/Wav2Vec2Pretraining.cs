@@ -418,6 +418,27 @@ internal sealed class Wav2Vec2Pretraining<T>
         return negatives;
     }
 
+    // Distractor indices are flat frame indices over the batch; at a masked step each must name a frame of its own
+    // utterance, or the loss would read another utterance's (or no) frame. Unmasked steps carry no distractors.
+    private static void ValidateNegatives(int[,,] negatives, bool[,] mask, int batch, int length)
+    {
+        if (negatives.GetLength(0) != batch || negatives.GetLength(1) != length)
+            throw new ArgumentException(
+                $"The negatives are [{negatives.GetLength(0)}, {negatives.GetLength(1)}, {negatives.GetLength(2)}] but the forward has "
+                + $"{batch} utterances of {length} frames.", nameof(negatives));
+        int k = negatives.GetLength(2);
+        for (int b = 0; b < batch; b++)
+            for (int t = 0; t < length; t++)
+                for (int j = 0; mask[b, t] && j < k; j++)
+                {
+                    int index = negatives[b, t, j];
+                    if (index < b * length || index >= (b + 1) * length)
+                        throw new ArgumentException(
+                            $"Distractor index {index} at [{b}, {t}, {j}] is outside utterance {b}'s frames [{b * length}, {(b + 1) * length}).",
+                            nameof(negatives));
+                }
+    }
+
     /// <summary>The pre-training loss of a forward with its applied mask and distractor indices.</summary>
     /// <param name="output">The forward, with its applied mask.</param>
     /// <param name="negatives">Each step's distractor indices.</param>
@@ -456,6 +477,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         {
             var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
             var requiredNegatives = negatives ?? throw new ArgumentNullException(nameof(negatives));
+            ValidateNegatives(requiredNegatives, mask, batch, length);
             indices = new int[batch * length * k];
             flatMask = new bool[batch * length];
             for (int b = 0; b < batch; b++)
@@ -529,6 +551,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         {
             var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
             var requiredNegatives = negatives ?? throw new ArgumentNullException(nameof(negatives));
+            ValidateNegatives(requiredNegatives, mask, batch, length);
             var tv = targets.Cast<double>().ToArray();
             var excludeArr = new double[batch * length * (k + 1)];
             for (int b = 0; b < batch; b++)

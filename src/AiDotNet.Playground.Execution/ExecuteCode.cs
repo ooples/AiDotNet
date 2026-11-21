@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 
 // Force load AiDotNet assemblies by referencing them
@@ -96,11 +97,14 @@ public class ExecuteCode
 
         try
         {
-            // Wrap user code in a class structure
-            var wrappedCode = WrapUserCode(code);
-
-            // Create syntax tree
-            var syntaxTree = CSharpSyntaxTree.ParseText(wrappedCode);
+            // A complete program (its own types and a static Main) is compiled as written and run from its entry
+            // point; wrapping it would put its class inside a method, which cannot compile. A statement-only
+            // snippet is wrapped in a class that captures its console output.
+            var userTree = CSharpSyntaxTree.ParseText(code);
+            bool completeProgram = IsCompleteProgram(userTree);
+            var syntaxTrees = completeProgram
+                ? new[] { userTree, CSharpSyntaxTree.ParseText(DefaultGlobalUsings) }
+                : new[] { CSharpSyntaxTree.ParseText(WrapUserCode(code)) };
 
             // Get references
             var references = GetMetadataReferences();
@@ -108,9 +112,9 @@ public class ExecuteCode
             // Create compilation
             var compilation = CSharpCompilation.Create(
                 "UserCodeAssembly",
-                new[] { syntaxTree },
+                syntaxTrees,
                 references,
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                new CSharpCompilationOptions(completeProgram ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary)
                     .WithOptimizationLevel(OptimizationLevel.Release)
                     .WithAllowUnsafe(false));
 
@@ -137,7 +141,7 @@ public class ExecuteCode
             ms.Seek(0, SeekOrigin.Begin);
 
             // Load and execute the assembly
-            var output = await ExecuteAssemblyAsync(ms);
+            var output = await ExecuteAssemblyAsync(ms, completeProgram);
 
             stopwatch.Stop();
 
@@ -158,6 +162,46 @@ public class ExecuteCode
                 ExecutionTime = stopwatch.ElapsedMilliseconds
             };
         }
+    }
+
+    // The namespaces a snippet gets from its wrapper, for a complete program that relies on the same defaults.
+    private const string DefaultGlobalUsings =
+        "global using System;\n"
+        + "global using System.Collections.Generic;\n"
+        + "global using System.Linq;\n"
+        + "global using System.Text;\n"
+        + "global using System.Threading.Tasks;\n"
+        + "global using System.IO;\n";
+
+    /// <summary>
+    /// Whether the code is a program with its own entry point: it declares a static <c>Main</c> and has no
+    /// top-level statements (which would be the snippet form).
+    /// </summary>
+    private static bool IsCompleteProgram(SyntaxTree tree)
+    {
+        var root = tree.GetRoot();
+        if (root.ChildNodes().OfType<GlobalStatementSyntax>().Any()) return false;
+        return root.DescendantNodes().OfType<MethodDeclarationSyntax>()
+            .Any(method => method.Identifier.ValueText == "Main"
+                && method.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.StaticKeyword)));
+    }
+
+    /// <summary>Runs a program's entry point with the console captured, awaiting an asynchronous <c>Main</c>.</summary>
+    private static async Task<string> RunEntryPointAsync(MethodInfo entryPoint)
+    {
+        var output = new StringWriter();
+        var originalOut = Console.Out;
+        Console.SetOut(output);
+        try
+        {
+            object?[]? arguments = entryPoint.GetParameters().Length == 0 ? null : new object?[] { Array.Empty<string>() };
+            if (entryPoint.Invoke(null, arguments) is Task pending) await pending;
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+        return output.ToString();
     }
 
     private static string WrapUserCode(string code)
@@ -292,7 +336,7 @@ public class ExecuteCode
     /// Timed-out tasks will continue running in the background until they complete naturally.
     /// For true cancellation, process isolation would be required.
     /// </remarks>
-    private async Task<string> ExecuteAssemblyAsync(MemoryStream assemblyStream)
+    private async Task<string> ExecuteAssemblyAsync(MemoryStream assemblyStream, bool completeProgram)
     {
         // Create a cancellation token for timeout
         using var cts = new CancellationTokenSource(ExecutionTimeout);
@@ -306,24 +350,40 @@ public class ExecuteCode
             // Load assembly into the collectible context
             assemblyStream.Seek(0, SeekOrigin.Begin);
             var assembly = loadContext.LoadFromStream(assemblyStream);
-            var type = assembly.GetType("UserProgram");
-
-            if (type is null)
+            Task<string>? task;
+            if (completeProgram)
             {
-                return "Error: Could not find UserProgram class";
+                var entryPoint = assembly.EntryPoint;
+                if (entryPoint is null)
+                {
+                    return "Error: The program has no entry point";
+                }
+
+                // A synchronous Main (and the wrapper the compiler emits for an async one) blocks its caller, so it
+                // runs on the pool to keep the timeout below able to observe it.
+                task = Task.Run(() => RunEntryPointAsync(entryPoint));
             }
-
-            var method = type.GetMethod("ExecuteAsync", BindingFlags.Public | BindingFlags.Static);
-
-            if (method is null)
+            else
             {
-                return "Error: Could not find ExecuteAsync method";
-            }
+                var type = assembly.GetType("UserProgram");
 
-            // Execute with timeout
-            // Note: Task.WhenAny detects timeout but cannot cancel the user's task
-            // since user code doesn't receive a CancellationToken
-            var task = (Task<string>?)method.Invoke(null, null);
+                if (type is null)
+                {
+                    return "Error: Could not find UserProgram class";
+                }
+
+                var method = type.GetMethod("ExecuteAsync", BindingFlags.Public | BindingFlags.Static);
+
+                if (method is null)
+                {
+                    return "Error: Could not find ExecuteAsync method";
+                }
+
+                // Execute with timeout
+                // Note: Task.WhenAny detects timeout but cannot cancel the user's task
+                // since user code doesn't receive a CancellationToken
+                task = (Task<string>?)method.Invoke(null, null);
+            }
 
             if (task is null)
             {

@@ -31,7 +31,7 @@ const env = {
   PLAYWRIGHT_HTML_OUTPUT_DIR: process.env.PLAYWRIGHT_HTML_OUTPUT_DIR || fileURLToPath(new URL('../playwright-report/deployed',import.meta.url)),
   PUBLIC_SUPABASE_URL: settings.PUBLIC_SUPABASE_URL,
   PUBLIC_SUPABASE_ANON_KEY: settings.PUBLIC_SUPABASE_ANON_KEY,
-  VERCEL_AUTOMATION_BYPASS_SECRET: readFileSync(bypassFile, 'utf8').trim(),
+  PREVIEW_BYPASS_SECRET: readFileSync(bypassFile, 'utf8').trim(),
   PLAYWRIGHT_USER_EMAIL: customer.email,
   PLAYWRIGHT_USER_PASSWORD: customer.password,
   PLAYWRIGHT_ADMIN_EMAIL: admin.email,

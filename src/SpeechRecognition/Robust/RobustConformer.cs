@@ -72,6 +72,10 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private NoiseRobustWav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Stack.Network.Configuration.LayerDrop > 0;
     private Random _random;
     [AiDotNet.Attributes.Scratch]
     private bool _inContinualPretrain;

@@ -164,10 +164,18 @@ internal sealed class FlowTextEmbedding<T>
     /// <summary>Embeds <paramref name="tokens"/> stretched to <paramref name="frames"/>; all filler when dropped (CFG).</summary>
     public Tensor<T> Forward(Tensor<T> tokens, int frames, bool drop)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var ids = new Tensor<T>(new[] { frames });
-        if (!drop)
-            for (int i = 0; i < Math.Min(frames, tokens.Length); i++) ids[i] = ops.FromDouble(ops.ToDouble(tokens[i]) + 1);
+        // The ids on the engine (the first min(frames, tokens) shifted by one, filler zeros after), so a compiled
+        // training plan traces them instead of reading the step's tokens on the host.
+        int kept = Math.Min(frames, tokens.Length);
+        Tensor<T> ids;
+        if (drop || kept == 0) ids = new Tensor<T>(new[] { frames });
+        else
+        {
+            var flat = _engine.Reshape(tokens, new[] { tokens.Length });
+            var head = kept < tokens.Length ? _engine.TensorSlice(flat, new[] { 0 }, new[] { kept }) : flat;
+            var shifted = _engine.TensorAddScalar(head, MathHelper.GetNumericOperations<T>().One);
+            ids = kept < frames ? _engine.TensorConcatenate(new[] { shifted, new Tensor<T>(new[] { frames - kept }) }, 0) : shifted;
+        }
         var x = _embedding.Forward(ids);                                               // [frames, dim]
         if (_blocks.Count == 0) return x;
         x = _engine.TensorAdd(x, FlowMatchingTts.TextPositions<T>(frames, _dim));

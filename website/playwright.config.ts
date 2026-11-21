@@ -18,11 +18,22 @@ if (!baseURL) {
   throw new Error(
     'PLAYWRIGHT_BASE_URL is required. Set it to the environment you want ' +
     'to test against — e.g. http://localhost:4321 for a local dev server, ' +
-    'a Vercel preview URL for a PR, or https://www.aidotnet.dev for ' +
+    'https://test.aidotnet.dev for the preview, or https://www.aidotnet.dev for ' +
     'production smoke (only do this deliberately — the auth-backed specs ' +
     'mutate real accounts).',
   );
 }
+
+// Identify the test runner to Cloudflare. The per-IP rate limit on www.aidotnet.dev exempts requests
+// carrying this cookie; without it the post-deploy smoke tests (about 12,000 pages fetched right
+// after the deploy emptied the cache) are answered with HTTP 429. On test.aidotnet.dev the same
+// cookie is the preview gate. Only set when the secret is present, so local runs are unchanged.
+const bypassSecret = process.env.PREVIEW_BYPASS_SECRET;
+const bypassHost = new URL(baseURL).hostname;
+const runnerStorageState = bypassSecret && /^(www|test)\.aidotnet\.dev$/.test(bypassHost)
+  ? { cookies: [{ name: 'aidotnet_preview', value: bypassSecret, domain: bypassHost, path: '/', expires: -1,
+      httpOnly: true, secure: true, sameSite: 'Lax' as const }], origins: [] }
+  : undefined;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -62,6 +73,8 @@ export default defineConfig({
     // but at 3x the CI runtime. Stick to Chromium for the baseline and
     // add cross-browser explicitly for critical paths if needed.
     ...devices['Desktop Chrome'],
+    // The setup projects inherit this, so the user/admin storage-state files they save carry it too.
+    storageState: runnerStorageState,
   },
   projects: [
     // ---------- Anonymous projects (existing test suite) ----------

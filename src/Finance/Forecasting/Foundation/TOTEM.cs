@@ -656,26 +656,19 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         var distances = Engine.ReduceSum(diffSq, new[] { 3 }, keepDims: false);
         // distances shape: [numPositions, numCodebooks, codebookSize].
 
-        // Argmin over the codebookSize axis — non-differentiable by design; the
-        // straight-through estimator below routes gradients around the argmin.
-        var argmin = Engine.TensorArgMin(distances, axis: 2);
-        // argmin shape: [numPositions, numCodebooks] of Tensor<int>.
+        // Nearest entry as a one-hot over the codebookSize axis (the first of equal distances, as an argmin picks), so
+        // the selection is engine ops a compiled training step traces instead of indices it would have to read.
+        // Non-differentiable by design; the straight-through estimator below routes gradients around it.
+        var nearest = Engine.ReduceMax(Engine.TensorNegate(distances), new[] { 2 }, keepDims: true, out _);
+        var hits = Engine.TensorEquals(Engine.TensorNegate(distances),
+            Engine.TensorBroadcastTo(nearest, distances._shape));
+        var oneHot = Engine.StopGradient(Engine.TensorMultiply(hits, Engine.TensorEquals(Engine.TensorCumSum(hits, 2), NumOps.One)));
 
-        // Per-codebook gather: for each c, zqSlices[c][p, :] = codebooks[c, argmin[p, c], :].
-        // TensorIndexSelectDiff along the codebookSize axis of the per-c codebook slice.
-        var zqSlices = new Tensor<T>[_numCodebooks];
-        for (int c = 0; c < _numCodebooks; c++)
-        {
-            // Slice codebook_c = codebooks[c, :, :] via TensorSliceAxis(axis=0, index=c).
-            var codebookC = Engine.TensorSliceAxis(codebooks, axis: 0, index: c);
-            // argminC = argmin[:, c] shape [numPositions] — TensorSliceAxis on int tensor.
-            var argminC = Engine.TensorSliceAxis(argmin, axis: 1, index: c);
-            // Gather: source shape [codebookSize, codebookDim], indices [numPositions] along axis 0
-            //   → [numPositions, codebookDim].
-            zqSlices[c] = Engine.TensorIndexSelectDiff(codebookC, argminC, axis: 0);
-        }
-        // Stack per-codebook slices along the codebook axis to get [numPositions, numCodebooks, codebookDim].
-        var zq = Engine.TensorStack(zqSlices, axis: 1);
+        // zq[p, c, :] = codebooks[c, nearest(p, c), :] = sum_k oneHot[p, c, k] codebooks[c, k, :], as a batched product
+        // over the codebooks: [C, P, K] x [C, K, D] -> [C, P, D] -> [P, C, D].
+        var zq = Engine.TensorPermute(
+            Engine.TensorBatchMatMul(Engine.TensorPermute(oneHot, new[] { 1, 0, 2 }), codebooks),
+            new[] { 1, 0, 2 });
 
         // Straight-through: quantized = head + StopGradient(zq - head). Forward-values
         // equal codebook entries; backward gradient flows through head as if identity.

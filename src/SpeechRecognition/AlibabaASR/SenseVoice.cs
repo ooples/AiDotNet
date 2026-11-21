@@ -172,7 +172,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         // The paper network (see the class remarks). It used to be the generic Paraformer template.
         var o = _options;
         var configuration = new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim, o.NumAttentionHeads, o.FeedForwardDim,
-            o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize);
+            o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize, SampleRate: o.SampleRate);
         var layers = new List<LayerBase<T>>();
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? 42);
         _encoder = new SanmEncoder<T>(Engine, layers, configuration, random);
