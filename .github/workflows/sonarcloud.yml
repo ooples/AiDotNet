@@ -291,6 +291,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -360,6 +364,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -579,6 +587,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -1805,6 +1817,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -2763,7 +2779,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        if: steps.plan.outputs.mode == 'Full'
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted' && steps.plan.outputs.mode == 'Full'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -2845,6 +2864,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -3433,7 +3456,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: ${{ runner.environment == 'github-hosted' && fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -3671,6 +3697,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        # Hosted-runner cache archives store paths relative to the workspace (../../../../.nuget). On a
+        # self-hosted layout such as /opt/actions-runner/<name>/_work they resolve to a missing directory,
+        # tar fails on every file and the job dies. Self-hosted runners keep ~/.nuget on disk anyway.
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
