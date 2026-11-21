@@ -28,6 +28,16 @@ public sealed class FusedPersistenceOwnershipTests
         return e.TensorMultiplyScalar(e.ReduceSum(e.TensorMultiply(delta, delta), null), 1f / delta.Length);
     }
 
+    // A required-GPU lane (AIDOTNET_REQUIRE_GPU_TESTS=1) must have a device; hosted CPU lanes skip.
+    private static void RequireGpu(DirectGpuTensorEngine device)
+    {
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(device.IsGpuAvailable, "Native GPU required; this test must execute.");
+        Skip.IfNot(device.IsGpuAvailable, "No native GPU is available.");
+        // Ownership is observed through the native allocation tracker, which is fixed at process start.
+        Skip.IfNot(GpuMemoryTracker.Enabled, "Set AIDOTNET_GPU_MEMTRACK=1 before test process startup to run the native-ownership case.");
+    }
+
     private static long NativeSequence() => (long)StaticField(typeof(GpuMemoryTracker), "s_seq");
 
     private static object[] LiveProbeAllocations(long afterSequence, ISet<long>? idlePooled = null)
@@ -123,14 +133,15 @@ public sealed class FusedPersistenceOwnershipTests
         Assert.True(records.Length == 0, string.Join(Environment.NewLine, sites) + metadata);
     }
 
-    [Theory]
+    [SkippableTheory]
+    [Trait("Category", "GPU")]
     [InlineData(false)]
     [InlineData(true)]
     public void Probe_owns_snapshots_preserves_sources_and_releases_native_storage(bool gpu)
     {
         var previous = AiDotNetEngine.Current;
         using var device = gpu ? new DirectGpuTensorEngine() : null;
-        if (gpu) Assert.True(Present(device, "the GPU engine").IsGpuAvailable, "Native GPU required; this test must execute.");
+        if (gpu) RequireGpu(Present(device, "the GPU engine"));
         AiDotNetEngine.Current = gpu ? Present(device, "the GPU engine") : new CpuEngine();
         try
         {
@@ -171,14 +182,15 @@ public sealed class FusedPersistenceOwnershipTests
         finally { AiDotNetEngine.Current = previous; }
     }
 
-    [Theory]
+    [SkippableTheory]
+    [Trait("Category", "GPU")]
     [InlineData(false)]
     [InlineData(true)]
     public void Completed_fused_steps_release_probe_storage_and_match_eager_updates(bool gpu)
     {
         var previous = AiDotNetEngine.Current;
         using var device = gpu ? new DirectGpuTensorEngine() : null;
-        if (gpu) Assert.True(Present(device, "the GPU engine").IsGpuAvailable, "Native GPU required; this test must execute.");
+        if (gpu) RequireGpu(Present(device, "the GPU engine"));
         AiDotNetEngine.Current = gpu ? Present(device, "the GPU engine") : new CpuEngine();
         try
         {
