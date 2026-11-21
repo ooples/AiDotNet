@@ -6391,7 +6391,6 @@ override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.CreateDiscriminators() -> Syste
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.Generate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.ComputeInputMel(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.KeepsCentredFrame.get -> bool
-override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.DiscriminatorLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.GeneratorLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, bool adversarial) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
