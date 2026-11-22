@@ -23,6 +23,12 @@ import threading
 import time
 
 import psutil
+from measurement_contracts import CACHE_SENSITIVE_ENVIRONMENT, allocation_metrics, cache_coverage, checked_phases, fixed_windows, raw_file
+from python_process import bootstrap_argv, resolve_python_process, resolve_script, stop_launch
+from lstm_equivalence import lstm_correctness_gate, lstm_workload_gate
+from torch_policy import compare_reference, sha as streaming_sha
+
+
 
 
 def read_json(path: Path) -> dict:
@@ -67,9 +73,24 @@ def paired_gate(ours: list[float | None], theirs: list[float | None], maximum: f
     rng = random.Random(2561)
     draws = sorted(statistics.median(rng.choices(logs, k=len(logs))) for _ in range(resamples))
     upper = math.exp(draws[math.ceil(.95 * len(draws)) - 1])
-    point = statistics.median(ratios)
+    point = midpoint_median(ratios)
     return {"status": "pass" if point <= maximum and upper <= maximum else "fail",
             "median_ratio": point, "upper_95_ratio": upper, "pairs": len(ratios)}
+
+
+def warmed_cuda_calls_gate(ours: list[int | None], theirs: list[int | None], maximum: float) -> dict:
+    """Score exact native CUDA calls during a warmed workload phase."""
+    if (len(ours) != len(theirs) or len(ours) < 5 or
+            any(type(value) is not int or value < 0 for value in ours + theirs)):
+        return {"status": "unverified", "reason": "Five complete pairs of native CUDA call counts are required."}
+    if any(a != 0 and b == 0 for a, b in zip(ours, theirs)):
+        return {"status": "fail", "reason": "AiDotNet issued native CUDA calls against a zero-call reference."}
+    positive = [(a, b) for a, b in zip(ours, theirs) if b > 0]
+    if not positive:
+        return {"status": "pass", "zero_floor_pairs": len(ours), "reason": "Both frameworks issued zero native calls."}
+    result = paired_gate([a for a, _ in positive], [b for _, b in positive], maximum)
+    result["zero_floor_pairs"] = len(ours) - len(positive)
+    return result
 
 
 def phase_group(phase: str) -> str:
@@ -85,6 +106,24 @@ def phase_records(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()] if path.exists() else []
 
 
+def midpoint_median(values: list[float]) -> float:
+    """statistics.median adds the two middle values before halving, which overflows for finite values near the
+    float maximum; low + (high - low) / 2 cannot for the nonnegative ratios scored here."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return ordered[middle - 1] + (ordered[middle] - ordered[middle - 1]) / 2
+
+
+def crosses_phase_boundary(sample: dict, boundaries: list[int]) -> bool:
+    """A device query that started in one phase and returned in another has no known observation phase."""
+    start = sample.get("query_start_unix_ms")
+    if start is None:
+        return False
+    return any(start < boundary <= sample["unix_ms"] for boundary in boundaries)
+
+
 def memory_metrics(samples: list[dict], phases: list[dict]) -> dict[str, float | None]:
     result: dict[str, float | None] = {}
     for metric in ("rss_bytes", "gpu_device_bytes"):
@@ -96,9 +135,12 @@ def memory_metrics(samples: list[dict], phases: list[dict]) -> dict[str, float |
     by_phase: dict[str, list[dict]] = {}
     ordered = sorted(phases, key=lambda event: event["unix_ms"])
     index = -1
+    boundaries = [event["unix_ms"] for event in ordered]
     for sample in sorted(samples, key=lambda item: item["unix_ms"]):
         while index + 1 < len(ordered) and ordered[index + 1]["unix_ms"] <= sample["unix_ms"]:
             index += 1
+        if crosses_phase_boundary(sample, boundaries):
+            continue
         group = phase_group(ordered[index]["phase"]) if index >= 0 else "startup"
         by_phase.setdefault(group, []).append(sample)
     for group in {phase_group(event["phase"]) for event in ordered} | {"startup"}:
@@ -142,6 +184,21 @@ def nvidia_query(gpu_id: str, fields: str) -> str | None:
                                        stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.SubprocessError):
         return None
+
+
+def nvidia_compute_processes(gpu_id: str) -> set[int] | None:
+    """PIDs with a compute context on the GPU, or None when the driver cannot list them."""
+    try:
+        text = subprocess.check_output(["nvidia-smi", "--id=" + gpu_id, "--query-compute-apps=pid",
+                                        "--format=csv,noheader,nounits"], text=True, timeout=3,
+                                       stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    pids = set()
+    for line in text.splitlines():
+        with contextlib.suppress(ValueError):
+            pids.add(int(line.strip()))
+    return pids
 
 
 def contending_processes(excluded: set[int] | None = None) -> list[dict]:
@@ -197,13 +254,30 @@ class Sampler:
 
     def gpu(self) -> None:
         while not self.stop.is_set():
+            # nvidia-smi can take longer than a short phase. Keep both ends of the query so a reading taken in
+            # one phase is not charged to the phase in which the query happened to return.
+            started = time.time_ns() // 1_000_000
             value = nvidia_query(self.gpu_id, "memory.used")
             if value is not None:
                 with contextlib.suppress(ValueError):
                     with self.lock:
-                        self.samples.append({"unix_ms": time.time_ns() // 1_000_000,
+                        self.samples.append({"unix_ms": time.time_ns() // 1_000_000, "query_start_unix_ms": started,
                                              "gpu_device_bytes": float(value) * 1048576})
+            self.audit_gpu_exclusivity()
             self.stop.wait(.1)
+
+    def audit_gpu_exclusivity(self) -> None:
+        """memory.used is device-wide: another CUDA process on this GPU would be charged to the measured side."""
+        listing = nvidia_compute_processes(self.gpu_id)
+        if listing is None:
+            return
+        own = {self.process.pid}
+        with contextlib.suppress(psutil.Error):
+            own.update(child.pid for child in self.process.children(recursive=True))
+        foreign = sorted(pid for pid in listing if pid not in own)
+        if foreign:
+            self.contention.append({"unix_ms": time.time_ns() // 1_000_000, "kind": "foreign_cuda_process",
+                                    "processes": [{"pid": pid} for pid in foreign]})
 
     def start(self) -> None:
         for thread in self.threads:
@@ -226,8 +300,46 @@ class Sampler:
         return self.samples
 
 
+def hifigan_workload_gate(run: dict) -> dict:
+    """Require this process's own receipt for the shared HiFi-GAN fixture.
+
+    A report can name the requested model, seed, batch sizes and parameter count after running the ordinary
+    workload. Only the receipt written by the fixture consumer proves which state, inputs and crops the scored
+    process used. Both sides are checked against one hashed manifest, so they identify the same workload.
+    """
+    try:
+        manifest_path = Path(run["artifact_paths"]["hifigan_fixture_manifest"])
+        if streaming_sha(manifest_path) != run["artifacts"]["hifigan_fixture_manifest"]:
+            raise ValueError("The HiFi-GAN fixture manifest changed after launch.")
+        manifest = read_json(manifest_path)
+        record = read_json(raw_file(run, "hifigan_workload"))
+        if not isinstance(manifest, dict) or not isinstance(record, dict):
+            raise ValueError("The HiFi-GAN fixture manifest or workload receipt is not a JSON object.")
+        if (record.get("schema") != "hifigan-shared-workload-consumption-v1" or record.get("framework") != run["side"]
+                or type(record.get("pid")) is not int or record["pid"] != run["pid"]):
+            raise ValueError("HiFi-GAN workload receipt differs from the measured process or framework.")
+        if record.get("preflight_pass") is not True or record.get("pass") is not True:
+            raise ValueError("The process did not consume the complete shared HiFi-GAN workload.")
+        if (record.get("fixture_manifest_sha256") != run["artifacts"]["hifigan_fixture_manifest"]
+                or record.get("state_sha256") != manifest["state_sha256"]
+                or record.get("state_tensor_count") != manifest["state_tensor_count"]):
+            raise ValueError("HiFi-GAN workload receipt names a different fixture or initial state.")
+        if record.get("inputs") != manifest["inputs"]:
+            raise ValueError("HiFi-GAN workload receipt consumed different input tensors.")
+        steps = [{key: step[key] for key in ("index", "pool_index", "crop_start")} for step in manifest["training_steps"]]
+        if not steps or record.get("consumed_steps") != steps:
+            raise ValueError("HiFi-GAN workload receipt consumed different training steps or crops.")
+        if record.get("inference_batches_consumed") != manifest["protocol"]["inference_batches"]:
+            raise ValueError("HiFi-GAN workload receipt consumed different inference batches.")
+        return {"status": "pass"}
+    except (KeyError, TypeError, ValueError, OSError) as error:
+        return {"status": "unverified", "reason": str(error) or type(error).__name__}
+
+
 def reference_recipe_gate(run: dict) -> dict:
     """Require the actual hashed reference manifest to name the scored Torch recipe."""
+    if run.get("model") == "lstm":
+        return lstm_workload_gate(run)
     hashes = run.get("artifacts", {})
     try:
         manifest_path = Path(run.get("artifact_paths", {}).get("hifigan_reference_manifest", ""))
@@ -242,7 +354,87 @@ def reference_recipe_gate(run: dict) -> dict:
             return {"status": "unverified", "reason": "Reference manifest exporter hash does not match the per-reference exporter artifact."}
     except (OSError, ValueError, TypeError):
         return {"status": "unverified", "reason": "Missing or invalid reference manifest for recipe validation."}
+    if run.get("side") == "pytorch" and run.get("mode") == "score":
+        return reference_policy_gate(run)
     return {"status": "pass"}
+
+
+def reference_policy_gate(run: dict) -> dict:
+    """Bind actual scored Torch precision to the same reference used for numerical checks."""
+    try:
+        if run.get("side") != "pytorch" or run.get("mode") != "score" or run.get("return_code") != 0:
+            raise ValueError("Formal Torch policy evidence requires a successful scored process.")
+        manifest_path = Path(run["artifact_paths"]["hifigan_reference_manifest"])
+        manifest = read_json(manifest_path)
+        if streaming_sha(manifest_path) != run["artifacts"]["hifigan_reference_manifest"]:
+            raise ValueError("Reference manifest changed.")
+        if manifest.get("model") != run["model"] or manifest.get("device") != run["device"]:
+            raise ValueError("Reference precision policy belongs to another model/device.")
+        policy = read_json(raw_file(run, "torch_policy"))
+        if not isinstance(policy, dict):
+            raise ValueError("Torch policy receipt is not an object.")
+        if (policy.get("schema") != "torch-policy-native-receipt-v1" or policy.get("mode") != "strict-reference"
+                or policy.get("pid") != run["pid"] or isinstance(policy.get("pid"), bool)
+                or policy.get("atexit_complete") is not True or policy.get("observation_error")
+                or type(policy.get("benchmark_exit_code")) is not int or policy["benchmark_exit_code"] != 0):
+            raise ValueError("Torch policy receipt lacks strict mode, real PID, successful benchmark or complete shutdown observation.")
+        for field, artifact in (("benchmark_sha256", "pytorch_benchmark"), ("wrapper_sha256", "torch_policy_wrapper"),
+                                ("reference_manifest_sha256", "hifigan_reference_manifest")):
+            if not run["artifacts"].get(artifact) or policy.get(field) != run["artifacts"][artifact]:
+                raise ValueError("Torch policy source/reference binding differs: " + field)
+        resolved = dict(manifest)
+        attestation = None
+        if policy.get("reference_environment") is not None:
+            artifact = "reference_environment"
+            path = Path(run["artifact_paths"][artifact])
+            actual_hash = streaming_sha(path)
+            if (actual_hash != run["artifacts"][artifact] or policy["reference_environment"].get("sha256") != actual_hash
+                    or Path(policy["reference_environment"].get("path", "")).resolve() != path.resolve()):
+                raise ValueError("Reference startup policy artifact differs.")
+            attestation = read_json(path)
+            if attestation.get("reference_manifest_sha256") != run["artifacts"]["hifigan_reference_manifest"]:
+                raise ValueError("Reference startup policy belongs to another manifest.")
+            evidence = attestation.get("evidence", [])
+            if not evidence or any(streaming_sha(item["path"]) != item.get("sha256") for item in evidence):
+                raise ValueError("Reference startup policy evidence changed or is missing.")
+            for key, value in attestation.get("policy", {}).items():
+                if key != "deterministic_warn_only" or not isinstance(value, bool) or (key in resolved and resolved[key] != value):
+                    raise ValueError("Legacy attestation changes a recorded policy field or has an unsupported field.")
+                resolved[key] = value
+        if not isinstance(resolved.get("deterministic_warn_only"), bool):
+            raise ValueError("Legacy reference warn-only choice lacks a bound source attestation.")
+        if run["device"] == "cuda" and (attestation is None or "CUBLAS_WORKSPACE_CONFIG" not in attestation.get("environment", {})):
+            raise ValueError("CUDA reference workspace environment is not explicitly bound.")
+        observations = {}
+        for name in ("applied_flags_before_benchmark", "flags_after_benchmark", "flags_at_exit"):
+            snapshot = policy.get(name, {})
+            if not isinstance(snapshot, dict):
+                raise ValueError("Torch policy observation is missing or malformed: " + name)
+            observations[name] = compare_reference(snapshot, resolved)
+            if (type(snapshot.get("cuda_initialized_before_observation")) is not bool
+                    or type(snapshot.get("cuda_initialized_after_observation")) is not bool
+                    or snapshot["cuda_initialized_before_observation"] != snapshot["cuda_initialized_after_observation"]):
+                raise ValueError("Observation changed CUDA initialization state.")
+        if any(row["status"] != "match" for row in observations.values()):
+            return {"status": "fail", "reason": "Actual scored Torch policy differs from the numerical reference.", "observations": observations}
+        expected_env = policy.get("effective_environment")
+        if not isinstance(expected_env, dict) or any(policy.get(name) != expected_env for name in ("environment_after_benchmark", "environment_at_exit")):
+            raise ValueError("Precision override environment changed during the benchmark.")
+        if attestation is not None and any(expected_env.get(key) != value for key, value in attestation.get("environment", {}).items()):
+            raise ValueError("Effective precision environment differs from the reference startup policy.")
+        native = policy.get("native")
+        if not isinstance(native, dict) or native.get("status") != "observed_loaded_images":
+            # A non-Windows producer states that formal scoring is Windows-only; pass that reason through.
+            reason = native.get("reason") if isinstance(native, dict) else None
+            raise ValueError(reason if isinstance(reason, str) and reason else "Loaded native-image observation is unavailable.")
+        native_files = policy["native"].get("files")
+        if not isinstance(native_files, list) or not native_files or any(
+                not isinstance(item, dict) or not isinstance(item.get("path"), str) or not re.fullmatch("[a-f0-9]{64}", item.get("sha256", ""))
+                or type(item.get("bytes")) is not int or item["bytes"] <= 0 for item in native_files):
+            raise ValueError("Native image paths/binary hashes are missing or malformed.")
+        return {"status": "pass", "observations": observations, "scope": "Explicit reference precision policy; native image presence is not vendor execution proof."}
+    except (KeyError, ValueError, TypeError, OSError, json.JSONDecodeError) as error:
+        return {"status": "unverified", "reason": str(error)}
 
 
 def provenance(config: dict) -> dict:
@@ -253,7 +445,7 @@ def provenance(config: dict) -> dict:
         if dirty:
             raise ValueError(f"Scoring source must be committed: {name} has working-tree changes.")
         repos[name] = sha
-    hashes = {name: hashlib.sha256(Path(path).read_bytes()).hexdigest() for name, path in config["artifacts"].items()}
+    hashes = {name: streaming_sha(path) for name, path in config["artifacts"].items()}
     receipt = read_json(Path(config["build_receipt"]))
     if receipt.get("repositories") != repos or receipt.get("artifacts") != hashes:
         raise ValueError("Build receipt does not bind these exact source commits and binary/script hashes.")
@@ -284,6 +476,9 @@ def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str,
              "AIDOTNET_DIRECT_PTX_CACHE_PATH": "aidotnet-kernels/CUDA/DirectPtx"}
     if side == "pytorch":
         known.update(TORCHINDUCTOR_CACHE_DIR="torchinductor", TRITON_CACHE_DIR="triton")
+    else:
+        known.update(AIDOTNET_AUTOTUNE_CACHE_PATH="aidotnet-autotune",
+                     AIDOTNET_CODEGEN_AUTOTUNE_CACHE="aidotnet-codegen/autotune.tsv")
     seed_receipt = None
     if regime == "warm":
         seed = Path(policy["warm_seeds"][side]["path"]).resolve()
@@ -295,11 +490,44 @@ def cache_environment(run_dir: Path, policy: dict, side: str) -> tuple[dict[str,
         shutil.copytree(seed, root, dirs_exist_ok=True)
         seed_receipt = actual
     env = {key: str(root / directory) for key, directory in known.items()}
-    for directory in env.values():
-        Path(directory).mkdir(parents=True, exist_ok=True)
+    for key, directory in env.items():
+        target = Path(directory)
+        (target.parent if key == "AIDOTNET_CODEGEN_AUTOTUNE_CACHE" else target).mkdir(parents=True, exist_ok=True)
+    initial_files = {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in sorted(root.rglob("*")) if path.is_file()}
     return env, {"regime": regime, "redirected_environment": env, "warm_seed": seed_receipt,
-                 "coverage": "known_environment_redirects_only",
+                 "initial_files": initial_files, "coverage": "known_environment_redirects_only",
                  "unverified": "Framework/vendor caches not honoring these environment variables require source and runtime verification."}
+
+
+def profiled_dotnet_identity(process, phase_file: Path, model: str, timeout: float = 60) -> dict:
+    """Identify the managed benchmark child when Nsight Systems owns the launcher PID."""
+    try:
+        launcher_birth = psutil.Process(process.pid).create_time()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if phase_file.is_file():
+                with phase_file.open("rb") as stream:
+                    line = stream.readline()
+                if line.endswith(b"\n"):
+                    marker = json.loads(line.decode("utf-8-sig"))
+                    if (marker.get("phase") != "construction" or marker.get("model") != model
+                            or marker.get("diagnostics") is not True or type(marker.get("pid")) is not int
+                            or marker["pid"] <= 0):
+                        raise ValueError("The first diagnostic marker does not identify the benchmark.")
+                    actual = psutil.Process(marker["pid"])
+                    birth = actual.create_time()
+                    if birth + .001 < launcher_birth or process.pid not in {item.pid for item in actual.parents()}:
+                        raise ValueError("The diagnostic marker belongs to a different process.")
+                    return {"pid": actual.pid, "process_create_time": birth, "launcher_pid": process.pid,
+                            "launcher_create_time": launcher_birth, "actual_process_image": actual.exe()}
+            if process.poll() is not None:
+                raise ValueError("Nsight exited before the benchmark emitted its construction marker.")
+            time.sleep(.02)
+        raise ValueError("Timed out waiting for the profiled benchmark construction marker.")
+    except (OSError, ValueError, psutil.Error):
+        stop_launch(process)
+        raise
 
 
 def launch(config: dict, side: str, model: str, device: str, pair: int, mode: str, output_dir: Path) -> dict:
@@ -307,9 +535,35 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     run_dir.mkdir(parents=True, exist_ok=False)
     command = config["commands"][side]
     protocol = config["protocol" if mode == "score" else "diagnostic_protocol"]
-    bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"))
+    bindings = dict(protocol, model=model, device=device, output=str(run_dir / "report.json"), cache=str(run_dir / "cache"), run_directory=str(run_dir))
     bindings["inference_batches"] = ",".join(map(str, protocol["inference_batch_sizes"]))
     argv = [str(arg).format_map(bindings) for arg in command["argv"]]
+    if model == "lstm" and "lstm_fixture_manifest" in config["artifacts"]:
+        if "--lstm-fixture" not in argv:
+            argv.extend(["--lstm-fixture", str(Path(config["artifacts"]["lstm_fixture_manifest"]).resolve().parent)])
+        if "--lstm-workload-receipt" not in argv:
+            argv.extend(["--lstm-workload-receipt", str(run_dir / "lstm-workload.json")])
+    if model == "hifigan" and "hifigan_fixture_manifest" in config["artifacts"]:
+        # The gate reads the receipt from the process directory, so a command cannot redirect or omit it.
+        if "--hifigan-workload-receipt" in argv:
+            raise ValueError("The campaign owns --hifigan-workload-receipt; remove it from the command.")
+        if "--hifigan-fixture" not in argv:
+            argv.extend(["--hifigan-fixture", str(Path(config["artifacts"]["hifigan_fixture_manifest"]).resolve().parent)])
+        argv.extend(["--hifigan-workload-receipt", str(run_dir / "hifigan-workload.json")])
+    original_argv = argv.copy()
+    bootstrap_receipt = None
+    if side == "pytorch":
+        bootstrap_script = config["artifacts"].get("python_process_bootstrap")
+        if not bootstrap_script:
+            raise ValueError("PyTorch needs a hash-bound real-process bootstrap; a Windows venv launcher PID is not the framework PID.")
+        bootstrap_receipt = run_dir / "python-process.json"
+        argv = bootstrap_argv(argv, bootstrap_script, bootstrap_receipt, cwd=command["cwd"])
+    nsys = config.get("artifacts", {}).get("nsys") if device == "cuda" and mode == "diagnostic" else None
+    profiled_argv = argv.copy() if nsys else None
+    if nsys:
+        argv = [str(Path(nsys).resolve()), "profile", "--trace=cuda,nvtx", "--cuda-memory-usage=true",
+                "--cuda-trace-all-apis=true", "--sample=none", "--cpuctxsw=none", "--export=sqlite",
+                "--output", str(run_dir / "native-memory"), *profiled_argv]
     env = os.environ.copy()
     env.update({key: str(value).format_map(bindings) for key, value in command.get("env", {}).items()})
     cache_env, cache_state = cache_environment(run_dir, config["cache_policy"], side)
@@ -325,6 +579,17 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         env.pop("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE", None)
     for key in ("PROFILE_RANGE", "PROFILE_INFERENCE_BATCH", "BENCH_MEMSTEP", "AIDOTNET_FUSED_DIAG"):
         env.pop(key, None)
+    # Allocation callbacks belong only to diagnostic processes, never to scored timing.
+    profiler_keys = ("CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "CORECLR_PROFILER_PATH_64",
+                     "DOTNET_ENABLE_PROFILING", "DOTNET_PROFILER", "DOTNET_PROFILER_PATH", "DOTNET_PROFILER_PATH_64",
+                     "AIDOTNET_ARRAY_PROFILER_OUTPUT")
+    for key in profiler_keys:
+        env.pop(key, None)
+    if mode == "diagnostic" and side == "aidotnet" and "clr_array_profiler" in config["artifacts"]:
+        env.update(CORECLR_ENABLE_PROFILING="1", CORECLR_PROFILER="{5B735E8D-5547-4DB5-B407-E9AF3E2A9D15}",
+                   CORECLR_PROFILER_PATH=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
+                   CORECLR_PROFILER_PATH_64=str(Path(config["artifacts"]["clr_array_profiler"]).resolve()),
+                   AIDOTNET_ARRAY_PROFILER_OUTPUT=str(run_dir / "array-allocations.json"))
     gpu_mapping = None
     if device == "cuda":
         gpu_id = str(config.get("gpu_id", "")).strip()
@@ -343,12 +608,17 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
         receipt_file = Path(receipt_path).resolve()
         metadata["correctness_receipt"] = {"path": str(receipt_file),
             "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest() if receipt_file.is_file() else None}
-    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, protocol=protocol,
+    metadata.update(side=side, model=model, device=device, pair=pair, mode=mode, argv=argv, original_argv=original_argv,
+                    profiled_argv=profiled_argv, protocol=protocol,
                     cache_state=cache_state, gpu_mapping=gpu_mapping,
+                    cache_sensitive_environment={key: env.get(key) for key in CACHE_SENSITIVE_ENVIRONMENT},
+                    # Only keys present in the final environment: an override that launch filtering removed (a
+                    # disabled diagnostic such as PROFILE_RANGE) stays out of the receipt instead of raising.
                     environment_overrides={key: env[key] for key in set(command.get("env", {})) | set(cache_env) |
+                        (set(profiler_keys) & set(env)) |
                         ({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "AIDOTNET_DIRECTGPU_BACKENDS"} & set(env)) |
                         {"AIDOTNET_BENCH_DIAGNOSTICS", "AIDOTNET_BUFFER_ALLOC_DIAG", "AIDOTNET_GPU_MEMTRACK",
-                         "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"}})
+                         "AIDOTNET_GPU_MEMTRACK_PEAKDUMP"} if key in env})
     blockers = contending_processes()
     if mode == "score" and blockers:
         metadata.update(return_code=-2, memory={}, phase_events=[], contention=[{
@@ -359,26 +629,58 @@ def launch(config: dict, side: str, model: str, device: str, pair: int, mode: st
     with (run_dir / "process.log").open("w", encoding="utf-8") as log:
         process = subprocess.Popen(argv, cwd=command["cwd"], env=env, stdout=log, stderr=subprocess.STDOUT)
         try:
-            sampler = Sampler(process.pid, gpu_mapping["uuid"] if gpu_mapping else None)
+            if bootstrap_receipt:
+                identity = resolve_python_process(process, bootstrap_receipt, expected_target=resolve_script(original_argv, command["cwd"]),
+                                                  expected_bootstrap=Path(bootstrap_script))
+            elif nsys:
+                identity = profiled_dotnet_identity(process, run_dir / "phases.jsonl", model)
+            else:
+                identity = {"pid": process.pid, "process_create_time": psutil.Process(process.pid).create_time(),
+                            "launcher_pid": process.pid}
+            metadata.update(identity)
+            sampler = Sampler(identity["pid"], gpu_mapping["uuid"] if gpu_mapping else None)
         except psutil.NoSuchProcess:
             metadata.update(return_code=process.wait(), memory={}, phase_events=[], contention=[],
                             invalid_reason="Child exited before memory sampling could start.")
             write_json(run_dir / "measurement.json", metadata)
             return {"path": str(run_dir), **metadata}
+        except (ValueError, OSError, psutil.Error) as error:
+            metadata.update(return_code=-3, launcher_pid=process.pid, memory={}, phase_events=[],
+                            invalid_reason="Benchmark process identity could not be verified: " + str(error))
+            write_json(run_dir / "measurement.json", metadata)
+            return {"path": str(run_dir), **metadata}
+        def stop_tree() -> None:
+            # Only children of this launch are terminated; compiler workers must not leak into the next pair.
+            try:
+                with contextlib.suppress(psutil.Error):
+                    for child in psutil.Process(process.pid).children(recursive=True):
+                        with contextlib.suppress(psutil.Error):
+                            child.kill()
+            finally:
+                with contextlib.suppress(OSError):
+                    process.kill()
+                process.wait()
+
         sampler.start()
         try:
-            return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
-        except subprocess.TimeoutExpired:
-            # Only children of this launch are terminated; compiler workers must not leak into the next pair.
-            with contextlib.suppress(psutil.Error):
-                for child in psutil.Process(process.pid).children(recursive=True):
-                    with contextlib.suppress(psutil.Error):
-                        child.kill()
-            process.kill()
-            process.wait()
-            return_code = -1
-        samples = sampler.finish()
+            try:
+                return_code = process.wait(timeout=config.get("timeout_seconds", 3600))
+            except subprocess.TimeoutExpired:
+                stop_tree()
+                return_code = -1
+            except BaseException:
+                # Ctrl+C or any other interruption: a surviving child would keep the CPU or GPU busy during the
+                # next run. Stop and reap it, then let the interruption propagate.
+                stop_tree()
+                raise
+        finally:
+            samples = sampler.finish()
     phases = phase_records(run_dir / "phases.jsonl")
+    raw_names = {"phases": "phases.jsonl", "cpu_allocations": "cpu-allocations.json", "clr_arrays": "array-allocations.json",
+                 "torch_policy": "torch-policy.json", "cuda_nsys_sqlite": "native-memory.sqlite",
+                 "lstm_workload": "lstm-workload.json", "hifigan_workload": "hifigan-workload.json"}
+    metadata["diagnostic_files"] = {key: {"name": name, "sha256": streaming_sha(run_dir / name)}
+                                    for key, name in raw_names.items() if (run_dir / name).is_file()}
     metadata.update(return_code=return_code, memory=memory_metrics(samples, phases), phase_events=phases,
                     gpu_allocator_peaks=gpu_allocator_peaks(phases),
                     contention=sampler.contention,
@@ -433,13 +735,21 @@ def hifigan_comparison_kinds() -> dict[str, str]:
 
 def correctness_gate(run: dict) -> dict:
     """Bind a successful full-V1 equivalence receipt to the exact scored binaries/reference."""
+    if run.get("model") == "lstm":
+        return lstm_correctness_gate(run)
     binding = run.get("correctness_receipt") or {}
     if run.get("model") != "hifigan-v1":
         return {"status": "unverified", "reason": "This family has no validated numerical-equivalence receipt contract."}
     path = Path(binding.get("path", ""))
     if not path.is_file() or binding.get("sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
         return {"status": "unverified", "reason": "Missing or changed numerical-equivalence receipt."}
-    receipt = read_json(path)
+    try:
+        receipt = read_json(path)
+    except ValueError:
+        receipt = None
+    if not isinstance(receipt, dict):
+        # Hash-bound but malformed evidence is unverified; it must not abort the campaign before gate.json exists.
+        return {"status": "unverified", "reason": "The numerical-equivalence receipt is not a JSON object."}
     if receipt.get("schema") != "hifigan-v1-equivalence-receipt-v1" or receipt.get("model") != run["model"] or receipt.get("device") != run["device"]:
         return {"status": "unverified", "reason": "Numerical receipt schema/model/device mismatch."}
     budgets = {"cpu": {"absolute": 2e-5, "relative": 1e-3, "gradient_relative": .01, "gradient_cosine": .999},
@@ -503,6 +813,36 @@ def correctness_gate(run: dict) -> dict:
     return {"status": "pass", "receipt_sha256": binding["sha256"], "checks": len(checks)}
 
 
+def cold_completion_seconds(run: dict) -> float:
+    """Include process startup, construction and preparation through the first completed epoch.
+
+    The existing epoch timer remains separate: a constructor can execute a forward
+    before that timer starts. Raw phase hashes/PIDs bind this end-to-end measurement
+    to the same fresh process instead of inferring startup from a sampler's first tick.
+    """
+    created = number(run.get("process_create_time"))
+    if created is None or created <= 0:
+        raise ValueError("Cold completion lacks a finite positive process creation timestamp.")
+    pid = run.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise ValueError("Cold completion lacks the launched process PID.")
+    epochs = run.get("protocol", {}).get("epochs")
+    if not isinstance(epochs, int) or isinstance(epochs, bool) or epochs < 1:
+        raise ValueError("Cold completion requires at least one real training epoch.")
+    phases = checked_phases(run)
+    if any(not isinstance(event.get("unix_ms"), int) or isinstance(event["unix_ms"], bool)
+           or event["unix_ms"] <= 0 for event in phases):
+        raise ValueError("Cold completion phase timestamps are missing or invalid.")
+    launch_ms = created * 1000
+    if launch_ms > phases[0]["unix_ms"]:
+        raise ValueError("Cold completion phases predate process creation.")
+    endpoint = next(event for event in phases if event["phase"] == "training-epoch-0-complete")
+    elapsed = (endpoint["unix_ms"] - launch_ms) / 1000
+    if not math.isfinite(elapsed) or elapsed <= 0:
+        raise ValueError("Cold completion interval is not positive and finite.")
+    return elapsed
+
+
 def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     path = Path(run["path"])
     if run.get("invalid_reason"):
@@ -516,7 +856,20 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
         return {}, ["requested model missing"]
     errors = []
     if run.get("mode") == "score" and run.get("contention"):
-        errors.append("external CI worker/testhost contention observed during scoring")
+        kinds = {record.get("kind") for record in run["contention"] if isinstance(record, dict)}
+        if kinds - {"foreign_cuda_process"} or not kinds:
+            errors.append("external CI worker/testhost contention observed during scoring")
+        if "foreign_cuda_process" in kinds:
+            errors.append("another CUDA process used the measured GPU during scoring; device-wide VRAM samples "
+                          "would include its memory")
+    if run["model"] == "lstm":
+        workload = lstm_workload_gate(run)
+        if workload["status"] != "pass":
+            errors.append("LSTM workload: " + workload["reason"])
+    if run["model"] == "hifigan":
+        workload = hifigan_workload_gate(run)
+        if workload["status"] != "pass":
+            errors.append("HiFi-GAN workload: " + workload["reason"])
     if model.get("device") != run["device"]:
         errors.append("device mismatch")
     for name in ("epochs", "train_batches", "batch_size", "inference_iterations", "warmup_iterations", "warmup_min_ms", "seed", "inference_batch_sizes"):
@@ -530,7 +883,12 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     training = model.get("training") or {}
     epochs = training.get("epoch_seconds", [])
     values = {"first_epoch_seconds": number(epochs[0]) if epochs else None,
-              "steady_epoch_seconds": number(training.get("steady_state_epoch_seconds_median"))}
+              "steady_epoch_seconds": number(training.get("steady_state_epoch_seconds_median")),
+              "launch_to_first_epoch_end_seconds": None}
+    try:
+        values["launch_to_first_epoch_end_seconds"] = cold_completion_seconds(run)
+    except (KeyError, ValueError, TypeError, OSError, json.JSONDecodeError) as error:
+        errors.append("cold completion: " + str(error))
     if number(training.get("first_loss")) is None or number(training.get("last_loss")) is None:
         errors.append("missing/nonfinite training loss evidence")
     for batch in run["protocol"]["inference_batch_sizes"]:
@@ -548,7 +906,10 @@ def metrics(run: dict) -> tuple[dict[str, float | None], list[str]]:
     return values, errors
 
 
-def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None) -> dict:
+def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] | None = None,
+             protocol: dict | None = None) -> dict:
+    if number(maximum) is None or not 0 < maximum <= .9:
+        raise ValueError("Every nonzero baseline requires at least a 10% reduction.")
     groups = sorted({(run["model"], run["device"]) for run in runs} | set(required or []))
     output = {}
     for model, device in groups:
@@ -557,17 +918,59 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         sides = {side: [next((run for run in scored if run["pair"] == pair and run["side"] == side), None)
                         for pair in pairs] for side in ("aidotnet", "pytorch")}
         rows = {side: [metrics(run) if run else ({}, ["missing pair member"]) for run in sides[side]] for side in sides}
-        names = sorted(set().union(*(row[0].keys() for side in rows.values() for row in side)))
+        names = sorted({"launch_to_first_epoch_end_seconds"} | set().union(*(row[0].keys() for side in rows.values() for row in side)))
         outcomes = {name: paired_gate([row[0].get(name) for row in rows["aidotnet"]],
-                                      [row[0].get(name) for row in rows["pytorch"]],
-                                      1.0 if name.endswith("_bytes") else maximum) for name in names}
-        # Disk-cache redirection alone cannot prove a complete cold/warm regime across vendor libraries.
-        outcomes["first_epoch_cache_coverage"] = {"status": "unverified", "reason":
-            "Known cache directories are isolated; complete framework/vendor cache coverage is not yet proven."}
-        # Requested and actual backing allocations are independent gates. Unsupported counter coverage stays red.
-        for kind in ("cpu_framework_requested", "cpu_backing", *( ("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
+                                      [row[0].get(name) for row in rows["pytorch"]], maximum) for name in names}
+        cache_checks = [cache_coverage(run) for run in scored]
+        identities = [(run.get("pid"), run.get("process_create_time")) for run in scored]
+        outcomes["first_epoch_cache_coverage"] = {
+            "status": "pass" if cache_checks and all(row["status"] == "pass" for row in cache_checks)
+                      and len(set(identities)) == len(identities) else "unverified",
+            "receipts": cache_checks,
+            "reason": "Every score needs a fresh process and source-bound persistent-cache inventory.",
+        }
+        policy_checks = [reference_recipe_gate(run) for run in scored if run["side"] == "pytorch"]
+        outcomes["reference_precision_policy"] = {
+            "status": "pass" if policy_checks and all(row["status"] == "pass" for row in policy_checks) else
+                      "fail" if any(row["status"] == "fail" for row in policy_checks) else "unverified",
+            "receipts": policy_checks,
+        }
+        diagnostics = [run for run in runs if (run["model"], run["device"], run["mode"]) == (model, device, "diagnostic")]
+        allocation_rows = {side: [] for side in sides}
+        for side in sides:
+            for pair, score in zip(pairs, sides[side]):
+                matched = [run for run in diagnostics if run["side"] == side and run["pair"] == pair]
+                diagnostic = matched[0] if len(matched) == 1 else None
+                keys = ("protocol", "repositories", "artifacts", "machine", "gpu", "gpu_mapping", "cache_policy")
+                if score is None or diagnostic is None or any(score.get(key) != diagnostic.get(key) for key in keys):
+                    allocation_rows[side].append(({}, ["Diagnostic pair/source/protocol/cache/hardware differs from scoring."]))
+                elif cache_coverage(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic cache coverage is incomplete."]))
+                elif model == "lstm" and lstm_workload_gate(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic did not run the matched LSTM workload."]))
+                elif model == "hifigan" and hifigan_workload_gate(diagnostic)["status"] != "pass":
+                    allocation_rows[side].append(({}, ["Allocation diagnostic did not run the matched HiFi-GAN workload."]))
+                else:
+                    allocation_rows[side].append(allocation_metrics(diagnostic))
+        # Compare computed exact/upper Ai bounds against exact/lower Torch bounds.
+        # Native CUDA acquisitions include async driver-pool suballocations, not physical backing events.
+        for kind in ("cpu_framework_requested", "cpu_backing", *(("gpu_framework_requested", "gpu_backing") if device == "cuda" else ())):
             for unit in ("bytes", "count"):
-                outcomes[f"{kind}_{unit}"] = {"status": "unverified", "reason": "Allocator coverage contract not yet verified on both frameworks."}
+                name = f"{kind}_{unit}"
+                outcome = paired_gate([row[0].get(name) for row in allocation_rows["aidotnet"]],
+                                      [row[0].get(name) for row in allocation_rows["pytorch"]], maximum)
+                outcome["coverage_errors"] = {side: [error for _, errors in allocation_rows[side] for error in errors] for side in sides}
+                outcome["window"] = "construction_training_epochs_inference_steady_excluding_adaptive_warmup"
+                outcomes[name] = outcome
+        if device == "cuda":
+            windows = {window for run in scored if "protocol" in run
+                       for window in fixed_windows(run) if window not in ("construction", "training_epoch_0")}
+            for window in sorted(windows):
+                for action in ("alloc", "free"):
+                    name = f"cuda_native_{window}_{action}_calls"
+                    outcomes[name] = warmed_cuda_calls_gate(
+                        [row[0].get(name) for row in allocation_rows["aidotnet"]],
+                        [row[0].get(name) for row in allocation_rows["pytorch"]], maximum)
         numerical = [correctness_gate(run) for run in scored]
         outcomes["numerical_equivalence"] = {
             "status": "pass" if numerical and all(row["status"] == "pass" for row in numerical) else
@@ -577,10 +980,22 @@ def evaluate(runs: list[dict], maximum: float, required: list[tuple[str, str]] |
         failures = [error for side in rows.values() for _, errors in side for error in errors]
         if not scored:
             failures.append("required model/device has no scored runs")
-        signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu")}, sort_keys=True)
+        if len(scored) != len(pairs) * 2:
+            failures.append("scored pairs contain missing or duplicate members")
+        all_identities = [(run.get("pid"), run.get("process_create_time")) for run in scored + diagnostics]
+        if len(set(all_identities)) != len(all_identities):
+            failures.append("score/diagnostic process identities were reused")
+        signatures = {json.dumps({key: run.get(key) for key in ("repositories", "artifacts", "machine", "gpu", "gpu_mapping")}, sort_keys=True)
                       for run in scored}
         if len(signatures) != 1:
             failures.append("source, binaries, or hardware changed within the campaign")
+        # A ratio compares like with like only when every scored process ran one protocol. Each report is checked
+        # against its own launch elsewhere, so a saved index mixing two protocols would otherwise score as matched.
+        protocols = {json.dumps(run.get("protocol"), sort_keys=True) for run in scored}
+        if len(protocols) > 1:
+            failures.append("score protocol differs within the campaign")
+        elif protocol is not None and scored and protocols != {json.dumps(protocol, sort_keys=True)}:
+            failures.append("saved score protocol differs from the requested configuration")
         parameter_counts = set()
         for run in scored:
             report_path = Path(run["path"]) / "report.json"
@@ -620,12 +1035,12 @@ def main() -> None:
                             write_json(run_index, runs)
                             if mode == "score" and runs[-1].get("contention"):
                                 required = [(name, target) for name in config["models"] for target in config["devices"]]
-                                write_json(args.output / "gate.json", evaluate(runs, config.get("maximum_ratio", .9), required))
+                                write_json(args.output / "gate.json", evaluate(runs, config.get("maximum_ratio", .9), required, config["protocol"]))
                                 raise SystemExit("Scoring invalidated by an external CI worker/testhost; see measurement.json.")
     else:
         runs = read_json(run_index)
     required = [(model, device) for model in config["models"] for device in config["devices"]]
-    results = evaluate(runs, config.get("maximum_ratio", .9), required)
+    results = evaluate(runs, config.get("maximum_ratio", .9), required, config["protocol"])
     write_json(args.output / "gate.json", results)
     print(json.dumps(results, indent=2))
     raise SystemExit(0 if results and all(row["status"] == "pass" for row in results.values()) else 1)

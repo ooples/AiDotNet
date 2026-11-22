@@ -1,0 +1,1262 @@
+{
+  "schema": "performance-publication-checkpoint-v1",
+  "date_utc": "2026-11-20",
+  "overall_acceptance_pass": false,
+  "family_complete": false,
+  "source": {
+    "aidotnet_commit": "f6676b956961a0f65f8f254132d24b06a9d7cc3d",
+    "tensors_commit": "60ccb6100e0d4b4d1f96a31ea43daada8336bd92",
+    "tensors_tree": "bd9637501a30763169c42dd329950e9ddf317dad",
+    "framework_build_ai_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+    "framework_build_tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
+    "source_equivalence": "AiDotNet and the source Tensors engine were built together. The full-model controls below ran on those binaries."
+  },
+  "pull_requests": {
+    "aidotnet": [
+      {
+        "baseRefName": "perf/elementwise-sweep-combined-v1",
+        "changedFiles": 72,
+        "headRefOid": "59b8151a27e75f682ae333e059f23bc8b3f4c993",
+        "number": 2601,
+        "state": "OPEN"
+      },
+      {
+        "baseRefName": "perf/2561-beat-torch-compile-2",
+        "changedFiles": 66,
+        "headRefOid": "4b1e081d9735ea9ca13b6f5f05ce7dca7c392c9d",
+        "number": 2604,
+        "state": "OPEN"
+      }
+    ],
+    "tensors": [
+      {
+        "baseRefName": "main",
+        "changedFiles": 123,
+        "headRefOid": "f8dc3cd74d420694fe7f02d6501c31114495636e",
+        "number": 1784,
+        "state": "OPEN"
+      },
+      {
+        "baseRefName": "main",
+        "changedFiles": 106,
+        "headRefOid": "37b365190a89edd09d36e5f20b4bd0c18c11b8b7",
+        "number": 1786,
+        "state": "OPEN"
+      },
+      {
+        "baseRefName": "main",
+        "changedFiles": 17,
+        "headRefOid": "0258a04a0047c3f35c34118122390e39e0c7fc31",
+        "number": 1792,
+        "state": "OPEN"
+      },
+      {
+        "baseRefName": "perf/hifi-2561-dependencies",
+        "changedFiles": 97,
+        "headRefOid": "428c648ee4b86af431b1bfa9f77e0c32a07ae1f6",
+        "number": 1793,
+        "state": "OPEN"
+      },
+      {
+        "baseRefName": "perf/hifi-2561-dependencies",
+        "changedFiles": 74,
+        "headRefOid": "fa65a86403f3483572b7323c18e21254124b9473",
+        "number": 1794,
+        "state": "MERGED"
+      }
+    ],
+    "independent_forecasting": 1792,
+    "shared_hifi_dependencies": [
+      1784,
+      1786
+    ],
+    "training_merged_into": "perf/hifi-2561-dependencies",
+    "history_rewritten": false,
+    "snapshot_utc_before_this_publication": "2026-11-20T07:36:23.138933+00:00"
+  },
+  "builds": {
+    "frameworks": [
+      "net10.0"
+    ],
+    "pass": true,
+    "configurations": [
+      "published Tensors NuGet 0.151.2",
+      "Tensors source"
+    ],
+    "historical_multitarget_receipts": "history.before_combined_pr_verification.builds"
+  },
+  "focused_tests": {
+    "harness_unit_tests": 82,
+    "harness_log_sha256": "4b74cc05f4c376bc98ae76e3a531cab428e51ad30ba78788b2be6891b7fffa83",
+    "optional_operation_tests_source_runtime": 28,
+    "optional_operation_tests_package_runtime": 28
+  },
+  "compiler_validation": {
+    "production_tree": "e039de7739c9310eecf0a1cb2bd16f1216154b97",
+    "compiled_jobs": {
+      "hip-opencl": 26,
+      "wgsl": 15,
+      "Vulkan": 15
+    },
+    "additional_wgsl_spirv_sha256": "7950F5F8B040362C33ED636358D369D144D1105300BC0E61E2BC5F46646CE89B",
+    "metal_run": "44328785438",
+    "apple_payloads": [
+      {
+        "shader": "batch.metal",
+        "sha256": "7a90714c3497b87355a79a8f06e6a27fa6446a6b3acb5bc0267ea8aa84588cef",
+        "metallib_sha256": "155d3542cc457b9acef5c942f357b6de902d24e6098c80059294e8a85c1f9c7e"
+      },
+      {
+        "shader": "convt.metal",
+        "sha256": "d7f05f4bb1091656e5da660ced9bd44be8683e816b9f51f1b676c831dc2dd0d0",
+        "metallib_sha256": "1a76347500ee35abfc0c168f9c6489cc92b2df666f1d9abae3baf564393f0ed3"
+      }
+    ],
+    "physical_cuda_checks": 1615,
+    "receipt_sha256": "045817f6dbf7aeb241bfcc461feb8ef571db03fff67a01b270e6f8027bcc2914"
+  },
+  "fresh_cuda_numerical": {
+    "pass": true,
+    "passed_checks": 1615,
+    "native_pass": true,
+    "summary_sha256": "18c0f05344a69df57628d063df757326e0c64a7ec5e394fa1aa8862361673ca0",
+    "runtime_assemblies_sha256": {
+      "AiDotNet.PyTorchParity.dll": "E8958B23F85BAFB3F4107421BB3A4E866E1E6D38306902891EDE941F3E410BB3",
+      "AiDotNet.dll": "2FFAAED8A895D97910EAC637D57D1AA9268FCD7FF861FE6BF64FF4250141F6AC",
+      "AiDotNet.Tensors.dll": "D8DA3E6D229C878CA3F6A4159B97A0D4E36510D73B5D2B07054951C3BB8ADF24"
+    },
+    "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032"
+  },
+  "prior_cuda_checkpoint": {
+    "aidotnet_commit": "a3b3cebb8026aef91a71b03a557b2681ede5a050",
+    "tensors_commit": "693fd1bc7eaa8324ddd6afe1fbd509c8cdea5e03",
+    "passed_checks": 1615,
+    "scope": "Before integrating latest remote fixes; does not establish current integration correctness."
+  },
+  "cpu_numerical": {
+    "fresh_integration_rerun": true,
+    "pass": true,
+    "passed": 1615,
+    "expected": 1615,
+    "errors": 0,
+    "failed": [],
+    "replay_failure": false,
+    "configurations": {
+      "managed": {
+        "failed_checks": [],
+        "passed_checks": 1615,
+        "native_pass": null,
+        "pass": true,
+        "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+        "workload_exit_code": 0,
+        "device": "cpu",
+        "archive_unchanged": true,
+        "not_for_scored_timing": true,
+        "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+        "schema": "shared-hifi-matched-raw-v1",
+        "numeric_pass": true,
+        "summary_sha256": "ae4c528fa9edfe2c1dce695426ec5655cd92e511d4a6d611bce552d969a8b9d6",
+        "numerical_sha256": "edc57b98c69196f4face2657e50d4b67cbe6e6673b2b05a027a362e9c712cfcb",
+        "reference_exported_from_this_harness": true
+      },
+      "onemkl": {
+        "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+        "archive_unchanged": true,
+        "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+        "workload_exit_code": 0,
+        "device": "cpu",
+        "not_for_scored_timing": true,
+        "schema": "shared-hifi-matched-raw-v1",
+        "passed_checks": 1615,
+        "numeric_pass": true,
+        "failed_checks": [],
+        "pass": true,
+        "native_pass": null,
+        "summary_sha256": "4bb3952bd4b6a1cea98ac0b36314c1259836b9972fb243649c92a0abf9c891bd",
+        "numerical_sha256": "72f690f459208b3bb9a40815a4e28c6fa52d2faed88315efcd4a01529b3abd57",
+        "reference_exported_from_this_harness": true
+      }
+    }
+  },
+  "performance": {
+    "accepted_win": false,
+    "five_alternating_matched_pairs_complete": false,
+    "required_margin_percent": 10,
+    "metrics": [
+      "latency",
+      "allocation count",
+      "allocation bytes",
+      "peak CPU RAM",
+      "peak GPU VRAM"
+    ],
+    "zero_native_gpu_allocation_or_free_baseline": "must match zero",
+    "prior_diagnostic_training_peak_bytes": 2003615368,
+    "saved_torch_target_max_bytes": 1880967168,
+    "prior_nsys_warm_training_gpu_allocations": 20,
+    "prior_nsys_batch16_gpu_frees": 8,
+    "scope": "Diagnostic historical candidate; these blockers remain open and are not acceptance evidence for the integration.",
+    "published_change_diagnostics": {
+      "public_waveform_packing": {
+        "published": "428c648ee4b86af431b1bfa9f77e0c32a07ae1f6",
+        "pr": 1793,
+        "files": 97,
+        "tested": {
+          "production_tree": "e039de7739c9310eecf0a1cb2bd16f1216154b97",
+          "tree": "bd9637501a30763169c42dd329950e9ddf317dad",
+          "head": "60ccb6100e0d4b4d1f96a31ea43daada8336bd92",
+          "test_exits": {
+            "net471": 0,
+            "net462": 0,
+            "net10.0": 0
+          },
+          "production_verification": "956c63295ac55cc07432fb0e2d3ad66f0539d6b2"
+        },
+        "whole_model": {
+          "managed": 1615,
+          "onemkl": 1615,
+          "cuda": 1615
+        },
+        "incremental_pairs": {
+          "completed_rows": 4,
+          "completed_pairs": 2,
+          "pairs": [
+            {
+              "first_epoch_seconds": {
+                "parent": 6.528174,
+                "combined": 6.414539,
+                "ratio": 0.982593141665648
+              },
+              "steady_epoch_seconds": {
+                "parent": 4.600683,
+                "combined": 4.544355,
+                "ratio": 0.9877566004873625
+              },
+              "launch_to_first_epoch_end_seconds": {
+                "parent": 13.04839404296875,
+                "combined": 12.985537109375,
+                "ratio": 0.9951827839206296
+              },
+              "inference_b1_median_ms": {
+                "parent": 365.959,
+                "combined": 362.049,
+                "ratio": 0.9893157430203929
+              },
+              "inference_b1_p95_ms": {
+                "parent": 444.497,
+                "combined": 445.368,
+                "ratio": 1.0019595182869625
+              },
+              "inference_b8_median_ms": {
+                "parent": 2957.286,
+                "combined": 2922.239,
+                "ratio": 0.988148931148357
+              },
+              "inference_b8_p95_ms": {
+                "parent": 3134.274,
+                "combined": 2942.225,
+                "ratio": 0.93872616114609
+              },
+              "inference_b16_median_ms": {
+                "parent": 6037.425,
+                "combined": 5783.534,
+                "ratio": 0.957947138059686
+              },
+              "inference_b16_p95_ms": {
+                "parent": 6439.027,
+                "combined": 6256.416,
+                "ratio": 0.9716399698277395
+              },
+              "whole_process_rss_bytes": {
+                "parent": 3742752768,
+                "combined": 3739889664,
+                "ratio": 0.999235027217272
+              },
+              "construction_rss_bytes": {
+                "parent": 745287680,
+                "combined": 746278912,
+                "ratio": 1.0013299991756204
+              },
+              "training_rss_bytes": {
+                "parent": 3682304000,
+                "combined": 3620806656,
+                "ratio": 0.9832992213570634
+              },
+              "inference_b1_rss_bytes": {
+                "parent": 3696996352,
+                "combined": 3653173248,
+                "ratio": 0.9881462950385946
+              },
+              "inference_b8_rss_bytes": {
+                "parent": 3710406656,
+                "combined": 3679043584,
+                "ratio": 0.9915472682895058
+              },
+              "inference_b16_rss_bytes": {
+                "parent": 3742752768,
+                "combined": 3739889664,
+                "ratio": 0.999235027217272
+              }
+            },
+            {
+              "first_epoch_seconds": {
+                "parent": 6.322611,
+                "combined": 6.100031,
+                "ratio": 0.9647961894223763
+              },
+              "steady_epoch_seconds": {
+                "parent": 4.521562,
+                "combined": 4.553117,
+                "ratio": 1.0069787829957877
+              },
+              "launch_to_first_epoch_end_seconds": {
+                "parent": 12.976016845703125,
+                "combined": 12.67166650390625,
+                "ratio": 0.9765451644047721
+              },
+              "inference_b1_median_ms": {
+                "parent": 368.872,
+                "combined": 312.39,
+                "ratio": 0.8468791342254223
+              },
+              "inference_b1_p95_ms": {
+                "parent": 400.233,
+                "combined": 320.144,
+                "ratio": 0.7998940617090545
+              },
+              "inference_b8_median_ms": {
+                "parent": 2946.711,
+                "combined": 2931.541,
+                "ratio": 0.9948518874093863
+              },
+              "inference_b8_p95_ms": {
+                "parent": 3005.484,
+                "combined": 2991.837,
+                "ratio": 0.9954593003988709
+              },
+              "inference_b16_median_ms": {
+                "parent": 5935.709,
+                "combined": 5811.936,
+                "ratio": 0.9791477311303503
+              },
+              "inference_b16_p95_ms": {
+                "parent": 6246.093,
+                "combined": 5914.392,
+                "ratio": 0.9468946427790941
+              },
+              "whole_process_rss_bytes": {
+                "parent": 3739426816,
+                "combined": 3741138944,
+                "ratio": 1.000457858405645
+              },
+              "construction_rss_bytes": {
+                "parent": 745484288,
+                "combined": 746893312,
+                "ratio": 1.0018900787349658
+              },
+              "training_rss_bytes": {
+                "parent": 3678834688,
+                "combined": 3622658048,
+                "ratio": 0.9847297732123591
+              },
+              "inference_b1_rss_bytes": {
+                "parent": 3687120896,
+                "combined": 3654402048,
+                "ratio": 0.9911261797692895
+              },
+              "inference_b8_rss_bytes": {
+                "parent": 3706982400,
+                "combined": 3682803712,
+                "ratio": 0.9934775282450761
+              },
+              "inference_b16_rss_bytes": {
+                "parent": 3739426816,
+                "combined": 3741138944,
+                "ratio": 1.000457858405645
+              }
+            }
+          ],
+          "median_ratios": {
+            "first_epoch_seconds": 0.9736946655440122,
+            "steady_epoch_seconds": 0.997367691741575,
+            "launch_to_first_epoch_end_seconds": 0.9858639741627009,
+            "inference_b1_median_ms": 0.9180974386229076,
+            "inference_b1_p95_ms": 0.9009267899980085,
+            "inference_b8_median_ms": 0.9915004092788717,
+            "inference_b8_p95_ms": 0.9670927307724804,
+            "inference_b16_median_ms": 0.9685474345950181,
+            "inference_b16_p95_ms": 0.9592673063034167,
+            "whole_process_rss_bytes": 0.9998464428114584,
+            "construction_rss_bytes": 1.001610038955293,
+            "training_rss_bytes": 0.9840144972847112,
+            "inference_b1_rss_bytes": 0.989636237403942,
+            "inference_b8_rss_bytes": 0.992512398267291,
+            "inference_b16_rss_bytes": 0.9998464428114584
+          }
+        },
+        "b1_five_predictions": {
+          "prior": {
+            "requested_bytes": 8859327825,
+            "requested_count": 48090,
+            "clr_objects": 69492,
+            "managed_allocated_bytes": 5926144,
+            "receipt_sha256": "f66463712e11e04c46fdef6e046faf1732e487f939ae6e65e30c179ca3b8c459"
+          },
+          "updated": {
+            "requested_bytes": 3941807985,
+            "requested_count": 17910,
+            "clr_objects": 70231,
+            "managed_allocated_bytes": 6008944,
+            "receipt_sha256": "c9614f38d5831cbdb180ba71b2bac29b1958a9944980470ccdb659fe4b708716"
+          }
+        },
+        "scope": "Parent-to-candidate comparisons. Requested framework storage includes pool hits; CLR objects and bytes are separate."
+      },
+      "lstm_first_cpu_diagnostic": {
+        "ratios": {
+          "status": "observations_from_contaminated_pair",
+          "formal_accepted_count": 0,
+          "compiled_rejection": "A separate framework benchmark overlapped the measurement.",
+          "receipts": {
+            "ai": {
+              "report.json": "f3601a5335653db4004df0dbe57f9a4e421d6b225dde6ed14229778ea285814d",
+              "measurement.json": "0456148e76f2ecd6c322b6141952260eae6ee4afa855f4d2b9abf8986d019b15",
+              "lstm-workload.json": "80b9b924a3376614f38e93a6038975663ac9f037554f274d55e48a1547d76515",
+              "phases.jsonl": "8e0820f2565b8acb67f8f17bd93f225223057db7b793d412bd995fa6afb08b73",
+              "memory-samples.json": "2976716f28820df104e145c49a7e8880c22e500856eb7778fb0b0cfe63d5f740"
+            },
+            "compiled": {
+              "report.json": "141c991c9a30aee4f2e05c2cdde1d7147ca90eef6b28fc000ebcc5f9b16cdb1c",
+              "measurement.json": "acec26b549075ffbcd0d515fb5eb43a5f5572c0aa1cf8a7d53cd2578b0a818dc",
+              "lstm-workload.json": "ac79d4727a7ee5a4c7bf302aba24ebd93c5a7f3d92cddd7c269a4cd942d3db51",
+              "phases.jsonl": "710a86d88ef154872a4c7f6f632faa2d2d1310d9f4a2eb403102f85681a9b78c",
+              "memory-samples.json": "d98fa8303834d46b299d55fa7ec921c6f64049c48ccd69958941695064356072"
+            },
+            "eager": {
+              "report.json": "60978a44dfc3ba72c406c03572f8ae40ef55cc09fdbee6937fb73b224d9965c1",
+              "measurement.json": "517ec1932b47d2edef3e7431365676c08ca679c7f228b83a5877676241693b40",
+              "lstm-workload.json": "975e1673cd98888356a9ec4f262d9802b8fb405f1e44a3d26c68c4f8f544c61f",
+              "phases.jsonl": "59ee078debab801a0ff5ba727316ccbeeaa169931fd9fff511a60e4cd0b99d1b",
+              "memory-samples.json": "de000c84e373cfefda5bf002a123545a4ec34acefcb9afa3adb50ac5d7b41ead"
+            }
+          },
+          "observations": {
+            "training/epoch0_s": {
+              "ai": 0.297896,
+              "compiled": 143.183221,
+              "eager": 0.134127,
+              "ai_div_compiled": 0.0020805231082208996,
+              "ai_div_eager": 2.220999500473432
+            },
+            "training/steady_s": {
+              "ai": 0.021488,
+              "compiled": 0.098503,
+              "eager": 0.042668,
+              "ai_div_compiled": 0.2181456402343076,
+              "ai_div_eager": 0.5036092622105559
+            },
+            "startup/first_epoch_complete_s": {
+              "ai": 0.70565234375,
+              "compiled": 146.0469814453125,
+              "eager": 2.67466796875,
+              "ai_div_compiled": 0.004831680441230019,
+              "ai_div_eager": 0.2638280160358689
+            },
+            "inference/b1/median_ms": {
+              "ai": 0.052,
+              "compiled": 0.238,
+              "eager": 0.128,
+              "ai_div_compiled": 0.2184873949579832,
+              "ai_div_eager": 0.40625
+            },
+            "inference/b1/p95_ms": {
+              "ai": 0.058,
+              "compiled": 0.309,
+              "eager": 0.144,
+              "ai_div_compiled": 0.1877022653721683,
+              "ai_div_eager": 0.40277777777777785
+            },
+            "inference/b8/median_ms": {
+              "ai": 0.177,
+              "compiled": 0.711,
+              "eager": 0.201,
+              "ai_div_compiled": 0.2489451476793249,
+              "ai_div_eager": 0.880597014925373
+            },
+            "inference/b8/p95_ms": {
+              "ai": 0.184,
+              "compiled": 0.911,
+              "eager": 0.223,
+              "ai_div_compiled": 0.20197585071350163,
+              "ai_div_eager": 0.8251121076233183
+            },
+            "inference/b16/median_ms": {
+              "ai": 0.188,
+              "compiled": 0.84,
+              "eager": 0.23,
+              "ai_div_compiled": 0.22380952380952382,
+              "ai_div_eager": 0.817391304347826
+            },
+            "inference/b16/p95_ms": {
+              "ai": 0.195,
+              "compiled": 1.771,
+              "eager": 0.256,
+              "ai_div_compiled": 0.1101072840203275,
+              "ai_div_eager": 0.76171875
+            },
+            "peak_rss/whole_process": {
+              "ai": 128086016,
+              "compiled": 939012096,
+              "eager": 750292992,
+              "ai_div_compiled": 0.13640507565943005,
+              "ai_div_eager": 0.17071466395890314
+            },
+            "peak_rss/construction": {
+              "ai": 73842688,
+              "compiled": 633307136,
+              "eager": 614494208,
+              "ai_div_compiled": 0.11659854090132975,
+              "ai_div_eager": 0.12016824086973331
+            },
+            "peak_rss/training": {
+              "ai": 113717248,
+              "compiled": 897601536,
+              "eager": 747274240,
+              "ai_div_compiled": 0.12669012188499643,
+              "ai_div_eager": 0.15217605788204341
+            },
+            "peak_rss/inference_b1": {
+              "ai": 126025728,
+              "compiled": 902955008,
+              "eager": 748261376,
+              "ai_div_compiled": 0.13957032951081433,
+              "ai_div_eager": 0.1684247403944581
+            },
+            "peak_rss/inference_b8": {
+              "ai": 128081920,
+              "compiled": 918679552,
+              "eager": 748806144,
+              "ai_div_compiled": 0.13941958294506593,
+              "ai_div_eager": 0.1710481691774153
+            },
+            "peak_rss/inference_b16": {
+              "ai": 124792832,
+              "compiled": 906903552,
+              "eager": 749113344,
+              "ai_div_compiled": 0.13760320127183712,
+              "ai_div_eager": 0.1665873836042627
+            }
+          }
+        },
+        "exclusive_status": "diagnostic_only",
+        "accepted_pairs": 0,
+        "receipt_sha256": "5d028b90efe7d36eea0cd05eed7d74587375c9d9d16add95e5fb5dfbdc9257f6"
+      },
+      "informer_inference": {
+        "verification": "verification.json",
+        "sha256": "4516ffc697882376849dc01be80315b4d96ac9cbc89dd8e05a4ba894be9bc03b",
+        "candidate": "dc83ec4d2e9947c4e087f5986bc999c827e32b8f",
+        "scope": "One before/after pair against the prior AiDotNet implementation. Strict matched PyTorch performance remains open.",
+        "publication": {
+          "url": "https://github.com/ooples/AiDotNet/pull/2601#issuecomment-7031167950",
+          "head": "59b8151a27e75f682ae333e059f23bc8b3f4c993",
+          "file_count": 72,
+          "normal_package_build": {
+            "git_head": "59b8151a27e75f682ae333e059f23bc8b3f4c993",
+            "tensors_version": "0.151.2",
+            "tensor_sha": "7FF6CCA6DE2D1D4A927661FAC30D34034AE7C40BA95C6AD0F81FECE3C453B6F7",
+            "model_sha": "87D5B125E2B3B36F463E2A1F90750B7E2327C8523297963DA13D908BA84117A3",
+            "tests": "Total tests: 20      Passed: 20"
+          },
+          "package_receipt_sha256": "4b116b2f0234d93c6c14d44060cec8379cc3a77580996969fb716e4e45e51123"
+        }
+      },
+      "training_plan_storage": {
+        "report": "hifi-cpu-plan-storage.json",
+        "sha256": "b843430da21771840ef55ee1762da466f1384e8474ed4df283fc53204815bae5",
+        "result": {
+          "results": [
+            {
+              "plans": 2,
+              "direct_entry_types": [
+                "System.Action<AiDotNet.Tensors.Engines.IEngine>[] (Bytes > 10K)",
+                "System.Action<AiDotNet.Tensors.Engines.IEngine>[] (Bytes > 1K)",
+                "AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>",
+                "System.Boolean[]",
+                "System.Int64[] (Bytes > 1K)",
+                "System.Object",
+                "AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>[] (Bytes > 1K)",
+                "System.Collections.Generic.List<System.Runtime.InteropServices.GCHandle>",
+                "AiDotNet.Tensors.Engines.Compilation.TensorStorageLeaseSet",
+                "System.Collections.Generic.List<AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer>",
+                "ForwardEmit<System.Single>[] (Bytes > 1K)",
+                "System.Int32[] (Bytes > 1K)",
+                "AiDotNet.Tensors.Engines.FirstWriteRedirectTable",
+                "System.Boolean[] (Bytes > 1K)",
+                "System.String[] (Bytes > 1K)",
+                "System.Int32[][] (Bytes > 1K)",
+                "System.Collections.Generic.HashSet<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>",
+                "System.Collections.Generic.Dictionary<System.String,AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>",
+                "System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>",
+                "System.Single[][] (Bytes > 1K)",
+                "System.Single[]",
+                "AiDotNet.Tensors.Engines.Compilation.CompiledStep<System.Single>[] (Bytes > 10K)",
+                "System.Int32[]",
+                "System.Func<AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan+CapturedOptimizer<System.Single>>",
+                "System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>,AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>",
+                "System.ValueTuple<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>,AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>[] (Bytes > 1K)",
+                "System.Action",
+                "System.Collections.ObjectModel.ReadOnlyCollection<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>>",
+                "FusedOptimizerRuntimeState<System.Single>",
+                "System.Collections.Generic.List<System.ValueTuple<System.Single[],System.Int32>>",
+                "System.Collections.Generic.List<System.Int32>",
+                "System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer>",
+                "System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<System.Single>,System.Int32>",
+                "System.Collections.Generic.Dictionary<AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32>",
+                "System.Collections.Generic.Dictionary<AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer>",
+                "System.Runtime.CompilerServices.ConditionalWeakTable<AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Object>",
+                "System.Collections.Generic.HashSet<System.Object>",
+                "WeightNormWorkspaceLayout<System.Single>",
+                "System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer>",
+                "System.Collections.Generic.HashSet<System.IntPtr>"
+              ]
+            },
+            {
+              "storage": "other plan-exclusive FP32",
+              "arrays": 2590,
+              "exclusive_bytes": 565394460
+            },
+            {
+              "storage": "direct jagged array of training plan",
+              "arrays": 185,
+              "exclusive_bytes": 294974492
+            },
+            {
+              "storage": "optimizer state jagged FP32 array",
+              "arrays": 776,
+              "exclusive_bytes": 677304392
+            }
+          ],
+          "pid": 16968,
+          "assembly": "ADFBB512A55D6CC0320D9523D7137C39A186088FECBE36CD5A0E6DCC21523A43",
+          "heap_sha256": "E1C5C6BBE1E5BB1C05F3353C68E37D04BC0EDCDF9C94584DBDFA19E34B47FAB5",
+          "phase": "inference-b1-steady",
+          "scope": "Disjoint counts of live FP32 arrays reachable exclusively via a real CompiledTrainingPlan. Membership in the optimizer and direct-jagged slots is recorded even if the same arrays also appear through captured delegates."
+        }
+      }
+    }
+  },
+  "next_work": [
+    "Reduce warmed training CUDA allocation/free calls and per-phase CPU RAM and GPU VRAM.",
+    "Collect five matched alternating CPU and physical CUDA pairs across latency, allocation count and bytes, and peak memory.",
+    "Continue the other model families in order of measured gaps."
+  ],
+  "history": {
+    "before_replay_fix_cuda": {
+      "pass": false,
+      "checks_reached": 805,
+      "failed_tensor_checks": 0,
+      "expected_checks": 1615,
+      "workload_exit_code": 94,
+      "archive_unchanged": true,
+      "summary_sha256": "90fc3ac234e643af3818c8f7e537d5351865f409216bbcc907411a056db12aea",
+      "blocker": "Second update aborts: closure replay TensorMax has no matching trace-time shape. Diagnostic-only replay attempt55 identifies missing cache entry at node244. Guard remains unchanged; diagnostic patch archived outside the repos."
+    },
+    "before_calibrated_cpu_verifier": {
+      "source": {
+        "aidotnet_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+        "tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
+        "tensors_tree": "4fdbe76f1e3b4b5d6633a303e093e4b78c3d77dc",
+        "framework_build_ai_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+        "framework_build_tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
+        "source_equivalence": "Five-framework rebuild uses replay-fix commit d8dbe5fb89. The numerical runtime was built from identical library sources before the fix commit; archive hashes are preserved. Tensors final stack remains the identical published source tree."
+      },
+      "fresh_cuda_numerical": {
+        "pass": true,
+        "checks_reached": 1615,
+        "failed_tensor_checks": 0,
+        "expected_checks": 1615,
+        "workload_exit_code": 0,
+        "native_dispatch_pass": true,
+        "archive_unchanged": true,
+        "summary_sha256": "de54e9ea525fc2d401f0aa409cd5271b790f878597ee0e3f18411a8cbb0240f4",
+        "runtime_assemblies_sha256": {
+          "AiDotNet": "8f238d0bfc2c3ad54d3e8caf16678a9d59ba5fa64e1326f674cd41b994423dbe",
+          "Tensors": "d8332b648d68c8438321f49c9f6e563490c9274998ceb01a447b8e0072a57565"
+        },
+        "scope": "Full matched CUDA correctness check after spectral replay fix; no performance claim."
+      },
+      "cpu_numerical": {
+        "fresh_integration_rerun": true,
+        "pass": false,
+        "passed": 1612,
+        "expected": 1615,
+        "errors": 0,
+        "replay_failure": false,
+        "failed": [
+          {
+            "name": "train/step1/generator/001/bias",
+            "relative_l2": 0.002806617609186483,
+            "max_absolute_error": 0.00039996273699216545
+          },
+          {
+            "name": "train/step2/generator/001/bias",
+            "relative_l2": 0.0028095625932973863,
+            "max_absolute_error": 0.000400044780690223
+          },
+          {
+            "name": "train/step3/generator/001/bias",
+            "relative_l2": 0.002812718367088688,
+            "max_absolute_error": 0.00040006955350690987
+          }
+        ],
+        "numerical_receipt_sha256": "f62c417199f33699ebeb111e23ceb59b8bf7c487067404c790899bf5fd3a347f",
+        "scope": "All checks completed; same three generator/001/bias learned-state failures remain blocking."
+      },
+      "pull_requests": {
+        "aidotnet": [
+          {
+            "number": 2601,
+            "files": 64
+          },
+          {
+            "number": 2604,
+            "files": 61
+          }
+        ],
+        "tensors_merge_order": [
+          {
+            "number": 1781,
+            "files": 99
+          },
+          {
+            "number": 1765,
+            "files": 92
+          },
+          {
+            "number": 1782,
+            "files": 89
+          },
+          {
+            "number": 1783,
+            "files": 89
+          }
+        ],
+        "separate_efforts_unchanged": [
+          "AiDotNet#2524",
+          "Tensors#1772",
+          "Tensors#1774"
+        ],
+        "history_rewritten": false
+      },
+      "next_work": [
+        "Resolve the upstream CPU numerical discrepancy causing the three bias-update failures; keep all strict thresholds.",
+        "Resolve the CPU learned-state mismatch and rerun strict CPU numerical checks.",
+        "Eliminate measured warm GPU allocation/free calls and lower phase peak memory, then collect five alternating matched pairs.",
+        "Continue the family manifest in measured-bottleneck order; close each CPU/CUDA family only when every numerical, allocation, latency and peak-memory gate passes."
+      ]
+    },
+    "before_combined_pr_verification": {
+      "source": {
+        "aidotnet_commit": "24a5bba859b11c5860ada4c7bef24623f9287b32",
+        "tensors_commit": "da11467888e3d29933b53f68d6b6ac83aa968a60",
+        "tensors_tree": "5c0f3ec43f34bd8375e5d97354ee5e05fedc83ae",
+        "framework_build_ai_commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+        "framework_build_tensors_commit": "3e75dbe68f92ec3b4ec7b987b971218be9c9f1c9",
+        "source_equivalence": "Numerical verifier uses 24a5bba859 and unchanged core library sources from e1cab94957e1d0ab2aac81f582aeffa6643e886a. Framework and shader build fields describe their earlier recorded sources."
+      },
+      "pull_requests": {
+        "aidotnet": [
+          {
+            "baseRefName": "perf/elementwise-sweep-combined-v1",
+            "changedFiles": 72,
+            "headRefOid": "59b8151a27e75f682ae333e059f23bc8b3f4c993",
+            "number": 2601,
+            "state": "OPEN"
+          },
+          {
+            "baseRefName": "perf/2561-beat-torch-compile-2",
+            "changedFiles": 66,
+            "headRefOid": "4b1e081d9735ea9ca13b6f5f05ce7dca7c392c9d",
+            "number": 2604,
+            "state": "OPEN"
+          }
+        ],
+        "tensors": [
+          {
+            "baseRefName": "main",
+            "changedFiles": 123,
+            "headRefOid": "f8dc3cd74d420694fe7f02d6501c31114495636e",
+            "number": 1784,
+            "state": "OPEN"
+          },
+          {
+            "baseRefName": "main",
+            "changedFiles": 106,
+            "headRefOid": "37b365190a89edd09d36e5f20b4bd0c18c11b8b7",
+            "number": 1786,
+            "state": "OPEN"
+          },
+          {
+            "baseRefName": "main",
+            "changedFiles": 17,
+            "headRefOid": "0258a04a0047c3f35c34118122390e39e0c7fc31",
+            "number": 1792,
+            "state": "OPEN"
+          },
+          {
+            "baseRefName": "perf/hifi-2561-dependencies",
+            "changedFiles": 97,
+            "headRefOid": "428c648ee4b86af431b1bfa9f77e0c32a07ae1f6",
+            "number": 1793,
+            "state": "OPEN"
+          },
+          {
+            "baseRefName": "perf/hifi-2561-dependencies",
+            "changedFiles": 74,
+            "headRefOid": "fa65a86403f3483572b7323c18e21254124b9473",
+            "number": 1794,
+            "state": "MERGED"
+          }
+        ],
+        "independent_forecasting": 1792,
+        "shared_hifi_dependencies": [
+          1784,
+          1786
+        ],
+        "training_merged_into": "perf/hifi-2561-dependencies",
+        "history_rewritten": false,
+        "snapshot_utc_before_this_publication": "2026-11-20T07:36:23.138933+00:00"
+      },
+      "builds": {
+        "frameworks": [
+          "net10.0",
+          "net8.0",
+          "net471",
+          "net462",
+          "netstandard2.0"
+        ],
+        "all_pass": true,
+        "framework_receipts_sha256": "e916350653d51b77c04c17353d6512645ad2190e0d7abdae4dd36c6d3d61885b",
+        "standalone_net10_stages": [
+          {
+            "stage": "perf/2561-engine-foundation",
+            "commit": "e073904b97039cd5828d172cf0b27c09b212a649",
+            "exit": 0
+          },
+          {
+            "stage": "perf/2561-engine-validation-cpu",
+            "commit": "56c9824e824ed560c985e686858a67f70b99462a",
+            "exit": 0
+          },
+          {
+            "stage": "perf/2561-convolution-backends",
+            "commit": "b3aa2a03b276253a4b7ecc27bb3a9289252ffef9",
+            "exit": 0
+          }
+        ],
+        "matched_benchmark_harness_build": "pass"
+      },
+      "focused_tests": {
+        "passed": 110,
+        "skipped": 0,
+        "groups": {
+          "derived_cache": 17,
+          "gradient_legacy": 82,
+          "gradient_handoff": 11
+        },
+        "scope": "Fresh integrated candidate binaries from CUDA quality attempt54"
+      },
+      "fresh_cuda_numerical": {
+        "pass": true,
+        "checks_reached": 1615,
+        "failed_tensor_checks": 0,
+        "expected_checks": 1615,
+        "workload_exit_code": 0,
+        "native_dispatch_pass": true,
+        "archive_unchanged": true,
+        "summary_sha256": "bf6759c184456a5e8ba6bc41d3c6c9115b07cb6725888230676722234dff67db",
+        "runtime_assemblies_sha256": {
+          "AiDotNet.dll": "1f46b8d999e5a12cf462247cb1e8a7cae9f49dbcdb31a112ecb6390a5d7713cf",
+          "AiDotNet.Tensors.dll": "dbc34cba80941887999d3e975b20c7e51d8ef25c06215f0b3cc19172f5fea1ef",
+          "AiDotNet.PyTorchParity.dll": "c91c137aceebb4e930446b2cb08d9037b024ad58bd3e1eca368d945f2ed68d7f"
+        },
+        "scope": "Physical CUDA compared with the fixed compiled PyTorch reference and native dispatch checks."
+      },
+      "cpu_numerical": {
+        "fresh_integration_rerun": true,
+        "passed": 1615,
+        "expected": 1615,
+        "errors": 0,
+        "replay_failure": false,
+        "failed": [],
+        "configurations": {
+          "managed": {
+            "device": "cpu",
+            "passed_checks": 1615,
+            "pass": true,
+            "failed_checks": [],
+            "native_pass": null,
+            "archive_unchanged": true,
+            "fixture_manifest_sha256": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+            "reference_manifest_sha256": "914dbb1295b46a02347e8ac35cab35f31c1709d94919be0feb61058f54067284",
+            "summary_sha256": "399e039051c544f21ee251839db9d6ca89ee310d915da6f11b193c09985c4296",
+            "numerical_sha256": "b26649f6636214154ff806656453706aeb033a69a1447c6d22daf3783a7880ae"
+          },
+          "onemkl": {
+            "device": "cpu",
+            "passed_checks": 1615,
+            "pass": true,
+            "failed_checks": [],
+            "native_pass": null,
+            "archive_unchanged": true,
+            "fixture_manifest_sha256": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+            "reference_manifest_sha256": "914dbb1295b46a02347e8ac35cab35f31c1709d94919be0feb61058f54067284",
+            "summary_sha256": "a4a1ce6ba55512f0584bcc1b6c7eb369edc149ac35469ce5202bd747aa5a4ff1",
+            "numerical_sha256": "df1cae92f490ec4b46bff464be22bc6627b3502e1f7a8526a1dbc814e0040ba9"
+          }
+        },
+        "pass": true
+      },
+      "fresh_verifier_receipts": {
+        "managed": {
+          "device": "cpu",
+          "passed_checks": 1615,
+          "pass": true,
+          "failed_checks": [],
+          "native_pass": null,
+          "archive_unchanged": true,
+          "fixture_manifest_sha256": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+          "reference_manifest_sha256": "914dbb1295b46a02347e8ac35cab35f31c1709d94919be0feb61058f54067284",
+          "summary_sha256": "399e039051c544f21ee251839db9d6ca89ee310d915da6f11b193c09985c4296",
+          "numerical_sha256": "b26649f6636214154ff806656453706aeb033a69a1447c6d22daf3783a7880ae"
+        },
+        "onemkl": {
+          "device": "cpu",
+          "passed_checks": 1615,
+          "pass": true,
+          "failed_checks": [],
+          "native_pass": null,
+          "archive_unchanged": true,
+          "fixture_manifest_sha256": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+          "reference_manifest_sha256": "914dbb1295b46a02347e8ac35cab35f31c1709d94919be0feb61058f54067284",
+          "summary_sha256": "a4a1ce6ba55512f0584bcc1b6c7eb369edc149ac35469ce5202bd747aa5a4ff1",
+          "numerical_sha256": "df1cae92f490ec4b46bff464be22bc6627b3502e1f7a8526a1dbc814e0040ba9"
+        },
+        "cuda": {
+          "device": "cuda",
+          "passed_checks": 1615,
+          "pass": true,
+          "failed_checks": [],
+          "native_pass": true,
+          "archive_unchanged": true,
+          "fixture_manifest_sha256": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+          "reference_manifest_sha256": "b30181ea9fb8089dc2dbe611cd1823c226762a3940650ca4e268553c18aa983c",
+          "summary_sha256": "bf6759c184456a5e8ba6bc41d3c6c9115b07cb6725888230676722234dff67db",
+          "numerical_sha256": "2cb325fe8b062b9f5c277dd6fe87341a44f6f45efa1b7f8814616a3b31bdc68b"
+        }
+      },
+      "compiler_validation": {
+        "pass": true,
+        "actual_jobs": 56,
+        "payloads": 41,
+        "groups": [
+          {
+            "backend_group": "hip-opencl",
+            "jobs": 26,
+            "pass": true
+          },
+          {
+            "backend_group": "wgsl",
+            "jobs": 15,
+            "pass": true
+          },
+          {
+            "backend_group": "Vulkan",
+            "jobs": 15,
+            "pass": true
+          }
+        ],
+        "manifest_sha256": "cf8a17534eb004785485e19561baecb738dc1a2b75ee94d16ded65dfef9cd40c",
+        "batch_sha256": "d5434c96ab98a291650d6555dc0188403f9e57ed1420c9860e841165004b9dc1",
+        "metal": {
+          "new_apple_invocation": false,
+          "payloads_scalar_abi_managed_sources_unchanged": true,
+          "prior_actual_apple_run": 44328785438,
+          "prior_bound_proof_sha256": "f8764ca6c1c3fae8df2aeb31cfc1f885dd9304b72c799afea74fbc81dd782a1d"
+        },
+        "non_cuda_runtime_tested": false
+      }
+    }
+  },
+  "replay_fix": {
+    "commit": "d8dbe5fb89894fa4e04b27ff25245ba312e96df9",
+    "root_cause": "Probe-only omission of spectral state copies/snapshots shifted later shape-cache node positions.",
+    "change": "Record identical lazy copy/snapshot operations during probes; abandon them without executing writes.",
+    "guard_or_tolerance_changes": false,
+    "canonical_baseline": {
+      "passed": 11,
+      "failed": 3,
+      "skipped": 0,
+      "trx_sha256": "dd080c4d05437f2cf1b05c86a93318e419dc1cb4f13fa43d6059700a5f9b5e77"
+    },
+    "fixed_regression_suite": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "CPU float/double and CUDA; multiple layers/repeated forwards, two probes per step, state unchanged bitwise and three SGD updates matching eager; existing spectral and AdamW trajectory checks retained.",
+      "trx_sha256": "4ef24d4c7305c53bda8f4147f0360f5ad0643bb813d7abfd3c4b35d1651527a6"
+    }
+  },
+  "fresh_verifier_receipts": {
+    "managed": {
+      "failed_checks": [],
+      "passed_checks": 1615,
+      "native_pass": null,
+      "pass": true,
+      "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+      "workload_exit_code": 0,
+      "device": "cpu",
+      "archive_unchanged": true,
+      "not_for_scored_timing": true,
+      "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+      "schema": "shared-hifi-matched-raw-v1",
+      "numeric_pass": true,
+      "summary_sha256": "ae4c528fa9edfe2c1dce695426ec5655cd92e511d4a6d611bce552d969a8b9d6",
+      "numerical_sha256": "edc57b98c69196f4face2657e50d4b67cbe6e6673b2b05a027a362e9c712cfcb",
+      "reference_exported_from_this_harness": true
+    },
+    "onemkl": {
+      "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+      "archive_unchanged": true,
+      "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+      "workload_exit_code": 0,
+      "device": "cpu",
+      "not_for_scored_timing": true,
+      "schema": "shared-hifi-matched-raw-v1",
+      "passed_checks": 1615,
+      "numeric_pass": true,
+      "failed_checks": [],
+      "pass": true,
+      "native_pass": null,
+      "summary_sha256": "4bb3952bd4b6a1cea98ac0b36314c1259836b9972fb243649c92a0abf9c891bd",
+      "numerical_sha256": "72f690f459208b3bb9a40815a4e28c6fa52d2faed88315efcd4a01529b3abd57",
+      "reference_exported_from_this_harness": true
+    },
+    "cuda": {
+      "device": "cuda",
+      "pass": true,
+      "workload_exit_code": 0,
+      "archive_unchanged": true,
+      "native_pass": true,
+      "numeric_pass": true,
+      "not_for_scored_timing": true,
+      "failed_checks": [],
+      "passed_checks": 1615,
+      "reference_manifest_sha256": "ef507b3f162840e770067f2fd99294be31b5a3c784c77e50f32f218476d36562",
+      "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+      "schema": "shared-hifi-matched-raw-v1",
+      "summary_sha256": "18c0f05344a69df57628d063df757326e0c64a7ec5e394fa1aa8862361673ca0",
+      "numerical_sha256": "f3b36363c7c9c5b32ac7c0531015b2704d170567c849f4d8dc8a32b2f2335de5",
+      "reference_exported_from_this_harness": true
+    }
+  },
+  "verification_policy": "Learned-weight updates use the per-tensor relative error and cosine policy calibrated against eager and compiled PyTorch. Output, gradient and spectral-state observations retain their strict checks.",
+  "fresh_hifigan_fixture": {
+    "previous_manifest": "be310dd48db0f16a7faeb616a7d8703524fb32329c6d2d4f085a488d6db60abe",
+    "current_manifest": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+    "source_hashes": {
+      "benchmark_source_sha256": "cec9f9ea5fa2309e663bbe0a679a7a42ba5b165812931873a3db1c2b1eafd0b0",
+      "fixture_consumer_sha256": "c4e6d209348c499652d2b319ea7b50fc6f5036d9a2706e45703e14a1c257ad74",
+      "exporter_sha256": "436bbf9faeb5d1ca6258adb8a5c4d0b683ffe46f3bd8d016b6179f964984be2f"
+    },
+    "state_fields": 404,
+    "unchanged_training_steps": 9,
+    "payloads": {
+      "initial.safetensors": "6c30021fd19ac3fa8959206928092d12a54cbed3149b595445f2f60cbcb335c5",
+      "inputs.safetensors": "14825e8824d130cb3080974d34e88f4855af66fa0af2dd06bf28526841a1c0bb"
+    },
+    "all_non_source_fields_identical": true
+  },
+  "combined_builds": {
+    "published_package": {
+      "engine_production_tree": null,
+      "engine_source": "NuGet 0.151.2",
+      "source": "f6676b956961a0f65f8f254132d24b06a9d7cc3d",
+      "variant": "nuget",
+      "assemblies": {
+        "AiDotNet.PyTorchParity.dll": "76E55599B0A139E28F2DE95A4A5165AC109FD3EB0B7F8B2347D94B8120FF06B3",
+        "AiDotNet.dll": "44771CDCCB1EE17B3DFDCD6179375E20320B7C93000CF3C4F1FF2F365FA94981",
+        "AiDotNet.Tensors.dll": "7FF6CCA6DE2D1D4A927661FAC30D34034AE7C40BA95C6AD0F81FECE3C453B6F7"
+      }
+    },
+    "source_dependency": {
+      "engine_production_tree": "e039de7739c9310eecf0a1cb2bd16f1216154b97",
+      "engine_source": "60ccb6100e0d4b4d1f96a31ea43daada8336bd92",
+      "source": "f6676b956961a0f65f8f254132d24b06a9d7cc3d",
+      "variant": "rich",
+      "assemblies": {
+        "AiDotNet.PyTorchParity.dll": "E8958B23F85BAFB3F4107421BB3A4E866E1E6D38306902891EDE941F3E410BB3",
+        "AiDotNet.dll": "2FFAAED8A895D97910EAC637D57D1AA9268FCD7FF861FE6BF64FF4250141F6AC",
+        "AiDotNet.Tensors.dll": "D8DA3E6D229C878CA3F6A4159B97A0D4E36510D73B5D2B07054951C3BB8ADF24"
+      }
+    }
+  },
+  "combined_lstm_controls": {
+    "cpu": {
+      "checks": 93,
+      "pairs": 1,
+      "purpose": "unscored numerical validation",
+      "summary_sha256": "b75504b2e439ed99cb261200676fb9150ffd5e4d9ca323a0dbd12647e8f3160c",
+      "comparison_sha256": "45855789c9f396fe8f5aeb604470d4949c5453d1d8df32942c2ee2c2f0ebf30d"
+    },
+    "cuda": {
+      "checks": 93,
+      "pairs": 1,
+      "purpose": "unscored numerical validation",
+      "summary_sha256": "b75504b2e439ed99cb261200676fb9150ffd5e4d9ca323a0dbd12647e8f3160c",
+      "comparison_sha256": "3929dcfc4fe7da7fc2bd892acd38e6bbe93ae0e9a195ecea04e52fddd817443a"
+    },
+    "cpu_reference_policy": "Unmodified fullgraph Inductor using the ATen CPU recurrent decomposition. The stock oneDNN fullgraph backward fails on this Windows device."
+  },
+  "tensor_legacy_framework_verification": {
+    "source": "60ccb6100e0d4b4d1f96a31ea43daada8336bd92",
+    "test_exits": {
+      "net471": 0,
+      "net462": 0,
+      "net10.0": 0
+    },
+    "receipt_sha256": "019c93f2112fc63519d6cb433730e24e2a545de6c872c6da2187cfa3252775fb"
+  },
+  "matching_production_compiler_verification": {
+    "production_tree": "e039de7739c9310eecf0a1cb2bd16f1216154b97",
+    "compiled_jobs": {
+      "hip-opencl": 26,
+      "wgsl": 15,
+      "Vulkan": 15
+    },
+    "additional_wgsl_spirv_sha256": "7950F5F8B040362C33ED636358D369D144D1105300BC0E61E2BC5F46646CE89B",
+    "metal_run": "44328785438",
+    "apple_payloads": [
+      {
+        "shader": "batch.metal",
+        "sha256": "7a90714c3497b87355a79a8f06e6a27fa6446a6b3acb5bc0267ea8aa84588cef",
+        "metallib_sha256": "155d3542cc457b9acef5c942f357b6de902d24e6098c80059294e8a85c1f9c7e"
+      },
+      {
+        "shader": "convt.metal",
+        "sha256": "d7f05f4bb1091656e5da660ced9bd44be8683e816b9f51f1b676c831dc2dd0d0",
+        "metallib_sha256": "1a76347500ee35abfc0c168f9c6489cc92b2df666f1d9abae3baf564393f0ed3"
+      }
+    ],
+    "physical_cuda_checks": 1615,
+    "receipt_sha256": "045817f6dbf7aeb241bfcc461feb8ef571db03fff67a01b270e6f8027bcc2914"
+  },
+  "optional_operations_numerical_oracle": {
+    "test_source": "80facf1d2d0a1f8d3d8eb5686a60bcbcae9c4c36",
+    "combined_source_runtime": {
+      "exit_code": 0,
+      "skipped": 0,
+      "passed": 28,
+      "failed_cases": [],
+      "model": "2FFAAED8A895D97910EAC637D57D1AA9268FCD7FF861FE6BF64FF4250141F6AC",
+      "failed": 0,
+      "engine": "D8DA3E6D229C878CA3F6A4159B97A0D4E36510D73B5D2B07054951C3BB8ADF24",
+      "total": 28,
+      "staged_model": "2FFAAED8A895D97910EAC637D57D1AA9268FCD7FF861FE6BF64FF4250141F6AC",
+      "staged_engine": "D8DA3E6D229C878CA3F6A4159B97A0D4E36510D73B5D2B07054951C3BB8ADF24"
+    },
+    "combined_package_runtime": {
+      "failed_cases": [],
+      "failed": 0,
+      "engine": "7FF6CCA6DE2D1D4A927661FAC30D34034AE7C40BA95C6AD0F81FECE3C453B6F7",
+      "passed": 28,
+      "exit_code": 0,
+      "staged_engine": "7FF6CCA6DE2D1D4A927661FAC30D34034AE7C40BA95C6AD0F81FECE3C453B6F7",
+      "staged_model": "44771CDCCB1EE17B3DFDCD6179375E20320B7C93000CF3C4F1FF2F365FA94981",
+      "model": "44771CDCCB1EE17B3DFDCD6179375E20320B7C93000CF3C4F1FF2F365FA94981",
+      "total": 28,
+      "skipped": 0
+    }
+  },
+  "standalone_consumer": {
+    "default_branch": "master",
+    "base_commit": "0b14ed81d40723bd145b2ac7d75554fc384e81fe",
+    "verified_source": "f5ce54ec2aa6108f1f7782754b5fcfe0c91bea37",
+    "verified_src_tree": "2c9b72b622574d0e1bef77f1ff84763d5a1931ce",
+    "changed_files": 73,
+    "optional_engine_builds": {
+      "source-runtime": {
+        "passed": 28,
+        "assemblies": {
+          "AiDotNet.Tensors.dll": "D8DA3E6D229C878CA3F6A4159B97A0D4E36510D73B5D2B07054951C3BB8ADF24",
+          "AiDotNet.dll": "B1DDEF42664F0237498140F83F8A843E1471F32860348D2CD1355E799E7FC4DC"
+        },
+        "production": "2c9b72b622574d0e1bef77f1ff84763d5a1931ce",
+        "benchmark": "CDAAF63FB2632459B1650E30CB5EE64F3EF9E887DB101EC93F772D842A183469",
+        "source": "f5ce54ec2aa6108f1f7782754b5fcfe0c91bea37"
+      },
+      "package-runtime": {
+        "passed": 28,
+        "assemblies": {
+          "AiDotNet.Tensors.dll": "3694A412483E772B0F74F86E34B04B0EEE290682980FA80557234B537C7C7493",
+          "AiDotNet.dll": "0D34B2ECC8FCFB8EBBE661F75FF5068ECA77793AC7D2AEAFE733F03197557518"
+        },
+        "production": "2c9b72b622574d0e1bef77f1ff84763d5a1931ce",
+        "benchmark": "3FED78AA5D4426566DD538891D15A3BA26F51D485331F5BB039D62781DD91D72",
+        "source": "f5ce54ec2aa6108f1f7782754b5fcfe0c91bea37"
+      }
+    },
+    "nuget_version": "0.151.0",
+    "physical_cuda_and_cpu_source_engine_tree": "e039de7739c9310eecf0a1cb2bd16f1216154b97",
+    "full_model_numerics_on_source_engine": {
+      "hifigan": {
+        "managed": {
+          "passed_checks": 1615,
+          "device": "cpu",
+          "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+          "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+          "native_pass": null,
+          "fused_steps": 6,
+          "eager_steps": 0,
+          "numerics_sha256": "afbd86e7dcc8d2c74416514c5926c90f3c55874fdcd75f79d7fa11f20b13a40c"
+        },
+        "onemkl": {
+          "passed_checks": 1615,
+          "device": "cpu",
+          "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+          "reference_manifest_sha256": "d7ebaaf84c3802281057e99095446cf433e74ced64e25a23335a27db13ee65c6",
+          "native_pass": null,
+          "fused_steps": 6,
+          "eager_steps": 0,
+          "numerics_sha256": "a90bfbf19a02e08a3ba166316003cc55c3ed7f2c56182363f939e45fc153e46b"
+        },
+        "cuda": {
+          "passed_checks": 1615,
+          "device": "cuda",
+          "fixture_manifest_sha256": "c7cd28aaa1cd5fcc9a43deb68ca64f8a2e1c6b37633befa4d3b6355255a43032",
+          "reference_manifest_sha256": "ef507b3f162840e770067f2fd99294be31b5a3c784c77e50f32f218476d36562",
+          "native_pass": true,
+          "fused_steps": 6,
+          "eager_steps": 0,
+          "numerics_sha256": "2602f9d18ae968f832c311726d94fa7c23cc5dad88593b48fd7e9a88ca84d901"
+        }
+      },
+      "lstm": {
+        "cpu": {
+          "checks": 93,
+          "comparison_sha256": "b75504b2e439ed99cb261200676fb9150ffd5e4d9ca323a0dbd12647e8f3160c"
+        },
+        "cuda": {
+          "checks": 93,
+          "comparison_sha256": "b75504b2e439ed99cb261200676fb9150ffd5e4d9ca323a0dbd12647e8f3160c"
+        }
+      }
+    },
+    "python_suite": {
+      "tests": 82,
+      "tree": "9beb2ae59b66fda45d3f20616684eb3b5180a697",
+      "standalone_test_log_sha256": "46dec90b2dc4aab7f0a14c9f40fe6264a05d9bddc140fccbef132cd5ed3781f9"
+    },
+    "family_complete": false
+  }
+}

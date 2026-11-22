@@ -9,17 +9,28 @@ from pathlib import Path
 _previous_phase: str | None = None
 
 
-def mark_phase(model: str, phase: str) -> None:
+def mark_phase(model: str, phase: str) -> bool:
+    """Record a phase boundary. Returns True when it snapshotted and reset the CUDA allocator peaks.
+
+    When phase telemetry is active this function owns that reset: a caller that reset the peaks first would make
+    the marker record the reset values as the finished phase's peaks.
+    """
     global _previous_phase
     output = os.environ.get("AIDOTNET_BENCH_PHASE_FILE")
     if not output:
-        return
+        return False
+    reset_peaks = False
     diagnostics = os.environ.get("AIDOTNET_BENCH_DIAGNOSTICS") == "1"
     record: dict[str, object] = {
         "schema": 1, "pid": os.getpid(), "unix_ms": time.time_ns() // 1_000_000,
         "model": model, "phase": phase, "diagnostics": diagnostics,
     }
     import torch
+    if diagnostics and os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE"):
+        # A zero-duration marker maps allocator events to fixed-work windows; adaptive
+        # warm-up call counts must not be mixed into the allocation efficiency score.
+        with torch.profiler.record_function("aidotnet.phase/" + model + "/" + phase):
+            pass
     if torch.cuda.is_initialized() and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":
         stats = torch.cuda.memory_stats()
         record["gpu_memory_interval"] = {
@@ -34,9 +45,12 @@ def mark_phase(model: str, phase: str) -> None:
             }},
         }
         torch.cuda.reset_peak_memory_stats()
+        reset_peaks = True
     else:
         record["gpu_memory_interval"] = {"coverage": "inactive_or_uninitialized"}
     if diagnostics:
+        # Evidence for the allocation gate: before initialization the CUDA caching allocator cannot allocate.
+        record["cuda_initialized"] = torch.cuda.is_initialized()
         # Native CUDA caching-allocator requests are distinct from segments acquired from the driver.
         # These counters do not measure Python objects, CPU storage, or allocations inside vendor libraries.
         if torch.cuda.is_initialized() and torch.cuda.get_allocator_backend() == "native" and os.environ.get("AIDOTNET_BENCH_DEVICE") != "cpu":
@@ -58,6 +72,7 @@ def mark_phase(model: str, phase: str) -> None:
     with Path(output).open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record, allow_nan=False) + "\n")
     _previous_phase = phase
+    return reset_peaks
 
 
 def cpu_storage_events(trace_path: Path) -> dict[str, object]:

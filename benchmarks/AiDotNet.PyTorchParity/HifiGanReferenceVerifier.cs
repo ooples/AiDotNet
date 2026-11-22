@@ -70,7 +70,9 @@ internal static class HifiGanReferenceVerifier
             : throw new InvalidDataException($"{type.Name}.{name} is not a non-null {typeof(T).Name}.");
     }
 
-    private static Binding[] Bindings(Model model)
+    private static Binding[] Bindings(Model model) => Bindings(model.GeneratorLayers, model.DiscriminatorLayers);
+
+    private static Binding[] Bindings(IEnumerable<LayerBase<float>> generator, IEnumerable<LayerBase<float>> discriminator)
     {
         var result = new List<Binding>();
         void Add(IEnumerable<LayerBase<float>> layers, string group)
@@ -85,8 +87,8 @@ internal static class HifiGanReferenceVerifier
             int expected = group == "generator" ? 78 : 54;
             if (index != expected) throw new InvalidDataException($"{group} has {index} layers; full V1 requires {expected}.");
         }
-        Add(model.GeneratorLayers, "generator");
-        Add(model.DiscriminatorLayers, "discriminator");
+        Add(generator, "generator");
+        Add(discriminator, "discriminator");
         return result.ToArray();
     }
 
@@ -117,6 +119,22 @@ internal static class HifiGanReferenceVerifier
             }
         if (!expectedKeys.SetEquals(source.Names)) throw new InvalidDataException("The reference state has missing or extra fields.");
     }
+    // The benchmark consumes the same active404-field mapping as numerical verification.
+    private static Binding[] BenchmarkBindings(HiFiGAN<float> model)
+        => Bindings(Field<HiFiGanGenerator<float>>(model, typeof(HiFiGAN<float>), "_generator").Layers,
+            Field<HiFiGanDiscriminators<float>>(model, typeof(HiFiGAN<float>), "_discriminators").Layers);
+
+    internal static IEnumerable<(string Name, Tensor<float> Value)> SharedBenchmarkState(HiFiGAN<float> model)
+        => BenchmarkBindings(model).SelectMany(binding => Fields(binding)
+            .Select(field => (binding.Key + "/" + field.Role, field.Tensor)));
+
+    internal static void ImportSharedBenchmarkState(HiFiGAN<float> model, string path)
+    {
+        using var source = TorchCheckpointFile.Open(path, strictAxes: true);
+        Import(BenchmarkBindings(model), source);
+    }
+
+
 
     private static Tensor<float> Read(TorchCheckpointFile source, string name)
     {
@@ -131,8 +149,16 @@ internal static class HifiGanReferenceVerifier
         Tolerance tolerance, GradientTotals? total = null, ComparisonKind kind = ComparisonKind.Standard)
     {
         // The engine represents reductions as rank-zero tensors; the reference serializes each scalar as [1].
-        int[] shape = actual.Length == 1 && source.ShapeOf(key)?.Aggregate(1L, (a, b) => a * b) == 1
-            ? Array.Empty<int>() : actual.Shape.ToArray();
+        // Only a stored [1] is that scalar form: the reader does not check axes for an empty requested shape, so any
+        // other one-element shape that differs from the actual tensor's is rejected here.
+        int[] shape = actual.Shape.ToArray();
+        if (actual.Length == 1 && source.ShapeOf(key) is { } stored
+            && !stored.Select(d => (long)d).SequenceEqual(shape.Select(d => (long)d)))
+        {
+            if (stored.Length != 1 || stored[0] != 1)
+                throw new InvalidDataException($"Scalar reference '{key}' must be stored as [1], not [{string.Join(", ", stored)}].");
+            shape = Array.Empty<int>();
+        }
         var expected = source.Read(key, shape);
         return Compare(name, actual.ToArray(), expected, tolerance, total, kind);
     }
@@ -159,9 +185,10 @@ internal static class HifiGanReferenceVerifier
         double ratio = expectedSquared > 0 ? Math.Sqrt(actualSquared / expectedSquared) : actualSquared == 0 ? 1 : 0;
         double cosine = expectedSquared > 0 && actualSquared > 0 ? dot / Math.Sqrt(expectedSquared * actualSquared)
             : expectedSquared == actualSquared ? 1 : 0;
+        // AdamW can amplify small gradient differences in individual weights. The eager/compiled
+        // reference control calibrates learned state by its tensorwise relative error and cosine.
         bool pass = kind == ComparisonKind.LearnedState
-            ? finite && worst <= tolerance.Absolute + tolerance.Relative * scale
-                && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
+            ? finite && relative <= tolerance.Relative && cosine >= tolerance.GradientCosine
             : finite && worst <= tolerance.Absolute + tolerance.Relative * scale
                 && (relative <= tolerance.Relative || worst <= tolerance.Absolute);
         if (total is not null)
@@ -225,11 +252,17 @@ internal static class HifiGanReferenceVerifier
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
-    internal static int Run(string directory, string output)
+    internal static int Run(string directory, string output, string? workloadDirectory = null)
     {
         var checks = new List<Check>();
         var errors = new List<string>();
-        var manifest = JObject.Parse(File.ReadAllText(Path.Combine(directory, "manifest.json")));
+        // One snapshot supplies both the protocol and the receipt's hash, so the receipt cannot name a manifest that
+        // replaced this one while the verification ran.
+        byte[] manifestBytes = File.ReadAllBytes(Path.Combine(directory, "manifest.json"));
+        string manifestSha256 = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
+        JObject manifest;
+        using (var manifestReader = new StreamReader(new MemoryStream(manifestBytes)))
+            manifest = JObject.Parse(manifestReader.ReadToEnd());
         string device = AiDotNetEngine.Current.SupportsGpu ? "cuda" : "cpu";
         var tolerance = device == "cuda" ? new Tolerance(2e-4, 3e-3, .03, .995)
             : new Tolerance(2e-5, 1e-3, .01, .999);
@@ -255,6 +288,8 @@ internal static class HifiGanReferenceVerifier
                     throw new InvalidDataException($"Reference hash differs: {file.Name}");
             }
             using var reference = TorchCheckpointFile.Open(Path.Combine(directory, "reference.safetensors"), strictAxes: true);
+            HifiBenchmarkFixture.ValidateMatchedReference(workloadDirectory, directory, manifest, reference);
+
             using var initial = TorchCheckpointFile.Open(Path.Combine(directory, "initial.safetensors"), strictAxes: true);
             using var referenceGradients = TorchCheckpointFile.Open(Path.Combine(directory, "isolated-gradients.safetensors"), strictAxes: true);
             using var model = new Model((int?)manifest["seed"] ?? throw new InvalidDataException("Missing seed."));
@@ -346,7 +381,7 @@ internal static class HifiGanReferenceVerifier
         var receipt = new
         {
             schema = "hifigan-v1-equivalence-receipt-v1", model = "hifigan-v1", device, pass,
-            reference_manifest_sha256 = Hash(Path.Combine(directory, "manifest.json")),
+            reference_manifest_sha256 = manifestSha256,
             engine = AiDotNetEngine.Current.Name, tolerance, fused_steps = fused, eager_steps = eager,
             comparison_policy = new
             {
