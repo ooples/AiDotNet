@@ -282,7 +282,6 @@ internal sealed partial class HiFiGanGenerator<T>
             ReleaseConsumed(previous, x);
             var stageInput = x;
             Tensor<T>? sum = null;
-            bool hasPrivateBranch = false;
             foreach (var (first, second) in _blocks[i])
             {
                 var h = stageInput;
@@ -308,12 +307,11 @@ internal sealed partial class HiFiGanGenerator<T>
                     ReleaseConsumed(carriedActivation, h, stageInput, sum);
                     ReleaseConsumed(residual, h, stageInput, sum);
                 }
-                hasPrivateBranch |= !Aliases(h, stageInput);
                 if (sum is null) sum = h;
                 else
                 {
                     var previousSum = sum;
-                    if (hasPrivateBranch && CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
+                    if (CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
                     {
                         _engine.TensorAddInPlace(previousSum, h);
                         Interlocked.Increment(ref _gpuOwnedResidualReuses);
@@ -329,7 +327,7 @@ internal sealed partial class HiFiGanGenerator<T>
                 }
             }
             var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
-            if (hasPrivateBranch && CanReusePrivateResult(completedSum, stageInput))
+            if (CanReusePrivateResult(completedSum, stageInput))
             {
                 _engine.TensorMultiplyScalarInPlace(completedSum, _residualAverageScale);
                 Interlocked.Increment(ref _gpuOwnedResidualReuses);
