@@ -348,7 +348,10 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
             var size = Options.InputSize;
             if (size is null || size.Length != 2 || size[0] <= 0 || size[1] <= 0)
                 throw new InvalidOperationException("InputSize must be [height, width] with positive entries.");
+            // Not a step: shapes resolve, but a training-mode BatchNorm must not fold the zero image into the running
+            // statistics inference reads, and nothing draws.
             using (AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter())
+            using (AiDotNet.Training.CompiledStepRandom<T>.SuppressDraws())
             {
                 Forward(new Tensor<T>(new[] { 1, 3, size[0], size[1] }));
                 MaterializeAuxiliaryHeads();
