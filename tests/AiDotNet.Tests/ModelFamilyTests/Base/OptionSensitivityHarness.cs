@@ -195,6 +195,15 @@ public static class OptionSensitivityHarness
 
     private static readonly ConcurrentDictionary<(Type Fixture, string Group), Lazy<ControlFingerprint>> s_controls = new();
 
+    /// <summary>
+    /// The control groups measured so far for <paramref name="fixtureType"/>: <c>""</c> is the shared default control,
+    /// and <c>auto-prep:Option</c>, <c>auto-obs:Option</c> or <c>auto-train:Option</c> an option's own isolated control.
+    /// For tests of the isolation itself, which a verdict alone cannot show (a candidate compared with the wrong
+    /// control reads as sensitive too).
+    /// </summary>
+    internal static IReadOnlyCollection<string> MeasuredControlGroups(Type fixtureType)
+        => s_controls.Keys.Where(key => key.Fixture == fixtureType).Select(key => key.Group).OrderBy(g => g, StringComparer.Ordinal).ToArray();
+
     [ThreadStatic]
     private static long s_fingerprintCount;
 

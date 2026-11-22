@@ -75,7 +75,16 @@ public class Pix2StructOptionControlTests
 
         if (!stripFirst)
             Assert.Equal(OptionSensitivityOutcome.Insensitive, Measure("MaxGradNorm").Outcome);
+        Assert.DoesNotContain(OptionSensitivityHarness.MeasuredControlGroups(fixture), group => group.EndsWith(":MaxPatches", StringComparison.Ordinal));
         Assert.Equal(OptionSensitivityOutcome.Sensitive, Measure("MaxPatches").Outcome);
+        // The verdict alone does not show which control it was measured against: compared with the square control the
+        // strip candidate reads as sensitive too. The harness must have measured MaxPatches against a control of its
+        // own, built by the MaxPatches probe (the unperturbed strip), and no manual ControlGroup entry asked for it.
+        Assert.Contains(OptionSensitivityHarness.MeasuredControlGroups(fixture),
+            group => group.StartsWith("auto-", StringComparison.Ordinal) && group.EndsWith(":MaxPatches", StringComparison.Ordinal));
         Assert.Equal(OptionSensitivityOutcome.Insensitive, Measure("MaxGradNorm").Outcome);
+        // MaxGradNorm observes the square image: it shares the default control and takes none of its own.
+        Assert.Contains(string.Empty, OptionSensitivityHarness.MeasuredControlGroups(fixture));
+        Assert.DoesNotContain(OptionSensitivityHarness.MeasuredControlGroups(fixture), group => group.EndsWith(":MaxGradNorm", StringComparison.Ordinal));
     }
 }
