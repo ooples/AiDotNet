@@ -239,7 +239,11 @@ internal static class TransducerLoss
                 double total = double.NegativeInfinity;
                 for (int i = 0; i < durations.Length; i++)
                 {
-                    int d = durations[i], to = t + d;
+                    // A duration past the remaining frames has no transition here; checked before the sum, which
+                    // overflows for a duration near int.MaxValue and would pass "to < frames" as a negative index.
+                    int d = durations[i];
+                    if (d > frames - t) continue;
+                    int to = t + d;
                     if (d > 0 && u == length && to == frames) total = Add(total, Token(t, u, blank) + Duration(t, u, i));
                     if (d > 0 && to < frames) total = Add(total, beta[to, u] + Token(t, u, blank) + Duration(t, u, i));
                     if (u < length && to < frames) total = Add(total, beta[to, u + 1] + Token(t, u, labels[u]) + Duration(t, u, i));
@@ -253,7 +257,9 @@ internal static class TransducerLoss
             for (int u = 0; u < width; u++)
                 for (int i = 0; i < durations.Length; i++)
                 {
-                    int d = durations[i], to = t + d, at = (t * width + u) * channels;
+                    int d = durations[i];
+                    if (d > frames - t) continue;   // as in the backward pass: no transition, and no overflow
+                    int to = t + d, at = (t * width + u) * channels;
                     double blankNext = d == 0 ? double.NegativeInfinity
                         : to == frames ? (u == length ? 0.0 : double.NegativeInfinity)
                         : to < frames ? beta[to, u] : double.NegativeInfinity;
