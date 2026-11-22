@@ -58,7 +58,7 @@ public sealed class DecoderEngineParityTests
     }
 
     [SkippableFact]
-    [Trait("category", "gpu")]
+    [Trait("Category", "GPU")]
     public void A_transformer_forward_agrees_between_the_cpu_and_gpu_engines()
     {
         DirectGpuTensorEngine? gpu = null;
