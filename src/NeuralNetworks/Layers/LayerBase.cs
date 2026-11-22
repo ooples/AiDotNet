@@ -4829,6 +4829,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (IsInferringShapes && GetSubLayers().Count == 0)
             return ShapeInferenceOutput(input);
 
+        if (UseStreamingAllocator)
+        {
+            var declared = DeclaredParameterTensors();
+            if (declared is not null)
+            {
+                for (int i = 0; i < declared.Count; i++)
+                {
+                    var tensor = declared[i].Tensor;
+                    if (tensor is not null && tensor.StreamingPoolHandle >= 0)
+                        WeightRegistry.Materialize(tensor);
+                }
+            }
+            else if (GetSubLayers().Count == 0)
+            {
+                var own = GetTrainableParametersWithoutMaterialization();
+                for (int i = 0; i < own.Count; i++)
+                {
+                    var tensor = own[i];
+                    if (tensor is not null && tensor.StreamingPoolHandle >= 0)
+                        WeightRegistry.Materialize(tensor);
+                }
+            }
+        }
+
         var observer = LayerForwardObserver<T>.Current;
         if (observer is null) return ForwardTraced(input);
 

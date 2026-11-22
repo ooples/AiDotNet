@@ -25,6 +25,7 @@ public class FusedTrainingSessionStreamedWeightTests
     [Fact]
     public void TrainingAStreamedModel_ProbesItsPagedOutWeights()
     {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
         var architecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional, NeuralNetworkTaskType.Regression, NetworkComplexity.Deep, 0, 32, 32, 3, 0);
         try
