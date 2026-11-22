@@ -69,12 +69,13 @@ public class CompiledStepRedrawTests
     }
 
     /// <summary>
-    /// Wav2Vec2's dropouts, its SpecAugment time mask and its LayerDrop all draw per step. The time mask and LayerDrop
-    /// used to be host decisions: a bool mask written into a constant, and a branch that left a dropped layer out of
-    /// the traced graph altogether.
+    /// Wav2Vec2's dropouts and its SpecAugment time mask draw per step. The time mask used to be a host decision: a
+    /// bool mask written into a constant. LayerDrop is not part of this plan: a dropped layer does not run and is not
+    /// stepped (fairseq, transformers), which one fixed graph cannot express, so a model with LayerDrop &gt; 0 trains on
+    /// the eager tape (TrainingForwardSkipsLayersPerStep; see LayerDropSkipsTheOptimizerStepTests).
     /// </summary>
     [Fact(Timeout = 120000)]
-    public async Task Wav2Vec2_dropout_time_mask_and_layer_drop_are_redrawn_on_every_compiled_step()
+    public async Task Wav2Vec2_dropout_and_time_mask_are_redrawn_on_every_compiled_step()
     {
         await Task.Yield();
         const int batch = 2, samples = 400;
@@ -83,7 +84,7 @@ public class CompiledStepRedrawTests
             ConvDims = new[] { 8, 8, 8 }, ConvKernels = new[] { 10, 3, 2 }, ConvStrides = new[] { 5, 2, 2 },
             HiddenSize = 16, Layers = 2, Heads = 2, IntermediateSize = 32, PositionalConvKernel = 8, PositionalConvGroups = 4,
             FeatureProjectionDropout = 0.2, HiddenDropout = 0.2, AttentionDropout = 0.2, ActivationDropout = 0.2,
-            LayerDrop = 0.5, MaskTimeProbability = 0.3, MaskTimeLength = 2, MaskTimeMinMasks = 1,
+            LayerDrop = 0.0, MaskTimeProbability = 0.3, MaskTimeLength = 2, MaskTimeMinMasks = 1,
         };
         (Wav2Vec2Network<double> Network, List<LayerBase<double>> Layers) Build()
         {
