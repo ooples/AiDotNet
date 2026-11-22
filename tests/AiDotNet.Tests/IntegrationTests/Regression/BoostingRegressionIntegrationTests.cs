@@ -243,6 +243,51 @@ public class BoostingRegressionIntegrationTests
         Assert.Equal(500, predictions.Length);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task HistGradientBoosting_Float_FitsLinearData_ReasonableR2()
+    {
+        // float takes its own histogram loop; it must fit as the double one does.
+        var (xd, yd) = CreateLinearData(200, new[] { 1.5, -2.0, 0.5 }, intercept: 3.0, noise: 0.5, seed: 7);
+        var x = new Matrix<float>(xd.Rows, xd.Columns);
+        var y = new Vector<float>(yd.Length);
+        for (int i = 0; i < xd.Rows; i++)
+        {
+            for (int j = 0; j < xd.Columns; j++) x[i, j] = (float)xd[i, j];
+            y[i] = (float)yd[i];
+        }
+
+        var model = new HistGradientBoostingRegression<float>(new HistGradientBoostingOptions { Seed = 7 });
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+
+        var asDouble = new Vector<double>(predictions.Length);
+        for (int i = 0; i < predictions.Length; i++) asDouble[i] = predictions[i];
+        Assert.True(AllFinite(asDouble), "float HistGradientBoosting predictions contain NaN/Infinity");
+        double r2 = ComputeR2(yd, asDouble);
+        Assert.True(r2 > 0.5, $"float HistGradientBoosting R²={r2:F4} should be > 0.5 on linear data");
+    }
+
+#if NET5_0_OR_GREATER // GC.GetAllocatedBytesForCurrentThread
+    [Fact(Timeout = 300000)]
+    public async Task HistGradientBoosting_TrainAllocationStaysBounded()
+    {
+        // The split search runs once per (node, feature). Built from engine ops it allocated several sample-length
+        // arrays per call: 1000 rows x 31 features allocated ~47 GB in one fit and the fit was GC-bound (~130 s).
+        // Accumulated in place it allocates ~165 MB on this thread; 1 GB leaves room without hiding a regression.
+        var coefficients = new double[31];
+        for (int j = 0; j < coefficients.Length; j++) coefficients[j] = (j % 3 - 1) / (1.0 + j);
+        var (x, y) = CreateLinearData(1000, coefficients, intercept: 0, noise: 0.1, seed: 11);
+
+        var model = new HistGradientBoostingRegression<double>(new HistGradientBoostingOptions { Seed = 11 });
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        model.Train(x, y);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated < 1_000_000_000L, $"HistGradientBoosting Train allocated {allocated / 1e6:F0} MB on the fitting thread");
+        Assert.True(AllFinite(model.Predict(x)), "HistGradientBoosting predictions contain NaN/Infinity");
+    }
+#endif
+
     #endregion
 
     #region NGBoost Regression
