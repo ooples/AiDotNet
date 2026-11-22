@@ -235,7 +235,7 @@ internal sealed class Wav2Vec2Network<T>
             // weight decay), as in fairseq and transformers. A compiled plan has one fixed graph and could only blend the
             // layer out with a zero multiplier, which still steps it; the models that own this network therefore
             // declare TrainingForwardSkipsLayersPerStep when LayerDrop is positive and train on the eager tape.
-            if (!(training && random.NextDouble() < c.LayerDrop))
+            if (!(training && c.LayerDrop > 0 && random.NextDouble() < c.LayerDrop))
                 hidden = Encode(layer, hidden, training, random);
             states.Add(hidden);
         }
