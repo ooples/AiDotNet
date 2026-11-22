@@ -100,7 +100,7 @@ internal sealed class NaturalSpeechCore<T>
         // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
         // each stage 3-15x and leaves an untrained generator's output to its biases.
         Decoder = new HiFiGanGenerator<T>(engine, h, c.UpsampleInitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels, c.ResblockDilations,
-            resblockType1: true, plainEnds: true);
+            resblockType1: true, plainEnds: true, defaultInitialization: random);
         decoderLayers.AddRange(Decoder.Layers);
         Memory = new NaturalSpeechMemoryBank<T>(engine, memoryLayers, random, h, c.MemorySize, c.MemoryHeads);
         if (c.Encoder == NaturalSpeechPhonemeEncoder.FeedForwardTransformer)

@@ -81,7 +81,8 @@ public partial class ISTFTNet<T> : GanVocoderBase<T>
         // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
         // each stage 3-15x and leaves an untrained generator's output to its biases.
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
-            o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1);
+            o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1,
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
         _istft = new InverseStft<T>(Engine, o.InverseFftSize, o.InverseHopSize, o.InverseWindowSize);
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);

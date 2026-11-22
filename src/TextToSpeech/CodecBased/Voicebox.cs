@@ -246,7 +246,8 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         // each stage 3-15x and leaves an untrained generator's output to its biases.
         _vocoder = new HiFiGanGenerator<T>(Engine, _options.MelChannels, _options.VocoderInitialChannels,
             _options.VocoderUpsampleRates, _options.VocoderUpsampleKernels, _options.VocoderResBlockKernels,
-            _options.VocoderResBlockDilations, resblockType1: true);
+            _options.VocoderResBlockDilations, resblockType1: true,
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
         ComponentLayers.AddRange(_vocoder.Layers);
     }
 

@@ -476,7 +476,7 @@ internal sealed class GptSoVitsSynthesizer<T>
         // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
         // each stage 3-15x and leaves an untrained generator's output to its biases.
         Generator = new HiFiGanGenerator<T>(engine, c.InterChannels, c.UpsampleInitialChannels, c.UpsampleRates, c.UpsampleKernels,
-            c.ResblockKernels, c.ResblockDilations, resblockType1: true, conditionChannels: c.Gin, plainEnds: true);
+            c.ResblockKernels, c.ResblockDilations, resblockType1: true, conditionChannels: c.Gin, plainEnds: true, defaultInitialization: random);
         layers.AddRange(Generator.Layers);
         Posterior = new MeloPosteriorEncoder<T>(engine, layers, c.SpecChannels, c.InterChannels, h, c.Gin);
         ReferenceEncoder = new GptSoVitsMelStyleEncoder<T>(engine, layers, random, c.ReferenceChannels, c.Gin, c.StyleHidden, c.Dropout > 0 ? 0.1 : 0.0);

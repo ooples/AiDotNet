@@ -122,7 +122,7 @@ internal sealed class CodeHiFiGan<T>
         // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
         // each stage 3-15x and leaves an untrained generator's output to its biases.
         Generator = new HiFiGanGenerator<T>(engine, c.InputDim, c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
-            c.ResblockDilations, resblockType1: true);
+            c.ResblockDilations, resblockType1: true, defaultInitialization: initialization);
         layers.AddRange(Generator.Layers);
     }
 
