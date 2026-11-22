@@ -10849,6 +10849,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 finally
                 {
                     segmentState.Release();
+                    (auxiliaryGradient[0] as IDisposable)?.Dispose();
                     auxiliaryGradient[0] = null;
                 }
 
@@ -10867,11 +10868,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // lists the segment output as its input so every walk order (reverse recording or topological) runs it
                 // first. It passes no gradient to that input: the term's dependence on the segment is differentiated in
                 // the segment's recompute.
+                // The gradient is held past this op's backward, outside whatever scope the backward walk runs it in
+                // (a compiled walk releases each step's results), so it is detached to its own lifetime and released by
+                // the segment backward that consumes it.
                 AiDotNet.Tensors.Engines.Autodiff.BackwardFunction<T> auxiliaryBackward = (gradAuxiliary, _, _, _, eng, _) =>
                 {
-                    auxiliaryGradient[0] = auxiliaryGradient[0] is { } earlier
-                        ? eng.TensorAdd(earlier, CloneCheckpointBoundary(gradAuxiliary, eng))
-                        : CloneCheckpointBoundary(gradAuxiliary, eng);
+                    var copy = TensorScope.Detach(CloneCheckpointBoundary(gradAuxiliary, eng));
+                    if (auxiliaryGradient[0] is { } earlier)
+                    {
+                        var sum = TensorScope.Detach(CloneCheckpointBoundary(eng.TensorAdd(earlier, copy), eng));
+                        (earlier as IDisposable)?.Dispose();
+                        (copy as IDisposable)?.Dispose();
+                        copy = sum;
+                    }
+                    auxiliaryGradient[0] = copy;
                 };
                 AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive<T>(
                     $"Checkpoint_seg{seg}_auxiliary", segmentAuxiliary, new[] { segmentOutput }, auxiliaryBackward);
