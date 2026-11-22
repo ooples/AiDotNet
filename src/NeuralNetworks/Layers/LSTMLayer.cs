@@ -1245,7 +1245,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
         bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
             && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
-        if (standardActivations && !graphActive && _stateCellClip == 0 && _stateZoneout is null
+        // A stateless training trace binds the stacked weights and input at each replay. The engine
+        // records the fused sequence operation where supported. Explicit h/c outputs still use
+        // the state-aware recurrence below when tracing.
+        bool statelessTrainingTrace = graphActive && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && IsTrainingMode && !_stateStepping && Engine.Unwrap() is CpuEngine;
+        if (standardActivations && (!graphActive || statelessTrainingTrace) && _stateCellClip == 0 && _stateZoneout is null
             && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;

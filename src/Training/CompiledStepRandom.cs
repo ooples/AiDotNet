@@ -36,9 +36,17 @@ public static class CompiledStepRandom<T>
         private readonly Action<IEngine> _redraw;
         private RecordedDraw(Action<IEngine> redraw) => _redraw = redraw;
 
-        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill)
+        // onDevice: fill writes the tensor through an engine op, so its device copy becomes the value; bumping the
+        // version as a host fill needs would mark that copy stale and re-upload the old host values.
+        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill, bool onDevice = false)
             => new(engine =>
             {
+                if (onDevice)
+                {
+                    using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+                    fill(tensor);
+                    return;
+                }
                 fill(tensor);
                 tensor.IncrementVersion();
                 engine.InvalidatePersistentTensor(tensor);
@@ -98,7 +106,9 @@ public static class CompiledStepRandom<T>
     public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
 
     /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
-    internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill)
+    /// <remarks>With <paramref name="onDevice"/>, <paramref name="fill"/> writes through an engine op (see
+    /// <see cref="RecordedDraw.Create{TData}"/>) and runs outside any graph recording.</remarks>
+    internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill, bool onDevice = false)
     {
         Guard.NotNull(shape);
         Guard.NotNull(fill);
@@ -111,10 +121,15 @@ public static class CompiledStepRandom<T>
             previous.AsSpan().CopyTo(tensor.AsWritableSpan());
             t_replayIndex++;
         }
+        else if (onDevice)
+        {
+            using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+            fill(tensor);
+        }
         else
             fill(tensor);
         t_captured?.Draws.Add(tensor);
-        t_recording?.Add(RecordedDraw.Create(tensor, fill));
+        t_recording?.Add(RecordedDraw.Create(tensor, fill, onDevice));
         return tensor;
     }
 
@@ -123,29 +138,41 @@ public static class CompiledStepRandom<T>
     /// mask) with the active plan recording so every compiled replay refills it in place, including when the same layer
     /// instance is invoked multiple times within one forward pass.
     /// </summary>
-    internal static void RecordCustom(Tensor<T> tensor, Action<Tensor<T>> fill)
+    /// <param name="tensor">The per-step tensor.</param>
+    /// <param name="fill">Refills it in place.</param>
+    /// <param name="onDevice">Whether <paramref name="fill"/> writes through an engine op (see
+    /// <see cref="RecordedDraw.Create{TData}"/>).</param>
+    internal static void RecordCustom(Tensor<T> tensor, Action<Tensor<T>> fill, bool onDevice = false)
     {
         if (t_recording is null)
             return;
         Guard.NotNull(tensor);
         Guard.NotNull(fill);
-        t_recording.Add(RecordedDraw.Create(tensor, fill));
+        t_recording.Add(RecordedDraw.Create(tensor, fill, onDevice));
     }
 
     /// <summary>
     /// An inverted-dropout mask of <paramref name="shape"/>, redrawn on every compiled replay: each entry is 0 with
-    /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>, one <see cref="Random.NextDouble"/> per
-    /// entry in row-major order, as an eager host loop draws it.
+    /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>.
     /// </summary>
+    /// <remarks>
+    /// The engine draws the mask (<see cref="IEngine.TensorDropoutMask{T}"/>, on the device for a GPU engine) from one
+    /// seed per draw taken from <paramref name="random"/>, and copies it into the step's tensor on the device: no host
+    /// loop over the activation and no upload, as torch draws dropout masks. The masks are a deterministic function of
+    /// <paramref name="random"/>'s stream, not of one <see cref="Random.NextDouble"/> per entry.
+    /// </remarks>
     internal static Tensor<T> InvertedDropoutMask(int[] shape, Random random, double rate)
     {
         Guard.NotNull(random);
+        T rateT = NumOps.FromDouble(rate);
         T keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        return Draw(shape, m =>
+        return DrawData<T>(shape, m =>
         {
-            var span = m.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        });
+            var engine = AiDotNetEngine.Current;
+            int seed = random.Next();
+            using var fresh = engine.TensorDropoutMask<T>(m._shape, rateT, keep, seed);
+            engine.TensorCopy(fresh, m);
+        }, onDevice: true);
     }
 
     /// <summary>

@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
 [TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, IShapeContract, ICompiledBindingSource
 {
     /// <inheritdoc />
     /// <remarks>
@@ -813,20 +813,18 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int numNodes = processInput.Shape[1];
         int outputFeatures = _weights.Shape[1];
 
-        // Perform graph convolution: A * X * W
-        // First: X * W using reshape pattern for 3D @ 2D
-        var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, processInput.Shape[2], outputFeatures);
-
-        Tensor<T> output;
+        int inputFeatures = processInput.Shape[2];
+        Tensor<T> result;
 
         if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {
+            // Perform graph convolution: A * X * W. First X * W, then the edge aggregation.
+            var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, inputFeatures, outputFeatures);
+
             // Sparse aggregation using scatter operations (production-recommended for large graphs)
             // For each batch, gather source features and scatter-add to target nodes
-            output = TensorAllocator.Rent<T>([batchSize, numNodes, outputFeatures]);
+            var output = TensorAllocator.Rent<T>([batchSize, numNodes, outputFeatures]);
             output.Fill(NumOps.Zero);
-
-            int numEdges = _edgeSourceIndices.Length;
 
             for (int b = 0; b < batchSize; b++)
             {
@@ -843,6 +841,8 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 // Set the aggregated results in output tensor for this batch
                 output.SetSlice(b, aggregated);
             }
+
+            result = ApplyActivation(AddBias(output, outputFeatures));
         }
         else
         {
@@ -855,40 +855,26 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             }
 
             // Ensure adjacency matrix has matching rank for batch operation
-            // If adjacency is 2D and xw is 3D, broadcast adjacency to 3D
+            // If adjacency is 2D, broadcast adjacency to 3D
             Tensor<T> adjForBatch;
-            if (_adjacencyMatrix.Shape.Length == 2 && xw.Shape.Length == 3)
+            if (_adjacencyMatrix.Shape.Length == 2)
             {
-                // Reshape 2D adjacency [nodes, nodes] to 3D [1, nodes, nodes] and broadcast to [batchSize, nodes, nodes]
-                if (batchSize == 1)
-                {
-                    adjForBatch = Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes]);
-                }
-                else
-                {
-                    // Broadcast: repeat adjacency matrix for each batch item using Engine.TensorTile
-                    // First reshape to [1, nodes, nodes] then tile along batch dimension
-                    var adjReshaped = Engine.Reshape(_adjacencyMatrix, [1, numNodes, numNodes]);
-                    adjForBatch = Engine.TensorTile(adjReshaped, [batchSize, 1, 1]);
-                }
+                // The graph is a constant (no gradient flows to it), so its [batchSize, nodes, nodes] broadcast is built
+                // once per (adjacency, batch size), kept device-resident, and reused, rather than re-tiled (or, for one
+                // graph, re-uploaded) on every forward. A reshaped view of the caller's matrix is not used even for one
+                // graph: the caller owns that matrix, and its view is re-uploaded on every GPU forward.
+                adjForBatch = TiledAdjacency(_adjacencyMatrix, batchSize, numNodes);
             }
             else
             {
                 adjForBatch = _adjacencyMatrix;
             }
 
-            // Then: A * (X * W) using batched matmul for 3D @ 3D
-            output = Engine.BatchMatMul(adjForBatch, xw);
+            // A (X W): the weight multiply first, then propagation over the graph. (A X) W with a fused linear epilogue
+            // was measured too: no faster on CPU inference and noisier on CUDA at the benchmark shapes.
+            var xw = BatchedMatMul3Dx2D(processInput, _weights, batchSize, numNodes, inputFeatures, outputFeatures);
+            result = ApplyActivation(AddBias(Engine.BatchMatMul(adjForBatch, xw), outputFeatures));
         }
-
-        if (_useBias)
-        {
-            // Add bias by broadcasting across batch and node dimensions.
-            var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
-            output = Engine.TensorAdd(output, biasBroadcast);
-        }
-
-        var result = ApplyActivation(output);
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
@@ -919,25 +905,96 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return result;
     }
 
+    [Scratch]
+    private Tensor<T>? _tiledAdjacency;
+    [Scratch]
+    private Tensor<T>? _tiledAdjacencySource;
+    private int _tiledAdjacencyVersion;
+    [Scratch]
+    private object? _tiledAdjacencyStorageIdentity;
+
+    /// <summary>Adds the [1, 1, F] bias by broadcasting (no [B, N, F] tile is materialized), when the layer has one.</summary>
+    private Tensor<T> AddBias(Tensor<T> output, int outputFeatures)
+        => _useBias ? Engine.TensorAdd(output, Engine.Reshape(_bias, [1, 1, outputFeatures])) : output;
+
+    [Scratch]
+    private Tensor<T>? _residentTiledAdjacency;
+    [Scratch]
+    private IEngine? _residentTiledAdjacencyOwner;
+
     /// <summary>
-    /// Broadcasts a bias tensor across batch and node dimensions.
+    /// Registers the graph as a persistent constant on its owning engine, releasing the previous registration.
     /// </summary>
-    /// <param name="bias">The bias tensor of shape [outputFeatures].</param>
-    /// <param name="batchSize">The batch size for broadcasting.</param>
-    /// <param name="numNodes">The number of nodes for broadcasting.</param>
-    /// <returns>A tensor of shape [batchSize, numNodes, outputFeatures] with biases broadcast.</returns>
-    private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
+    private void KeepResident(ref Tensor<T>? slot, Tensor<T> tensor)
     {
-        int outputFeatures = bias.Length;
-
-        // Reshape bias from [outputFeatures] to [1, 1, outputFeatures]
-        var biasReshaped = Engine.Reshape(bias, [1, 1, outputFeatures]);
-
-        // Tile across batch and node dimensions: [batchSize, numNodes, outputFeatures]
-        var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
-
-        return broadcast;
+        var owner = Engine;
+        if (ReferenceEquals(slot, tensor) && ReferenceEquals(_residentTiledAdjacencyOwner, owner)) return;
+        if (slot is not null) _residentTiledAdjacencyOwner?.UnregisterPersistentTensor(slot);
+        slot = null;
+        _residentTiledAdjacencyOwner = null;
+        owner.RegisterPersistentTensor(tensor, PersistentTensorRole.Constant);
+        slot = tensor;
+        _residentTiledAdjacencyOwner = owner;
     }
+
+    /// <summary>The 2-D adjacency repeated over <paramref name="batchSize"/> graphs, cached while the matrix is unchanged.</summary>
+    private Tensor<T> TiledAdjacency(Tensor<T> adjacency, int batchSize, int numNodes)
+    {
+        // While a training plan traces this forward, the broadcast must be recorded from the adjacency itself. The plan
+        // replays without re-running this method, so the version check below never sees a later graph, and a host copy
+        // would be frozen into the plan as a constant: a graph task packs each step's adjacency into the step's data
+        // (GraphModelLayoutBase.GraphTrainingObjective), and every replay would train on the traced step's graph. For
+        // one graph the [1, N, N] view costs nothing; for a batch the plan re-tiles the live matrix each replay, which
+        // the measured training step does not notice. An inference plan's only input is the node features, so it keeps
+        // the cached resident copy as a constant: the owning network drops its compiled plans when
+        // CompiledBindingVersion moves (a new graph, or a write into this one), so that constant never replays stale.
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace)
+        {
+            var single = Engine.Reshape(adjacency, [1, numNodes, numNodes]);
+            return batchSize == 1 ? single : Engine.TensorTile(single, [batchSize, 1, 1]);
+        }
+
+        if (_tiledAdjacency is not null && ReferenceEquals(adjacency, _tiledAdjacencySource)
+            && ReferenceEquals(adjacency.StorageIdentity, _tiledAdjacencyStorageIdentity)
+            && adjacency.StorageMutationVersion == _tiledAdjacencyVersion && _tiledAdjacency.Shape[0] == batchSize)
+        {
+            KeepResident(ref _residentTiledAdjacency, _tiledAdjacency);
+            return _tiledAdjacency;
+        }
+        // A plain host copy, not an engine op: an op here would be recorded into whichever compiled plan is tracing
+        // this forward, and the cached tensor would then only hold data while that plan runs.
+        var source = adjacency.ToArray();
+        var tiled = new T[checked(batchSize * source.Length)];
+        for (int b = 0; b < batchSize; b++)
+            Array.Copy(source, 0, tiled, b * source.Length, source.Length);
+        _tiledAdjacency = new Tensor<T>(tiled, [batchSize, numNodes, numNodes]);
+        KeepResident(ref _residentTiledAdjacency, _tiledAdjacency);
+        _tiledAdjacencySource = adjacency;
+        _tiledAdjacencyStorageIdentity = adjacency.StorageIdentity;
+        _tiledAdjacencyVersion = adjacency.StorageMutationVersion;
+        return _tiledAdjacency;
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _residentTiledAdjacency is not null)
+        {
+            _residentTiledAdjacencyOwner?.UnregisterPersistentTensor(_residentTiledAdjacency);
+            _residentTiledAdjacency = null;
+            _residentTiledAdjacencyOwner = null;
+        }
+        base.Dispose(disposing);
+    }
+
+    // What a compiled inference plan reads besides the weights: the adjacency, or the edge list in sparse mode.
+    [Scratch]
+    private CompiledBindingTracker _bindingTracker;
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _bindingTracker.Observe(_adjacencyMatrix, _edgeSourceIndices, _edgeTargetIndices, _useSparseAggregation);
 
     /// <summary>
     /// Performs batched matrix multiplication between a 3D tensor and a 2D weight matrix.

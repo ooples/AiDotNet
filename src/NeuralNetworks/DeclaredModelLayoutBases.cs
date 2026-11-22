@@ -228,6 +228,9 @@ public abstract class GraphModelLayoutBase<T> : DeclaredModelLayoutBase<T>
                 new[] { features, adjacency, target },
                 data =>
                 {
+                    // Marked as step data, so a layer that derives host-side structure from its graph records it from
+                    // this tensor instead while a plan traces the step.
+                    using var stepGraph = NeuralNetworks.Layers.GraphStepAdjacency<T>.Enter(data[1]);
                     SetGraphLayerAdjacency(data[1]);
                     return loss.ComputeTapeLoss(forward(data[0]), data[2]);
                 })

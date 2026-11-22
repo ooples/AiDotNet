@@ -1577,7 +1577,9 @@ public static class CompiledTapeTrainingStep<T>
                 }
 
                 using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
-                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, primaryShapes);
+                    probe = primaryShapes is null
+                        ? closure.Probe(objective, parameters, out signature, out leaves, out reason)
+                        : ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason, primaryShapes);
                 if (probe == ClosureGuardResult.Aborted
                     && reason is not null
                     && reason.IndexOf("(no matching trace-time shape)", StringComparison.Ordinal) >= 0)
