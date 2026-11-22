@@ -3788,11 +3788,18 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
+            // CodecFrameRate, FftSize, MaxTextLength and SampleRate read as sensitive only against a control another
+            // option's probe had prepared; against the option-independent control they leave the fixture's output
+            // unchanged (as CosyVoice, CosyVoice3 and CosyVoiceClone record).
+            { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::MaxCodecFrames", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice3`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice3`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice3`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
