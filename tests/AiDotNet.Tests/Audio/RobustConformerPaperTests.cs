@@ -81,11 +81,14 @@ public class RobustConformerPaperTests
         var (total, reconstruction) = network.ContinualPretrainingLoss(noisy, clean, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4), mask, negatives);
 
         var output = encoder.Forward(noisy, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4), mask: mask);
-        double wav2vec2 = network.Pretraining.Loss(output, negatives, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4)).Total[0];
+        var losses = network.Pretraining.Loss(output, negatives, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4));
+        double wav2vec2 = losses.Total[0];
+        Assert.True(losses.Masked > 1, $"masked steps {losses.Masked}");
         var predicted = network.Reconstruct(output.Hidden, 3200);
         double l1 = Enumerable.Range(0, 3200).Average(i => Math.Abs(predicted[0, i] - clean[0, i]));
         Assert.Equal(l1, reconstruction[0], 9);
-        Assert.Equal(wav2vec2 + 0.1 * l1, total[0], 9);
+        // wav2vec 2.0's terms are summed over the masked steps (fairseq's criterion), and so is λ2 L_r.
+        Assert.Equal(wav2vec2 + 0.1 * losses.Masked * l1, total[0], 9);
     }
 
     [Fact(Timeout = 300000)]
