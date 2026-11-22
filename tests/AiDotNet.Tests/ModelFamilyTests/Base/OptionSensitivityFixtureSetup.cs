@@ -680,10 +680,21 @@ internal static class OptionSensitivityFixtureSetup
             // The BERT features condition the text encoder only when text is synthesized; Predict takes phone ids.
             return OptionSensitivityHarness.Fingerprint(melo.Synthesize("Hello there, how are you today?")
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.Audio.Classification.SceneClassifier<T> scene && option == "ContextFrames")
-            // The fixture feeds ready-made context vectors; the option sizes the vectors a recording becomes.
+        if (network is AiDotNet.Audio.Classification.SceneClassifier<T> scene
+            && option is "ContextFrames" or "SampleRate" or "FftSize" or "HopLength" or "NumMels")
+            // The fixture feeds ready-made context vectors; these options shape the vectors a recording becomes (the
+            // context width, and the log mel front end's rate, window, hop and band count).
             return OptionSensitivityHarness.Fingerprint(scene.ContextFeatures(LongWaveform<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.Audio.Classification.SceneClassifier<T> described && option == "NumMfccs")
+        {
+            // The MFCCs are the descriptive features a classification reports beside its decision; Predict never reads
+            // them.
+            var mfccOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var features = ((AiDotNet.Interfaces.ISceneClassifier<T>)described).Classify(Waveform<T>(160000)).Features;
+            return OptionSensitivityHarness.Fingerprint(
+                (features?.MfccMean ?? Array.Empty<T>()).Concat(features?.MfccStd ?? Array.Empty<T>()).Select(mfccOps.ToDouble));
+        }
         if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
             return MoshiOptionFixture.Observe(moshi, option);
         if (network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> porta && option is "PostNetLearningRate" or "PostNetTemperature")
@@ -2175,6 +2186,9 @@ internal static class OptionSensitivityFixtureSetup
             // Start below the probe's gradient norm so the clip binds.
             if (option == "MaxGradNorm") SetOption(options, "MaxGradNorm", 1e-8);
         }
+        // Start below the probe's gradient norm so the clip binds at every candidate.
+        if (options is AiDotNet.Audio.Speaker.SpeakerEmbeddingOptions && option == "MaxGradNorm")
+            SetOption(options, "MaxGradNorm", 1e-3);
         if (options is AiDotNet.SpeechRecognition.LLMIntegrated.Phi4AudioOptions phi4 && option == "UseLongRope")
         {
             // The release's LongRoPE factors cover 48 rotary frequencies: Phi-4-mini's 128-wide heads at a 0.75 partial
@@ -2278,9 +2292,14 @@ internal static class OptionSensitivityFixtureSetup
         {
             if (option == "ContextLength")
             {
-                // A budget of 30 tokens past the release's 1,024 reserve, over segments of a few words.
-                fishOptions.ContextLength = 1054;
+                // A budget of 130 tokens past the release's 1,024 reserve, over segments of a few words: it holds the
+                // newest segment twice over (the release counts each segment twice) and not the whole history, so the
+                // later segments are generated after a trimmed history. At 30 no segment fitted, which the release
+                // answers by keeping the whole history at every budget. The fixture's 160-token context cannot hold
+                // that history (the unperturbed model threw), so the context is sized for the full text.
+                fishOptions.ContextLength = 1154;
                 fishOptions.ChunkLength = 24;
+                fishOptions.MaxSequenceLength = 1024;
             }
             // Fish Speech 1.5 trains without dropout, so its training seed would draw nothing.
             if (option == "TrainingSeed") fishOptions.DropoutRate = 0.1;

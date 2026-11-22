@@ -117,12 +117,15 @@ public class FlashVSROptions : NeuralNetworkOptions
     /// Gets or sets the sparse ratio (the release recommends 1.5 or 2; 2 is more stable). The top-k ratio is this times
     /// 768·1280 over the output area, so the kept share of blocks is the same at any resolution.
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Acts on the sparse attention's block map, which needs several (2, 8, 8)-token windows a frame pair and more than three frame pairs. The test-scale clip (25 frames of 32 x 32) is one window a pair over three pairs, where every block is visible, local and kept at any value. FlashVSRPaperTests measures the option on a larger token grid.")]
     public double SparseRatio { get; set; } = 2.0;
 
     /// <summary>Gets or sets how many earlier two-frame chunks the KV cache keeps (kv_ratio, 3).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Acts on the sparse attention's block map, which needs several (2, 8, 8)-token windows a frame pair and more than three frame pairs. The test-scale clip (25 frames of 32 x 32) is one window a pair over three pairs, where every block is visible, local and kept at any value. FlashVSRPaperTests measures the option on a larger token grid.")]
     public int KvCacheChunks { get; set; } = 3;
 
     /// <summary>Gets or sets the locality window in 8x8-token blocks (the release recommends 9 or 11; 11 is more stable).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Acts on the sparse attention's block map, which needs several (2, 8, 8)-token windows a frame pair and more than three frame pairs. The test-scale clip (25 frames of 32 x 32) is one window a pair over three pairs, where every block is visible, local and kept at any value. FlashVSRPaperTests measures the option on a larger token grid.")]
     public int LocalRange { get; set; } = 11;
 
     /// <summary>Gets or sets the tiny conditional decoder's stage widths (512, 256, 128, 128).</summary>

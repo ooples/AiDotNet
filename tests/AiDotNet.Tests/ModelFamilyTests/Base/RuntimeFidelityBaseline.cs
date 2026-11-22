@@ -494,7 +494,13 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::MinTurnDuration", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::WindowDurationSeconds", OptionSensitivityOutcome.Insensitive },
+            // Both passed only while the fixture's control was whichever option's probe ran first (a waveform control
+            // made every frame-observed option read as sensitive). Measured against the option-independent control they
+            // are what SpeakerVerifier's are: EncoderLayerCount marks a split in a caller-supplied layer list, which this
+            // self-built network has none of, and MinimumDurationSeconds is published but gates nothing.
+            { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::MaxFrames", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::MinimumDurationSeconds", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::DefaultThreshold", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::MinDurationSeconds", OptionSensitivityOutcome.Insensitive },

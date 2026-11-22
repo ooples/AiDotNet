@@ -124,6 +124,60 @@ public class FlashVSRPaperTests
         Assert.Equal(3, Kept(3));
     }
 
+    private static (Tensor<double> Q, Tensor<double> K) SparseQueriesAndKeys(int tokens, int headDim)
+    {
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
+        var q = new Tensor<double>(new[] { 1, tokens, headDim });
+        var k = new Tensor<double>(new[] { 1, tokens, headDim });
+        for (int i = 0; i < q.Length; i++)
+        {
+            q[i] = random.NextDouble() - 0.5;
+            k[i] = random.NextDouble() - 0.5;
+        }
+        return (q, k);
+    }
+
+    // kv_ratio and topk_ratio on five frame pairs of one block each: the fifth pair sees itself and the cached pairs
+    // before it, and keeps the entries above its (topk + 1)-th largest (topk = int(ratio) - 1 with one block a pair).
+    [Fact(Timeout = 60000)]
+    public async Task SparseMask_KeepsWhatTheCacheAndTheRatioAllow()
+    {
+        await Task.Yield();
+        int frames = 10, side = 8, tokens = frames * side * side, perChunk = 2 * side * side;
+        var (q, k) = SparseQueriesAndKeys(tokens, 4);
+        int Kept(double ratio, int kvChunks)
+        {
+            var mask = WanSparseMask.Build(q, k, new WanSparsePlan(frames, side, side, ratio, kvChunks, 11));
+            return Enumerable.Range(0, frames / 2).Count(c => mask[4 * perChunk * tokens + c * perChunk] > 0);
+        }
+
+        Assert.Equal(3, Kept(1000.0, 3));   // four visible pairs, all but the smallest
+        Assert.Equal(1, Kept(1000.0, 1));   // two visible pairs
+        Assert.Equal(2, Kept(3.0, 3));      // topk 2
+        Assert.Equal(1, Kept(2.0, 3));      // topk 1
+    }
+
+    // local_range on one frame pair of 2 x 2 blocks: a window of one block leaves each block itself alone, and a window
+    // that spans the grid leaves all sixteen block pairs to the top-k, which drops the smallest.
+    [Fact(Timeout = 60000)]
+    public async Task SparseMask_KeepsOnlyBlocksInsideTheLocalRange()
+    {
+        await Task.Yield();
+        int frames = 2, side = 16, tokens = frames * side * side;
+        var (q, k) = SparseQueriesAndKeys(tokens, 4);
+        int FirstToken(int block) => (block / 2) * 8 * side + (block % 2) * 8;
+        int Kept(int localRange, bool sameBlock)
+        {
+            var mask = WanSparseMask.Build(q, k, new WanSparsePlan(frames, side, side, 1000.0, 3, localRange));
+            return Enumerable.Range(0, 16).Count(pair => (pair / 4 == pair % 4) == sameBlock
+                && mask[FirstToken(pair / 4) * tokens + FirstToken(pair % 4)] > 0);
+        }
+
+        Assert.Equal(4, Kept(1, sameBlock: true));
+        Assert.Equal(0, Kept(1, sameBlock: false));
+        Assert.Equal(15, Kept(11, sameBlock: true) + Kept(11, sameBlock: false));
+    }
+
     // Sec. 3-4: the tiny decoder alone, then full-attention flow matching, then sparse causal flow matching with the
     // previous network frozen as the teacher, then distillation with the critic starting from the teacher.
     [Fact(Timeout = 600000)]
