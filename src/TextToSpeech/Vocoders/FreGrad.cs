@@ -97,7 +97,7 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
             throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to half the hop ({o.HopSize}).");
         if (o.MelChannels < 2)
             throw new ArgumentException("The two priors need at least two mel bands.");
-        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides,
             audioChannels: 2, frequencyAware: true);
         _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels,

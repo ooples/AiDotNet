@@ -83,7 +83,7 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
             throw new ArgumentException("The selected WaveNet gated residual architecture uses zero dropout.", nameof(o.DropoutRate));
         if (o.UpsampleScales.Length == 0 || o.UpsampleScales.Any(s => s <= 0))
             throw new ArgumentException("WaveNet needs positive conditioning factors.", nameof(o.UpsampleScales));
-        _network = new WaveNetNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _network = new WaveNetNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MuLawLevels, o.MelChannels, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.NumDilatedLayers, o.DilationCycle,
             o.KernelSize, o.UpsampleScales);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency,

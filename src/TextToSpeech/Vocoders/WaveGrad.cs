@@ -100,7 +100,7 @@ public partial class WaveGrad<T> : DiffusionVocoderBase<T>
             throw new ArgumentException("WaveGrad needs positive UBlock factors.", nameof(o.UpsampleFactors));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The UBlocks' factors ({string.Join("x", o.UpsampleFactors)}) must multiply to the hop ({o.HopSize}).");
-        _network = new WaveGradNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _network = new WaveGradNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.MelProjectionChannels, o.WaveformChannels, o.UpsampleFactors, o.UpsampleChannels, o.UpsampleDilations,
             o.RepeatBlocks, o.LeakySlope, o.NoiseLevelScale);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency,

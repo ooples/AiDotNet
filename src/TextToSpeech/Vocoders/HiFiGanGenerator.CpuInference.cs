@@ -104,6 +104,7 @@ internal sealed partial class HiFiGanGenerator<T>
                 }
                 catch { logical.Dispose(); nchw?.Dispose(); throw; }
             }
+            using var convScratch = TensorArena.CreateDetached();
             PrivateCpuActivation Conv(NormedConv1DLayer<T> layer, PrivateCpuActivation input, int slot,
                 PrivateCpuActivation? residual = null, bool activate = false, bool post = false)
             {
@@ -117,7 +118,11 @@ internal sealed partial class HiFiGanGenerator<T>
                     binding = layer.BindPrivateCpuInference(input.Logical, input.Nchw, target.Nchw, residualTensor, activate, alpha);
                     bindings[layer] = binding;
                 }
-                binding.Execute();
+                using (convScratch.Activate())
+                {
+                    binding.Execute();
+                }
+                convScratch.Reset();
                 return target;
             }
             PrivateCpuActivation Activate(PrivateCpuActivation input, int slot, T alpha)

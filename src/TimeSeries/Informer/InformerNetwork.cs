@@ -352,7 +352,6 @@ internal sealed class InformerNetwork<T>
 
     // Draw once per (query, sample), shared by all heads. Rows address either keys [BH, Lk, E]
     // or precomputed dot products [BH, Lq, Lk]. Drawing in the same order preserves seeded replay.
-    [AiDotNet.Attributes.ScalarKernel("Host draw of L_Q x U key indices (an upload each step, not a device read).")]
     private Tensor<int> SampledKeyIndices(int batchHeads, int queries, int samples, int keys, bool scoreTable, Random random)
     {
         var fixedKeys = KeySampler?.Invoke(queries, samples, keys);

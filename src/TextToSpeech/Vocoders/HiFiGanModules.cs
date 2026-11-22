@@ -282,6 +282,7 @@ internal sealed partial class HiFiGanGenerator<T>
             ReleaseConsumed(previous, x);
             var stageInput = x;
             Tensor<T>? sum = null;
+            bool hasPrivateBranch = false;
             foreach (var (first, second) in _blocks[i])
             {
                 var h = stageInput;
@@ -307,11 +308,12 @@ internal sealed partial class HiFiGanGenerator<T>
                     ReleaseConsumed(carriedActivation, h, stageInput, sum);
                     ReleaseConsumed(residual, h, stageInput, sum);
                 }
+                hasPrivateBranch |= !Aliases(h, stageInput);
                 if (sum is null) sum = h;
                 else
                 {
                     var previousSum = sum;
-                    if (CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
+                    if (hasPrivateBranch && CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
                     {
                         _engine.TensorAddInPlace(previousSum, h);
                         Interlocked.Increment(ref _gpuOwnedResidualReuses);
@@ -327,7 +329,7 @@ internal sealed partial class HiFiGanGenerator<T>
                 }
             }
             var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
-            if (CanReusePrivateResult(completedSum, stageInput))
+            if (hasPrivateBranch && CanReusePrivateResult(completedSum, stageInput))
             {
                 _engine.TensorMultiplyScalarInPlace(completedSum, _residualAverageScale);
                 Interlocked.Increment(ref _gpuOwnedResidualReuses);
@@ -822,7 +824,6 @@ internal sealed class DifferentiableMel<T>
             for (int k = 0; k < bins; k++) _mel[k, m] = ops.FromDouble(basis[m, k]);
     }
 
-    [AiDotNet.Attributes.ScalarKernel("Builds immutable FP32 Hann coefficients once, without reading audio/tensor values; separate rounded stages preserve the reference construction recipe.")]
     private static float[] PeriodicHannFloat(int fftSize, int windowSize)
     {
         var result = new float[fftSize];

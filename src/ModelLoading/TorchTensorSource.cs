@@ -62,6 +62,7 @@ internal abstract class TorchTensorSource
         CheckCount(name, shape, count);
         if (shape.Length == 0 && count != expected)
             throw new InvalidDataException($"'{name}' has {count} values in {Description}; the destination expects {expected}.");
+        destination.IncrementVersion();
     }
 
     /// <summary>Copies a stored <c>[rows, cols]</c> matrix into <paramref name="destination"/> as <c>[cols, rows]</c>.</summary>
@@ -95,6 +96,7 @@ internal abstract class TorchTensorSource
             }
         });
         CheckCount(name, new[] { rows, cols }, count);
+        destination.IncrementVersion();
     }
 
     /// <summary>Decodes the named tensor in stored order, chunk by chunk, into <paramref name="sink"/> (each run of values and

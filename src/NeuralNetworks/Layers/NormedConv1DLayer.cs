@@ -106,7 +106,6 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     // Module constructors can supply an explicit stream before any default weight, bias or spectral-vector draw.
     // The public constructor and its serialized shape signature keep their existing behavior and compatibility.
-    [AiDotNet.Attributes.ScalarKernel("Cold initialization preserves the existing sequential uniform/Gaussian random draws and scalar gain-reduction order so an explicit seed determines every parameter and buffer without changing its distribution.")]
     internal NormedConv1DLayer(int inChannels, int outChannels, int kernelSize,
         int stride, int dilation, int groups, int padding, bool transposed, ConvolutionNormalization normalization,
         int outputPadding, bool useBias, Random? initialization = null)
@@ -137,28 +136,36 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
         int fanIn = (transposed ? outChannels / groups : inChannels / groups) * kernelSize;
         double bound = 1.0 / Math.Sqrt(fanIn);
-        _direction = transposed
-            ? new Tensor<T>(new[] { inChannels, outChannels / groups, 1, kernelSize })
-            : new Tensor<T>(new[] { outChannels, inChannels / groups, 1, kernelSize });
-        for (int i = 0; i < _direction.Length; i++) _direction[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
-        _bias = new Tensor<T>(new[] { outChannels });
+        var directionShape = transposed
+            ? new[] { inChannels, outChannels / groups, 1, kernelSize }
+            : new[] { outChannels, inChannels / groups, 1, kernelSize };
+        var directionSamples = new double[directionShape[0] * directionShape[1] * kernelSize];
+        for (int i = 0; i < directionSamples.Length; i++)
+            directionSamples[i] = (2 * random.NextDouble() - 1) * bound;
+        _direction = new Tensor<double>(directionSamples, directionShape).Cast<T>();
+
+        var biasSamples = new double[outChannels];
         if (useBias)
-            for (int i = 0; i < outChannels; i++) _bias[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
+            for (int i = 0; i < outChannels; i++)
+                biasSamples[i] = (2 * random.NextDouble() - 1) * bound;
+        _bias = new Tensor<double>(biasSamples, new[] { outChannels }).Cast<T>();
 
         // weight_norm(dim=0) normalizes over everything but dim 0: output channels for Conv1d, input channels for
         // ConvTranspose1d (whose weight is [in, out, k]).
-        int rows = _direction.Shape[0], per = _direction.Length / rows;
-        _gain = new Tensor<T>(new[] { rows });
+        int rows = directionShape[0], per = _direction.Length / rows;
+        var storedDirection = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(_direction).AsSpan();
+        var gainSamples = new double[rows];
         for (int r = 0; r < rows; r++)
         {
             double sum = 0;
             for (int i = 0; i < per; i++)
             {
-                double v = NumOps.ToDouble(_direction[r * per + i]);
+                double v = storedDirection[r * per + i];
                 sum += v * v;
             }
-            _gain[r] = NumOps.FromDouble(Math.Sqrt(sum));
+            gainSamples[r] = Math.Sqrt(sum);
         }
+        _gain = new Tensor<double>(gainSamples, new[] { rows }).Cast<T>();
         // Spectral norm's u ~ N(0, 1) and v ~ N(0, 1), each normalized (torch.nn.utils.spectral_norm).
         _u = NormalizedGaussian(rows, random);
         _v = NormalizedGaussian(per, random);
@@ -201,6 +208,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     internal void ZeroBias()
     {
         for (int i = 0; i < _bias.Length; i++) _bias[i] = NumOps.Zero;
+        _bias.IncrementVersion();
+        _inferenceWeightKernel.Invalidate();
         Engine.InvalidatePersistentTensor(_bias);
     }
 
@@ -217,9 +226,6 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape, string? gainName,
         string? biasName)
     {
-        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
-        // inference forward built from the old values must not answer for the loaded ones.
-        _inferenceWeightKernel.Invalidate();
         if (gainName is not null && _normalization != ConvolutionNormalization.Weight)
             throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
         if (_normalization == ConvolutionNormalization.Spectral)
@@ -256,6 +262,10 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                 foreach (var b in _bias.AsSpan())
                     if (NumOps.ToDouble(b) != 0) throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
         }
+        _direction.IncrementVersion();
+        _gain.IncrementVersion();
+        _bias.IncrementVersion();
+        _inferenceWeightKernel.Invalidate();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -268,9 +278,6 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     internal void LoadTorchWeights(double[] weight, double[]? gain, double[] bias)
     {
-        // The loaders write the direction and gain storage directly; the cached effective kernel an earlier
-        // inference forward built from the old values must not answer for the loaded ones.
-        _inferenceWeightKernel.Invalidate();
         if (weight.Length != _direction.Length)
             throw new ArgumentException($"Expected {_direction.Length} kernel values, got {weight.Length}.", nameof(weight));
         if (bias.Length != _bias.Length)
@@ -304,6 +311,10 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                 throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
             _bias[i] = NumOps.FromDouble(bias[i]);
         }
+        _direction.IncrementVersion();
+        _gain.IncrementVersion();
+        _bias.IncrementVersion();
+        _inferenceWeightKernel.Invalidate();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -331,6 +342,10 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             }
             _gain[r] = NumOps.FromDouble(Math.Sqrt(sum));
         }
+        _direction.IncrementVersion();
+        _gain.IncrementVersion();
+        _bias.IncrementVersion();
+        _inferenceWeightKernel.Invalidate();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -396,8 +411,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             }
         }
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
-        var inverse = Engine.TensorPow(sigma, NumOps.FromDouble(-1));
-        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+        var unitShape = new int[_direction.Rank];
+        for (int i = 0; i < unitShape.Length; i++) unitShape[i] = 1;
+        // Scale _direction in its native rank so leaf gradient accumulation owns its buffer instead of
+        // returning a Reshape view over a non-leaf gradient buffer that GradientTape.Dispose recycles.
+        var inverse = Engine.Reshape(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), unitShape);
+        return InvalidateComputedKernelCaches(Engine.TensorMultiply(_direction, inverse));
     }
 
     // The published engine predates the fused operation. Bind it once so newer engines record
@@ -624,6 +643,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException("The mask must match the kernel.", nameof(mask));
         for (int i = 0; i < _direction.Length; i++)
             if (NumOps.ToDouble(mask[i]) == 0) _direction[i] = NumOps.Zero;
+        _direction.IncrementVersion();
+        _inferenceWeightKernel.Invalidate();
         Engine.InvalidatePersistentTensor(_direction);
     }
 

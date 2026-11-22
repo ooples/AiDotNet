@@ -739,10 +739,20 @@ public class GroundingHeadPaperTests
     [Fact]
     public void Pyramid_NormalizesEachLevelsChannelsOverTheMap_AsDinosGroupNorm()
     {
-        var probe = new HeadProbe();
-        // Width 4 splits into 4 groups of one channel, so each channel is normalized over its level's whole map
-        // (a layer norm would normalize each token over its channels instead).
-        var levels = probe.Pyramid(probe.PyramidOf(4, 4), Random(28, 4, 3));
+        var previousSeed = LayerInitializationSeedScope.AmbientFallbackSeed;
+        LayerInitializationSeedScope.AmbientFallbackSeed = 28;
+        FeatureLevels<double> levels;
+        try
+        {
+            var probe = new HeadProbe();
+            // Width 4 splits into 4 groups of one channel, so each channel is normalized over its level's whole map
+            // (a layer norm would normalize each token over its channels instead).
+            levels = probe.Pyramid(probe.PyramidOf(4, 4), Random(28, 4, 3));
+        }
+        finally
+        {
+            LayerInitializationSeedScope.AmbientFallbackSeed = previousSeed;
+        }
 
         Assert.Equal(new[] { (4, 4), (2, 2), (1, 1), (1, 1) }, levels.Shapes);
         for (int level = 0; level < 2; level++)

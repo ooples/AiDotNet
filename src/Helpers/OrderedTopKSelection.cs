@@ -73,18 +73,16 @@ internal static class OrderedTopKSelection<T>
     }
 
     /// <summary>A <c>[1, rows, columns]</c> constant with entry <c>value(i, j)</c>.</summary>
-    [AiDotNet.Attributes.ScalarKernel("Builds a small host constant once per trace.")]
     public static Tensor<T> Constant(int rows, int columns, Func<int, int, double> value)
     {
-        var tensor = new Tensor<T>(new[] { 1, rows, columns });
-        var span = tensor.AsWritableSpan();
+        var shape = new[] { 1, rows, columns };
+        var values = new double[rows * columns];
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < columns; j++)
-            {
-                double v = value(i, j);
-                if (v != 0) span[i * columns + j] = NumOps.FromDouble(v);
-            }
-        return tensor;
+                values[i * columns + j] = value(i, j);
+        using var _ = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        var doubles = new Tensor<double>(values, shape);
+        return typeof(T) == typeof(double) ? (Tensor<T>)(object)doubles : doubles.Cast<T>();
     }
 
     /// <summary>A constant of <paramref name="shape"/> with every entry <paramref name="value"/>.</summary>

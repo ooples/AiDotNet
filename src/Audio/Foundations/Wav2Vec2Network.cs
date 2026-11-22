@@ -230,17 +230,51 @@ internal sealed class Wav2Vec2Network<T>
         states.Add(hidden);
         foreach (var layer in EncoderLayers)
         {
-            // LayerDrop: in training each layer is skipped with probability LayerDrop. A skipped layer does not run, so
-            // it is not in the step's graph, gets no gradient and is not stepped by the optimizer (no momentum update, no
-            // weight decay), as in fairseq and transformers. A compiled plan has one fixed graph and could only blend the
-            // layer out with a zero multiplier, which still steps it; the models that own this network therefore
-            // declare TrainingForwardSkipsLayersPerStep when LayerDrop is positive and train on the eager tape.
-            if (!(training && random.NextDouble() < c.LayerDrop))
+            // LayerDrop: in training each layer is skipped with probability LayerDrop. On the eager tape (which models
+            // with positive LayerDrop use via TrainingForwardSkipsLayersPerStep so AdamW does not step skipped layers
+            // by momentum or weight decay), a dropped layer is omitted from the step's graph and only its per-step
+            // dropout draws are advanced on the generator. When Wav2Vec2Network is traced directly into a compiled plan
+            // (e.g. under memoryless SGD), KeepGate + Gated keeps every layer in the traced graph and redraws on each
+            // replay from the identical random stream.
+            if (training && c.LayerDrop > 0)
+            {
+                if (AiDotNet.Training.CompiledStepRandom<T>.IsCapturingOrReplaying)
+                {
+                    var gate = AiDotNet.Training.CompiledStepRandom<T>.KeepGate(random, c.LayerDrop);
+                    hidden = AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine, gate, Encode(layer, hidden, training, random), hidden);
+                }
+                else if (AiDotNet.Training.CompiledStepRandom<T>.AreDrawsSkipped)
+                {
+                    hidden = Encode(layer, hidden, training, random);
+                }
+                else if (random.NextDouble() < c.LayerDrop)
+                {
+                    AdvanceSkippedLayerDraws(batch, hidden.Shape[1], random);
+                }
+                else
+                {
+                    hidden = Encode(layer, hidden, training, random);
+                }
+            }
+            else
+            {
                 hidden = Encode(layer, hidden, training, random);
+            }
             states.Add(hidden);
         }
         if (c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
         return new Output(hidden, features, states, raw, applied);
+    }
+
+    private void AdvanceSkippedLayerDraws(int batch, int length, Random random)
+    {
+        var c = Configuration;
+        int draws = 0;
+        if (c.AttentionDropout > 0) draws += batch * c.Heads * length * length;
+        if (c.HiddenDropout > 0) draws += batch * length * c.HiddenSize;
+        if (c.ActivationDropout > 0) draws += batch * length * c.IntermediateSize;
+        if (c.HiddenDropout > 0) draws += batch * length * c.HiddenSize;
+        for (int i = 0; i < draws; i++) _ = random.NextDouble();
     }
 
     // ------------------------------------------------------------------ building blocks

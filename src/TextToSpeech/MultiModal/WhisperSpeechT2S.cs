@@ -130,9 +130,10 @@ internal sealed class WhisperSpeechT2S<T>
         int w = c.Width;
         foreach (var block in EncoderBlocks.Concat(DecoderBlocks))
         {
-            foreach (var attention in new[] { block.Attention, block.CrossAttention }.Where(a => a is not null))
+            foreach (var candidate in new[] { block.Attention, block.CrossAttention })
             {
-                TorchParameters.Linear(_engine, attention!.Query, w, w, static () => 0.0, static () => 0.0);
+                if (candidate is not { } attention) continue;
+                TorchParameters.Linear(_engine, attention.Query, w, w, static () => 0.0, static () => 0.0);
                 TorchParameters.Linear(attention.Key, w, w, () => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / w));
                 Linear(attention.Value, w, w, c.InitStd / w);
                 Linear(attention.Output, w, w, c.InitStd / w);

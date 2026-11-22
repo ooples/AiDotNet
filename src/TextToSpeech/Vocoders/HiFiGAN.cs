@@ -74,11 +74,6 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
-    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
-    // seeds the segment crops). A run that sets only SamplingSeed is unchanged; the multiplier keeps (Seed, SamplingSeed)
-    // pairs from colliding on neighbouring values.
-    private int InitializationSeed => unchecked(PaperOptions.SamplingSeed + (PaperOptions.Seed ?? 0) * 7919);
-
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {

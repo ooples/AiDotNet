@@ -67,6 +67,18 @@ public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
 
         // Coefficient prediction head (one set per detection)
         _coeffHead = new Dense<T>(256 * 5 * 5, _numPrototypes);
+
+        // Start sub-networks in inference mode so Predict and shape probing use running statistics,
+        // matching ResNet and ObjectDetectorBase; Train switches them to training mode per step.
+        _backbone.SetTrainingMode(false);
+        _neck.SetTrainingMode(false);
+    }
+
+    private protected override void SetTrainingModeCore(bool training)
+    {
+        base.SetTrainingModeCore(training);
+        _backbone.SetTrainingMode(training);
+        _neck.SetTrainingMode(training);
     }
 
     /// <inheritdoc/>

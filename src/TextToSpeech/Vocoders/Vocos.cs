@@ -83,7 +83,7 @@ public partial class Vocos<T> : GanVocoderBase<T>
         if (o.HopSize <= 0) throw new ArgumentOutOfRangeException(nameof(o.HopSize));
         if (o.SegmentSize < o.HopSize || o.SegmentSize % o.HopSize != 0)
             throw new ArgumentException("Vocos training segments must contain a positive whole number of STFT hops.", nameof(o.SegmentSize));
-        _generator = new VocosGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _generator = new VocosGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.ConvNeXtDim, o.IntermediateDim, o.NumBackboneBlocks, o.FftSize, o.HopSize);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.FftSize, o.MelChannels, 0.0, o.SampleRate / 2.0, 1e-7,
             htkScale: true, naturalLog: true, exactMagnitude: true);

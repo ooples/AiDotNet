@@ -24,7 +24,8 @@ internal sealed class CsrAttentionOperations<T>
         // optional capability once per element type; forwards then use ordinary typed delegates.
         Type? pattern = typeof(IEngine).Assembly.GetType("AiDotNet.Tensors.Engines.CsrGraph");
         if (pattern is null) return null;
-        var binder = typeof(CsrAttentionOperations<T>).GetMethod(nameof(BindTyped), BindingFlags.Static | BindingFlags.NonPublic)!;
+        var binder = typeof(CsrAttentionOperations<T>).GetMethod(nameof(BindTyped), BindingFlags.Static | BindingFlags.NonPublic);
+        if (binder is null) return null;
         try
         {
             var bind = (Func<CsrAttentionOperations<T>?>)binder.MakeGenericMethod(pattern)

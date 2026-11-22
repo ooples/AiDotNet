@@ -4230,6 +4230,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // rather than NeuralNetworkBase, so without their own families they fell through to
         // NeuralNetwork and were rejected for not implementing INeuralNetworkModel.
         bool extendsObjectDetector = false, extendsTextDetector = false, extendsOcr = false;
+        bool extendsGanBase = false;
 
         // #2147: a model that sizes its layers from its options declares SizesLayersFromOptions (itself or through a base
         // such as FinancialModelBase); NeuralNetworkBase's own declaration is the default, not a declaration.
@@ -4390,6 +4391,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 extendsNonLinearRegression = true;
             else if (baseName.StartsWith("ProbabilisticClassifierBase", System.StringComparison.Ordinal))
                 extendsProbabilisticClassifier = true;
+            else if (baseName.StartsWith("GanVocoderBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("GenerativeAdversarialNetwork", System.StringComparison.Ordinal))
+                extendsGanBase = true;
 
             baseType = baseType.BaseType;
         }
@@ -4569,6 +4573,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsTextConditioningBase = extendsTextConditioning,
             ExtendsNeckBase = extendsNeck,
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
+            ExtendsGanBase = extendsGanBase,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
             ExtendsTextSafetyModuleBase = extendsTextSafety,
             ExtendsImageWatermarkerBase = extendsImageWatermarker,
@@ -16190,13 +16195,20 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // invariants measure it.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
-                if (model.ClassName is "WaveRNN" or "WaveNet")
+                else if (model.ClassName is "WaveRNN" or "WaveNet")
                 {
                     // WaveNet likewise samples each 8-bit mu-law class from a 256-way softmax (van den Oord et al. 2016,
                     // Sec. 2.2); the reason below applies to it unchanged.
                     // WaveRNN samples each coarse and fine 8-bit class from a 256-way softmax (Kalchbrenner et al. 2018,
                     // Sec. 3); with seeded draws an untrained model's near-uniform logits rarely move a class boundary past a
                     // draw, so constant mels can sample the same classes. Two steps sharpen the softmaxes first.
+                    sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
+                }
+                else if (model.ExtendsGanBase || model.Categories.Contains(CategoryGAN))
+                {
+                    // GAN vocoders compose deep upsampling stacks with nonlinear post-filters (tanh / iSTFT) whose
+                    // untrained weight initialization can attenuate small mel differences below the probe floor on
+                    // unfavorable random draws. Two warmup steps open the generator conditioning path.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
             }
@@ -16457,6 +16469,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // above uses mel = 8, T = 4, hop = 4 while retaining every paper component.
                     sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 4 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 12 };");
+                    if (model.ExtendsGanBase || model.Categories.Contains(CategoryGAN))
+                        sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
                 else if (model.ClassName == "NaturalSpeech2")
                 {
@@ -22172,6 +22186,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>True for a Mask R-CNN-style instance segmenter: a ModelBase driven through Predict and Segment.</summary>
         public bool ExtendsInstanceSegmenterBase { get; set; }
+
+        /// <summary>True for a GAN neural vocoder or GenerativeAdversarialNetwork descendant.</summary>
+        public bool ExtendsGanBase { get; set; }
 
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }

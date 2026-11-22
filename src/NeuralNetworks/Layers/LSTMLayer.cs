@@ -1365,7 +1365,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     // observers must still see the full sequence and the slice as individual layers.
     internal bool TryForwardLastHiddenState(Tensor<T> input, out Tensor<T> result)
     {
-        result = null!;
+        result = input;
         if (GetType() != typeof(LSTMLayer<T>) || IsTrainingMode || !_isInitialized || !IsShapeResolved || RequiresForwardInputValidation ||
             IsInferringShapes || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ||
             AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ||

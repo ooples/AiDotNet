@@ -78,7 +78,7 @@ public partial class ISTFTNet<T> : GanVocoderBase<T>
         int bins = o.InverseFftSize / 2 + 1;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7));
         _istft = new InverseStft<T>(Engine, o.InverseFftSize, o.InverseHopSize, o.InverseWindowSize);
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);

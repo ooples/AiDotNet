@@ -71,6 +71,13 @@ public partial class SOLOv2<T> : InstanceSegmenterBase<T>
         _maskBranch = new Conv2D<T>(256, _kernelDim, kernelSize: 3, padding: 1);
     }
 
+    private protected override void SetTrainingModeCore(bool training)
+    {
+        base.SetTrainingModeCore(training);
+        _backbone.SetTrainingMode(training);
+        _fpn.SetTrainingMode(training);
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Heads, in order: the mask features from P2, then each pyramid level's category predictions,

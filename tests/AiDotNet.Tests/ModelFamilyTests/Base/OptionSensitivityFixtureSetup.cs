@@ -45,6 +45,15 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> metaVoice ? MetaVoiceOptionFixture.ParameterCount(metaVoice)
             : network.GetParameters().Length;
 
+    internal static string ResolveEffectiveControlGroup<T>(INeuralNetworkModel<T> network, string option, int steps)
+    {
+        string explicitGroup = ControlGroup(network, option);
+        if (explicitGroup.Length > 0 || option.Length == 0) return explicitGroup;
+        if (TrainingSteps(network, option, steps) != TrainingSteps(network, string.Empty, steps))
+            return "auto:" + option;
+        return string.Empty;
+    }
+
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> && DevaOptionFixture.Handles(option) ? "deva-video-" + option
             : network is AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T> && KMaXSemanticAtrousOptionFixture.Handles(option) ? "kmax-" + option
@@ -339,6 +348,32 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        long result = ObserveTaskCore(network, input, option, observe, out bool uncustomizedFallback);
+        if (!uncustomizedFallback && option.Length > 0)
+            OptionSensitivityHarness.MarkCustomObservation();
+        return result;
+    }
+
+    private static bool SameObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> resolvedInput)
+    {
+        var baselineInput = ObservationInput(network, input, string.Empty);
+        if (ReferenceEquals(resolvedInput, baselineInput)) return true;
+        if (!resolvedInput.Shape.ToArray().SequenceEqual(baselineInput.Shape.ToArray())) return false;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < resolvedInput.Length; i++)
+        {
+            if (BitConverter.DoubleToInt64Bits(ops.ToDouble(resolvedInput[i]))
+                != BitConverter.DoubleToInt64Bits(ops.ToDouble(baselineInput[i])))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static long ObserveTaskCore<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
+        Func<INeuralNetworkModel<T>, Tensor<T>, long> observe, out bool uncustomizedFallback)
+    {
+        uncustomizedFallback = false;
         if (network is AiDotNet.Audio.Foundations.Wav2Vec2<T> wav2Vec2 && option == "MaskProbability")
         {
             // transformers' _compute_mask_indices draws max(floor(p*L/M + U), mask_time_min_masks = 2) spans, so on
@@ -508,14 +543,24 @@ internal static class OptionSensitivityFixtureSetup
             && option is "MemoryBankCapacity" or "MemoryBankRule" or "MemoryResampling" or "ConfidenceThreshold")
         {
             // The self-sorting memory bank (Zhu et al. 2024, section 3.2) fills, filters and resamples while an image set
-            // is segmented from one prompted template; Predict segments a single image with an empty bank. Eight
-            // distinct 64-pixel images overfill the fixture's four-entry bank.
+            // is segmented from one prompted template; Predict segments a single image with an empty bank. Twelve 64-pixel
+            // images sweep a 90-degree arc between two orthogonal patterns on top of a shared base so cosine similarities
+            // span a wide positive range (differentiating NormalizedSimilarity from Softmax without going negative).
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var images = new List<Tensor<T>>();
-            for (int k = 0; k < 8; k++)
+            const int length = 3 * 64 * 64;
+            const int cohortCount = 12;
+            var sharedBase = SineRamp<T>(length, 0.013, 0.14, 0.5);
+            var modeA = SineRamp<T>(length, 0.029, 0.25);
+            var modeB = SineRamp<T>(length, 0.047, 0.25);
+            var images = new List<Tensor<T>>(cohortCount);
+            for (int k = 0; k < cohortCount; k++)
             {
-                var image = Shaped(SineRamp<T>(3 * 64 * 64, 0.011 + 0.003 * k, 0.4, 0.5, k), new[] { 3, 64, 64 });
-                images.Add(image);
+                double angle = k * (Math.PI * 0.5) / (cohortCount - 1);
+                var arc = engine.TensorAdd(
+                    engine.TensorMultiplyScalar(modeA, ops.FromDouble(Math.Cos(angle))),
+                    engine.TensorMultiplyScalar(modeB, ops.FromDouble(Math.Sin(angle))));
+                images.Add(Shaped(engine.TensorAdd(sharedBase, arc), new[] { 3, 64, 64 }));
             }
             var masks = medicalSam.SegmentImageSet(images, 0, new float[,] { { 32f, 32f } }, new[] { 1 });
             return OptionSensitivityHarness.Fingerprint(masks.SelectMany(mask => mask.Select(ops.ToDouble)));
@@ -581,7 +626,7 @@ internal static class OptionSensitivityFixtureSetup
             // windows once the window is shorter than the clip.
             return observe(network, Waveform<T>(48000));
         if (option == "MaxTextLength" && network is AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>
-                or AiDotNet.SpeechRecognition.Multilingual.Chirp3<T> or AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<T>
+                or AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>
                 or AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>
             && network is AiDotNet.Interfaces.ISpeechRecognizer<T> capped)
         {
@@ -1229,7 +1274,10 @@ internal static class OptionSensitivityFixtureSetup
                 OptionSensitivityHarness.Fingerprint(trimmed.Select(value => ops.ToDouble(value))));
         }
         if (network is not AiDotNet.VisionLanguage.Grounding.GLaMM<T> glamm || option != "RegionGroupNormGroups")
+        {
+            uncustomizedFallback = option.Length == 0 || SameObservationInput(network, input, ObservationInput(network, input, option));
             return fingerprint;
+        }
         // Predict encodes the whole image; only a conversation naming a box runs the region encoder.
         var sample = new AiDotNet.VisionLanguage.Grounding.GlammSample<T>(input,
             new[] { new AiDotNet.VisionLanguage.Grounding.GlammTurn("Describe <bbox>.", "A region.") },
@@ -1420,6 +1468,9 @@ internal static class OptionSensitivityFixtureSetup
             ? Math.Max(2, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> && option == "TmaStartStep"
             ? Math.Max(2, steps)
+            : network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>
+                && option is "HotwordBatchRatio" or "HotwordUtteranceRatio" or "HotwordMinLength" or "HotwordMaxLength"
+            ? Math.Max(6, steps)
             : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
             || network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T>
             || network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> && SpeechT5Fixture.IsPretraining(option)
@@ -1428,34 +1479,63 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        bool customized = false;
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T> como
             && option is "DistillationSteps" or "EmaDecay"
             && como.CurrentPhase == AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeechTrainingPhase.Teacher)
+        {
             como.BeginDistillation();
+            customized = true;
+        }
 
         if (network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> align && option == "LearningRate")
+        {
             align.CurrentPhase = AiDotNet.TextToSpeech.Classic.AlignTTSTrainingPhase.JointFineTuning;
+            customized = true;
+        }
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleTts && option is "MaxStretch" or "DropoutRate")
+        {
             // Section II-B's second stage trains the prosody predictor, with the duration-stretch augmentation and the
             // predictor's dropout; the first (reconstruction) stage uses neither.
             styleTts.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTtsTrainingStage.Prosody;
+            customized = true;
+        }
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
+        {
             style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
+            customized = true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
+        {
             cosy.CurrentStage = AiDotNet.TextToSpeech.CodecBased.CosyVoiceTrainingStage.Flow;
+            customized = true;
+        }
         if ((option != "CurrentStage" && !IsNaturalJointOption(option))
             || network is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> natural
             || natural.GetOptions() is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions options
-            || options.CurrentStage != AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint) return;
+            || options.CurrentStage != AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint)
+        {
+            if (customized && option.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
+            return;
+        }
         // Joint training has a documented warm-up prerequisite: cluster posterior frames into the bank.
         int frames = option == "MemoryKMeansIterations" ? Math.Max(8 * options.MemorySize, 128) : Math.Max(options.MemorySize, 32);
         int samples = checked(frames * options.HopSize);
         var recording = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(SineRamp<T>(samples, 2 * Math.PI * 180 / options.SampleRate, 0.4),
             SineRamp<T>(samples, 2 * Math.PI * 470 / options.SampleRate, 0.2));
         natural.InitializeMemoryBank(new[] { recording });
+        if (option.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
     }
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
+    {
+        bool handled = TryTrainOptionCore(network, input, option);
+        if (handled && option.Length > 0)
+            OptionSensitivityHarness.MarkCustomObservation();
+        return handled;
+    }
+
+    private static bool TryTrainOptionCore<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
         if (network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> lid && option == "FeatureProjectionDropout")
         {
@@ -1465,6 +1545,29 @@ internal static class OptionSensitivityFixtureSetup
             var lidOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             var english = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(new[] { lidOps.One })), new Tensor<T>(new[] { 3 }) }, 0);
             lid.Train(Waveform<T>(32000), english);
+            return true;
+        }
+        if (network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T> seacoSampler
+            && seacoSampler.GetOptions() is AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions seacoSamplerOptions
+            && option is "HotwordBatchRatio" or "HotwordUtteranceRatio" or "HotwordMinLength" or "HotwordMaxLength")
+        {
+            // Predict returns a single-token distribution, so the generic target has one token per utterance (shorter
+            // than HotwordMinLength = 2) and one utterance per batch. Four one-second utterances of eleven non-special
+            // tokens exercise r_b across steps, r_u across utterances, and [l_min, l_max] spans up to ten tokens.
+            const int batchCount = 4, samples = 16000, transcriptLength = 11;
+            var seacoEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var seacoOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var waves = Enumerable.Range(0, batchCount)
+                .Select(b => seacoEngine.TensorAdd(SineRamp<T>(samples, 0.11 + 0.07 * b, 0.4), CosineRamp<T>(samples, 0.29 + 0.05 * b, 0.2)))
+                .ToArray();
+            var batchAudio = seacoEngine.TensorStack(waves, 0);
+            int spanVocab = Math.Max(4, seacoSamplerOptions.VocabSize - 3);
+            var tokenValues = new T[batchCount * transcriptLength];
+            for (int r = 0; r < batchCount; r++)
+                for (int t = 0; t < transcriptLength; t++)
+                    tokenValues[(r * transcriptLength) + t] = seacoOps.FromDouble(3 + (((r * 5) + t) % spanVocab));
+            var batchTokens = new Tensor<T>(new[] { batchCount, transcriptLength }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(tokenValues));
+            seacoSampler.Train(batchAudio, batchTokens);
             return true;
         }
         if (network is AiDotNet.Finance.Forecasting.Foundation.Chronos<T> chronos && option is "BatchSize" or "MinPast" or "MissingValueProbability")

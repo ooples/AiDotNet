@@ -90,7 +90,7 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
             throw new ArgumentException("PriorGrad's transposed-convolution strides must be positive and even.", nameof(o.UpsampleStrides));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
-        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides);
         _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels,
             o.MelMinFrequency, o.MelMaxFrequency, singlePrecisionBasis: true);

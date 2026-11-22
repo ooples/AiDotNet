@@ -127,10 +127,12 @@ internal static class TorchParameters
         var span = w.AsWritableSpan();
         for (int o = 0; o < outputs; o++)
             for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        w.IncrementVersion();
         engine.InvalidatePersistentTensor(w);
         var b = layer.GetBiases();
         var biasSpan = b.AsWritableSpan();
         for (int o = 0; o < outputs; o++) Store(biasSpan, o, bias(), ops);
+        b.IncrementVersion();
         engine.InvalidatePersistentTensor(b);
     }
 
@@ -170,6 +172,7 @@ internal static class TorchParameters
         var span = weights.AsWritableSpan();
         for (int o = 0; o < outputs; o++)
             for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        weights.IncrementVersion();
         AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
     }
 
@@ -186,6 +189,7 @@ internal static class TorchParameters
             var span = weights.AsWritableSpan();
             for (int o = 0; o < outputs; o++)
                 for (int i = 0; i < inputs; i++) span[i * outputs + o] = ops.FromDouble(weight[o * inputs + i]);
+            weights.IncrementVersion();
             AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
             return;
         }
@@ -226,7 +230,11 @@ internal static class TorchParameters
         source.CopyTransposedTo(weightName, weightShape ?? new[] { outputs, inputs }, outputs, inputs, w);
         engine.InvalidatePersistentTensor(w);
         var b = layer.GetBiases();
-        if (biasName is null) b.AsWritableSpan().Clear();
+        if (biasName is null)
+        {
+            b.AsWritableSpan().Clear();
+            b.IncrementVersion();
+        }
         else source.CopyTo(biasName, new[] { outputs }, b);
         engine.InvalidatePersistentTensor(b);
     }
@@ -293,7 +301,11 @@ internal static class TorchParameters
     /// <summary>Publishes weights written into <see cref="WeightsToWrite{T}"/>'s tensor.</summary>
     public static void Commit<T>(BiasFreeLinearLayer<T> layer, Tensor<T> written)
     {
-        if (ReferenceEquals(written, layer.Weights)) AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(written);
+        if (ReferenceEquals(written, layer.Weights))
+        {
+            written.IncrementVersion();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(written);
+        }
         else layer.SetParameters(new Vector<T>(written.ToArray()));
     }
 

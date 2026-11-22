@@ -195,6 +195,15 @@ public static class OptionSensitivityHarness
 
     private static readonly ConcurrentDictionary<(Type Fixture, string Group), Lazy<ControlFingerprint>> s_controls = new();
 
+    [ThreadStatic]
+    private static long s_fingerprintCount;
+
+    [ThreadStatic]
+    private static bool s_customObservation;
+
+    /// <summary>Marks the current observation or training step as using an option-specific task probe rather than the default fixture path.</summary>
+    internal static void MarkCustomObservation() => s_customObservation = true;
+
     /// <summary>
     /// Measures <paramref name="option"/> on the fixture's model and enforces the verdict against the
     /// runtime baseline.
@@ -203,13 +212,15 @@ public static class OptionSensitivityHarness
     /// <param name="fixtureType">The concrete test class, used to cache the control measurement.</param>
     /// <param name="option">The options property to perturb.</param>
     /// <param name="probe">How the family builds, observes and trains its model.</param>
-    public static void AssertChangesObservableBehaviour<TModel>(Type fixtureType, string option, OptionSensitivityProbe<TModel> probe)
+    /// <param name="controlProbe">Optional option-independent probe used to populate the default shared control (<c>""</c>) without capturing <paramref name="option"/>.</param>
+    public static void AssertChangesObservableBehaviour<TModel>(Type fixtureType, string option, OptionSensitivityProbe<TModel> probe,
+        OptionSensitivityProbe<TModel>? controlProbe = null)
         where TModel : class
     {
         OptionSensitivityReport report;
         try
         {
-            report = Measure(fixtureType, option, probe);
+            report = Measure(fixtureType, option, probe, controlProbe);
         }
         catch (Exception ex)
         {
@@ -261,7 +272,8 @@ public static class OptionSensitivityHarness
     }
 
     /// <summary>Measures one option without enforcing anything.</summary>
-    public static OptionSensitivityReport Measure<TModel>(Type fixtureType, string option, OptionSensitivityProbe<TModel> probe)
+    public static OptionSensitivityReport Measure<TModel>(Type fixtureType, string option, OptionSensitivityProbe<TModel> probe,
+        OptionSensitivityProbe<TModel>? controlProbe = null)
         where TModel : class
     {
         if (fixtureType is null) throw new ArgumentNullException(nameof(fixtureType));
@@ -271,6 +283,7 @@ public static class OptionSensitivityHarness
         Type declaredOptions;
         PropertyInfo? property;
         object? fixtureValue;
+        bool optionsPreparationDiverges = false;
         var source = Seeded(probe.Create);
         try
         {
@@ -290,6 +303,8 @@ public static class OptionSensitivityHarness
             var prepared = (ModelOptions)CloneEngine.CopyConfiguration(held);
             probe.PrepareOptions?.Invoke(prepared);
             fixtureValue = property?.GetValue(prepared);
+            if (probe.ControlGroup.Length == 0 && controlProbe is not null && OptionsPreparationDiffers(held, controlProbe.PrepareOptions, prepared))
+                optionsPreparationDiverges = true;
         }
         finally
         {
@@ -302,11 +317,21 @@ public static class OptionSensitivityHarness
                 $"{declaredOptions.Name} has no public writable property '{option}'.");
         }
 
-        var control = s_controls.GetOrAdd((fixtureType, probe.ControlGroup),
-            _ => new Lazy<ControlFingerprint>(() => MeasureControl(probe, declaredOptions))).Value;
+        string effectiveGroup = optionsPreparationDiverges ? "auto-prep:" + option : probe.ControlGroup;
+        bool isolatedToOption = effectiveGroup.Length > 0;
+        var effectiveControlProbe = isolatedToOption ? probe : (controlProbe ?? probe);
+        var control = s_controls.GetOrAdd((fixtureType, effectiveGroup),
+            _ => new Lazy<ControlFingerprint>(() => MeasureControl(effectiveControlProbe, declaredOptions))).Value;
         if (control.Failure is not null)
         {
             return new OptionSensitivityReport(modelKey, option, control.FailureOutcome, control.Failure);
+        }
+
+        ControlFingerprint IsolateOptionControl(string prefix)
+        {
+            isolatedToOption = true;
+            return s_controls.GetOrAdd((fixtureType, prefix + option),
+                _ => new Lazy<ControlFingerprint>(() => MeasureControl(probe, declaredOptions))).Value;
         }
 
         OptionSensitivityReport? insensitive = null;
@@ -373,9 +398,11 @@ public static class OptionSensitivityHarness
                 measured.Add(Describe(candidate));
 
                 long untrained;
+                long untrainedCount;
+                bool untrainedCustom;
                 try
                 {
-                    untrained = Seeded(() => probe.Observe(perturbed));
+                    untrained = ObserveMeasured(probe.Observe, perturbed, out untrainedCount, out untrainedCustom);
                 }
                 catch (Exception ex) when (IsInputContractRejection(ex))
                 {
@@ -383,6 +410,13 @@ public static class OptionSensitivityHarness
                         $"with {option} = {Describe(candidate)} the model rejects the fixture input "
                         + $"({Unwrap(ex).GetType().Name}), so the option changes its "
                         + (Unwrap(ex) is AiDotNet.TextToSpeech.Latest.KaniSpeechSpanException ? "generated speech contract." : "input contract."));
+                }
+
+                if (!isolatedToOption && (untrainedCustom != control.UntrainedCustomObservation || untrainedCount != control.UntrainedValueCount))
+                {
+                    control = IsolateOptionControl("auto-obs:");
+                    if (control.Failure is not null)
+                        return new OptionSensitivityReport(modelKey, option, control.FailureOutcome, control.Failure);
                 }
 
                 if (untrained != control.Untrained)
@@ -404,16 +438,38 @@ public static class OptionSensitivityHarness
                 }
 
                 long trained;
+                long trainedCount;
+                bool trainedCustom;
                 try
                 {
+                    s_customObservation = false;
                     Seeded(() => probe.Train(perturbed));
-                    trained = Seeded(() => probe.Observe(perturbed));
+                    bool trainCustom = s_customObservation;
+                    trained = ObserveMeasured(probe.Observe, perturbed, out trainedCount, out bool postTrainObsCustom);
+                    trainedCustom = trainCustom || postTrainObsCustom;
                 }
                 catch (Exception ex) when (IsInputContractRejection(ex))
                 {
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
                         $"with {option} = {Describe(candidate)} training rejects the fixture data where the control trains "
                         + $"({Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}).");
+                }
+
+                if (!isolatedToOption && (trainedCustom != control.TrainedCustomObservation
+                    || (control.TrainedValueCount.HasValue && trainedCount != control.TrainedValueCount.Value)))
+                {
+                    control = IsolateOptionControl("auto-train:");
+                    if (control.Failure is not null)
+                        return new OptionSensitivityReport(modelKey, option, control.FailureOutcome, control.Failure);
+                    if (control.Trained is null)
+                    {
+                        insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
+                            $"{option} {Describe(fixtureValue)} -> {{{string.Join(", ", measured)}}} reached the rebuilt model and "
+                            + "changed neither its parameters nor its outputs; "
+                            + $"the probe's training step failed on the unperturbed model ({control.TrainingFailure}), so "
+                            + "training-time effects were not observed.");
+                        continue;
+                    }
                 }
 
                 if (trained != control.Trained.Value)
@@ -484,6 +540,7 @@ public static class OptionSensitivityHarness
             count++;
         }
 
+        s_fingerprintCount += count;
         return unchecked((hash ^ count) * (long)0x100000001b3UL);
     }
 
@@ -501,13 +558,43 @@ public static class OptionSensitivityHarness
         public long? ParameterCount { get; set; }
         public long? ParameterShapesFingerprint { get; set; }
         public long Untrained { get; set; }
+        public long UntrainedValueCount { get; set; }
+        public bool UntrainedCustomObservation { get; set; }
         public long? Trained { get; set; }
+        public long? TrainedValueCount { get; set; }
+        public bool TrainedCustomObservation { get; set; }
         public IReadOnlyList<KeyValuePair<string, long>>? UntrainedParts { get; set; }
         public IReadOnlyList<KeyValuePair<string, long>>? TrainedParts { get; set; }
         public string? Failure { get; set; }
         public OptionSensitivityOutcome FailureOutcome { get; set; }
         /// <summary>Why the control could not take the probe's training step, when it could not.</summary>
         public string? TrainingFailure { get; set; }
+    }
+
+    private static long ObserveMeasured<TModel>(Func<TModel, long> observe, TModel model,
+        out long valueCount, out bool customObservation)
+    {
+        s_fingerprintCount = 0;
+        s_customObservation = false;
+        long fingerprint = Seeded(() => observe(model));
+        valueCount = s_fingerprintCount;
+        customObservation = s_customObservation;
+        return fingerprint;
+    }
+
+    private static bool OptionsPreparationDiffers(object held, Action<ModelOptions>? baselinePreparation,
+        ModelOptions optionPrepared)
+    {
+        var baselinePrepared = (ModelOptions)CloneEngine.CopyConfiguration(held);
+        baselinePreparation?.Invoke(baselinePrepared);
+        foreach (var property in baselinePrepared.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!property.CanRead || property.GetIndexParameters().Length != 0) continue;
+            if (!ValuesEqual(property.GetValue(baselinePrepared), property.GetValue(optionPrepared)))
+                return true;
+        }
+
+        return false;
     }
 
     private static ControlFingerprint MeasureControl<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions)
@@ -566,19 +653,28 @@ public static class OptionSensitivityHarness
         }
         try
         {
-            result.Untrained = Seeded(() => probe.Observe(model));
+            result.Untrained = ObserveMeasured(probe.Observe, model,
+                out long untrainedCount, out bool untrainedCustom);
+            result.UntrainedValueCount = untrainedCount;
+            result.UntrainedCustomObservation = untrainedCustom;
             result.UntrainedParts = probe.ObservedParts?.Invoke(model).ToArray();
             if (!train || probe.Train is null) return result;
+            bool trainCustom;
             try
             {
+                s_customObservation = false;
                 Seeded(() => probe.Train(model));
+                trainCustom = s_customObservation;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 result.TrainingFailure = $"{Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}";
                 return result;
             }
-            result.Trained = Seeded(() => probe.Observe(model));
+            result.Trained = ObserveMeasured(probe.Observe, model,
+                out long trainedCount, out bool postTrainObsCustom);
+            result.TrainedValueCount = trainedCount;
+            result.TrainedCustomObservation = trainCustom || postTrainObsCustom;
             result.TrainedParts = probe.ObservedParts?.Invoke(model).ToArray();
             return result;
         }

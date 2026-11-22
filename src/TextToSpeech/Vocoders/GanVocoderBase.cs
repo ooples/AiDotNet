@@ -36,7 +36,13 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     private readonly Dictionary<string, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _optimizers = new();
     private readonly bool _useNativeMode;
     private bool _disposed;
+    private readonly int _samplingSeed;
     private Random _trainingRandom;
+
+    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
+    // seeds the segment crops). A run that sets only SamplingSeed is unchanged; the multiplier keeps (Seed, SamplingSeed)
+    // pairs from colliding on neighbouring values.
+    private protected int InitializationSeed => unchecked(_samplingSeed + (Options?.Seed ?? 0) * 7919);
     private IReadOnlyList<ILayer<T>>? _trainingLayers;
     private long _trainingSteps;
     private readonly List<LayerBase<T>> _generatorLayers = new();
@@ -57,6 +63,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         Options = _vocoder;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
+        _samplingSeed = samplingSeed;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(samplingSeed);
         ApplyAudioSettings();
         InitializeLayers();
@@ -71,6 +78,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         // Options, as NeuralNetworkBase asks of every derived model.
         Options = _vocoder;
         _useNativeMode = false;
+        _samplingSeed = samplingSeed;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(samplingSeed);
         ApplyAudioSettings();
         if (string.IsNullOrWhiteSpace(modelPath))
