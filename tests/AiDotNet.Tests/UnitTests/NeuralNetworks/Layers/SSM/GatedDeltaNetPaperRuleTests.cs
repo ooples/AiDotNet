@@ -47,7 +47,7 @@ public class GatedDeltaNetPaperRuleTests
         var x = new float[512 * ModelDim];
         for (int i = 0; i < x.Length; i++) x[i] = (float)(rng.NextDouble() * 2000 - 1000);
         var y = layer.Forward(new Tensor<float>(new[] { 1, 512, ModelDim }, new Vector<float>(x))).ToArray();
-        Assert.All(y, v => Assert.True(float.IsFinite(v), $"non-finite output {v}"));
+        Assert.All(y, v => Assert.True(!float.IsNaN(v) && !float.IsInfinity(v), $"non-finite output {v}"));
     }
 
     private static double[] Reference(double[] p, double[] x)
