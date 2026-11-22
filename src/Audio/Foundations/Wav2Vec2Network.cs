@@ -348,22 +348,49 @@ internal sealed class Wav2Vec2Network<T>
     }
 
     /// <summary>
-    /// SpecAugment time masks (transformers <c>_compute_mask_indices</c>): per utterance ⌊p·L/M + U(0, 1)⌋ spans of M
-    /// frames (at least <see cref="Wav2Vec2Configuration.MaskTimeMinMasks"/>), starts drawn without replacement.
+    /// Span time masks as fairseq's <c>compute_mask_indices</c> draws them (static lengths, <c>idc_select_ver</c> 1): per
+    /// utterance ⌊p·L/M + U(0, 1)⌋ spans of M frames (at least <see cref="Wav2Vec2Configuration.MaskTimeMinMasks"/>), starts
+    /// drawn without replacement, and never every frame (see <see cref="DrawSpans"/>).
     /// </summary>
     public bool[,] DrawMask(int batch, int length, double probability, Random random)
     {
         var c = Configuration;
-        int span = Math.Min(c.MaskTimeLength, length);
         var mask = new bool[batch, length];
         for (int b = 0; b < batch; b++)
         {
-            int spans = (int)(probability * length / span + random.NextDouble());
-            spans = Math.Max(spans, c.MaskTimeMinMasks);
-            if (spans * span > length) spans = length / span;
-            foreach (var start in Enumerable.Range(0, length - span + 1).OrderBy(_ => random.Next()).Take(spans))
-                for (int t = start; t < start + span; t++) mask[b, t] = true;
+            int spans = Math.Max(c.MaskTimeMinMasks, (int)(probability * length / c.MaskTimeLength + random.NextDouble()));
+            var row = DrawSpans(length, spans, c.MaskTimeLength, random);
+            for (int t = 0; t < length; t++) mask[b, t] = row[t];
         }
+        return mask;
+    }
+
+    /// <summary>
+    /// <paramref name="spans"/> spans of <paramref name="span"/> frames over <paramref name="length"/> frames, following
+    /// fairseq's <c>compute_mask_indices</c> (fairseq/data/data_utils.py, <c>idc_select_ver == 1</c>):
+    /// <code>
+    /// min_len = min(lengths)
+    /// if sz - min_len &lt;= num_mask:
+    ///     min_len = sz - num_mask - 1
+    /// mask_idc = rng.choice(sz - min_len, num_mask, replace=False)
+    /// mask_idc = [mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])]
+    /// mask_idc = np.unique(mask_idc[mask_idc &lt; sz])
+    /// if len(mask_idc) &gt;= sz: raise ValueError("the entire sequence is masked. ...")
+    /// </code>
+    /// Starts come from the first sz − min_len frames and spans are cut at the end. fairseq rejects a draw that masks
+    /// every frame; one is possible when the utterance is shorter than the spans (two 10-frame spans over 9 frames
+    /// starting at 0 and 1), and a training step cannot be refused, so here one frame of such a draw, chosen uniformly,
+    /// is left unmasked: the encoder always sees part of its input.
+    /// </summary>
+    internal static bool[] DrawSpans(int length, int spans, int span, Random random)
+    {
+        var mask = new bool[length];
+        if (length <= 0 || spans <= 0 || span <= 0) return mask;
+        int minLength = span;
+        if (length - minLength <= spans) minLength = length - spans - 1;
+        foreach (int start in Enumerable.Range(0, length - minLength).OrderBy(_ => random.Next()).Take(spans))
+            for (int t = start; t < Math.Min(length, start + span); t++) mask[t] = true;
+        if (length > 1 && mask.All(m => m)) mask[random.Next(length)] = false;
         return mask;
     }
 
