@@ -137,11 +137,15 @@ internal static class ScaleShuffle
     }
 }
 
+// A diverged run's loss is NaN or infinite: written as a JSON string ("NaN") rather than failing the whole report.
 internal sealed record ScaleEpochReport(int Epoch, double TrainSeconds, double SamplesPerSecond, double DataWaitSeconds,
-    double? TrainLoss, double EvalSeconds, double TestAccuracy, double CumulativeTrainSeconds);
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? TrainLoss,
+    double EvalSeconds, double TestAccuracy, double CumulativeTrainSeconds);
 
 internal sealed record ScaleReport(string Dataset, string TrainSha256, int TrainSamples, int TestSamples, int BatchSize,
-    int TestBatchSize, int StepsPerEpoch, int WarmupSteps, int LossEvery, double? FirstLoss, List<ScaleEpochReport> Epochs,
+    int TestBatchSize, int StepsPerEpoch, int WarmupSteps, int LossEvery,
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
+    List<ScaleEpochReport> Epochs,
     double TotalTrainSeconds, ResourceReport Resources);
 
 internal static class ScaleBench
