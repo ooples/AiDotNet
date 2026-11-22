@@ -17,6 +17,11 @@ namespace AiDotNet.Tests.UnitTests.Training;
 [Collection("FoundationScaleSerial")]
 public class FusedTrainingSessionStreamedWeightTests
 {
+    // The streaming registry is process-wide and single-tenant: a model another test left streaming (an
+    // undisposed foundation-scale model) makes auto-detect decline here. This collection runs alone, so
+    // starting each test from a clean registry is safe and makes the test independent of run order.
+    public FusedTrainingSessionStreamedWeightTests() => NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+
     [Fact]
     public void TrainingAStreamedModel_ProbesItsPagedOutWeights()
     {

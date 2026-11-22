@@ -1013,6 +1013,24 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(
                 transcripts.SelectMany(text => text.Select(character => (double)character).Append(-text.Length - 1.0))));
         }
+        if (network is AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<T> codeSwitchingAsr && option == "MaxTextLength")
+        {
+            // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns logits and never
+            // decodes, so nothing else can observe it. An untrained decoder can emit the boundary token at once, which
+            // ends the decode before any bound acts, so the probe suppresses the boundary token's output bias and
+            // decodes four clips of different tones until the bound stops them.
+            if (codeSwitchingAsr.Network is { } codeSwitchingNetwork)
+            {
+                var biases = codeSwitchingNetwork.DecoderOutput.GetBiases();
+                if (codeSwitchingNetwork.Boundary >= 0 && codeSwitchingNetwork.Boundary < biases.Length)
+                    biases[codeSwitchingNetwork.Boundary] = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(-1e4);
+            }
+            var decoded = new[] { 0.13, 0.29, 0.53, 0.87 }.Select(frequency =>
+                codeSwitchingAsr.Transcribe(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorAdd(
+                    SineRamp<T>(16000, frequency, 0.4), CosineRamp<T>(16000, 0.37, 0.2)), includeTimestamps: false).Text).ToList();
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(
+                decoded.SelectMany(text => text.Select(character => (double)character).Append(-text.Length - 1.0))));
+        }
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
@@ -1355,8 +1373,11 @@ internal static class OptionSensitivityFixtureSetup
         "EmotionHidden" or "EmotionLayers" or "EmotionHeads" or "EmotionKeyValueHeads" or "EmotionHeadDim"
         or "EmotionIntermediate" or "EmotionVocabulary" or "EmotionLoraRank";
 
+    // Options that act only in the semantic-to-mel flow, so they are trained in its stage. The DiT's head count
+    // changes no parameter, and the default text-to-semantic stage never runs the DiT while training; at test scale
+    // the untrained GPT's synthesis need not reach it either, so only a flow step can show the heads' effect.
     private static bool IsIndexFlowOption(string option) => option is
-        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
+        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout" or "DitHeads";
 
     private static bool IsVocoderFrontendOption(string option) => option is
         "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin" or "EnergyMax";

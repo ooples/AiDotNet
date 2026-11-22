@@ -11,6 +11,7 @@ namespace AiDotNet.Tests.UnitTests.Video.ActionRecognition;
 /// Pins that TimeSformer's declared input (<c>Architecture.GetInputShape()</c>) is the video clip the model
 /// is built for, and that the model accepts an input of exactly that shape.
 /// </summary>
+[Collection("FoundationScaleSerial")]
 public class TimeSformerDeclaredInputTests
 {
     private static Tensor<float> Random(int[] shape, int seed)
@@ -41,7 +42,21 @@ public class TimeSformerDeclaredInputTests
     [Fact]
     public void DefaultConstructor_DeclaresAnEightFrameClip_AndPredictAcceptsIt()
     {
-        var model = new TimeSformer<float>();
+        // The default model is large enough to auto-engage weight streaming, which claims the process-wide
+        // streaming registry; release it afterwards so later streaming tests start from a clean registry.
+        try
+        {
+            RunDefaultConstructorCheck();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+        }
+    }
+
+    private static void RunDefaultConstructorCheck()
+    {
+        using var model = new TimeSformer<float>();
 
         // The default model is built for 8-frame 224x224 RGB clips (numFrames = 8 sizes the divided
         // space-time blocks and the positional table). It used to declare InputType.ThreeDimensional,
