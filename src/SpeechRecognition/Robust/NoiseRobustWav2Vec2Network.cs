@@ -107,7 +107,8 @@ internal sealed class NoiseRobustWav2Vec2Network<T>
     /// <summary>
     /// The continual pre-training loss (Equation 4) of noisy waveforms <c>[B, S]</c> and their clean references:
     /// L = L_c + λ1 L_d + λ2 L_r, where wav2vec 2.0's objective supplies the contrastive and diversity terms (with its
-    /// feature penalty) and L_r is the mean absolute error of the reconstructed clean waveform (Equation 3).
+    /// feature penalty) and L_r is the mean absolute error of the reconstructed clean waveform (Equation 3). Like
+    /// wav2vec 2.0's objective the total is summed over the masked steps, so λ2 L_r enters once per masked step.
     /// </summary>
     public (Tensor<T> Total, Tensor<T> Reconstruction) ContinualPretrainingLoss(Tensor<T> noisy, Tensor<T> clean, bool training, Random random,
         bool[,]? mask = null, int[,,]? negatives = null)
@@ -122,8 +123,13 @@ internal sealed class NoiseRobustWav2Vec2Network<T>
         var predicted = Reconstruct(output.Hidden, noisy.Shape[1]);
         var reconstruction = _engine.ReduceMean(_engine.TensorAbs(_engine.TensorSubtract(predicted, clean)), new[] { 0, 1 }, keepDims: false);
         reconstruction = _engine.Reshape(reconstruction, new[] { 1 });
+        // wav2vec 2.0's objective is summed over the masked steps (fairseq's wav2vec criterion, whose trainer divides the
+        // gradients by sample_size, the number of masked steps), so Equation 4's weights hold per masked step. fairseq adds
+        // each extra loss the same way: "p = coef * p.float() * sample_size; loss += p". Added unscaled, L_r would weigh
+        // λ2 / (masked steps) against L_c and the encoder would barely learn to keep what the reconstruction needs.
+        double steps = Math.Max(1, losses.Masked);
         var total = _engine.TensorAdd(_engine.Reshape(losses.Total, new[] { 1 }),
-            _engine.TensorMultiplyScalar(reconstruction, NumOps.FromDouble(ReconstructionWeight)));
+            _engine.TensorMultiplyScalar(reconstruction, NumOps.FromDouble(ReconstructionWeight * steps)));
         return (total, reconstruction);
     }
 }
