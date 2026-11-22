@@ -85,7 +85,10 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         var o = PaperOptions;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
+            // No N(0, 0.01) redraw: the reference applies init_weights after weight_norm, so it writes only the derived
+            // `weight` tensor, which the forward pre-hook recomputes from weight_g and weight_v. Every convolution trains
+            // from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks each stage 3-15x and leaves an
+            // untrained generator's output to its biases, below single precision's resolution of the mel input.
             defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 11));
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
             singlePrecisionBasis: true);
