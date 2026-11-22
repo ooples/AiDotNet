@@ -627,6 +627,7 @@ internal static class OptionSensitivityFixtureSetup
             return observe(network, Waveform<T>(48000));
         if (option == "MaxTextLength" && network is AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>
                 or AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>
+                or AiDotNet.SpeechRecognition.Multilingual.USM<T>
                 or AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>
             && network is AiDotNet.Interfaces.ISpeechRecognizer<T> capped)
         {

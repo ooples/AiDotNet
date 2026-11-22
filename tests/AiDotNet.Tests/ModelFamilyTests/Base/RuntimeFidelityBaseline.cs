@@ -4439,10 +4439,15 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.WaveRNN`1::UpsampleRates", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveRNN`1::VocabSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
+            // Read as sensitive only against a control another option had prepared; against the option-independent
+            // control FftSize, MaxTextLength and MinReferenceDurationSec leave the fixture's output unchanged.
+            { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::MaxCodecFrames", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::MinReferenceDurationSec", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
             // The released MetaVoice codec fixes 24 kHz, hop320, eight 1024-entry codebooks and two coarse streams.
             { "AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B`1::CodecLatentDim", OptionSensitivityOutcome.NoValidPerturbation },
@@ -4625,6 +4630,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::NumBlocks", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::TemporalWindowSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::Variant", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Video.Denoising.ShiftNet`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::NumBlocks", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::NumShifts", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::ShiftRadius", OptionSensitivityOutcome.Insensitive },
