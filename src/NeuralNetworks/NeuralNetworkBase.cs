@@ -6995,11 +6995,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A training-time regularizer the forward produced (a mask-sparsity penalty, a commitment
         // term). It is added here, the funnel every tape-loss path shares, so it reaches the gradient
         // in all of them; a scalar returned outside the tape would be reported and never trained on.
-        var auxiliary = ConsumeAuxiliaryTapeLoss();
+        // Under gradient checkpointing the terms produced inside segments were collected per segment (see
+        // CheckpointSegments); the model returns whatever it produced after the last one.
+        var auxiliary = SumAuxiliaryTerms(TakeCheckpointAuxiliaryLoss(), ConsumeAuxiliaryTapeLoss());
         if (auxiliary is null) return objective;
-        if (auxiliary.Length != 1)
-            throw new InvalidOperationException(
-                $"ConsumeAuxiliaryTapeLoss must return a scalar loss; {GetType().Name} returned {auxiliary.Length} values.");
+        RequireScalarAuxiliary(auxiliary);
         return Engine.TensorAdd(objective, Engine.Reshape(auxiliary, objective._shape));
     }
 
@@ -10591,9 +10591,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 && active(param, grad);
         }
 
-        Tensor<T> output = s_checkpointSegmentsDelegate is { } checkpointSegments
-            ? checkpointSegments(_checkpointLayerFunctions, input, _checkpointSegmentParameters, segmentSize, consumer)
-            : CheckpointSegmentsFallback(_checkpointLayerFunctions, input, _checkpointSegmentParameters, _checkpointAllParametersFactory, segmentSize, consumer);
+        // A term the model already holds before the first segment (a weight penalty it computed before the layer walk)
+        // was produced outside every segment, on the tape; it joins the segments' terms unchanged. Each segment's own
+        // terms are collected at its end, so they must not be mixed with it.
+        var auxiliaryBeforeSegments = ConsumeAuxiliaryTapeLoss();
+        Tensor<T> output = CheckpointSegments(
+            _checkpointLayerFunctions, input, _checkpointSegmentParameters, _checkpointAllParametersFactory,
+            segmentSize, consumer, out var segmentAuxiliary);
+        _checkpointAuxiliaryLoss = SumAuxiliaryTerms(auxiliaryBeforeSegments, segmentAuxiliary);
         if (!_firstForwardCompleted)
         {
             _firstForwardCompleted = true;
@@ -10603,63 +10608,71 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return output;
     }
 
-    private static readonly Func<
-        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
-        Tensor<T>,
-        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
-        int,
-        Func<Tensor<T>, Tensor<T>, bool>?,
-        Tensor<T>>? s_checkpointSegmentsDelegate = ResolveCheckpointSegmentsDelegate();
+    /// <summary>
+    /// The auxiliary loss the last checkpointed forward collected from its segments, tape-connected through each
+    /// segment's auxiliary output, or null. <see cref="ApplyCompositeObjective"/> takes it with the model's own term.
+    /// </summary>
+    private Tensor<T>? _checkpointAuxiliaryLoss;
 
-    private static Func<
-        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
-        Tensor<T>,
-        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
-        int,
-        Func<Tensor<T>, Tensor<T>, bool>?,
-        Tensor<T>>? ResolveCheckpointSegmentsDelegate()
+    private Tensor<T>? TakeCheckpointAuxiliaryLoss()
     {
-        var method = typeof(AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>).GetMethod(
-            "CheckpointSegments",
-            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
-            binder: null,
-            types: new[]
-            {
-                typeof(IReadOnlyList<Func<Tensor<T>, Tensor<T>>>),
-                typeof(Tensor<T>),
-                typeof(IReadOnlyList<IReadOnlyList<Tensor<T>>>),
-                typeof(int),
-                typeof(Func<Tensor<T>, Tensor<T>, bool>)
-            },
-            modifiers: null);
-        if (method is null) return null;
-        return (Func<
-            IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
-            Tensor<T>,
-            IReadOnlyList<IReadOnlyList<Tensor<T>>>,
-            int,
-            Func<Tensor<T>, Tensor<T>, bool>?,
-            Tensor<T>>)Delegate.CreateDelegate(typeof(Func<
-                IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
-                Tensor<T>,
-                IReadOnlyList<IReadOnlyList<Tensor<T>>>,
-                int,
-                Func<Tensor<T>, Tensor<T>, bool>?,
-                Tensor<T>>), method);
+        var term = _checkpointAuxiliaryLoss;
+        _checkpointAuxiliaryLoss = null;
+        return term;
     }
 
-    private Tensor<T> CheckpointSegmentsFallback(
+    private Tensor<T>? SumAuxiliaryTerms(Tensor<T>? first, Tensor<T>? second)
+    {
+        if (first is null) return second;
+        if (second is null) return first;
+        RequireScalarAuxiliary(first);
+        RequireScalarAuxiliary(second);
+        return Engine.TensorAdd(Engine.Reshape(first, [1]), Engine.Reshape(second, [1]));
+    }
+
+    private void RequireScalarAuxiliary(Tensor<T> term)
+    {
+        if (term.Length != 1)
+            throw new InvalidOperationException(
+                $"ConsumeAuxiliaryTapeLoss must return a scalar loss; {GetType().Name} returned {term.Length} values.");
+    }
+
+    /// <summary>
+    /// The checkpointed forward through <paramref name="functions"/>: each segment runs without recording, keeps only its
+    /// output, and records one tape op whose backward runs the segment again on a nested tape and back-propagates it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This follows <c>torch.utils.checkpoint</c>, including for what a segment contributes to the loss besides its
+    /// output. An auxiliary loss a layer produces inside the segment (an MoE balance term, read by the model's
+    /// <see cref="ConsumeAuxiliaryTapeLoss"/>) is taken at the end of the segment and becomes a second segment output: a
+    /// tape op of its own, whose gradient the segment backward picks up and seeds the recompute with alongside the
+    /// output gradient, as PyTorch back-propagates every output of a checkpointed function. The recompute produces the
+    /// term again on the nested tape, so d(term)/d(parameters) reaches the segment's parameters and input. Without
+    /// this, the term was built from the segment's discarded, untaped activations: its gradient was lost, and on the GPU
+    /// its storage was already released when the objective read it.
+    /// </para>
+    /// <para>
+    /// The two runs of the segment are marked through <see cref="AiDotNet.Training.Memory.GradientCheckpointingContext"/>,
+    /// so a layer whose forward changes its own state can make that change once and recompute with the state its first
+    /// forward read.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> CheckpointSegments(
         IReadOnlyList<Func<Tensor<T>, Tensor<T>>> functions,
         Tensor<T> input,
         IReadOnlyList<IReadOnlyList<Tensor<T>>> segmentParameters,
         Func<IReadOnlyList<Tensor<T>>> allParametersFactory,
         int segmentSize,
-        Func<Tensor<T>, Tensor<T>, bool>? tryConsumeParameterGradient)
+        Func<Tensor<T>, Tensor<T>, bool>? tryConsumeParameterGradient,
+        out Tensor<T>? auxiliaryLoss)
     {
+        auxiliaryLoss = null;
         if (functions.Count == 0) return input;
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         if (tape is null)
         {
+            // Nothing records, so nothing is recomputed: a plain forward, whose auxiliary terms stay with the model.
             var cur = input;
             foreach (var fn in functions) cur = fn(cur);
             return cur;
@@ -10675,21 +10688,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int startIdx = seg * segmentSize;
             int endIdx = Math.Min(startIdx + segmentSize, functions.Count);
             var segmentInput = current;
+            var segmentState = new AiDotNet.Training.Memory.GradientCheckpointingContext.SegmentState();
 
             Tensor<T> segmentOutput;
+            Tensor<T>? segmentAuxiliary = null;
+            IReadOnlyList<Tensor<T>> selected;
             using (var segmentGpuScope = TensorScope.Begin())
             using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
             using (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.NoGrad())
+            using (AiDotNet.Training.Memory.GradientCheckpointingContext.EnterSegmentForward(segmentState))
             {
                 segmentOutput = segmentInput;
                 for (int i = startIdx; i < endIdx; i++)
                     segmentOutput = functions[i](segmentOutput);
-                segmentOutput = segmentGpuScope.Keep(CloneCheckpointBoundaryFallback(segmentOutput, engine));
-            }
+                segmentOutput = segmentGpuScope.Keep(CloneCheckpointBoundary(segmentOutput, engine));
 
-            IReadOnlyList<Tensor<T>> selected = resolved && seg < segmentParameters.Count
-                ? segmentParameters[seg]
-                : allParametersFactory();
+                // The terms this segment's layers produced. Only the value escapes here; the recompute rebuilds the term
+                // on the tape.
+                if (ConsumeAuxiliaryTapeLoss() is { } term)
+                {
+                    RequireScalarAuxiliary(term);
+                    segmentAuxiliary = segmentGpuScope.Keep(CloneCheckpointBoundary(term, engine));
+                }
+
+                // Selected while the scope is open: a layer that creates a parameter on its first forward registers it
+                // with this scope, which would release its storage on disposal. Parameters outlive every activation
+                // scope, so each one is handed back to its own lifetime.
+                selected = resolved && seg < segmentParameters.Count
+                    ? segmentParameters[seg]
+                    : allParametersFactory();
+                for (int i = 0; i < selected.Count; i++)
+                    if (selected[i] is { } parameter) TensorScope.Detach(parameter);
+            }
 
             var unique = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             var checkpointInputs = new Tensor<T>[selected.Count + 1];
@@ -10707,80 +10737,119 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int capturedStart = startIdx;
             int capturedEnd = endIdx;
             var capturedFunctions = functions;
+            bool capturedHasAuxiliary = segmentAuxiliary is not null;
+            // The auxiliary output's gradient, set by its tape op's backward. That op consumes the segment output, so
+            // the reverse walk reaches it before the segment op that produces the output.
+            var auxiliaryGradient = new Tensor<T>?[1];
 
             AiDotNet.Tensors.Engines.Autodiff.BackwardFunction<T> backward = (gradOutput, inputs, output, savedState, eng, grads) =>
             {
                 var reInput = inputs[0];
                 List<(Tensor<T> Key, Tensor<T> Gradient)> detachedGradients;
-                using (var recomputeGpuScope = TensorScope.Begin())
-                using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
-                using (var recomputeTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(
-                    new AiDotNet.Tensors.Engines.Autodiff.GradientTapeOptions { Persistent = false, SuppressArenaScope = true }))
+                try
                 {
-                    var reInputDetached = eng.StopGradient(reInput);
-                    var reOutput = reInputDetached;
-                    for (int i = capturedStart; i < capturedEnd; i++)
-                        reOutput = capturedFunctions[i](reOutput);
-
-                    var weighted = eng.TensorMultiply(reOutput, gradOutput);
-                    var pseudoLoss = eng.ReduceSum(weighted);
-
-                    var recomputeSources = new Tensor<T>[inputs.Length];
-                    recomputeSources[0] = reInputDetached;
-                    for (int i = 1; i < inputs.Length; i++) recomputeSources[i] = inputs[i];
-
-                    var savedIndexedGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads;
-                    var savedSparseGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads;
-                    // The tables are addressed by each tensor's _gradIndex, so those are suspended too. A parameter shared
-                    // with the outer pass keeps the index that pass assigned: the nested walk would not reassign it (a new
-                    // nested tensor could take the same slot and the two would accumulate into one), and its cleanup sets
-                    // every index it touched to -1 (the outer pass would lose the parameter's indexed and sparse
-                    // gradients). Clear them for the nested pass and restore them afterwards.
-                    var savedGradIndices = SuspendCheckpointGradIndices(recomputeTape);
-                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedGrads();
-                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedSparseGrads();
-                    Dictionary<Tensor<T>, Tensor<T>> segGrads;
-                    try
+                    using (var recomputeGpuScope = TensorScope.Begin())
+                    using (AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true))
+                    using (var recomputeTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(
+                        new AiDotNet.Tensors.Engines.Autodiff.GradientTapeOptions { Persistent = false, SuppressArenaScope = true }))
                     {
-                        segGrads = recomputeTape.ComputeGradients(pseudoLoss, recomputeSources);
-                    }
-                    finally
-                    {
-                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads = savedIndexedGrads;
-                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads = savedSparseGrads;
-                        foreach (var (tensor, index) in savedGradIndices)
-                            tensor._gradIndex = index;
-                    }
-
-                    detachedGradients = new List<(Tensor<T>, Tensor<T>)>(segGrads.Count);
-                    bool hasInputGrad = false;
-                    foreach (var kvp in segGrads)
-                    {
-                        if (ReferenceEquals(kvp.Key, gradOutput) || kvp.Value is null) continue;
-                        bool isSegmentInput = ReferenceEquals(kvp.Key, reInputDetached);
-                        if (isSegmentInput)
+                        // Detached so the recompute graph stops at the segment boundary instead of re-entering the
+                        // previous segment (torch.utils.checkpoint's detach_variable).
+                        var reInputDetached = eng.StopGradient(reInput);
+                        var reOutput = reInputDetached;
+                        Tensor<T>? reAuxiliary;
+                        using (AiDotNet.Training.Memory.GradientCheckpointingContext.EnterRecompute(segmentState))
                         {
-                            hasInputGrad = true;
+                            for (int i = capturedStart; i < capturedEnd; i++)
+                                reOutput = capturedFunctions[i](reOutput);
+                            reAuxiliary = ConsumeAuxiliaryTapeLoss();
                         }
-                        else if (tryConsumeParameterGradient is not null)
+                        if ((reAuxiliary is not null) != capturedHasAuxiliary)
+                            throw new InvalidOperationException(
+                                $"Checkpoint segment {capturedStart}..{capturedEnd - 1} of {GetType().Name} produced an "
+                                + $"auxiliary loss in {(capturedHasAuxiliary ? "its forward but not its recompute" : "its recompute but not its forward")}: "
+                                + "the two runs diverged, so the recomputed gradients would not belong to the loss.");
+
+                        // Vector-Jacobian product seed: sum(reOutput * gradOutput) + sum(reAuxiliary * gradAuxiliary),
+                        // both gradients constants, so its gradient is the VJP of every segment output at once.
+                        var gradOutputDetached = eng.StopGradient(gradOutput);
+                        var pseudoLoss = eng.ReduceSum(eng.TensorMultiply(reOutput, gradOutputDetached));
+                        if (reAuxiliary is not null && auxiliaryGradient[0] is { } gradAuxiliary)
                         {
-                            bool consumed;
-                            using (TensorScope.Suspend())
+                            var auxiliarySeed = eng.Reshape(eng.StopGradient(gradAuxiliary), reAuxiliary._shape);
+                            var auxiliaryPseudoLoss = eng.ReduceSum(eng.TensorMultiply(reAuxiliary, auxiliarySeed));
+                            pseudoLoss = eng.TensorAdd(pseudoLoss, eng.Reshape(auxiliaryPseudoLoss, pseudoLoss._shape));
+                        }
+
+                        var recomputeSources = new Tensor<T>[inputs.Length];
+                        recomputeSources[0] = reInputDetached;
+                        for (int i = 1; i < inputs.Length; i++) recomputeSources[i] = inputs[i];
+
+                        var savedIndexedGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads;
+                        var savedSparseGrads = AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads;
+                        // The tables are addressed by each tensor's _gradIndex, so those are suspended too. A parameter shared
+                        // with the outer pass keeps the index that pass assigned: the nested walk would not reassign it (a new
+                        // nested tensor could take the same slot and the two would accumulate into one), and its cleanup sets
+                        // every index it touched to -1 (the outer pass would lose the parameter's indexed and sparse
+                        // gradients). Clear them for the nested pass and restore them afterwards.
+                        var savedGradIndices = SuspendCheckpointGradIndices(recomputeTape);
+                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedGrads();
+                        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.ClearIndexedSparseGrads();
+                        Dictionary<Tensor<T>, Tensor<T>> segGrads;
+                        try
+                        {
+                            segGrads = recomputeTape.ComputeGradients(pseudoLoss, recomputeSources);
+                        }
+                        finally
+                        {
+                            AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedGrads = savedIndexedGrads;
+                            AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps._indexedSparseGrads = savedSparseGrads;
+                            foreach (var (tensor, index) in savedGradIndices)
+                                tensor._gradIndex = index;
+                        }
+
+                        detachedGradients = new List<(Tensor<T>, Tensor<T>)>(segGrads.Count);
+                        bool hasInputGrad = false;
+                        foreach (var kvp in segGrads)
+                        {
+                            if (ReferenceEquals(kvp.Key, gradOutput) || ReferenceEquals(kvp.Key, gradOutputDetached)
+                                || kvp.Value is null) continue;
+                            bool isSegmentInput = ReferenceEquals(kvp.Key, reInputDetached);
+                            if (isSegmentInput)
                             {
-                                consumed = tryConsumeParameterGradient(kvp.Key, kvp.Value);
+                                hasInputGrad = true;
                             }
-                            if (consumed) continue;
+                            else if (tryConsumeParameterGradient is not null)
+                            {
+                                bool consumed;
+                                using (TensorScope.Suspend())
+                                {
+                                    consumed = tryConsumeParameterGradient(kvp.Key, kvp.Value);
+                                }
+                                if (consumed)
+                                {
+                                    // The nested backward mirrored the gradient into Grad; it belongs to recomputeGpuScope
+                                    // and is released below, and no outer accumulation will replace it.
+                                    if (ReferenceEquals(kvp.Key.Grad, kvp.Value)) kvp.Key.Grad = null;
+                                    continue;
+                                }
+                            }
+                            var key = isSegmentInput ? reInput : kvp.Key;
+                            var copied = recomputeGpuScope.Keep(CloneCheckpointBoundary(kvp.Value, eng));
+                            detachedGradients.Add((key, copied));
                         }
-                        var key = isSegmentInput ? reInput : kvp.Key;
-                        var copied = recomputeGpuScope.Keep(CloneCheckpointBoundaryFallback(kvp.Value, eng));
-                        detachedGradients.Add((key, copied));
-                    }
 
-                    if (!hasInputGrad && ReferenceEquals(reOutput, reInputDetached))
-                    {
-                        var copied = recomputeGpuScope.Keep(CloneCheckpointBoundaryFallback(gradOutput, eng));
-                        detachedGradients.Add((reInput, copied));
+                        if (!hasInputGrad && ReferenceEquals(reOutput, reInputDetached))
+                        {
+                            var copied = recomputeGpuScope.Keep(CloneCheckpointBoundary(gradOutput, eng));
+                            detachedGradients.Add((reInput, copied));
+                        }
                     }
+                }
+                finally
+                {
+                    segmentState.Release();
+                    auxiliaryGradient[0] = null;
                 }
 
                 foreach (var (key, gradient) in detachedGradients)
@@ -10791,13 +10860,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive<T>(
                 $"Checkpoint_seg{seg}", segmentOutput, checkpointInputs, backward);
+
+            if (segmentAuxiliary is not null)
+            {
+                // The auxiliary output's own tape op. Its backward only hands its gradient to the segment op above; it
+                // lists the segment output as its input so every walk order (reverse recording or topological) runs it
+                // first. It passes no gradient to that input: the term's dependence on the segment is differentiated in
+                // the segment's recompute.
+                AiDotNet.Tensors.Engines.Autodiff.BackwardFunction<T> auxiliaryBackward = (gradAuxiliary, _, _, _, eng, _) =>
+                {
+                    auxiliaryGradient[0] = auxiliaryGradient[0] is { } earlier
+                        ? eng.TensorAdd(earlier, CloneCheckpointBoundary(gradAuxiliary, eng))
+                        : CloneCheckpointBoundary(gradAuxiliary, eng);
+                };
+                AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive<T>(
+                    $"Checkpoint_seg{seg}_auxiliary", segmentAuxiliary, new[] { segmentOutput }, auxiliaryBackward);
+                auxiliaryLoss = auxiliaryLoss is null
+                    ? Engine.Reshape(segmentAuxiliary, [1])
+                    : Engine.TensorAdd(auxiliaryLoss, Engine.Reshape(segmentAuxiliary, [1]));
+            }
             current = segmentOutput;
         }
 
         return current;
     }
 
-    private static Tensor<T> CloneCheckpointBoundaryFallback(Tensor<T> source, IEngine engine)
+    private static Tensor<T> CloneCheckpointBoundary(Tensor<T> source, IEngine engine)
     {
         if (engine is DirectGpuTensorEngine && source.TryGetGpuBuffer() is not null)
         {

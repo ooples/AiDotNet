@@ -26627,3 +26627,8 @@ AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Capacity.get
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Position.get -> int
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.CreateStepState(int batchSize = 1, int? capacity = null) -> AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>!
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Training.Memory.GradientCheckpointingContext
+static AiDotNet.Training.Memory.GradientCheckpointingContext.IsSegmentForward.get -> bool
+static AiDotNet.Training.Memory.GradientCheckpointingContext.IsRecomputing.get -> bool
+static AiDotNet.Training.Memory.GradientCheckpointingContext.Preserve<T>(object! owner, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> void
+static AiDotNet.Training.Memory.GradientCheckpointingContext.TryRecall<T>(object! owner, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> bool
