@@ -17870,8 +17870,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> output;
         try
         {
+            // The intermediates are host arrays on the CPU, which the scope above does not free: fresh every call,
+            // a DCGAN generator's ~80 MB of them per iteration went to the large-object heap and forced a gen-2
+            // collection about once an iteration (trimming the shared array pool, so the convolutions' packing
+            // scratch was faulted in afresh each time). An arena hands the same arrays back on the next call. The
+            // output is copied out with the arena suspended, so nothing returned is arena-backed.
+            using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             using (new NoGradScope<T>())
-                output = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
+            {
+                var produced = ForwardForTraining(input);
+                using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+                    output = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { produced })[0];
+            }
         }
         finally
         {
