@@ -72,7 +72,7 @@ public class IncrementalStepGpuTests
     }
 
     [SkippableTheory]
-    [Trait("category", "gpu")]
+    [Trait("Category", "GPU")]
     [InlineData(false)]
     [InlineData(true)]
     public void GatedDeltaNet_Step_on_the_gpu_matches_the_forward_at_every_position(bool compiled)
@@ -84,7 +84,7 @@ public class IncrementalStepGpuTests
     }
 
     [SkippableTheory]
-    [Trait("category", "gpu")]
+    [Trait("Category", "GPU")]
     [InlineData(false)]
     [InlineData(true)]
     public void MultiLatentAttention_Step_on_the_gpu_matches_the_forward_at_every_position(bool compiled)
