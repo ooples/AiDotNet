@@ -4125,6 +4125,24 @@ jobs:
             '--TestCaseFilter:GpuContract=Required' `
             '--logger:trx;LogFileName=required-gpu.trx' '--ResultsDirectory:required-gpu-results'
           if ($LASTEXITCODE -ne 0) { throw 'Required GPU tests failed.' }
+      # Native-ownership GPU cases need the per-allocation tracker, which is fixed at process start and too
+      # slow suite-wide, so they run in their own process. REQUIRE_GPU_TESTS turns any skip into a failure.
+      - name: Execute fused persistence ownership GPU cases with native tracking
+        if: always()
+        shell: pwsh
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+          AIDOTNET_GPU_MEMTRACK: '1'
+          AIDOTNET_REQUIRE_GPU_TESTS: '1'
+        run: |
+          dotnet vstest tests/AiDotNet.Tests/bin/Release/net10.0/AiDotNetTests.dll `
+            '--TestCaseFilter:FullyQualifiedName~AiDotNet.Tests.UnitTests.Training.FusedPersistenceOwnershipTests' `
+            '--logger:trx;LogFileName=fused-ownership-gpu.trx' '--ResultsDirectory:required-gpu-results'
+          if ($LASTEXITCODE -ne 0) { throw 'Fused persistence ownership GPU tests failed.' }
+      - name: Verify fused persistence ownership GPU cases executed
+        if: always()
+        shell: pwsh
+        run: ./tools/TestImpact/Assert-FusedOwnershipGpuResults.ps1 -Trx required-gpu-results/fused-ownership-gpu.trx
       - name: Verify every required case actually executed on CUDA
         if: always()
         shell: pwsh
@@ -4396,4 +4414,4 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # NOTE: Website deployment has moved to deploy-website.yml (deploys to Vercel at aidotnet.dev)
+  # NOTE: Website deployment has moved to deploy-website.yml (deploys to the VPS behind Cloudflare at aidotnet.dev)

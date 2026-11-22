@@ -111,6 +111,11 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> _alphaBias;
 
+    // Per-head output RMSNorm gain, shared by the heads: [headDim] (the paper's output normalization before the gate).
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
+    private Tensor<T> _outputNormWeight;
+
     // Output gate: [modelDim, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -149,6 +154,8 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _alphaWeightsGradient;
     [Scratch]
     private Tensor<T>? _alphaBiasGradient;
+    [Scratch]
+    private Tensor<T>? _outputNormWeightGradient;
     [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
     [Scratch]
@@ -243,6 +250,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         _betaBias = new Tensor<T>([numHeads]);
         _alphaWeights = new Tensor<T>([modelDimension, numHeads]);
         _alphaBias = new Tensor<T>([numHeads]);
+        _outputNormWeight = new Tensor<T>([_headDimension]);
         _outputGateWeights = new Tensor<T>([modelDimension, modelDimension]);
         _outputGateBias = new Tensor<T>([modelDimension]);
         _outputProjectionWeights = new Tensor<T>([modelDimension, modelDimension]);
@@ -263,6 +271,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_alphaWeights);
         // Alpha bias ~ 2 so sigmoid(2) ≈ 0.88 -> strong initial memory retention
         _alphaBias.Fill(NumOps.FromDouble(2.0));
+        _outputNormWeight.Fill(NumOps.One);
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);
@@ -315,8 +324,12 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 2: Q, K, V projections
         var siluFlat = Engine.Reshape(siluConv, new[] { batchSize * seqLen, _modelDimension });
-        var q = Engine.Reshape(Engine.TensorMatMul(siluFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
-        var k = Engine.Reshape(Engine.TensorMatMul(siluFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
+        // Queries and keys are L2-normalized per head and the queries scaled by 1/sqrt(headDim), as Gated DeltaNet
+        // (Yang et al., ICLR 2025) and its reference implementation do: unit keys keep the transition a contraction.
+        var q = NormalizeHeads(Engine.Reshape(Engine.TensorMatMul(siluFlat, _queryWeights), new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            1.0 / Math.Sqrt(_headDimension), new[] { batchSize, seqLen, _modelDimension });
+        var k = NormalizeHeads(Engine.Reshape(Engine.TensorMatMul(siluFlat, _keyWeights), new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            1.0, new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(siluFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
 
         // Step 3: Gates
@@ -335,11 +348,11 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
 
-        // Step 4: Delta rule recurrence per head
-        var output = Engine.GatedDeltaNetScanForward(q, k, v, alpha, beta, _numHeads);
+        // Step 4: the gated delta rule per head, S_t = a_t S_{t-1} (I - b_t k_t k_tᵀ) + b_t v_t k_tᵀ, o_t = S_t q_t
+        var output = Engine.GatedDeltaNetScanForward(q, k, v, alpha, beta, _numHeads, GatedDeltaRule.Standard);
 
-        // Step 5: Gated output
-        var gatedOutput = Engine.TensorMultiply(output, gate);
+        // Step 5: per-head RMSNorm of the output, then the gate
+        var gatedOutput = Engine.TensorMultiply(NormalizeOutput(output, new[] { batchSize, seqLen, _numHeads, _headDimension }), gate);
 
         // Step 6: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
@@ -359,6 +372,33 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
+    }
+
+    /// <summary>The epsilon of the per-head query/key L2 normalization: x / sqrt(sum x^2 + eps).</summary>
+    private const double QueryKeyNormEpsilon = 1e-6;
+
+    /// <summary>The epsilon of the per-head output RMSNorm.</summary>
+    private const double OutputNormEpsilon = 1e-5;
+
+    /// <summary>
+    /// Each head's vector (the last axis of <paramref name="heads"/>) divided by its L2 norm, then multiplied by
+    /// <paramref name="scale"/>, reshaped to <paramref name="shape"/>.
+    /// </summary>
+    private Tensor<T> NormalizeHeads(Tensor<T> heads, double scale, int[] shape)
+    {
+        int last = heads.Shape.Length - 1;
+        var sumSquares = Engine.ReduceSum(Engine.TensorMultiply(heads, heads), new[] { last }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquares, NumOps.FromDouble(QueryKeyNormEpsilon)));
+        var unit = Engine.TensorDivide(heads, Engine.TensorBroadcastTo(norm, heads._shape));
+        if (scale != 1.0) unit = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(scale));
+        return Engine.Reshape(unit, shape);
+    }
+
+    /// <summary>The scan output's per-head RMSNorm with the shared gain, back in the output's own shape.</summary>
+    private Tensor<T> NormalizeOutput(Tensor<T> output, int[] headShape)
+    {
+        var normalized = Engine.RMSNorm(Engine.Reshape(output, headShape), _outputNormWeight, OutputNormEpsilon, out _);
+        return Engine.Reshape(normalized, output._shape);
     }
 
     /// <summary>
@@ -423,6 +463,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorAddInPlace(_betaBias, Engine.TensorMultiplyScalar((_betaBiasGradient ?? throw new InvalidOperationException("_betaBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_alphaWeights, Engine.TensorMultiplyScalar((_alphaWeightsGradient ?? throw new InvalidOperationException("_alphaWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_alphaBias, Engine.TensorMultiplyScalar((_alphaBiasGradient ?? throw new InvalidOperationException("_alphaBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputNormWeight, Engine.TensorMultiplyScalar((_outputNormWeightGradient ?? throw new InvalidOperationException("_outputNormWeightGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar((_outputGateWeightsGradient ?? throw new InvalidOperationException("_outputGateWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar((_outputGateBiasGradient ?? throw new InvalidOperationException("_outputGateBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
@@ -438,6 +479,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_betaBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_alphaWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_alphaBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputNormWeight, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
@@ -451,6 +493,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         _queryWeights, _keyWeights, _valueWeights,
         _betaWeights, _betaBias,
         _alphaWeights, _alphaBias,
+        _outputNormWeight,
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
@@ -460,7 +503,8 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
     {
         base.ClearGradients();
         _convWeightsGradient = null; _convBiasGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null; _alphaWeightsGradient = null; _alphaBiasGradient = null;
-        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+        _outputNormWeightGradient = null; _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
@@ -476,6 +520,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         _betaBiasGradient = null;
         _alphaWeightsGradient = null;
         _alphaBiasGradient = null;
+        _outputNormWeightGradient = null;
         _outputGateWeightsGradient = null;
         _outputGateBiasGradient = null;
         _outputProjectionWeightsGradient = null;

@@ -9,6 +9,7 @@ import psutil
 
 from benchmark_telemetry import cpu_storage_events
 from finish_gate import cache_environment, contending_processes, correctness_gate, evaluate, gpu_allocator_peaks, hifigan_comparison_kinds, hifigan_comparison_policy, hifigan_required_checks, launch, memory_metrics, metrics, normalize, paired_gate, phase_group, reference_recipe_gate
+from finish_gate import hifigan_workload_gate, warmed_cuda_calls_gate
 
 
 class GateTests(unittest.TestCase):
@@ -17,7 +18,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual("unverified", result["status"])
         json.dumps(result, allow_nan=False)
 
-    def test_evaluate_gates_memory_at_parity_and_timing_at_speedup(self):
+    def test_memory_and_latency_both_require_ten_percent_reduction(self):
         with tempfile.TemporaryDirectory() as temporary:
             runs = [dict(model="tiny", device="cpu", mode="score", pair=pair, side=side, path=temporary)
                     for pair in range(5) for side in ("aidotnet", "pytorch")]
@@ -26,13 +27,32 @@ class GateTests(unittest.TestCase):
                 return {"whole_process_rss_bytes": value, "training_seconds": value}, []
             with patch("finish_gate.metrics", side_effect=measured), patch("finish_gate.correctness_gate", return_value={"status": "pass"}):
                 outcomes = evaluate(runs, .9)["tiny/cpu"]["metrics"]
-            self.assertEqual("pass", outcomes["whole_process_rss_bytes"]["status"])
+            self.assertEqual("fail", outcomes["whole_process_rss_bytes"]["status"])
             self.assertEqual("fail", outcomes["training_seconds"]["status"])
 
+    def test_mixed_or_unrequested_score_protocols_cannot_be_scored_as_matched(self):
+        def score(threads_by_side, requested=None):
+            with tempfile.TemporaryDirectory() as temporary:
+                runs = [dict(model="tiny", device="cpu", mode="score", pair=pair, side=side, path=temporary,
+                             protocol={"threads": threads_by_side[side], "inference_batch_sizes": [1]})
+                        for pair in range(5) for side in ("aidotnet", "pytorch")]
+                with patch("finish_gate.metrics", return_value=({"training_seconds": 1.0}, [])),                      patch("finish_gate.correctness_gate", return_value={"status": "pass"}):
+                    return evaluate(runs, .9, protocol=requested)["tiny/cpu"]["protocol_errors"]
+
+        mixed = "score protocol differs within the campaign"
+        unrequested = "saved score protocol differs from the requested configuration"
+        self.assertIn(mixed, score({"aidotnet": 8, "pytorch": 16}))
+        matched = score({"aidotnet": 8, "pytorch": 8}, {"threads": 8, "inference_batch_sizes": [1]})
+        self.assertNotIn(mixed, matched)
+        self.assertNotIn(unrequested, matched)
+        self.assertIn(unrequested, score({"aidotnet": 8, "pytorch": 8}, {"threads": 16, "inference_batch_sizes": [1]}))
+
     def launch_config(self):
-        return {"commands": {side: {"argv": ["runner"], "cwd": ".", "env": {"CUDA_VISIBLE_DEVICES": "wrong"}}
+        return {"commands": {side: {"argv": ["runner", __file__], "cwd": ".", "env": {"CUDA_VISIBLE_DEVICES": "wrong"}}
                              for side in ("aidotnet", "pytorch")}, "protocol": {"inference_batch_sizes": [1]},
-                "cache_policy": {"regime": "cold"}, "gpu_id": "2"}
+                "diagnostic_protocol": {"inference_batch_sizes": [1]}, "gpu_id": "2",
+                "artifacts": {"python_process_bootstrap": __file__, "nsys": "nsys"},
+                "cache_policy": {"regime": "cold"}}
 
     def test_cuda_launch_pins_both_runners_and_sampler_to_physical_uuid(self):
         config = self.launch_config()
@@ -43,13 +63,16 @@ class GateTests(unittest.TestCase):
                 with patch("finish_gate.provenance", return_value={}), patch("finish_gate.contending_processes", return_value=[]), \
                      patch("finish_gate.nvidia_query", return_value="2, GPU-test, 00000000:65:00.0") as query, \
                      patch("finish_gate.subprocess.Popen", return_value=Mock(pid=123, wait=Mock(return_value=0))) as popen, \
+                     patch("finish_gate.psutil.Process", return_value=Mock(create_time=Mock(return_value=1.0))), \
+                     patch("finish_gate.resolve_python_process", return_value={"pid": 456, "process_create_time": 1.0}), \
                      patch("finish_gate.Sampler", return_value=sampler) as sampling:
                     result = launch(config, side, "tiny", "cuda", 0, "score", Path(temporary))
                 env = popen.call_args.kwargs["env"]
                 self.assertEqual("GPU-test", env["CUDA_VISIBLE_DEVICES"])
                 self.assertEqual("PCI_BUS_ID", env["CUDA_DEVICE_ORDER"])
                 self.assertEqual("cuda", env["AIDOTNET_DIRECTGPU_BACKENDS"])
-                sampling.assert_called_once_with(123, "GPU-test")
+                self.assertIsNone(result["profiled_argv"])
+                sampling.assert_called_once_with(456 if side == "pytorch" else 123, "GPU-test")
                 query.assert_called_once_with("2", "index,uuid,pci.bus_id")
                 saved = json.loads((Path(result["path"]) / "measurement.json").read_text())
                 self.assertEqual("2", saved["gpu_mapping"]["physical_index"])
@@ -74,6 +97,30 @@ class GateTests(unittest.TestCase):
             self.assertIn("before memory sampling", saved["invalid_reason"])
             self.assertEqual(({}, [saved["invalid_reason"]]), metrics(dict(saved, path=result["path"])))
 
+    def test_only_warmed_native_calls_can_match_a_zero_reference(self):
+        self.assertEqual("pass", warmed_cuda_calls_gate([0] * 5, [0] * 5, .9)["status"])
+        self.assertEqual("fail", warmed_cuda_calls_gate([0, 0, 1, 0, 0], [0] * 5, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([0] * 4, [0] * 4, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([None] * 5, [0] * 5, .9)["status"])
+        self.assertEqual("unverified", warmed_cuda_calls_gate([0, 8, 8, 8, 8], [0, 10, 10, 10, 10], .9)["status"])
+        self.assertEqual("pass", warmed_cuda_calls_gate([0] + [8] * 5, [0] + [10] * 5, .9)["status"])
+        self.assertEqual("fail", warmed_cuda_calls_gate([96] * 5, [100] * 5, .9)["status"])
+
+    def test_cuda_diagnostic_profiles_the_framework_process(self):
+        sampler = Mock(contention=[])
+        sampler.finish.return_value = []
+        with tempfile.TemporaryDirectory() as temporary, patch("finish_gate.provenance", return_value={}), \
+             patch("finish_gate.nvidia_query", return_value="2, GPU-test, 00000000:65:00.0"), \
+             patch("finish_gate.contending_processes", return_value=[]), \
+             patch("finish_gate.subprocess.Popen", return_value=Mock(pid=123, wait=Mock(return_value=0))), \
+             patch("finish_gate.profiled_dotnet_identity", return_value={"pid": 789, "process_create_time": 1.0}), \
+             patch("finish_gate.Sampler", return_value=sampler) as sampling:
+            result = launch(self.launch_config(), "aidotnet", "tiny", "cuda", 0, "diagnostic", Path(temporary))
+        self.assertEqual(["runner", __file__], result["profiled_argv"])
+        self.assertIn("--cuda-trace-all-apis=true", result["argv"])
+        self.assertIn("--export=sqlite", result["argv"])
+        sampling.assert_called_once_with(789, "GPU-test")
+
     def test_repeatable_ten_percent_win_passes(self):
         result = paired_gate([8.8, 8.7, 8.8, 8.9, 8.8], [10] * 5)
         self.assertEqual("pass", result["status"])
@@ -81,6 +128,10 @@ class GateTests(unittest.TestCase):
 
     def test_partial_speedup_fails(self):
         self.assertEqual("fail", paired_gate([9.5] * 5, [10] * 5)["status"])
+
+    def test_saved_runs_cannot_be_rescored_at_a_weaker_threshold(self):
+        with self.assertRaisesRegex(ValueError, "10%"):
+            evaluate([], 1.0)
 
     def test_noisy_point_win_does_not_hide_losing_pairs(self):
         result = paired_gate([8, 8, 8, 12, 12], [10] * 5)
@@ -150,6 +201,66 @@ class GateTests(unittest.TestCase):
                 "path": str(seed), "sha256": {"kernel": "incorrect"}}}}
             with self.assertRaisesRegex(ValueError, "differs"):
                 cache_environment(run, policy, "pytorch")
+
+    def hifigan_workload_run(self, root, side="aidotnet", **changes):
+        steps = [{"index": index, "pool_index": index % 2, "crop_start": index * 3, "cropped_mel": {"sha256": "m"}}
+                 for index in range(9)]
+        manifest = {"state_sha256": "s" * 64, "state_tensor_count": 404, "inputs": {"inference/1/mel": {"sha256": "i"}},
+                    "training_steps": steps, "protocol": {"inference_batches": [1, 8, 16]}}
+        manifest_path = root / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest))
+        manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        record = {"schema": "hifigan-shared-workload-consumption-v1", "framework": side, "pid": 4321,
+                  "preflight_pass": True, "pass": True, "fixture_manifest_sha256": manifest_hash,
+                  "state_sha256": "s" * 64, "state_tensor_count": 404, "inputs": manifest["inputs"],
+                  "consumed_steps": [{key: step[key] for key in ("index", "pool_index", "crop_start")} for step in steps],
+                  "inference_batches_consumed": [1, 8, 16]}
+        record.update(changes)
+        receipt = root / "hifigan-workload.json"
+        receipt.write_text(json.dumps(record))
+        return {"path": str(root), "side": side, "pid": 4321, "model": "hifigan",
+                "artifacts": {"hifigan_fixture_manifest": manifest_hash},
+                "artifact_paths": {"hifigan_fixture_manifest": str(manifest_path)},
+                "diagnostic_files": {"hifigan_workload": {"name": receipt.name,
+                                                          "sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}}}
+
+    def test_hifigan_run_must_carry_its_own_receipt_for_the_shared_fixture(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for side in ("aidotnet", "pytorch"):
+                self.assertEqual({"status": "pass"}, hifigan_workload_gate(self.hifigan_workload_run(root, side)))
+            # The ordinary workload writes no receipt: the report alone cannot stand in for it.
+            run = self.hifigan_workload_run(root)
+            del run["diagnostic_files"]["hifigan_workload"]
+            self.assertEqual("unverified", hifigan_workload_gate(run)["status"])
+            (root / "report.json").write_text(json.dumps({"results": [{"model": "hifigan", "device": "cpu"}]}))
+            errors = metrics(dict(run, mode="score", device="cpu", return_code=0, memory={},
+                                  protocol={"inference_batch_sizes": [1]}))[1]
+            self.assertTrue(any(error.startswith("HiFi-GAN workload: ") for error in errors), errors)
+            for reason, changes in (
+                    ("measured process", {"pid": 9999}),
+                    ("measured process", {"framework": "pytorch"}),
+                    ("complete shared", {"pass": False}),
+                    ("different fixture", {"fixture_manifest_sha256": "0" * 64}),
+                    ("different fixture", {"state_sha256": "0" * 64}),
+                    ("different input", {"inputs": {}}),
+                    ("different training steps", {"consumed_steps": []}),
+                    ("different inference", {"inference_batches_consumed": [1]})):
+                result = hifigan_workload_gate(self.hifigan_workload_run(root, **changes))
+                self.assertEqual("unverified", result["status"], changes)
+                self.assertIn(reason, result["reason"], changes)
+
+    def test_campaign_supplies_the_hifigan_fixture_and_owns_the_receipt_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = root / "fixture" / "manifest.json"
+            manifest.parent.mkdir()
+            manifest.write_text("{}")
+            config = self.launch_config()
+            config["artifacts"] = dict(config.get("artifacts", {}), hifigan_fixture_manifest=str(manifest))
+            config["commands"]["aidotnet"]["argv"] += ["--hifigan-workload-receipt", "elsewhere.json"]
+            with self.assertRaisesRegex(ValueError, "campaign owns --hifigan-workload-receipt"):
+                launch(config, "aidotnet", "hifigan", "cpu", 0, "score", root / "out")
 
     def test_missing_reports_cannot_pass_or_silently_drop_allocator_gates(self):
         with tempfile.TemporaryDirectory() as temporary:

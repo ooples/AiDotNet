@@ -17,10 +17,20 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// the average of |k_r| multi-receptive-field residual blocks, then a leaky ReLU (0.01), a 7-tap output convolution and
 /// tanh. Input <c>[1, channels, frames]</c>, output <c>[1, 1, frames · Πu]</c>.
 /// </summary>
-internal sealed class HiFiGanGenerator<T>
+internal sealed partial class HiFiGanGenerator<T>
 {
     private const double Slope = 0.1;
     private static readonly bool s_gpuLifetimeDiagnostics = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_LIFETIME_DIAG") == "1";
+    private readonly bool _gpuOwnedResidualsEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_OWNED_RESIDUALS") == "1";
+    private readonly bool _gpuDetachedLifetimesEnabled = Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_DETACHED_LIFETIMES") == "1";
+    private readonly int _gpuInferenceBatchLimit = ReadGpuInferenceBatchLimit();
+    private long _gpuOwnedResidualReuses;
+
+    /// <summary>How many branch or stage results the GPU inference path accumulated into in place.</summary>
+    internal long GpuOwnedResidualReuses => Interlocked.Read(ref _gpuOwnedResidualReuses);
+
+    /// <summary>Receives the sample count of each chunk the GPU micro-batched inference path dispatches.</summary>
+    internal Action<int>? GpuInferenceChunkDispatched { get; set; }
     private string? _gpuLifetimeDiagnosticState;
 
     private readonly IEngine _engine;
@@ -34,6 +44,7 @@ internal sealed class HiFiGanGenerator<T>
     private readonly T _residualAverageScale;
     private readonly bool _tanhOutput;
     private readonly int _outputReflectPad;
+    private readonly (int Rate, int Offset)[] _upsampleGeometry;
 
     /// <param name="engine">The engine.</param>
     /// <param name="inChannels">Input channels (mel bands, or VITS's latent).</param>
@@ -56,12 +67,16 @@ internal sealed class HiFiGanGenerator<T>
     /// PyTorch's default initialization everywhere.</param>
     /// <param name="conditionInEachUpsamplingLayer">Also project and add the global condition after every upsampler
     /// (XTTS-v2's <c>cond_in_each_up_layer</c>).</param>
+    /// <param name="defaultInitialization">Optional stream for every layer's default weights, biases and spectral
+    /// vectors, separate from the paper's normal reinitialization stream.</param>
     public HiFiGanGenerator(IEngine engine, int inChannels, int initialChannels, int[] upsampleRates, int[] upsampleKernels,
         int[] resblockKernels, int[][] resblockDilations, bool resblockType1, int conditionChannels = 0, bool plainEnds = false,
         int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null, bool plainOutputBias = false,
-        bool conditionInEachUpsamplingLayer = false)
+        bool conditionInEachUpsamplingLayer = false, Random? defaultInitialization = null)
     {
         _engine = engine;
+        _upsampleGeometry = upsampleRates.Select((rate, i) =>
+            (Rate: rate, Offset: upsampleKernels[i] - rate - 2 * ((upsampleKernels[i] - rate) / 2))).ToArray();
         _resblockType1 = resblockType1;
         // Every upsampling stage has the same parallel residual branches. This is one architecture scalar,
         // converted before the stage loops; an empty stage still fails at its existing missing-branch guard.
@@ -71,35 +86,35 @@ internal sealed class HiFiGanGenerator<T>
         _outputReflectPad = outputReflectPad;
         // VITS keeps HiFi-GAN's body but uses a plain input convolution and a plain, bias-free output one.
         _pre = Add(plainEnds
-            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None)
-            : Conv(inChannels, initialChannels, 7, 1, 1, 3));
-        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
+            ? new NormedConv1DLayer<T>(inChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, 0, true, defaultInitialization)
+            : Conv(inChannels, initialChannels, 7, 1, 1, 3, defaultInitialization));
+        if (conditionChannels > 0) Condition = Add(new NormedConv1DLayer<T>(conditionChannels, initialChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None, 0, true, defaultInitialization));
         int channels = initialChannels;
         for (int i = 0; i < upsampleRates.Length; i++)
         {
             int next = initialChannels >> (i + 1);
             _ups.Add(Add(new NormedConv1DLayer<T>(channels, next, upsampleKernels[i], upsampleRates[i], 1, 1,
-                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight)));
+                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight, 0, true, defaultInitialization)));
             if (conditionInEachUpsamplingLayer)
                 _stageConditions.Add(Add(new NormedConv1DLayer<T>(conditionChannels, next, 1, 1, 1, 1, 0, false,
-                    ConvolutionNormalization.None)));
+                    ConvolutionNormalization.None, 0, true, defaultInitialization)));
             channels = next;
             var stage = new List<(List<NormedConv1DLayer<T>>, List<NormedConv1DLayer<T>>)>();
             for (int j = 0; j < resblockKernels.Length; j++)
             {
                 int k = resblockKernels[j];
                 var dilations = resblockType1 ? resblockDilations[j] : resblockDilations[j].Take(2).ToArray();
-                var first = dilations.Select(d => Add(Conv(channels, channels, k, 1, d, (k * d - d) / 2))).ToList();
+                var first = dilations.Select(d => Add(Conv(channels, channels, k, 1, d, (k * d - d) / 2, defaultInitialization))).ToList();
                 var second = resblockType1
-                    ? dilations.Select(_ => Add(Conv(channels, channels, k, 1, 1, (k - 1) / 2))).ToList()
+                    ? dilations.Select(_ => Add(Conv(channels, channels, k, 1, 1, (k - 1) / 2, defaultInitialization))).ToList()
                     : new List<NormedConv1DLayer<T>>();
                 stage.Add((first, second));
             }
             _blocks.Add(stage);
         }
         _post = Add(plainEnds
-            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, useBias: plainOutputBias)
-            : Conv(channels, outputChannels, 7, 1, 1, 3));
+            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, 0, plainOutputBias, defaultInitialization)
+            : Conv(channels, outputChannels, 7, 1, 1, 3, defaultInitialization));
         if (initialization is not null)
         {
             Func<double> normal = () =>
@@ -159,8 +174,8 @@ internal sealed class HiFiGanGenerator<T>
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
-    private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding)
-        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight);
+    private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding, Random? initialization = null)
+        => new(input, output, kernel, stride, dilation, 1, padding, false, ConvolutionNormalization.Weight, 0, true, initialization);
 
     private TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
     {
@@ -171,9 +186,33 @@ internal sealed class HiFiGanGenerator<T>
     private Tensor<T> LeakyRelu(Tensor<T> x, double slope)
         => _engine.LeakyReLU(x, MathHelper.GetNumericOperations<T>().FromDouble(slope));
 
+    private static int ReadGpuInferenceBatchLimit()
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_HIFI_GPU_INFERENCE_BATCH_LIMIT"), out int limit)
+            && limit >= 1 && limit <= 8 ? limit : 0;
+    }
+
+    private Tensor<T> ForwardGpuMicrobatched(Tensor<T> features, DirectGpuTensorEngine gpu)
+    {
+        using var owner = TensorScope.Begin();
+        var outputs = new List<Tensor<T>>();
+        int batch = features.Shape[0], channels = features.Shape[1], frames = features.Shape[2];
+        for (int start = 0; start < batch; start += _gpuInferenceBatchLimit)
+        {
+            int count = Math.Min(_gpuInferenceBatchLimit, batch - start);
+            GpuInferenceChunkDispatched?.Invoke(count);
+            using var chunk = TensorScope.Begin();
+            var input = _engine.TensorSlice(features, new[] { start, 0, 0 }, new[] { count, channels, frames });
+            outputs.Add(chunk.Keep(ForwardGpuInference(input, null, gpu)));
+        }
+        return owner.Keep(_engine.TensorConcatenate(outputs.ToArray(), 0));
+    }
+
     private Tensor<T> ForwardGpuInference(Tensor<T> features, Tensor<T>? condition, DirectGpuTensorEngine gpu)
     {
         using var forward = TensorScope.Begin();
+        T leakySlope = MathHelper.GetNumericOperations<T>().FromDouble(Slope);
+
         long snapshot = gpu.ActivationCacheTimestampSnapshot();
         var released = new HashSet<object>(AiDotNet.Tensors.Engines.Autodiff.ReferenceEqualityComparer<object>.Instance);
 
@@ -210,6 +249,17 @@ internal sealed class HiFiGanGenerator<T>
                     afterQueuedWork: true);
             }
         }
+        // A branch result is private to this invocation. Donate only its whole, resident FP32 storage; the
+        // stage input is shared by the other branches and every caller boundary remains protected.
+        bool CanReusePrivateResult(Tensor<T> value, Tensor<T> shared)
+            => _gpuOwnedResidualsEnabled && typeof(T) == typeof(float) && ReferenceEquals(_engine, gpu)
+                && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+                && value.IsContiguous && value._storageOffset == 0
+                && value.DataVector.Length == value.Length
+                && value.DataVector._deviceState is { DeviceValid: true, Buffer: { } buffer }
+                && buffer.Handle != IntPtr.Zero && buffer.Size >= value.Length
+                && !Aliases(value, features) && !Aliases(value, condition) && !Aliases(value, shared);
+
 
         Tensor<T> x;
         using (var pre = TensorScope.Begin())
@@ -235,31 +285,59 @@ internal sealed class HiFiGanGenerator<T>
             foreach (var (first, second) in _blocks[i])
             {
                 var h = stageInput;
+                Tensor<T>? nextActivatedResidual = null;
                 for (int n = 0; n < first.Count; n++)
                 {
                     var residual = h;
+                    var carriedActivation = nextActivatedResidual;
+                    nextActivatedResidual = null;
                     using (var pair = TensorScope.Begin())
                     {
-                        var t = first[n].Forward(LeakyRelu(residual, Slope));
-                        if (_resblockType1) t = second[n].Forward(LeakyRelu(t, Slope));
-                        h = _engine.TensorAdd(t, residual);
+                        var activatedResidual = carriedActivation ?? LeakyRelu(residual, Slope);
+                        if (_resblockType1)
+                        {
+                            var activatedFirst = first[n].ForwardLeakyInference(activatedResidual, leakySlope);
+                            h = second[n].ForwardResidualInference(activatedFirst, residual, leakySlope,
+                                n + 1 < first.Count, out nextActivatedResidual);
+                        }
+                        else h = _engine.TensorAdd(first[n].Forward(activatedResidual), residual);
                         pair.Keep(h);
+                        if (nextActivatedResidual is not null) pair.Keep(nextActivatedResidual);
                     }
+                    ReleaseConsumed(carriedActivation, h, stageInput, sum);
                     ReleaseConsumed(residual, h, stageInput, sum);
                 }
                 if (sum is null) sum = h;
                 else
                 {
                     var previousSum = sum;
-                    using (var combine = TensorScope.Begin())
+                    if (CanReusePrivateResult(previousSum, stageInput) && !Aliases(previousSum, h))
+                    {
+                        _engine.TensorAddInPlace(previousSum, h);
+                        Interlocked.Increment(ref _gpuOwnedResidualReuses);
+                        sum = previousSum;
+                    }
+                    else
+                    {
+                        using var combine = TensorScope.Begin();
                         sum = combine.Keep(_engine.TensorAdd(previousSum, h));
+                    }
                     ReleaseConsumed(previousSum, sum, stageInput);
                     ReleaseConsumed(h, sum, stageInput);
                 }
             }
             var completedSum = sum ?? throw new InvalidOperationException("A HiFi-GAN stage has no residual branches.");
-            using (var average = TensorScope.Begin())
+            if (CanReusePrivateResult(completedSum, stageInput))
+            {
+                _engine.TensorMultiplyScalarInPlace(completedSum, _residualAverageScale);
+                Interlocked.Increment(ref _gpuOwnedResidualReuses);
+                x = completedSum;
+            }
+            else
+            {
+                using var average = TensorScope.Begin();
                 x = average.Keep(_engine.TensorMultiplyScalar(completedSum, _residualAverageScale));
+            }
             ReleaseConsumed(completedSum, x);
             ReleaseConsumed(stageInput, x);
         }
@@ -301,6 +379,48 @@ internal sealed class HiFiGanGenerator<T>
 
 
     public Tensor<T> Forward(Tensor<T> features, Tensor<T>? condition = null)
+        => ForwardCore(features, condition, allowDetachedTrainingRecycle: false);
+
+    // This call is confined to GanVocoderBase's detached discriminator generation. The
+    // generator's convolution-only layers retain no manual activation caches; its
+    // training mode and normalization behavior remain unchanged.
+    internal Tensor<T> ForwardDetachedForDiscriminator(Tensor<T> features)
+    {
+        if (_gpuDetachedLifetimesEnabled && NoGradScope<T>.IsSuppressed && GradientTape<T>.Current is null
+            && _engine.GetType() == typeof(DirectGpuTensorEngine) && _engine is DirectGpuTensorEngine gpu
+            && !gpu.ResidentStepActive && !gpu.InferenceCaptureActive
+            && !AiDotNet.Tensors.Engines.Gpu.GpuBufferReleaseDeferral.IsActive
+            && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+            && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+            && _layers.All(layer => layer.GetType() == typeof(NormedConv1DLayer<T>))
+            && (gpu.GetBackend() is not AiDotNet.Tensors.Engines.DirectGpu.IGpuGraphCapture capture
+                || !capture.SupportsGraphCapture || !capture.IsStreamCapturing()))
+        {
+            // Detached discriminator generation needs only the waveform. Keep training mode and the existing
+            // host-owned return contract while returning convolution/residual scratch at each pair boundary.
+            using var scratch = TensorScope.Begin();
+            var detached = ForwardGpuInference(features, null, gpu);
+            return new Tensor<T>(detached.ToArray(), detached.Shape.ToArray());
+        }
+
+        bool recycle = InferenceArenaSettings.Enabled && InferenceArenaSettings.RecycleLayerScratch
+            && CanRecycleDetachedTraining;
+        using var arena = recycle ? TensorArena.CreateDetached() : null;
+        using var active = arena?.Activate();
+        var output = ForwardCore(features, null, allowDetachedTrainingRecycle: recycle);
+        // The discriminator owns only the waveform. No arena-backed intermediate
+        // escapes this call, including when there was no caller arena at entry.
+        return NoGradScope<T>.IsSuppressed ? new Tensor<T>(output.ToArray(), output.Shape.ToArray()) : output;
+    }
+
+    private bool CanRecycleDetachedTraining => NoGradScope<T>.IsSuppressed
+        && ReferenceEquals(_engine, _engine.Unwrap()) && _engine.Unwrap().GetType() == typeof(CpuEngine)
+        && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
+        && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+        && _layers.All(layer => layer.GetType() == typeof(NormedConv1DLayer<T>));
+
+    private Tensor<T> ForwardCore(Tensor<T> features, Tensor<T>? condition, bool allowDetachedTrainingRecycle)
     {
         if (s_gpuLifetimeDiagnostics && _engine.TryGet<DirectGpuTensorEngine>(out var diagnosticGpu))
             TraceGpuInferenceEligibility(features, diagnosticGpu);
@@ -311,26 +431,53 @@ internal sealed class HiFiGanGenerator<T>
             && GradientTape<T>.Current is null && !GraphMode.IsActive && !GraphCaptureCompatibility.IsActive
             && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
             && _layers.All(layer => !layer.InTrainingMode))
+        {
+            if (_gpuInferenceBatchLimit > 0 && condition is null && features.Rank == 3
+                && features.Shape[0] > _gpuInferenceBatchLimit && typeof(T) == typeof(float)
+                && ReferenceEquals(_engine, gpu) && !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled)
+                return ForwardGpuMicrobatched(features, gpu);
             return ForwardGpuInference(features, condition, gpu);
+        }
 
+
+        if (TryForwardPrivateCpu(features, condition, out var privateCpuOutput)) return privateCpuOutput;
 
         // The native forward bypasses the generic layer walk's scratch recycling. Keep each branch's residual
         // boundary, not every convolution's normalization and activation temporaries. A private arena never
         // resets caller-owned input/condition tensors. GPU boundaries stay resident on their existing path.
+        bool detachedTraining = allowDetachedTrainingRecycle && CanRecycleDetachedTraining;
         bool recycle = InferenceArenaSettings.RecycleLayerScratch && TensorArena.Current is not null
-            && !_pre.InTrainingMode && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
+            && (!_pre.InTrainingMode || detachedTraining) && !GradientRecording.IsRecording<T>() && !GraphMode.IsActive
             && !_engine.Is<DirectGpuTensorEngine>();
         using var scratch = recycle ? TensorArena.CreateDetached() : null;
         var ops = MathHelper.GetNumericOperations<T>();
         var x = _pre.Forward(features);
         if (condition is not null && Condition is not null)
             x = _engine.TensorAdd(x, _engine.TensorTile(Condition.Forward(condition), new[] { 1, 1, x.Shape[2] }));
+        // The branch arena resets after every residual pair, so its carry cannot own the sum.
+        // One separate, maximum-stage buffer survives those resets and is reused by every stage.
+        // Keep custom engines and an identity average on their existing ownership path.
+        int accumulatorLength = recycle && _engine.Unwrap().GetType() == typeof(CpuEngine)
+            && _blocks.Count > 0 && _blocks[0].Count > 1 && !ops.Equals(_residualAverageScale, ops.One)
+                ? ResidualAccumulatorLength(x)
+                : 0;
+        var accumulatorOwner = accumulatorLength > 0 ? TensorArena.Current : null;
+        bool scaleOwnedAccumulator = accumulatorOwner is not null && _engine.GetType() == typeof(CpuEngine);
+        Tensor<T>? accumulator = null;
+        // The upsampler's activation/output temporaries die once the stage result
+        // has been copied into the independent caller-owned prefix. Reuse their
+        // slots across stages instead of retaining every stage in the caller arena.
+        using var stageScratch = scaleOwnedAccumulator
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+                ? TensorArena.CreateDetached() : null;
         for (int i = 0; i < _ups.Count; i++)
         {
+            using var stageActive = stageScratch?.Activate();
             x = _ups[i].Forward(LeakyRelu(x, Slope));
             if (condition is not null && _stageConditions.Count > 0)
                 x = _engine.TensorAdd(x, _engine.TensorTile(_stageConditions[i].Forward(condition), new[] { 1, 1, x.Shape[2] }));
             Tensor<T>? sum = null;
+            bool ownsStageSum = false;
             foreach (var (first, second) in _blocks[i])
             {
                 using var active = scratch?.Activate();
@@ -345,6 +492,19 @@ internal sealed class HiFiGanGenerator<T>
                 if (sum is null)
                 {
                     if (scratch is null) sum = h;
+                    else if (accumulatorOwner is not null && h.Length <= accumulatorLength)
+                    {
+                        if (accumulator is null)
+                        {
+                            using (accumulatorOwner.Activate())
+                                accumulator = TensorAllocator.RentUninitialized<T>(new[] { accumulatorLength });
+                        }
+                        sum = Tensor<T>.FromMemory(accumulator.DataUnmarked.Slice(0, h.Length), h.Shape.ToArray());
+                        using var sourceKeep = new KeepAliveScope(h);
+                        using var destinationKeep = new KeepAliveScope(sum);
+                        h.AsSpanUnmarked().CopyTo(sum.AsWritableSpanUnmarked());
+                        ownsStageSum = true;
+                    }
                     else
                     {
                         // Own the first branch's sum outside the recyclable carry pool. Consume later branches
@@ -357,13 +517,46 @@ internal sealed class HiFiGanGenerator<T>
                 else if (scratch is null) sum = _engine.TensorAdd(sum, h);
                 else _engine.TensorAddInPlace(sum, h);
             }
-            x = _engine.TensorMultiplyScalar(sum!, ops.FromDouble(1.0 / _blocks[i].Count));
+            var average = _residualAverageScale;
+            if (scaleOwnedAccumulator && ownsStageSum && sum is not null)
+            {
+                // The next stage consumes x through its activation/upsampler before copying
+                // its first branch into this prefix. The post-convolution also produces a
+                // separate result, so no caller-visible output aliases this private workspace.
+                _engine.TensorMultiplyScalarInPlace(sum, average);
+                x = sum;
+                // Only this owned-prefix path proves that no stage workspace
+                // remains an input to the next iteration. Fallbacks keep it live.
+                stageScratch?.Reset();
+            }
+            else x = _engine.TensorMultiplyScalar(
+                sum ?? throw new InvalidOperationException("The residual stage produced no branch output."), average);
         }
         // F.leaky_relu with its default slope 0.01 before the output convolution (reference Generator.forward).
         x = LeakyRelu(x, 0.01);
         if (_outputReflectPad > 0) x = VocoderOps.ReflectPad(_engine, x, _outputReflectPad, 0);
         var y = _post.Forward(x);
         return _tanhOutput ? _engine.Tanh(y) : y;
+    }
+
+    private int ResidualAccumulatorLength(Tensor<T> preOutput)
+    {
+        long time = preOutput.Shape[2];
+        long maximum = 0;
+        for (int i = 0; i < _upsampleGeometry.Length; i++)
+        {
+            // ConvTranspose1D: (time - 1) * rate + kernel - 2 * padding.
+            // The offset also preserves odd kernel/rate differences instead of assuming time * rate.
+            var geometry = _upsampleGeometry[i];
+            time = time * geometry.Rate + geometry.Offset;
+            // Leave unrepresentable/empty shapes on the existing convolution/error path.
+            if (time <= 0 || time > int.MaxValue || preOutput.Shape[0] <= 0) return 0;
+            long elements = time * (preOutput.Shape[1] >> (i + 1));
+            if (elements <= 0 || elements > int.MaxValue / preOutput.Shape[0]) return 0;
+            elements *= preOutput.Shape[0];
+            maximum = Math.Max(maximum, elements);
+        }
+        return (int)maximum;
     }
 
 }
@@ -397,22 +590,27 @@ internal sealed class HiFiGanDiscriminators<T>
     /// <param name="vitsScale">Build VITS's scale discriminator (jaywalnut310/vits <c>DiscriminatorS</c>, also MeloTTS's):
     /// MelGAN's widths 16, 64, 256, 1024, 1024, 1024 with stride-4 grouped convolutions (groups 4, 16, 64, 256), in place
     /// of HiFi-GAN's 128-to-1024 layout.</param>
+    /// <param name="initialization">Optional stream for all default directions, biases and spectral vectors.</param>
     public HiFiGanDiscriminators(IEngine engine, int[] periods, int scales, bool useScaleDiscriminator = true, int widthDivisor = 1,
-        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false, bool vitsScale = false)
+        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false, bool vitsScale = false,
+        Random? initialization = null)
     {
         _engine = engine;
         _padFullPeriod = padFullPeriod;
         _slope = slope;
         int W(int c) => Math.Max(1, c / Math.Max(1, widthDivisor));
+        NormedConv1DLayer<T> Build(int input, int output, int kernel, int stride, int dilation, int groups, int padding,
+            bool transposed, ConvolutionNormalization normalization) =>
+            new(input, output, kernel, stride, dilation, groups, padding, transposed, normalization, 0, true, initialization);
         var widths = periodChannels ?? new[] { 32, 128, 512, 1024, 1024 };
         if (widths.Length != 5) throw new ArgumentException("A period discriminator has five convolutions.", nameof(periodChannels));
         foreach (int p in periods)
         {
             int[] channels = { 1, W(widths[0]), W(widths[1]), W(widths[2]), W(widths[3]) };
             var convs = new List<NormedConv1DLayer<T>>();
-            for (int i = 0; i < 4; i++) convs.Add(Add(new NormedConv1DLayer<T>(channels[i], channels[i + 1], 5, 3, 1, 1, 2, false, ConvolutionNormalization.Weight)));
-            convs.Add(Add(new NormedConv1DLayer<T>(W(widths[3]), W(widths[4]), 5, 1, 1, 1, 2, false, ConvolutionNormalization.Weight)));
-            _periods.Add((p, convs, Add(new NormedConv1DLayer<T>(W(widths[4]), 1, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Weight))));
+            for (int i = 0; i < 4; i++) convs.Add(Add(Build(channels[i], channels[i + 1], 5, 3, 1, 1, 2, false, ConvolutionNormalization.Weight)));
+            convs.Add(Add(Build(W(widths[3]), W(widths[4]), 5, 1, 1, 1, 2, false, ConvolutionNormalization.Weight)));
+            _periods.Add((p, convs, Add(Build(W(widths[4]), 1, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Weight))));
         }
         if (!useScaleDiscriminator) return;
         for (int s = 0; s < scales; s++)
@@ -422,27 +620,27 @@ internal sealed class HiFiGanDiscriminators<T>
             {
                 var vits = new List<NormedConv1DLayer<T>>
                 {
-                    Add(new NormedConv1DLayer<T>(1, W(16), 15, 1, 1, 1, 7, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(16), W(64), 41, 4, 1, Groups(W(16), 4), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(64), W(256), 41, 4, 1, Groups(W(64), 16), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(256), W(1024), 41, 4, 1, Groups(W(256), 64), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 41, 4, 1, Groups(W(1024), 256), 20, false, norm)),
-                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
+                    Add(Build(1, W(16), 15, 1, 1, 1, 7, false, norm)),
+                    Add(Build(W(16), W(64), 41, 4, 1, Groups(W(16), 4), 20, false, norm)),
+                    Add(Build(W(64), W(256), 41, 4, 1, Groups(W(64), 16), 20, false, norm)),
+                    Add(Build(W(256), W(1024), 41, 4, 1, Groups(W(256), 64), 20, false, norm)),
+                    Add(Build(W(1024), W(1024), 41, 4, 1, Groups(W(1024), 256), 20, false, norm)),
+                    Add(Build(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
                 };
-                _scales.Add((vits, Add(new NormedConv1DLayer<T>(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
+                _scales.Add((vits, Add(Build(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
                 continue;
             }
             var convs = new List<NormedConv1DLayer<T>>
             {
-                Add(new NormedConv1DLayer<T>(1, W(128), 15, 1, 1, 1, 7, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(128), W(128), 41, 2, 1, Groups(W(128), 4), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(128), W(256), 41, 2, 1, Groups(W(128), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(256), W(512), 41, 4, 1, Groups(W(256), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(512), W(1024), 41, 4, 1, Groups(W(512), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(1024), W(1024), 41, 1, 1, Groups(W(1024), 16), 20, false, norm)),
-                Add(new NormedConv1DLayer<T>(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
+                Add(Build(1, W(128), 15, 1, 1, 1, 7, false, norm)),
+                Add(Build(W(128), W(128), 41, 2, 1, Groups(W(128), 4), 20, false, norm)),
+                Add(Build(W(128), W(256), 41, 2, 1, Groups(W(128), 16), 20, false, norm)),
+                Add(Build(W(256), W(512), 41, 4, 1, Groups(W(256), 16), 20, false, norm)),
+                Add(Build(W(512), W(1024), 41, 4, 1, Groups(W(512), 16), 20, false, norm)),
+                Add(Build(W(1024), W(1024), 41, 1, 1, Groups(W(1024), 16), 20, false, norm)),
+                Add(Build(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
             };
-            _scales.Add((convs, Add(new NormedConv1DLayer<T>(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
+            _scales.Add((convs, Add(Build(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
         }
     }
 
@@ -565,7 +763,7 @@ internal sealed class HiFiGanDiscriminators<T>
 
 /// <summary>
 /// The log-mel spectrogram of a waveform on the autodiff tape (reference <c>meldataset.mel_spectrogram</c>): reflect
-/// padding of (n_fft − hop) / 2, a Hann-windowed DFT of each hop-spaced frame as matrix products, magnitude
+/// padding of (n_fft − hop) / 2, a Hann-windowed transform of each hop-spaced frame, magnitude
 /// <c>√(re² + im² + 1e-9)</c>, librosa's Slaney mel filterbank, and <c>log(max(x, 1e-5))</c>.
 /// </summary>
 internal sealed class DifferentiableMel<T>
@@ -573,8 +771,12 @@ internal sealed class DifferentiableMel<T>
     private readonly IEngine _engine;
     private readonly int _fft;
     private readonly int _hop;
-    private readonly Tensor<T> _cos;
-    private readonly Tensor<T> _sin;
+    private readonly Tensor<T>? _cos;
+    private readonly Tensor<T>? _sin;
+    private readonly Tensor<T>? _fftWindow;
+    private static readonly Func<IEngine, Tensor<T>, double, Tensor<T>>? RealFftMagnitude =
+        OptionalEngineOperation.Find<Func<IEngine, Tensor<T>, double, Tensor<T>>>(
+            typeof(IEngine).Assembly.GetType("AiDotNet.Tensors.Engines.RfftMagnitudeEngineExtensions"), "TensorRfftMagnitude", typeof(T));
     private readonly Tensor<T> _mel;
 
     /// <param name="singlePrecisionBasis">librosa's float32 filterbank exactly (its default dtype, as references that keep
@@ -587,25 +789,65 @@ internal sealed class DifferentiableMel<T>
         _fft = fftSize;
         _hop = hopSize;
         int bins = fftSize / 2 + 1;
-        // Periodic Hann window of the window length, centred in the FFT frame (torch.stft pads the window).
-        var window = new double[fftSize];
-        int offset = (fftSize - windowSize) / 2;
-        for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
-        _cos = new Tensor<T>(new[] { fftSize, bins });
-        _sin = new Tensor<T>(new[] { fftSize, bins });
-        for (int n = 0; n < fftSize; n++)
-            for (int k = 0; k < bins; k++)
-            {
-                double a = 2 * Math.PI * n * k / fftSize;
-                _cos[n, k] = ops.FromDouble(window[n] * Math.Cos(a));
-                _sin[n, k] = ops.FromDouble(-window[n] * Math.Sin(a));
-            }
+        if (RealFftMagnitude is not null && typeof(T) == typeof(float)
+            && (engine.Is<CpuEngine>() || (engine.SupportsGpu && engine.Is<DirectGpuTensorEngine>())))
+        {
+            // Separate FP32 windowing is part of the real-FFT recipe. Folding a
+            // double-precision window into DFT tables changes quiet-band VJPs.
+            _fftWindow = (Tensor<T>)(object)new Tensor<float>(PeriodicHannFloat(fftSize, windowSize), new[] { 1, fftSize });
+        }
+        else
+        {
+            // Generic numeric types and other engines retain the folded-window DFT.
+            var window = new double[fftSize];
+            int offset = (fftSize - windowSize) / 2;
+            // torch.hann_window(1) is [1], not the formula's 0: a one-sample window passes its sample through, as
+            // PeriodicHannFloat does on the real-FFT path.
+            if (windowSize == 1) window[offset] = 1;
+            else for (int n = 0; n < windowSize; n++) window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
+            _cos = new Tensor<T>(new[] { fftSize, bins });
+            _sin = new Tensor<T>(new[] { fftSize, bins });
+            for (int n = 0; n < fftSize; n++)
+                for (int k = 0; k < bins; k++)
+                {
+                    double a = 2 * Math.PI * n * k / fftSize;
+                    _cos[n, k] = ops.FromDouble(window[n] * Math.Cos(a));
+                    _sin[n, k] = ops.FromDouble(-window[n] * Math.Sin(a));
+                }
+        }
         var basis = singlePrecisionBasis ? TacotronSpectrogram.LibrosaFloat32MelBasis(sampleRate, fftSize, melChannels, fMin, fMax)
             : new TacotronSpectrogram(sampleRate, fftSize, hopSize, windowSize, melChannels, fMin, fMax).MelBasis;
         _mel = new Tensor<T>(new[] { bins, melChannels });
         for (int m = 0; m < melChannels; m++)
             for (int k = 0; k < bins; k++) _mel[k, m] = ops.FromDouble(basis[m, k]);
     }
+
+    [AiDotNet.Attributes.ScalarKernel("Builds immutable FP32 Hann coefficients once, without reading audio/tensor values; separate rounded stages preserve the reference construction recipe.")]
+    private static float[] PeriodicHannFloat(int fftSize, int windowSize)
+    {
+        var result = new float[fftSize];
+        int offset = (fftSize - windowSize) / 2;
+        if (windowSize == 1) { result[offset] = 1; return result; }
+        float step = (float)(2 * Math.PI / windowSize);
+        for (int n = 0; n < windowSize; n++)
+        {
+            float angle = HannMultiply(n, step);
+#if NET5_0_OR_GREATER
+            float cosine = MathF.Cos(angle);
+#else
+            float cosine = (float)Math.Cos(angle);
+#endif
+            result[offset + n] = HannAdd(HannMultiply(cosine, -.5f), .5f);
+        }
+        return result;
+    }
+
+    // Window construction consists of distinct FP32 stages, as in separate
+    // arange/multiply/cos/multiply/add operations; do not contract them to FMA.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static float HannMultiply(float a, float b) => a * b;
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static float HannAdd(float a, float b) => a + b;
 
     /// <summary>The source index of position <paramref name="i"/> under reflect padding (repeated reflection when the pad
     /// exceeds the signal, where PyTorch would refuse).</summary>
@@ -651,6 +893,10 @@ internal sealed class DifferentiableMel<T>
         for (int f = 0; f < frames; f++)
             rows[f] = _engine.Reshape(_engine.TensorSlice(padded, new[] { f * _hop, 0 }, new[] { _fft, 1 }), new[] { 1, _fft });
         var framed = frames == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);                       // [frames, fft]
+        if (_fftWindow is not null && RealFftMagnitude is { } magnitude)
+            return magnitude(_engine, _engine.TensorMultiply(framed, _fftWindow), epsilon);
+        if (_cos is null || _sin is null)
+            throw new InvalidOperationException("The folded-window DFT tables were not built for this transform.");
         var re = _engine.TensorMatMul(framed, _cos);
         var im = _engine.TensorMatMul(framed, _sin);
         return _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),

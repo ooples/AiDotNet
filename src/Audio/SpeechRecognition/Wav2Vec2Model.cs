@@ -95,6 +95,10 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     // The shared wav2vec 2.0 network and the CTC head (transformers Wav2Vec2ForCTC: dropout, then lm_head).
     private Audio.Foundations.Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private DenseLayer<T>? _ctcHead;
     private readonly Random _random;
 

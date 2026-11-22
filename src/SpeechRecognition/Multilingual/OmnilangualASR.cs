@@ -66,6 +66,10 @@ public partial class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     private bool _disposed;
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Audio.Foundations.Wav2Vec2CtcStack<T>? _stack;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _stack is not null && _stack.Network.Configuration.LayerDrop > 0;
     private readonly Random _random;
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />

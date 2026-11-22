@@ -1,6 +1,7 @@
 using AiDotNet.Audio.Classification;
 using AiDotNet.Audio.SpeechRecognition;
 using AiDotNet.Enums;
+using AiDotNet.PyTorchParity;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
@@ -59,7 +60,7 @@ internal sealed class AiDotNetPannsCnn14Model : IBenchmarkModel
         set => (_input, _label) = value;
     }
 
-    /// <summary>Standard-normal log-mel features [B, 1, 1001, 64] and multi-hot labels with two random tags per clip.</summary>
+    /// <summary>Standard-normal log-mel features [B, 1, 1001, 64] and multi-hot labels with two distinct random tags per clip.</summary>
     public void LoadSyntheticBatch(int batchSize)
     {
         var features = new float[batchSize * Frames * Mels];
@@ -70,13 +71,23 @@ internal sealed class AiDotNetPannsCnn14Model : IBenchmarkModel
         }
         _input = new Tensor<float>(features, [batchSize, 1, Frames, Mels]);
         var labels = new float[batchSize * Classes];
+        var tags = new HashSet<int>();
         for (var b = 0; b < batchSize; b++)
-            for (var t = 0; t < TagsPerClip; t++)
-                labels[b * Classes + _random.Next(Classes)] = 1f;
+        {
+            // Draw until the tags are distinct: a repeated class would leave one positive instead of TagsPerClip.
+            tags.Clear();
+            while (tags.Count < TagsPerClip) tags.Add(_random.Next(Classes));
+            foreach (int tag in tags) labels[b * Classes + tag] = 1f;
+        }
         _label = new Tensor<float>(labels, [batchSize, Classes]);
     }
 
-    public void Forward() => _ = _model.Predict(_input);
+    // Dispose the result as the HiFi-GAN row does, so a device-resident output is released inside the timed call
+    // rather than whenever the collector runs.
+    public void Forward()
+    {
+        using var output = _model.Predict(_input);
+    }
 
     public void Backward()
     {
@@ -153,7 +164,7 @@ internal sealed class AiDotNetWav2Vec2BaseModel : IBenchmarkModel
     }
 
     /// <summary>
-    /// Zero-mean, unit-variance waveforms (the feature extractor's normalization), as a 220 Hz-ish tone with noise,
+    /// Waveforms of a 220 Hz-ish tone with noise, not normalized per clip (the PyTorch twin's loader is the same),
     /// and transcripts of 24 random non-blank symbols.
     /// </summary>
     public void LoadSyntheticBatch(int batchSize)
@@ -175,7 +186,12 @@ internal sealed class AiDotNetWav2Vec2BaseModel : IBenchmarkModel
         _label = new Tensor<float>(labels, [batchSize, TranscriptLength]);
     }
 
-    public void Forward() => _ = _model.Predict(_input);
+    // Dispose the result as the HiFi-GAN row does, so a device-resident output is released inside the timed call
+    // rather than whenever the collector runs.
+    public void Forward()
+    {
+        using var output = _model.Predict(_input);
+    }
 
     public void Backward()
     {
@@ -212,20 +228,36 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
     internal const int UtteranceFrames = 256;
 
     private readonly HiFiGAN<float> _model;
+    private readonly HifiBenchmarkFixture? _fixture;
+
     private readonly Random _random;
     private Tensor<float> _input = Tensor<float>.Empty();
     private Tensor<float> _label = Tensor<float>.Empty();
     private bool _trained;
 
-    public AiDotNetHifiGanV1Model(int seed)
+    public AiDotNetHifiGanV1Model(int seed) : this(seed, null) { }
+
+    public AiDotNetHifiGanV1Model(int seed, HifiBenchmarkFixture? fixture)
     {
+        _fixture = fixture;
+
         _random = new Random(seed);
         // The defaults are the V1 configuration and the paper's optimizer; SamplingSeed seeds initialization and crops.
         _model = new HiFiGAN<float>(new NeuralNetworkArchitecture<float>(inputFeatures: MelChannels, outputSize: 1),
             new HiFiGANOptions { SamplingSeed = seed });
 
-        LoadSyntheticBatch(1);
-        Forward();
+        if (_fixture is null)
+        {
+            LoadSyntheticBatch(1);
+            Forward();
+        }
+        else
+        {
+            _fixture.ImportState(_model);
+            (_input, _label) = _fixture.WarmupBatch;
+            Forward();
+            _fixture.RestoreAfterWarmupAndEmit(_model);
+        }
         ParameterCount = _model.TrainableParameterCount;
     }
 
@@ -238,10 +270,18 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
         set => (_input, _label) = value;
     }
 
+    internal HiFiGAN<float> NativeModelForStateDiagnostics => _model;
+
     /// <summary>Waveforms of a few random partials plus noise, peak 0.95 (the reference loader's normalization).</summary>
     public void LoadSyntheticBatch(int batchSize)
     {
         int samples = UtteranceFrames * Hop;
+        if (_fixture is not null)
+        {
+            (_input, _label) = _fixture.NextData(batchSize);
+            return;
+        }
+
         var audio = new float[batchSize * samples];
         var mels = new List<Tensor<float>>();
         for (var b = 0; b < batchSize; b++)
@@ -278,7 +318,11 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
         _label = new Tensor<float>(audio, [batchSize, samples]);
     }
 
-    public void Forward() => _ = _model.Predict(_input);
+    public void Forward()
+    {
+        // Match the PyTorch row's discarded-output lifetime: release device storage after each forward.
+        using var output = _model.Predict(_input);
+    }
 
     public void Backward()
     {
@@ -287,6 +331,8 @@ internal sealed class AiDotNetHifiGanV1Model : IBenchmarkModel
                 "HiFiGAN trains one utterance per step (it crops and scores a single waveform); run the hifigan-v1 row " +
                 "with --batch-size 1.");
         // HiFiGAN.Train is the whole GAN iteration: segment crop, discriminator update, generator update.
+        _fixture?.ValidateActualTrainingBatch(_input, _label);
+
         _model.Train(_input, _label);
         _trained = true;
     }

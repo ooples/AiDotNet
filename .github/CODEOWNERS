@@ -60,7 +60,7 @@
 /src/AiDotNet.Serving/                   @ooples
 /src/Deployment/                         @ooples
 
-# Website (Astro project deployed to Vercel).
+# Website (Astro project served from the AiDotNet VPS behind Cloudflare).
 /website/                                @ooples
 
 # Documentation site / docfx.

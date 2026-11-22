@@ -230,19 +230,13 @@ internal sealed class Wav2Vec2Network<T>
         states.Add(hidden);
         foreach (var layer in EncoderLayers)
         {
-            // LayerDrop: in training each layer is skipped with probability LayerDrop. The skip is a per-step 0/1
-            // gate drawn before the layer runs, so a compiled training plan redraws it on every replay rather than
-            // baking the traced step's choice of layers into its graph: gate·layer(h) + (1 − gate)·h, exactly
-            // layer(h) or h.
-            if (training && c.LayerDrop > 0)
-            {
-                var gate = AiDotNet.Training.CompiledStepRandom<T>.KeepGate(random, c.LayerDrop);
-                hidden = AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine, gate, Encode(layer, hidden, training, random), hidden);
-            }
-            else
-            {
+            // LayerDrop: in training each layer is skipped with probability LayerDrop. A skipped layer does not run, so
+            // it is not in the step's graph, gets no gradient and is not stepped by the optimizer (no momentum update, no
+            // weight decay), as in fairseq and transformers. A compiled plan has one fixed graph and could only blend the
+            // layer out with a zero multiplier, which still steps it; the models that own this network therefore
+            // declare TrainingForwardSkipsLayersPerStep when LayerDrop is positive and train on the eager tape.
+            if (!(training && random.NextDouble() < c.LayerDrop))
                 hidden = Encode(layer, hidden, training, random);
-            }
             states.Add(hidden);
         }
         if (c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
