@@ -1199,6 +1199,12 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // rise across the first two steps while the model is learning. Judge it after the warm-up transient.
             { "Wav2Vec2", new WarmupIterationOverride(memorization: 15) },
 
+            // HuBERT's training forward keeps the paper's regularizers (dropout 0.1, LayerDrop 0.1, SpecAugment time
+            // masks), so GetLastLoss is one draw per step. On the fixed pair its training loss read 1.2554, 1.2750,
+            // 1.2279 ... over twelve steps (1.2585, 1.2966 ... with LayerDrop 0, so not the skip), while the evaluation
+            // loss at the same weights fell on every step: 1.2774, 1.2364, 1.1775 ... 0.6398. Same remedy as VMamba's above.
+            { "HuBERT", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // DeepAR's default stack inserts DropoutLayer instances between its recurrent layers.
             // GetLastLoss is therefore one training-mode dropout draw at each endpoint, so it can
             // reverse even when the fixed example's evaluation loss decreases. Measure the same

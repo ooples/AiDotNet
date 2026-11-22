@@ -101,6 +101,24 @@ public class RobustConformerPaperTests
         Assert.True(model.LastReconstructionLoss < 0.8 * first, $"L_r {first} -> {model.LastReconstructionLoss}");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ContinualPretraining_WithLayerDrop_StepsOnTheEagerTape()
+    {
+        await Task.Yield();
+        // LayerDrop > 0 trains on the eager tape (a skipped layer is not stepped), and the step hands its reconstruction
+        // loss out through a retained output, which needs the AdamW update to report whether it was applied.
+        var options = Tiny();
+        options.LayerDrop = 0.1;
+        using var model = new RobustConformer<double>(Architecture(), options);
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var noisy = Voice(3200, 180, noise: 0.1);
+        var clean = Voice(3200, 180);
+        var decoder = network.Decoder[^1].GetParameters().ToArray();
+        model.ContinualPretrain(noisy, clean);
+        Assert.True(model.LastReconstructionLoss > 0 && !double.IsNaN(model.LastReconstructionLoss), $"L_r {model.LastReconstructionLoss}");
+        Assert.NotEqual(decoder, network.Decoder[^1].GetParameters().ToArray());
+    }
+
     [Fact(Timeout = 300000)]
     public async Task FineTuning_LowersTheCtcLoss_AndLeavesTheReconstructionModule()
     {

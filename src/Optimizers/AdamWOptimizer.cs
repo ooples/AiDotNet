@@ -678,6 +678,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private int _tapeStep;
 
     /// <inheritdoc />
+    /// <remarks>A step that the anomaly guard skips is reported rejected; every other step is reported accepted.</remarks>
+    protected override bool ReportsRetainedOutputUpdateOutcome => true;
+
+    /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
@@ -725,10 +729,14 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (TryGetClippedAheadGradNormSq(out double preNormSq))
         {
             if (double.IsNaN(preNormSq) || (double.IsInfinity(preNormSq) && (typeof(T) == typeof(float) || HasAnomalousTapeGradients(context))))
+            {
+                ReportRetainedOutputUpdateRejected();
                 return;
+            }
         }
         else if (HasAnomalousTapeGradients(context))
         {
+            ReportRetainedOutputUpdateRejected();
             return;
         }
 
@@ -918,6 +926,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Engine.TensorSubtractInPlace(param, adamUpdate);
             Engine.TensorSubtractInPlace(param, decayTerm);
         }
+        ReportRetainedOutputUpdateAccepted();
     }
 
     /// <summary>
