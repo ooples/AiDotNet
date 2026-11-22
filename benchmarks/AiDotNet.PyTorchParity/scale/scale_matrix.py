@@ -107,7 +107,8 @@ def summarize(rows: list[dict]) -> list[dict]:
     for r in rows:
         key = (r["model"], r["device"], r["dataset"], r["configuration"], r["launch"])
         run = runs.setdefault(key, dict(samples=0.0, seconds=0.0, accuracy=None, last_epoch=-1, rss=r["rss_mb_peak"],
-                                        gpu=r["gpu_mem_mb_peak"], flags=set()))
+                                        gpu=r["gpu_mem_mb_peak"], flags=set(), trajectory=set()))
+        run["trajectory"].add((r["epoch"], r["train_loss"], r["test_accuracy"]))
         run["samples"] += r["samples_per_second"] * r["train_seconds"]
         run["seconds"] += r["train_seconds"]
         if r["epoch"] > run["last_epoch"]:
@@ -130,6 +131,11 @@ def summarize(rows: list[dict]) -> list[dict]:
         ai_rate = [ai[l]["samples"] / ai[l]["seconds"] for l in launches]
         pt_rate = [pt[l]["samples"] / pt[l]["seconds"] for l in launches]
         flags = set().union(*(ai[l]["flags"] | pt[l]["flags"] for l in launches))
+        # AiDotNet's GPU and CPU training is deterministic: every launch trains on the same data in the same order and
+        # must report the same loss and accuracy for every epoch. Launches that disagree computed different values for
+        # identical work, which on a healthy machine does not happen (a GPU fault, see the README).
+        if len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
+            flags.add("ai-launches-disagree")
         summary.append(dict(
             model=model, device=device, dataset=dataset, launches=len(launches),
             samples_per_launch=round(ai[launches[0]]["samples"]),

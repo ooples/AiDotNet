@@ -194,14 +194,24 @@ def condition_flags(before, after):
 # A CUDA launch whose GPU, busy at its end, ran below this fraction of its maximum SM clock is flagged gpu-clock-low,
 # and the runner refuses to start CUDA measurements when its load probe sustains less.
 LOW_CLOCK_FRACTION = 0.6
+# With --gpu-clock-lock, the reference is the locked clock instead: the probe must sustain at least this fraction of
+# it (so the lock is in effect and nothing caps the GPU below it), and so must every busy launch.
+LOCKED_CLOCK_FRACTION = 0.9
+# The SM clock the run declared locked (nvidia-smi -lgc), or None. Set from protocol.json, so a resume keeps it.
+GPU_CLOCK_LOCK = None
+
+
+def clock_floor(max_clock):
+    """The SM clock below which a busy GPU counts as held down: 90% of the declared lock, else 60% of the maximum."""
+    return LOCKED_CLOCK_FRACTION * GPU_CLOCK_LOCK if GPU_CLOCK_LOCK else LOW_CLOCK_FRACTION * max_clock
 
 
 def gpu_clock_low(state):
-    """True when the GPU was working (P0, over 30% utilization) at under LOW_CLOCK_FRACTION of its maximum SM clock."""
+    """True when the GPU was working (P0, over 30% utilization) below clock_floor."""
     gpu = state.get("gpu") or {}
     try:
         return (gpu.get("pstate") == "P0" and float(gpu["utilization.gpu"]) > 30
-                and float(gpu["clocks.sm"]) < LOW_CLOCK_FRACTION * float(gpu["clocks.max.sm"]))
+                and float(gpu["clocks.sm"]) < clock_floor(float(gpu["clocks.max.sm"])))
     except (KeyError, ValueError):
         return False
 
@@ -566,6 +576,10 @@ def main():
     parser.add_argument("--allow-battery", action="store_true", help="Run even when the machine is on battery power")
     parser.add_argument("--allow-gpu-clock-cap", action="store_true",
                         help="Run CUDA measurements even when the GPU sustains under 60%% of its maximum SM clock")
+    parser.add_argument("--gpu-clock-lock", type=int, metavar="MHZ",
+                        help="Declare that the GPU's SM clock is locked at MHZ (nvidia-smi -lgc MHZ,MHZ, run as administrator). "
+                             "The run records it, refuses to start unless the GPU sustains it, and judges gpu-clock-low "
+                             "against it. Use it on a GPU that computes wrong values at its top clocks.")
     parser.add_argument("--summarize", type=Path, metavar="RUN_DIR",
                         help="Only rebuild RUN_DIR's CSVs and table from its raw reports, into RUN_DIR/regenerated")
     parser.add_argument("--scale", type=Path, metavar="DATA_ROOT",
@@ -630,7 +644,7 @@ def main():
         dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
         print(f"Results: {dest}", flush=True)
         info = dict(started=now(), models=args.models, devices=args.devices, launches=launches, smoke=args.smoke, common=common,
-                    scale=scale,
+                    scale=scale, gpuClockLock=args.gpu_clock_lock,
                     threads=THREADS, referenceModels=[m for m in REFERENCE if m in args.models],
                     torchConfigurations={d: arms[d] for d in args.devices},
                     configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
@@ -672,13 +686,22 @@ def main():
 
     if "cuda" in info["devices"] and not torch.cuda.is_available():
         parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
+    global GPU_CLOCK_LOCK
+    if args.resume and args.gpu_clock_lock and args.gpu_clock_lock != info.get("gpuClockLock"):
+        parser.error(f"This run declared --gpu-clock-lock {info.get('gpuClockLock')}; resume it with the same lock.")
+    GPU_CLOCK_LOCK = info.get("gpuClockLock")
     if "cuda" in info["devices"] and shutil.which("nvidia-smi"):
-        # Checked on every start, including a resume: the platform can cap a laptop GPU between sessions.
+        # Checked on every start, including a resume: the platform can cap a laptop GPU between sessions, and a clock
+        # lock does not survive a reboot.
         probe = gpu_clock_probe(env)
         info.setdefault("gpuClockProbes", []).append(probe)
         save(dest / "protocol.json", info)
-        print(f"GPU sustained {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load", flush=True)
-        if probe["medianSmClock"] < LOW_CLOCK_FRACTION * probe["maxSmClock"] and not args.allow_gpu_clock_cap:
+        print(f"GPU sustained {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load"
+              + (f" (declared lock {GPU_CLOCK_LOCK} MHz)" if GPU_CLOCK_LOCK else ""), flush=True)
+        if GPU_CLOCK_LOCK and probe["medianSmClock"] > GPU_CLOCK_LOCK + 30:
+            sys.exit(f"The GPU ran at {probe['medianSmClock']:.0f} MHz, above the declared {GPU_CLOCK_LOCK} MHz lock, so the "
+                     f"lock is not in effect. Run nvidia-smi -lgc {GPU_CLOCK_LOCK},{GPU_CLOCK_LOCK} as administrator.")
+        if probe["medianSmClock"] < clock_floor(probe["maxSmClock"]) and not args.allow_gpu_clock_cap:
             sys.exit(f"The GPU sustains only {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load, so "
                      "its timings would describe the cap. Check the charger and the performance profile, or pass "
                      "--allow-gpu-clock-cap.")
