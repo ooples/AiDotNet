@@ -629,6 +629,7 @@ internal static class OptionSensitivityFixtureSetup
                 or AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>
                 or AiDotNet.SpeechRecognition.Multilingual.USM<T>
                 or AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T>
+                or AiDotNet.SpeechRecognition.Multilingual.Chirp<T> or AiDotNet.SpeechRecognition.Robust.AVHuBERT<T>
             && network is AiDotNet.Interfaces.ISpeechRecognizer<T> capped)
         {
             // The cap acts only when Transcribe decodes (the CTC greedy pass or the attention decoder's step budget);
@@ -1006,6 +1007,55 @@ internal static class OptionSensitivityFixtureSetup
             }
             return result;
         }
+        if (network is AiDotNet.Video.Enhancement.MGLDVSR<T> mgldEdges && option == "EdgeWeight")
+        {
+            // The edge weights scale the decoder's warping loss over the ground truth's SPyNet flows, which the release
+            // loads pretrained and frozen. The fixture's untrained SPyNet gives forward and backward flows that disagree
+            // everywhere, so every pixel fails the occlusion check and the warping loss is exactly zero at every weight
+            // (measured). As the GuidanceScale probe does for RAFT, zero each pyramid level's last convolution: zero flow
+            // leaves every pixel visible, and the weighted loss compares the clip's neighbouring frames. This runs before
+            // the probe's training on both the control and each candidate; the frozen SPyNet keeps it through training.
+            var hidden = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var spyNet = typeof(AiDotNet.Video.Enhancement.MGLDVSR<T>).GetField("_spyNet", hidden)?.GetValue(network) as AiDotNet.Video.Enhancement.SpyNetFlowBlock<T>
+                ?? throw new InvalidOperationException("MGLDVSR's SPyNet was not found; the EdgeWeight probe cannot zero its flow.");
+            for (int level = 0; level < AiDotNet.Video.Enhancement.SpyNetFlowBlock<T>.Levels; level++)
+            {
+                var last = mgldEdges.Layers[spyNet.First + level * 5 + 4];
+                last.SetParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<T>(checked((int)last.ParameterCount)));
+            }
+        }
+        // Turbo, which this option needs, rejects the fixture's one-second reference voice, so the generic Predict below
+        // must not run first; the distillation loss is the whole observation.
+        // Turbo, which this option needs, rejects the fixture's one-second reference voice, so the generic Predict below
+        // must not run first; the distillation loss is the whole observation.
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> distilled && option == "DistillationTeacherSteps")
+        {
+            // Prepare makes the fixture Turbo; the teacher's Euler steps set the student's regression target.
+            var flow = distilled.FlowModel!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var speech = Enumerable.Range(0, 6).Select(i => (i * 37) % 50).ToArray();
+            var mel = new Tensor<T>(new[] { 1, flow.Configuration.OutputSize, flow.MelFrames(speech.Length) });
+            mel = Shaped(SineRamp<T>(mel.Length, 0.37, 1.0), mel.Shape.ToArray());
+            var xvector = new Tensor<T>(new[] { flow.Configuration.SpeakerDim });
+            xvector = Shaped(CosineRamp<T>(xvector.Length, 0.5, 1.0), xvector.Shape.ToArray());
+            var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)distilled.GetOptions();
+            return OptionSensitivityHarness.Fingerprint(flow.DistillationLoss(distilled.TeacherFlow, speech, mel, xvector, false,
+                new Random(1337), settings.DistillationTeacherSteps).Select(ops.ToDouble));
+        }
+        if (network is AiDotNet.Audio.Classification.GenreClassifier<T> genreModel
+            && option is "FftSize" or "HopLength" or "SampleRate" or "TopK")
+        {
+            // The analysis frame, hop and rate shape the 30 surface features of a recording, which Predict (handed the
+            // features) never computes; as for the beat options above, an unfitted softmax over raw features saturates,
+            // so the features are observed. TopK cuts the reported list. Three seconds at the default 22.05 kHz span
+            // the 43-frame texture window.
+            var genreOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var clip = Waveform<T>(66150);
+            var surface = ((AiDotNet.Interfaces.IGenreClassifier<T>)genreModel).ExtractFeatures(clip).Select(genreOps.ToDouble);
+            return option == "TopK"
+                ? OptionSensitivityHarness.Fingerprint(new[] { (double)genreModel.ClassifyLegacy(clip).TopPredictions.Count })
+                : OptionSensitivityHarness.Fingerprint(surface);
+        }
         long fingerprint = observe(network, ObservationInput(network, input, option));
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> mask && IsMaskGctSamplingOption(option))
         {
@@ -1189,20 +1239,6 @@ internal static class OptionSensitivityFixtureSetup
             for (int seed = 0; seed < 4; seed++)
                 tokens.AddRange(topK.T3Model!.Generate(new[] { 1, 3, 5, 7 }, condition, new Random(1337 + seed)).Select(t => (double)t));
             return OptionSensitivityHarness.Fingerprint(tokens);
-        }
-        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> distilled && option == "DistillationTeacherSteps")
-        {
-            // Prepare makes the fixture Turbo; the teacher's Euler steps set the student's regression target.
-            var flow = distilled.FlowModel!;
-            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            var speech = Enumerable.Range(0, 6).Select(i => (i * 37) % 50).ToArray();
-            var mel = new Tensor<T>(new[] { 1, flow.Configuration.OutputSize, flow.MelFrames(speech.Length) });
-            mel = Shaped(SineRamp<T>(mel.Length, 0.37, 1.0), mel.Shape.ToArray());
-            var xvector = new Tensor<T>(new[] { flow.Configuration.SpeakerDim });
-            xvector = Shaped(CosineRamp<T>(xvector.Length, 0.5, 1.0), xvector.Shape.ToArray());
-            var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)distilled.GetOptions();
-            return OptionSensitivityHarness.Fingerprint(flow.DistillationLoss(distilled.TeacherFlow, speech, mel, xvector, false,
-                new Random(1337), settings.DistillationTeacherSteps).Select(ops.ToDouble));
         }
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
@@ -1969,6 +2005,11 @@ internal static class OptionSensitivityFixtureSetup
             vfit.LearningRateMilestones = new[] { 1, 2, 3, 4, 5 };
         if (options is AiDotNet.Video.Options.XVFIOptions xvfi && option == "LearningRateDecay")
             xvfi.LearningRateMilestones = new[] { 1 };
+        if (options is AiDotNet.Video.Options.XVFIOptions xvfiEdges && option == "SmoothnessWeight")
+            // The smoothness term weights each flow gradient by exp(-(EdgeConstant * image gradient)^2). At the release's 150
+            // the fixture's textured frames drive that weight to about 1e-22 (measured), so the term is lost to rounding
+            // beside the reconstruction loss at any SmoothnessWeight. An edge constant of 1 keeps the weight near one.
+            xvfiEdges.EdgeConstant = 1.0;
         if (options is AiDotNet.Video.Options.InterpAnyClearerOptions clearer && option == "MinLearningRate")
         {
             // The cosine floor acts only after the 2,000-step warmup; a four-step cosine starts decaying at once.
@@ -2186,6 +2227,14 @@ internal static class OptionSensitivityFixtureSetup
             }
             // Start below the probe's gradient norm so the clip binds.
             if (option == "MaxGradNorm") SetOption(options, "MaxGradNorm", 1e-8);
+            // The fixture's untrained 64-token head is nearly uniform, so at the paper's 1.0 a rescaled temperature moves
+            // no sampling boundary past the two paths' seeded draws. At 0.05 the small logit gaps decide the draws
+            // (as the Fish Speech fixture samples at 0.1), and eight paths give the median more draws to move.
+            if (option == "Temperature")
+            {
+                SetOption(options, "Temperature", 0.05);
+                SetOption(options, "NumSamples", 8);
+            }
         }
         // Start below the probe's gradient norm so the clip binds at every candidate.
         if (options is AiDotNet.Audio.Speaker.SpeakerEmbeddingOptions && option == "MaxGradNorm")
