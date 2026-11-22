@@ -201,7 +201,15 @@ public class FishSpeechReferenceTests
         Close(f["mel"]!, mel, "mel");
         var codes = codec.Encode(wave);
         Same(Grid(f["codec_codes"]!), codes, "codes");
-        Close(f["decoded"]!, codec.Decode(codes), "decoded");
+        var decoded = codec.Decode(codes);
+        Close(f["decoded"]!, decoded, "decoded");
+        // A code past the quantizer's 1,000 entries (the transformer's codebook holds 1,024) decodes as the release's
+        // indices_to_codes reads it, digit by digit: the same as the code modulo the entries.
+        var past = (int[,])codes.Clone();
+        past[0, 0] += 1000;
+        Assert.Equal(decoded.ToArray(), codec.Decode(past).ToArray());
+        past[0, 0] = -1;
+        Assert.Throws<ArgumentOutOfRangeException>(() => codec.Decode(past));
     }
 
     /// <summary>
