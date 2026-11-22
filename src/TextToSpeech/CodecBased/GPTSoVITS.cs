@@ -264,9 +264,13 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
                     o.VocoderUpsampleKernels ?? new[] { 8, 8, 4, 4, 4, 4 }, o.VocoderResblockKernels, o.VocoderResblockDilations, snakeBeta: true,
                     tanhAtFinal: false, biasAtFinal: false);
             else
+                // No N(0, 0.01) redraw: the reference (GPT-SoVITS module/models.py Generator) applies init_weights after weight_norm,
+                // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+                // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+                // each stage 3-15x and leaves an untrained generator's output to its biases.
                 _hifiGan = new HiFiGanGenerator<T>(Engine, 100, o.VocoderInitialChannels ?? 512, o.VocoderUpsampleRates ?? new[] { 10, 6, 2, 2, 2 },
                     o.VocoderUpsampleKernels ?? new[] { 20, 12, 4, 4, 4 }, o.VocoderResblockKernels, o.VocoderResblockDilations, resblockType1: true,
-                    plainEnds: true, initialization: random, plainOutputBias: true);
+                    plainEnds: true, plainOutputBias: true, defaultInitialization: random);
             if (o.LoraRank > 0) _cfm.Cfm.Estimator.AddLora(_loraLayers, o.LoraRank, o.LoraRank, random);
         }
         else

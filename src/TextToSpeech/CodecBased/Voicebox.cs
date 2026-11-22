@@ -240,10 +240,14 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         _melFeatures = new CenteredLogMel<T>(Engine, _options.SampleRate, _options.FftSize, _options.HopSize,
             _options.WindowLength, _options.MelChannels, _options.MelMinFrequency, _options.MelMaxFrequency,
             floor: 1e-5, naturalLog: true);
+        // No N(0, 0.01) redraw: the reference (HiFi-GAN V1, jik876/hifi-gan) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         _vocoder = new HiFiGanGenerator<T>(Engine, _options.MelChannels, _options.VocoderInitialChannels,
             _options.VocoderUpsampleRates, _options.VocoderUpsampleKernels, _options.VocoderResBlockKernels,
             _options.VocoderResBlockDilations, resblockType1: true,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
         ComponentLayers.AddRange(_vocoder.Layers);
     }
 

@@ -56,16 +56,17 @@ internal sealed class HiftGenerator<T>
         Configuration = configuration;
         var c = configuration;
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
-        // init_weights: N(0, 0.01) for the convolutions it reaches; the others keep PyTorch's default (Kaiming uniform).
-        Func<double> Normal(double std) => () =>
-            std * Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble());
+        // No N(0, 0.01) redraw: the reference applies init_weights (to ups, conv_post and the ResBlock convolutions) after
+        // weight_norm, so it writes only the derived `weight` tensor, which weight_norm recomputes from weight_g and weight_v
+        // on every forward. Those convolutions train from PyTorch's default draw (null init below: the layer's own
+        // U(±1/√fan_in) weights and bias, g = ||v||), seeded from the initialization stream.
         Func<double> Kaiming(int fanIn) => () => (2 * initialization.NextDouble() - 1) / Math.Sqrt(fanIn);
         NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding, bool weightNorm,
-            Func<double> init, bool transposed = false)
+            Func<double>? init, bool transposed = false)
         {
             var conv = Add(new NormedConv1DLayer<T>(input, output, kernel, stride, dilation, 1, padding, transposed,
-                weightNorm ? ConvolutionNormalization.Weight : ConvolutionNormalization.None));
-            conv.Reinitialize(init, bias: 0.0);
+                weightNorm ? ConvolutionNormalization.Weight : ConvolutionNormalization.None, 0, true, initialization));
+            if (init is not null) conv.Reinitialize(init, bias: 0.0);
             return conv;
         }
 
@@ -84,8 +85,8 @@ internal sealed class HiftGenerator<T>
         {
             int u = c.UpsampleRates[i], k = c.UpsampleKernels[i];
             Ups.Add(c.Causal
-                ? Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, 1, 1, 0, true, Normal(0.01))
-                : Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, Normal(0.01), transposed: true));
+                ? Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, 1, 1, 0, true, null)
+                : Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, null, transposed: true));
         }
         // Source downsampling: cumulative rates of [1] + reversed rates without its last, reversed again.
         var rates = new List<int> { 1 };
@@ -105,7 +106,7 @@ internal sealed class HiftGenerator<T>
         for (int i = 0; i < c.UpsampleRates.Length; i++)
             for (int j = 0; j < c.ResblockKernels.Length; j++)
                 ResBlocks.Add(NewResBlock(c.BaseChannels >> (i + 1), c.ResblockKernels[j], c.ResblockDilations[j]));
-        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, c.Causal ? 0 : 3, true, Normal(0.01));
+        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, c.Causal ? 0 : 3, true, null);
 
         ResBlock NewResBlock(int channels, int kernel, int[] dilations)
         {
@@ -113,9 +114,9 @@ internal sealed class HiftGenerator<T>
             foreach (int d in dilations)
             {
                 block.Snakes1.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, c.Causal ? 0 : (kernel * d - d) / 2, true, Normal(0.01)));
+                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, c.Causal ? 0 : (kernel * d - d) / 2, true, null));
                 block.Snakes2.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, c.Causal ? 0 : (kernel - 1) / 2, true, Normal(0.01)));
+                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, c.Causal ? 0 : (kernel - 1) / 2, true, null));
             }
             return block;
         }
