@@ -117,8 +117,12 @@ internal sealed class CodeHiFiGan<T>
         StyleTokenEmbedding = Table(c.StyleTokens);
         SpeakerEmbedding = Table(c.Speakers);
         StyleEmbedding = Table(c.Styles);
+        // No N(0, 0.01) redraw: the reference (fairseq hifigan.py Generator) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         Generator = new HiFiGanGenerator<T>(engine, c.InputDim, c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
-            c.ResblockDilations, resblockType1: true, initialization: initialization);
+            c.ResblockDilations, resblockType1: true);
         layers.AddRange(Generator.Layers);
     }
 

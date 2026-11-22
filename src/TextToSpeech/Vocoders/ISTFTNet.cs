@@ -76,9 +76,12 @@ public partial class ISTFTNet<T> : GanVocoderBase<T>
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The upsampling ({string.Join("x", o.UpsampleRates)}) times the inverse STFT hop ({o.InverseHopSize}) must equal the hop ({o.HopSize}).");
         int bins = o.InverseFftSize / 2 + 1;
+        // No N(0, 0.01) redraw: the reference (iSTFTNet's HiFi-GAN-based Generator) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
-            o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1);
         _istft = new InverseStft<T>(Engine, o.InverseFftSize, o.InverseHopSize, o.InverseWindowSize);
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
