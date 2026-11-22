@@ -319,6 +319,38 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     // Active step's pre-computed global squared norm while StepCore executes on _gradientsClippedAhead.
     private double? _activeStepClippedAheadNormSq;
 
+    // Pre-clip global squared norm ClipTapeGradientsAhead computed, handed to the Step that consumes its dictionary.
+    private double? _clippedAheadPreClipNormSq;
+
+    // Pre-clip global squared norm of the most recent tape Step's gradients, or null when that step computed none.
+    private double? _lastStepGradientNormSq;
+
+    /// <summary>
+    /// The global L2 norm of the most recent tape <see cref="Step(TapeStepContext{T})"/>'s gradients, before any
+    /// clipping, or null when that step did not compute one.
+    /// </summary>
+    /// <remarks>
+    /// This is the value the step's global-norm clip (or Adam's anomaly guard) already reduced to a host double, so
+    /// reading it costs nothing. With clipping by norm disabled no step computes it, unless
+    /// <see cref="ComputeGradientNormEveryStep"/> is set. A non-finite norm is reported as is.
+    /// </remarks>
+    internal double? LastStepGradientNorm =>
+        _lastStepGradientNormSq is double sq ? Math.Sqrt(sq) : null;
+
+    /// <summary>
+    /// When true, a tape step whose clipping options would not reduce the global gradient norm reduces it anyway so
+    /// <see cref="LastStepGradientNorm"/> is always set. That is one extra sum of squares per step and, for gradients
+    /// resident on a GPU, one device reduction plus a device-to-host read of its scalar. Off by default.
+    /// </summary>
+    internal bool ComputeGradientNormEveryStep { get; set; }
+
+    // Number of tape Steps run so far; lets a caller tell whether LastStepGradientNorm describes a recent step (a
+    // fused compiled plan updates the weights without calling Step).
+    private long _tapeStepCount;
+
+    /// <summary>The number of tape <see cref="Step(TapeStepContext{T})"/> calls this optimizer has run.</summary>
+    internal long TapeStepCount => Interlocked.Read(ref _tapeStepCount);
+
     /// <summary>
     /// Marks <paramref name="gradients"/> as already clipped for the upcoming <see cref="Step(TapeStepContext{T})"/>
     /// call without re-running the optimizer's own clipping pass.
@@ -369,6 +401,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool canReuseNormInStep = false)
     {
         _clippedAheadNormSq = null;
+        _clippedAheadPreClipNormSq = null;
+        TapeClipNormThreadCache.LastPreClipNormSq = null;
         // The clip scales the gradients in place; a layer that published one by reference keeps the unclipped values.
         if (GradientOptions.EnableGradientClipping)
             LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(gradients.Values);
@@ -384,6 +418,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             try
             {
                 ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+                _clippedAheadPreClipNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
                 if (canReuseNormInStep)
                 {
                     _clippedAheadNormSq = TapeClipNormThreadCache.LastPostClipNormSq;
@@ -3513,8 +3548,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool matchedClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
         GradientsClippedAhead = matchedClippedAhead;
         _activeStepClippedAheadNormSq = matchedClippedAhead ? _clippedAheadNormSq : null;
+        TapeClipNormThreadCache.LastPreClipNormSq = matchedClippedAhead ? _clippedAheadPreClipNormSq : null;
         _gradientsClippedAhead = null;
         _clippedAheadNormSq = null;
+        _clippedAheadPreClipNormSq = null;
+        _lastStepGradientNormSq = null;
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
@@ -3524,12 +3562,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // keeps the unclipped values first.
             if (!GradientsClippedAhead && GradientOptions.EnableGradientClipping)
                 LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(context.Gradients.Values);
+            // Opt-in monitoring: reduce the norm now, before a by-value clip changes the gradients, when no clip by
+            // norm will reduce it during the step.
+            if (ComputeGradientNormEveryStep && !GradientsClippedAhead && !(TapeStepGradientClipNorm > 0.0))
+                TapeClipNormThreadCache.LastPreClipNormSq = MonitoringGlobalGradientSquaredNorm(context);
             if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
         }
         finally
         {
+            _lastStepGradientNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
+            TapeClipNormThreadCache.LastPreClipNormSq = null;
+            Interlocked.Increment(ref _tapeStepCount);
             GradientsClippedAhead = false;
             _activeStepClippedAheadNormSq = null;
             _stepNoGrad?.Dispose();
@@ -4553,6 +4598,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (deviceNorm is not null && deviceNorm.IsFinite)
             {
                 double devSq = deviceNorm.TotalNormSquared;
+                TapeClipNormThreadCache.LastPreClipNormSq = devSq;
                 double devNorm = Math.Sqrt(devSq);
                 if (devNorm > maxNorm && devNorm > 0.0)
                 {
@@ -4583,6 +4629,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 globalNormSq += v * v;
             }
         }
+        TapeClipNormThreadCache.LastPreClipNormSq = globalNormSq;
         if (double.IsNaN(globalNormSq) || double.IsInfinity(globalNormSq))
         {
             TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq;
@@ -4854,6 +4901,66 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var grad in grads)
             engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
+    }
+
+    /// <summary>
+    /// The global squared gradient norm for <see cref="ComputeGradientNormEveryStep"/>: summed in double on the host
+    /// for host-current gradients, and by one device sum of squares (whose scalar is read back) for gradients still
+    /// pending on a GPU.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
+    private static double MonitoringGlobalGradientSquaredNorm(TapeStepContext<T> context)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double sum = 0.0;
+        bool devicePending = false;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null || grad.Length == 0) continue;
+            if (grad.HasPendingGpuData)
+            {
+                devicePending = true;
+                continue;
+            }
+            sum += HostSumOfSquares(grad, numOps);
+        }
+
+        if (!devicePending) return sum;
+
+        if (typeof(T) == typeof(float) && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            var deviceGrads = new List<Tensor<float>>();
+            foreach (var kvp in context.Gradients)
+                if (kvp.Value is { Length: > 0, HasPendingGpuData: true } pending) deviceGrads.Add((Tensor<float>)(object)pending);
+            using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
+            if (deviceSum is not null)
+                return deviceSum.IsFinite ? sum + deviceSum.TotalNormSquared
+                    : deviceSum.NanCount > 0 ? double.NaN : double.PositiveInfinity;
+        }
+
+        // No device reduction available: read the pending gradients back.
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null || grad.Length == 0 || !grad.HasPendingGpuData) continue;
+            sum += HostSumOfSquares(grad, numOps);
+        }
+        return sum;
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
+    private static double HostSumOfSquares(Tensor<T> grad, INumericOperations<T> numOps)
+    {
+        if (TrySumOfSquaresHostSimd(grad, out double sq)) return sq;
+        var span = (grad.IsContiguous ? grad : grad.Contiguous()).AsSpan();
+        double sum = 0.0;
+        for (int i = 0; i < span.Length; i++)
+        {
+            double v = numOps.ToDouble(span[i]);
+            sum += v * v;
+        }
+        return sum;
     }
 
     /// <summary>
@@ -6197,4 +6304,9 @@ internal static class TapeClipNormThreadCache
 {
     [ThreadStatic]
     internal static double? LastPostClipNormSq;
+
+    // Pre-clip global squared gradient norm the current tape step already reduced to a host double (by its clip,
+    // its anomaly guard, or the opt-in monitoring reduction); null when the step computed none.
+    [ThreadStatic]
+    internal static double? LastPreClipNormSq;
 }

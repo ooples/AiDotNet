@@ -16599,6 +16599,36 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // The latest device-side clip's total norm (GPU engine, float): kept on the device until someone asks for it.
     private AiDotNet.Tensors.Engines.Gpu.DeviceGradientNorm? _lastDeviceGradientNorm;
 
+    // The latest global-norm clip's pre-clip squared norm when it was reduced on the host; null otherwise.
+    private double? _lastHostGradientNormSq;
+
+    // False after a grouped clip, whose per-group norms are not one global norm.
+    private bool _lastGradientNormIsGlobal = true;
+
+    // Number of global gradient clips run so far; lets a caller tell whether the latest step clipped at all.
+    private long _gradientClipCount;
+
+    /// <summary>
+    /// The number of gradient clips this network has run. A caller compares two readings to tell whether the steps
+    /// between them clipped (and so whether <see cref="TryGetLastGradientNorm"/> describes the latest step).
+    /// </summary>
+    internal long GradientClipCount => Interlocked.Read(ref _gradientClipCount);
+
+    /// <summary>
+    /// The pre-clip global L2 gradient norm of the latest global-norm clip, or null when it is not available.
+    /// </summary>
+    /// <param name="allowDeviceRead">When the clip ran on a GPU the norm is still on the device; reading it back is a
+    /// device-to-host copy that waits for the device. False returns null in that case instead.</param>
+    /// <remarks>On a host engine the clip already reduced the norm to a double, so reading it costs nothing.
+    /// Element-wise (by-value) clipping and grouped clipping do not produce one global norm and report null.</remarks>
+    internal double? TryGetLastGradientNorm(bool allowDeviceRead)
+    {
+        if (!_lastGradientNormIsGlobal) return null;
+        if (_lastHostGradientNormSq is double sq) return Math.Sqrt(sq);
+        if (allowDeviceRead && _lastDeviceGradientNorm is { } deviceNorm) return deviceNorm.TotalNorm;
+        return null;
+    }
+
     private void ApplyGradientClipping(
         Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
         IReadOnlyList<Tensor<T>> iterationOrder)
@@ -16607,6 +16637,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         LastStepHadNonFiniteGradients = false;
         _lastDeviceGradientNorm?.Dispose();
         _lastDeviceGradientNorm = null;
+        _lastHostGradientNormSq = null;
+        _lastGradientNormIsGlobal = true;
+        Interlocked.Increment(ref _gradientClipCount);
         if (UsesElementWiseGradientClipping)
         {
             // GPU engine: the finiteness check is one device sum of squares and one scalar read, and the clamp runs on
@@ -16725,6 +16758,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 totalNormSq += v * v;
             }
         }
+        _lastHostGradientNormSq = totalNormSq;
         if (totalNormSq == 0.0) return;
 
         // A NON-FINITE total norm must not be scaled through. If any single gradient element is NaN
@@ -17780,6 +17814,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 foreach (var group in groups)
                     ApplyGradientClipping(grads, maxGradNorm, group);
+                // Each group was clipped to its own norm; no single global norm describes the step.
+                _lastGradientNormIsGlobal = false;
             }
             PublishParameterGradients(grads);
         }

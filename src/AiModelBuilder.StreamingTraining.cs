@@ -1558,4 +1558,101 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ConversionsHelper.ConvertToVector<T, TOutput>(prediction),
             ConversionsHelper.ConvertToVector<T, TOutput>(y));
     }
+
+    /// <summary>
+    /// Builds the step-level monitor reporter for a streaming run, or null when no monitor session is open or
+    /// <see cref="StreamingTrainingOptions{T, TInput, TOutput}.MonitorEveryNSteps"/> is 0. Also returns an action
+    /// that undoes any optimizer setting it changed for the run (the opt-in gradient-norm reduction).
+    /// </summary>
+    private (TrainingMonitoring.StreamingStepMonitorReporter<T>? Reporter, Action? Restore) CreateStreamingStepReporter(
+        StreamingTrainingOptions<T, TInput, TOutput>? streamingOptions,
+        string? monitorSessionId,
+        IStreamingDataLoader<T, TInput, TOutput> rawLoader,
+        bool distributed,
+        int gradientAccumulationSteps,
+        int epochs,
+        long startStep)
+    {
+        var defaults = streamingOptions ?? new StreamingTrainingOptions<T, TInput, TOutput>();
+        if (_trainingMonitor is null || monitorSessionId is null || defaults.MonitorEveryNSteps <= 0)
+            return (null, null);
+
+        bool monitorGradNorm = defaults.MonitorGradNorm;
+        var network = _model as NeuralNetworks.NeuralNetworkBase<T>;
+        var gradientOptimizer = _optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>;
+        Action? restore = null;
+
+        // On an eager tape step the network's own global-norm clip (default max norm 1.0) reduces the pre-clip norm:
+        // to a host double on a CPU engine (free to read), on the device for a GPU engine (reading it waits for the
+        // device, so only with MonitorGradNorm). Without a network clip, the optimizer's clip by norm (or Adam's
+        // anomaly guard) reduces it; only when neither does is an extra reduction needed, and only with
+        // MonitorGradNorm. A step taken by a fused compiled plan reports no norm: the plan clips internally and
+        // AiDotNet.Tensors exposes no accessor for the norm it computed.
+        bool networkClips = network is not null && network.MaxGradNormValue > 0.0;
+        if (monitorGradNorm && !networkClips && gradientOptimizer is not null && !gradientOptimizer.ComputeGradientNormEveryStep)
+        {
+            gradientOptimizer.ComputeGradientNormEveryStep = true;
+            restore = () => gradientOptimizer.ComputeGradientNormEveryStep = false;
+        }
+
+        long lastClipCount = network?.GradientClipCount ?? 0L;
+        long lastOptimizerStepCount = gradientOptimizer?.TapeStepCount ?? 0L;
+        double? GradNorm()
+        {
+            if (network is not null)
+            {
+                long clipCount = network.GradientClipCount;
+                if (clipCount != lastClipCount)
+                {
+                    lastClipCount = clipCount;
+                    // The optimizer saw the network-clipped gradients, so its norm would not be the step's norm.
+                    return network.TryGetLastGradientNorm(allowDeviceRead: monitorGradNorm);
+                }
+            }
+
+            // Only when the optimizer's tape step ran since the last report: a fused compiled plan steps without it,
+            // and AiDotNet.Tensors' compiled plan does not expose the norm it reduces for its clip.
+            if (gradientOptimizer is not null)
+            {
+                long stepCount = gradientOptimizer.TapeStepCount;
+                if (stepCount != lastOptimizerStepCount)
+                {
+                    lastOptimizerStepCount = stepCount;
+                    return gradientOptimizer.LastStepGradientNorm;
+                }
+            }
+
+            return null;
+        }
+
+        long totalSteps = 0L;
+        if (!distributed && rawLoader.SampleCount > 0 && rawLoader.BatchSize > 0)
+        {
+            long batchesPerEpoch = (rawLoader.SampleCount + rawLoader.BatchSize - 1) / rawLoader.BatchSize;
+            long stepsPerEpoch = (batchesPerEpoch + gradientAccumulationSteps - 1) / gradientAccumulationSteps;
+            totalSteps = stepsPerEpoch * Math.Max(0, epochs);
+        }
+        if (defaults.MaxSteps is long maxSteps && (totalSteps == 0L || maxSteps < totalSteps))
+            totalSteps = maxSteps;
+
+        var reporter = new TrainingMonitoring.StreamingStepMonitorReporter<T>(
+            _trainingMonitor,
+            monitorSessionId,
+            defaults.MonitorEveryNSteps,
+            defaults.TokensPerSample,
+            defaults.MonitorResourceIntervalSeconds,
+            GradNorm,
+            startStep,
+            totalSteps);
+        reporter.TakeResourceBaseline();
+        return (reporter, restore);
+    }
+
+    /// <summary>The configured optimizer's current learning rate, or NaN when there is none to read.</summary>
+    private double CurrentStreamingLearningRate()
+    {
+        if (_optimizer is IGradientBasedOptimizer<T, TInput, TOutput> gradientOptimizer)
+            return gradientOptimizer.GetCurrentLearningRate();
+        return _optimizer?.GetOptions().InitialLearningRate ?? double.NaN;
+    }
 }

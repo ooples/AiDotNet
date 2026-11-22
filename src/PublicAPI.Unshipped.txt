@@ -26648,3 +26648,11 @@ static AiDotNet.Training.Memory.GradientCheckpointingContext.IsSegmentForward.ge
 static AiDotNet.Training.Memory.GradientCheckpointingContext.IsRecomputing.get -> bool
 static AiDotNet.Training.Memory.GradientCheckpointingContext.Preserve<T>(object! owner, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> void
 static AiDotNet.Training.Memory.GradientCheckpointingContext.TryRecall<T>(object! owner, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.get -> int
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.get -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.get -> double
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.get -> int?
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.set -> void

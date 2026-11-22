@@ -47,9 +47,10 @@ namespace AiDotNet.Dashboard.Dashboard;
 /// - Resource utilization monitoring
 /// - Alert notifications when thresholds are crossed
 /// - Full ITrainingMonitor compliance for infrastructure integration
+/// - An opt-in local web page (<see cref="StartWebServer"/>) with live charts, for runs without a console
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class TrainingMonitorDashboard<T> : ITrainingMonitor<T>, IDisposable
+public partial class TrainingMonitorDashboard<T> : ITrainingMonitor<T>, IDisposable
 {
     private readonly string _defaultName;
     private readonly object _lock = new();
@@ -74,6 +75,10 @@ public class TrainingMonitorDashboard<T> : ITrainingMonitor<T>, IDisposable
         public int CurrentEpoch { get; set; }
         public int TotalEpochs { get; set; }
         public Dictionary<string, List<(int Step, T Value, DateTime Timestamp)>> MetricHistory { get; } = new();
+        // Per-metric sequence numbers parallel to MetricHistory, so a reader can fetch only the points added since
+        // its last read whatever step numbers they carry.
+        public Dictionary<string, List<long>> MetricSequence { get; } = new();
+        public long LastSequence { get; set; }
         public Dictionary<string, T> CurrentMetrics { get; } = new();
         public Dictionary<string, double> CurrentMetricsDouble { get; } = new();
         public List<(DateTime Time, LogLevel Level, string Message)> Messages { get; } = new();
@@ -194,6 +199,12 @@ public class TrainingMonitorDashboard<T> : ITrainingMonitor<T>, IDisposable
                 session.MetricHistory[metricName] = new List<(int, T, DateTime)>();
             }
             session.MetricHistory[metricName].Add((step, value, ts));
+            if (!session.MetricSequence.TryGetValue(metricName, out var sequence))
+            {
+                sequence = new List<long>();
+                session.MetricSequence[metricName] = sequence;
+            }
+            sequence.Add(++session.LastSequence);
 
             // Update current value
             session.CurrentMetrics[metricName] = value;
@@ -746,6 +757,7 @@ public class TrainingMonitorDashboard<T> : ITrainingMonitor<T>, IDisposable
 
         _isDisposed = true;
 
+        StopWebServer();
         _refreshTimer?.Dispose();
         _epochProgress?.Dispose();
         _batchProgress?.Dispose();

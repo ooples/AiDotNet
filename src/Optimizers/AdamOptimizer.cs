@@ -1204,6 +1204,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if ((guardActive || clipActive) && (clipActive || !TryGetClippedAheadGradNormSq(out globalNormSq)))
         {
             globalNormSq = GlobalGradientSquaredNorm(context);
+            // Unclipped gradients: this is the step's pre-clip global norm, which training monitors read for free.
+            if (!GradientsClippedAhead)
+                TapeClipNormThreadCache.LastPreClipNormSq = globalNormSq;
         }
 
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN

@@ -377,13 +377,20 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                 }
             }
 
-            // Check for high memory usage
+            // Check for high memory usage. LogResourceUsage records memory in MB (the ITrainingMonitor contract, and
+            // what GetResourceUsage reports), so it is compared against the memory available to the process. This
+            // previously compared the MB value against 90 as if it were a percentage, so any process above 90 MB was
+            // reported, and the training loops that stop on reported issues stopped.
             var latestResource = session.ResourceHistory.LastOrDefault();
             if (latestResource != null)
             {
-                if (latestResource.MemoryUsage > 90)
+                if (TryGetAvailableMemoryMB(out double availableMb) && availableMb > 0)
                 {
-                    issues.Add($"High memory usage: {latestResource.MemoryUsage:F1}%");
+                    double percent = latestResource.MemoryUsage / availableMb * 100.0;
+                    if (percent > 90)
+                    {
+                        issues.Add($"High memory usage: {latestResource.MemoryUsage:F0} MB ({percent:F1}% of {availableMb:F0} MB available)");
+                    }
                 }
 
                 if (latestResource.GpuMemory.HasValue && latestResource.GpuMemory > 95)
@@ -420,6 +427,18 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         }
 
         return issues;
+    }
+
+    // Memory available to the process (physical memory or a container limit), where the runtime reports it.
+    private static bool TryGetAvailableMemoryMB(out double availableMb)
+    {
+#if NET5_0_OR_GREATER
+        availableMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024.0);
+        return true;
+#else
+        availableMb = 0;
+        return false;
+#endif
     }
 
     /// <summary>

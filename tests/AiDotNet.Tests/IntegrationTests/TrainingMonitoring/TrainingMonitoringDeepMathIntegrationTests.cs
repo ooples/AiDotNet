@@ -340,11 +340,22 @@ public class TrainingMonitoringDeepMathIntegrationTests
         var monitor = new TrainingMonitor<double>();
         var sessionId = monitor.StartSession("Test");
 
-        // Log high memory usage (>90%)
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 95);
+#if NET5_0_OR_GREATER
+        // LogResourceUsage takes memory in MB; above 90% of the memory available to the process is an issue.
+        double availableMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024.0);
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: availableMb * 0.95);
 
         var issues = monitor.CheckForIssues(sessionId);
         Assert.Contains(issues, i => i.Contains("memory"));
+
+        // A typical process (well under 90% of available memory) is not an issue, though it is above 90 MB.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 512);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
+#else
+        // net471 exposes no available-memory figure to the runtime, so the check does not run.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 512);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
+#endif
     }
 
     [Fact(Timeout = 120000)]

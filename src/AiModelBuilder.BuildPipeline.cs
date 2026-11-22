@@ -2763,6 +2763,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             InvokeTrainingCallbacksBegin(epochs);
 
+            // Step-level monitor reporting (MonitorEveryNSteps). Defaults apply when no streaming options were set.
+            var (stepReporter, restoreGradNormFlag) = CreateStreamingStepReporter(
+                streamingOptions, streamingMonitorSessionId, rawLoader, distBackend is not null,
+                gradientAccumulationSteps, epochs, globalStep);
+            long monitorSamplesSeen = 0L;
+
             // #1790: guarantee OnTrainEnd fires (and the monitor session closes) even if the streaming loop
             // throws — the "always called" contract, symmetric with the non-streaming path.
             try
@@ -2802,6 +2808,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 await foreach (var (inputs, outputs) in activeLoader.GetBatchesAsync(shuffle: true, seed: epochSeed, cancellationToken: cancellationToken))
                 {
                     batchInEpoch++;
+                    T stepLoss = streamingLastLoss;
+                    bool stepHasLoss = false;
 
                     // Resume: skip the batches of the resumed epoch that the checkpointed run already trained on.
                     if (epoch == startEpoch && batchInEpoch <= resumeSkipBatches)
@@ -2815,11 +2823,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         long globalBatchSamples = distLoader.LastBatchGlobalSampleCount;
                         if (globalBatchSamples <= 0) continue;
                         samplesInEpoch += globalBatchSamples;
+                        monitorSamplesSeen += globalBatchSamples;
                     }
                     else
                     {
                         if (inputs.Length == 0) continue;
                         samplesInEpoch += inputs.Length;
+                        monitorSamplesSeen += inputs.Length;
                     }
 
                     TOutput[] processedOutputs = outputs;
@@ -2899,6 +2909,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             accumulatedMicroBatches = 0;
                             var accumLoss = nn.GetLastLoss();
                             epochLoss = AddLossScalars(epochLoss, accumLoss);
+                            stepLoss = accumLoss;
+                            stepHasLoss = true;
                             epochBatches++;
                         }
                         else
@@ -2911,6 +2923,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                                 nn.Train((batchedInput ?? throw new InvalidOperationException("batchedInput is null where it is required.")), (batchedTarget ?? throw new InvalidOperationException("batchedTarget is null where it is required.")));
                                 var lastLoss = nn.GetLastLoss();
                                 epochLoss = numOps.Add(epochLoss, lastLoss);
+                                stepLoss = lastLoss;
+                                stepHasLoss = true;
                                 epochBatches++;
                             }
                             else
@@ -2926,6 +2940,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                                     nn.Train(inputArray[i], outputArray[i]);
                                     var sampleLoss = nn.GetLastLoss();
                                     epochLoss = numOps.Add(epochLoss, sampleLoss);
+                                    stepLoss = sampleLoss;
+                                    stepHasLoss = true;
                                     epochBatches++;
                                 }
                             }
@@ -2953,6 +2969,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(processedOutputs[i]);
                             var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
                             epochLoss = numOps.Add(epochLoss, loss);
+                            stepLoss = loss;
+                            stepHasLoss = true;
                             epochBatches++;
                         }
                     }
@@ -2961,6 +2979,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
+                    stepReporter?.OnStep(
+                        globalStep,
+                        stepHasLoss,
+                        stepLoss,
+                        monitorSamplesSeen,
+                        CurrentStreamingLearningRate(),
+                        stepReporter.TotalSteps,
+                        epoch + 1,
+                        epochs);
                     T runningEpochLoss = epochBatches > 0
                         ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
                         : numOps.Zero;
@@ -3007,6 +3034,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     && microBatchBuffer is not null
                     && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
                 {
+                    long stepBeforeFlush = globalStep;
                     (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
                         await FlushRemainingAccumulatedMicroBatchesAsync(
                             flushNn,
@@ -3030,6 +3058,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             gradientAccumulationSteps,
                             activeFitSeed,
                             activeFitBatchSize);
+                    if (globalStep > stepBeforeFlush)
+                    {
+                        stepReporter?.OnStep(
+                            globalStep,
+                            true,
+                            flushNn.GetLastLoss(),
+                            monitorSamplesSeen,
+                            CurrentStreamingLearningRate(),
+                            stepReporter.TotalSteps,
+                            epoch + 1,
+                            epochs);
+                    }
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
@@ -3050,6 +3090,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     : numOps.Zero;
                 streamingLastEpoch = epoch;
                 streamingLastLoss = avgEpochLoss;
+                stepReporter?.OnEpochEnd(globalStep, epoch + 1, epochs);
 
                 // Stream this epoch's metrics to the monitor, invoke user callbacks, and evaluate
                 // the abort signals (callback veto / cancellation / monitor issue).
@@ -3118,6 +3159,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             finally
             {
+                restoreGradNormFlag?.Invoke();
+
                 // Notify callbacks that training has ended, then close the monitor session — always, even on
                 // throw. Isolate the two so a throwing OnTrainEnd callback can't leak the monitor session.
                 try
