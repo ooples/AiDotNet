@@ -2293,14 +2293,15 @@ internal static class OptionSensitivityFixtureSetup
         {
             if (option == "ContextLength")
             {
-                // A budget of 130 tokens past the release's 1,024 reserve, over segments of a few words: it holds the
-                // newest segment twice over (the release counts each segment twice) and not the whole history, so the
-                // later segments are generated after a trimmed history. At 30 no segment fitted, which the release
+                // A budget of 200 tokens past the release's 1,024 reserve (less 1.5's system prompt), over segments of at
+                // most 24 bytes: about 45 tokens each with the turn markers, then eight generated frames. It holds the
+                // newest segment twice over (the release counts each segment twice) and not the whole history, so from
+                // the fourth or fifth segment on the history is trimmed. At 30 no segment fitted, which the release
                 // answers by keeping the whole history at every budget. The fixture's 160-token context cannot hold
                 // that history (the unperturbed model threw), so the context is sized for the full text.
-                fishOptions.ContextLength = 1154;
+                fishOptions.ContextLength = 1224;
                 fishOptions.ChunkLength = 24;
-                fishOptions.MaxSequenceLength = 1024;
+                fishOptions.MaxSequenceLength = 2048;
             }
             // Fish Speech 1.5 trains without dropout, so its training seed would draw nothing.
             if (option == "TrainingSeed") fishOptions.DropoutRate = 0.1;
