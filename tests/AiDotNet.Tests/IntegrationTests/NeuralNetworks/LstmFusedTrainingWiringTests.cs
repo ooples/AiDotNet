@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -143,9 +144,8 @@ public class LstmFusedTrainingWiringTests
     }
 
     /// <summary>
-    /// Compiled CPU training records the fused LSTM node into the plan (instead of the per-timestep loop). One training
-    /// step through that plan must update every parameter the way the eager tape step does: same starting weights, same
-    /// data, compilation on vs off.
+    /// Replays compiled LSTM training on changing batches and compares the parameter updates
+    /// to eager training from the same initial state.
     /// </summary>
     [Fact]
     public void CompiledTrainingStep_MatchesEagerStep()
@@ -173,10 +173,15 @@ public class LstmFusedTrainingWiringTests
         var saved = TensorCodecOptions.Current;
         try
         {
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
-            compiled.Train(input, target);
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
-            eager.Train(input, target);
+            for (int step = 0; step < 3; step++)
+            {
+                var batch = step == 0 ? input : Rand(new[] { seq, features }, 21 + 2 * step, scale: 1f);
+                var labels = step == 0 ? target : Rand(new[] { seq, outputs }, 22 + 2 * step, scale: 1f);
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+                compiled.Train(batch, labels);
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+                eager.Train(batch, labels);
+            }
         }
         finally
         {
@@ -198,6 +203,27 @@ public class LstmFusedTrainingWiringTests
         double cos = dot / System.Math.Sqrt(na * nb);
         Assert.True(cos > 0.9999, $"compiled and eager updates point different ways: cos {cos:R}");
         Assert.True(maxAbs <= 1e-3 * maxMag + 1e-7, $"compiled vs eager parameters differ by {maxAbs:E3} (largest update {maxMag:E3})");
+    }
+
+    [Fact]
+    public void StatelessCompiledTraining_HasConstantPlanSizeAcrossSequenceLengths()
+    {
+        var engine = new CpuEngine();
+        var layer = new LSTMLayer<float>(6, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+        layer.SetTrainingMode(true);
+        layer.Forward(Rand(new[] { 2, 3, 4 }, 31));
+
+        (int Forward, int Backward) PlanSize(int steps)
+        {
+            var input = Rand(new[] { 2, steps, 4 }, steps);
+            using var scope = GraphMode.EnableTraining(new[] { input });
+            var loss = engine.ReduceSum(layer.Forward(input), null, false);
+            Assert.Null(scope.HostReadOp);
+            using var plan = scope.CompileTraining(new[] { input }, loss);
+            return (plan.ForwardStepCount, plan.BackwardStepCount);
+        }
+
+        Assert.Equal(PlanSize(3), PlanSize(17));
     }
 
     /// <summary>

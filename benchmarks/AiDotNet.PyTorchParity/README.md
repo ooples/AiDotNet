@@ -99,6 +99,21 @@ Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a 
 `--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
 compiled training is what gets timed.
 
+Three audio and speech rows (`AudioRows.cs`, beside the existing `whisper-tiny`) wrap shipped models at their papers'
+shapes, each against a hand-written twin in `benchmark.py` (no torchaudio, librosa or transformers needed):
+
+| row | AiDotNet class | shape, step | trainable parameters |
+|-----|----------------|-------------|---------------------:|
+| `panns-cnn14` | `PANNs` (CNN14) | 10 s AudioSet clips as `[1, 1001, 64]` log-mel, 527 tags, BCE on logits, batch 32 | 80,761,679 |
+| `wav2vec2-base` | `Wav2Vec2Model` (BASE + CTC head) | 2 s of raw 16 kHz audio (32,000 samples, 99 frames), 24-symbol transcripts, CTC, feature encoder frozen | 90,197,410 |
+| `hifigan-v1` | `HiFiGAN` (V1) | 256-frame mel (about 3 s at 22.05 kHz); one D + one G update on an 8192-sample segment | 84,660,721 |
+
+PANNs takes features, so both sides build the log-mel batch outside the timed region; wav2vec 2.0 reads the waveform.
+`wav2vec2-base` runs LayerDrop 0 on both sides (it skips whole layers at random, a graph break per layer under
+`torch.compile`). `hifigan-v1` trains one utterance per step on both sides, as AiDotNet's HiFiGAN does: run it with
+`--batch-size 1` (the paper's batch is 16). Its parameter count covers the generator (13,936,130) and both
+discriminators.
+
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
 epoch 0, once, which the steady-state figures exclude; the PyTorch side holds it on the device until timing ends.
@@ -131,14 +146,15 @@ beat PyTorch on).
 ```bash
 cd benchmarks/AiDotNet.PyTorchParity/pytorch
 pip install -r requirements.txt
-python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
     --threads 8 --output ../results/pytorch.json
 ```
 
-PyTorch runs **eager** here (no `torch.compile`) on purpose: the AiDotNet side
-runs its own compiled/fused path, and pitting it against a separately compiled
-PyTorch compares two compilation stacks rather than the kernels. Pin both sides
-to the same thread count (`--threads` ↔ `AIDOTNET_CPU_THREADS`).
+The performance target is **`torch.compile`**, including its first epoch and
+steady-state training and inference. Pass `--compile` explicitly; omitting it
+measures an eager baseline and does not establish a win against compiled PyTorch.
+Pin both sides to the same thread count (`--threads` ↔ `AIDOTNET_CPU_THREADS`)
+and device. Record peak CPU RAM and GPU VRAM separately from allocation volume.
 
 ## 3. Compare
 

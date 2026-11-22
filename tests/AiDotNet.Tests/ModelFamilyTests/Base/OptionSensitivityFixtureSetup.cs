@@ -1321,8 +1321,11 @@ internal static class OptionSensitivityFixtureSetup
         "EmotionHidden" or "EmotionLayers" or "EmotionHeads" or "EmotionKeyValueHeads" or "EmotionHeadDim"
         or "EmotionIntermediate" or "EmotionVocabulary" or "EmotionLoraRank";
 
+    // Options that act only in the semantic-to-mel flow, so they are trained in its stage. The DiT's head count
+    // changes no parameter, and the default text-to-semantic stage never runs the DiT while training; at test scale
+    // the untrained GPT's synthesis need not reach it either, so only a flow step can show the heads' effect.
     private static bool IsIndexFlowOption(string option) => option is
-        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
+        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout" or "DitHeads";
 
     private static bool IsVocoderFrontendOption(string option) => option is
         "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin" or "EnergyMax";

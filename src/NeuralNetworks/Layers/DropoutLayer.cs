@@ -310,7 +310,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
         var mask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
         _dropoutMask = mask;
-        AiDotNet.Training.CompiledStepRandom<T>.RecordCustom(mask, RefreshMaskTensorInPlace);
+        AiDotNet.Training.CompiledStepRandom<T>.RecordCustom(mask, RefreshMaskTensorInPlace, onDevice: true);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, mask);
@@ -333,8 +333,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
             return;
 
         RefreshMaskTensorInPlace(_dropoutMask);
-        _dropoutMask.IncrementVersion();
-        Engine.InvalidatePersistentTensor(_dropoutMask);
     }
 
     private void RefreshMaskTensorInPlace(Tensor<T> targetMask)
@@ -353,7 +351,10 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException(
                 $"Compiled dropout mask length changed from {targetMask.Length} to {refreshedMask.Length}.");
 
-        refreshedMask.AsSpan().CopyTo(targetMask.AsWritableSpan());
+        // An engine copy: on a GPU engine the fresh mask stays on the device (a host span copy downloaded it, then an
+        // invalidation uploaded it again), and the copy itself makes the destination's device value current, so the
+        // callers bump no version (a bump would mark that copy stale and re-upload the old host values).
+        Engine.TensorCopy(refreshedMask, targetMask);
     }
 
     /// <summary>

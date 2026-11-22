@@ -25,8 +25,9 @@ public enum MedicalSAM2ModelSize
 /// the official code (the Hiera-S model, a 16-memory bank). The code's own bank rule and resampling are available as
 /// <see cref="MemoryBankRule"/> and <see cref="MemoryResampling"/>.
 /// </para>
-/// <para><b>For Beginners:</b> Leave these at their defaults; set <see cref="ConfidenceThreshold"/> only if you want low-quality
-/// predictions kept out of the bank.</para>
+/// <para><b>For Beginners:</b> Leave these at their defaults, which follow the paper; set <see cref="ConfidenceThreshold"/>
+/// only if you want low-quality predictions kept out of the bank. To reproduce the official code's behaviour instead,
+/// set <see cref="MemoryBankRule"/> and <see cref="MemoryResampling"/> to the code's choices.</para>
 /// </remarks>
 public class MedicalSAM2Options : SegmentationModelOptions, ISam2Settings
 {
@@ -62,6 +63,8 @@ public class MedicalSAM2Options : SegmentationModelOptions, ISam2Settings
     public MemoryBankUpdateRule MemoryBankRule { get; set; } = MemoryBankUpdateRule.TopKDissimilarity;
 
     /// <summary>How the bank draws an image's memories (default: the paper's normalized similarity, eq. 4).</summary>
+    /// <remarks>Set <see cref="MemoryBankResampling.Softmax"/> to draw as the official code does (a softmax over the
+    /// cosine similarities) instead of the paper's equation. Both are well-defined for every bank.</remarks>
     [AiDotNet.Attributes.PaperDefault(MemoryBankResampling.NormalizedSimilarity, Source = "Zhu et al. 2024, eq. 4: memory sampling normalized by similarity.") ]
     public MemoryBankResampling MemoryResampling { get; set; } = MemoryBankResampling.NormalizedSimilarity;
 

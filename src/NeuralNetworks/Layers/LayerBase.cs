@@ -7907,9 +7907,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     private Vector<T>? MaterializeParameterGradients(Dictionary<Tensor<T>, Tensor<T>> owned)
     {
-        int ignored = 0;
-        int total = FillParameterGradients(null, 0, owned, ref ignored);
-        if (total <= 0) return null;
+        int matchingScalars = 0;
+        int total = FillParameterGradients(null, 0, owned, ref matchingScalars);
+        if (total <= 0 || matchingScalars == 0) return null;
         var filled = new T[total];
         int matched = 0;
         FillParameterGradients(filled, 0, owned, ref matched);
@@ -7937,7 +7937,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 var tensor = component.Tensor;
                 int count = ParameterComponentScalarCount(component);
                 if (count == 0) continue;
-                if (dest is null) { offset += count; continue; }
+                if (dest is null)
+                {
+                    // A counting pass must also establish whether anything can be published, without reading values.
+                    // An inactive GAN group otherwise allocated its full flat gradient array before returning no match.
+                    if (tensor is not null && grads.TryGetValue(tensor, out var candidate)
+                        && candidate is not null && TrainableScalarCount(candidate) == count)
+                        matched += count;
+                    offset += count;
+                    continue;
+                }
                 if (tensor is not null
                     && grads.TryGetValue(tensor, out var gradient)
                     && gradient is not null
@@ -8039,9 +8048,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // a step with nothing keyed to this layer would leave the last step's surface zeroed by the fill.
         ParameterGradients = null;
 
-        int ignored = 0;
-        int total = FillParameterGradients(null, 0, grads, ref ignored);
-        if (total <= 0) return 0;
+        int matchingScalars = 0;
+        int total = FillParameterGradients(null, 0, grads, ref matchingScalars);
+        if (total <= 0 || matchingScalars == 0) return 0;
 
         bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
         var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];

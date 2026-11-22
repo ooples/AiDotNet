@@ -1244,7 +1244,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
         bool standardActivations = UsesStandardSequenceActivations;
-        if (standardActivations && !graphActive && _stateCellClip == 0 && _stateZoneout is null
+        // A stateless training trace binds the stacked weights and input at each replay. The engine
+        // records the fused sequence operation where supported. Explicit h/c outputs still use
+        // the state-aware recurrence below when tracing.
+        bool statelessTrainingTrace = graphActive && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && IsTrainingMode && !_stateStepping && Engine.Unwrap() is CpuEngine;
+        if (standardActivations && (!graphActive || statelessTrainingTrace) && _stateCellClip == 0 && _stateZoneout is null
             && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;

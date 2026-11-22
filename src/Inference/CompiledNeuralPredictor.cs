@@ -67,7 +67,11 @@ internal sealed class CompiledNeuralPredictor<T>
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        if (package is not null && TryBind(package)) _package = package;
+        if (package is not null && TryBind(package))
+        {
+            _package = package;
+            _programBinding = _model.CompiledBindingVersion;
+        }
     }
 
     /// <summary>The network this predictor serves.</summary>
@@ -98,6 +102,7 @@ internal sealed class CompiledNeuralPredictor<T>
         lock (_programGate)
         {
             var sample = _example ?? example;
+            DropProgramIfBindingsMoved();
             if (_package is { } bound && !EnsureBoundToCurrentParameters(bound)) _package = null;
             if (_package is null && sample is not null) TryTrace(sample);
             if (_package is null || sample is null) return _package;
@@ -126,6 +131,7 @@ internal sealed class CompiledNeuralPredictor<T>
                     _example = input.Clone();
                 }
             }
+            DropProgramIfBindingsMoved();
             if (_package is { } bound && !EnsureBoundToCurrentParameters(bound)) _package = null;
             if (_package is null && !TryTrace(input)) return false;
             if (_package is not { } package) return false;
@@ -152,6 +158,20 @@ internal sealed class CompiledNeuralPredictor<T>
                 return false;
             }
         }
+    }
+
+    // NeuralNetworkBase.CompiledBindingVersion as last seen by each tier: a layer's graph (adjacency or edge list) is
+    // not a parameter, so the program and the graph-capture plans hold it as traced. When it moves (a new graph was
+    // set, or the matrix was written in place) the program is traced again and the plans are dropped.
+    private long _programBinding = long.MinValue;
+    private long _graphBinding = long.MinValue;
+
+    private void DropProgramIfBindingsMoved()
+    {
+        long binding = _model.CompiledBindingVersion;
+        if (binding == _programBinding) return;
+        if (_programBinding != long.MinValue) _package = null;
+        _programBinding = binding;
     }
 
     private bool TryTrace(Tensor<T> example)
@@ -306,6 +326,17 @@ internal sealed class CompiledNeuralPredictor<T>
                 _graphParameters = current;
                 _graphStructureVersion = structure;
                 _graphParameterEpoch = epoch;
+            }
+
+            long binding = _model.CompiledBindingVersion;
+            if (binding != _graphBinding)
+            {
+                if (_graphBinding != long.MinValue)
+                {
+                    _cache.Invalidate();
+                    _graphSlotsByShape.Clear();
+                }
+                _graphBinding = binding;
             }
         }
         var slot = _graphSlotsByShape.GetOrAdd(input.Shape, static _ => new GraphShapeSlot());

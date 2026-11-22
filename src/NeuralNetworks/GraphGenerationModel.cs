@@ -912,6 +912,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
                 new[] { input, adjacencyMatrix, epsilon },
                 data =>
                 {
+                    using var stepGraph = AiDotNet.NeuralNetworks.Layers.GraphStepAdjacency<T>.Enter(data[1]);
                     var (mean, logVar) = Encode(data[0], data[1]);
                     var reconstructed = Decode(ReparameterizeWith(mean, logVar, data[2]));
                     return ElboLoss(reconstructed, data[1], mean, logVar);

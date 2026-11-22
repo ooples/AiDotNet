@@ -10870,6 +10870,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (wasTraining) SetTrainingMode(false);
         try
         {
+            RefreshCompiledBindings();
             return _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
         }
         finally
@@ -10948,6 +10949,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // internally and invalidates stale plans when _layerStructureVersion changes.
             // Executing once up-front warms the plan so the first production inference
             // pays no trace + compile cost.
+            RefreshCompiledBindings();
             var warmupOutput = _compileHost.Predict(
                 sampleInput,
                 _layerStructureVersion,
@@ -11166,6 +11168,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!InferenceAccelerationEngaged || AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerForward();
 
+        RefreshCompiledBindings();
         return _inferenceGate.Run(
             input,
             _layerStructureVersion,
@@ -11173,6 +11176,87 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
+    // Reused traversal and identity/version snapshots of non-parameter inputs held by compiled plans.
+    [AiDotNet.Attributes.Scratch]
+    private object? _compiledBindingGate;
+    [AiDotNet.Attributes.Scratch]
+    private List<(NeuralNetworks.Layers.ICompiledBindingSource Source, int Version)>? _compiledBindingSnapshot;
+    [AiDotNet.Attributes.Scratch]
+    private List<(NeuralNetworks.Layers.ICompiledBindingSource Source, int Version)>? _compiledBindingWork;
+    [AiDotNet.Attributes.Scratch]
+    private HashSet<ILayer<T>>? _compiledBindingVisited;
+    [AiDotNet.Attributes.Scratch]
+    private Stack<ILayer<T>>? _compiledBindingPending;
+    [AiDotNet.Attributes.Scratch]
+    private long _compiledBindingGeneration;
+    [AiDotNet.Attributes.Scratch]
+    private long _compiledBindingSum = long.MinValue;
+    private static long s_nextCompiledBindingGeneration;
+
+    /// <summary>
+    /// A generation for the identities and versions of graph bindings throughout the layer graph.
+    /// Replacing a source advances it even when the replacement reports the same local version.
+    /// </summary>
+    internal long CompiledBindingVersion
+    {
+        get
+        {
+            lock (System.Threading.LazyInitializer.EnsureInitialized(ref _compiledBindingGate)
+                ?? throw new InvalidOperationException("Compiled binding lock initialization failed."))
+            {
+                var snapshot = _compiledBindingSnapshot ??= new();
+                var current = _compiledBindingWork ??= new();
+                var seen = _compiledBindingVisited ??= new(ReferenceEqualityComparer<ILayer<T>>.Instance);
+                var pending = _compiledBindingPending ??= new();
+                current.Clear();
+                seen.Clear();
+                pending.Clear();
+                foreach (var layer in Layers) pending.Push(layer);
+                foreach (var layer in GetExtraTrainableLayers())
+                    if (layer is not null) pending.Push(layer);
+                while (pending.Count > 0)
+                {
+                    var layer = pending.Pop();
+                    if (!seen.Add(layer)) continue;
+                    if (layer is NeuralNetworks.Layers.ICompiledBindingSource source)
+                        current.Add((source, source.CompiledBindingVersion));
+                    if (layer.GetSubLayers() is { } children)
+                        foreach (var child in children)
+                            if (child is not null) pending.Push(child);
+                }
+                bool changed = current.Count != snapshot.Count;
+                for (int i = 0; i < current.Count && !changed; i++)
+                    changed = !ReferenceEquals(current[i].Source, snapshot[i].Source)
+                        || current[i].Version != snapshot[i].Version;
+                if (changed)
+                {
+                    _compiledBindingGeneration = System.Threading.Interlocked.Increment(ref s_nextCompiledBindingGeneration);
+                    snapshot.Clear();
+                    _compiledBindingSnapshot = current;
+                    _compiledBindingWork = snapshot;
+                }
+                return _compiledBindingGeneration;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Drops the compiled inference plans (and the accelerated path's verdicts and memoized outputs) when a layer's
+    /// graph changed since they were built: a plan holds the graph it traced, as a constant or as the tensor object it
+    /// read, so replaying it after SetAdjacencyMatrix or an in-place edit of the matrix would answer for the old graph.
+    /// </summary>
+    private void RefreshCompiledBindings()
+    {
+        long sum = CompiledBindingVersion;
+        if (sum == _compiledBindingSum) return;
+        if (_compiledBindingSum != long.MinValue)
+        {
+            _compileHost.Invalidate();
+            _inferenceGate.Clear();
+        }
+        _compiledBindingSum = sum;
     }
 
     /// <summary>
@@ -17392,9 +17476,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // reductions started from different weights through this entry point than through every other one.
         if (GradientValueClip > 0.0)
             return RefuseUnsupportedDeclaredBreak("The declared closure step clips model gradients by value.");
-        // A model can declare per-group norm clipping even when its active objective disables it; the groups decline the
-        // compiled route only when they will be used.
-        if (MaxGradNormValue > 0.0 && HasCustomGradientClippingGroups() && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
+        // Group boundaries matter only when the model actually clips by norm. An override may select a GAN's
+        // active parameter group even when its paper disables clipping; refusing it then prevents any fused attempt.
+        if (MaxGradNormValue > 0.0 && HasCustomGradientClippingGroups()
+            && GradientClippingGroups(CollectModelTrainableTensors()) is not null)
             return RefuseUnsupportedDeclaredBreak("The declared closure step uses custom gradient clipping groups.");
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.

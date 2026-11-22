@@ -93,9 +93,10 @@ internal sealed class AiDotNetVaeModel(int seed) : AiDotNetBenchmarkModel(seed)
 /// 2,708 nodes, 1,433 input features, 7 classes, a hidden layer of 8 heads x 8 features (ELU, concatenated) and a
 /// one-head output layer, attention dropout 0.6 - trained full-batch for node classification. The graph is a fixed,
 /// Cora-sized stand-in (benchmark.py's cora_like_graph): a ring plus a chord i -> i+7 per node, 5,416 undirected edges
-/// against Cora's 5,429, with self-loops. AiDotNet's layer evaluates attention densely over the N x N adjacency with
-/// an additive -1e9 mask, as the authors' reference implementation does; benchmark.py's <c>CoraGAT</c> computes the
-/// same dense masked attention with the same 92,373 parameters. One "sample" is the whole graph, so the row runs at
+/// against Cora's 5,429, with self-loops. The model is the authors' masked attention (an additive -1e9 mask off the
+/// graph, softmax over each row). AiDotNet's layer evaluates it over the adjacency's edges only (its sparse CSR kernel:
+/// the same coefficients, since every masked entry contributes exp(-1e9 - max) = 0); benchmark.py's <c>CoraGAT</c>
+/// computes it densely over the N x N matrix, as the reference implementation does, with the same 92,373 parameters. One "sample" is the whole graph, so the row runs at
 /// batch size 1 only (--batch-size 1 --inference-batches 1).
 /// </summary>
 internal sealed class AiDotNetGatModel(int seed) : AiDotNetBenchmarkModel(seed)

@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
 [TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract, ICompiledBindingSource
 {
     /// <inheritdoc />
     /// <remarks>
@@ -449,13 +449,50 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         bool adjacency2D = (adjacency ?? throw new InvalidOperationException("adjacency is null where it is required.")).Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
 
+        // The masked dense attention below, computed over the graph's edges only. A row's softmax over its stored
+        // neighbours is exactly the dense softmax with the -1e9 additive mask: every masked entry contributes
+        // exp(-1e9 - max) = 0, so the coefficients, the dropout on them and the aggregation agree, at O(edges * heads)
+        // instead of O(nodes^2 * heads) work and memory (the dense path materializes several [N, N] tensors per head
+        // and rebuilds the mask and the dropout mask on the host every forward). It needs every row to have an edge
+        // (a fully masked dense row softmaxes to a uniform 1/N over all nodes), which a GAT's self-loops guarantee.
+        // A training step's own adjacency (GraphStepAdjacency), while a compiled plan traces the step, is a plan input
+        // that every replay refreshes: a CSR pattern or mask built from it on the host here would be frozen into the
+        // plan with the traced step's graph. Such a forward takes the dense path with the mask recorded from the live
+        // adjacency instead. A graph that stays fixed across steps (the layer's own) keeps the sparse kernel.
+        bool graphIsReplayedData = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && GraphStepAdjacency<T>.IsStepData(adjacency);
+        var csr = CsrAttentionOperations<T>.Available;
+        var csrGraph = csr is not null && adjacency2D && adjacency.Shape[0] == numNodes && UseSparseAttention && !graphIsReplayedData
+            ? GetCsrGraph(adjacency, csr) : null;
+        if (csrGraph is not null && csr is not null)
+        {
+            // Wh for every head at once: [B*N, in] @ [in, H*F], laid out [B, N, H, F] as the CSR op reads it.
+            var allHeadWeights = _numHeads == 1
+                ? Engine.Reshape(_weights, [_inputFeatures, _outputFeatures])
+                : Engine.Reshape(Engine.TensorPermute(_weights, [1, 0, 2]), [_inputFeatures, _numHeads * _outputFeatures]);
+            var transformedAll = Engine.TensorMatMul(
+                Engine.Reshape(processInput, [batchSize * numNodes, _inputFeatures]), allHeadWeights);
+            bool dropoutActive = _dropoutRate > 0.0 && IsTrainingMode;
+            var aggregatedAll = csr.Aggregate(Engine, transformedAll, _attentionWeights, csrGraph,
+                NumOps.ToDouble(_alpha), dropoutActive ? _dropoutRate : 0.0, dropoutActive ? _random : null);
+            var combinedSparse = _concatenateHeads || _numHeads == 1
+                ? Engine.Reshape(aggregatedAll, [batchSize, numNodes, _combinedOutputFeatures])
+                : Engine.ReduceMean(Engine.Reshape(aggregatedAll, [batchSize, numNodes, _numHeads, _outputFeatures]), [2], keepDims: false);
+            var sparseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
+            var activatedSparse = ApplyActivation(Engine.TensorAdd(combinedSparse, sparseBias));
+            return RestoreDenseOutputRank(activatedSparse, rank, numNodes);
+        }
+
         // The additive attention mask depends only on the batch element (adjacency[b]), not the
         // head, so build it once per batch element instead of recomputing the identical O(numNodes^2)
         // mask _numHeads times per element inside the (h, b) nest. It is a constant tensor (not a
         // tape parameter), so the same instance can be reused across heads.
         var perBatchMasks = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
-            perBatchMasks[b] = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+            perBatchMasks[b] = graphIsReplayedData
+                ? RecordedAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf)
+                : BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
 
         // Retain every head output until the paper's head-combination operation. Hidden
         // GAT layers concatenate heads; the final prediction layer averages them.
@@ -523,36 +560,81 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         output = Engine.TensorAdd(combinedHeads, denseBias);
 
         activatedOutput = ApplyActivation(output);
+        return RestoreDenseOutputRank(activatedOutput, rank, numNodes);
+    }
 
-        // Reshape output to match original input rank
-        Tensor<T> denseReshaped;
+    /// <summary>Reshapes a [batch, nodes, combinedFeatures] output back to the input's rank.</summary>
+    private Tensor<T> RestoreDenseOutputRank(Tensor<T> activatedOutput, int rank, int numNodes)
+    {
         if (rank == 1)
         {
             // Original was [inputFeatures], output should be [outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
+            return Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
         }
-        else if (rank == 2)
+        if (rank == 2)
         {
             // Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
-        }
-        else
-        {
-            // Restore original batch dimensions
-            if (_originalInputShape == null)
-            {
-                throw new InvalidOperationException("Original input shape was not captured.");
-            }
-            var originalShape = _originalInputShape;
-            var outputShape = new int[rank];
-            for (int d = 0; d < rank - 2; d++)
-                outputShape[d] = originalShape[d];
-            outputShape[rank - 2] = numNodes;
-            outputShape[rank - 1] = _combinedOutputFeatures;
-            denseReshaped = Engine.Reshape(activatedOutput, outputShape);
+            return Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
         }
 
-        return denseReshaped;
+        // Restore original batch dimensions
+        var originalShape = _originalInputShape ?? throw new InvalidOperationException("Original input shape was not captured.");
+        var outputShape = new int[rank];
+        for (int d = 0; d < rank - 2; d++)
+            outputShape[d] = originalShape[d];
+        outputShape[rank - 2] = numNodes;
+        outputShape[rank - 1] = _combinedOutputFeatures;
+        return Engine.Reshape(activatedOutput, outputShape);
+    }
+
+    /// <summary>
+    /// Whether a 2-D adjacency runs the sparse (edge-only) attention kernel - the default, and the same result as the
+    /// dense masked path - rather than the dense [N, N] formulation. Tests compare the two.
+    /// </summary>
+    internal bool UseSparseAttention { get; set; } = true;
+
+    // The CSR pattern of the installed 2-D adjacency, rebuilt only when the matrix (or its contents) changes.
+    [Scratch]
+    private object? _csrGraph;
+    [Scratch]
+    private Tensor<T>? _csrGraphSource;
+    private int _csrGraphSourceVersion;
+
+    /// <summary>
+    /// The nonzero pattern of <paramref name="adjacency"/> for the sparse attention kernel, or null when some node has
+    /// no edge (the dense path's uniform fallback for a fully masked row has no sparse equivalent).
+    /// </summary>
+    private object? GetCsrGraph(Tensor<T> adjacency, CsrAttentionOperations<T> csr)
+    {
+        // The storage epoch, not Version: Version does not advance for a write made in inference mode or through
+        // another view of the same storage.
+        if (ReferenceEquals(adjacency, _csrGraphSource) && adjacency.StorageMutationVersion == _csrGraphSourceVersion)
+            return _csrGraph;
+        _csrGraph = csr.CreatePattern(adjacency);
+        _csrGraphSource = adjacency;
+        _csrGraphSourceVersion = adjacency.StorageMutationVersion;
+        return _csrGraph;
+    }
+
+    // What a compiled inference plan reads besides the weights: the adjacency (its CSR pattern or mask), or the edges.
+    [Scratch]
+    private CompiledBindingTracker _bindingTracker;
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _bindingTracker.Observe(_adjacencyMatrix, _edgeSourceIndices, _edgeTargetIndices, _useSparseAggregation);
+
+    /// <summary>
+    /// The additive attention mask for one graph, as recorded engine ops over the live adjacency: 0 on an edge, -1e9
+    /// elsewhere, the same values as <see cref="BuildAttentionMask"/>. A compiled training plan replays these ops on
+    /// each step's own adjacency.
+    /// </summary>
+    private Tensor<T> RecordedAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
+    {
+        var graph = adjacency2D
+            ? adjacency
+            : Engine.Reshape(Engine.TensorSlice(adjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+        return Engine.TensorMultiplyScalar(Engine.TensorEquals(graph, NumOps.Zero), negInf);
     }
 
     private Tensor<T> ExtractHeadWeight(int h)
