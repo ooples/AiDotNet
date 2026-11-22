@@ -6765,6 +6765,7 @@ AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.VocoderSettings.get -> AiDotNet
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.TrainingSteps.get -> long
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.HasPaperLayers.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.SegmentSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateGenerator() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateDiscriminators() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!

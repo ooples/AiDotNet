@@ -80,6 +80,7 @@ internal sealed partial class HiFiGanGenerator<T>
                         ?? new float[(int)maximum];
             Interlocked.Increment(ref _privateCpuCalls);
             var cpu = _engine.Cast<CpuEngine>();
+            using var convolutionScratch = TensorArena.CreateDetached();
             var activeViews = new Dictionary<(int Slot, int Channels, int Time), PrivateCpuActivation>();
             views = activeViews;
             var bindings = new Dictionary<NormedConv1DLayer<T>, NormedConv1DLayer<T>.CpuInferenceBinding>(AiDotNet.Helpers.TensorReferenceComparer<NormedConv1DLayer<T>>.Instance);
@@ -104,7 +105,6 @@ internal sealed partial class HiFiGanGenerator<T>
                 }
                 catch { logical.Dispose(); nchw?.Dispose(); throw; }
             }
-            using var convScratch = TensorArena.CreateDetached();
             PrivateCpuActivation Conv(NormedConv1DLayer<T> layer, PrivateCpuActivation input, int slot,
                 PrivateCpuActivation? residual = null, bool activate = false, bool post = false)
             {
@@ -118,11 +118,11 @@ internal sealed partial class HiFiGanGenerator<T>
                     binding = layer.BindPrivateCpuInference(input.Logical, input.Nchw, target.Nchw, residualTensor, activate, alpha);
                     bindings[layer] = binding;
                 }
-                using (convScratch.Activate())
-                {
-                    binding.Execute();
-                }
-                convScratch.Reset();
+                // Convolution kernels rent their im2col/packing workspace from the active arena. Keep it in a
+                // private arena reset after every convolution: in the caller's arena each convolution's scratch
+                // would stay live until the caller resets, growing with the layer count instead of one stage.
+                using (convolutionScratch.Activate()) binding.Execute();
+                convolutionScratch.Reset();
                 return target;
             }
             PrivateCpuActivation Activate(PrivateCpuActivation input, int slot, T alpha)
