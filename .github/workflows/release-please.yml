@@ -130,6 +130,7 @@ jobs:
       # limit (13:48:35 -> 14:17:01 UTC, 2026-09-24), so Pack and Publish never ran. Only these
       # projects and their references are needed to produce the packages.
       PACKED_PROJECTS: >-
+        src/AiDotNet.Resources/AiDotNet.Resources.csproj
         src/AiDotNet.csproj
         src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj
         src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj
@@ -254,6 +255,25 @@ jobs:
             echo "Error: Missing packaged source generator in $main"; exit 1;
           }
 
+          # nuget.org rejects a package over 250 MB with HTTP 413, and only at push time - after the
+          # tag and GitHub release exist. v0.236.0 was cut that way and never reached NuGet: 78 MB of
+          # embedded dictionaries, multiplied by five target frameworks, made the core package 554 MB.
+          # The limit here is lower than nuget.org's so growth is caught while there is still room.
+          max_bytes=$((200 * 1024 * 1024))
+          for pkg in out/*.nupkg; do
+            size=$(stat -c %s "$pkg")
+            echo "$(basename "$pkg"): $((size / 1024 / 1024)) MB"
+            if [ "$size" -gt "$max_bytes" ]; then
+              echo "::error::$(basename "$pkg") is $size bytes; the limit is $max_bytes (nuget.org rejects packages over 250 MB)."
+              exit 1
+            fi
+          done
+          # Data embedded in AiDotNet.dll ships once per target framework. It belongs in
+          # AiDotNet.Resources, which the core package must therefore depend on.
+          unzip -p "$main" '*.nuspec' | grep -q '<dependency id="AiDotNet.Resources"' || {
+            echo "Error: $main does not depend on AiDotNet.Resources"; exit 1;
+          }
+
           for pkg in out/*.nupkg; do
             [ "$pkg" = "$main" ] && continue
             name=$(basename "$pkg")
@@ -324,7 +344,18 @@ jobs:
             exit 1
           fi
           shopt -s nullglob
-          pkgs=(out/*.nupkg)
+          # Push the core package LAST. It depends on AiDotNet.Resources, and a published version can
+          # never be replaced: if a dependency's push fails after the core is up, that core version is
+          # permanently unrestorable. The glob sorts "AiDotNet.<digit>" ahead of every other package.
+          pkgs=()
+          core=()
+          for pkg in out/*.nupkg; do
+            case "$(basename "$pkg")" in
+              AiDotNet.[0-9]*) core+=("$pkg") ;;
+              *) pkgs+=("$pkg") ;;
+            esac
+          done
+          pkgs+=("${core[@]}")
           [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No .nupkg files found in out/"; exit 1; }
           for pkg in "${pkgs[@]}"; do
             nuspec="$(unzip -p "$pkg" '*.nuspec')"
