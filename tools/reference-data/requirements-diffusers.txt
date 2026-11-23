@@ -3,4 +3,4 @@
 # requirements.txt pin serves CosyVoice, which needs APIs later releases removed.
 torch==2.14.1+cpu
 numpy==2.5.3
-diffusers==0.35.0
+diffusers==0.38.0
