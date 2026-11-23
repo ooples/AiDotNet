@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.236.1](https://github.com/ooples/AiDotNet/compare/v0.236.0...v0.236.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* move embedded tokenizer and tts data into a single-tfm resources package ([#2624](https://github.com/ooples/AiDotNet/issues/2624)) ([e27708e](https://github.com/ooples/AiDotNet/commit/e27708eecd1928a5a3dd7260a059aff3afd8a708))
+
 ## [0.236.0](https://github.com/ooples/AiDotNet/compare/v0.235.0...v0.236.0) (2026-11-23)
 
 
