@@ -31,7 +31,8 @@ internal sealed record Wav2Vec2PretrainingConfiguration
     /// <summary>The weight of the L2 penalty on the feature encoder's output (fairseq's <c>features_pen</c> weight 10).</summary>
     public double FeaturePenaltyWeight { get; init; } = 10.0;
 
-    /// <summary>The probability a frame starts a masked span (p = 0.065) of M = 10 frames.</summary>
+    /// <summary>The probability a frame starts a masked span (p = 0.065) of M = 10 frames, the paper's rate; the masks
+    /// are drawn with fairseq's equivalent mask_prob = p·M = 0.65 (<see cref="Wav2Vec2Network{T}.DrawPretrainingMask"/>).</summary>
     public double MaskProbability { get; init; } = 0.065;
 
     /// <summary>The factor on the feature encoder's gradients (0.1).</summary>
