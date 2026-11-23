@@ -253,9 +253,20 @@ internal sealed class CodeHiFiGan<T>
             durationLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
                 NumOps.FromDouble(1.0 / kept.Count));
         }
+        return (SynthesizeFrameCodes(codes, speaker, style, pitch, styleTokens), durationLoss);
+    }
+
+    /// <summary>
+    /// Synthesizes the waveform of frame-level codes without running the duration predictor (used for the detached
+    /// discriminator step in GAN training so duration-predictor dropout does not advance the training RNG twice per step).
+    /// </summary>
+    internal Tensor<T> SynthesizeFrameCodes(IReadOnlyList<int> codes, int? speaker, int? style = null,
+        IReadOnlyList<int>? pitch = null, IReadOnlyList<int>? styleTokens = null)
+    {
+        if (codes is null || codes.Count == 0) throw new ArgumentException("There are no codes.", nameof(codes));
         var (pitchRows, styleRows) = ConditionRows(pitch, styleTokens, codes.Count);
         var wave = Generator.Forward(GeneratorInput(Embed(codes), pitchRows, styleRows, speaker, style));
-        return (_engine.Reshape(wave, new[] { wave.Length }), durationLoss);
+        return _engine.Reshape(wave, new[] { wave.Length });
     }
 
     /// <summary>Each unit's frames: <c>max(1, round(exp(d) − 1))</c> of its log duration, rounding half to even.</summary>

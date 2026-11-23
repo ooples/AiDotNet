@@ -1308,6 +1308,43 @@ public class PhysicsInformedPaperReferenceTests
     }
 
     [Fact]
+    public void MultiScalePinn_ExplicitRandomSeed_ReproducesAllScaleWeightsDeterministically()
+    {
+        static MultiScalePINN<float> Build(int? seed)
+        {
+            var arch = new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1);
+            if (seed.HasValue)
+            {
+                arch.RandomSeed = seed.Value;
+            }
+
+            return new MultiScalePINN<float>(
+                arch,
+                new PureDerivativePoissonMultiScalePde(),
+                Array.Empty<IBoundaryCondition<float>>(),
+                trainingOptions: new MultiScaleTrainingOptions<float> { UseAdaptiveScaleWeighting = false },
+                options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 6 });
+        }
+
+        var seededA = Build(4096);
+        var seededB = Build(4096);
+        var seededOther = Build(4097);
+        Assert.Equal(seededA.GetParameters().ToArray(), seededB.GetParameters().ToArray());
+        Assert.NotEqual(seededA.GetParameters().ToArray(), seededOther.GetParameters().ToArray());
+        Assert.NotEqual(
+            seededA.ScaleNetworks[1].GetParameters().ToArray(),
+            seededOther.ScaleNetworks[1].GetParameters().ToArray());
+
+        var unseededA = Build(null);
+        var unseededB = Build(null);
+        Assert.NotEqual(unseededA.GetParameters().ToArray(), unseededB.GetParameters().ToArray());
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task MultiScalePinn_ConcurrentAndReentrantSolve_ThrowsAndPreservesState()
     {
         var arch = new NeuralNetworkArchitecture<float>(

@@ -249,7 +249,8 @@ public partial class SpiritLM<T> : TtsModelBase<T>
         if (o.IncludeVocoderDiscriminators)
         {
             int discriminatorWidthDivisor = Math.Max(1, 512 / Math.Max(1, o.VocoderChannels));
-            _discriminators = new HiFiGanDiscriminators<T>(Engine, new[] { 2, 3, 5, 7, 11 }, 3, widthDivisor: discriminatorWidthDivisor);
+            _discriminators = new HiFiGanDiscriminators<T>(Engine, new[] { 2, 3, 5, 7, 11 }, 3, widthDivisor: discriminatorWidthDivisor,
+                initialization: random);
             _discriminatorLayers.AddRange(_discriminators.Layers);
             // speech-resynthesis' mel loss: n_fft 1024, hop 256, window 1024, 80 bands, 0–8 kHz (the configs' fmax).
             _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, 1024, 256, 1024, 80, 0.0, 8000.0);

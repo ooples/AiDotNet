@@ -198,13 +198,26 @@ namespace AiDotNet.PhysicsInformed.PINNs
             for (int scale = 0; scale < _multiScalePDE.NumberOfScales; scale++)
             {
                 int outputDim = _multiScalePDE.GetScaleOutputDimension(scale);
+                int? scaleSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
+                var outerScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+                try
+                {
+                    if (scaleSeed.HasValue)
+                    {
+                        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(scaleSeed);
+                    }
 
-                // Adjust network size based on scale
-                // Finer scales typically need deeper networks
-                var scaleArchitecture = CreateScaleArchitecture(baseArchitecture, scale, outputDim);
-                var scaleNetwork = new FeedForwardNeuralNetwork<T>(scaleArchitecture);
+                    // Adjust network size based on scale
+                    // Finer scales typically need deeper networks
+                    var scaleArchitecture = CreateScaleArchitecture(baseArchitecture, scale, outputDim, scaleSeed);
+                    var scaleNetwork = new FeedForwardNeuralNetwork<T>(scaleArchitecture);
 
-                _scaleNetworks.Add(scaleNetwork);
+                    _scaleNetworks.Add(scaleNetwork);
+                }
+                finally
+                {
+                    AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(outerScope);
+                }
             }
         }
 
@@ -214,7 +227,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private NeuralNetworkArchitecture<T> CreateScaleArchitecture(
             NeuralNetworkArchitecture<T> baseArchitecture,
             int scaleIndex,
-            int outputDimension)
+            int outputDimension,
+            int? scaleSeed = null)
         {
             // Finer scales use deeper smooth (Tanh) PINN sub-networks so second- and higher-order PDE derivatives
             // do not vanish (FeedForwardNeuralNetwork's default ReLU layers have zero second derivative everywhere).
@@ -256,7 +270,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
             }
 
-            return new NeuralNetworkArchitecture<T>(
+            var scaleArchitecture = new NeuralNetworkArchitecture<T>(
                 baseArchitecture.InputType,
                 baseArchitecture.TaskType,
                 baseArchitecture.Complexity,
@@ -267,6 +281,12 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 outputDimension,
                 scaleLayers,
                 baseArchitecture.ShouldReturnFullSequence);
+            if (scaleSeed.HasValue)
+            {
+                scaleArchitecture.RandomSeed = scaleSeed.Value;
+            }
+
+            return scaleArchitecture;
         }
 
         /// <inheritdoc/>

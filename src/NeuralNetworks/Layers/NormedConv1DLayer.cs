@@ -139,33 +139,87 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         var directionShape = transposed
             ? new[] { inChannels, outChannels / groups, 1, kernelSize }
             : new[] { outChannels, inChannels / groups, 1, kernelSize };
-        var directionSamples = new double[directionShape[0] * directionShape[1] * kernelSize];
-        for (int i = 0; i < directionSamples.Length; i++)
-            directionSamples[i] = (2 * random.NextDouble() - 1) * bound;
-        _direction = new Tensor<double>(directionSamples, directionShape).Cast<T>();
-
-        var biasSamples = new double[outChannels];
-        if (useBias)
-            for (int i = 0; i < outChannels; i++)
-                biasSamples[i] = (2 * random.NextDouble() - 1) * bound;
-        _bias = new Tensor<double>(biasSamples, new[] { outChannels }).Cast<T>();
-
         // weight_norm(dim=0) normalizes over everything but dim 0: output channels for Conv1d, input channels for
-        // ConvTranspose1d (whose weight is [in, out, k]).
-        int rows = directionShape[0], per = _direction.Length / rows;
-        var storedDirection = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(_direction).AsSpan();
-        var gainSamples = new double[rows];
-        for (int r = 0; r < rows; r++)
+        // ConvTranspose1d (whose weight is [in, out, k]). Specialize float and double spans directly to avoid
+        // multi-hundred-MiB transient double[]/Tensor<double> allocations on large codecs while preserving exact draw order.
+        int rows = directionShape[0], per = directionShape[1] * kernelSize;
+        _direction = new Tensor<T>(directionShape);
+        _gain = new Tensor<T>(new[] { rows });
+        _bias = new Tensor<T>(new[] { outChannels });
+        if (_direction is Tensor<float> dirFloat && _gain is Tensor<float> gainFloat && _bias is Tensor<float> biasFloat)
         {
-            double sum = 0;
-            for (int i = 0; i < per; i++)
+            var dirSpan = dirFloat.AsWritableSpan();
+            var gainSpan = gainFloat.AsWritableSpan();
+            for (int r = 0; r < rows; r++)
             {
-                double v = storedDirection[r * per + i];
-                sum += v * v;
+                double sum = 0;
+                int rowOffset = r * per;
+                for (int i = 0; i < per; i++)
+                {
+                    float elem = (float)((2 * random.NextDouble() - 1) * bound);
+                    dirSpan[rowOffset + i] = elem;
+                    double v = elem;
+                    sum += v * v;
+                }
+                gainSpan[r] = (float)Math.Sqrt(sum);
             }
-            gainSamples[r] = Math.Sqrt(sum);
+            if (useBias)
+            {
+                var biasSpan = biasFloat.AsWritableSpan();
+                for (int i = 0; i < outChannels; i++)
+                    biasSpan[i] = (float)((2 * random.NextDouble() - 1) * bound);
+            }
         }
-        _gain = new Tensor<double>(gainSamples, new[] { rows }).Cast<T>();
+        else if (_direction is Tensor<double> dirDouble && _gain is Tensor<double> gainDouble && _bias is Tensor<double> biasDouble)
+        {
+            var dirSpan = dirDouble.AsWritableSpan();
+            var gainSpan = gainDouble.AsWritableSpan();
+            for (int r = 0; r < rows; r++)
+            {
+                double sum = 0;
+                int rowOffset = r * per;
+                for (int i = 0; i < per; i++)
+                {
+                    double elem = (2 * random.NextDouble() - 1) * bound;
+                    dirSpan[rowOffset + i] = elem;
+                    sum += elem * elem;
+                }
+                gainSpan[r] = Math.Sqrt(sum);
+            }
+            if (useBias)
+            {
+                var biasSpan = biasDouble.AsWritableSpan();
+                for (int i = 0; i < outChannels; i++)
+                    biasSpan[i] = (2 * random.NextDouble() - 1) * bound;
+            }
+        }
+        else
+        {
+            var directionSamples = new double[rows * per];
+            for (int i = 0; i < directionSamples.Length; i++)
+                directionSamples[i] = (2 * random.NextDouble() - 1) * bound;
+            _direction = new Tensor<double>(directionSamples, directionShape).Cast<T>();
+
+            var biasSamples = new double[outChannels];
+            if (useBias)
+                for (int i = 0; i < outChannels; i++)
+                    biasSamples[i] = (2 * random.NextDouble() - 1) * bound;
+            _bias = new Tensor<double>(biasSamples, new[] { outChannels }).Cast<T>();
+
+            var storedDirection = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(_direction).AsSpan();
+            var gainSamples = new double[rows];
+            for (int r = 0; r < rows; r++)
+            {
+                double sum = 0;
+                for (int i = 0; i < per; i++)
+                {
+                    double v = storedDirection[r * per + i];
+                    sum += v * v;
+                }
+                gainSamples[r] = Math.Sqrt(sum);
+            }
+            _gain = new Tensor<double>(gainSamples, new[] { rows }).Cast<T>();
+        }
         // Spectral norm's u ~ N(0, 1) and v ~ N(0, 1), each normalized (torch.nn.utils.spectral_norm).
         _u = NormalizedGaussian(rows, random);
         _v = NormalizedGaussian(per, random);

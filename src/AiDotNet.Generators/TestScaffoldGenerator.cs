@@ -19388,15 +19388,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 ? factoryBody.Substring("        => ".Length, factoryBody.Length - "        => ".Length - 1)
                 : constructorExpr;
             sb.AppendLine("    {");
-            sb.AppendLine("        int? _prevSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;");
-            sb.AppendLine("        var _prevScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();");
-            sb.AppendLine("        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed ?? 1337;");
-            sb.AppendLine("        if (_prevSeed is null) AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(null);");
-            sb.AppendLine($"        try {{ return {factoryExpr}; }}");
-            sb.AppendLine("        finally");
+            sb.AppendLine("        var _scopeType = typeof(global::AiDotNet.Interfaces.IFullModel<,,>).Assembly.GetType(\"AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope\");");
+            sb.AppendLine("        var _scopeEnter = _scopeType == null ? null : _scopeType.GetMethod(\"EnterDefaultAmbientFallbackSeedScope\", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);");
+            sb.AppendLine("        using (_scopeEnter == null ? null : _scopeEnter.Invoke(null, null) as System.IDisposable)");
             sb.AppendLine("        {");
-            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed;");
-            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(_prevScope);");
+            sb.AppendLine($"            return {factoryExpr};");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
         }
