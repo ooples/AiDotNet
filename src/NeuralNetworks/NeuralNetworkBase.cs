@@ -10275,8 +10275,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             BindInputContract(input.Shape.ToArray()).Validate(input);
             // The base PredictCore promotes an unbatched sample; an override that runs the chain takes its input as given.
             var current = InferenceForwardDeclaredBy(typeof(NeuralNetworkBase<T>)) ? NormalizeInputBatchDim(input) : input;
+            // A layer that keeps nothing between calls runs in its own scope: its intermediates are freed as its forward
+            // returns, and only its output outlives it. They were left to finalization, so a validation pass held every
+            // layer's intermediates at once (13-50 MiB per layer of a 74M-parameter MoE language model) until a collection
+            // ran. When every layer keeps nothing (the readout too), a scope around the chain also frees the outputs once
+            // the loss has been read; a model's own result scope does that already.
+            bool chainKeepsNothing = resultScope is null
+                && Layers.All(layer => layer is Layers.LayerBase<T> { KeepsResultsBetweenCalls: false });
+            using var chainScope = chainKeepsNothing ? TensorScope.Begin() : null;
             for (int i = 0; i < Layers.Count - 1; i++)
-                current = Layers[i].Forward(current);
+            {
+                if (Layers[i] is Layers.LayerBase<T> { KeepsResultsBetweenCalls: false } released)
+                {
+                    using var layerScope = TensorScope.Begin();
+                    current = layerScope.Keep(released.Forward(current));
+                }
+                else
+                {
+                    current = Layers[i].Forward(current);
+                }
+            }
             if (head.TryComputeFusedLoss(current, target, loss) is not { } fused) return false;
             value = fused.Data.Span[0];
             return true;

@@ -73,4 +73,85 @@ public class StreamingValidationFusedReadoutGpuTests
         }
         finally { AiDotNetEngine.Current = previous; }
     }
+
+    private const int Width = 2048, Depth = 8, HeadVocabulary = 1024;
+    private const long ActivationBytes = (long)Rows * Width * sizeof(float);   // 32 MiB
+
+    /// <summary>
+    /// Each layer that keeps nothing between calls has its intermediates freed as its forward returns, with no garbage
+    /// collection: validation of eight layers that each make three [rows, width] intermediates peaks near the layer
+    /// outputs plus one layer's work, not all of them (left to finalization they summed to about 1 GiB here, or a
+    /// collection ran to reclaim them).
+    /// </summary>
+    [SkippableFact]
+    public void Validation_frees_each_layers_intermediates_as_it_returns()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var layers = new List<ILayer<float>>();
+            for (int i = 0; i < Depth; i++) layers.Add(new ThreeIntermediatesLayer(Width));
+            layers.Add(new DenseLayer<float>(HeadVocabulary, (IActivationFunction<float>?)null));
+            var network = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputSize: Width, outputSize: HeadVocabulary, layers: layers) { RandomSeed = 11 });
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261124);
+            var x = new Tensor<float>(new[] { Rows, Width });
+            var ids = new Tensor<float>(new[] { Rows });
+            for (int i = 0; i < x.Length; i++) x.SetFlat(i, (float)(rng.NextDouble() * 0.2 - 0.1));
+            for (int r = 0; r < Rows; r++) ids.SetFlat(r, rng.Next(HeadVocabulary));
+            var loss = new CrossEntropyWithLogitsLoss<float>();
+
+            float Score() => AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, ids);
+            float first = Score();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long before = GpuMemoryStats.Stats()["allocated_bytes.all.current"];
+            GpuMemoryStats.ResetPeakStats();
+            int collections = GC.CollectionCount(0);
+            float got = Score();
+            int collected = GC.CollectionCount(0) - collections;
+            long peak = GpuMemoryStats.Stats()["allocated_bytes.all.peak"] - before;
+            long after = GpuMemoryStats.Stats()["allocated_bytes.all.current"] - before;
+
+            Assert.Equal(first, got);
+            Assert.Equal(0, collected);
+            // Kept: the eight outputs (8 x 32 MiB) and the input's device copy; transient: one layer's three intermediates.
+            Assert.True(peak < 14 * ActivationBytes,
+                $"validation peaked {peak:N0} device bytes; {Depth} layers' intermediates together are {Depth * 4 * ActivationBytes:N0}.");
+            Assert.True(after < ActivationBytes, $"validation left {after:N0} device bytes allocated.");
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    /// <summary>x + 0.5 (x*x + x): three intermediates and an output, and nothing kept between calls.</summary>
+    [AiDotNet.Attributes.ElementWiseShape]
+    private sealed class ThreeIntermediatesLayer : LayerBase<float>
+    {
+        internal ThreeIntermediatesLayer(int features) : base([features], [features])
+        {
+        }
+
+        protected internal override bool KeepsResultsBetweenCalls => false;
+
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
+        {
+            var square = Engine.TensorMultiply(input, input);
+            var sum = Engine.TensorAdd(square, input);
+            var half = Engine.TensorMultiplyScalar(sum, 0.5f);
+            return Engine.TensorAdd(half, input);
+        }
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
+    }
 }
