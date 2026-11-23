@@ -102,15 +102,22 @@ foreach ($rel in $relativeUnshipped) {
 
     $shipped = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($e in @(Read-ApiFile $shippedPath)) { [void]$shipped.Add($e) }
+    # Additions first, removals second, whatever order the file lists them in. An entry can be added
+    # and then replaced within one release cycle (a property made virtual: 'X' added, '*REMOVED*X'
+    # and 'virtual X' added later), and the file is sorted, not chronological. Applying the removal
+    # where it stood dropped nothing, then the later addition put the dead entry into Shipped and the
+    # v0.236.1 roll failed with RS0017 on VitsModelOptions.AddBlank / SpeakerEmbeddingDim.
+    foreach ($e in $released) {
+        if (-not $e.StartsWith($removedPrefix, [StringComparison]::Ordinal)) {
+            [void]$shipped.Add($e)
+            $moved++
+        }
+    }
     foreach ($e in $released) {
         if ($e.StartsWith($removedPrefix, [StringComparison]::Ordinal)) {
             $target = $e.Substring($removedPrefix.Length)
             if (-not $shipped.Remove($target)) { Write-Warning "$rel removes '$target', which $shippedPath does not list." }
             $removed++
-        }
-        else {
-            [void]$shipped.Add($e)
-            $moved++
         }
     }
     Write-ApiFile $shippedPath @($shipped)
