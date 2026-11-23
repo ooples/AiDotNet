@@ -130,6 +130,115 @@ public class StreamingValidationFusedReadoutGpuTests
         finally { AiDotNetEngine.Current = previous; }
     }
 
+    private const int TrainWidth = 64, TrainVocabulary = 1024, TrainRows = 256, StepsBefore = 8, StepsAfter = 6;
+
+    /// <summary>
+    /// Validation between training steps leaves the compiled training step as it was: the steps after it give the same
+    /// losses as a run with no validation, and they keep replaying the captured graph. The model reads a constant
+    /// (non-parameter) tensor, which the plan binds to a buffer its graph reads through a baked pointer; validation's
+    /// eager forward read the same tensor, found that buffer neither its own nor cached, and dropped the binding, so the
+    /// plan stopped replaying and trained eagerly from then on, on different losses. With
+    /// <paramref name="releases"/> every layer keeps nothing between calls, so validation also frees each layer's
+    /// results as it returns.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Validation_between_steps_leaves_the_compiled_step_replaying(bool releases)
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var withValidation = TrainAround(validate: true, releases);
+            var without = TrainAround(validate: false, releases);
+            for (int s = 0; s < without.Losses.Length; s++)
+                Assert.True(without.Losses[s] == withValidation.Losses[s],
+                    $"step {s}: {withValidation.Losses[s]:G9} after a validation, {without.Losses[s]:G9} without one");
+            Assert.True(withValidation.ReplaysAfter >= StepsAfter,
+                $"the {StepsAfter} steps after validation replayed the captured graph {withValidation.ReplaysAfter} times");
+            Assert.True(without.ReplaysAfter >= StepsAfter,
+                $"the {StepsAfter} steps without validation replayed the captured graph {without.ReplaysAfter} times");
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    private static (float[] Losses, long ReplaysAfter) TrainAround(bool validate, bool releases)
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(TrainWidth, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new ConstantScaleLayer(TrainWidth, releases),
+            new DenseLayer<float>(TrainVocabulary, (IActivationFunction<float>?)null),
+        };
+        var loss = new CrossEntropyWithLogitsLoss<float>();
+        var network = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: TrainWidth, outputSize: TrainVocabulary, layers: layers) { RandomSeed = 13 },
+            new AiDotNet.Optimizers.AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                new AiDotNet.Models.Options.AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-3 }),
+            loss);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261125);
+        Tensor<float> Batch(out Tensor<float> ids)
+        {
+            var x = new Tensor<float>(new[] { TrainRows, TrainWidth });
+            ids = new Tensor<float>(new[] { TrainRows });
+            for (int i = 0; i < x.Length; i++) x.SetFlat(i, (float)(rng.NextDouble() * 2 - 1));
+            for (int r = 0; r < TrainRows; r++) ids.SetFlat(r, rng.Next(TrainVocabulary));
+            return x;
+        }
+        var batches = new List<(Tensor<float> X, Tensor<float> Ids)>();
+        for (int s = 0; s < StepsBefore + StepsAfter; s++) batches.Add((Batch(out var ids), ids));
+        var held = Batch(out var heldIds);
+
+        var losses = new float[StepsBefore + StepsAfter];
+        network.SetTrainingMode(true);
+        for (int s = 0; s < StepsBefore; s++)
+        {
+            network.Train(batches[s].X, batches[s].Ids);
+            losses[s] = network.GetLastLoss();
+        }
+        if (validate)
+            Assert.True(float.IsFinite(AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, held, heldIds)));
+        long replays = AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<float>.GraphReplayCount;
+        for (int s = StepsBefore; s < StepsBefore + StepsAfter; s++)
+        {
+            network.Train(batches[s].X, batches[s].Ids);
+            losses[s] = network.GetLastLoss();
+        }
+        return (losses, AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<float>.GraphReplayCount - replays);
+    }
+
+    /// <summary>x times a constant per-feature scale that is not a parameter.</summary>
+    [AiDotNet.Attributes.ElementWiseShape]
+    private sealed class ConstantScaleLayer : LayerBase<float>
+    {
+        private readonly Tensor<float> _scale;
+
+        private readonly bool _keepsNothing;
+
+        internal ConstantScaleLayer(int features, bool keepsNothing) : base([features], [features])
+        {
+            _keepsNothing = keepsNothing;
+            _scale = new Tensor<float>(new[] { features });
+            for (int i = 0; i < features; i++) _scale.SetFlat(i, 0.5f + i / (2f * features));
+        }
+
+        protected internal override bool KeepsResultsBetweenCalls => !_keepsNothing;
+
+        protected override Tensor<float> ForwardTraced(Tensor<float> input) => Engine.TensorMultiply(input, _scale);
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
+    }
+
     /// <summary>x + 0.5 (x*x + x): three intermediates and an output, and nothing kept between calls.</summary>
     [AiDotNet.Attributes.ElementWiseShape]
     private sealed class ThreeIntermediatesLayer : LayerBase<float>
