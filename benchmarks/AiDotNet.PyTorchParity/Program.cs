@@ -183,12 +183,15 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
 }
 // Diagnostic: AIDOTNET_BENCH_READBACK_SITES=1 records every device-to-host copy's call site and prints the busiest.
 bool readbackSites = Environment.GetEnvironmentVariable("AIDOTNET_BENCH_READBACK_SITES") == "1";
-// GpuLaunchProbe is internal to AiDotNet.Tensors, so through reflection.
-var probe = typeof(AiDotNet.Tensors.Engines.DirectGpuTensorEngine).Assembly
-    .GetType("AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe", throwOnError: true)!;
-if (readbackSites) probe.GetProperty("CaptureReadbackSites")!.SetValue(null, true);
+// GpuLaunchProbe is internal to AiDotNet.Tensors, so through reflection, and resolved only when the diagnostic is on:
+// a Tensors build without it still benchmarks.
+var probe = readbackSites
+    ? typeof(AiDotNet.Tensors.Engines.DirectGpuTensorEngine).Assembly
+        .GetType("AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe", throwOnError: true)!
+    : null;
+if (probe is not null) probe.GetProperty("CaptureReadbackSites")!.SetValue(null, true);
 var report = new BenchmarkRunner(benchOptions).Run();
-if (readbackSites)
+if (probe is not null)
     foreach (var site in ((string[])probe.GetProperty("ReadbackSites")!.GetValue(null)!)
                  .OrderByDescending(s => long.Parse(s.Substring(0, s.IndexOf('x')))).Take(25))
         Console.Error.WriteLine("[readback] " + site);
@@ -367,9 +370,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         var epochSeconds = new List<double>();
         var gradientSeconds = new List<double>();
         var dataSeconds = new List<double>();
-        var total = Stopwatch.StartNew();
         double? firstLoss = null;
-        using var monitor = ResourceMonitor.Start();
 
         // Batches are generated BEFORE the timed epochs (the PyTorch twin does the same) so epoch
         // time is pure training: our managed CPU RNG and their on-device randn cost very different
@@ -379,20 +380,30 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         {
             var dataTimer = Stopwatch.StartNew();
             model.LoadSyntheticBatch(options.BatchSize);
-            dataTimer.Stop();
-            dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
             var current = model.CurrentBatch;
             // The twin builds every batch on its device before the timed epochs (make_batch's .to(device), randn on
             // the device); on a GPU run ours are placed there too, so no step pays a host-to-device upload it doesn't.
+            // The upload is data time, as the twin's .to(device) and synchronize are.
             if (BenchStats.DeviceName == "cuda")
             {
                 current.Input.Gpu();
                 current.Label.Gpu();
+                BenchStats.SynchronizeDevice();
             }
+            dataTimer.Stop();
+            dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
             batches.Add(current);
         }
 
-        // The training steps under autocast for --precision bf16 (inference stays FP32 in both arms).
+        // The total and the resource window start once the batch pool exists, as the twin's start_total and its
+        // ResourceMonitor (peak stats reset there) do: both cover the training phase with the pool resident.
+        var total = Stopwatch.StartNew();
+        using var monitor = ResourceMonitor.Start();
+
+        // The training steps under autocast for --precision bf16 (inference stays FP32 in both arms). Only a GPU engine
+        // narrows under AutocastScope; on the CPU this arm would run FP32 while the twin's torch.autocast runs bf16.
+        if (options.Precision == "bf16" && BenchStats.DeviceName != "cuda")
+            throw new ArgumentException("--precision bf16 needs --device cuda: the CPU engine does not run autocast.");
         using var autocast = options.Precision == "bf16"
             ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.BFloat16)
             : null;

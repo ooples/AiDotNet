@@ -435,6 +435,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         foreach (var verdict in _optimizedVerdicts)
             if (ShapeMatches(verdict.Shape, input)) return verdict;
         var created = new OptimizedRouteVerdict(ShapeSnapshot(input));
+        // Bounded: a workload whose input shape keeps changing re-probes its oldest shape instead of growing this list,
+        // which every forward scans, without limit.
+        if (_optimizedVerdicts.Count >= MaxVerdictShapes) _optimizedVerdicts.RemoveAt(0);
         _optimizedVerdicts.Add(created);
         return created;
     }
@@ -451,6 +454,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     }
 
     private const int MaxVerificationProbes = 3;
+
+    // Input shapes a layer keeps verdicts for (see VerdictFor).
+    private const int MaxVerdictShapes = 32;
 
     private static int[] ShapeSnapshot(Tensor<T> tensor)
     {

@@ -17868,6 +17868,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return lossValue;
     }
 
+    // Whether ForwardForTrainingDetached has run once (its first call may size lazy layers, so it runs without an arena).
+    private bool _detachedForwardRan;
+
     /// <summary>
     /// A training-mode forward that records nothing and leaves every layer's registered state (BatchNorm running
     /// statistics and the like) as it found it; the output is a detached copy.
@@ -17897,8 +17900,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // a DCGAN generator's ~80 MB of them per iteration went to the large-object heap and forced a gen-2
             // collection about once an iteration (trimming the shared array pool, so the convolutions' packing
             // scratch was faulted in afresh each time). An arena hands the same arrays back on the next call. The
-            // output is copied out with the arena suspended, so nothing returned is arena-backed.
-            using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            // output is copied out with the arena suspended, so nothing returned is arena-backed. It pools even nested
+            // (a declared-objective step runs this inside its own step arena, and a nested arena that does not pool drops
+            // every array it rented: the whole forward was allocated afresh each step). The first call, and any call
+            // while parameters are still unsized, runs without it: weights a lazy layer creates must not be arena-backed.
+            bool lazyForward = !_detachedForwardRan || HasUninitializedParameters;
+            _detachedForwardRan = true;
+            using var arena = lazyForward ? null : AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true);
             using (new NoGradScope<T>())
             {
                 var produced = ForwardForTraining(input);
