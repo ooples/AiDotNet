@@ -56,6 +56,10 @@ class ResourceSummary:
     rss_mb_peak: float | None
     gpu_util_percent_avg: float | None
     gpu_mem_mb_peak: float | None
+    # This process's caching-allocator peaks over the phase (torch.cuda.max_memory_allocated / max_memory_reserved):
+    # unlike gpu_mem_mb_peak (device-wide nvidia-smi), they exclude the CUDA context and every other process.
+    gpu_allocated_mb_peak: float | None = None
+    gpu_reserved_mb_peak: float | None = None
 
 
 @dataclass
@@ -102,8 +106,11 @@ class ModelResult:
 
 
 class ResourceMonitor:
-    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True, gpu_id: str | None = None) -> None:
+    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True, gpu_id: str | None = None,
+                 torch_device: torch.device | None = None) -> None:
         self.sample_seconds = sample_seconds
+        # The CUDA device whose allocator peaks the phase reports (None: not a CUDA run).
+        self.torch_device = torch_device if torch_device is not None and torch_device.type == "cuda" else None
         # The GPU the benchmark runs on, as an nvidia-smi --id (its UUID): unqualified, nvidia-smi lists every GPU and
         # the first line was read, which on a two-GPU machine is not necessarily this one (the C# side does the same).
         self.gpu_id = gpu_id
@@ -123,6 +130,9 @@ class ResourceMonitor:
         self._thread = threading.Thread(target=self._sample, daemon=True)
 
     def __enter__(self) -> ResourceMonitor:
+        if self.torch_device is not None:
+            torch.cuda.synchronize(self.torch_device)
+            torch.cuda.reset_peak_memory_stats(self.torch_device)
         self.process.cpu_percent(interval=None)
         if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
             self._thread.start()
@@ -153,6 +163,10 @@ class ResourceMonitor:
             rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else None,
             gpu_util_percent_avg=round(statistics.fmean(self.gpu_util), 3) if self.gpu_util else None,
             gpu_mem_mb_peak=round(max(self.gpu_mem), 3) if self.gpu_mem else None,
+            gpu_allocated_mb_peak=round(torch.cuda.max_memory_allocated(self.torch_device) / 1024 / 1024, 3)
+            if self.torch_device is not None else None,
+            gpu_reserved_mb_peak=round(torch.cuda.max_memory_reserved(self.torch_device) / 1024 / 1024, 3)
+            if self.torch_device is not None else None,
         )
 
 
@@ -1989,7 +2003,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     # --precision bf16: the training steps under torch.autocast, as the C# side runs them under AutocastScope.
     autocast = (torch.autocast(device_type=device.type, dtype=torch.bfloat16) if PRECISION == "bf16"
                 else contextlib.nullcontext())
-    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device)) as monitor, autocast:
+    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device), torch_device=device) as monitor, autocast:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"

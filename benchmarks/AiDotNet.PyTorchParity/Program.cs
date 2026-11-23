@@ -1374,6 +1374,7 @@ internal sealed class ResourceMonitor : IDisposable
     private readonly List<double> _gpuMemMb = [];
     private readonly Task _task;
     private readonly Task? _gpuTask;
+    private readonly bool _trackAllocator;
 
     private ResourceMonitor()
     {
@@ -1397,6 +1398,9 @@ internal sealed class ResourceMonitor : IDisposable
         // The sample is pinned to the engine's GPU (nvidia-smi --id); when that GPU cannot be identified, VRAM is
         // not reported rather than read from whichever GPU nvidia-smi lists first.
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        // The allocator peaks below cover this phase only, as benchmark.py resets torch's at the phase's start.
+        _trackAllocator = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (_trackAllocator) AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
         string? gpuId = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? NvidiaSmi.ResolveDevice(engine.Name) : null;
         if (gpuId is not null)
             _gpuTask = Task.Run(async () =>
@@ -1432,8 +1436,18 @@ internal sealed class ResourceMonitor : IDisposable
             ProcessRssMbPeak: Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3),
             ProcessRssMbHwm: Math.Round(_process.PeakWorkingSet64 / 1024d / 1024d, 3),
             NvidiaSmiSample: null,
-            GpuMemMbPeak: GpuPeak());
+            GpuMemMbPeak: GpuPeak(),
+            GpuAllocatedMbPeak: AllocatorPeak("allocated_bytes.all.peak"),
+            GpuReservedMbPeak: AllocatorPeak("reserved_bytes.all.peak"));
     }
+
+    // This process's device allocator peaks over the phase (GpuMemoryStats, PyTorch's allocator semantics): what
+    // benchmark.py reads from torch.cuda.max_memory_allocated / max_memory_reserved. Unlike GpuMemMbPeak they exclude
+    // the CUDA context and every other process on the device.
+    private double? AllocatorPeak(string key)
+        => _trackAllocator && AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Stats().TryGetValue(key, out long bytes)
+            ? Math.Round(bytes / 1024d / 1024d, 3)
+            : null;
 
     private double? GpuPeak()
     {
@@ -1636,7 +1650,7 @@ internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample,
-    double? GpuMemMbPeak = null);
+    double? GpuMemMbPeak = null, double? GpuAllocatedMbPeak = null, double? GpuReservedMbPeak = null);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
 
