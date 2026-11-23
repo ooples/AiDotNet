@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Models;
@@ -5608,6 +5608,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// tape path while leaving the complete selected set available for gradient publication and
     /// optimizer updates.
     /// </remarks>
+    /// <summary>
+    /// The parameter order the fused compiled step's plan uses for this model (the order a fused optimizer checkpoint
+    /// is indexed by): the same layers, extras and selection the fused step hands the compiler.
+    /// </summary>
+    private IReadOnlyList<Tensor<T>> FusedPlanParameterOrder()
+    {
+        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+        IReadOnlyList<Tensor<T>>? selected = HasCustomTrainableParameterSelection() ? CollectModelTrainableTensors() : null;
+        return Training.CompiledTapeTrainingStep<T>.FusedParameterOrder(
+            trainableLayers, selected ?? CollectFusedExtraTrainableTensors(), selected?.ToArray());
+    }
+
     internal IReadOnlyList<Tensor<T>> CollectLayerOwnedTrainableTensorsForClipping(
         IReadOnlyList<Tensor<T>> selectedParameters)
     {
@@ -16245,6 +16257,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 ComputeLossAligned,
                 paramBuffer);
 
+            // A checkpoint written by the compiled plan holds its moments in the plan's parameter order; move them into
+            // this eager step's order so the eager optimizer continues them instead of refusing or restarting.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> restoredFused
+                && restoredFused.PeekPendingFusedOptimizerState() is not null)
+            {
+                restoredFused.MaterializePendingFusedOptimizerStateToEager(FusedPlanParameterOrder(), trainableParams);
+            }
+
             if (!mpSkipOptimizerStep)
             {
                 // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
@@ -17344,6 +17364,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // A layer whose gradient is a tape step the plan cannot reproduce keeps the step on the eager tape.
             GraphBreakReason = LayerGraphBreakReason(),
         };
+
+        // Eager moments restored from a checkpoint are held by eager parameter index; bind them to the parameters now
+        // so a freshly configured plan can take them over (by reference) instead of restarting the optimizer.
+        if (resolvedOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> restoredEager)
+            restoredEager.BindPendingTapeState(CollectLayerOwnedTrainableTensorsForClipping(CollectModelTrainableTensors()));
 
         bool committedBefore = FusedSession.IsCommitted;
         var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);

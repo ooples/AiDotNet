@@ -159,7 +159,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Records that the pending fused-plan state is now installed in a plan. Called only after the import
     /// succeeded, so a failed import leaves the state pending and the eager-path guard still refuses to restart.
     /// </summary>
-    internal void MarkPendingFusedOptimizerStateInstalled() => _pendingFusedPlanState = null;
+    internal void MarkPendingFusedOptimizerStateInstalled()
+    {
+        _pendingFusedPlanState = null;
+        if (!_eagerStateInstalledInPlan)
+            return;
+        // The plan now owns the moments it was given: drop the eager copy (and its step count), so the state has one
+        // owner and a later checkpoint carries it once.
+        _eagerStateInstalledInPlan = false;
+        ClearSerializedTapeState();
+        EnumerateOptimizerFields()
+            .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int))
+            ?.SetValue(this, 0);
+    }
 
     /// <summary>
     /// Throws when this optimizer holds eager-path moments from a checkpoint that a fused plan would discard.
@@ -2586,14 +2598,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _pendingFusedPlanState = output.ToArray();
     }
 
-    internal void MaterializePendingFusedOptimizerStateToEager(IReadOnlyList<Tensor<T>> canonicalParameters)
+    /// <summary>
+    /// Moves a restored fused-plan state (moments and step count) into this optimizer's eager tape state, so an eager
+    /// step continues the checkpointed trajectory instead of restarting the optimizer.
+    /// </summary>
+    /// <param name="planParameters">The parameter order of the plan that wrote the state (its canonical order).</param>
+    /// <param name="eagerParameters">The order the eager step indexes its state by; <c>null</c> when it is the same.</param>
+    /// <exception cref="InvalidOperationException">The state has no exact eager representation: moments stored in
+    /// reduced precision, a parameter whose update count differs from the optimizer step (the eager optimizer
+    /// bias-corrects every parameter with one step count), or a trained parameter the eager step does not have.</exception>
+    internal void MaterializePendingFusedOptimizerStateToEager(
+        IReadOnlyList<Tensor<T>> planParameters,
+        IReadOnlyList<Tensor<T>>? eagerParameters = null)
     {
-        if (_pendingFusedPlanState is not { Length: > 8 } || canonicalParameters is null)
+        if (_pendingFusedPlanState is not { Length: > 8 } || planParameters is null)
             return;
+        eagerParameters ??= planParameters;
 
-        var expectedLengths = new int[canonicalParameters.Count];
-        for (int i = 0; i < canonicalParameters.Count; i++)
-            expectedLengths[i] = canonicalParameters[i].Length;
+        var expectedLengths = new int[planParameters.Count];
+        for (int i = 0; i < planParameters.Count; i++)
+            expectedLengths[i] = planParameters[i].Length;
 
         using var input = new MemoryStream(_pendingFusedPlanState, writable: false);
         using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -2609,8 +2633,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             hasVelocityIncludesLearningRate: version >= 5,
             hasEnrollmentMetadata: version >= FusedOptimizerStateVersion,
             expectedParameterLengths: expectedLengths);
-        if (checkpoint is null || checkpoint.Parameters.Length != canonicalParameters.Count)
+        if (checkpoint is null || checkpoint.Parameters.Length != planParameters.Count)
             return;
+
+        var eagerIndex = new Dictionary<Tensor<T>, int>(TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < eagerParameters.Count; i++)
+        {
+            if (eagerParameters[i] is { } parameter && !eagerIndex.ContainsKey(parameter))
+                eagerIndex[parameter] = i;
+        }
+
+        // Validate everything before changing any state, so a refusal leaves the fused state pending (and the eager
+        // step refusing) rather than half-moved.
+        var carried = new bool[planParameters.Count];
+        for (int p = 0; p < planParameters.Count; p++)
+        {
+            var state = checkpoint.Parameters[p];
+            if (state.MBFloat16 is not null || state.VBFloat16 is not null || state.MScales is not null || state.VScales is not null)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint whose moments are stored in reduced " +
+                    "precision, but this step runs on the eager path, which keeps full-precision moments. Resume on the " +
+                    "compiled path, or restore from a checkpoint written with full-precision moments.");
+            }
+            if (state.AcceptedUpdates == 0)
+                continue;
+            if (state.AcceptedUpdates != checkpoint.OptimizerStep)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint in which parameter {p} was updated " +
+                    $"{state.AcceptedUpdates} times but the optimizer took {checkpoint.OptimizerStep} steps. The eager path " +
+                    "bias-corrects every parameter with one step count, so it cannot continue this state exactly. Resume on " +
+                    "the compiled path.");
+            }
+            if (!eagerIndex.ContainsKey(planParameters[p]))
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint that trains parameter {p}, which the " +
+                    "eager step does not train, so its moments have nowhere to go. Resume on the compiled path.");
+            }
+            carried[p] = true;
+        }
 
         var stepField = EnumerateOptimizerFields()
             .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int));
@@ -2624,56 +2687,156 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         FieldInfo? maxSecondMomentField = stateFields.FirstOrDefault(f =>
             f.Name is "_tapeVMax");
 
+        Dictionary<int, Tensor<T>> Moments(
+            Func<AiDotNet.Tensors.Engines.Compilation.FusedOptimizerParameterCheckpoint, float[]?> single,
+            Func<AiDotNet.Tensors.Engines.Compilation.FusedOptimizerParameterCheckpoint, double[]?> wide)
+        {
+            var map = new Dictionary<int, Tensor<T>>(planParameters.Count);
+            for (int p = 0; p < planParameters.Count; p++)
+            {
+                if (!carried[p]) continue;
+                var target = planParameters[p];
+                int index = eagerIndex[target];
+                var pCkpt = checkpoint.Parameters[p];
+                if (single(pCkpt) is { } f)
+                    map[index] = new Tensor<float>(target._shape, new Vector<float>((float[])f.Clone())).Cast<T>();
+                else if (wide(pCkpt) is { } d)
+                    map[index] = new Tensor<double>(target._shape, new Vector<double>((double[])d.Clone())).Cast<T>();
+            }
+            return map;
+        }
+
         lock (_tapeStateSync)
         {
-            if (firstMomentField is not null)
-            {
-                var mMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.MFloat is { } mf)
-                        mMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])mf.Clone())).Cast<T>();
-                    else if (pCkpt.MDouble is { } md)
-                        mMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])md.Clone())).Cast<T>();
-                }
-                if (mMap.Count > 0)
-                    _pendingTapeTensorStates[firstMomentField.Name] = mMap;
-            }
-
-            if (secondMomentField is not null)
-            {
-                var vMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.VFloat is { } vf)
-                        vMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vf.Clone())).Cast<T>();
-                    else if (pCkpt.VDouble is { } vd)
-                        vMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vd.Clone())).Cast<T>();
-                }
-                if (vMap.Count > 0)
-                    _pendingTapeTensorStates[secondMomentField.Name] = vMap;
-            }
-
-            if (maxSecondMomentField is not null)
-            {
-                var vmaxMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.VMaxFloat is { } vmf)
-                        vmaxMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vmf.Clone())).Cast<T>();
-                    else if (pCkpt.VMaxDouble is { } vmd)
-                        vmaxMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vmd.Clone())).Cast<T>();
-                }
-                if (vmaxMap.Count > 0)
-                    _pendingTapeTensorStates[maxSecondMomentField.Name] = vmaxMap;
-            }
+            if (firstMomentField is not null && Moments(s => s.MFloat, s => s.MDouble) is { Count: > 0 } mMap)
+                _pendingTapeTensorStates[firstMomentField.Name] = mMap;
+            if (secondMomentField is not null && Moments(s => s.VFloat, s => s.VDouble) is { Count: > 0 } vMap)
+                _pendingTapeTensorStates[secondMomentField.Name] = vMap;
+            if (maxSecondMomentField is not null && Moments(s => s.VMaxFloat, s => s.VMaxDouble) is { Count: > 0 } vmaxMap)
+                _pendingTapeTensorStates[maxSecondMomentField.Name] = vmaxMap;
         }
 
         _pendingFusedPlanState = null;
         _restoredEagerStateAwaitingEagerPath = true;
+    }
+
+    /// <summary>
+    /// Binds eager moments restored from a checkpoint (held by parameter index until a step names the parameters) to
+    /// <paramref name="eagerParameters"/>, the order the eager step indexes them by, without consuming them. A compiled
+    /// step calls this first so <see cref="TryInstallEagerStateIntoPlan"/> can find each parameter's moments.
+    /// </summary>
+    internal void BindPendingTapeState(IReadOnlyList<Tensor<T>> eagerParameters)
+    {
+        Guard.NotNull(eagerParameters);
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.Count == 0)
+                return;
+            RebuildTapeParameterIndex(eagerParameters);
+        }
+    }
+
+    /// <summary>Set when eager moments were installed into a plan; cleared (and the eager copy dropped) once that
+    /// plan's first step succeeded.</summary>
+    private bool _eagerStateInstalledInPlan;
+
+    /// <summary>
+    /// Installs this optimizer's eager state (step count and moments) into a freshly configured compiled plan, so the
+    /// plan continues the eager trajectory: an eager-written checkpoint resumed on the compiled path, or eager steps
+    /// that ran before the compiled path engaged. PyTorch keeps one optimizer state whichever way the step runs.
+    /// </summary>
+    /// <returns><c>false</c> when there is no eager state to carry.</returns>
+    /// <exception cref="InvalidOperationException">The eager state cannot be carried exactly.</exception>
+    internal bool TryInstallEagerStateIntoPlan(AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> plan)
+    {
+        Guard.NotNull(plan);
+        var stepField = EnumerateOptimizerFields()
+            .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int));
+        int step = stepField?.GetValue(this) is int s ? s : 0;
+        var stateFields = EnumerateTapeTensorStateFields().ToList();
+
+        lock (_tapeStateSync)
+        {
+            bool anyLive = stateFields.Any(f => f.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> { IsEmpty: false });
+            // A restored field with no entries (e.g. an unused AMSGrad max) leaves an empty pending map behind.
+            bool anyUnbound = _pendingTapeTensorStates.Values.Any(entries => entries.Count > 0);
+            if (step == 0 && !anyLive && !anyUnbound)
+                return false;
+
+            string Refusal(string why) =>
+                $"{GetType().Name} holds eager optimizer state (step {step}) that the compiled plan cannot continue exactly: " +
+                why + ". Continuing would silently restart the optimizer. Train on the eager path instead.";
+
+            if (anyUnbound)
+                throw new InvalidOperationException(Refusal("its restored moments are not bound to this model's parameters"));
+            foreach (var field in stateFields)
+            {
+                if (TransientTapeTensorStates(field.Name).Any())
+                    throw new InvalidOperationException(Refusal($"its '{field.Name}' state is held in a compressed form"));
+            }
+
+            FieldInfo? first = stateFields.FirstOrDefault(f => f.Name is "_tapeM" or "_tapeVelocity" or "_tapeMomentum");
+            FieldInfo? second = stateFields.FirstOrDefault(f => f.Name is "_tapeV" or "_tapeMeanSquare" or "_tapeSquaredGrad");
+            FieldInfo? max = stateFields.FirstOrDefault(f => f.Name is "_tapeVMax");
+            foreach (var field in stateFields)
+            {
+                if (field != first && field != second && field != max
+                    && field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> { IsEmpty: false })
+                    throw new InvalidOperationException(Refusal($"its '{field.Name}' state has no compiled-plan counterpart"));
+            }
+
+            var checkpoint = plan.CaptureFusedOptimizerCheckpoint()
+                ?? throw new InvalidOperationException(Refusal("the plan has no configured optimizer"));
+            if (checkpoint.MomentStorageMode != AiDotNet.Tensors.Engines.Compilation.FusedMomentStorageMode.Float32)
+                throw new InvalidOperationException(Refusal($"the plan stores its moments as {checkpoint.MomentStorageMode}"));
+
+            ConcurrentDictionary<Tensor<T>, Tensor<T>>? Live(FieldInfo? field)
+                => field?.GetValue(this) as ConcurrentDictionary<Tensor<T>, Tensor<T>>;
+            var m = Live(first);
+            var v = Live(second);
+            var vmax = Live(max);
+            var parameters = plan.Parameters;
+            var planSet = new HashSet<Tensor<T>>(parameters, TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var live in new[] { m, v, vmax })
+            {
+                if (live is not null && live.Keys.Any(parameter => !planSet.Contains(parameter)))
+                    throw new InvalidOperationException(Refusal("it holds moments for a parameter the plan does not train"));
+            }
+
+            bool isFloat = typeof(T) == typeof(float);
+            if (!isFloat && typeof(T) != typeof(double))
+                throw new InvalidOperationException(Refusal($"the numeric type {typeof(T).Name} has no plan moment layout"));
+
+            checkpoint.OptimizerStep = step;
+            for (int p = 0; p < parameters.Length; p++)
+            {
+                var state = checkpoint.Parameters[p];
+                // The eager optimizer bias-corrects every parameter with its one step count.
+                state.AcceptedUpdates = step;
+                var parameter = parameters[p];
+                if (m is not null && m.TryGetValue(parameter, out var mp))
+                {
+                    if (isFloat) state.MFloat = (float[])(object)mp.AsSpan().ToArray();
+                    else state.MDouble = (double[])(object)mp.AsSpan().ToArray();
+                }
+                if (v is not null && v.TryGetValue(parameter, out var vp))
+                {
+                    if (isFloat) state.VFloat = (float[])(object)vp.AsSpan().ToArray();
+                    else state.VDouble = (double[])(object)vp.AsSpan().ToArray();
+                }
+                if (vmax is not null && vmax.TryGetValue(parameter, out var vmp))
+                {
+                    if (isFloat) state.VMaxFloat = (float[])(object)vmp.AsSpan().ToArray();
+                    else state.VMaxDouble = (double[])(object)vmp.AsSpan().ToArray();
+                }
+            }
+
+            plan.RestoreFusedOptimizerCheckpoint(checkpoint, plan.LearningRateSchedules.ToArray());
+        }
+
+        _eagerStateInstalledInPlan = true;
+        _restoredEagerStateAwaitingEagerPath = false;
+        return true;
     }
 
     /// <summary>
@@ -3038,18 +3201,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // part of the active model (e.g. after a parameter set is replaced, or an optimizer is reused
             // across models without a full Reset) would linger as stale references and could be serialized
             // as state for parameters that no longer exist.
-            _tapeParameterIndices.Clear();
-            for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
-            {
-                var parameter = parameters[parameterIndex];
-                if (parameter is null) continue;
-
-                _tapeParameterIndices[parameter] = parameterIndex;
-                RestorePendingTapeTensorStates(parameterIndex, parameter);
-            }
-            _tapeIndexedParameterCount = count;
-            _tapeIndexedParametersRef = parameters;
+            RebuildTapeParameterIndex(parameters);
         }
+    }
+
+    /// <summary>Indexes <paramref name="parameters"/> by position and binds pending restored state to them. Caller
+    /// holds <c>_tapeStateSync</c>.</summary>
+    private void RebuildTapeParameterIndex(IReadOnlyList<Tensor<T>> parameters)
+    {
+        int count = parameters.Count;
+        _tapeParameterIndices.Clear();
+        for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+        {
+            var parameter = parameters[parameterIndex];
+            if (parameter is null) continue;
+
+            _tapeParameterIndices[parameter] = parameterIndex;
+            RestorePendingTapeTensorStates(parameterIndex, parameter);
+        }
+        _tapeIndexedParameterCount = count;
+        _tapeIndexedParametersRef = parameters;
     }
 
     /// <summary>

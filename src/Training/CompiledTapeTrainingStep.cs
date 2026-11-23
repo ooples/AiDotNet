@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -2590,6 +2590,15 @@ public static class CompiledTapeTrainingStep<T>
                 }
             }
         }
+        else if (plan is AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> concrete
+            && optimizer.TryInstallEagerStateIntoPlan(concrete))
+        {
+            // Eager moments (from an eager-written checkpoint, or eager steps taken before this plan engaged) now live
+            // in the plan with the eager step count, so the plan continues the eager trajectory instead of restarting
+            // Adam. The eager copy is dropped once the first fused step succeeds.
+            imported = optimizer;
+            CurrentState.planOptimizerStep = concrete.OptimizerStep;
+        }
         else
         {
             optimizer.EnsureRestoredStateUsableByFusedPlan();
@@ -2679,6 +2688,14 @@ public static class CompiledTapeTrainingStep<T>
     /// Dedup is by <c>Tensor&lt;T&gt;</c> reference across BOTH sources, so an
     /// extra tensor that also happens to be layer-carried is only registered once.
     /// </summary>
+    /// <summary>The parameter order a fused plan compiled from these inputs uses: the canonical order its optimizer
+    /// state (and so a fused checkpoint) is indexed by.</summary>
+    internal static Tensor<T>[] FusedParameterOrder(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extras,
+        IReadOnlyCollection<Tensor<T>>? selection)
+        => CollectDeduplicatedParametersWithExtras(layers, extras, selection);
+
     private static Tensor<T>[] CollectDeduplicatedParametersWithExtras(
         IReadOnlyList<ITrainableLayer<T>> layers,
         IReadOnlyList<Tensor<T>>? extras,
