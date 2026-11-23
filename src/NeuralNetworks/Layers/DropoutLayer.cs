@@ -139,6 +139,13 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private ulong _seedCounter;
 
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => unchecked((long)System.Threading.Interlocked.Read(ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter)));
+        set => System.Threading.Interlocked.Exchange(ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter), value ?? 0L);
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
     /// </summary>
@@ -302,9 +309,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         ulong counter = AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward
             ? PeekSeedCounter()
             : AiDotNet.Training.CompiledStepRandom<T>.StepCounter(AdvanceSeedCounter);
-        int? perCallSeed = RandomSeed.HasValue
-            ? DeriveSeed32(RandomSeed.Value, counter)
-            : (int?)null;
+        int? perCallSeed = StochasticDrawSeed(counter);
 
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
@@ -341,9 +346,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
             return;
 
         ulong counter = AdvanceSeedCounter();
-        int? perCallSeed = RandomSeed.HasValue
-            ? DeriveSeed32(RandomSeed.Value, counter)
-            : (int?)null;
+        int? perCallSeed = StochasticDrawSeed(counter);
 
         using var refreshedMask = Engine.TensorDropoutMask<T>(
             targetMask._shape, _dropoutRate, _scale, perCallSeed);
@@ -420,18 +423,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         // Interlocked.Increment returns the POST-increment value; subtract
         // 1 to recover the pre-increment value the callers expect.
         return unchecked((ulong)(incremented - 1));
-    }
-
-    /// <summary>
-    /// Shared seed-derivation helper for the CPU Forward path. Mixes the
-    /// layer's <see cref="LayerBase{T}.RandomSeed"/> with the per-call
-    /// counter via a Knuth-multiplicative hash. The 32-bit width matches
-    /// <see cref="Tensors.Helpers.RandomHelper.CreateSeededRandom(int)"/>'s
-    /// seed parameter type that <c>TensorDropoutMask</c> consumes on CPU.
-    /// </summary>
-    private static int DeriveSeed32(int randomSeed, ulong counter)
-    {
-        return unchecked((int)(((uint)randomSeed * 2654435761u) ^ (uint)counter));
     }
 
     #region ONNX Export

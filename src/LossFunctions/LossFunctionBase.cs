@@ -10,6 +10,13 @@ namespace AiDotNet.LossFunctions;
 public abstract class LossFunctionBase<T> : ILossFunction<T>
 {
     /// <summary>
+    /// The number of elements of <paramref name="target"/> this loss's mean reduction divides by, or <c>null</c> when it
+    /// averages over every target element. Distributed training weights each rank's gradient by this count over the
+    /// global count, so a loss that leaves targets out of its mean (cross-entropy's ignored rows) must report it.
+    /// </summary>
+    internal virtual long? CountMeanReductionElements(Tensor<T> target) => null;
+
+    /// <summary>
     /// Provides operations for the numeric type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;

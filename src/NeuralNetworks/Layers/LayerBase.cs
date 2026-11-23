@@ -722,6 +722,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private int? _randomSeed;
     private Random? _seededRandom;
 
+    /// <summary>
+    /// The random stream this layer's per-step draws (dropout and drop-path masks) come from: 0 in a single process and
+    /// on rank 0, the rank elsewhere, so each data-parallel rank draws its own masks, deterministically.
+    /// </summary>
+    internal int StochasticStream { get; set; }
+
+    /// <summary>
+    /// The seed per-step draws use when <see cref="RandomSeed"/> is unset: training draws one (rank 0, shared) and
+    /// checkpoints it, so a resumed run draws the masks the uninterrupted one would. Null leaves such draws unseeded.
+    /// </summary>
+    internal int? StochasticFallbackSeed { get; set; }
+
+    /// <summary>
+    /// The draw counter of a layer whose per-step masks are derived from a seed and a counter, or null for a layer that
+    /// draws none. Checkpointed with the training cursor so a resumed run continues the sequence of masks.
+    /// </summary>
+    internal virtual long? StochasticDrawCounter
+    {
+        get => null;
+        set { }
+    }
+
+    /// <summary>
+    /// The seed of per-step draw <paramref name="counter"/>: <see cref="RandomSeed"/> (else
+    /// <see cref="StochasticFallbackSeed"/>) mixed with the counter, then with <see cref="StochasticStream"/> when it is
+    /// not 0, so stream 0 draws exactly the masks a single process does. Null when neither seed is set.
+    /// </summary>
+    private protected int? StochasticDrawSeed(ulong counter)
+    {
+        if ((RandomSeed ?? StochasticFallbackSeed) is not int seed) return null;
+        uint mixed = unchecked(((uint)seed * 2654435761u) ^ (uint)counter);
+        if (StochasticStream != 0)
+        {
+            uint h = unchecked(mixed ^ ((uint)StochasticStream * 0x9E3779B9u));
+            h = unchecked((h ^ (h >> 16)) * 0x85EBCA6Bu);
+            h = unchecked((h ^ (h >> 13)) * 0xC2B2AE35u);
+            mixed = h ^ (h >> 16);
+        }
+        return unchecked((int)mixed);
+    }
+
     public int? RandomSeed
     {
         get => _randomSeed;

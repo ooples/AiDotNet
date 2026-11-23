@@ -1338,6 +1338,59 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         Thread.MemoryBarrier();
     }
 
+    /// <summary>How a peer's exit is queried (tests substitute a query that fails as a restricted handle does).</summary>
+    internal Func<Process, bool> HasExitedQuery { get; set; } = static p => p.HasExited;
+
+    /// <summary>
+    /// Whether <paramref name="proc"/> has exited. When its handle cannot be queried (access restricted, or the platform
+    /// does not support it) the process is looked up again by id: no process by that id (or one started later, a reused
+    /// id) means it exited. A peer whose liveness cannot be established either way is an error, not a live peer: treating
+    /// it as alive left only the collective timeout to notice a dead rank.
+    /// </summary>
+    internal static bool HasPeerExited(Process proc, Func<Process, bool> hasExited)
+    {
+        Exception queryFailure;
+        try
+        {
+            return hasExited(proc);
+        }
+        catch (InvalidOperationException)
+        {
+            return true;   // no process is associated with the object any more
+        }
+        catch (System.ComponentModel.Win32Exception ex) { queryFailure = ex; }
+        catch (NotSupportedException ex) { queryFailure = ex; }
+
+        int id;
+        try { id = proc.Id; }
+        catch (InvalidOperationException) { return true; }
+        try
+        {
+            using var again = Process.GetProcessById(id);
+            try
+            {
+                // A different process that reuses the id started after ours did.
+                return again.StartTime > proc.StartTime;
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or InvalidOperationException)
+            {
+                // Its start time is unreadable too: the id is still taken, so the peer is alive.
+                Debug.WriteLine($"Peer PID {id} start time unreadable ({ex.Message}); the id is live.");
+                return false;
+            }
+        }
+        catch (ArgumentException)
+        {
+            return true;   // no process with that id is running
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or InvalidOperationException)
+        {
+            throw new IOException(
+                $"Cannot tell whether distributed peer PID {id} is alive: its handle query failed ({queryFailure.Message}) "
+                + $"and looking it up by id failed ({ex.Message}).", queryFailure);
+        }
+    }
+
     private void CheckPeerAlive(int peer)
     {
         var proc = _peerProcesses?[peer];
@@ -1362,31 +1415,10 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 Volatile.Write(ref lastChecks[peer], now);
             }
 
-            try
+            exited = HasPeerExited(proc, HasExitedQuery);
+            if (exited && exitedFlags is not null)
             {
-                exited = proc.HasExited;
-                if (exited && exitedFlags is not null)
-                {
-                    Volatile.Write(ref exitedFlags[peer], 1);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                exited = true;
-                if (exitedFlags is not null)
-                {
-                    Volatile.Write(ref exitedFlags[peer], 1);
-                }
-            }
-            catch (System.ComponentModel.Win32Exception ex)
-            {
-                Debug.WriteLine($"HasExited query restricted for peer {peer}: {ex.Message}");
-                exited = false;
-            }
-            catch (NotSupportedException ex)
-            {
-                Debug.WriteLine($"HasExited query unsupported for peer {peer}: {ex.Message}");
-                exited = false;
+                Volatile.Write(ref exitedFlags[peer], 1);
             }
         }
 

@@ -2767,7 +2767,7 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
@@ -2963,7 +2963,7 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
 
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);

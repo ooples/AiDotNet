@@ -130,6 +130,8 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
              && predicted.Shape[classAxis] > 1
              && target.Length == predicted.Length / predicted.Shape[classAxis]);
 
+        RecordReductionLayout(target.Shape.ToArray(), isClassIndexTarget, classAxis, predicted.Shape[classAxis]);
+
         if (isClassIndexTarget && predicted.Shape.Length >= 2
             && classAxis == predicted.Shape.Length - 1)
         {
@@ -269,6 +271,71 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     /// LM-head kernels read them: always without an explicit class axis (the last axis is preferred when it matches),
     /// and with one only when it names the last axis.
     /// </summary>
+    private readonly object _reductionLayoutLock = new();
+    private (int[] TargetShape, bool ClassIndex, int ClassAxis, int Classes) _reductionLayout;
+
+    /// <summary>
+    /// Records how a target of <paramref name="targetShape"/> was scored -- class indices or dense rows along
+    /// <paramref name="classAxis"/> of <paramref name="classes"/> classes -- so <see cref="CountMeanReductionElements"/>
+    /// counts the rows the mean divided by. A compiled step replays the traced loss without calling it again; the layout
+    /// is a function of the shapes, which a replay keeps.
+    /// </summary>
+    internal void RecordReductionLayout(int[] targetShape, bool classIndex, int classAxis, int classes)
+    {
+        lock (_reductionLayoutLock)
+            _reductionLayout = ((int[])targetShape.Clone(), classIndex, classAxis, classes);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The supervised rows: a class index inside <c>[0, classes)</c> after rounding, or a dense row with target
+    /// mass -- the count <see cref="ComputeTapeLoss"/> divides by (before it clamps an all-ignored batch to one).</remarks>
+    [AiDotNet.Attributes.ScalarKernel("Host count of the supervised targets of one batch, once per step for gradient weighting")]
+    internal override long? CountMeanReductionElements(Tensor<T> target)
+    {
+        (int[] TargetShape, bool ClassIndex, int ClassAxis, int Classes) layout;
+        lock (_reductionLayoutLock) layout = _reductionLayout;
+        if (layout.TargetShape is null) return null;   // this loss has scored nothing
+        if (!layout.TargetShape.AsSpan().SequenceEqual(target.Shape.ToArray()))
+        {
+            // The scored target may be a reshape of the caller's (a [B, 1] batch of indices scored as [B]); the count
+            // is the same over the same values when the rows are the same rows.
+            long recorded = 1;
+            foreach (int d in layout.TargetShape) recorded *= d;
+            bool sameRows = recorded == target.Length
+                && (layout.ClassIndex
+                    || (layout.ClassAxis == layout.TargetShape.Length - 1 && target.Rank > 0
+                        && target.Shape[target.Rank - 1] == layout.TargetShape[layout.ClassAxis]));
+            if (!sameRows) return null;   // this loss did not score a target of this shape
+        }
+        var values = target.Contiguous().AsSpan();
+        long count = 0;
+        if (layout.ClassIndex)
+        {
+            double upper = layout.Classes - 0.5;
+            for (int i = 0; i < values.Length; i++)
+            {
+                double v = NumOps.ToDouble(values[i]);
+                if (v > -0.5 && v < upper) count++;
+            }
+            return count;
+        }
+        int rank = layout.TargetShape.Length;
+        if (rank <= 1) return 1;   // one sample: the loss is that sample's, not a mean over rows
+        int axis = layout.ClassAxis;
+        int classes = layout.TargetShape[axis];
+        int inner = 1;
+        for (int a = axis + 1; a < rank; a++) inner *= layout.TargetShape[a];
+        int outer = values.Length / (classes * inner);
+        for (int o = 0; o < outer; o++)
+            for (int i = 0; i < inner; i++)
+            {
+                int baseIndex = o * classes * inner + i;
+                for (int c = 0; c < classes; c++)
+                    if (NumOps.ToDouble(values[baseIndex + c * inner]) != 0.0) { count++; break; }
+            }
+        return count;
+    }
+
     internal bool ReadsClassIndexTargetsOverLastAxis(int logitsRank) =>
         !_classAxis.HasValue || (_classAxis.Value < 0 ? logitsRank + _classAxis.Value : _classAxis.Value) == logitsRank - 1;
 

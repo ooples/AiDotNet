@@ -142,6 +142,58 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _barrierReceiveSlot = new T[1];
     }
 
+    /// <summary>The default per-wait timeout: 120 s, as <see cref="SharedMemoryCommunicationBackend{T}"/>.</summary>
+    public const int DefaultTimeoutMilliseconds = 120_000;
+
+    private int _timeoutMilliseconds = DefaultTimeoutMilliseconds;
+
+    /// <summary>
+    /// How long any single blocking wait (rendezvous accept, socket send and receive, the background send worker) may
+    /// take before it throws, so a hung or dead peer surfaces as an exception on every rank instead of a hang
+    /// (PyTorch's process-group timeout). Set it before <c>Initialize</c>.
+    /// </summary>
+    public int TimeoutMilliseconds
+    {
+        get => _timeoutMilliseconds;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "Timeout must be positive.");
+            if (IsInitialized) throw new InvalidOperationException("Set the timeout before Initialize.");
+            _timeoutMilliseconds = value;
+        }
+    }
+
+    /// <summary>
+    /// A backend whose rank and world size come from <c>AIDOTNET_RANK</c> (or <c>RANK</c>) and
+    /// <c>AIDOTNET_WORLD_SIZE</c> (or <c>WORLD_SIZE</c>), and whose timeout comes from
+    /// <c>AIDOTNET_COLLECTIVE_TIMEOUT_MS</c> when set, the names <see cref="SharedMemoryCommunicationBackend{T}"/> reads.
+    /// </summary>
+    public static GlooCommunicationBackend<T> FromEnvironment()
+    {
+        static int Read(string name, string fallback, int defaultValue)
+        {
+            string? text = Environment.GetEnvironmentVariable(name) ?? Environment.GetEnvironmentVariable(fallback);
+            if (string.IsNullOrEmpty(text)) return defaultValue;
+            if (!int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int value))
+                throw new InvalidOperationException($"{name} is not an integer: '{text}'.");
+            return value;
+        }
+        return new GlooCommunicationBackend<T>(
+            Read("AIDOTNET_RANK", "RANK", 0),
+            Read("AIDOTNET_WORLD_SIZE", "WORLD_SIZE", 1))
+        {
+            TimeoutMilliseconds = Read("AIDOTNET_COLLECTIVE_TIMEOUT_MS", "AIDOTNET_COLLECTIVE_TIMEOUT_MS", DefaultTimeoutMilliseconds),
+        };
+    }
+
+    // Every socket's send and receive give up after the timeout: a read from a peer that hangs throws IOException
+    // (SocketError.TimedOut) instead of blocking forever.
+    private void ApplyTimeouts(TcpClient client)
+    {
+        client.ReceiveTimeout = TimeoutMilliseconds;
+        client.SendTimeout = TimeoutMilliseconds;
+    }
+
     /// <inheritdoc/>
     public override int Rank => _rank;
 
@@ -555,6 +607,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 {
                     NoDelay = true,
                 };
+                ApplyTimeouts(client);
                 TryConfigureSocketBuffers(client.Client);
                 client.Connect(masterAddr, targetPort);
 
@@ -601,9 +654,18 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("TCP listener not initialized");
         }
 
-        // Accept incoming connection from ANY rank
+        // Accept incoming connection from ANY rank, within the timeout: a rank that never starts fails rendezvous.
+        var acceptDeadline = Stopwatch.StartNew();
+        while (!_tcpListener.Pending())
+        {
+            if (acceptDeadline.ElapsedMilliseconds >= TimeoutMilliseconds)
+                throw new TimeoutException(
+                    $"Rank {_rank}: no connection from a higher rank within {TimeoutMilliseconds} ms during rendezvous.");
+            Thread.Sleep(5);
+        }
         var client = _tcpListener.AcceptTcpClient();
         client.NoDelay = true;
+        ApplyTimeouts(client);
         TryConfigureSocketBuffers(client.Client);
 
         // Read handshake to identify the connecting rank (exact 4 bytes, zero read-ahead buffering)
@@ -1360,7 +1422,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Exception? sendEx;
             try
             {
-                _workCompleted.WaitOne();
+                // The socket send times out on its own; this bound only guards the hand-off to the worker thread.
+                if (!_workCompleted.WaitOne(checked(_owner.TimeoutMilliseconds * 2)))
+                    throw new TimeoutException(
+                        $"Rank {_owner._rank}: a background send did not complete within {_owner.TimeoutMilliseconds * 2} ms.");
                 sendEx = _exception;
                 _exception = null;
             }

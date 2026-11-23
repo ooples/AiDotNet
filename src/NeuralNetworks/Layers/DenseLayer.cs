@@ -364,6 +364,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         if (ids is null) return null;
 
         vocabularySize = outputSize;
+        ((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).RecordReductionLayout(
+            target.Shape.ToArray(), classIndex: true, classAxis: target.Rank, classes: outputSize);
         return ids;
     }
 

@@ -26656,3 +26656,7 @@ AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorReso
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.set -> void
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.get -> int?
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.set -> void
+const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMilliseconds = 120000 -> int
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.get -> int
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set -> void
+static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!

@@ -8200,7 +8200,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var (lastLossTensor, lastAlignedTarget) = ComputeAccumulationMicroBatchObjective(
                 lastMb.Input, lastMb.Target, loss);
 
-            long lastTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(lastAlignedTarget);
+            long lastTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(lastAlignedTarget, loss);
             double lastUnscaledLoss = ReadScalarLossAsDouble(lastLossTensor);
             if (lastTokens > 0)
             {
@@ -8346,7 +8346,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             var (mbInput, mbTarget) = preparedMicroBatches[i];
             var (lossTensor, alignedTarget) = ComputeAccumulationMicroBatchObjective(mbInput, mbTarget, loss);
-            long mbTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(alignedTarget);
+            long mbTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(alignedTarget, loss);
             if (mbTokens <= 0) continue;
             totalTokens += mbTokens;
             weightedLossSum += ReadScalarLossAsDouble(lossTensor) * mbTokens;
@@ -8493,7 +8493,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         using var tape = new GradientTape<T>();
         var (lossTensor, alignedTarget) = ComputeAccumulationMicroBatchObjective(mbInput, mbTarget, loss);
-        long mbTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(alignedTarget);
+        long mbTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(alignedTarget, loss);
         if (mbTokens <= 0) return;
 
         double mbUnscaledLoss = ReadScalarLossAsDouble(lossTensor);
@@ -8973,7 +8973,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         MixedPrecisionContext? mpCtx,
         Action restoreFp32Masters)
     {
-        long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(expected);
+        long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(expected, loss);
         double localUnscaledLoss = ReadScalarLossAsDouble(lossTensor);
         var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localUnscaledLoss);
         T lossValue = NumOps.FromDouble(globalLoss);
@@ -9158,7 +9158,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
             }
 
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(expected);
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(expected, loss);
             double localUnscaledLoss = ReadScalarLossAsDouble(lossTensor);
             var lossForBackward = ScaleLossForMixedPrecision(mpCtx, lossTensor);
 
@@ -18198,6 +18198,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
+    }
+
+    /// <summary>
+    /// The layers (and sub-layers) whose per-step masks come from a seed and a draw counter, in a fixed traversal order
+    /// that is the same on every rank.
+    /// </summary>
+    internal IReadOnlyList<LayerBase<T>> CollectStochasticLayers()
+    {
+        var found = new List<LayerBase<T>>();
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        void Visit(ILayer<T> layer)
+        {
+            if (!seen.Add(layer)) return;
+            if (layer is LayerBase<T> concrete && concrete.StochasticDrawCounter.HasValue) found.Add(concrete);
+            foreach (var sub in layer.GetSubLayers()) Visit(sub);
+        }
+        foreach (var layer in Layers) Visit(layer);
+        return found;
+    }
+
+    /// <summary>Every registered buffer of this network's layers and their sub-layers, in layer order.</summary>
+    internal IReadOnlyList<Tensor<T>> CollectRegisteredBuffers()
+    {
+        var buffers = new List<Tensor<T>>();
+        foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
+        return buffers;
     }
 
     private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)

@@ -28,7 +28,161 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     internal const string StreamingSamplesInEpochKey = "streaming.samples_in_epoch";
     internal const string StreamingGlobalBatchSizeKey = "streaming.global_batch_size";
     internal const string StreamingWorldSizeKey = "streaming.world_size";
+    internal const string StreamingRngBaseSeedKey = "rng.base_seed";
+    internal const string StreamingRngDrawCountersKey = "rng.draw_counters";
     internal const string StreamingMpScaleKey = "mp.scale";
+
+    /// <summary>The seed drawn for this run's unseeded stochastic layers, or null when every one has its own seed.</summary>
+    private int? _stochasticBaseSeed;
+
+    /// <summary>
+    /// Gives every stochastic layer its per-rank stream (the rank; 0 in a single process) and, for layers without a
+    /// RandomSeed, a seed derived from one base seed rank 0 draws and broadcasts. A layer's masks are then a function of
+    /// (seed, rank, draw counter), all three of which the checkpoint records, so a resumed run continues the
+    /// uninterrupted run's masks; and data-parallel ranks draw different, reproducible masks, as each PyTorch DDP rank
+    /// draws from its own generator.
+    /// </summary>
+    private void ConfigureStochasticStreams(DistributedTraining.ICommunicationBackend<T>? distBackend)
+    {
+        _stochasticBaseSeed = null;
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        int worldSize = distBackend is null ? 1 : Math.Max(1, distBackend.WorldSize);
+        int rank = worldSize > 1 ? distBackend!.Rank : 0;
+        bool needsSeed = layers.Any(layer => layer.RandomSeed is null);
+        int baseSeed = 0;
+        if (worldSize > 1)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var plan = new Vector<T>(6);
+            if (rank == 0)
+            {
+                Span<T> w = plan.AsWritableSpan();
+                w[0] = numOps.FromDouble(needsSeed ? 1.0 : 0.0);
+                WriteIntAsU7Chunks(numOps, w, 1, needsSeed ? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue) : 0);
+            }
+            plan = distBackend!.Broadcast(plan, root: 0);
+            needsSeed = numOps.ToDouble(plan.AsSpan()[0]) > 0.0;
+            baseSeed = ReadIntFromU7Chunks(numOps, plan.AsSpan(), 1);
+        }
+        else if (needsSeed)
+        {
+            baseSeed = RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+        }
+
+        foreach (var layer in layers) layer.StochasticStream = rank;
+        if (needsSeed) ApplyStochasticBaseSeed(layers, baseSeed);
+    }
+
+    private void ApplyStochasticBaseSeed(IReadOnlyList<NeuralNetworks.Layers.LayerBase<T>> layers, int baseSeed)
+    {
+        _stochasticBaseSeed = baseSeed;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            layers[i].StochasticFallbackSeed = layers[i].RandomSeed is null
+                ? unchecked(baseSeed * 31 + (i + 1) * (int)0x9E3779B1u)
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Adds the random state to a checkpoint: the drawn base seed and every rank's draw counters
+    /// ("c,c,...;c,c,..." in rank order). Collective when distributed: every rank must call it for the same save.
+    /// </summary>
+    private void AddStochasticCheckpointState(Dictionary<string, object> metadata, DistributedTraining.ICommunicationBackend<T>? distBackend)
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        if (layers.Count == 0) return;
+        int worldSize = distBackend is null ? 1 : Math.Max(1, distBackend.WorldSize);
+        int rank = worldSize > 1 ? distBackend!.Rank : 0;
+        var counters = new long[worldSize, layers.Count];
+        if (worldSize > 1)
+        {
+            // Each rank writes its own slots (two 32-bit halves, 7 bits per element) and a sum gathers them exactly.
+            var numOps = MathHelper.GetNumericOperations<T>();
+            const int PerCounter = 10;
+            var gathered = new Vector<T>(checked(worldSize * layers.Count * PerCounter));
+            Span<T> w = gathered.AsWritableSpan();
+            for (int i = 0; i < layers.Count; i++)
+            {
+                long c = layers[i].StochasticDrawCounter ?? 0L;
+                int at = (rank * layers.Count + i) * PerCounter;
+                WriteIntAsU7Chunks(numOps, w, at, unchecked((int)(c >> 32)));
+                WriteIntAsU7Chunks(numOps, w, at + 5, unchecked((int)c));
+            }
+            distBackend!.AllReduce(gathered, DistributedTraining.ReductionOperation.Sum);
+            ReadOnlySpan<T> r = gathered.AsSpan();
+            for (int k = 0; k < worldSize; k++)
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    int at = (k * layers.Count + i) * PerCounter;
+                    long hi = ReadIntFromU7Chunks(numOps, r, at), lo = unchecked((uint)ReadIntFromU7Chunks(numOps, r, at + 5));
+                    counters[k, i] = (hi << 32) | lo;
+                }
+        }
+        else
+        {
+            for (int i = 0; i < layers.Count; i++) counters[0, i] = layers[i].StochasticDrawCounter ?? 0L;
+        }
+
+        var text = new System.Text.StringBuilder();
+        for (int k = 0; k < worldSize; k++)
+        {
+            if (k > 0) text.Append(';');
+            for (int i = 0; i < layers.Count; i++)
+            {
+                if (i > 0) text.Append(',');
+                text.Append(counters[k, i].ToString(CultureInfo.InvariantCulture));
+            }
+        }
+        metadata[StreamingRngDrawCountersKey] = text.ToString();
+        if (_stochasticBaseSeed is int baseSeed) metadata[StreamingRngBaseSeedKey] = baseSeed;
+    }
+
+    /// <summary>The random state of a checkpoint as one string ("seed|counters"), for broadcasting from rank 0.</summary>
+    private static string ReadStochasticCheckpointState(Dictionary<string, object> metadata)
+    {
+        string seed = metadata.TryGetValue(StreamingRngBaseSeedKey, out var s) && s is not null
+            ? Convert.ToInt32(s, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+        string counters = metadata.TryGetValue(StreamingRngDrawCountersKey, out var c) && c is not null
+            ? Convert.ToString(c, CultureInfo.InvariantCulture) ?? string.Empty
+            : string.Empty;
+        return seed + "|" + counters;
+    }
+
+    /// <summary>
+    /// Restores the state <see cref="ReadStochasticCheckpointState"/> read: the base seed, and this rank's draw counters
+    /// (rank r takes the counters rank r saved; a rank the saving run did not have takes rank 0's -- its masks cannot
+    /// match a run that never had it, but they continue a real sequence rather than restart one).
+    /// </summary>
+    private void RestoreStochasticCheckpointState(string state, int rank, string checkpointId)
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet || string.IsNullOrEmpty(state)) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        int bar = state.IndexOf('|');
+        string seedText = bar < 0 ? state : state.Substring(0, bar);
+        string countersText = bar < 0 ? string.Empty : state.Substring(bar + 1);
+        if (seedText.Length > 0)
+            ApplyStochasticBaseSeed(layers, int.Parse(seedText, CultureInfo.InvariantCulture));
+        if (countersText.Length == 0)
+        {
+            if (layers.Count > 0)
+                throw new InvalidOperationException(
+                    $"Cannot resume from checkpoint '{checkpointId}': it records no dropout draw counters, but the model has "
+                    + $"{layers.Count} stochastic layer(s); resumed masks would not continue the checkpointed run's.");
+            return;
+        }
+        var ranks = countersText.Split(';');
+        var mine = ranks[rank < ranks.Length ? rank : 0].Split(',');
+        if (mine.Length != layers.Count)
+            throw new InvalidOperationException(
+                $"Cannot resume from checkpoint '{checkpointId}': it records {mine.Length} stochastic layer counter(s) but "
+                + $"the model has {layers.Count}.");
+        for (int i = 0; i < layers.Count; i++)
+            layers[i].StochasticDrawCounter = long.Parse(mine[i], CultureInfo.InvariantCulture);
+    }
     internal const string StreamingMpGrowthTrackerKey = "mp.growth_tracker";
     internal const string StreamingMpTotalUpdatesKey = "mp.total_updates";
     internal const string StreamingMpSkippedUpdatesKey = "mp.skipped_updates";
@@ -178,6 +332,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         distCoordinator?.EnsureInitialParametersSynchronized(
             neuralNet.CollectTrainableParameters(),
             neuralNet.InvalidateLayerWeightCaches);
+        distCoordinator?.BroadcastBuffers(neuralNet.CollectRegisteredBuffers(), neuralNet.InvalidateLayerWeightCaches);
         neuralNet.ActiveMixedPrecisionContext?.ClearFp32SnapshotPool();
     }
 
@@ -399,6 +554,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (distBackend is null || singleProcess)
         {
+            AddStochasticCheckpointState(metadata, null);
             if (forceSave)
             {
                 _checkpointManager.SaveCheckpoint(_model, _optimizer, epoch, stepInt, metrics, metadata);
@@ -433,6 +589,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             return false;
         }
+
+        AddStochasticCheckpointState(metadata, distBackend);
 
         if (distCoordinator is not null
             && _model is NeuralNetworks.NeuralNetworkBase<T> nn
@@ -593,7 +751,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int savedBatchSize = checked((int)ReadStreamingCursor(metadata, StreamingBatchSizeKey, latest.CheckpointId));
 
         ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
+        RestoreStochasticCheckpointState(ReadStochasticCheckpointState(metadata), rank: 0, latest.CheckpointId);
         int? savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+        RequireCheckpointedDataOrder(options.Seed, savedFitSeed, latest.CheckpointId);
         int? savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
         long samplesInEpoch;
@@ -633,6 +793,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distCoordinator?.EnsureInitialParametersSynchronized(
                 restoredNn.CollectTrainableParameters(),
                 restoredNn.InvalidateLayerWeightCaches);
+            // A checkpoint restored as a parameter vector carries no buffers; rank 0's are the restored ones.
+            distCoordinator?.BroadcastBuffers(restoredNn.CollectRegisteredBuffers(), restoredNn.InvalidateLayerWeightCaches);
         }
 
         ILearningRateScheduler? configuredScheduler =
@@ -689,6 +851,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int? savedFitBatchSize = null;
         byte[]? rank0StateBytes = null;
         byte[]? rank0OptimizerBytes = null;
+        byte[]? rank0RngState = null;
+        string rngCheckpointId = string.Empty;
         Exception? rank0Error = null;
 
         if (distBackend.Rank == 0)
@@ -706,6 +870,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                     ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
                     savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+                    RequireCheckpointedDataOrder(options.Seed, savedFitSeed, latest.CheckpointId);
                     savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
                     samplesInEpoch = metadata.TryGetValue(StreamingSamplesInEpochKey, out var samplesObj) && samplesObj is not null
@@ -734,6 +899,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
 
                     rank0OptimizerBytes = latest.OptimizerData;
+                    rank0RngState = System.Text.Encoding.UTF8.GetBytes(ReadStochasticCheckpointState(metadata));
+                    rngCheckpointId = latest.CheckpointId;
                     hasMpScale = TryReadMpMetadata(metadata, out mpScale, out mpGrowthTracker, out mpTotalUpdates, out mpSkippedUpdates);
                     status = 1;
                 }
@@ -814,6 +981,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             mpSkippedUpdates = ReadIntFromU7Chunks(numOps, mpR, 20);
         }
 
+        byte[] sharedRngState = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0RngState : null, root: 0);
+        RestoreStochasticCheckpointState(System.Text.Encoding.UTF8.GetString(sharedRngState), distBackend.Rank, rngCheckpointId);
+
         byte[] sharedStateBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0StateBytes : null, root: 0);
         if (sharedStateBytes.Length > 0 && model is ICheckpointableModel checkpointableModel)
         {
@@ -844,6 +1014,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distCoordinator?.EnsureInitialParametersSynchronized(
                 restoredNn.CollectTrainableParameters(),
                 restoredNn.InvalidateLayerWeightCaches);
+            // A checkpoint restored as a parameter vector carries no buffers; rank 0's are the restored ones.
+            distCoordinator?.BroadcastBuffers(restoredNn.CollectRegisteredBuffers(), restoredNn.InvalidateLayerWeightCaches);
         }
 
         ILearningRateScheduler? configuredScheduler =
@@ -894,6 +1066,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             FastForwardScheduler(configuredScheduler, restoredSchedulerStep);
             gradientOptimizer.SetLearningRateScheduler(configuredScheduler);
         }
+    }
+
+    // With no configured seed the order is the drawn seed the checkpoint records; one that records none cannot be continued.
+    private static void RequireCheckpointedDataOrder(int? configuredSeed, int? savedFitSeed, string checkpointId)
+    {
+        if (configuredSeed is null && savedFitSeed is null)
+            throw new InvalidOperationException(
+                $"Cannot resume from checkpoint '{checkpointId}': the run had no Seed and the checkpoint records no drawn " +
+                "data-order seed, so the batches skipped on resume would not be the batches already trained on.");
     }
 
     private static void ValidateCheckpointSeed(Dictionary<string, object> metadata, int? expectedSeed, string checkpointId)

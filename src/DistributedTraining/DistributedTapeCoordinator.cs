@@ -346,6 +346,56 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     }
 
     /// <summary>
+    /// Broadcasts Rank 0's registered buffers (non-trainable persistent state such as batch-norm running statistics) to
+    /// every other rank, as PyTorch DDP broadcasts module buffers from rank 0 when it wraps the model: without it each
+    /// rank kept the buffers it initialized or loaded itself, and evaluation diverged across ranks.
+    /// </summary>
+    /// <param name="buffers">Every registered buffer of the model, in the same order on every rank.</param>
+    /// <param name="invalidateCaches">Invoked after the buffers are overwritten.</param>
+    public void BroadcastBuffers(IReadOnlyList<Tensor<T>> buffers, Action? invalidateCaches = null)
+    {
+        ThrowIfDisposed();
+        if (buffers is null) throw new ArgumentNullException(nameof(buffers));
+        if (WorldSize <= 1 || buffers.Count == 0) return;
+        EnsureBackendInitialized();
+        var unique = new List<Tensor<T>>(buffers.Count);
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        long total = 0;
+        foreach (var buffer in buffers)
+        {
+            if (buffer is null || buffer.Length == 0 || !seen.Add(buffer)) continue;
+            unique.Add(buffer);
+            total += buffer.Length;
+        }
+        if (total == 0) return;
+        // The layout must agree before any data moves: a rank with a different buffer set would unpack garbage.
+        var layout = new Vector<T>(2);
+        layout.AsWritableSpan()[0] = NumOps.FromDouble(unique.Count);
+        layout.AsWritableSpan()[1] = NumOps.FromDouble(total);
+        var layoutMax = new Vector<T>(layout.AsSpan().ToArray());
+        Backend.AllReduce(layoutMax, ReductionOperation.Max);
+        Backend.AllReduce(layout, ReductionOperation.Min);
+        if (!NumOps.Equals(layout.AsSpan()[0], layoutMax.AsSpan()[0]) || !NumOps.Equals(layout.AsSpan()[1], layoutMax.AsSpan()[1]))
+            throw new InvalidOperationException(
+                $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here), "
+                + "so rank 0's buffers cannot be broadcast onto them.");
+        var flat = new Vector<T>(checked((int)total));
+        if (Rank == 0)
+        {
+            Span<T> dst = flat.AsWritableSpan();
+            int offset = 0;
+            foreach (var buffer in unique)
+            {
+                buffer.Contiguous().AsSpan().CopyTo(dst.Slice(offset, buffer.Length));
+                offset += buffer.Length;
+            }
+        }
+        flat = Backend.Broadcast(flat, root: 0);
+        UnpackVectorIntoParameters(flat.AsSpan().Slice(0, (int)total), unique.ToArray(), preserveGpuWeightBuffers: false);
+        invalidateCaches?.Invoke();
+    }
+
+    /// <summary>
     /// Broadcasts Rank 0's initial trainable parameters to all other ranks once per distinct parameter list.
     /// Subsequent calls with the identical parameter tensor list are idempotent no-ops until <see cref="ResetParameterSync"/> is called.
     /// </summary>
@@ -406,6 +456,21 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     public static long CountValidElements(Tensor<T>? targetBatch)
     {
         return targetBatch is null ? 0L : targetBatch.Length;
+    }
+
+    /// <summary>
+    /// The number of target elements <paramref name="loss"/>'s mean reduction divides by for
+    /// <paramref name="targetBatch"/>: for cross-entropy the supervised rows, so ignored targets (the ignore index,
+    /// padding) carry no weight, as PyTorch DDP with a loss normalized over the global count of valid tokens does.
+    /// Losses that average over every target element (and a loss that did not score this target) count
+    /// <see cref="CountValidElements(Tensor{T})"/>.
+    /// </summary>
+    public static long CountValidElements(Tensor<T>? targetBatch, ILossFunction<T>? loss)
+    {
+        if (targetBatch is null || targetBatch.Length == 0) return 0L;
+        return loss is LossFunctions.LossFunctionBase<T> lossBase && lossBase.CountMeanReductionElements(targetBatch) is long counted
+            ? counted
+            : targetBatch.Length;
     }
 
     /// <summary>

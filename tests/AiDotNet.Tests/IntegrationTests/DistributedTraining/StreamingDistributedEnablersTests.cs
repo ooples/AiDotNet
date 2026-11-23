@@ -36,7 +36,7 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// overflow skipping, wall-clock auto-checkpointing, and cross-world-size checkpoint resume.
 /// </summary>
 [Collection("SequentialDistributedStreamingEnablers")]
-public sealed class StreamingDistributedEnablersTests : IDisposable
+public sealed partial class StreamingDistributedEnablersTests : IDisposable
 {
     private const int InDim = 8;
     private const int HiddenDim = 16;

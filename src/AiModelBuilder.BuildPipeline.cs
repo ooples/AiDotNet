@@ -2591,6 +2591,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 distBackend,
                 distCoordinator,
                 cancellationToken);
+            ConfigureStochasticStreams(distBackend);
 
             // Start a training-monitor session for this streaming run (the streaming path did not
             // previously open one, so the configured monitor never received per-epoch metrics).
@@ -2754,6 +2755,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
 
+            // The data order: with no configured seed, a seed drawn once (rank 0, broadcast) and checkpointed as the fit
+            // seed, so a resumed run -- at any world size -- skips exactly the samples it already trained on. Drawing a
+            // fresh order each epoch on rank 0 left a resumed epoch shuffled differently from the one it continues.
+            if (activeFitSeed is null && (distBackend is { WorldSize: > 1 } || streamingOptions is not null))
+            {
+                activeFitSeed = ResolveStreamingPipelineFitPlan(
+                    streamingOptions, rawLoader, distLoader, distBackend, savedFitSeed, savedFitBatchSize).FitSeed;
+            }
+            int? shuffleBaseSeed = streamingOptions?.Seed ?? activeFitSeed;
+
             IStreamingDataLoader<T, TInput, TOutput> activeLoader =
                 (IStreamingDataLoader<T, TInput, TOutput>?)distLoader ?? rawLoader;
             if (!activeLoader.IsLoaded)
@@ -2780,7 +2791,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 int epochBatches = 0;
                 int batchInEpoch = 0;
                 long samplesInEpoch = (epoch == startEpoch && resumeSkipBatches == 0) ? resumeSkipSamples : 0L;
-                int? epochSeed = streamingOptions?.Seed is int baseSeed ? unchecked(baseSeed + epoch) : null;
+                int? epochSeed = shuffleBaseSeed is int baseSeed ? unchecked(baseSeed + epoch) : null;
                 var microBatchBuffer = (gradientAccumulationSteps > 1 || distCoordinator is not null)
                     ? new List<(Tensor<T> Input, Tensor<T> Target)>(gradientAccumulationSteps)
                     : null;

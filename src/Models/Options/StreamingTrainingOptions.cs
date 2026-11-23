@@ -10,7 +10,9 @@ namespace AiDotNet.Models.Options;
 /// <remarks>
 /// <para>
 /// <see cref="ModelOptions.Seed"/> fixes the data order: epoch <c>e</c> is shuffled with <c>Seed + e</c>, so the
-/// order is identical across runs and across a stop/resume. <c>null</c> keeps the loader's unseeded shuffle.
+/// order is identical across runs and across a stop/resume. <c>null</c> draws the base seed once per run (rank 0, shared
+/// with every rank) and checkpoints it, so the order differs between fresh runs but a resumed run continues the order of
+/// the run it resumes, as PyTorch's <c>DistributedSampler</c> resumes its seeded order.
 /// </para>
 /// <para>
 /// Periodic checkpoint cadence and retention come from the configured checkpoint manager
@@ -104,8 +106,8 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// </summary>
     /// <value><c>true</c> to resume; defaults to <c>false</c>.</value>
     /// <remarks>Restores model state, optimizer state including the learning-rate schedule, the global step and
-    /// the data position. Requires <see cref="ModelOptions.Seed"/> so the skipped data is exactly the data already
-    /// trained on.</remarks>
+    /// the data position, and the data order (the configured <see cref="ModelOptions.Seed"/>, or the seed the run drew),
+    /// so the skipped data is exactly the data already trained on.</remarks>
     public bool ResumeFromLatestCheckpoint { get; set; }
 
     /// <summary>
@@ -194,9 +196,5 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
             throw new ArgumentException("TokensPerSample must be positive when set.", nameof(TokensPerSample));
         if (MonitorResourceIntervalSeconds < 0 || double.IsNaN(MonitorResourceIntervalSeconds))
             throw new ArgumentException("MonitorResourceIntervalSeconds cannot be negative.", nameof(MonitorResourceIntervalSeconds));
-        if (ResumeFromLatestCheckpoint && Seed is null)
-            throw new ArgumentException(
-                "ResumeFromLatestCheckpoint requires Seed: without a fixed data order the batches skipped on resume " +
-                "would not be the batches already trained on.", nameof(Seed));
     }
 }
