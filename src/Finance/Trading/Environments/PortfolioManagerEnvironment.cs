@@ -21,7 +21,8 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// traded; (3) a pluggable <see cref="IPortfolioReward"/> objective (total return, differential Sharpe,
 /// drawdown-penalized) so the reward is an experiment knob; (4) realistic FRICTIONS — transaction cost,
 /// turnover-proportional slippage, short-borrow financing, and gross carry — all deducted from cash so portfolio
-/// value reflects true costs. Each asset's position and cash are already in the base observation, so the policy
+/// value reflects true costs. Each asset's weight and the cash fraction ride in the observation (scale-free; see
+/// <see cref="ScaleFreeAccountState"/>), so the policy
 /// conditions its exits on what it holds.
 /// </para>
 /// </summary>
@@ -359,4 +360,50 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     /// new episode — without it, reward statistics and the drawdown peak leaked from one episode into the next.
     /// </summary>
     protected override void OnReset() => ResetEpisodeState();
+
+    /// <summary>
+    /// When true (the default), the account part of the observation is scale-free: each tradable asset's slot holds
+    /// its portfolio WEIGHT (units x price / portfolio value) and the last slot holds cash as a fraction of portfolio
+    /// value, each clamped to [-10, 10]. When false, the slots hold raw units and raw cash (the layout before this
+    /// option existed).
+    /// </summary>
+    /// <remarks>
+    /// Raw units and cash scale with the initial capital: at 100,000 the cash input alone is about 1e5 while prices
+    /// and features are near 1, and the RL agents, which do not normalise inputs, saturate their tanh policy heads,
+    /// so the greedy action no longer depends on the training data. The weight and cash fraction are what a
+    /// cross-sectional policy conditions on (FinRL's portfolio environment observes the last weights for the same
+    /// reason) and are identical for any capital. Observation-only feature columns hold no position and stay 0.
+    /// </remarks>
+    public bool ScaleFreeAccountState { get; init; } = true;
+
+    /// <inheritdoc />
+    protected override Vector<T> BuildObservation(int step)
+    {
+        var observation = base.BuildObservation(step);
+        if (!ScaleFreeAccountState)
+        {
+            return observation;
+        }
+
+        double value = ToDouble(_portfolioValue);
+        bool valid = IsFiniteValue(value) && value > 0;
+        int offset = WindowSize * NumAssets;
+        int row = Math.Min(Math.Max(step, 0), MarketData.Shape[0] - 1);
+        var prices = MarketData.Data.Span.Slice(row * NumAssets, _tradableCount);
+        var units = _positions.AsSpan();
+        var target = observation.AsWritableSpan();
+        for (int i = 0; i < _tradableCount; i++)
+        {
+            double u = ToDouble(units[i]);
+            double price = ToDouble(prices[i]);
+            double weight = valid && u != 0 && IsFiniteValue(price) && price > 0 ? u * price / value : 0.0;
+            target[offset + i] = FromDouble(IsFiniteValue(weight) ? MathPolyfill.Clamp(weight, -10.0, 10.0) : 0.0);
+        }
+
+        double cash = valid ? ToDouble(_cash) / value : 0.0;
+        target[offset + NumAssets] = FromDouble(IsFiniteValue(cash) ? MathPolyfill.Clamp(cash, -10.0, 10.0) : 0.0);
+        return observation;
+    }
+
+    private static bool IsFiniteValue(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }

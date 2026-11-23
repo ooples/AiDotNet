@@ -26627,3 +26627,6 @@ AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Capacity.get
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Position.get -> int
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.CreateStepState(int batchSize = 1, int? capacity = null) -> AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>!
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.get -> bool
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.init -> void
+override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.BuildObservation(int step) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

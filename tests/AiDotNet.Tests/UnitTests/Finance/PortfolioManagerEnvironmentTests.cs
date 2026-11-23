@@ -15,6 +15,37 @@ namespace AiDotNet.Tests.UnitTests.Finance;
 /// </summary>
 public sealed class PortfolioManagerEnvironmentTests
 {
+    // ---- observation scale ------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Account_state_in_the_observation_is_the_same_for_any_capital_and_equals_the_book()
+    {
+        // Prices 100 and 50: raw units and cash scale with capital; weights and the cash fraction do not.
+        var prices = new List<double[]> { Enumerable.Repeat(100.0, 10).ToArray(), Enumerable.Repeat(50.0, 10).ToArray() };
+        Vector<double> AfterOneStep(double capital, bool scaleFree)
+        {
+            var env = new PortfolioManagerEnvironment<double>(prices, null, windowSize: 2, initialCapital: capital,
+                reward: new TotalReturnReward(), transactionCost: 0, slippageCoefficient: 0, annualBorrowCost: 0)
+            { ScaleFreeAccountState = scaleFree };
+            env.Reset();
+            return env.Step(new Vector<double>(new[] { 0.6, -0.3 })).NextState;
+        }
+
+        var small = AfterOneStep(1.0, true);
+        var large = AfterOneStep(100_000.0, true);
+        Assert.Equal(small.Length, large.Length);
+        for (int i = 0; i < small.Length; i++) Assert.Equal(small[i], large[i], 9);
+        // Layout: 2 x 2 window prices, then the 2 weights, then cash / value (1 - 0.6 + 0.3).
+        Assert.Equal(0.6, large[4], 9);
+        Assert.Equal(-0.3, large[5], 9);
+        Assert.Equal(0.7, large[6], 9);
+
+        var raw = AfterOneStep(100_000.0, false);
+        Assert.Equal(600.0, raw[4], 6);   // units = 0.6 x 100,000 / 100
+        Assert.Equal(70_000.0, raw[6], 6);
+    }
+
     // ---- reward math (deterministic) ----------------------------------------------------------
 
     [Fact]
