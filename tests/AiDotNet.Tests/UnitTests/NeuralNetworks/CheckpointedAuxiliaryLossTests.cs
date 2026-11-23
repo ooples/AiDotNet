@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Training.Memory;
@@ -320,5 +321,61 @@ public class CheckpointedAuxiliaryLossTests
                 maxDiff = Math.Max(maxDiff, Math.Abs(plainGrads[p][i] - ckptGrads[p][i]));
         Assert.True(maxDiff > 1e-3, $"expected the uncontracted recompute to diverge, max gradient difference {maxDiff}");
         Assert.All(checkpointed.Layers.OfType<DriftingScaleLayer>(), l => Assert.Equal(1.5f * 1.5f, l.Scale));
+    }
+
+    /// <summary>
+    /// On a GPU engine with compilation on, the checkpointed network trains through the compiled fused step (the plan
+    /// recomputes each segment inside its backward) instead of falling back to the eager tape, and reaches the losses
+    /// and parameters of the plain compiled network, auxiliary terms included. Before checkpointing ran inside the
+    /// plan, every checkpointed step was a fused-path miss.
+    /// </summary>
+    [SkippableFact]
+    public void CheckpointedTraining_OnTheGpu_RunsTheCompiledStep_AndMatchesPlainCompiledTraining()
+    {
+        bool requireGpu = Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1";
+        DirectGpuTensorEngine gpu;
+        try { gpu = new DirectGpuTensorEngine(); }
+        catch (Exception ex) when (!requireGpu) { throw new SkipException($"GPU engine construction failed ({ex.GetType().Name})."); }
+        var prior = AiDotNetEngine.Current;
+        var priorOptions = TensorCodecOptions.Current;
+        try
+        {
+            bool available = gpu.SupportsGpu && gpu.IsGpuAvailable;
+            if (requireGpu) Assert.True(available, "AIDOTNET_REQUIRE_GPU_TESTS=1 but no GPU backend is available.");
+            Skip.IfNot(available, "No GPU backend available.");
+            AiDotNetEngine.Current = gpu;
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            var (plain, checkpointed, input, target) = Pair(optimizer: () =>
+                new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                    new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+            plain.SetTrainingMode(true);
+            checkpointed.SetTrainingMode(true);
+
+            for (int step = 0; step < 6; step++)
+            {
+                plain.Train(input, target);
+                int hits = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits;
+                int misses = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerMisses;
+                checkpointed.Train(input, target);
+                Assert.True(AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits == hits + 1
+                    && AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerMisses == misses,
+                    $"step {step}: the checkpointed step did not run compiled " +
+                    $"({AiDotNet.Configuration.TrainingDiagnosticsConfig.LastFusedOptimizerMissReason})");
+                AssertClose(plain.GetLastLoss(), checkpointed.GetLastLoss(), $"step {step} loss");
+            }
+
+            var p = plain.GetParameters();
+            var c = checkpointed.GetParameters();
+            Assert.Equal(p.Length, c.Length);
+            for (int i = 0; i < p.Length; i++)
+                Assert.True(Math.Abs(p[i] - c[i]) <= 1e-5f * Math.Max(1f, Math.Abs(p[i])),
+                    $"parameter {i} after 6 steps: plain {p[i]:R}, checkpointed {c[i]:R}");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(priorOptions);
+            AiDotNetEngine.Current = prior;
+            gpu.Dispose();
+        }
     }
 }

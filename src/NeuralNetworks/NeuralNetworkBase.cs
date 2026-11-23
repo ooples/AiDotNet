@@ -10489,6 +10489,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private Tensor<T> RunCheckpointedForward(int layerCount, int segmentSize, Tensor<T> input)
     {
+        // Traced for a compiled training plan: the plan does the checkpointing (see RunCheckpointSegmentsInTrace).
+        if (Tensors.Engines.Compilation.GraphMode.IsTrainingTrace)
+            return RunCheckpointSegmentsInTrace(layerCount, segmentSize, input);
         bool paramsResolved = !AnyLayerNeedsShapeResolution() && !AnyLayerHasUnmaterializedParameters();
         if (_checkpointLayerFunctions is null
             || _checkpointSegmentParameters is null
@@ -10607,6 +10610,55 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         return output;
     }
+
+    /// <summary>
+    /// The checkpointed forward while a compiled training plan traces it: every layer runs as in the plain forward, and
+    /// each segment's ops are marked as one activation-checkpoint segment of the trace
+    /// (<c>GraphMode.BeginCheckpointSegment</c>). The plan keeps what readers outside a segment need (its output, an
+    /// auxiliary loss a layer produced inside it, state), releases the rest when the segment's forward ends, and
+    /// recomputes what the segment's backward reads just before that backward, inside the captured step. A layer's
+    /// in-place state (GradientCheckpointingContext's concern on the eager tape) is handled by the plan, which gives
+    /// the recompute the value the first forward read; the trace is the plain forward, so the plan computes the same
+    /// loss and gradients as the plan without checkpointing.
+    /// </summary>
+    private Tensor<T> RunCheckpointSegmentsInTrace(int layerCount, int segmentSize, Tensor<T> input)
+    {
+        var current = input;
+        for (int start = 0; start < layerCount; start += segmentSize)
+        {
+            int end = Math.Min(start + segmentSize, layerCount);
+            using (Tensors.Engines.Compilation.GraphMode.BeginCheckpointSegment())
+            {
+                for (int i = start; i < end; i++)
+                {
+                    var layerInput = current;
+                    current = Layers[i].Forward(current);
+                    if (Layers[i] is Layers.LayerBase<T> verifiable) verifiable.VerifyReportedOutputShape(current, layerInput);
+                }
+            }
+        }
+        if (!_firstForwardCompleted)
+        {
+            _firstForwardCompleted = true;
+            TryAutoEnableWeightStreaming();
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// The segment size the compiled plan is traced with: the checkpointed forward's (0 = no checkpointing, or a layer
+    /// graph the checkpointed forward does not segment).
+    /// </summary>
+    private int CompiledCheckpointSegmentSize()
+    {
+        if (!IsGradientCheckpointingEnabled || !CanUseGradientCheckpointingForCurrentLayerGraph()) return 0;
+        int layerCount = FusedReadoutForTraining() is null ? Layers.Count : Layers.Count - 1;
+        int size = GetEffectiveCheckpointSegmentSize(layerCount);
+        return size > 0 && layerCount > size ? size : 0;
+    }
+
+    // The segment size the committed fused plan was traced with; -1 until a fused step ran.
+    private int _fusedCheckpointSegmentSize = -1;
 
     /// <summary>
     /// The auxiliary loss the last checkpointed forward collected from its segments, tape-connected through each
@@ -17020,16 +17072,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // and only while tracing; repeat it for this batch so an invalid label still throws.
         if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> indexLoss)
             indexLoss.ValidateIndexTargetOutsidePlan(expected);
-        if (IsGradientCheckpointingEnabled)
+        // Gradient checkpointing runs inside the compiled plan on a GPU engine: the trace marks each segment
+        // (RunCheckpointSegmentsInTrace) and the plan releases the segment's activations after its forward and
+        // recomputes them in its backward, as torch.compile does with torch.utils.checkpoint. A plan is traced with one
+        // segmentation, so changing it after the plan committed (its optimizer moments cannot move to the eager
+        // optimizer, or to a plan traced again) would silently change the trajectory.
+        int checkpointSegmentSize = CompiledCheckpointSegmentSize();
+        if (FusedSession.IsCommitted && _fusedCheckpointSegmentSize >= 0 && checkpointSegmentSize != _fusedCheckpointSegmentSize)
+            throw new InvalidOperationException(
+                $"Gradient checkpointing on {GetType().Name} changed (segment size {_fusedCheckpointSegmentSize} -> " +
+                $"{checkpointSegmentSize}) after fused training had committed. The compiled plan was traced with the " +
+                "earlier segments and its optimizer moments cannot move to another plan or the eager optimizer, so the " +
+                "switch would change the training trajectory. Configure checkpointing before the first Train call.");
+        if (IsGradientCheckpointingEnabled && Engine is not DirectGpuTensorEngine)
         {
-            // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager
-            // optimizer, so turning checkpointing on after the fused step committed would silently change the trajectory.
             if (FusedSession.IsCommitted)
                 throw new InvalidOperationException(
                     $"Gradient checkpointing was enabled on {GetType().Name} after fused training had committed. The " +
                     "compiled plan's optimizer moments cannot move to the eager optimizer, so the switch would change the " +
                     "training trajectory. Enable checkpointing before the first Train call.");
-            return EmitFusedMissAndFallback("gradient checkpointing enabled (requires eager/streaming tape)");
+            return EmitFusedMissAndFallback(
+                "gradient checkpointing on a host engine (a host plan's forward outputs are fixed arrays, so recomputing "
+                + "them inside the plan would save no memory; the eager tape checkpoints)");
         }
         if (FusedTrainingDisabledByConfiguration)
         {
@@ -17179,9 +17243,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             GraphBreakReason = LayerGraphBreakReason(),
         };
 
+        bool committedBefore = FusedSession.IsCommitted;
         var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
+            // The segmentation the plan this step committed (or continued) was traced with.
+            if (!committedBefore || _fusedCheckpointSegmentSize < 0) _fusedCheckpointSegmentSize = checkpointSegmentSize;
             if (lossTensor is not null)
                 SetLastLossDeferred(lossTensor);
             else
