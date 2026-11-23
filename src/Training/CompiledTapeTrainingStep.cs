@@ -123,15 +123,6 @@ public static class CompiledTapeTrainingStep<T>
         // LastFallbackWasUnreplayableClosureStep).
         internal bool lastFallbackUnreplayableClosureStep;
         // Unexpected replay-contract failures are surfaced without an automatic eager route.
-        internal object? mpPlan;
-        internal int[]? mpKey;
-        [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
-        [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpTarget;
-        internal object? mpAdamPlan;
-        internal int[]? mpAdamKey;
-        internal object? mpScaler;
-        internal object? mpGenericPlan;
-        internal int[]? mpGenericKey;
         internal List<(Tensor<T> Input, Tensor<T> Target)>? persistentByShape;
         internal int[]? cachedCompositeShapeKey;
         [AiDotNet.Attributes.Scratch] internal Dictionary<Tensor<T>, Tensor<T>>? distributedGradMap;
@@ -1036,11 +1027,7 @@ public static class CompiledTapeTrainingStep<T>
             // tensors — the plan was compiled with the FIRST model's leaf
             // refs and the optimizer step would update those tensors, not
             // the caller's.
-            if (InvalidateIfLayerSetChanged(layers))
-            {
-                // Caches cleared; cache field rebound below.
-                _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // also drop the mixed-precision plans (#558)
-            }
+            InvalidateIfLayerSetChanged(layers);   // caches cleared; cache field rebound below
             InvalidateIfSelectionChanged(null);
             var cache = _cache ??= new CompiledModelCache<T>();
 
@@ -1082,28 +1069,6 @@ public static class CompiledTapeTrainingStep<T>
             Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
             compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
             Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
-
-            // FP16 activation storage (Tensors #558): when opted in (AIDOTNET_FP16_ACTIVATIONS=1, float
-            // only), route to the mixed-dtype compiled plan — matmul activations are stored as FP16
-            // (~1/2 resident) with grads bridged FP16<->FP32. SGD on FP32 master weights, same as this
-            // path's UpdateParametersSGD. Default off => the single-type fused/eager paths are unchanged.
-            // Also requires the mixed-precision API to be present in the Tensors assembly (Tensors #557);
-            // older Tensors releases (<= 0.91.12) don't ship it, so MixedPrecisionReflection.IsAvailable
-            // returns false and we silently fall through to the FP32 compiled-plan path below.
-            if (typeof(T) == typeof(float)
-                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
-                && MixedPrecisionReflection.IsAvailable)
-            {
-                float lossMp = StepMixedPrecision(
-                    (System.Collections.Generic.IReadOnlyList<Tensor<float>>)(object)parameters,
-                    (Tensor<float>)(object)input,
-                    (Tensor<float>)(object)target,
-                    Convert.ToSingle(numOps.ToDouble(learningRate)),
-                    f => (Tensor<float>)(object)forward((Tensor<T>)(object)f),
-                    (p, tg) => (Tensor<float>)(object)computeLoss((Tensor<T>)(object)p, (Tensor<T>)(object)tg),
-                    compositeKey);
-                return (T)(object)lossMp;
-            }
 
             bool compiledNow = false;
             ICompiledTrainingPlan<T> plan;
@@ -1296,10 +1261,6 @@ public static class CompiledTapeTrainingStep<T>
         _retiringCache = null;
         CurrentState.closureState?.Clear(keepAlive: null);
         CurrentState.closureState = null;
-        // Drop ALL mixed-precision plans (SGD/Adam/generic) on explicit Invalidate,
-        // matching InvalidateIfLayerSetChanged — a model-structure change must not
-        // leave any stale FP16 plan capturing the old layer set's tensors (#558).
-        _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // FP16 mixed-precision plans (#558)
         // Reset the fused-engagement counter — from this point on, any
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
@@ -1950,7 +1911,6 @@ public static class CompiledTapeTrainingStep<T>
                 fusedExtras, l2Regularization, l2AfterClip, layers);
             bool canRebind = closureObjective is null && trainableSelection is null && !_cachedUsesExplicitSelection
                 && (extraTensors is null || extraTensors.Count == 0)
-                && _mpPlan is null && _mpAdamPlan is null && _mpGenericPlan is null
                 && CurrentState.optimizerContract is { } previousContract
                 && CanRebindLayerSlots(previousContract, requestedContract);
             // A changed explicit subset is the established new-selection lifecycle; a layer-slot rebind preserves state.
@@ -2135,139 +2095,6 @@ public static class CompiledTapeTrainingStep<T>
             compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
             Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
 
-            // FP16 activation storage on the FUSED-ADAM path (Tensors #558): when opted in
-            // (AIDOTNET_FP16_ACTIVATIONS=1, float, Adam/AdamW) route to the mixed-dtype compiled plan's
-            // StepAdam — matmul activations stored as FP16 (~1/2 resident), grads bridged FP16<->FP32,
-            // Adam on FP32 master weights+moments with a GradScaler. This is the path Adam-configured
-            // models (the cortex) take, so it is what makes them eligible for the memory win. Default off
-            // => the single-type fused plan below is byte-identical.
-            // The mixed-precision plans trace once and never rebind, so a closure objective (whose data lives in the
-            // closure) stays on the guarded single-type plan below.
-            if (closureObjective is null
-                && typeof(T) == typeof(float)
-                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
-                && MixedPrecisionReflection.IsAvailable
-                && (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
-                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW))
-            {
-                // The static state fields are typed Tensor<T> (the class is generic);
-                // this Adam path runs only when T == float, so cast through object.
-                Tensor<T>? pinT = _persistentInput;
-                Tensor<T>? ptgT = _persistentTarget;
-                if (pinT is null || ptgT is null)
-                    throw new InvalidOperationException(
-                        "Fused-optimizer FP16 path requires _persistentInput / _persistentTarget to be initialized.");
-                Tensor<float> pin = (Tensor<float>)(object)pinT;
-                Tensor<float> ptg = (Tensor<float>)(object)ptgT;
-
-                if (_mpAdamPlan is null || _mpAdamKey is null || !ShapesEqual(_mpAdamKey, compositeKey))
-                {
-                    var fwdF = forward; var lossF = computeLoss;
-                    Tensor<float> pinLocal = pin; Tensor<float> ptgLocal = ptg;
-                    _mpAdamPlan = MixedPrecisionReflection.Trace(
-                        () => (Tensor<float>)(object)lossF(fwdF((Tensor<T>)(object)pinLocal), (Tensor<T>)(object)ptgLocal));
-                    _mpAdamKey = (int[])compositeKey.Clone();
-                }
-
-                // The reflection probe returns null when the Tensors assembly doesn't
-                // ship the mixed-precision API (≤ 0.91.12). IsAvailable above already
-                // gated this path, but Trace can still return null if the type was
-                // dropped mid-process by an assembly-load fault; bail safely.
-                object? adamPlan = _mpAdamPlan;
-                if (adamPlan is null) return false;
-                _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
-                object? scaler = _mpScaler;
-                if (scaler is null) return false;
-
-                // The fused-Adam signature receives float hyperparams; the Tensors
-                // StepAdam signature takes doubles for higher-precision accumulation
-                // through the mixed-precision update path.
-                float lossF32 = MixedPrecisionReflection.StepAdam(
-                    adamPlan,
-                    (System.Collections.Generic.IReadOnlyList<Tensor<float>>)(object)parameters,
-                    (double)learningRate, (double)beta1, (double)beta2,
-                    (double)epsilon, (double)weightDecay, scaler);
-                lossValue = (T)(object)lossF32;
-                _fusedStepCount++;
-                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
-                return true;
-            }
-
-            // FP16 activation storage for EVERY OTHER fused optimizer (Lion, RMSprop, LAMB, Adagrad,
-            // AdaMax, AdaDelta, Nadam): the Adam/SGD fast paths above apply their update inline in the
-            // plan; here we run the optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients
-            // (matmul activations stored as FP16, grads bridged FP16<->FP32) and hand the unscaled FP32
-            // grads to the optimizer INSTANCE so it applies its own master update (and maintains its own
-            // state + gradient clipping) via Step — extending the memory win to all optimizers without
-            // duplicating optimizer math. Requires the eager optimizer (threaded in from
-            // NeuralNetworkBase) and a Tensors build exposing ComputeGradients (Tensors #574); both
-            // gates degrade to the FP32 plan below when absent. Skipped on FP16 overflow (the GradScaler
-            // backs off). Default off => the single-type fused plan below is byte-identical.
-            if (closureObjective is null
-                && typeof(T) == typeof(float)
-                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
-                && eagerOptimizer is not null
-                && MixedPrecisionReflection.IsComputeGradientsAvailable)
-            {
-                Tensor<T>? pinT = _persistentInput;
-                Tensor<T>? ptgT = _persistentTarget;
-                if (pinT is null || ptgT is null)
-                    throw new InvalidOperationException(
-                        "Fused-optimizer FP16 path requires _persistentInput / _persistentTarget to be initialized.");
-                Tensor<float> pin = (Tensor<float>)(object)pinT;
-                Tensor<float> ptg = (Tensor<float>)(object)ptgT;
-
-                if (_mpGenericPlan is null || _mpGenericKey is null || !ShapesEqual(_mpGenericKey, compositeKey))
-                {
-                    var fwdF = forward; var lossF = computeLoss;
-                    Tensor<float> pinLocal = pin; Tensor<float> ptgLocal = ptg;
-                    _mpGenericPlan = MixedPrecisionReflection.Trace(
-                        () => (Tensor<float>)(object)lossF(fwdF((Tensor<T>)(object)pinLocal), (Tensor<T>)(object)ptgLocal));
-                    _mpGenericKey = (int[])compositeKey.Clone();
-                }
-
-                object? genericPlan = _mpGenericPlan;
-                if (genericPlan is null) return false;
-                _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
-                object? scaler = _mpScaler;
-                if (scaler is null) return false;
-
-                var gr = MixedPrecisionReflection.ComputeGradients(
-                    genericPlan,
-                    (IReadOnlyList<Tensor<float>>)(object)parameters,
-                    scaler);
-                lossValue = (T)(object)gr.Loss;
-
-                // Skip the optimizer step on FP16 overflow — corrupt grads must never touch the master
-                // weights (the scaler has already backed off and the step retries at a lower scale next call).
-                if (!gr.FoundInfNan)
-                {
-                    var gradMap = new Dictionary<Tensor<T>, Tensor<T>>(
-                        parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                    for (int i = 0; i < parameters.Length; i++)
-                    {
-                        Tensor<float>? g = gr.Gradients[i];
-                        if (g is not null) gradMap[parameters[i]] = (Tensor<T>)(object)g;
-                    }
-                    var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                        new List<Tensor<T>>(parameters), gradMap, lossValue,
-                        input, target,
-                        (inp, tgt) => forward(inp), (pred, tgt) => computeLoss(pred, tgt),
-                        parameterBuffer: null);
-                    eagerOptimizer.Step(ctx);
-                }
-                _fusedStepCount++;
-                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
-                return true;
-            }
-
-            // FP16-IN-CAPTURE (Tensors task #30): when opted in (AIDOTNET_FP16_CAPTURE=1, float), trace the
-            // forward under an FP16-storage autocast so the compiled CompiledTrainingPlan captures the Half
-            // activation nodes (consumed by its heterogeneous forward/backward — device-resident FP16
-            // activation storage, ~half the activation VRAM). Distinct from AIDOTNET_FP16_ACTIVATIONS, which
-            // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
-            // is active only during the (once-per-shape) trace+compile; Step() replays without it.
-
             ICompiledTrainingPlan<T> plan;
             bool compiledThisCall = false;
             if (closureObjective is not null)
@@ -2280,10 +2107,6 @@ public static class CompiledTapeTrainingStep<T>
             }
             else
             {
-                using var _fp16Capture =
-                    (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
-                        ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.Float16)
-                        : null;
                 // Per-step random tensors the forward draws (CompiledStepRandom) are recorded with the plan the
                 // trace produces, so every later replay redraws them instead of reusing the traced draw.
                 using var stepRandom = CompiledStepRandom<T>.BeginRecording();
@@ -2753,80 +2576,6 @@ public static class CompiledTapeTrainingStep<T>
         return result.ToArray();
     }
 
-    // FP16 activation-storage plan cache (Tensors #558). Persistent input/target are reused across steps
-    // (the compiled trace captures them as leaves); each step copies the current batch in, then replays.
-    // The plan handles are held as `object?` because the mixed-precision API (Tensors PR #557) is on
-    // Tensors `main` but not yet in the latest published NuGet (0.91.12). The reflection-based bridge in
-    // MixedPrecisionReflection.cs resolves the actual type at runtime; until Tensors publishes a release
-    // containing #557, the IsAvailable probe returns false and the FP16 path is skipped at runtime.
-    private static object? _mpPlan { get => CurrentState.mpPlan; set => CurrentState.mpPlan = value; }
-    private static int[]? _mpKey { get => CurrentState.mpKey; set => CurrentState.mpKey = value; }
-    private static Tensor<float>? _mpInput { get => CurrentState.mpInput; set => CurrentState.mpInput = value; }
-    private static Tensor<float>? _mpTarget { get => CurrentState.mpTarget; set => CurrentState.mpTarget = value; }
-    // Fused-Adam mixed-precision plan (traces against the fused path's persistent input/target).
-    private static object? _mpAdamPlan { get => CurrentState.mpAdamPlan; set => CurrentState.mpAdamPlan = value; }
-    private static int[]? _mpAdamKey { get => CurrentState.mpAdamKey; set => CurrentState.mpAdamKey = value; }
-    private static object? _mpScaler { get => CurrentState.mpScaler; set => CurrentState.mpScaler = value; }
-    // Generic mixed-precision plan: ComputeGradients returns FP32 grads, the eager optimizer INSTANCE
-    // applies its own master update — covers every fused optimizer other than the inline Adam/SGD paths
-    // (Lion, RMSprop, LAMB, Adagrad, AdaMax, AdaDelta, Nadam) without duplicating optimizer math.
-    private static object? _mpGenericPlan { get => CurrentState.mpGenericPlan; set => CurrentState.mpGenericPlan = value; }
-    private static int[]? _mpGenericKey { get => CurrentState.mpGenericKey; set => CurrentState.mpGenericKey = value; }
-
-    /// <summary>
-    /// One mixed-precision (FP16 activation storage) compiled training step. Compiles once per
-    /// input/target shape via the reflection-bridged
-    /// <c>MixedPrecisionCompiledPlan.Trace</c>, then replays with the current batch copied into
-    /// persistent leaf tensors. SGD on the FP32 master parameters.
-    /// </summary>
-    /// <remarks>The reflection bridge guards against the case where the running Tensors assembly
-    /// doesn't ship the mixed-precision API (versions &lt;= 0.91.12). Callers should gate this
-    /// helper behind <see cref="MixedPrecisionReflection.IsAvailable"/>.</remarks>
-    private static float StepMixedPrecision(
-        System.Collections.Generic.IReadOnlyList<Tensor<float>> parameters,
-        Tensor<float> input,
-        Tensor<float> target,
-        double learningRate,
-        Func<Tensor<float>, Tensor<float>> forwardF,
-        Func<Tensor<float>, Tensor<float>, Tensor<float>> lossF,
-        int[] key)
-    {
-        if (_mpPlan is null || _mpKey is null || !ShapesEqual(_mpKey, key))
-        {
-            // Assign locals first so the trace lambda can close over them without
-            // tripping the nullability checker on the static field.
-            Tensor<float> mpInputLocal = new Tensor<float>((float[])input.ToArray().Clone(), input.Shape.ToArray());
-            Tensor<float> mpTargetLocal = new Tensor<float>((float[])target.ToArray().Clone(), target.Shape.ToArray());
-            _mpInput = mpInputLocal;
-            _mpTarget = mpTargetLocal;
-            _mpPlan = MixedPrecisionReflection.Trace(() => lossF(forwardF(mpInputLocal), mpTargetLocal));
-            _mpKey = (int[])key.Clone();
-        }
-        else
-        {
-            // Refresh the persistent leaves with this step's batch; replay reads the current data.
-            // The else branch is reachable only when _mpInput / _mpTarget were assigned in a prior
-            // if-branch (same Step call sequence guarantees this — the cache is per-shape and we
-            // populate both fields together) so the local copies are non-null at this point.
-            Tensor<float>? mpInputCur = _mpInput;
-            Tensor<float>? mpTargetCur = _mpTarget;
-            if (mpInputCur is null || mpTargetCur is null)
-                throw new InvalidOperationException("MP plan cache state corrupted: keys present but leaves missing.");
-            mpInputCur.CopyFromArray(input.ToArray());
-            mpTargetCur.CopyFromArray(target.ToArray());
-        }
-        object? plan = _mpPlan;
-        if (plan is null)
-            throw new InvalidOperationException("MP plan cache state corrupted: key present but plan handle missing.");
-        // Loss-scale the SGD mixed-precision step (Tensors 0.102.0 / #650): without a GradScaler
-        // the FP16 backward grads can underflow to zero before reaching the FP32 masters. Persist
-        // one scaler (dynamic loss scale + skip-on-overflow handled inside Step) — matching the
-        // Adam/generic paths above, which already pass _mpScaler.
-        _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
-        // The mixed-precision plan is an FP32 master copy updated in float, so the rate narrows here and only here.
-        return MixedPrecisionReflection.StepSgd(plan, parameters, (float)learningRate, _mpScaler);
-    }
-
     /// <summary>
     /// AiDotNet#1331 helper: structural shape equality. We need this on the
     /// hot path where every <c>Train</c> call decides whether the persistent
@@ -2907,12 +2656,7 @@ public static class CompiledTapeTrainingStep<T>
 
         try
         {
-            if (InvalidateIfLayerSetChanged(layers))
-            {
-                _mpPlan = null;
-                _mpAdamPlan = null;
-                _mpGenericPlan = null;
-            }
+            InvalidateIfLayerSetChanged(layers);
             InvalidateIfSelectionChanged(null);
 
             bool hasNonEmpty = input.Length > 0 && target.Length > 0;
