@@ -8428,9 +8428,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// recurrent state, a buffer reused across calls. A <see cref="AiDotNet.Tensors.Engines.TensorScope"/> around a
     /// model's Predict frees every GPU result the call creates, so a model scopes its calls only when no layer keeps one.
     /// True unless the layer has been checked; a layer that caches its last forward only for backward rewrites that cache
-    /// on its next forward, so it keeps nothing between calls.
+    /// on its next forward, so it keeps nothing between calls. A layer that returns false also lets an inference call free
+    /// its intermediates as soon as its forward returns. A layer defined outside this library may override it once its
+    /// forward has been checked; a lazily built device tensor it keeps can be detached with
+    /// <see cref="AiDotNet.Tensors.Engines.TensorScope.Detach{T}"/>.
     /// </summary>
-    internal virtual bool KeepsResultsBetweenCalls => true;
+    protected internal virtual bool KeepsResultsBetweenCalls => true;
 
     /// <summary>
     /// Gets diagnostic information about this layer's state and behavior.

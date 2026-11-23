@@ -361,7 +361,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// Its forward caches serve only the next backward and are rewritten by every forward. Only this exact type has been
     /// checked: a derived layer may keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(DropoutLayer<T>);
+    protected internal override bool KeepsResultsBetweenCalls => GetType() != typeof(DropoutLayer<T>);
 
     /// <summary>
     /// Resets the internal state of the layer.

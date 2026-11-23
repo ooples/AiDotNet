@@ -754,6 +754,20 @@ static AiDotNet.Safety.Watermarking.WatermarkStatistics.ZForUpperTail(double p) 
 virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
 virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.InferenceForwardIsLayerChain.get -> bool
 override AiDotNet.NeuralNetworks.NeuralNetwork<T>.InferenceForwardIsLayerChain.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ActivationLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.DropoutLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.EmbeddingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.FeedForwardLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.GlobalPoolingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.PositionalEncodingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.KeepsResultsBetweenCalls.get -> bool
+virtual AiDotNet.NeuralNetworks.Layers.LayerBase<T>.KeepsResultsBetweenCalls.get -> bool
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandHighHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandLowHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
