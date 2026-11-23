@@ -159,12 +159,9 @@ internal sealed class AvHubertNetwork<T>
     {
         var mask = new bool[frames];
         if (probability <= 0 || frames == 0) return mask;
+        // av_hubert's compute_mask_indices (avhubert/utils.py, min_masks = 2), the same start draw as fairseq's.
         int spans = Math.Max(2, (int)(probability * frames / length + random.NextDouble()));
-        int room = Math.Max(1, frames - length + 1);
-        var starts = Enumerable.Range(0, room).OrderBy(_ => random.Next()).Take(Math.Min(spans, room));
-        foreach (int start in starts)
-            for (int t = start; t < Math.Min(frames, start + length); t++) mask[t] = true;
-        return mask;
+        return AiDotNet.Audio.Foundations.Wav2Vec2Network<T>.DrawSpans(frames, spans, length, random);
     }
 
     /// <summary>The audio encoder's output <c>[T, D]</c>; masked frames take the learned mask embedding.</summary>

@@ -2417,6 +2417,13 @@ internal static class OptionSensitivityFixtureSetup
                 // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
                 avMask.AudioMaskLength = 2;
             }
+            if (option == "VideoMaskProbability")
+            {
+                // Likewise for the video: 5-frame spans give ⌊p·12/5 + U⌋, at least two, so 0.3 and 0.6 always draw two
+                // spans and 1.0 draws a third only when U >= 0.6; whether the two probe steps differ is then a coin flip.
+                // Two-frame spans let p set the count.
+                avMask.VideoMaskLength = 2;
+            }
             if (option == "AudioDropout")
             {
                 avMask.ModalityDropout = 1.0;

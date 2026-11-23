@@ -81,24 +81,42 @@ public class RobustConformerPaperTests
         var (total, reconstruction) = network.ContinualPretrainingLoss(noisy, clean, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4), mask, negatives);
 
         var output = encoder.Forward(noisy, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4), mask: mask);
-        double wav2vec2 = network.Pretraining.Loss(output, negatives, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4)).Total[0];
+        var losses = network.Pretraining.Loss(output, negatives, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom(4));
+        double wav2vec2 = losses.Total[0];
+        Assert.True(losses.Masked > 1, $"masked steps {losses.Masked}");
         var predicted = network.Reconstruct(output.Hidden, 3200);
         double l1 = Enumerable.Range(0, 3200).Average(i => Math.Abs(predicted[0, i] - clean[0, i]));
         Assert.Equal(l1, reconstruction[0], 9);
-        Assert.Equal(wav2vec2 + 0.1 * l1, total[0], 9);
+        // wav2vec 2.0's terms are summed over the masked steps (fairseq's criterion), and so is λ2 L_r.
+        Assert.Equal(wav2vec2 + 0.1 * losses.Masked * l1, total[0], 9);
     }
 
+    /// <remarks>
+    /// L_r is measured in evaluation mode under one fixed, seeded mask before and after training. Each training step draws
+    /// its own mask, so the training-mode L_r of a step is a random variable: on this clip it swings between about 0.13
+    /// and 0.25 from one step to the next with the mask alone, and comparing two such draws says little about learning.
+    /// </remarks>
     [Fact(Timeout = 300000)]
     public async Task ContinualPretraining_LearnsToReconstructTheCleanSpeech()
     {
         await Task.Yield();
         using var model = new RobustConformer<double>(Architecture(), Tiny());
+        var network = model.Network ?? throw new InvalidOperationException("native model");
         var noisy = Voice(3200, 180, noise: 0.1);
         var clean = Voice(3200, 180);
-        model.ContinualPretrain(noisy, clean);
-        double first = model.LastReconstructionLoss;
-        for (int step = 0; step < 30; step++) model.ContinualPretrain(noisy, clean);
-        Assert.True(model.LastReconstructionLoss < 0.8 * first, $"L_r {first} -> {model.LastReconstructionLoss}");
+        double ReconstructionLoss()
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
+            var encoder = network.Stack.Network;
+            var mask = encoder.DrawPretrainingMask(1, encoder.Frames(3200), network.Pretraining.Configuration.MaskProbability, random);
+            var negatives = network.Pretraining.SampleNegatives(mask, random);
+            return network.ContinualPretrainingLoss(noisy, clean, training: false, random, mask, negatives).Reconstruction[0];
+        }
+        double first = ReconstructionLoss();
+        for (int step = 0; step < 31; step++) model.ContinualPretrain(noisy, clean);
+        double last = ReconstructionLoss();
+        Assert.True(last < 0.8 * first, $"L_r {first} -> {last}");
     }
 
     [Fact(Timeout = 120000)]

@@ -277,7 +277,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
             : input.Rank == 2 ? input.Shape.ToArray() : new[] { input.Shape[0], input.Length / input.Shape[0] };
         int batch = waveformShape[0], frames = network.Frames(waveformShape[1]);
         var stepMask = pretraining.Configuration.MaskProbability > 0
-            ? network.DrawMask(batch, frames, pretraining.Configuration.MaskProbability, _random)
+            ? network.DrawPretrainingMask(batch, frames, pretraining.Configuration.MaskProbability, _random)
             : new bool[batch, frames];
         var stepNegatives = pretraining.SampleNegatives(stepMask, _random);
         using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
@@ -321,7 +321,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         var waveform = input.Rank == 1 ? Engine.Reshape(input, new[] { 1, input.Length })
             : input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Shape[0], input.Length / input.Shape[0] });
         var mask = _pretraining.Configuration.MaskProbability > 0
-            ? _network.DrawMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random)
+            ? _network.DrawPretrainingMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random)
             : new bool[waveform.Shape[0], _network.Frames(waveform.Shape[1])];
         var output = _network.Forward(waveform, training: false, random, mask: mask);
         return _pretraining.Loss(output, _pretraining.SampleNegatives(mask, random), training: false, random).Total[0];
