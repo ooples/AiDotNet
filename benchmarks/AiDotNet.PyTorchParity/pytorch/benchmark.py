@@ -102,8 +102,11 @@ class ModelResult:
 
 
 class ResourceMonitor:
-    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True) -> None:
+    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True, gpu_id: str | None = None) -> None:
         self.sample_seconds = sample_seconds
+        # The GPU the benchmark runs on, as an nvidia-smi --id (its UUID): unqualified, nvidia-smi lists every GPU and
+        # the first line was read, which on a two-GPU machine is not necessarily this one (the C# side does the same).
+        self.gpu_id = gpu_id
         # nvidia-smi reports SYSTEM-WIDE GPU utilization/memory, not this
         # process's. On a CPU-only benchmark run that attributes whatever the
         # desktop GPU happens to be doing (browser, compositor, other apps)
@@ -135,7 +138,7 @@ class ResourceMonitor:
             self.cpu.append(self.process.cpu_percent(interval=None))
             self.rss_mb.append(self.process.memory_info().rss / 1024 / 1024)
             if self.track_gpu:
-                gpu = query_nvidia_smi()
+                gpu = query_nvidia_smi(self.gpu_id)
                 if gpu is not None:
                     util, mem = gpu
                     self.gpu_util.append(util)
@@ -153,14 +156,24 @@ class ResourceMonitor:
         )
 
 
-def query_nvidia_smi() -> tuple[float, float] | None:
+def cuda_smi_id(device: torch.device) -> str | None:
+    """nvidia-smi's --id for a CUDA device: its UUID, as torch reports it (None when torch cannot tell)."""
+    if device.type != "cuda":
+        return None
+    try:
+        return "GPU-" + str(torch.cuda.get_device_properties(device).uuid)
+    except (RuntimeError, AttributeError):
+        return None
+
+
+def query_nvidia_smi(gpu_id: str | None = None) -> tuple[float, float] | None:
     try:
         output = subprocess.check_output(
             [
                 "nvidia-smi",
                 "--query-gpu=utilization.gpu,memory.used",
                 "--format=csv,noheader,nounits",
-            ],
+            ] + ([f"--id={gpu_id}"] if gpu_id else []),
             text=True,
             timeout=1,
             stderr=subprocess.DEVNULL,
@@ -1976,7 +1989,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     # --precision bf16: the training steps under torch.autocast, as the C# side runs them under AutocastScope.
     autocast = (torch.autocast(device_type=device.type, dtype=torch.bfloat16) if PRECISION == "bf16"
                 else contextlib.nullcontext())
-    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor, autocast:
+    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device)) as monitor, autocast:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
