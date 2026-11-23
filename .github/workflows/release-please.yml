@@ -117,8 +117,11 @@ jobs:
     # Sized from measurement, not guessed. The same packed core, built alone for the same frameworks in
     # "Build (compat frameworks + pack)", took 11-18 min (job 15-21 min) across five master runs on
     # 2026-09-24; this job also builds and packs seven metapackages and runs the generator consumer check.
-    # 25 min left no margin; 45 is ~2x the worst observed comparable job and still catches a hang.
-    timeout-minutes: 45
+    # 25 min left no margin; 45 was ~2x the worst observed comparable job. v0.236.1 then hit 45 twice
+    # (runs 45191988230, 45204961520) while thrashing at the memory ceiling - see "Restore and Build".
+    # Built one framework at a time the core takes 27 min in a 4-CPU/16-GB container, where the old
+    # two-at-a-time build took 31 min; 60 leaves room for the rest of the job and still catches a hang.
+    timeout-minutes: 60
     outputs:
       package-artifact-id: ${{ steps.upload-packages.outputs.artifact-id }}
     env:
@@ -212,13 +215,21 @@ jobs:
       # once, which reached the 16-GB ceiling there and got a compiler killed with exit 137. This
       # job had no limit, and v0.233.0's runner was shut down 14 minutes into compiling
       # src/AiDotNet.csproj ("The runner has received a shutdown signal"), so nothing was packed.
+      #
+      # -m:2 was not enough either. One core compile peaks at 10-12 GB, so two at once do not fit in
+      # 16 GB: measured in a 4-CPU/16-GB container, v0.236.0 already lost its shared compiler server to
+      # the OOM killer at 13 GB and only finished because the fallback compilers happened to fit, and
+      # v0.236.1 did not ("csc" exited with code 137) - on the runner that showed up only as this step
+      # running into the job timeout. So: -m:1 builds one framework at a time, and
+      # UseSharedCompilation=false gives each compile its own process, so its memory is returned
+      # before the next one starts instead of accumulating in a compiler server. Peak 12.3 GB, 27 min.
       - name: Restore and Build
         run: |
           set -e
           for proj in $PACKED_PROJECTS; do
             echo "Building $proj"
             dotnet restore "$proj"
-            dotnet build "$proj" -c Release --no-restore -m:2
+            dotnet build "$proj" -c Release --no-restore -m:1 -p:UseSharedCompilation=false
           done
 
       - name: Pack NuGet
@@ -468,7 +479,7 @@ jobs:
         run: |
           set -euo pipefail
           dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
-          dotnet build src/AiDotNet.csproj -c Release -m:2 -p:GenerateCompatibilitySuppressionFile=true
+          dotnet build src/AiDotNet.csproj -c Release -m:1 -p:UseSharedCompilation=false -p:GenerateCompatibilitySuppressionFile=true
 
       - name: Open the baseline PR
         env:
