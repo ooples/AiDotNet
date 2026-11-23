@@ -332,7 +332,15 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             model.LoadSyntheticBatch(options.BatchSize);
             dataTimer.Stop();
             dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
-            batches.Add(model.CurrentBatch);
+            var current = model.CurrentBatch;
+            // The twin builds every batch on its device before the timed epochs (make_batch's .to(device), randn on
+            // the device); on a GPU run ours are placed there too, so no step pays a host-to-device upload it doesn't.
+            if (BenchStats.DeviceName == "cuda")
+            {
+                current.Input.Gpu();
+                current.Label.Gpu();
+            }
+            batches.Add(current);
         }
 
         // The training steps under autocast for --precision bf16 (inference stays FP32 in both arms).
