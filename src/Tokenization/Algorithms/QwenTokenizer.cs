@@ -77,7 +77,7 @@ namespace AiDotNet.Tokenization.Algorithms
             QwenAddedTokens.Take(3), CosyVoice3Tokens, "AiDotNet.Tokenization.cosyvoice3-merges.txt.gz"));
         private static readonly Lazy<QwenTokenizer> SparkInstance = new(() =>
         {
-            using var stream = typeof(QwenTokenizer).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.spark_added_tokens.json.gz")
+            using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.spark_added_tokens.json.gz")
                 ?? throw new InvalidDataException("Missing released Spark-TTS added-token vocabulary.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
             using var reader = new StreamReader(gzip);
@@ -294,7 +294,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
         private static string ReadResource(string resource)
         {
-            using var stream = typeof(QwenTokenizer).Assembly.GetManifestResourceStream(resource)
+            using var stream = EmbeddedData.Open(resource)
                 ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
             using var reader = new StreamReader(gzip, Encoding.UTF8);

@@ -163,7 +163,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     private static readonly Lazy<SentencePieceModel> CharacterModel = new(() =>
     {
         const string resource = "AiDotNet.TextToSpeech.MultiModal.speecht5_spm_char.model.gz";
-        using var stream = typeof(DiTToTTS<T>).Assembly.GetManifestResourceStream(resource)
+        using var stream = EmbeddedData.Open(resource)
             ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
         return SentencePieceModel.FromGzip(stream);
     });

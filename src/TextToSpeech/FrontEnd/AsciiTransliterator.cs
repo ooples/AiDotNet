@@ -9,7 +9,7 @@ internal static class AsciiTransliterator
 {
     private static readonly Lazy<Dictionary<int, string>> Replacements = new(() =>
     {
-        using var stream = typeof(AsciiTransliterator).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.unidecode.json.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.unidecode.json.gz")
             ?? throw new InvalidDataException("Missing Unidecode replacement tables.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         return System.Text.Json.JsonSerializer.Deserialize<Dictionary<int, string>>(gzip) ?? throw new InvalidDataException("Invalid Unidecode tables.");
