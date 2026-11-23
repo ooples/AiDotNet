@@ -39,7 +39,7 @@ public class FusedReadoutLossTests
         private Tensor<double> _w;
         private readonly Tensor<double> _zeroBias = new(new[] { Vocab });
         public bool Fuse = true;
-        public int FusedCalls;
+        public int FusedCalls, ForwardCalls;
 
         public FusableHead(int seed) : base(new[] { Width }, new[] { Vocab })
         {
@@ -59,7 +59,11 @@ public class FusedReadoutLossTests
             RegisterTrainableParameter(_w, AiDotNet.Tensors.Engines.PersistentTensorRole.Weights);
         }
 
-        protected override Tensor<double> ForwardTraced(Tensor<double> input) => Engine.TensorMatMul(input, _w);
+        protected override Tensor<double> ForwardTraced(Tensor<double> input)
+        {
+            ForwardCalls++;
+            return Engine.TensorMatMul(input, _w);
+        }
 
         public Tensor<double>? TryComputeFusedLoss(Tensor<double> input, Tensor<double> target, ILossFunction<double> loss)
         {
@@ -458,5 +462,45 @@ public class FusedReadoutLossTests
         // Each logit should be 32 * 0.25 = 8.0f (stale Q8 weights would have produced 0.0f).
         for (int o = 0; o < outF; o++)
             Assert.Equal(8.0f, y.GetFlat(o), 4);
+    }
+
+    /// <summary>
+    /// Streaming validation scores a batch through the fused readout: the readout's output (an LM head's
+    /// <c>[rows, vocabulary]</c> logits) is never formed, and the loss equals the loss of <c>Predict</c>.
+    /// </summary>
+    [Fact]
+    public void ValidationLoss_UsesTheFusedReadout_WithoutFormingItsOutput()
+    {
+        var (net, head) = Build(seed: 21);
+        var (x, ids) = Data(seed: 22);
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        double expected = loss.ComputeTapeLoss(net.Predict(x), ids).GetFlat(0);
+        head.ForwardCalls = 0;
+        head.FusedCalls = 0;
+        net.SetTrainingMode(true);
+
+        double got = AiModelBuilder<double, Tensor<double>, Tensor<double>>.SampleLoss(net, loss, x, ids);
+
+        Assert.Equal(expected, got, 12);
+        Assert.Equal(1, head.FusedCalls);
+        Assert.Equal(0, head.ForwardCalls);
+        Assert.True(net.IsTrainingMode, "validation restores the training mode");
+    }
+
+    /// <summary>A readout that declines (here it does not fuse) is scored through Predict, as before.</summary>
+    [Fact]
+    public void ValidationLoss_DeclinedReadout_ScoresThePrediction()
+    {
+        var (net, head) = Build(seed: 23);
+        var (x, ids) = Data(seed: 24);
+        head.Fuse = false;
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        double expected = loss.ComputeTapeLoss(net.Predict(x), ids).GetFlat(0);
+        head.ForwardCalls = 0;
+
+        double got = AiModelBuilder<double, Tensor<double>, Tensor<double>>.SampleLoss(net, loss, x, ids);
+
+        Assert.Equal(expected, got, 12);
+        Assert.Equal(1, head.ForwardCalls);
     }
 }

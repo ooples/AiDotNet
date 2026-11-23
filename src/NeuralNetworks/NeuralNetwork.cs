@@ -219,6 +219,10 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// you would use this method to classify new digit images.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>This type's <see cref="PredictCore"/> runs every layer in order (its compiled replay computes the same).</remarks>
+    protected override bool InferenceForwardIsLayerChain => InferenceForwardDeclaredBy(typeof(NeuralNetwork<T>));
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         try

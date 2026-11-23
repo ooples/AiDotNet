@@ -10189,6 +10189,108 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return _forwardForTrainingOverridden == 0 ? head : null;
     }
 
+    // The types declaring this model's Predict and PredictCore, resolved on first use.
+    private Type? _predictDeclarer, _predictCoreDeclarer;
+
+    /// <summary>
+    /// True when this model's <see cref="Predict(Tensor{T})"/> is the base funnel and its <see cref="PredictCore"/>
+    /// is the one <paramref name="type"/> declares: a type whose <see cref="PredictCore"/> runs the layer chain uses
+    /// this to keep <see cref="InferenceForwardIsLayerChain"/> false for a subclass that overrides it again.
+    /// </summary>
+    private protected bool InferenceForwardDeclaredBy(Type type)
+    {
+        if (_predictCoreDeclarer is null)
+        {
+            const System.Reflection.BindingFlags Instance = System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            _predictDeclarer = GetType().GetMethod(nameof(Predict), Instance, null, [typeof(Tensor<T>)], null)?.DeclaringType
+                ?? typeof(object);
+            _predictCoreDeclarer = GetType().GetMethod(nameof(PredictCore), Instance, null, [typeof(Tensor<T>)], null)?.DeclaringType
+                ?? typeof(object);
+        }
+        return _predictDeclarer == typeof(NeuralNetworkBase<T>) && _predictCoreDeclarer == type;
+    }
+
+    /// <summary>
+    /// True when <see cref="Predict(Tensor{T})"/> computes exactly <see cref="LayerBase{T}.Forward"/> of every layer
+    /// in order, in inference mode: then an inference loss may stop the forward before a fused readout
+    /// (<see cref="IFusedReadoutLossLayer{T}"/>) and take the loss from it without forming the readout's output.
+    /// The default is true only for a model that overrides neither <see cref="Predict(Tensor{T})"/> nor
+    /// <see cref="PredictCore"/>; a model whose <see cref="PredictCore"/> override only runs its layers in order
+    /// returns true.
+    /// </summary>
+    protected virtual bool InferenceForwardIsLayerChain => InferenceForwardDeclaredBy(typeof(NeuralNetworkBase<T>));
+
+    /// <summary>
+    /// The inference loss of one batch through a fused readout: every layer but the last runs as
+    /// <see cref="Predict(Tensor{T})"/> runs it (inference mode, no gradient), and the readout's
+    /// <see cref="IFusedReadoutLossLayer{T}.TryComputeFusedLoss"/> gives the loss. The readout's output is never formed:
+    /// for a language-model head that is the <c>[rows, vocabulary]</c> logits and the loss's intermediates over them
+    /// (five 384 MiB tensors at 2048 x 49152), which a validation pass allocated on top of a resident training step.
+    /// The same value as <c>loss.ComputeTapeLoss(Predict(input), target)</c> up to the order of the float reductions.
+    /// False (nothing run) when the model's inference forward is not that layer chain, a tape or graph trace is
+    /// recording, or the readout declines this loss and target; the caller then scores <see cref="Predict(Tensor{T})"/>.
+    /// </summary>
+    internal bool TryFusedReadoutInferenceLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss, out T value)
+    {
+        value = default!;
+        if (loss is not LossFunctions.LossFunctionBase<T>
+            || Tensors.Engines.Compilation.GraphMode.IsActive
+            || AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()
+            || Graph.LayerForwardObserver<T>.Current is not null)
+            return false;
+        RequireArchitectureAgreesWithInput();
+        EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
+        if (!InferenceForwardIsLayerChain || FusedReadoutForTraining() is not { } head) return false;
+
+        bool wasTraining = IsTrainingMode;
+        bool priorDefer = _deferLazyShapeResolutionToForward;
+        _deferLazyShapeResolutionToForward = true;
+        try
+        {
+            if (wasTraining) SetTrainingMode(false);
+        }
+        finally
+        {
+            _deferLazyShapeResolutionToForward = priorDefer;
+        }
+        // As Predict: a model that keeps no GPU result between calls frees this call's intermediates when it ends.
+        var resultScope = ReleasesInferenceIntermediates ? TensorScope.Begin() : null;
+        var noGrad = new NoGradScope<T>();
+        try
+        {
+            BindInputContract(input.Shape.ToArray()).Validate(input);
+            // The base PredictCore promotes an unbatched sample; an override that runs the chain takes its input as given.
+            var current = InferenceForwardDeclaredBy(typeof(NeuralNetworkBase<T>)) ? NormalizeInputBatchDim(input) : input;
+            for (int i = 0; i < Layers.Count - 1; i++)
+                current = Layers[i].Forward(current);
+            if (head.TryComputeFusedLoss(current, target, loss) is not { } fused) return false;
+            value = fused.Data.Span[0];
+            return true;
+        }
+        finally
+        {
+            try
+            {
+                _deferLazyShapeResolutionToForward = true;
+                try
+                {
+                    if (wasTraining) SetTrainingMode(true);
+                }
+                finally
+                {
+                    _deferLazyShapeResolutionToForward = priorDefer;
+                }
+            }
+            finally
+            {
+                noGrad.Dispose();
+                resultScope?.Dispose();
+            }
+        }
+    }
+
     /// <summary>The training forward through every layer but the last: the input of a fused readout.</summary>
     private Tensor<T> ForwardForTrainingToReadout(Tensor<T> input)
     {

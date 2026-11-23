@@ -752,6 +752,8 @@ static AiDotNet.Safety.Watermarking.WatermarkStatistics.CountZ(int hits, int tri
 static AiDotNet.Safety.Watermarking.WatermarkStatistics.UpperTailProbability(double z) -> double
 static AiDotNet.Safety.Watermarking.WatermarkStatistics.ZForUpperTail(double p) -> double
 virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
+virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.InferenceForwardIsLayerChain.get -> bool
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.InferenceForwardIsLayerChain.get -> bool
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandHighHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandLowHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!

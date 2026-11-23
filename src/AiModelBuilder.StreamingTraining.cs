@@ -1521,6 +1521,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // validation alone, and they are freed. Any other loss may cache one (a basis built on its first call, or a
         // caller's loss nested in a composite), so it runs with every scope suspended: neither a loss scope nor the
         // enclosing predict scope can free what it keeps.
+        // A fused readout (an LM head fused with its cross-entropy) gives the loss without forming the readout's output.
+        if (model is NeuralNetworks.NeuralNetworkBase<T> network && x is Tensor<T> xt && y is Tensor<T> yt
+            && network.TryFusedReadoutInferenceLoss(xt, yt, lossFunction, out var fusedLoss))
+            return fusedLoss;
         var releasing = model as NeuralNetworks.NeuralNetworkBase<T> is { ReleasesPredictResults: true } n ? n : null;
         bool lossKeepsNothing = lossFunction is LossFunctions.LossFunctionBase<T> { KeepsResultsBetweenCalls: false };
         // A scope frees GPU results only; host arrays were left to the garbage collector. On the CPU Predict returns a
