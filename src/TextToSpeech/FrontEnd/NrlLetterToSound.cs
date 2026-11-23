@@ -114,7 +114,7 @@ internal static class NrlLetterToSound
 
     private static Dictionary<string, List<Rule>> Load()
     {
-        var assembly = typeof(NrlLetterToSound).Assembly;
+        var assembly = EmbeddedData.Assembly;
         using var stream = assembly.GetManifestResourceStream(ResourceName)
             ?? throw new InvalidDataException($"The embedded resource {ResourceName} is missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);

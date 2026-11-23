@@ -44,7 +44,7 @@ internal sealed class LangDetector
 
     private static Data Load()
     {
-        using var stream = typeof(LangDetector).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz")
             ?? throw new InvalidOperationException("The langdetect profiles are not embedded.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, Encoding.UTF8);

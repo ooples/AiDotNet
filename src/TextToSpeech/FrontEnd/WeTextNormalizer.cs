@@ -206,7 +206,7 @@ internal sealed class OpenFst
 
     public static OpenFst ReadResource(string name)
     {
-        using var stream = typeof(OpenFst).Assembly.GetManifestResourceStream(name)
+        using var stream = EmbeddedData.Open(name)
             ?? throw new InvalidOperationException($"The grammar {name} is not embedded.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var buffer = new MemoryStream();

@@ -21,7 +21,7 @@ internal static class CmuPronouncingDictionary
 
     private static Dictionary<string, string[]> Load()
     {
-        var assembly = typeof(CmuPronouncingDictionary).Assembly;
+        var assembly = EmbeddedData.Assembly;
         using var stream = assembly.GetManifestResourceStream(ResourceName)
             ?? throw new InvalidDataException($"The embedded resource {ResourceName} is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);

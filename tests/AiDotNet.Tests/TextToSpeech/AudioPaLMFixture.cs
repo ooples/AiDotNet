@@ -23,7 +23,7 @@ internal static class AudioPaLMFixture
     private static readonly Lazy<string> CharacterModel = new(() =>
     {
         const string name = "AiDotNet.TextToSpeech.MultiModal.speecht5_spm_char.model.gz";
-        using var stream = typeof(SpeechT5<>).Assembly.GetManifestResourceStream(name) ?? throw new InvalidDataException(name);
+        using var stream = AiDotNet.Helpers.EmbeddedData.Open(name) ?? throw new InvalidDataException(name);
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         string path = Path.Combine(Path.GetTempPath(), $"aidotnet_audiopalm_spm_char_{System.Diagnostics.Process.GetCurrentProcess().Id}.model");
         using (var file = File.Create(path)) gzip.CopyTo(file);

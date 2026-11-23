@@ -33,7 +33,7 @@ internal static class Ftfy
 
         public Tables()
         {
-            using var stream = typeof(Ftfy).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz")
+            using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz")
                 ?? throw new InvalidDataException("The embedded resource ftfy_tables.json.gz is missing.");
             using var gzip = new GZipStream(stream, CompressionMode.Decompress);
             using var reader = new StreamReader(gzip, Encoding.UTF8);

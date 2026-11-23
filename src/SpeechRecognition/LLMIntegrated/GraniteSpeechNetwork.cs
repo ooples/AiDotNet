@@ -166,7 +166,7 @@ internal sealed class GraniteSpeechNetwork<T>
 
     private static ByteLevelBpeTokenizer LoadTokenizer()
     {
-        using var stream = typeof(GraniteSpeechNetwork<T>).Assembly.GetManifestResourceStream(TokenizerResource)
+        using var stream = EmbeddedData.Open(TokenizerResource)
             ?? throw new InvalidDataException($"The embedded resource {TokenizerResource} is missing.");
         using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);

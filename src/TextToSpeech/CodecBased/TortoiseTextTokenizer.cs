@@ -13,7 +13,7 @@ internal sealed class TortoiseTextTokenizer
     private readonly int _unknown;
     internal static readonly Lazy<TortoiseTextTokenizer> Default = new(() =>
     {
-        using var stream = typeof(TortoiseTextTokenizer).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.tortoise_tokenizer.json.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.tortoise_tokenizer.json.gz")
             ?? throw new InvalidDataException("Missing released TorToiSe tokenizer.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip);

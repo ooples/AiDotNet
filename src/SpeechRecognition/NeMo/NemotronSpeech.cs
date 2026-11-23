@@ -116,7 +116,7 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
 
     private static SentencePieceModel LoadTokenizer()
     {
-        using var stream = typeof(NemotronSpeech<T>).Assembly.GetManifestResourceStream(TokenizerResource)
+        using var stream = EmbeddedData.Open(TokenizerResource)
             ?? throw new InvalidDataException($"The embedded resource {TokenizerResource} is missing.");
         return SentencePieceModel.FromGzip(stream);
     }

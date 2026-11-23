@@ -67,7 +67,7 @@ public class QwenTokenizerReferenceTests
     [InlineData("AiDotNet.Tokenization.qwen2-merges.txt.gz", "merges.txt_sha256")]
     public void ShippedFiles_AreQwens(string resource, string key)
     {
-        var stream = typeof(QwenTokenizer).Assembly.GetManifestResourceStream(resource);
+        var stream = AiDotNet.Helpers.EmbeddedData.Open(resource);
         Assert.NotNull(stream);
         using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
         using var sha = SHA256.Create();
