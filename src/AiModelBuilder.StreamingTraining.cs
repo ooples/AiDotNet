@@ -375,6 +375,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int stepInt = checked((int)globalStep);
         var metrics = StreamingCheckpointMetrics(trainLoss, hasValidationLoss, validationLoss);
         var (metricValue, minimizeMetric) = ResolveAutoCheckpointMetric(metrics);
+        bool singleProcess = distBackend is null || (distBackend.WorldSize <= 1 && distCoordinator is null);
+        // Most steps save nothing. The metadata reads state a compiled step keeps on the device (the loss scaler's), so
+        // it is built only for a step that saves; a frequency or interval policy decides that without the metric.
+        if (singleProcess && !forceSave
+            && _checkpointManager is CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput> { AutoSaveDependsOnMetric: false } manager
+            && !manager.ShouldAutoSaveCheckpoint(stepInt))
+        {
+            return false;
+        }
         var metadata = StreamingCheckpointMetadata(
             epoch,
             batchInEpoch,
@@ -388,7 +397,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             fitSeed,
             fitBatchSize);
 
-        if (distBackend is null || (distBackend.WorldSize <= 1 && distCoordinator is null))
+        if (distBackend is null || singleProcess)
         {
             if (forceSave)
             {

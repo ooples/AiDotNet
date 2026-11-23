@@ -66,7 +66,71 @@ public class LossScaler<T>
     /// <summary>
     /// Current loss scale factor.
     /// </summary>
-    public double Scale { get; private set; }
+    public double Scale
+    {
+        get { PullDeviceState(); return _scale; }
+        private set => _scale = value;
+    }
+
+    private double _scale;
+
+    // A compiled training plan that scales its loss on the device (PyTorch's GradScaler inside the step) owns the live
+    // state while it trains; this host copy is refreshed from it on read (one device synchronization per read).
+    private Func<(double Scale, int GrowthTracker, long Steps, long OverflowSteps)?>? _deviceState;
+    private bool _pullingDeviceState;
+    private bool _restoredSinceAttach;
+
+    /// <summary>
+    /// Makes <paramref name="read"/> the source of this scaler's state: a fused compiled step scales, unscales, checks and
+    /// updates on the device, and reads of <see cref="Scale"/>, the update counts and <see cref="CaptureState"/> return
+    /// its state. Null detaches.
+    /// </summary>
+    internal void AttachDeviceState(Func<(double Scale, int GrowthTracker, long Steps, long OverflowSteps)?>? read)
+    {
+        PullDeviceState();
+        _deviceState = read;
+        _restoredSinceAttach = false;
+    }
+
+    /// <summary>True (once) when <see cref="RestoreState"/> or <see cref="Reset"/> replaced the state after a device
+    /// source was attached, so the owner pushes the host state to the device before its next step.</summary>
+    internal bool TakeHostStateChange()
+    {
+        bool changed = _restoredSinceAttach;
+        _restoredSinceAttach = false;
+        return changed;
+    }
+
+    /// <summary>The host state as the device scaler's initial state.</summary>
+    internal (double Scale, int GrowthTracker, long Steps, long OverflowSteps) HostState
+        => (_scale, _consecutiveSuccessfulUpdates, _totalUpdates, _skippedUpdates);
+
+    // A host-side update (an eager step) takes the state back from the device source; the owner pushes it to the plan
+    // before the plan steps again (TakeHostStateChange).
+    private void TakeHostOwnership()
+    {
+        if (_deviceState is null) return;
+        PullDeviceState();
+        _deviceState = null;
+        _restoredSinceAttach = true;
+    }
+
+    private void PullDeviceState()
+    {
+        if (_deviceState is not { } read || _pullingDeviceState) return;
+        _pullingDeviceState = true;
+        try
+        {
+            if (read() is { } state)
+            {
+                _scale = state.Scale;
+                _consecutiveSuccessfulUpdates = state.GrowthTracker;
+                _totalUpdates = (int)Math.Min(int.MaxValue, state.Steps);
+                _skippedUpdates = (int)Math.Min(int.MaxValue, state.OverflowSteps);
+            }
+        }
+        finally { _pullingDeviceState = false; }
+    }
 
     /// <summary>
     /// Whether to use dynamic loss scaling.
@@ -105,17 +169,24 @@ public class LossScaler<T>
     /// <summary>
     /// Gets the total number of updates attempted.
     /// </summary>
-    public int TotalUpdates => _totalUpdates;
+    public int TotalUpdates { get { PullDeviceState(); return _totalUpdates; } }
 
     /// <summary>
     /// Gets the number of updates skipped due to overflow.
     /// </summary>
-    public int SkippedUpdates => _skippedUpdates;
+    public int SkippedUpdates { get { PullDeviceState(); return _skippedUpdates; } }
 
     /// <summary>
     /// Gets the overflow rate (skipped / total).
     /// </summary>
-    public double OverflowRate => _totalUpdates > 0 ? (double)_skippedUpdates / _totalUpdates : 0.0;
+    public double OverflowRate
+    {
+        get
+        {
+            PullDeviceState();
+            return _totalUpdates > 0 ? (double)_skippedUpdates / _totalUpdates : 0.0;
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the LossScaler class.
@@ -280,6 +351,7 @@ public class LossScaler<T>
     /// </remarks>
     public bool UnscaleGradientsAndCheck(Tensor<T> gradients)
     {
+        TakeHostOwnership();
         _totalUpdates++;
 
         // Combine unscaling and overflow check in single pass for better cache locality
@@ -332,6 +404,7 @@ public class LossScaler<T>
     /// <returns>True if gradients are valid; false if overflow detected.</returns>
     public bool UnscaleGradientsAndCheck(Vector<T> gradients)
     {
+        TakeHostOwnership();
         _totalUpdates++;
 
         // First unscale the gradients
@@ -386,6 +459,7 @@ public class LossScaler<T>
     /// </remarks>
     public void RecordOverflow()
     {
+        TakeHostOwnership();
         _totalUpdates++;
         _skippedUpdates++;
         _consecutiveSuccessfulUpdates = 0;
@@ -410,6 +484,7 @@ public class LossScaler<T>
     /// </remarks>
     public void RecordSuccess()
     {
+        TakeHostOwnership();
         _totalUpdates++;
         _consecutiveSuccessfulUpdates++;
 
@@ -424,7 +499,10 @@ public class LossScaler<T>
     /// Captures the loss scaler's internal dynamic-scaling state for checkpoint serialization.
     /// </summary>
     internal (double Scale, int ConsecutiveSuccessfulUpdates, int TotalUpdates, int SkippedUpdates) CaptureState()
-        => (Scale, _consecutiveSuccessfulUpdates, _totalUpdates, _skippedUpdates);
+    {
+        PullDeviceState();
+        return (_scale, _consecutiveSuccessfulUpdates, _totalUpdates, _skippedUpdates);
+    }
 
     /// <summary>
     /// Restores the loss scaler's internal dynamic-scaling state from a checkpoint.
@@ -439,6 +517,7 @@ public class LossScaler<T>
         _consecutiveSuccessfulUpdates = Math.Max(0, consecutiveSuccessfulUpdates);
         _totalUpdates = Math.Max(0, totalUpdates);
         _skippedUpdates = Math.Max(0, skippedUpdates);
+        if (_deviceState is not null) _restoredSinceAttach = true;
     }
 
     /// <summary>
@@ -454,6 +533,7 @@ public class LossScaler<T>
         _consecutiveSuccessfulUpdates = 0;
         _totalUpdates = 0;
         _skippedUpdates = 0;
+        if (_deviceState is not null) _restoredSinceAttach = true;
     }
 
     /// <summary>
@@ -462,6 +542,7 @@ public class LossScaler<T>
     /// <returns>A string describing the current state.</returns>
     public override string ToString()
     {
+        PullDeviceState();
         return $"LossScaler<{typeof(T).Name}>: " +
                $"Scale={Scale:F0}, " +
                $"Dynamic={DynamicScaling}, " +

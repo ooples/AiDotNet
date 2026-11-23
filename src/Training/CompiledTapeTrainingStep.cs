@@ -109,6 +109,10 @@ public static class CompiledTapeTrainingStep<T>
         internal double configuredL2;
         internal bool configuredL2AfterClip;
         internal double configuredMaxGradNorm;
+        // Mixed precision (FusedMixedPrecision): the configuration the plan was committed with, and the plan whose loss
+        // scaling is configured (a new plan for a new shape takes the previous one's scaler state).
+        internal string? mixedPrecisionSignature;
+        internal object? lossScaledPlan;
         internal long fusedStepCount;
         // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
         // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
@@ -1269,6 +1273,8 @@ public static class CompiledTapeTrainingStep<T>
         _cachedSelectionIdentities = null;
         _cachedUsesExplicitSelection = false;
         _configuredPlan = null;
+        CurrentState.mixedPrecisionSignature = null;
+        CurrentState.lossScaledPlan = null;
         _configuredOptimizerConfig = null;
             CurrentState.optimizerContract = null;
         _configuredL2 = 0.0;
@@ -1435,7 +1441,8 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        FusedMixedPrecision? mixedPrecision = null)
     {
         // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
         AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
@@ -1487,13 +1494,75 @@ public static class CompiledTapeTrainingStep<T>
                 verifyDistributedReplay: verifyDistributedReplay,
                 distributedEagerReplayLoss: distributedEagerReplayLoss,
                 distributedReplayTolerance: distributedReplayTolerance,
-                closureObjective: closureObjective);
+                closureObjective: closureObjective,
+                mixedPrecision: mixedPrecision);
         }
         finally
         {
             if (--_stepDepth > 0) _currentState = previous;
             ExitState(ownerStates);
         }
+    }
+
+    /// <summary>
+    /// Mixed precision on the plan about to step (see <see cref="FusedMixedPrecision"/>): the configuration is fixed when
+    /// the first plan is configured, a later change is refused (the eager path would restart the plan's moments), and a
+    /// plan that takes over from another (a new batch shape) continues its scaler state. The matmul precision itself is
+    /// the caller's autocast scope around the step.
+    /// </summary>
+    private static bool TryConfigureMixedPrecision(ICompiledTrainingPlan<T> plan, FusedMixedPrecision? mixedPrecision)
+    {
+        string signature = mixedPrecision?.Signature ?? "";
+        CurrentState.mixedPrecisionSignature ??= signature;
+        if (!string.Equals(CurrentState.mixedPrecisionSignature, signature, StringComparison.Ordinal))
+        {
+            Fd("mixed-precision configuration changed after the plan was configured");
+            _lastFallbackException = new InvalidOperationException(
+                "Mixed precision was turned on, off or reconfigured after fused training had committed; the compiled "
+                + "plan's optimizer moments cannot move to the eager optimizer. Configure mixed precision before the "
+                + "first Train call.");
+            return false;
+        }
+        var scaling = mixedPrecision?.LossScaling;
+        if (ReferenceEquals(CurrentState.lossScaledPlan, plan))
+        {
+            // A checkpoint restore, a Reset or an eager step replaced the host scaler's state: the plan continues from it
+            // and becomes the state's source again.
+            if (scaling is not null && mixedPrecision!.HostScaler?.TakeHostStateChange() == true
+                && plan is ICompiledTrainingPlanLossScaling restored)
+            {
+                restored.ConfigureLossScaling(scaling, mixedPrecision.HostState());
+                mixedPrecision.AttachHostScaler(restored);
+            }
+            return true;
+        }
+        if (scaling is null)
+        {
+            CurrentState.lossScaledPlan = plan;
+            return true;
+        }
+        if (typeof(T) != typeof(float) || plan is not ICompiledTrainingPlanLossScaling scaled)
+        {
+            Fd("loss scaling requested but the linked plan cannot scale its loss");
+            return false;
+        }
+        LossScaleState? start = CurrentState.lossScaledPlan is ICompiledTrainingPlanLossScaling previous
+            ? previous.ReadLossScaleState()
+            : mixedPrecision!.HostState();
+        try
+        {
+            scaled.ConfigureLossScaling(scaling, start);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Fd("loss scaling refused: " + ex.Message);
+            _lastFallbackException = ex;
+            return false;
+        }
+        CurrentState.lossScaledPlan = plan;
+        mixedPrecision!.HostScaler?.TakeHostStateChange();
+        mixedPrecision.AttachHostScaler(scaled);
+        return true;
     }
 
     /// <summary>
@@ -1782,7 +1851,8 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        FusedMixedPrecision? mixedPrecision = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -2390,6 +2460,8 @@ public static class CompiledTapeTrainingStep<T>
                 CompiledStepRandom<T>.RedrawFor(plan);
             }
 
+            if (!TryConfigureMixedPrecision(plan, mixedPrecision)) return false;
+
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();
             // The gate is repeated here, not left to FdStep, only to keep the ToDouble/ToString
@@ -2462,6 +2534,8 @@ public static class CompiledTapeTrainingStep<T>
                     .Add(optimizerType);
             }
             _configuredPlan = null;
+            CurrentState.mixedPrecisionSignature = null;
+            CurrentState.lossScaledPlan = null;
             _configuredOptimizerConfig = null;
             CurrentState.optimizerContract = null;
             CurrentState.planOptimizerStep = -1;
@@ -3142,6 +3216,8 @@ public static class CompiledTapeTrainingStep<T>
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepDistributedCompiledPlan failed, falling back to eager: {ex}");
             _configuredPlan = null;
+            CurrentState.mixedPrecisionSignature = null;
+            CurrentState.lossScaledPlan = null;
             CurrentState.planOptimizerStep = -1;
             return false;
         }
@@ -3255,6 +3331,8 @@ public static class CompiledTapeTrainingStep<T>
                 + "all ranks aborted the replay in lockstep and continue on the eager tape";
             CurrentState.distributedReplayEvaluated = true;
             _configuredPlan = null;
+            CurrentState.mixedPrecisionSignature = null;
+            CurrentState.lossScaledPlan = null;
             CurrentState.planOptimizerStep = -1;
             return false;
         }

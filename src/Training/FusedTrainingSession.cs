@@ -324,6 +324,35 @@ internal sealed class FusedTrainingSession<T>
     public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss, out Tensor<T>? lossTensor)
     {
         Guard.NotNull(request);
+        // Mixed precision rides the compiled plan (PyTorch's autocast + GradScaler): every matmul of the step -- the
+        // trace, the replay and the replay-agreement forward -- multiplies in the configured precision, and the plan
+        // scales and unscales the loss gradient itself. The FP32 master weights are the plan's parameters.
+        FusedMixedPrecision? mixedPrecision = null;
+        if (_owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: { } mpContext })
+        {
+            mixedPrecision = FusedMixedPrecision.From(mpContext, out string? mpReason);
+            if (mixedPrecision is null)
+            {
+                loss = NumOps.Zero;
+                lossTensor = null;
+                LastFallbackException = null;
+                LastStepRanOutsidePlan = false;
+                return Decline(mpReason ?? "mixed precision has no fused form");
+            }
+        }
+        using var autocast = mixedPrecision is not null
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine autocastEngine
+                ? autocastEngine.EnterMatMulAutocast(mixedPrecision.MatMulPrecision)
+                : null;
+        _mixedPrecision = mixedPrecision;
+        return TryStepCore(request, out loss, out lossTensor);
+    }
+
+    // The step's mixed precision (TryStep), or null.
+    private FusedMixedPrecision? _mixedPrecision;
+
+    private FusedStepOutcome TryStepCore(FusedTrainingStepRequest<T> request, out T loss, out Tensor<T>? lossTensor)
+    {
         loss = NumOps.Zero;
         lossTensor = null;
         LastFallbackException = null;
@@ -359,10 +388,10 @@ internal sealed class FusedTrainingSession<T>
             return FusedStepOutcome.CommittedFailure;
         }
 
-        if (_owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: not null })
-            return Decline("mixed precision active (requires eager tape loss scaling)");
-
         bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
+        // The distributed step synchronizes, unscales and checks the gradients itself (DistributedTapeCoordinator).
+        if (isDistributed && _mixedPrecision is not null)
+            return Decline("mixed precision with distributed training (the coordinator unscales on the eager tape)");
         if (isDistributed)
             AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.RejectUnsupportedRoute("distributed");
 
@@ -574,7 +603,8 @@ internal sealed class FusedTrainingSession<T>
                 verifyDistributedReplay: isDistributed && checkReplay,
                 distributedEagerReplayLoss: distributedEagerReplayLoss,
                 distributedReplayTolerance: ReplayAgreementTolerance,
-                closureObjective: request.ClosureObjective);
+                closureObjective: request.ClosureObjective,
+                mixedPrecision: _mixedPrecision);
         }
         finally
         {

@@ -15354,8 +15354,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
             return;
         }
-        LastTrainingRoute = creditRuleActive ? "eager tape (non-backprop credit rule)"
-            : _mixedPrecisionContext is not null ? "eager tape (mixed precision)" : "fused attempt";
+        LastTrainingRoute = creditRuleActive ? "eager tape (non-backprop credit rule)" : "fused attempt";
 
         // Reset the pending fused-miss reason so this call's emission
         // window starts clean. The fused-path try sets it via
@@ -15376,13 +15375,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // met or tracing fails; we then fall through to the eager tape path
         // below with behavior unchanged.
         //
-        // Mixed-precision (issue #1354): the fused path does NOT materialize
-        // intermediate gradient tensors that the loss-scaler needs to unscale
-        // + overflow-check, and does NOT consult _mixedPrecisionContext for
-        // forward-weight round-tripping. When MP is enabled we MUST take the
-        // eager tape path so the MP wiring below (cast weights to low precision,
-        // scale loss, unscale gradients, overflow detection) actually runs.
-        if (!creditRuleActive && _mixedPrecisionContext is null
+        // Mixed precision (FP16/BF16) trains on the fused path too, as PyTorch's autocast + GradScaler do: FP32 master
+        // weights, matmuls in reduced precision inside the compiled plan, and the loss scaling, unscale, overflow check
+        // and scale update inside the plan (on the device on CUDA). FusedTrainingSession wires it; a configuration
+        // with no fused form (FP8) declines to the eager MP wiring below.
+        if (!creditRuleActive
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
         {
             return;
