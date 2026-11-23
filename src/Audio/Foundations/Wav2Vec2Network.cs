@@ -366,6 +366,19 @@ internal sealed class Wav2Vec2Network<T>
     }
 
     /// <summary>
+    /// The pre-training mask: the paper's start probability converted to fairseq's <c>mask_prob</c>. Baevski et al. 2020
+    /// (section 4.2) "sample p = 0.065 of all time-steps to be starting indices and mask the subsequent M = 10
+    /// time-steps"; fairseq states the same rate as <c>mask_prob: 0.65</c> (wav2vec2.py's default, used by
+    /// wav2vec2_base_librispeech.yaml), the fraction ⌊mask_prob·L/M⌋ spans of M frames cover, so mask_prob = p·M.
+    /// <see cref="DrawMask"/> takes fairseq's mask_prob.
+    /// </summary>
+    public bool[,] DrawPretrainingMask(int batch, int length, double startProbability, Random random) =>
+        DrawMask(batch, length, SpanMaskProbability(startProbability), random);
+
+    /// <summary>The paper's span-start probability p as fairseq's <c>mask_prob</c>, p·M (see <see cref="DrawPretrainingMask"/>).</summary>
+    public double SpanMaskProbability(double startProbability) => startProbability * Configuration.MaskTimeLength;
+
+    /// <summary>
     /// <paramref name="spans"/> spans of <paramref name="span"/> frames over <paramref name="length"/> frames, following
     /// fairseq's <c>compute_mask_indices</c> (fairseq/data/data_utils.py, <c>idc_select_ver == 1</c>):
     /// <code>

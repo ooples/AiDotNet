@@ -183,7 +183,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         var net = network.Stack.Network;
         var c = network.Pretraining.Configuration;
         var stepMask = c.MaskProbability > 0
-            ? net.DrawMask(x.Shape[0], net.Frames(x.Shape[1]), c.MaskProbability, _random)
+            ? net.DrawPretrainingMask(x.Shape[0], net.Frames(x.Shape[1]), c.MaskProbability, _random)
             : new bool[x.Shape[0], net.Frames(x.Shape[1])];
         var stepNegatives = network.Pretraining.SampleNegatives(stepMask, _random);
         using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();

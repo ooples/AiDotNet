@@ -116,7 +116,7 @@ internal sealed class NoiseRobustWav2Vec2Network<T>
         var network = Stack.Network;
         var c = Pretraining.Configuration;
         var output = mask is null
-            ? network.Forward(noisy, training, random, maskProbability: c.MaskProbability, featureGradientScale: c.FeatureGradientScale)
+            ? network.Forward(noisy, training, random, maskProbability: network.SpanMaskProbability(c.MaskProbability), featureGradientScale: c.FeatureGradientScale)
             : network.Forward(noisy, training, random, mask: mask, featureGradientScale: c.FeatureGradientScale);
         var drawn = output.Mask ?? mask ?? throw new InvalidOperationException("Pre-training needs a mask.");
         var losses = Pretraining.Loss(output, negatives ?? Pretraining.SampleNegatives(drawn, random), training, random);
