@@ -104,7 +104,7 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
             throw new ArgumentException("Each mel channel needs a finite fitted mean.", nameof(o.MelMean));
         if (o.MelScale is not null && (o.MelScale.Length != o.MelChannels || o.MelScale.Any(x => double.IsNaN(x) || double.IsInfinity(x) || x <= 0)))
             throw new ArgumentException("Each mel channel needs a positive finite fitted scale.", nameof(o.MelScale));
-        var init = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 2);
+        var init = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 2);
         _generator = new ParallelWaveGanGenerator<T>(Engine, init, o.MelChannels, o.UpsampleRates, o.AuxContextWindow,
             o.NumLayers, o.NumStacks, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.KernelSize);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency, 1e-10);
@@ -116,7 +116,7 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        var init = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 3);
+        var init = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 3);
         _discriminator = new ParallelWaveGanDiscriminator<T>(Engine, init, o.DiscriminatorLayers, o.DiscriminatorChannels, o.KernelSize);
         return _discriminator.Layers;
     }

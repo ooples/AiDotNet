@@ -271,7 +271,7 @@ public partial class SpiritLM<T>
         TrainWithCustomObjective(real, real, (_, _) =>
         {
             Tensor<T> generated;
-            using (new NoGradScope<T>()) generated = Generate().Waveform;
+            using (new NoGradScope<T>()) generated = vocoder.SynthesizeFrameCodes(segment, speaker, utteranceStyle, segmentPitch, segmentStyle);
             var onReal = discriminators.Forward(real);
             var onFake = discriminators.Forward(generated);
             Tensor<T>? total = null;

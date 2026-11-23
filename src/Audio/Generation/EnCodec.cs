@@ -112,18 +112,26 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         layers.Add(quantizer);
         _quantizer = quantizer;
         _decoder = new SeanetDecoder<T>(Engine, config, layers);
-        _melScales = o.MelScales.Select(i => new CodecMelScale<T>(Engine, o.SampleRate, 1 << i, (1 << i) / 4, o.MelBins, o.MelMinFrequency, null,
-            normalized: true)).ToList();
-        var weights = new Dictionary<string, double>
+        if (o.IncludeDiscriminators)
         {
-            ["t"] = o.TimeLossWeight,
-            ["f"] = o.FrequencyLossWeight,
-            ["g"] = o.AdversarialLossWeight,
-            ["feat"] = o.FeatureLossWeight,
-        };
-        _balancer = new LossBalancer<T>(Engine, weights, o.BalancerTotalNorm, o.BalancerDecay);
+            _melScales = BuildMelScales(o);
+            var weights = new Dictionary<string, double>
+            {
+                ["t"] = o.TimeLossWeight,
+                ["f"] = o.FrequencyLossWeight,
+                ["g"] = o.AdversarialLossWeight,
+                ["feat"] = o.FeatureLossWeight,
+            };
+            _balancer = new LossBalancer<T>(Engine, weights, o.BalancerTotalNorm, o.BalancerDecay);
+        }
         return quantizer;
     }
+
+    private List<CodecMelScale<T>> MelScales => _melScales ??= BuildMelScales(PaperOptions);
+
+    private List<CodecMelScale<T>> BuildMelScales(EnCodecOptions o) =>
+        o.MelScales.Select(i => new CodecMelScale<T>(Engine, o.SampleRate, 1 << i, (1 << i) / 4, o.MelBins, o.MelMinFrequency, null,
+            normalized: true)).ToList();
 
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
@@ -212,17 +220,18 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private Tensor<T> FrequencyLoss(IReadOnlyList<IReadOnlyList<Tensor<T>>> realMels, Tensor<T> generated)
     {
         var o = PaperOptions;
+        var scales = MelScales;
         var channels = Channels(generated).ToList();
         var terms = new List<Tensor<T>>();
         for (int c = 0; c < channels.Count; c++)
-            for (int i = 0; i < _melScales!.Count; i++)
+            for (int i = 0; i < scales.Count; i++)
             {
-                var d = Engine.TensorSubtract(realMels[c][i], _melScales[i].Forward(channels[c]));
+                var d = Engine.TensorSubtract(realMels[c][i], scales[i].Forward(channels[c]));
                 double count = d.Length;
                 var l1 = Total(Engine.TensorAbs(d));
                 var l2 = Engine.TensorPow(Engine.TensorAddScalar(Total(Engine.TensorMultiply(d, d)), NumOps.FromDouble(1e-24)), NumOps.FromDouble(0.5));
                 terms.Add(Engine.TensorMultiplyScalar(Engine.TensorAdd(l1, Engine.TensorMultiplyScalar(l2, NumOps.FromDouble(o.MelL2Coefficient))),
-                    NumOps.FromDouble(1.0 / (count * _melScales.Count))));
+                    NumOps.FromDouble(1.0 / (count * scales.Count))));
             }
         return Sum(terms);
     }
@@ -230,7 +239,8 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private List<IReadOnlyList<Tensor<T>>> RealMels(Tensor<T> real)
     {
         using var _ = new NoGradScope<T>();
-        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)_melScales!.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
+        var scales = MelScales;
+        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)scales.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
     }
 
     /// <summary>ℓ_g = (1/K) Σ_k max(0, 1 − D_k(x̂)), per channel, averaged over channels.</summary>

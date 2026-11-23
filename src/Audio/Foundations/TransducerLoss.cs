@@ -146,9 +146,16 @@ internal static class TransducerLoss
         if (frames <= 0) throw new ArgumentException("The lattice has no frames.", nameof(logProbs));
         if (vocabulary <= 0) throw new ArgumentOutOfRangeException(nameof(vocabulary), vocabulary, "The vocabulary must be positive.");
         if (durations.Count == 0) throw new ArgumentException("At least one duration is required.", nameof(durations));
+        bool canReachEnd = false;
         foreach (int duration in durations)
-            if (duration < 0 || duration > frames)
-                throw new ArgumentException($"Duration {duration} is outside [0, {frames}].", nameof(durations));
+        {
+            if (duration < 0)
+                throw new ArgumentException($"Duration {duration} is negative.", nameof(durations));
+            if (duration > 0 && duration <= frames)
+                canReachEnd = true;
+        }
+        if (!canReachEnd)
+            throw new ArgumentException($"No positive duration in [{string.Join(", ", durations)}] fits within {frames} frame(s).", nameof(durations));
         if (blank < 0 || blank >= vocabulary)
             throw new ArgumentOutOfRangeException(nameof(blank), blank, $"The blank must be a token in [0, {vocabulary}).");
         foreach (int label in labels)
@@ -232,7 +239,11 @@ internal static class TransducerLoss
                 double total = double.NegativeInfinity;
                 for (int i = 0; i < durations.Length; i++)
                 {
-                    int d = durations[i], to = t + d;
+                    // A duration past the remaining frames has no transition here; checked before the sum, which
+                    // overflows for a duration near int.MaxValue and would pass "to < frames" as a negative index.
+                    int d = durations[i];
+                    if (d > frames - t) continue;
+                    int to = t + d;
                     if (d > 0 && u == length && to == frames) total = Add(total, Token(t, u, blank) + Duration(t, u, i));
                     if (d > 0 && to < frames) total = Add(total, beta[to, u] + Token(t, u, blank) + Duration(t, u, i));
                     if (u < length && to < frames) total = Add(total, beta[to, u + 1] + Token(t, u, labels[u]) + Duration(t, u, i));
@@ -246,7 +257,9 @@ internal static class TransducerLoss
             for (int u = 0; u < width; u++)
                 for (int i = 0; i < durations.Length; i++)
                 {
-                    int d = durations[i], to = t + d, at = (t * width + u) * channels;
+                    int d = durations[i];
+                    if (d > frames - t) continue;   // as in the backward pass: no transition, and no overflow
+                    int to = t + d, at = (t * width + u) * channels;
                     double blankNext = d == 0 ? double.NegativeInfinity
                         : to == frames ? (u == length ? 0.0 : double.NegativeInfinity)
                         : to < frames ? beta[to, u] : double.NegativeInfinity;

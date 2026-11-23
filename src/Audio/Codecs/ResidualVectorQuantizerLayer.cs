@@ -73,9 +73,18 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         for (int q = 0; q < quantizers; q++)
         {
             _embed[q] = new Tensor<T>(new[] { bins, dim });
+            _embedAverage[q] = new Tensor<T>(new[] { bins, dim });
             if (kmeansIterations == 0)
-                for (int i = 0; i < _embed[q].Length; i++) _embed[q][i] = NumOps.FromDouble((2 * _random.NextDouble() - 1) * bound);
-            _embedAverage[q] = new Tensor<T>(_embed[q]._shape, _embed[q].ToVector());
+            {
+                var embedSpan = _embed[q].AsWritableSpan();
+                var avgSpan = _embedAverage[q].AsWritableSpan();
+                for (int i = 0; i < embedSpan.Length; i++)
+                {
+                    T elem = NumOps.FromDouble((2 * _random.NextDouble() - 1) * bound);
+                    embedSpan[i] = elem;
+                    avgSpan[i] = elem;
+                }
+            }
             _clusterSize[q] = new Tensor<T>(new[] { bins });
             // A buffer, as the reference's "inited": a restored model must not re-run k-means over trained codebooks.
             _initialized[q] = new Tensor<T>(new[] { 1 });

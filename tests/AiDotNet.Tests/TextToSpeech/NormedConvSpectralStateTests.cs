@@ -24,8 +24,8 @@ public sealed class NormedConvSpectralStateTests
         var compiled = Create();
         eager.SetTrainingMode(true);
         compiled.SetTrainingMode(true);
-        Tensor<double> Field(NormedConv1DLayer<double> layer, string name) => (Tensor<double>)typeof(NormedConv1DLayer<double>)
-            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layer)!;
+        Tensor<double> Field(NormedConv1DLayer<double> layer, string name) => Assert.IsType<Tensor<double>>(
+            Assert.IsAssignableFrom<FieldInfo>(typeof(NormedConv1DLayer<double>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)).GetValue(layer));
         foreach (string name in new[] { "_direction", "_u", "_v" })
         {
             var a = Field(eager, name);
@@ -73,8 +73,8 @@ public sealed class NormedConvSpectralStateTests
         var engine = AiDotNetEngine.Current;
         var layer = new NormedConv1DLayer<T>(2, 2, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Spectral);
         layer.SetTrainingMode(true);
-        Tensor<T> Field(string name) => (Tensor<T>)typeof(NormedConv1DLayer<T>)
-            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layer)!;
+        Tensor<T> Field(string name) => Assert.IsType<Tensor<T>>(
+            Assert.IsAssignableFrom<FieldInfo>(typeof(NormedConv1DLayer<T>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)).GetValue(layer));
         var direction = Field("_direction");
         var u = Field("_u");
         var v = Field("_v");

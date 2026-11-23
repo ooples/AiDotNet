@@ -4,6 +4,7 @@ virtual AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.Repor
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateAccepted() -> void
 AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.ReportRetainedOutputUpdateRejected() -> void
 override AiDotNet.Optimizers.AdamOptimizer<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
+override AiDotNet.Optimizers.AdamWOptimizer<T, TInput, TOutput>.ReportsRetainedOutputUpdateOutcome.get -> bool
 AiDotNet.Audio.Features.AudioFeatureExtractorBase<T>.ExtractSpectrogramBatch<TSpec>(AiDotNet.Tensors.LinearAlgebra.Tensor<TSpec>! spectrogram, System.Func<int, AiDotNet.Tensors.LinearAlgebra.Tensor<TSpec>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! extract2D) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.DetachTensor(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RequiresRetainedGeneration.get -> bool
@@ -6764,6 +6765,7 @@ AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.VocoderSettings.get -> AiDotNet
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.TrainingSteps.get -> long
 AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.HasPaperLayers.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.SegmentSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateGenerator() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 abstract AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CreateDiscriminators() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!

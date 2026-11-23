@@ -494,7 +494,13 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::MinTurnDuration", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerDiarizer`1::WindowDurationSeconds", OptionSensitivityOutcome.Insensitive },
+            // Both passed only while the fixture's control was whichever option's probe ran first (a waveform control
+            // made every frame-observed option read as sensitive). Measured against the option-independent control they
+            // are what SpeakerVerifier's are: EncoderLayerCount marks a split in a caller-supplied layer list, which this
+            // self-built network has none of, and MinimumDurationSeconds is published but gates nothing.
+            { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::MaxFrames", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor`1::MinimumDurationSeconds", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::DefaultThreshold", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Audio.Speaker.SpeakerLM`1::MinDurationSeconds", OptionSensitivityOutcome.Insensitive },
@@ -1280,8 +1286,20 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::TotalSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::UseEarlyStopping", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.ChronosBolt`1::UseIntercept", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::AutocorrelationCorrection", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::EarlyStoppingMinDelta", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::EarlyStoppingPatience", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::IncludeTrend", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::LagOrder", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::MaxContextLength", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::MaxPredictionAbsValue", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::MaxTrainingTimeSeconds", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::ModelSize", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::ModelType", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::NumFeatures", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::SeasonalPeriod", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::UseEarlyStopping", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Finance.Forecasting.Foundation.Chronos`1::UseIntercept", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.FlowState`1::AutocorrelationCorrection", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.FlowState`1::EarlyStoppingMinDelta", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Foundation.FlowState`1::EarlyStoppingPatience", OptionSensitivityOutcome.Insensitive },
@@ -3770,6 +3788,9 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.ChatTTS`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
+            // CodecFrameRate, FftSize, MaxTextLength and SampleRate read as sensitive only against a control another
+            // option's probe had prepared; against the option-independent control they leave the fixture's output
+            // unchanged (as CosyVoice, CosyVoice3 and CosyVoiceClone record).
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.CosyVoice2`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
@@ -3972,10 +3993,16 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.DescriptionBased.ParlerTTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.ParlerTTS`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::FilterChannels", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::InterChannels", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::LearningRate", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::NumDiffusionSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::NumFlowSteps", OptionSensitivityOutcome.Insensitive },
             // A single hop perturbation cannot preserve the configured generator upsampling product.
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::HopSize", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
@@ -4437,6 +4464,8 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.WaveRNN`1::UpsampleRates", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveRNN`1::VocabSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
+            // Read as sensitive only against a control another option had prepared; against the option-independent
+            // control FftSize, MaxTextLength and MinReferenceDurationSec leave the fixture's output unchanged.
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone`1::HopSize", OptionSensitivityOutcome.Insensitive },
@@ -4626,6 +4655,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::NumBlocks", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::TemporalWindowSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.LiteDVDNet`1::Variant", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Video.Denoising.ShiftNet`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::NumBlocks", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::NumShifts", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.Denoising.ShiftNet`1::ShiftRadius", OptionSensitivityOutcome.Insensitive },

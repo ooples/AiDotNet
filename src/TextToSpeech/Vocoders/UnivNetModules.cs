@@ -265,6 +265,28 @@ internal sealed class MultiResolutionSpectrogramDiscriminators<T>
         }
     }
 
+    /// <summary>
+    /// The discriminators with their convolutions initialized from <paramref name="initialization"/>, so a model's own
+    /// seeds decide these weights. Built by the plain constructor they follow the construction scope instead (the
+    /// architecture seed, or an unseeded source when that is unset).
+    /// </summary>
+    public static MultiResolutionSpectrogramDiscriminators<T> CreateSeeded(IEngine engine, int[] fftSizes, int[] hopSizes,
+        int[] windowSizes, int channels, double slope, Random initialization)
+    {
+        // A Conv2DLayer draws its weights in its constructor from the seed the construction scope hands it: the scope
+        // is pointed at this stream for the build and put back afterwards, deferred model seed included.
+        var enclosing = LayerInitializationSeedScope.CaptureScope();
+        LayerInitializationSeedScope.ResumeSequence(initialization);
+        try
+        {
+            return new MultiResolutionSpectrogramDiscriminators<T>(engine, fftSizes, hopSizes, windowSizes, channels, slope);
+        }
+        finally
+        {
+            LayerInitializationSeedScope.RestoreScope(enclosing);
+        }
+    }
+
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
     private Conv2DLayer<T> Add(Conv2DLayer<T> layer)

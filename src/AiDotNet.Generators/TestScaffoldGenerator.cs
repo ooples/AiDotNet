@@ -1199,6 +1199,12 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // rise across the first two steps while the model is learning. Judge it after the warm-up transient.
             { "Wav2Vec2", new WarmupIterationOverride(memorization: 15) },
 
+            // HuBERT's training forward keeps the paper's regularizers (dropout 0.1, LayerDrop 0.1, SpecAugment time
+            // masks), so GetLastLoss is one draw per step. On the fixed pair its training loss read 1.2554, 1.2750,
+            // 1.2279 ... over twelve steps (1.2585, 1.2966 ... with LayerDrop 0, so not the skip), while the evaluation
+            // loss at the same weights fell on every step: 1.2774, 1.2364, 1.1775 ... 0.6398. Same remedy as VMamba's above.
+            { "HuBERT", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // DeepAR's default stack inserts DropoutLayer instances between its recurrent layers.
             // GetLastLoss is therefore one training-mode dropout draw at each endpoint, so it can
             // reverse even when the fixed example's evaluation loss decreases. Measure the same
@@ -4230,6 +4236,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // rather than NeuralNetworkBase, so without their own families they fell through to
         // NeuralNetwork and were rejected for not implementing INeuralNetworkModel.
         bool extendsObjectDetector = false, extendsTextDetector = false, extendsOcr = false;
+        bool extendsGanBase = false;
 
         // #2147: a model that sizes its layers from its options declares SizesLayersFromOptions (itself or through a base
         // such as FinancialModelBase); NeuralNetworkBase's own declaration is the default, not a declaration.
@@ -4390,6 +4397,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 extendsNonLinearRegression = true;
             else if (baseName.StartsWith("ProbabilisticClassifierBase", System.StringComparison.Ordinal))
                 extendsProbabilisticClassifier = true;
+            else if (baseName.StartsWith("GanVocoderBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("GenerativeAdversarialNetwork", System.StringComparison.Ordinal))
+                extendsGanBase = true;
 
             baseType = baseType.BaseType;
         }
@@ -4569,6 +4579,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsTextConditioningBase = extendsTextConditioning,
             ExtendsNeckBase = extendsNeck,
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
+            ExtendsGanBase = extendsGanBase,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
             ExtendsTextSafetyModuleBase = extendsTextSafety,
             ExtendsImageWatermarkerBase = extendsImageWatermarker,
@@ -16190,13 +16201,20 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // invariants measure it.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
-                if (model.ClassName is "WaveRNN" or "WaveNet")
+                else if (model.ClassName is "WaveRNN" or "WaveNet")
                 {
                     // WaveNet likewise samples each 8-bit mu-law class from a 256-way softmax (van den Oord et al. 2016,
                     // Sec. 2.2); the reason below applies to it unchanged.
                     // WaveRNN samples each coarse and fine 8-bit class from a 256-way softmax (Kalchbrenner et al. 2018,
                     // Sec. 3); with seeded draws an untrained model's near-uniform logits rarely move a class boundary past a
                     // draw, so constant mels can sample the same classes. Two steps sharpen the softmaxes first.
+                    sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
+                }
+                else if (model.ExtendsGanBase || model.Categories.Contains(CategoryGAN))
+                {
+                    // GAN vocoders compose deep upsampling stacks with nonlinear post-filters (tanh / iSTFT) whose
+                    // untrained weight initialization can attenuate small mel differences below the probe floor on
+                    // unfavorable random draws. Two warmup steps open the generator conditioning path.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
             }
@@ -16457,6 +16475,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // above uses mel = 8, T = 4, hop = 4 while retaining every paper component.
                     sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 4 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 12 };");
+                    if (model.ExtendsGanBase || model.Categories.Contains(CategoryGAN))
+                        sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
                 else if (model.ClassName == "NaturalSpeech2")
                 {
@@ -17044,8 +17064,12 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName == "NaturalSpeech3" ? 40 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" or "WhisperSpeech" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName == "NaturalSpeech3" ? 40 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "MeloTTS" or "DiTToTTS" or "AudioPaLM" or "WhisperSpeech" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // MeloTTS is a Bert-VITS2: the same step (posterior noise, a random decoder window, the duration
+                    // model's noise, discriminators trained in the step), so its GetLastLoss() is one draw as well - CI
+                    // read 167.160980 at step 1 and 170.631683 at step 2. It joins its family: fifteen steps, judged on
+                    // the seeded objective, at the unchanged 1 % threshold.
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "MeloTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.
@@ -19364,15 +19388,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 ? factoryBody.Substring("        => ".Length, factoryBody.Length - "        => ".Length - 1)
                 : constructorExpr;
             sb.AppendLine("    {");
-            sb.AppendLine("        int? _prevSeed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;");
-            sb.AppendLine("        var _prevScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();");
-            sb.AppendLine("        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed ?? 1337;");
-            sb.AppendLine("        if (_prevSeed is null) AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(null);");
-            sb.AppendLine($"        try {{ return {factoryExpr}; }}");
-            sb.AppendLine("        finally");
+            sb.AppendLine("        var _scopeType = typeof(global::AiDotNet.Interfaces.IFullModel<,,>).Assembly.GetType(\"AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope\");");
+            sb.AppendLine("        var _scopeEnter = _scopeType == null ? null : _scopeType.GetMethod(\"EnterDefaultAmbientFallbackSeedScope\", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);");
+            sb.AppendLine("        using (_scopeEnter == null ? null : _scopeEnter.Invoke(null, null) as System.IDisposable)");
             sb.AppendLine("        {");
-            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _prevSeed;");
-            sb.AppendLine("            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(_prevScope);");
+            sb.AppendLine($"            return {factoryExpr};");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
         }
@@ -22172,6 +22192,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>True for a Mask R-CNN-style instance segmenter: a ModelBase driven through Predict and Segment.</summary>
         public bool ExtendsInstanceSegmenterBase { get; set; }
+
+        /// <summary>True for a GAN neural vocoder or GenerativeAdversarialNetwork descendant.</summary>
+        public bool ExtendsGanBase { get; set; }
 
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }

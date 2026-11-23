@@ -39,8 +39,8 @@ public sealed class NormedConvSpectralTrajectoryTests
             var ops = MathHelper.GetNumericOperations<T>();
             using var layer = new NormedConv1DLayer<T>(2, 2, 1, 1, 1, 1, 0, false, ConvolutionNormalization.Spectral);
             layer.SetTrainingMode(true);
-            Tensor<T> Field(string name) => (Tensor<T>)typeof(NormedConv1DLayer<T>)
-                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layer)!;
+            Tensor<T> Field(string name) => Assert.IsType<Tensor<T>>(
+                Assert.IsAssignableFrom<FieldInfo>(typeof(NormedConv1DLayer<T>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)).GetValue(layer));
             var direction = Field("_direction");
             foreach (var (name, values) in new[]
             {
@@ -87,8 +87,8 @@ public sealed class NormedConvSpectralTrajectoryTests
             var ops = MathHelper.GetNumericOperations<T>();
             var layer = new NormedConv1DLayer<T>(2, 3, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Spectral);
             layer.SetTrainingMode(true);
-            Tensor<T> Field(string name) => (Tensor<T>)typeof(NormedConv1DLayer<T>)
-                .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(layer)!;
+            Tensor<T> Field(string name) => Assert.IsType<Tensor<T>>(
+                Assert.IsAssignableFrom<FieldInfo>(typeof(NormedConv1DLayer<T>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)).GetValue(layer));
             var direction = Field("_direction");
             var bias = Field("_bias");
             var u = Field("_u");

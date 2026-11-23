@@ -191,6 +191,9 @@ internal static class TensorModelTrainer<T>
                         if (!System.Threading.Volatile.Read(ref warmup.Complete))
                         {
                             using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
+                            // A warmup forward is not a step: InferenceMode alone leaves BatchNorm updating its running statistics
+                            // (the step that follows would count the batch twice) and dropout drawing.
+                            using var noStepState = AiDotNet.Training.CompiledStepRandom<T>.SuppressDraws();
                             var warmupLoss = loss(forward(input), target);
                             System.Threading.Volatile.Write(ref warmup.Complete, true);
                             return warmupLoss;
@@ -204,6 +207,9 @@ internal static class TensorModelTrainer<T>
                         if (!System.Threading.Volatile.Read(ref warmup.Complete))
                         {
                             using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
+                            // A warmup forward is not a step: InferenceMode alone leaves BatchNorm updating its running statistics
+                            // (the step that follows would count the batch twice) and dropout drawing.
+                            using var noStepState = AiDotNet.Training.CompiledStepRandom<T>.SuppressDraws();
                             forward(input);
                             System.Threading.Volatile.Write(ref warmup.Complete, true);
                         }
@@ -319,6 +325,9 @@ internal static class TensorModelTrainer<T>
                 // pre-activations for a manual backward that never pops them, and keep them for the model's life
                 // (100 MB on FasterRCNN at 320x320). The scope skips only those caches.
                 using var noBackward = AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter();
+                // A warmup forward is not a step: InferenceMode alone leaves BatchNorm updating its running statistics
+                // (the step that follows would count the batch twice) and dropout drawing.
+                using var noStepState = AiDotNet.Training.CompiledStepRandom<T>.SuppressDraws();
                 forward(input);
                 System.Threading.Volatile.Write(ref warmup.Complete, true);
             }

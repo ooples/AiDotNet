@@ -822,7 +822,6 @@ internal sealed class DifferentiableMel<T>
             for (int k = 0; k < bins; k++) _mel[k, m] = ops.FromDouble(basis[m, k]);
     }
 
-    [AiDotNet.Attributes.ScalarKernel("Builds immutable FP32 Hann coefficients once, without reading audio/tensor values; separate rounded stages preserve the reference construction recipe.")]
     private static float[] PeriodicHannFloat(int fftSize, int windowSize)
     {
         var result = new float[fftSize];

@@ -1613,7 +1613,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.NonFiniteAndStatefulComparisonRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.QkvTransformHookTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ShapeOracleIssue1370Tests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetPaperRuleTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.HybridBlockSchedulerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.IncrementalStepGpuTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.IncrementalStepTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Mamba2BlockSSDEquivalenceTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MambaBlockTests.|
@@ -1742,7 +1744,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.MergedPRBugFixTests.|
       FullyQualifiedName~AiDotNet.Tests.MetaLearning.iMAMLAlgorithmTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.MedicalSam2OptionControlTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.NaturalSpeechOptionControlTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.Pix2StructOptionControlTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.AdaptedMetaModelTests.|
@@ -1826,6 +1830,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.RotaryPositionalEncodingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.ExtendedLSTMLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetPaperRuleTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedLinearAttentionLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Mamba2BlockTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Rwkv7ValueResidualGradientTests.|

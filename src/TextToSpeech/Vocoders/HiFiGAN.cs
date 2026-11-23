@@ -74,10 +74,11 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
-    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
-    // seeds the segment crops). A run that sets only SamplingSeed is unchanged; the multiplier keeps (Seed, SamplingSeed)
-    // pairs from colliding on neighbouring values.
-    private int InitializationSeed => unchecked(PaperOptions.SamplingSeed + (PaperOptions.Seed ?? 0) * 7919);
+    // The native generator keeps only parameters, normalized-weight caches built outside every TensorScope
+    // (DerivedTensorCache) and private host workspaces (plain arrays). Its GPU route already scopes and releases each
+    // stage and returns one kept waveform, so the Predict funnel may free every other GPU result when the call ends.
+    // Custom architecture layers and ONNX execution have not made this lifetime declaration.
+    protected override bool ReleasesInferenceIntermediates => HasPaperLayers && _generator is not null;
 
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()

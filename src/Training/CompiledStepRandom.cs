@@ -334,6 +334,16 @@ public static class CompiledStepRandom<T>
     /// </summary>
     internal static bool InNonStepForward => t_suppressDepth > 0;
 
+    /// <summary>
+    /// Whether this thread is tracing a compiled plan, capturing closure draws, or replaying captured draws.
+    /// </summary>
+    internal static bool IsCapturingOrReplaying => t_recording is not null || t_captured is not null || t_replay is not null;
+
+    /// <summary>
+    /// Whether per-step draws are suppressed or skipped on this thread (shape-resolution or non-step probe forwards).
+    /// </summary>
+    internal static bool AreDrawsSkipped => t_suppressDepth > 0 || t_skipDrawsDepth > 0;
+
     /// <summary>A scope in which <see cref="Draw"/> returns zeros without consuming the generator.</summary>
     internal sealed class SuppressionScope : IDisposable
     {

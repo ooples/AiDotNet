@@ -240,9 +240,13 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         _posterior = new VitsPosteriorEncoder<T>(Engine, _acousticComponents, posteriorInput, inter, h, o.PosteriorKernelSize, o.PosteriorLayers, gin);
         var (tLayers, tHeads, tKernel, tDropout) = FlowTransformer;
         _flow = new VitsFlow<T>(Engine, _acousticComponents, inter, h, o.FlowKernelSize, o.FlowLayers, o.NumFlowSteps, gin, tLayers, tHeads, tKernel, tDropout);
+        // No N(0, 0.01) redraw: the reference (VITS models.py Generator) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         _decoder = new HiFiGanGenerator<T>(Engine, inter, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, gin, plainEnds: true,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
         _acousticComponents.AddRange(_decoder.Layers);
         _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 1, true, o.DiscriminatorWidthDivisor, spectralFirstScale: false, vitsScale: true);
         _spectrogram = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, Hop, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);

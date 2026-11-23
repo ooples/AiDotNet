@@ -256,6 +256,10 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         _options = options ?? new SpeakerEmbeddingOptions();
         Options = _options;
         _options.Validate();
+        // The base clips at its own default unless told: the option reached the model and was never applied.
+        if (double.IsNaN(_options.MaxGradNorm) || double.IsInfinity(_options.MaxGradNorm))
+            throw new ArgumentOutOfRangeException(nameof(options), _options.MaxGradNorm, "MaxGradNorm must be finite.");
+        MaxGradNorm = NumOps.FromDouble(_options.MaxGradNorm);
 
         _useNativeMode = true;
         _modelPath = null;

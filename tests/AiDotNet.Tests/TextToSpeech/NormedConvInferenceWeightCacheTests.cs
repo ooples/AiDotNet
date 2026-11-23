@@ -166,4 +166,29 @@ public sealed class NormedConvInferenceWeightCacheTests
         for (int i = 0; i < after.Length; i++)
             Assert.InRange(Math.Abs(after[i] - (before[i] - .01f * expectedGradients[i])), 0, 1e-6);
     }
+
+    [Fact]
+    public void CheckpointLoadsThroughTorchTensorSourceRebuildCachedEvalWeights()
+    {
+        using var candidate = Create();
+        using var reference = new NormedConv1DLayer<float>(2, 3, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Weight);
+        reference.SetTrainingMode(false);
+        var warmed = candidate.Kernel();
+        var weights = Enumerable.Range(0, 18).Select(i => -.15 + .25 * Math.Cos(i * .5)).ToArray();
+        var gains = new[] { 1.4, .8, 1.1 };
+        var biases = new[] { .05, -.02, .03 };
+        AiDotNet.ModelLoading.TorchTensorSource CreateSource() =>
+            AiDotNet.ModelLoading.TorchTensorSource.From((name, _) => name switch
+            {
+                "weight_v" => weights,
+                "weight_g" => gains,
+                "bias" => biases,
+                _ => throw new InvalidOperationException($"Unexpected tensor '{name}'."),
+            });
+        candidate.LoadTorchWeights(CreateSource(), "weight_v", new[] { 3, 2, 3 }, "weight_g", "bias");
+        reference.LoadTorchWeights(CreateSource(), "weight_v", new[] { 3, 2, 3 }, "weight_g", "bias");
+        var rebuilt = candidate.Kernel();
+        Assert.NotSame(warmed, rebuilt);
+        Assert.Equal(reference.Kernel().ToArray(), rebuilt.ToArray());
+    }
 }

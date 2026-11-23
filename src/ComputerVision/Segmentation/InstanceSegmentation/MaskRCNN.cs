@@ -104,9 +104,27 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>, IHostProposalVision
     /// <remarks>
     /// Heads, in order: class logits [proposals, K + 1], class-specific box deltas
     /// [proposals, (K + 1) x 4], proposal boxes [proposals, 4], RPN objectness and RPN box deltas.
-    /// The mask branch runs on detections at inference and on sampled foreground RoIs in training.
+    /// The per-RoI heads are padded with zero rows to <see cref="ProposalsPerImage"/> (as in FasterRCNN)
+    /// so the raw prediction layout depends only on the input shape, even when batch statistics change
+    /// how many proposals RPN NMS keeps.
     /// </remarks>
-    protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _, out _);
+    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    {
+        var outputs = ForwardDetection(input, null, out _, out _);
+        for (int head = 0; head < 3; head++)
+        {
+            outputs[head] = CvTensorOps<T>.PadRows(outputs[head], ProposalsPerImage);
+        }
+
+        return outputs;
+    }
+
+    private protected override void SetTrainingModeCore(bool training)
+    {
+        base.SetTrainingModeCore(training);
+        _backbone.SetTrainingMode(training);
+        _fpn.SetTrainingMode(training);
+    }
 
     /// <summary>Output 2, the proposal boxes the RoI heads classified, is data: training cannot change it.</summary>
     protected override IReadOnlyCollection<int> DataOutputIndices => ProposalBoxesOutput;
@@ -212,9 +230,7 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>, IHostProposalVision
 
         var gold = targets.Select(target => TwoStageTargets.PixelCorners(target.Box, width, height)).ToList();
         var goldClasses = targets.Select(target => target.ClassId).ToList();
-        var random = _trainingRandom ??= Options.RandomSeed is int seed
-            ? RandomHelper.CreateSeededRandom(seed)
-            : RandomHelper.CreateSecureRandom();
+        var random = _trainingRandom ??= AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Options.RandomSeed);
 
         List<Tensor<T>> fpnFeatures = new();
         List<BoundingBox<T>> anchors = new();

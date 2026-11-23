@@ -91,8 +91,12 @@ public class OrderedTopKSelectionTests
         catch (Exception ex) when (ex is PlatformNotSupportedException or DllNotFoundException or InvalidOperationException) { }
         try
         {
-            Skip.If(gpu is null || !gpu.IsGpuAvailable, "GPU backend did not resolve.");
-            AssertSelects(gpu!, k);
+            if (gpu is null || !gpu.IsGpuAvailable)
+            {
+                Skip.If(true, "GPU backend did not resolve.");
+                return;
+            }
+            AssertSelects(gpu, k);
         }
         finally { gpu?.Dispose(); }
     }

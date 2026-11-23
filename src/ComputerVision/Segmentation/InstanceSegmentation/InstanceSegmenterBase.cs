@@ -231,6 +231,24 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     protected InstanceSegmenterBase(InstanceSegmentationOptions<T> options)
     {
         Options = options ?? throw new ArgumentNullException(nameof(options));
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract ObjectDetectorBase, TextDetectorBase and OCRBase follow). Every
+        // layer, the BackboneLayerShims adapters' inner layers, and the necks and heads that draw from
+        // the scope then take a deterministic seed, so two models built from equal options start from
+        // equal weights (#2201). A null seed leaves the scope unarmed unless AmbientFallbackSeed is set.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private protected bool IsTrainingMode;
+
+    /// <summary>
+    /// Switches training mode on the segmenter and its sub-networks (batch statistics vs running statistics).
+    /// </summary>
+    private protected virtual void SetTrainingModeCore(bool training)
+    {
+        IsTrainingMode = training;
     }
 
     /// <summary>
@@ -269,9 +287,18 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
-        RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate),
-            x => CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(x), DataOutputIndices, expectedOutput)));
+        bool wasTraining = IsTrainingMode;
+        SetTrainingModeCore(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate),
+                x => CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(x), DataOutputIndices, expectedOutput)));
+        }
+        finally
+        {
+            SetTrainingModeCore(wasTraining);
+        }
     }
 
     /// <summary>
@@ -284,8 +311,17 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
         if (targets is null) throw new ArgumentNullException(nameof(targets));
         if (forward is null) throw new ArgumentNullException(nameof(forward));
         if (loss is null) throw new ArgumentNullException(nameof(loss));
-        RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
-            this, input, targets, NumOps.FromDouble(TrainingLearningRate), forward, loss));
+        bool wasTraining = IsTrainingMode;
+        SetTrainingModeCore(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
+                this, input, targets, NumOps.FromDouble(TrainingLearningRate), forward, loss));
+        }
+        finally
+        {
+            SetTrainingModeCore(wasTraining);
+        }
     }
 
     [AiDotNet.Attributes.Scratch]
@@ -312,8 +348,14 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
             var size = Options.InputSize;
             if (size is null || size.Length != 2 || size[0] <= 0 || size[1] <= 0)
                 throw new InvalidOperationException("InputSize must be [height, width] with positive entries.");
-            Forward(new Tensor<T>(new[] { 1, 3, size[0], size[1] }));
-            MaterializeAuxiliaryHeads();
+            // Not a step: shapes resolve, but a training-mode BatchNorm must not fold the zero image into the running
+            // statistics inference reads, and nothing draws.
+            using (AiDotNet.NeuralNetworks.Layers.InferenceMode.Enter())
+            using (AiDotNet.Training.CompiledStepRandom<T>.SuppressDraws())
+            {
+                Forward(new Tensor<T>(new[] { 1, 3, size[0], size[1] }));
+                MaterializeAuxiliaryHeads();
+            }
             _parametersResolved = true;
         }
         finally

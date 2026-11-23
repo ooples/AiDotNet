@@ -10254,6 +10254,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // Outside this network's own step the forward belongs to someone else's objective, whose compiled plan may hold
+        // this network's parameter tensors; from now on a training step must leave their storage as it is.
+        if (System.Threading.Volatile.Read(ref _trainInFlight) == 0) _parametersReadOutsideOwnStep = true;
+
         // Propagate the architecture's RandomSeed to every layer once, before the first training
         // forward, so stochastic layers (notably DropoutLayer, whose mask derives from
         // RandomSeed + a per-forward counter) produce a REPRODUCIBLE sequence. Without this a
@@ -14291,6 +14295,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private int _trainInFlight;
 
     /// <summary>
+    /// Whether this network has been forwarded for training outside its own training step: as a fixed participant in
+    /// another network's objective (SAC's critics inside its actor loss, a frozen discriminator). Such an objective
+    /// reads this network's parameter tensors as external leaves of its compiled plan, so their storage must not
+    /// change for the rest of the run; see the parameter-buffer decision in <see cref="TrainWithTape"/>.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private bool _parametersReadOutsideOwnStep;
+
+    /// <summary>
     /// Acquires the per-instance training sentinel. Throws if another
     /// thread is currently inside <see cref="TrainWithTape"/> on this
     /// instance.
@@ -15406,6 +15419,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (_distributedCoordinator is not null || IsWeightStreamingActive || (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion))
         {
             paramBuffer = null;
+        }
+        else if (_parametersReadOutsideOwnStep)
+        {
+            // Installing the buffer replaces every parameter with a view of ONE shared storage. Another network's
+            // objective that forwards this one (SAC's actor reading its critics) already compiled a plan whose external
+            // leaves are these tensors; after the swap a weight and its bias alias one storage, that objective can no
+            // longer be signed or rebound, and its committed plan fails the next step. No optimizer reads the buffer
+            // (TapeStepContext.ParamBuffer), so the step keeps the tensors as they are. A buffer installed before the
+            // first outside read stays: the objective then saw the aliasing from its first trace and kept to the eager
+            // tape from the start.
+            paramBuffer = _parameterBuffer;
         }
         else if (_parameterBuffer is null)
         {

@@ -123,7 +123,7 @@
 4	ADNELEM001|AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.KMeansInit(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 3	ADNELEM001|AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.LoadCodebook(int, double[], double[], double[], bool)
 1	ADNELEM001|AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.Nearest(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-2	ADNELEM001|AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.ResidualVectorQuantizerLayer(int, int, int, double, int, int, bool, bool)
+1	ADNELEM001|AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.ResidualVectorQuantizerLayer(int, int, int, double, int, int, bool, bool)
 2	ADNELEM001|AiDotNet.Audio.Codecs.XCodec2SnakeBetaLayer<T>.Load(double[], double[])
 1	ADNELEM001|AiDotNet.Audio.Effects.DAC<T>.CreateCodec(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>>)
 5	ADNELEM001|AiDotNet.Audio.Effects.NeuralParametricEQ<T>.ApplyEQ(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
