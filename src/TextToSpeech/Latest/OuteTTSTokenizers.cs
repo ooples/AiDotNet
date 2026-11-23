@@ -50,7 +50,7 @@ internal static class OuteTTSTokenizers
 
     private static string ReadResource(string name)
     {
-        using var stream = typeof(OuteTTSTokenizers).Assembly.GetManifestResourceStream(name)
+        using var stream = EmbeddedData.Open(name)
             ?? throw new InvalidDataException($"The embedded resource {name} is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);

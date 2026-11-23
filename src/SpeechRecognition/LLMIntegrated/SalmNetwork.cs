@@ -72,7 +72,7 @@ internal sealed class SalmNetwork<T> : ILayerAliasOwner<T>
 
     private static SentencePieceModel LoadTokenizer()
     {
-        using var stream = typeof(SalmNetwork<T>).Assembly.GetManifestResourceStream(TokenizerResource)
+        using var stream = EmbeddedData.Open(TokenizerResource)
             ?? throw new InvalidDataException($"The embedded resource {TokenizerResource} is missing.");
         return SentencePieceModel.FromGzip(stream);
     }

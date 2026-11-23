@@ -33,7 +33,7 @@ internal static class SpeechGptFixture
         string directory = Path.Combine(Path.GetTempPath(), $"aidotnet_speechgpt_tokenizer_{System.Diagnostics.Process.GetCurrentProcess().Id}");
         Directory.CreateDirectory(directory);
         const string name = "AiDotNet.TextToSpeech.MultiModal.speecht5_spm_char.model.gz";
-        using (var stream = typeof(SpeechT5<>).Assembly.GetManifestResourceStream(name) ?? throw new InvalidDataException(name))
+        using (var stream = AiDotNet.Helpers.EmbeddedData.Open(name) ?? throw new InvalidDataException(name))
         using (var gzip = new GZipStream(stream, CompressionMode.Decompress))
         using (var file = File.Create(Path.Combine(directory, "tokenizer.model")))
             gzip.CopyTo(file);

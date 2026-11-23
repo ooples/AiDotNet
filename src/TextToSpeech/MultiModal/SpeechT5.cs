@@ -202,7 +202,7 @@ public partial class SpeechT5<T> : TtsModelBase<T>
     private static readonly Lazy<SentencePieceModel> CharacterModel = new(() =>
     {
         const string name = "AiDotNet.TextToSpeech.MultiModal.speecht5_spm_char.model.gz";
-        using var stream = typeof(SpeechT5<T>).Assembly.GetManifestResourceStream(name)
+        using var stream = EmbeddedData.Open(name)
             ?? throw new InvalidDataException($"The embedded resource {name} is missing.");
         return SentencePieceModel.FromGzip(stream);
     });

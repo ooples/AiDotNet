@@ -177,7 +177,7 @@ internal sealed class OpenAiWhisperTranscriber<T>
     // The release's mel filter banks [mels, 201], read once from the embedded float32 table and cast to T in bulk.
     private static readonly Lazy<(Tensor<T> Mel80, Tensor<T> Mel128)> Filters = new(() =>
     {
-        using var stream = typeof(OpenAiWhisperTranscriber<T>).Assembly.GetManifestResourceStream("AiDotNet.Audio.Whisper.whisper_mel_filters.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.Audio.Whisper.whisper_mel_filters.gz")
             ?? throw new InvalidDataException("The embedded resource whisper_mel_filters.gz is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new BinaryReader(gzip);

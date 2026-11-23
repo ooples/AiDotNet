@@ -65,7 +65,7 @@ public class WhisperTiktokenReferenceTests
     [Fact]
     public void ShippedVocabulary_IsWhispers()
     {
-        var resource = typeof(WhisperTiktoken).Assembly.GetManifestResourceStream("AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz");
+        var resource = AiDotNet.Helpers.EmbeddedData.Open("AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz");
         Assert.NotNull(resource);
         using var gzip = new System.IO.Compression.GZipStream(resource, System.IO.Compression.CompressionMode.Decompress);
         using var sha = SHA256.Create();
