@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Safety.Watermarking;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
@@ -111,9 +113,9 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
     private StegaStampWatermarker<float> Watermarker(string key) => _trained.Model.WithKey(key);
 
     /// <summary>
-    /// Smoke-scale bars, below what this fixture measures (64 bits, 2400 steps on 32 x 32 images): z 5.10-5.19 on the
-    /// three marked samples (confidence 0.70-0.73, detected) and 5.06-5.20 after the perturbation. The default 5.7 needs
-    /// a longer-trained model.
+    /// Smoke-scale bars, below what this fixture measures (64 bits, 2400 steps on 32 x 32 images): z 5.00-5.14 on the
+    /// three marked samples and 4.96-5.13 after the perturbation, with 1 to 8 cores (model seeds 2 and 3 measured 5.9
+    /// and 4.7). The default 5.7 needs a longer-trained model.
     /// </summary>
     protected override double OwnKeyMinimumZ => 4.5;
 
@@ -165,7 +167,8 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
             psnr += Psnr(image, encoded) / images;
         }
 
-        // Smoke scale, measured with the 64-bit payload: bit accuracy 0.785, PSNR 21.9 dB (the 16-bit, 600-step fixture
+        // Smoke scale, measured with the 64-bit payload: bit accuracy 0.78-0.81 with 1 to 8 cores (before the training JPEG
+        // rounded as the reference does, 2 cores stalled at 0.67; PSNR about 22 dB on CI) (the 16-bit, 600-step fixture
         // measured 0.934 and 16.7 dB). Chance is 0.5, and over 16 x 64 bits its standard error is 0.016, so 0.75 is far
         // above it. The run is the reference schedule's first 4500 steps, so the image loss has reached 0.6 of its weight.
         Assert.True(accuracy >= 0.75, $"Mean bit accuracy {accuracy:F3} over {images} fresh images (PSNR {psnr:F1} dB).");
@@ -190,7 +193,7 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
             accuracy += BitAccuracy(model.DecodeSecret(jpeg), secret) / images;
         }
 
-        // Measured with the 64-bit payload: 0.788 (16 bits: above 0.85).
+        // Measured with the 64-bit payload: 0.80 with 2 and 8 cores (16 bits: above 0.85).
         Assert.True(accuracy >= 0.75, $"Mean bit accuracy {accuracy:F3} after quality-75 JPEG rounding.");
     }
 }
@@ -214,5 +217,36 @@ public class StegaStampDistortionTests
             for (int i = 0; i < image.Length; i++) worst = Math.Max(worst, Math.Abs(round.GetFlat(i) - image.GetFlat(i)));
             Assert.True(worst < 0.02, $"Quality-100 JPEG (exact rounding {exact}) moved a pixel by {worst:F4}.");
         }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TrainingJpeg_PassesTheGradient_OfACoefficientOnAWholeStep()
+    {
+        await Task.Yield();
+        // Regression for the nightly StegaStamp fixture stalling near 0.67 bit accuracy on a 2-core runner: training
+        // rounded every coefficient as r + (x - r)^3, whose gradient 3 (x - r)^2 is zero on every whole quantization
+        // step, so the secret's gradient through JPEG was starved and the run's outcome hung on summation order. The
+        // reference rounds only coefficients below half a step (round_only_at_0); the rest pass with gradient 1.
+        // A grey image whose luma DC sits exactly on a quality-50 step (8 (255 v - 128) = -4 x 16): d sum(out) / d pixel
+        // goes through that DC alone (every AC and chroma coefficient is 0, cubed, gradient 0), and equals 3 times the
+        // channel's luma weight.
+        const int size = StegaStampWatermarkerTests.Size;
+        var model = new StegaStampWatermarker<float>(new StegaStampOptions { ImageSize = size, SecretBits = 16, UseErrorCorrection = false, Seed = 2 });
+        var image = new Tensor<float>(new[] { 1, 3, size, size });
+        for (int i = 0; i < image.Length; i++) image.SetFlat(i, 120f / 255f);
+        var table = model.QuantizationTable(1, size, 50);
+
+        using var tape = new GradientTape<float>();
+        var output = model.DifferentiableJpeg(image, table);
+        var loss = AiDotNetEngine.Current.ReduceSum(output, new[] { 0, 1, 2, 3 }, keepDims: false);
+        var gradients = tape.ComputeGradients(loss, new[] { image });
+        Assert.True(gradients.TryGetValue(image, out var gradient) && gradient is not null, "No gradient reached the image.");
+
+        double[] luma = { 0.299, 0.587, 0.114 };
+        for (int c = 0; c < 3; c++)
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                    Assert.True(Math.Abs(gradient[0, c, y, x] - 3 * luma[c]) < 1e-3,
+                        $"Channel {c} pixel ({y}, {x}): gradient {gradient[0, c, y, x]:F5}, expected {3 * luma[c]:F5}.");
     }
 }

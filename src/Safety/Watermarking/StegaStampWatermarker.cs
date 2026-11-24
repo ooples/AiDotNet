@@ -875,8 +875,9 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     }
 
     // JPEG in YCbCr on 8x8 blocks: DCT, divide by the quantization step, round, multiply back, inverse DCT. Training
-    // rounds with the cubic approximation r + (x - r)^3 (gradient 3 (x - r)^2); exactRounding is real JPEG rounding,
-    // for measuring robustness (no chroma subsampling or entropy coding, which are lossless or near it here).
+    // rounds as the reference's round_only_at_0 (utils.py): a coefficient below half a step becomes x^3, every other
+    // one passes unchanged with gradient 1. exactRounding is real JPEG rounding, for measuring robustness (no chroma
+    // subsampling or entropy coding, which are lossless or near it here).
     internal Tensor<T> DifferentiableJpeg(Tensor<T> rgb, Tensor<T> quantization, bool exactRounding = false)
     {
         int b = rgb.Shape[0], s = _options.ImageSize, nb = s / 8;
@@ -886,9 +887,13 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         var dct = DctMatrix();
         var coefficients = Engine.TensorMatMul(blocks, dct);
         var scaled = Engine.TensorDivide(coefficients, quantization);
-        var rounded = Engine.TensorRound(scaled);
-        var diff = Engine.TensorSubtract(scaled, rounded);
-        var approx = exactRounding ? rounded : Engine.TensorAdd(rounded, Engine.TensorMultiply(Engine.TensorMultiply(diff, diff), diff));
+        // Not r + (x - r)^3 at every coefficient: its gradient 3 (x - r)^2 is zero at every whole step and averages a
+        // quarter, which starved the secret's gradient so a short run stalled near 0.67 bit accuracy on some thread
+        // counts' summation orders.
+        var approx = exactRounding
+            ? Engine.TensorRound(scaled)
+            : SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(Engine.TensorAbs(scaled), 0.5),
+                Engine.TensorMultiply(Engine.TensorMultiply(scaled, scaled), scaled), scaled);
         var restored = Engine.TensorMatMul(Engine.TensorMultiply(approx, quantization), Engine.TensorTranspose(dct));
         var image = Engine.Reshape(Engine.TensorPermute(Engine.Reshape(restored, new[] { b, 3, nb, nb, 8, 8 }), new[] { 0, 1, 2, 4, 3, 5 }).Contiguous(),
             new[] { b, 3, s, s });
