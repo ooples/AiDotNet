@@ -1116,6 +1116,36 @@ foreach ($jobHeader in [Regex]::Matches($validation, '(?m)^  (?<job>[A-Za-z0-9_-
             "job '$jobName' step '$($localStep.Groups['name'].Value)' uses a local action without its checkout condition '$condition'"
     }
 }
+# actions/download-artifact extracts a lone pattern match into `path` itself rather than path/<name>,
+# so a run with one shard, attempt or slice recorded its only result as Missing (run 45309453002).
+# Every unmerged pattern download must be followed directly by the restore step for the same root,
+# pattern, source run and condition.
+$restoreScriptPath = Join-Path $PSScriptRoot 'Restore-ArtifactFolders.ps1'
+Assert-Contract (Test-Path -LiteralPath $restoreScriptPath -PathType Leaf) 'Restore-ArtifactFolders.ps1 is missing'
+$unmergedPatternDownloads = 0
+foreach ($jobHeader in [Regex]::Matches($validation, '(?m)^  (?<job>[A-Za-z0-9_-]+):\s*\r?$')) {
+    $jobName = $jobHeader.Groups['job'].Value
+    $jobBlock = Get-JobBlock -WorkflowText $validation -Job $jobName
+    $steps = @([Regex]::Matches($jobBlock, '(?ms)^      - .*?(?=^      - |\z)') | ForEach-Object Value)
+    for ($index = 0; $index -lt $steps.Count; $index++) {
+        $step = $steps[$index]
+        if (-not $step.Contains('uses: actions/download-artifact@')) { continue }
+        $patternLine = [Regex]::Match($step, '(?m)^          pattern: (?<value>[^\r\n]+?)\s*\r?$')
+        if (-not $patternLine.Success -or [Regex]::IsMatch($step, '(?m)^          merge-multiple: true\s*\r?$')) { continue }
+        $unmergedPatternDownloads++
+        $stepName = [Regex]::Match($step, '(?m)^      - name: (?<name>[^\r\n]+?)\s*\r?$').Groups['name'].Value
+        $path = [Regex]::Match($step, '(?m)^          path: (?<value>[^\r\n]+?)\s*\r?$').Groups['value'].Value
+        $runIdLine = [Regex]::Match($step, '(?m)^          run-id: (?<value>[^\r\n]+?)\s*\r?$')
+        $runId = if ($runIdLine.Success) { $runIdLine.Groups['value'].Value } else { '${{ github.run_id }}' }
+        $condition = [Regex]::Match($step, '(?m)^        if: [^\r\n]+?\s*\r?$').Value.Trim()
+        $restore = if ($index + 1 -lt $steps.Count) { $steps[$index + 1] } else { '' }
+        Assert-Contract ($restore.Contains("./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root '$path' -Pattern '$($patternLine.Groups['value'].Value)'") -and
+            $restore.Contains("ARTIFACT_RUN_ID: $runId") -and $restore.Contains('GH_TOKEN: ${{ github.token }}') -and
+            [Regex]::Match($restore, '(?m)^        if: [^\r\n]+?\s*\r?$').Value.Trim() -ceq $condition) `
+            "job '$jobName' step '$stepName' downloads a pattern unmerged without restoring a lone artifact's folder for '$path'"
+    }
+}
+Assert-Contract ($unmergedPatternDownloads -ge 10) "only $unmergedPatternDownloads unmerged pattern downloads were found; the contract no longer sees the workflow's downloads"
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
 # library and tests for three frameworks under analyzers and never finished inside the job limit, and a
 # build per project recompiled the main library under Sonar for every project referencing it (run
