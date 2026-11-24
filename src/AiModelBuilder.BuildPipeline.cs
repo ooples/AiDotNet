@@ -2905,7 +2905,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
                         }
 
-                        if ((gradientAccumulationSteps > 1 || distCoordinator is not null)
+                        // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
+                        // path runs it (one micro-batch per step); the accumulated step is the eager reference.
+                        bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
+                            && gradientAccumulationSteps <= 1;
+                        if (compiledDistributedStep && processedInputs.Length == 0)
+                            throw new NotSupportedException(
+                                "A rank received no samples this step; the data-parallel compiled update needs every rank to "
+                                + "have a batch (use drop-last batching, or turn AIDOTNET_DDP_COMPILED_UPDATE off).");
+                        if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)
                         {

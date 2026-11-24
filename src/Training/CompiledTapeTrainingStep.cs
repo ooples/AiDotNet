@@ -34,7 +34,7 @@ internal static class FirstCompiledStepAllocationGate
 /// </list>
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public static class CompiledTapeTrainingStep<T>
+public static partial class CompiledTapeTrainingStep<T>
 {
     /// <summary>
     /// Gives a newly compiled plan zero-initialized, exact-size scratch storage for its trace and
@@ -128,6 +128,8 @@ public static class CompiledTapeTrainingStep<T>
         [AiDotNet.Attributes.Scratch] internal Dictionary<Tensor<T>, Tensor<T>>? distributedGradMap;
         internal string? distributedReplayDisagreementReason;
         internal bool distributedReplayEvaluated;
+        // The data-parallel in-plan update, once engaged (DistributedCompiledUpdate).
+        internal object? distributedCompiledUpdate;
         internal object? shapeSwitchFrom;
         internal CompiledModelCache<T>? retiringCache;
         // Plans replaying a closure objective, keyed by its traced signature (see ClosureObjectiveState).
@@ -1875,6 +1877,8 @@ public static class CompiledTapeTrainingStep<T>
                 verifyDistributedReplay,
                 distributedEagerReplayLoss,
                 distributedReplayTolerance,
+                new DistributedFusedConfig(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule,
+                    fusedExtras, l2Regularization, l2AfterClip, useBf16Moments, int8MomentBlockSize),
                 out lossValue);
         }
         // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
@@ -2247,6 +2251,9 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                if (s_fusedDebug)
+                    FdStep($"configured: clip {maxGradNorm}, l2 {l2Regularization} after clip {l2AfterClip}, type {optimizerType}, "
+                        + $"wd {weightDecay}, eps {epsilon}, schedule {(lrSchedule is null ? "none" : lrSchedule.GetType().Name)}");
                 _configuredMaxGradNorm = maxGradNorm;
                 if (l2AfterClip)
                 {
@@ -2317,7 +2324,7 @@ public static class CompiledTapeTrainingStep<T>
                     ? MathHelper.GetNumericOperations<T>().ToDouble(lossOutput[0]).ToString("G17")
                     : "<empty>";
                 FdStep($"model-parameters={parameters.Length} loss-length={lossOutput.Length} " +
-                       $"loss={reportedLoss} optimizer={optimizerType}");
+                       $"loss={reportedLoss} optimizer={optimizerType} {PlanStepDiagnostics(plan)}");
             }
             // Hand the freshly-computed gradients back before returning. The fused kernel does the
             // parameter update in-replay, but it does NOT discard the gradients: CompiledTrainingPlan
@@ -2816,6 +2823,7 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay,
         double? distributedEagerReplayLoss,
         double distributedReplayTolerance,
+        DistributedFusedConfig fusedConfig,
         out T lossValue)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -2865,9 +2873,25 @@ public static class CompiledTapeTrainingStep<T>
                 persistentTgt);
             collectivesStarted = false;
 
+            var engaged = CurrentState.distributedCompiledUpdate as DistributedCompiledUpdate;
+            if (!hasNonEmpty && engaged?.Plan is { } idlePlan)
+            {
+                // Engaged and idle: the step still has to apply the global gradient on this rank. The last plan runs on
+                // its last batch with weight 0 (no tokens), so it contributes nothing to the sum and gets the same update.
+                collectivesStarted = true;
+                lossValue = RunDistributedCompiledUpdate(distNet, distCoord, idlePlan, parameters, eagerOptimizer,
+                    fusedConfig, maxGradNorm, localTokens: 0, verifyDistributedReplay, distributedEagerReplayLoss,
+                    distributedReplayTolerance, onGradients);
+                CurrentState.planOptimizerStep = -2;
+                _fusedStepCount++;
+                return true;
+            }
+
             if (!hasNonEmpty)
             {
                 collectivesStarted = true;
+                if (engaged is null && distCoord.CompiledOptimizerUpdate)
+                    AgreeOnDistributedCompiledUpdate(distCoord, localReady: false);
                 if (verifyDistributedReplay
                     && !VerifyDistributedReplayAgreement(
                         distCoord,
@@ -2944,6 +2968,30 @@ public static class CompiledTapeTrainingStep<T>
                     CompiledStepRandom<T>.RedrawFor(plan);
                 }
 
+                bool useInPlanUpdate = engaged is not null;
+                if (!useInPlanUpdate && distCoord.CompiledOptimizerUpdate)
+                {
+                    collectivesStarted = true;
+                    bool eligible = DistributedCompiledUpdateEligible(distNet, distCoord, eagerOptimizer, fusedConfig);
+                    useInPlanUpdate = AgreeOnDistributedCompiledUpdate(distCoord,
+                        localReady: !compiledNow && !verifyDistributedReplay && eligible);
+                    if (!useInPlanUpdate)
+                        Fd($"distributed in-plan update not engaged this step (traced now={compiledNow}, replay check="
+                            + $"{verifyDistributedReplay}, eligible={eligible}, every rank ready=false)");
+                }
+                if (useInPlanUpdate)
+                {
+                    collectivesStarted = true;
+                    long tokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+                    lossValue = RunDistributedCompiledUpdate(distNet, distCoord, plan, parameters, eagerOptimizer,
+                        fusedConfig, maxGradNorm, tokens, verifyDistributedReplay, distributedEagerReplayLoss,
+                        distributedReplayTolerance, onGradients);
+                    _configuredPlan = plan;
+                    CurrentState.planOptimizerStep = -2;
+                    _fusedStepCount++;
+                    return true;
+                }
+
                 // Execute compiled forward + backward ONLY (ConfigureOptimizer is intentionally omitted so
                 // per-rank gradients are reduced via DistributedTapeCoordinator ahead of clipping and stepping).
                 lossOutput = plan.Step();
@@ -2965,6 +3013,8 @@ public static class CompiledTapeTrainingStep<T>
 
             long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
+            if (s_fusedDebug)
+                Fd($"distributed reference step: eager lr {eagerOptimizer.GetCurrentLearningRate():G9}, global loss {globalLoss:G9}, tokens {localTokens}");
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
             distCoord.BeginBackwardStep(parameters, rankWeight);

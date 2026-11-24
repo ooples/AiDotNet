@@ -134,6 +134,15 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     public DistributedStrategy Strategy { get; }
 
     /// <summary>
+    /// Whether a compiled DDP step runs its optimizer update inside the compiled plan (the fused optimizer, a CUDA graph
+    /// on the GPU), with the gradient all-reduce between the plan's backward and its update, instead of the reference
+    /// path where the optimizer instance steps on the reduced gradients. Off by default; the environment variable
+    /// <c>AIDOTNET_DDP_COMPILED_UPDATE=1</c> turns it on. Every rank must use the same setting.
+    /// </summary>
+    internal bool CompiledOptimizerUpdate { get; set; }
+        = Environment.GetEnvironmentVariable("AIDOTNET_DDP_COMPILED_UPDATE") == "1";
+
+    /// <summary>
     /// Gets this process's zero-based rank within the communication group.
     /// </summary>
     public int Rank => Backend.Rank;
