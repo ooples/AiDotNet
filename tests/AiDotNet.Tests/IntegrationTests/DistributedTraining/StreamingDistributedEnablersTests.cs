@@ -530,9 +530,13 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
                     .BuildAsync();
                 return model.GetParameters().ToArray();
             })).ToArray();
+            long inPlanStepsBefore = AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics.Steps;
             var all = Task.WhenAll(tasks);
             Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(150))));
             var results = await all;
+            // The update ran in the plan (eager DDP would also leave the ranks equal).
+            Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics.Steps > inPlanStepsBefore,
+                "the in-plan data-parallel update never engaged");
             Assert.Equal(results[0], results[1]);
             Assert.NotEqual(init.ToArray(), results[0]);
         }
