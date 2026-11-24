@@ -152,6 +152,63 @@ public class FusedOptimizerIntegrationTests
     /// crashing and produce finite losses across multiple steps — any NaN/Inf indicates a
     /// broken kernel that silently corrupts training state.
     /// </summary>
+    /// <summary>
+    /// FP16 mixed precision with a fused optimizer that is neither Adam nor SGD (RMSprop) trains on the fused compiled
+    /// step: autocast and the loss scaler run inside the plan, RMSprop's own update applies the unscaled FP32 master
+    /// gradients, every loss is finite and the loss descends. (It replaces the test of the removed environment-gated
+    /// FP16 activation route, which reached the same optimizers through a separate plan.)
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Fp16MixedPrecision_NonAdamFusedOptimizer_TrainsOnTheFusedStep()
+    {
+        await Task.CompletedTask;
+
+        var network = BuildMlp();
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        network.EnableMixedPrecision(new AiDotNet.MixedPrecision.MixedPrecisionConfig
+        {
+            PrecisionType = MixedPrecisionType.FP16,
+        });
+
+        var optimizer = new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(network,
+            new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                Decay = 0.9,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false
+            });
+
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            var losses = new List<float>();
+            for (int step = 0; step < 15; step++)
+            {
+                network.TrainPublic(input, target, optimizer);
+                float loss = network.LastLossPublic;
+                losses.Add(loss);
+                Assert.False(float.IsNaN(loss) || float.IsInfinity(loss), $"FP16 step {step} produced a non-finite loss");
+            }
+
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "FP16 RMSprop never took the fused compiled step (a silent eager fallback).");
+            Assert.True(losses[losses.Count - 1] < losses[0],
+                $"FP16 RMSprop training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task FusedAdam_TrainingCompletes_WithFiniteLossAcrossSteps()
     {

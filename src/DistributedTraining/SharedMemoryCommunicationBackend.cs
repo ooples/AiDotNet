@@ -1344,8 +1344,9 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     /// <summary>
     /// Whether <paramref name="proc"/> has exited. When its handle cannot be queried (access restricted, or the platform
     /// does not support it) the process is looked up again by id: no process by that id (or one started later, a reused
-    /// id) means it exited. A peer whose liveness cannot be established either way is an error, not a live peer: treating
-    /// it as alive left only the collective timeout to notice a dead rank.
+    /// id) means it exited. A peer that cannot be looked up either way is an error, not a live peer: treating it as alive
+    /// left only the collective timeout to notice a dead rank. A peer found by id whose start time cannot be read (so a
+    /// reused id cannot be told apart) counts as alive; the collective timeout still bounds the wait for it.
     /// </summary>
     internal static bool HasPeerExited(Process proc, Func<Process, bool> hasExited)
     {

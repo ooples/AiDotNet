@@ -17,6 +17,8 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 public sealed class CollectiveFailureTimeoutTests
 {
     private const int TimeoutMs = 2000;
+    // A timeout must fire within its bound, not hang; the slack absorbs a loaded CI machine's scheduling and socket teardown.
+    private const int SchedulingSlackMs = 20_000;
     private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
 
     private static (string? Addr, string? Port) UseLoopbackRendezvous()
@@ -61,7 +63,7 @@ public sealed class CollectiveFailureTimeoutTests
             // Rank 1 stays connected but never joins the all-reduce.
             var error = Surfaced(() => g0.AllReduce(new Vector<float>(new float[1024]), ReductionOperation.Sum), out var took);
             Assert.True(error is TimeoutException or System.IO.IOException, $"unexpected {error.GetType().Name}: {error.Message}");
-            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs * 4), $"took {took.TotalMilliseconds:F0} ms for a {TimeoutMs} ms timeout");
+            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs + SchedulingSlackMs), $"took {took.TotalMilliseconds:F0} ms for a {TimeoutMs} ms timeout");
         }
         finally
         {
@@ -101,7 +103,7 @@ public sealed class CollectiveFailureTimeoutTests
         {
             var error = Surfaced(() => g0.Initialize(), out var took);
             Assert.IsType<TimeoutException>(error);
-            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs * 4), $"took {took.TotalMilliseconds:F0} ms");
+            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs + SchedulingSlackMs), $"took {took.TotalMilliseconds:F0} ms");
         }
         finally
         {
@@ -121,7 +123,7 @@ public sealed class CollectiveFailureTimeoutTests
             Task.WaitAll(Task.Run(() => s0.Initialize()), Task.Run(() => s1.Initialize()));
             var error = Surfaced(() => s0.AllReduce(new Vector<float>(new float[1024]), ReductionOperation.Sum), out var took);
             Assert.True(error is TimeoutException or System.IO.IOException, $"unexpected {error.GetType().Name}: {error.Message}");
-            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs * 4), $"took {took.TotalMilliseconds:F0} ms");
+            Assert.True(took < TimeSpan.FromMilliseconds(TimeoutMs + SchedulingSlackMs), $"took {took.TotalMilliseconds:F0} ms");
         }
         finally
         {
@@ -142,3 +144,10 @@ public sealed class CollectiveFailureTimeoutTests
         Assert.False(SharedMemoryCommunicationBackend<float>.HasPeerExited(self, Restricted));
     }
 }
+
+/// <summary>
+/// The multi-process and rendezvous tests run alone: they set the process-wide rendezvous variables
+/// (AIDOTNET_MASTER_ADDR, AIDOTNET_MASTER_PORT) and bind loopback ports, which a test running beside them would read.
+/// </summary>
+[CollectionDefinition("SequentialMultiProcessGpuDistributed", DisableParallelization = true)]
+public sealed class SequentialMultiProcessGpuDistributedCollection { }

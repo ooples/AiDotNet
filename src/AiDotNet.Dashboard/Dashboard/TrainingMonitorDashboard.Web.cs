@@ -23,6 +23,13 @@ public partial class TrainingMonitorDashboard<T>
 
     private const int MaxMessagesPerResponse = 50;
     private const int MaxAlertsPerResponse = 20;
+    // A metric's newest points in one response: a first poll of a long run copies at most this many under the
+    // training lock (the page keeps the same bound).
+    private const int MaxPointsPerMetricResponse = 4096;
+    // Requests served at once; more are answered 503 instead of queueing without bound on the thread pool.
+    private const int MaxConcurrentRequests = 8;
+    private readonly SemaphoreSlim _requestSlots = new(MaxConcurrentRequests, MaxConcurrentRequests);
+    private volatile bool _loopbackOnly = true;
 
     private static readonly JsonSerializerSettings WebJsonSettings = new()
     {
@@ -78,13 +85,15 @@ public partial class TrainingMonitorDashboard<T>
             throw new ArgumentOutOfRangeException(nameof(port), "Port must be between 0 and 65535.");
         if (string.IsNullOrWhiteSpace(host))
             host = "127.0.0.1";
-        if (_isDisposed)
-            throw new ObjectDisposedException(nameof(TrainingMonitorDashboard<T>));
         if (!HttpListener.IsSupported)
             throw new PlatformNotSupportedException("HttpListener is not supported on this platform.");
 
         lock (_webLock)
         {
+            // Under the lock: Dispose sets the flag before it stops the server, so a start racing it either sees
+            // the flag or is stopped by it.
+            if (_isDisposed)
+                throw new ObjectDisposedException(nameof(TrainingMonitorDashboard<T>));
             if (_listener is not null && _webServerUrl is not null)
                 return _webServerUrl;
 
@@ -113,6 +122,7 @@ public partial class TrainingMonitorDashboard<T>
 
                     _listener = listener;
                     _webServerUrl = prefix;
+                    _loopbackOnly = IsLoopbackName(host);
                     _listenerThread = new Thread(() => ListenLoop(listener))
                     {
                         IsBackground = true,
@@ -219,6 +229,28 @@ public partial class TrainingMonitorDashboard<T>
             yield return "localhost";
     }
 
+    private static bool IsLoopbackName(string? host)
+    {
+        if (string.IsNullOrEmpty(host)) return false;
+        string h = host!.Trim().TrimStart('[').TrimEnd(']');
+        return string.Equals(h, "localhost", StringComparison.OrdinalIgnoreCase)
+            || (IPAddress.TryParse(h, out var address) && IPAddress.IsLoopback(address));
+    }
+
+    // The host part of a Host header ("name:port", "[v6]:port" or "name").
+    private static string? HostNameOf(string? hostHeader)
+    {
+        if (string.IsNullOrWhiteSpace(hostHeader)) return null;
+        string h = hostHeader!.Trim();
+        if (h.StartsWith("[", StringComparison.Ordinal))
+        {
+            int close = h.IndexOf(']');
+            return close > 0 ? h.Substring(0, close + 1) : h;
+        }
+        int colon = h.LastIndexOf(':');
+        return colon > 0 && h.IndexOf(':') == colon ? h.Substring(0, colon) : h;
+    }
+
     private static int FindFreeLoopbackPort()
     {
         var probe = new TcpListener(IPAddress.Loopback, 0);
@@ -255,7 +287,17 @@ public partial class TrainingMonitorDashboard<T>
                 return;
             }
 
-            ThreadPool.QueueUserWorkItem(_ => HandleRequest(context));
+            if (!_requestSlots.Wait(0))
+            {
+                try { Respond(context, 503, "text/plain; charset=utf-8", "Busy"); }
+                catch (Exception) { /* the client is gone */ }
+                continue;
+            }
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { HandleRequest(context); }
+                finally { _requestSlots.Release(); }
+            });
         }
     }
 
@@ -264,6 +306,13 @@ public partial class TrainingMonitorDashboard<T>
         try
         {
             var request = context.Request;
+            // A loopback server answers only requests addressed to a loopback name: a page on another origin that
+            // re-points its own host name at 127.0.0.1 (DNS rebinding) sends its own name as Host and is refused.
+            if (_loopbackOnly && !IsLoopbackName(HostNameOf(request.Headers["Host"])))
+            {
+                Respond(context, 403, "text/plain; charset=utf-8", "Forbidden");
+                return;
+            }
             var path = request.Url?.AbsolutePath ?? "/";
             if (!string.Equals(request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase))
@@ -294,7 +343,8 @@ public partial class TrainingMonitorDashboard<T>
         {
             try
             {
-                Respond(context, 500, "text/plain; charset=utf-8", "Internal error: " + ex.Message);
+                System.Diagnostics.Trace.TraceWarning($"Training dashboard request failed: {ex}");
+                Respond(context, 500, "text/plain; charset=utf-8", "Internal error");
             }
             catch (Exception)
             {
@@ -391,7 +441,7 @@ public partial class TrainingMonitorDashboard<T>
                 session.MetricSequence.TryGetValue(kvp.Key, out var sequence);
                 var points = new List<object?[]>();
                 var history = kvp.Value;
-                for (int i = 0; i < history.Count; i++)
+                for (int i = Math.Max(0, history.Count - MaxPointsPerMetricResponse); i < history.Count; i++)
                 {
                     long seq = sequence is not null && i < sequence.Count ? sequence[i] : 0L;
                     if (afterSequence is long after && seq <= after) continue;

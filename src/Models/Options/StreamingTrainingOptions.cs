@@ -130,15 +130,29 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// <para>Every N steps the monitor receives, at the global step number (counted across epochs):
     /// <c>train_loss</c> (the last step's loss), <c>train_loss_avg</c> (mean loss over the N steps),
     /// <c>learning_rate</c>, <c>step_ms</c> (wall-clock milliseconds per step over the window, measured with
-    /// <see cref="System.Diagnostics.Stopwatch"/> and including data loading), <c>samples_per_second</c>,
+    /// <see cref="System.Diagnostics.Stopwatch"/>; it includes data loading, and any validation or checkpoint save that
+    /// ran inside the window), <c>samples_per_second</c>,
     /// <c>tokens_per_second</c> when <see cref="TokensPerSample"/> is set, and <c>grad_norm</c> when the
     /// optimizer step computed one. It also receives <see cref="ITrainingMonitor{T}.UpdateProgress"/>.</para>
     /// <para>The loss is the value the loop already reads after each step, so reporting adds no device
     /// synchronization.</para>
+    /// <para>Reports go only to a configured training monitor; <c>0</c> turns step reporting off.</para>
     /// <para><b>For Beginners:</b> a long language-model run is often a single epoch of thousands of steps; this
     /// lets a dashboard show the loss curve while that epoch is still running.</para>
     /// </remarks>
+    /// <value>Steps between reports; defaults to <c>10</c>.</value>
     public int MonitorEveryNSteps { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether a data-parallel step runs its optimizer update inside the compiled training plan (the
+    /// fused optimizer, a CUDA graph on a GPU), with the gradient all-reduce between the plan's backward and its update,
+    /// instead of the reference path where the optimizer steps on the reduced gradients.
+    /// </summary>
+    /// <value><c>true</c> to run the update in the plan; defaults to <c>false</c>.</value>
+    /// <remarks>Every rank must use the same setting, and every rank needs a batch on every step (drop-last
+    /// batching): the ranks agree on that before a step enters the plan's exchange. Accumulated steps
+    /// (<see cref="GradientAccumulationSteps"/> above 1) keep the reference path.</remarks>
+    public bool DataParallelUpdateInCompiledPlan { get; set; }
 
     /// <summary>
     /// Gets or sets the number of tokens in each training sample, used to report <c>tokens_per_second</c>.
@@ -158,8 +172,8 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// device, and this allows reading it back (one scalar, which waits for the device). With clipping by norm off,
     /// no step computes it; setting this adds one sum of squares over every gradient per step and, for gradients
     /// resident on a GPU, a device reduction plus a device-to-host read of its scalar.</para>
-    /// <para>A step taken by a fused compiled training plan reports no <c>grad_norm</c> either way: the plan clips
-    /// internally and does not expose the norm.</para>
+    /// <para>A step taken by a fused compiled training plan reports the pre-clip norm its own clip computed, when the
+    /// plan clips (one scalar read from the device on reporting steps only); a plan that does not clip reports none.</para>
     /// </remarks>
     public bool MonitorGradNorm { get; set; }
 

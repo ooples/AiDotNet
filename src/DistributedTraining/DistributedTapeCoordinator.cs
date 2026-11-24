@@ -136,11 +136,11 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     /// <summary>
     /// Whether a compiled DDP step runs its optimizer update inside the compiled plan (the fused optimizer, a CUDA graph
     /// on the GPU), with the gradient all-reduce between the plan's backward and its update, instead of the reference
-    /// path where the optimizer instance steps on the reduced gradients. Off by default; the environment variable
-    /// <c>AIDOTNET_DDP_COMPILED_UPDATE=1</c> turns it on. Every rank must use the same setting.
+    /// path where the optimizer instance steps on the reduced gradients. Off by default; set from
+    /// <see cref="Models.Options.StreamingTrainingOptions{T, TInput, TOutput}.DataParallelUpdateInCompiledPlan"/>.
+    /// Every rank must use the same setting.
     /// </summary>
     internal bool CompiledOptimizerUpdate { get; set; }
-        = Environment.GetEnvironmentVariable("AIDOTNET_DDP_COMPILED_UPDATE") == "1";
 
     /// <summary>
     /// Gets this process's zero-based rank within the communication group.
@@ -354,6 +354,46 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         return true;
     }
 
+    /// <summary>Whether <paramref name="local"/> holds on every rank (a min-reduce of one flag).</summary>
+    [AiDotNet.Attributes.ScalarKernel("Exchanges one agreement flag across ranks")]
+    internal bool AllRanks(bool local)
+    {
+        if (WorldSize <= 1) return local;
+        EnsureBackendInitialized();
+        var flag = new Vector<T>(1);
+        flag.AsWritableSpan()[0] = local ? NumOps.One : NumOps.Zero;
+        Backend.AllReduce(flag, ReductionOperation.Min);
+        return NumOps.GreaterThan(flag.AsSpan()[0], NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Whether every rank holds the same <paramref name="values"/>. Each value is exchanged as 7-bit chunks, which any
+    /// element type represents exactly (a float holds integers exactly only up to 2^24, so a gradient of 16,777,217
+    /// elements compared as one float would disagree with itself).
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Exchanges a few layout counts across ranks as 7-bit chunks")]
+    internal bool RanksAgree(params long[] values)
+    {
+        if (values is null) throw new ArgumentNullException(nameof(values));
+        if (WorldSize <= 1 || values.Length == 0) return true;
+        EnsureBackendInitialized();
+        const int Chunks = 10;   // 64 bits, 7 per chunk
+        var min = new Vector<T>(values.Length * Chunks);
+        Span<T> w = min.AsWritableSpan();
+        for (int v = 0; v < values.Length; v++)
+        {
+            ulong u = unchecked((ulong)values[v]);
+            for (int c = 0; c < Chunks; c++) w[v * Chunks + c] = NumOps.FromDouble((double)((u >> (7 * c)) & 0x7FUL));
+        }
+        var max = new Vector<T>(min.AsSpan().ToArray());
+        Backend.AllReduce(min, ReductionOperation.Min);
+        Backend.AllReduce(max, ReductionOperation.Max);
+        ReadOnlySpan<T> lo = min.AsSpan(), hi = max.AsSpan();
+        for (int i = 0; i < lo.Length; i++)
+            if (!NumOps.Equals(lo[i], hi[i])) return false;
+        return true;
+    }
+
     /// <summary>
     /// Broadcasts Rank 0's registered buffers (non-trainable persistent state such as batch-norm running statistics) to
     /// every other rank, as PyTorch DDP broadcasts module buffers from rank 0 when it wraps the model: without it each
@@ -378,13 +418,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         }
         if (total == 0) return;
         // The layout must agree before any data moves: a rank with a different buffer set would unpack garbage.
-        var layout = new Vector<T>(2);
-        layout.AsWritableSpan()[0] = NumOps.FromDouble(unique.Count);
-        layout.AsWritableSpan()[1] = NumOps.FromDouble(total);
-        var layoutMax = new Vector<T>(layout.AsSpan().ToArray());
-        Backend.AllReduce(layoutMax, ReductionOperation.Max);
-        Backend.AllReduce(layout, ReductionOperation.Min);
-        if (!NumOps.Equals(layout.AsSpan()[0], layoutMax.AsSpan()[0]) || !NumOps.Equals(layout.AsSpan()[1], layoutMax.AsSpan()[1]))
+        if (!RanksAgree(unique.Count, total))
             throw new InvalidOperationException(
                 $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here), "
                 + "so rank 0's buffers cannot be broadcast onto them.");

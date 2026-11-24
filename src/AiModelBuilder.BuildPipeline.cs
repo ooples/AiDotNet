@@ -2549,6 +2549,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 : null;
         if (distCoordinator is not null && _model is NeuralNetworks.NeuralNetworkBase<T> distNeuralNet)
         {
+            distCoordinator.CompiledOptimizerUpdate = _streamingTrainingOptions?.DataParallelUpdateInCompiledPlan ?? false;
             distNeuralNet.DistributedCoordinator = distCoordinator;
         }
 
@@ -2591,7 +2592,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 distBackend,
                 distCoordinator,
                 cancellationToken);
-            ConfigureStochasticStreams(distBackend);
+            ConfigureStochasticStreams(distBackend, streamingOptions?.Seed);
 
             // Start a training-monitor session for this streaming run (the streaming path did not
             // previously open one, so the configured monitor never received per-epoch metrics).
@@ -2909,10 +2910,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         // path runs it (one micro-batch per step); the accumulated step is the eager reference.
                         bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
                             && gradientAccumulationSteps <= 1;
-                        if (compiledDistributedStep && processedInputs.Length == 0)
+                        // Agreed before any rank enters the plan's exchange: a rank that threw alone would leave the
+                        // others waiting in the all-reduce until the collective timeout.
+                        if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
                             throw new NotSupportedException(
                                 "A rank received no samples this step; the data-parallel compiled update needs every rank to "
-                                + "have a batch (use drop-last batching, or turn AIDOTNET_DDP_COMPILED_UPDATE off).");
+                                + "have a batch (use drop-last batching, or turn the compiled data-parallel update off).");
                         if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)

@@ -26650,13 +26650,15 @@ static AiDotNet.Training.Memory.GradientCheckpointingContext.Preserve<T>(object!
 static AiDotNet.Training.Memory.GradientCheckpointingContext.TryRecall<T>(object! owner, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> bool
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.get -> int
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.DataParallelUpdateInCompiledPlan.get -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.DataParallelUpdateInCompiledPlan.set -> void
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.get -> bool
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.set -> void
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.get -> double
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.set -> void
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.get -> int?
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.set -> void
-const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMilliseconds = 120000 -> int
+const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMilliseconds = 1800000 -> int
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.get -> int
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set -> void
 static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!

@@ -30,14 +30,15 @@ public static partial class CompiledTapeTrainingStep<T>
     /// steps) stays the default; this one is opted into per coordinator.
     /// </summary>
     private static long s_compiledUpdateSteps, s_lastExchanges, s_lastUpdateLaunches;
-    private static bool s_lastSplit;
+    private static int s_lastSplit;
 
     /// <summary>
     /// Steps this process ran with the data-parallel update in the plan, and the last such plan's gradient exchanges,
     /// update-graph launches and whether it ran split into a backward graph and an update graph (tests).
     /// </summary>
     internal static (long Steps, long Exchanges, long UpdateGraphLaunches, bool Split) DistributedCompiledUpdateDiagnostics
-        => (System.Threading.Interlocked.Read(ref s_compiledUpdateSteps), s_lastExchanges, s_lastUpdateLaunches, s_lastSplit);
+        => (System.Threading.Interlocked.Read(ref s_compiledUpdateSteps), System.Threading.Interlocked.Read(ref s_lastExchanges),
+            System.Threading.Interlocked.Read(ref s_lastUpdateLaunches), System.Threading.Volatile.Read(ref s_lastSplit) != 0);
 
     private sealed class DistributedCompiledUpdate
     {
@@ -57,7 +58,7 @@ public static partial class CompiledTapeTrainingStep<T>
 
     /// <summary>
     /// Whether a distributed step may run its update in the plan: plain DDP (every rank holds every parameter and its
-    /// optimizer state), no mixed precision, the update the plan's fused kernel computes exactly (no L2 term from the
+    /// optimizer state), mixed precision only in the plan's own fused form, the update the plan's fused kernel computes exactly (no L2 term from the
     /// optimizer, no reduced-precision moments), and the coordinator opted in.
     /// </summary>
     private static bool DistributedCompiledUpdateEligible(
@@ -152,15 +153,10 @@ public static partial class CompiledTapeTrainingStep<T>
         if (!state.LayoutChecked && coordinator.WorldSize > 1)
         {
             // The ranks' gradient layouts must agree before any data moves, or the sum adds unrelated elements.
-            var layout = new Vector<T>(2);
-            layout.AsWritableSpan()[0] = numOps.FromDouble(length);
-            layout.AsWritableSpan()[1] = numOps.FromDouble(-length);
-            coordinator.Backend.AllReduce(layout, ReductionOperation.Min);
-            double min = numOps.ToDouble(layout.AsSpan()[0]), max = -numOps.ToDouble(layout.AsSpan()[1]);
-            if (min != length || max != length)
+            if (!coordinator.RanksAgree(length))
                 throw new InvalidOperationException(
                     $"Rank {coordinator.Rank}: the ranks' compiled plans exchange different gradient layouts "
-                    + $"({length} elements here, between {min} and {max} over the ranks).");
+                    + $"({length} elements here, a different count on another rank).");
             state.LayoutChecked = true;
         }
 
@@ -274,9 +270,9 @@ public static partial class CompiledTapeTrainingStep<T>
         if (!state.Exchanged)
             throw new InvalidOperationException("The compiled plan stepped without running its gradient exchange.");
         System.Threading.Interlocked.Increment(ref s_compiledUpdateSteps);
-        s_lastExchanges = concrete.GradientExchangeCount;
-        s_lastUpdateLaunches = concrete.UpdateGraphReplayCount;
-        s_lastSplit = concrete.HasSplitStepGraph;
+        System.Threading.Interlocked.Exchange(ref s_lastExchanges, concrete.GradientExchangeCount);
+        System.Threading.Interlocked.Exchange(ref s_lastUpdateLaunches, concrete.UpdateGraphReplayCount);
+        System.Threading.Volatile.Write(ref s_lastSplit, concrete.HasSplitStepGraph ? 1 : 0);
         // The batch-end bookkeeping every step takes (the single-process fused step's OnBatchEnd): the optimizer's
         // scheduler position, which a per-batch schedule's plan rate follows.
         // Not FinalizeDistributedStepPostUpdate: its host-authoritative cache invalidation would treat the host copies

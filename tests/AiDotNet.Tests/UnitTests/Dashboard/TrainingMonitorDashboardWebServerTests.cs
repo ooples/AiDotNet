@@ -121,12 +121,38 @@ public class TrainingMonitorDashboardWebServerTests
                 Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
         }
 
-        // Dispose stopped it: a second dashboard can take the same port.
+        // Dispose stopped it: a second dashboard can take the same port (retried briefly: a platform may hold a
+        // just-closed listening socket for a moment).
         using var other = new TrainingMonitorDashboard<double>();
-        var reused = other.StartWebServer(port);
+        string? reused = null;
+        for (int attempt = 0; reused is null; attempt++)
+        {
+            try { reused = other.StartWebServer(port); }
+            catch (InvalidOperationException) when (attempt < 20) { await Task.Delay(250); }
+        }
         Assert.Equal(port, new Uri(reused).Port);
         other.StopWebServer();
         other.StopWebServer(); // stopping twice is a no-op
+    }
+
+    // A loopback server answers only requests addressed to a loopback name. A page on another origin can point its own
+    // host name at 127.0.0.1 (DNS rebinding) and read the metrics; its requests carry its own name as Host.
+    [Fact(Timeout = 60000)]
+    public async Task A_loopback_server_refuses_a_request_addressed_to_another_host_name()
+    {
+        using var dashboard = new TrainingMonitorDashboard<double>();
+        var url = dashboard.StartWebServer();
+        int port = new Uri(url).Port;
+        using (var rebound = new HttpRequestMessage(HttpMethod.Get, url + "api/sessions"))
+        {
+            rebound.Headers.Host = "attacker.example:" + port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            using var response = await Http.SendAsync(rebound);
+            // Refused by the server (403) or, on Windows, by http.sys before it (400 invalid host name).
+            Assert.Contains(response.StatusCode, new[] { HttpStatusCode.Forbidden, HttpStatusCode.BadRequest });
+        }
+        using (var local = await Http.GetAsync(url + "api/sessions"))
+            Assert.Equal(HttpStatusCode.OK, local.StatusCode);
+
     }
 
     private static async Task AssertNotServing(string url)
@@ -200,7 +226,11 @@ public class TrainingMonitorDashboardWebServerTests
         Assert.Empty(errors);
 
         var final = await GetJson(url + "api/metrics?session=" + session);
-        Assert.Equal(20000, ((JArray)final["metrics"]!["train_loss"]!).Count);
+        // A full read serves each metric's newest 4096 points (a long run's first poll stays bounded).
+        var trainLoss = (JArray)final["metrics"]!["train_loss"]!;
+        Assert.Equal(4096, trainLoss.Count);
+        Assert.Equal(20000, (int)trainLoss[trainLoss.Count - 1]![0]!);
+        Assert.Equal(20000 - 4096 + 1, (int)trainLoss[0]![0]!);
     }
 
     [Fact(Timeout = 60000)]

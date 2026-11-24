@@ -393,18 +393,17 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                     }
                 }
 
-                // GPU memory is in MB too (the same contract), so it is compared against the device's total. It was
-                // compared against 95 as a percentage, so any device memory above 95 MB was a critical issue, and the
-                // streaming loop stops on one: its reporter had to leave the value out. Without a known total
-                // (no GPU engine, or a driver that reports none) the share cannot be judged and nothing is reported.
+                // GPU memory is in MB too (the same contract), and it is the whole device's: every process on it, and
+                // what a caching allocator holds for reuse. A share near the total is routine for a healthy run, so it
+                // is a warning, not an issue (the streaming loop stops on any issue). It was compared against 95 as a
+                // percentage, so any device memory above 95 MB stopped the run.
                 if (latestResource.GpuMemory is double gpuMemoryMb
                     && TryGetGpuDeviceTotalMemoryMB(out double gpuTotalMb) && gpuTotalMb > 0)
                 {
                     double gpuPercent = gpuMemoryMb / gpuTotalMb * 100.0;
                     if (gpuPercent > 95)
-                    {
-                        issues.Add($"Critical GPU memory usage: {gpuMemoryMb:F0} MB ({gpuPercent:F1}% of {gpuTotalMb:F0} MB)");
-                    }
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"GPU memory in use on the device: {gpuMemoryMb:F0} MB ({gpuPercent:F1}% of {gpuTotalMb:F0} MB).");
                 }
             }
 
@@ -438,7 +437,6 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         return issues;
     }
 
-    // Memory available to the process (physical memory or a container limit), where the runtime reports it.
     /// <summary>Total memory of the current GPU engine's device in MB, when the engine is a GPU engine.</summary>
     private static bool TryGetGpuDeviceTotalMemoryMB(out double totalMb)
     {
@@ -453,6 +451,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         return totalMb > 0;
     }
 
+    // Memory available to the process (physical memory or a container limit), where the runtime reports it.
     private static bool TryGetAvailableMemoryMB(out double availableMb)
     {
 #if NET5_0_OR_GREATER

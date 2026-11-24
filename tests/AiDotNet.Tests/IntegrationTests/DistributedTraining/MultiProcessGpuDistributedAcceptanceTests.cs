@@ -103,7 +103,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public bool DisableFusedSession { get; set; } = false;
         // A CUDA_VISIBLE_DEVICES value (a GPU UUID) for the worker in place of PhysicalGpuIndex.
         public string? CudaVisibleDevicesOverride { get; set; }
-        // Runs the DDP optimizer update inside the compiled plan (AIDOTNET_DDP_COMPILED_UPDATE=1 in the worker).
+        // Runs the DDP optimizer update inside the compiled plan (DataParallelUpdateInCompiledPlan in the worker).
         public bool CompiledUpdate { get; set; }
         // Mixed precision (the library default: FP16 matmuls, dynamic loss scaling).
         public bool MixedPrecision { get; set; }
@@ -387,6 +387,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
                     Seed = spec.DataSeed,
                     MaxSteps = spec.MaxSteps,
                     ResumeFromLatestCheckpoint = spec.ResumeFromCheckpoint,
+                    DataParallelUpdateInCompiledPlan = spec.CompiledUpdate,
                 });
 
             if (spec.MixedPrecision) builder.ConfigureMixedPrecision();
@@ -912,8 +913,6 @@ public static class Program
         psi.ArgumentList.Add(specPath);
 
         psi.Environment["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
-        if (spec.CompiledUpdate) psi.Environment["AIDOTNET_DDP_COMPILED_UPDATE"] = "1";
-        else psi.Environment.Remove("AIDOTNET_DDP_COMPILED_UPDATE");
         if (spec.UseGpu)
         {
             psi.Environment["CUDA_VISIBLE_DEVICES"] = spec.CudaVisibleDevicesOverride

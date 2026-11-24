@@ -36,13 +36,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private int? _stochasticBaseSeed;
 
     /// <summary>
+    /// The dropout base seed: derived from the configured <paramref name="seed"/>, so two runs with the same seed draw the
+    /// same masks (a multiplicative hash keeps it apart from the data-order seed itself), or drawn when none is set.
+    /// </summary>
+    internal static int DrawStochasticBaseSeed(int? seed)
+        => seed is int s
+            ? (int)(unchecked((uint)s * 2654435761u) % (uint)(int.MaxValue - 1)) + 1
+            : RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+
+    /// <summary>
     /// Gives every stochastic layer its per-rank stream (the rank; 0 in a single process) and, for layers without a
     /// RandomSeed, a seed derived from one base seed rank 0 draws and broadcasts. A layer's masks are then a function of
     /// (seed, rank, draw counter), all three of which the checkpoint records, so a resumed run continues the
     /// uninterrupted run's masks; and data-parallel ranks draw different, reproducible masks, as each PyTorch DDP rank
     /// draws from its own generator.
     /// </summary>
-    private void ConfigureStochasticStreams(DistributedTraining.ICommunicationBackend<T>? distBackend)
+    private void ConfigureStochasticStreams(DistributedTraining.ICommunicationBackend<T>? distBackend, int? seed)
     {
         _stochasticBaseSeed = null;
         if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
@@ -59,7 +68,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 Span<T> w = plan.AsWritableSpan();
                 w[0] = numOps.FromDouble(needsSeed ? 1.0 : 0.0);
-                WriteIntAsU7Chunks(numOps, w, 1, needsSeed ? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue) : 0);
+                WriteIntAsU7Chunks(numOps, w, 1, needsSeed ? DrawStochasticBaseSeed(seed) : 0);
             }
             plan = distBackend!.Broadcast(plan, root: 0);
             needsSeed = numOps.ToDouble(plan.AsSpan()[0]) > 0.0;
@@ -67,7 +76,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         else if (needsSeed)
         {
-            baseSeed = RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+            baseSeed = DrawStochasticBaseSeed(seed);
         }
 
         foreach (var layer in layers) layer.StochasticStream = rank;
@@ -166,6 +175,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         string countersText = bar < 0 ? string.Empty : state.Substring(bar + 1);
         if (seedText.Length > 0)
             ApplyStochasticBaseSeed(layers, int.Parse(seedText, CultureInfo.InvariantCulture));
+        if (seedText.Length == 0 && countersText.Length == 0)
+        {
+            // A checkpoint written before draw counters were recorded: resume, with the masks restarting their sequence.
+            if (layers.Count > 0)
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Checkpoint '{checkpointId}' records no dropout draw counters (it predates them); the model's "
+                    + $"{layers.Count} stochastic layer(s) restart their mask sequence on resume.");
+            return;
+        }
         if (countersText.Length == 0)
         {
             if (layers.Count > 0)

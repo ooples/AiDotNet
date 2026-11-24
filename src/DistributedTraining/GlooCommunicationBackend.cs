@@ -142,8 +142,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _barrierReceiveSlot = new T[1];
     }
 
-    /// <summary>The default per-wait timeout: 120 s, as <see cref="SharedMemoryCommunicationBackend{T}"/>.</summary>
-    public const int DefaultTimeoutMilliseconds = 120_000;
+    /// <summary>
+    /// The default per-wait timeout: 30 minutes, PyTorch's default for its Gloo process group. A peer may legitimately
+    /// spend minutes outside a collective (rank 0 saving a large checkpoint, a first step's graph capture, validation).
+    /// </summary>
+    public const int DefaultTimeoutMilliseconds = 1_800_000;
 
     private int _timeoutMilliseconds = DefaultTimeoutMilliseconds;
 
@@ -1423,9 +1426,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             try
             {
                 // The socket send times out on its own; this bound only guards the hand-off to the worker thread.
-                if (!_workCompleted.WaitOne(checked(_owner.TimeoutMilliseconds * 2)))
+                int handOffMs = (int)Math.Min(int.MaxValue, 2L * _owner.TimeoutMilliseconds);
+                if (!_workCompleted.WaitOne(handOffMs))
                     throw new TimeoutException(
-                        $"Rank {_owner._rank}: a background send did not complete within {_owner.TimeoutMilliseconds * 2} ms.");
+                        $"Rank {_owner._rank}: a background send did not complete within {handOffMs} ms.");
                 sendEx = _exception;
                 _exception = null;
             }

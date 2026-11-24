@@ -74,7 +74,9 @@ internal static class TrainingDashboardWebPage
 (function () {
   "use strict";
   var REFRESH_MS = 2000;
-  var state = { sessionId: null, seq: null, series: {}, charts: {} };
+  // Prototype-free maps: a metric may be named "__proto__" or "constructor".
+  var MAX_POINTS = 4096;
+  var state = { sessionId: null, seq: null, series: Object.create(null), charts: Object.create(null) };
   var $ = function (id) { return document.getElementById(id); };
 
   function num(v) { return v === null || v === undefined ? NaN : Number(v); }
@@ -126,8 +128,8 @@ internal static class TrainingDashboardWebPage
   function selectSession(id) {
     state.sessionId = id;
     state.seq = null;
-    state.series = {};
-    state.charts = {};
+    state.series = Object.create(null);
+    state.charts = Object.create(null);
     $("charts").innerHTML = "";
   }
 
@@ -260,6 +262,7 @@ internal static class TrainingDashboardWebPage
     Object.keys(data.metrics).forEach(function (name) {
       var series = state.series[name] || (state.series[name] = []);
       data.metrics[name].forEach(function (p) { series.push([num(p[0]), num(p[1])]); });
+      if (series.length > MAX_POINTS) series.splice(0, series.length - MAX_POINTS);
     });
     Object.keys(state.series).forEach(draw);
     state.seq = data.seq;
