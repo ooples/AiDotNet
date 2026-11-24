@@ -440,6 +440,69 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         }
     }
 
+    /// <summary>
+    /// A new instance of this model holding <paramref name="parameters"/>: <see cref="DeepCopy"/> followed by
+    /// <see cref="SetParameters"/>, without round-tripping this model's own parameter values through
+    /// <see cref="Serialize"/> only to overwrite them.
+    /// </summary>
+    /// <param name="parameters">The copy's parameter vector.</param>
+    /// <returns>The new instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// DeepCopy carries the parameters as doubles in a byte payload, so building a copy only to replace its
+    /// parameters held the source's vector, the payload and the decoded vector alive at once beside both
+    /// models' weights. A Cascade R-CNN at 70 million parameters ran out of memory doing that. This path
+    /// carries only the declared non-parameter state.
+    /// </para>
+    /// <para>
+    /// Only for a model whose <see cref="Serialize"/> and <see cref="Deserialize"/> add nothing to this base's:
+    /// a model that persists something extra in an override keeps <c>DeepCopy().SetParameters</c>. The
+    /// native-precision parameter shadows (<c>ReadAfterParameters</c>) are not replayed: they are the source's
+    /// working values, and the supplied vector replaces them.
+    /// </para>
+    /// </remarks>
+    private protected IFullModel<T, TInput, TOutput> CopyWithParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[]? declaredState = null;
+            if (State.Count > 0)
+            {
+                using var stream = new MemoryStream();
+                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
+                    State.WriteAll(writer);
+                    writer.Flush();
+                }
+
+                declaredState = stream.ToArray();
+            }
+
+            var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            PrepareCopyForStateRestore(copy);
+            if (TryGetParameterCount(out int expectedParameterCount))
+            {
+                AiDotNet.Models.CloneEngine.PrepareParameterTopology(
+                    this,
+                    copy,
+                    expectedParameterCount,
+                    () => copy.GetParameters().Length);
+            }
+
+            if (declaredState is not null)
+            {
+                using var stream = new MemoryStream(declaredState);
+                using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+                copy.State.ReadBeforeParameters(reader);
+            }
+
+            copy.SetParameters(parameters);
+            AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
+            return copy;
+        }
+    }
+
     /// <summary>Reads this model's parameter count, or reports that its layout is not resolved yet.</summary>
     /// <param name="count">The parameter count when the layout is resolved; zero otherwise.</param>
     /// <returns><c>true</c> when the count was read.</returns>
@@ -540,7 +603,11 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         var parameters = GetParameters();
 
-        using var stream = new MemoryStream();
+        // Sized up front: a growing MemoryStream doubles its buffer, holding the old and the new one at once and
+        // ending with up to twice the payload, before ToArray copies it once more.
+        string typeName = GetType().FullName ?? GetType().Name;
+        long payloadBytes = 64L + 3L * typeName.Length + 8L * parameters.Length;
+        using var stream = new MemoryStream(payloadBytes < int.MaxValue ? (int)payloadBytes : 0);
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
 
         writer.Write(ModelSerializationMagic);
@@ -599,14 +666,23 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
-        var payload = new double[count];
-        for (int i = 0; i < count; i++)
-        {
-            payload[i] = reader.ReadDouble();
-        }
 
-        // Convert the whole payload to T at once, then fill the parameter vector.
-        ParametersFromPayload(payload).AsSpan().CopyTo(parameters.AsWritableSpan());
+        // Decode in bounded blocks straight into the parameter vector. Reading the whole payload into a double[]
+        // and converting that at once held two more copies of the parameters alive.
+        const int DeserializationBlockSize = 16384;
+        var block = new double[Math.Min(count, DeserializationBlockSize)];
+        for (int start = 0; start < count;)
+        {
+            int length = Math.Min(DeserializationBlockSize, count - start);
+            for (int i = 0; i < length; i++)
+            {
+                block[i] = reader.ReadDouble();
+            }
+
+            var decoded = length == block.Length ? block : block.AsSpan(0, length).ToArray();
+            ParametersFromPayload(decoded).AsSpan().CopyTo(parameters.AsWritableSpan().Slice(start, length));
+            start += length;
+        }
 
         // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
         // one constant in its constructor-created shell and two after its declared node graph is

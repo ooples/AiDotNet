@@ -270,9 +270,42 @@ internal static class CvTensorOps<T>
         int present = rows.Shape[0];
         if (present > count)
             throw new InvalidOperationException($"{present} rows exceed the fixed count of {count}.");
-        return present == count
-            ? rows
-            : Engine.TensorConstantPad(rows, new[] { 0, 0, 0, count - present }, NumOps.Zero);
+        if (present == count)
+            return rows;
+
+        var padded = Engine.TensorConstantPad(rows, new[] { 0, 0, 0, count - present }, NumOps.Zero);
+        PaddedPredictionRows.Remove(padded);
+        PaddedPredictionRows.Add(padded, new System.Runtime.CompilerServices.StrongBox<int>(present));
+        return padded;
+    }
+
+    /// <summary>
+    /// The rows of each <see cref="PadRows"/> result that are predictions rather than padding, keyed by the padded
+    /// tensor so the raw training step can tell them apart without every head having to report it.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Tensor<T>, System.Runtime.CompilerServices.StrongBox<int>>
+        PaddedPredictionRows = new();
+
+    /// <summary>The leading rows of <paramref name="output"/> that are predictions: all of them unless <see cref="PadRows"/> padded it.</summary>
+    internal static int PredictionRows(Tensor<T> output)
+    {
+        if (output.Rank == 0) return 1;
+        return PaddedPredictionRows.TryGetValue(output, out var present) ? present.Value : output.Shape[0];
+    }
+
+    /// <summary>
+    /// Mean squared error over the <paramref name="predictionCount"/> positions of a
+    /// <c>ConcatenateTrainableOutputs</c> result that are predictions. Every other position already equals the
+    /// target, so it adds nothing to the sum, and it must add nothing to the count either: dividing by the padded
+    /// layout made a two-stage detector's loss rise whenever training let more proposals survive NMS, although
+    /// every prediction's error fell.
+    /// </summary>
+    internal static Tensor<T> MeanSquaredErrorOverPredictions(Tensor<T> predicted, Tensor<T> target, int predictionCount)
+    {
+        var difference = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(difference, difference);
+        int count = predictionCount > 0 && predictionCount <= squared.Length ? predictionCount : squared.Length;
+        return Engine.TensorMultiplyScalar(Engine.ReduceSum(squared, null), NumOps.FromDouble(1.0 / Math.Max(1, count)));
     }
 
     /// <summary>
@@ -318,35 +351,58 @@ internal static class CvTensorOps<T>
     /// </summary>
     public static Tensor<T> ConcatenateTrainableOutputs(IReadOnlyList<Tensor<T>> outputs, IReadOnlyCollection<int> dataOutputs,
         Tensor<T>? target)
+        => ConcatenateTrainableOutputs(outputs, dataOutputs, target, out _);
+
+    /// <summary>
+    /// The same, also taking out the padding rows <see cref="PadRows"/> appended, and reporting how many positions
+    /// are predictions.
+    /// </summary>
+    /// <param name="outputs">The forward outputs.</param>
+    /// <param name="dataOutputs">The outputs that are data rather than predictions.</param>
+    /// <param name="target">The step's target; the positions taken out carry its values.</param>
+    /// <param name="predictionCount">
+    /// The positions that are predictions - neither a data output nor a padding row - and so the denominator of the
+    /// step's mean squared error (<see cref="MeanSquaredErrorOverPredictions"/>).
+    /// </param>
+    public static Tensor<T> ConcatenateTrainableOutputs(IReadOnlyList<Tensor<T>> outputs, IReadOnlyCollection<int> dataOutputs,
+        Tensor<T>? target, out int predictionCount)
     {
         var prediction = ConcatenateOutputs(outputs);
-        if (dataOutputs.Count == 0)
+        var ops = MathHelper.GetNumericOperations<T>();
+        var keep = new Tensor<T>[outputs.Count];
+        var drop = new Tensor<T>[outputs.Count];
+        predictionCount = 0;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            drop[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            if (dataOutputs.Contains(i))
+            {
+                drop[i].Fill(ops.One);
+                continue;
+            }
+
+            // Row-major: a head's first PredictionRows rows are its predictions, the rest PadRows' zero padding.
+            int rows = outputs[i].Rank > 0 ? outputs[i].Shape[0] : 1;
+            int perRow = rows == 0 ? 0 : outputs[i].Length / rows;
+            int predicted = Math.Min(rows, PredictionRows(outputs[i])) * perRow;
+            keep[i].AsWritableSpan().Slice(0, predicted).Fill(ops.One);
+            drop[i].AsWritableSpan().Slice(predicted).Fill(ops.One);
+            predictionCount += predicted;
+        }
+
+        if (predictionCount == prediction.Length)
         {
             return prediction;
         }
 
-        var ops = MathHelper.GetNumericOperations<T>();
-        var keep = new Tensor<T>[outputs.Count];
-        for (int i = 0; i < outputs.Count; i++)
-        {
-            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
-            if (!dataOutputs.Contains(i)) keep[i].Fill(ops.One);
-        }
-
-        var keepMask = ConcatenateOutputs(keep);
-        var kept = Engine.TensorMultiply(prediction, keepMask);
+        var kept = Engine.TensorMultiply(prediction, ConcatenateOutputs(keep));
         if (target is null || !target.Shape.ToArray().SequenceEqual(prediction.Shape.ToArray()))
         {
             return kept;
         }
 
-        var dataMask = new Tensor<T>(keepMask.Shape.ToArray());
-        for (int i = 0; i < dataMask.Length; i++)
-        {
-            dataMask[i] = ops.Subtract(ops.One, keepMask[i]);
-        }
-
-        return Engine.TensorAdd(kept, Engine.TensorMultiply(target, dataMask));
+        return Engine.TensorAdd(kept, Engine.TensorMultiply(target, ConcatenateOutputs(drop)));
     }
 
     /// <summary>
