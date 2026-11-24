@@ -45,7 +45,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from benchmark_telemetry import mark_phase
+from benchmark_telemetry import begin_peak_window, mark_phase, window_peaks
 
 BATCH_SIZES = [1, 8, 32, 128]
 
@@ -132,7 +132,7 @@ class ResourceMonitor:
     def __enter__(self) -> ResourceMonitor:
         if self.torch_device is not None:
             torch.cuda.synchronize(self.torch_device)
-            torch.cuda.reset_peak_memory_stats(self.torch_device)
+            begin_peak_window(self.torch_device)
         self.process.cpu_percent(interval=None)
         if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
             self._thread.start()
@@ -156,6 +156,9 @@ class ResourceMonitor:
             time.sleep(self.sample_seconds)
 
     def summary(self) -> ResourceSummary:
+        # Over the whole phase: the phase markers reset torch's peak counters at every epoch boundary, so the
+        # maxima are accumulated across those resets (benchmark_telemetry) instead of read from the counters.
+        allocated_peak, reserved_peak = window_peaks(self.torch_device) if self.torch_device is not None else (0, 0)
         return ResourceSummary(
             # No samples (the external monitor owns sampling, or the run was shorter than one interval) is
             # unavailable, not zero.
@@ -163,10 +166,8 @@ class ResourceMonitor:
             rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else None,
             gpu_util_percent_avg=round(statistics.fmean(self.gpu_util), 3) if self.gpu_util else None,
             gpu_mem_mb_peak=round(max(self.gpu_mem), 3) if self.gpu_mem else None,
-            gpu_allocated_mb_peak=round(torch.cuda.max_memory_allocated(self.torch_device) / 1024 / 1024, 3)
-            if self.torch_device is not None else None,
-            gpu_reserved_mb_peak=round(torch.cuda.max_memory_reserved(self.torch_device) / 1024 / 1024, 3)
-            if self.torch_device is not None else None,
+            gpu_allocated_mb_peak=round(allocated_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
+            gpu_reserved_mb_peak=round(reserved_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
         )
 
 
@@ -1351,6 +1352,18 @@ class CoraGAT(nn.Module):
 # --precision (main sets it): "fp32" or "bf16".
 PRECISION = "fp32"
 
+
+def autocast_region(device: torch.device) -> contextlib.AbstractContextManager:
+    """--precision bf16: ONE forward/loss region under torch.autocast (a no-op context for fp32).
+
+    A fresh context per region, left before the optimizer update. Autocast caches the BF16 cast of each parameter for
+    the life of the outermost context, keyed by the tensor and not by its version: a context held across
+    optimizer.step() feeds the next forward the weights from before the update.
+    """
+    if PRECISION == "bf16":
+        return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    return contextlib.nullcontext()
+
 DCGAN_LATENT, DCGAN_IMAGE = 100, 64
 
 
@@ -1401,10 +1414,11 @@ class DCGAN64(nn.Module):
         generator_optimizer, discriminator_optimizer = self._optimizers
         batch = z.shape[0]
 
-        with torch.no_grad():
-            fake = self.generator(z)
         labels = torch.cat([torch.ones(batch, 1, device=z.device), torch.zeros(batch, 1, device=z.device)])
-        discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
+        with autocast_region(z.device):
+            with torch.no_grad():
+                fake = self.generator(z)
+            discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
         discriminator_optimizer.zero_grad(set_to_none=True)
         discriminator_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 1.0)
@@ -1413,7 +1427,9 @@ class DCGAN64(nn.Module):
         self.discriminator.eval()
         self.discriminator.requires_grad_(False)
         try:
-            generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
+            # A new region: the discriminator's weights changed in the update above.
+            with autocast_region(z.device):
+                generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
             generator_optimizer.zero_grad(set_to_none=True)
             generator_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.generator.parameters(), 1.0)
@@ -1813,26 +1829,29 @@ class HifiGanV1(nn.Module):
         mel = mel[:, :, start:start + frames]
         real = audio[:, start * HIFI_HOP:(start + frames) * HIFI_HOP].unsqueeze(1)
 
-        with torch.no_grad():
-            fake = self.generator(mel)
-        discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
-                                 for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
+        with autocast_region(mel.device):
+            with torch.no_grad():
+                fake = self.generator(mel)
+            discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
+                                     for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
         discriminator_optimizer.zero_grad(set_to_none=True)
         discriminator_loss.backward()
         discriminator_optimizer.step()
 
         self.discriminators.requires_grad_(False)
         try:
-            generated = self.generator(mel)
-            fake_out = self.discriminators(generated)
-            with torch.no_grad():
-                real_out = self.discriminators(real)
-                real_mel = self.loss_mel(real.squeeze(1))
-            adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
-            matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
-                           for r, g in zip(rf, gf))
-            mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
-            generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
+            # A new region: the discriminators' weights changed in the update above.
+            with autocast_region(mel.device):
+                generated = self.generator(mel)
+                fake_out = self.discriminators(generated)
+                with torch.no_grad():
+                    real_out = self.discriminators(real)
+                    real_mel = self.loss_mel(real.squeeze(1))
+                adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
+                matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
+                               for r, g in zip(rf, gf))
+                mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
+                generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
             generator_optimizer.zero_grad(set_to_none=True)
             generator_loss.backward()
             generator_optimizer.step()
@@ -2000,10 +2019,9 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
     start_total = time.perf_counter()
     first_loss: torch.Tensor | None = None
-    # --precision bf16: the training steps under torch.autocast, as the C# side runs them under AutocastScope.
-    autocast = (torch.autocast(device_type=device.type, dtype=torch.bfloat16) if PRECISION == "bf16"
-                else contextlib.nullcontext())
-    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device), torch_device=device) as monitor, autocast:
+    # --precision bf16: each forward/loss region runs under its own torch.autocast (autocast_region), as the C# side
+    # runs the steps under AutocastScope; the backward and the optimizer update run outside it.
+    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device), torch_device=device) as monitor:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
@@ -2022,20 +2040,22 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                     continue
 
                 optimizer.zero_grad(set_to_none=True)
-                if hasattr(model, "training_loss"):
-                    # A row with its own objective (DDPM's noise regression) computes its loss itself.
-                    loss = model.training_loss(x, y)
-                elif getattr(model, "loss_from_forward", False):
-                    # A row whose forward returns its own loss given the target (DeepAR's likelihood), called through
-                    # the module so a --compile run compiles the loss too.
-                    loss = model(x, y)
-                elif getattr(model, "regression", False):
-                    # A forecaster: mean squared error of the forecast against the continuation.
-                    loss = F.mse_loss(model(x), y)
-                else:
-                    logits = model(x)
-                    # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
-                    loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+                with autocast_region(device):
+                    if hasattr(model, "training_loss"):
+                        # A row with its own objective (DDPM's noise regression) computes its loss itself.
+                        loss = model.training_loss(x, y)
+                    elif getattr(model, "loss_from_forward", False):
+                        # A row whose forward returns its own loss given the target (DeepAR's likelihood), called
+                        # through the module so a --compile run compiles the loss too.
+                        loss = model(x, y)
+                    elif getattr(model, "regression", False):
+                        # A forecaster: mean squared error of the forecast against the continuation.
+                        loss = F.mse_loss(model(x), y)
+                    else:
+                        logits = model(x)
+                        # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a
+                        # class one.
+                        loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     # A copy: a CUDA-graph replay overwrites the step's output buffer.
                     first_loss = loss.detach().clone()

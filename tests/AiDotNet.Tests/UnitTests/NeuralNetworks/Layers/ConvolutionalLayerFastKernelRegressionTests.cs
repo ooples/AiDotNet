@@ -34,6 +34,33 @@ public class ConvolutionalLayerFastKernelRegressionTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ExactInference_AlternatingBatchShapes_KeepBothVerdictsAndReplayBitwise()
+    {
+        // The route verdict is kept per input shape. A cache of one shape would pass the single-shape tests while
+        // verifying again (or serving the other shape's verdict) every time the batch size alternates.
+        await Task.Yield();
+
+        var one = CreateInput([1, 3, 8, 8]);
+        var two = CreateInput([2, 3, 8, 8]);
+        var layer = CreateInitializedLayer(one, inputDepth: 3, outputDepth: 4);
+        layer.SetTrainingMode(false);
+
+        var oneSnapshot = layer.Forward(one).AsSpan().ToArray();
+        var twoSnapshot = layer.Forward(two).AsSpan().ToArray();
+        AssertOptimizedRouteMatch(layer, one, expected: true, "The batch-1 verdict must survive a batch-2 forward.");
+        AssertOptimizedRouteMatch(layer, two, expected: true, "The batch-2 verdict must be recorded as well.");
+
+        for (int replay = 0; replay < 8; replay++)
+        {
+            Assert.Equal(oneSnapshot, layer.Forward(one).AsSpan().ToArray());
+            Assert.Equal(twoSnapshot, layer.Forward(two).AsSpan().ToArray());
+        }
+
+        AssertOptimizedRouteMatch(layer, one, expected: true, "Alternating shapes must not drop the batch-1 verdict.");
+        AssertOptimizedRouteMatch(layer, two, expected: true, "Alternating shapes must not drop the batch-2 verdict.");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task ExactInference_ThreeByThreeRelu_PromotesFastKernelAndReplaysBitwise()
     {
         await Task.Yield();

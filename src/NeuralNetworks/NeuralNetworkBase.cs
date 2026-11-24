@@ -580,6 +580,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// The loss of the step that just ran, bound to that step: its value when it is already on the host, or an owned
+    /// copy of the deferred loss tensor (still unread, so nothing waits for the device). A compiled plan reuses its
+    /// loss tensor, so a caller that reports this step's loss later -- after another step of this network may have
+    /// run -- must hold the copy rather than ask <see cref="GetLastLoss"/> then. The caller disposes the copy.
+    /// </summary>
+    internal void CaptureLastLoss(out T value, out Tensor<T>? deferredCopy)
+    {
+        if (_pendingLossTensor is { } pending && pending.Length > 0)
+        {
+            // Outside any scope, arena or tape: the copy outlives the step and is not part of a gradient.
+            using var noScope = TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new NoGradScope<T>();
+            deferredCopy = Engine.TensorAddScalar(pending, NumOps.Zero);
+            value = NumOps.Zero;
+            return;
+        }
+
+        deferredCopy = null;
+        value = GetLastLoss();
+    }
+
+    /// <summary>
     /// Indicates whether the network is currently in training mode.
     /// </summary>
     /// <remarks>

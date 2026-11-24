@@ -3468,6 +3468,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Persistent weights must own contiguous storage outside any step/inference TensorArena so
         // WeightRegistry streaming never encounters arena slab views (IsView == true).
         using var _ = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        // Nor inside a TensorScope: a first forward run in one (a detached training forward, a sizing forward) would
+        // have its scope free the weight's device copy with the activations, before the step that reads it.
+        using var noScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
         if (UseStreamingAllocator) return WeightRegistry.AllocateStreaming<T>(shape);
         return nonStreamingAllocator?.Invoke() ?? new Tensor<T>(shape);
     }

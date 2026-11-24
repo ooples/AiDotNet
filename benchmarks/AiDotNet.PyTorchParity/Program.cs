@@ -415,7 +415,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 gradientTimer.Stop();
                 // The first step's loss is read once, in the untimed-for-steady-state epoch 0, as proof the step trains.
                 firstLoss ??= model.LastLoss;
-                gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
+                if (model.ReportsGradientTime) gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
                 model.Step();
                 if (Environment.GetEnvironmentVariable("BENCH_MEMSTEP") == "1")
                 {
@@ -549,6 +549,12 @@ internal interface IBenchmarkModel
     /// times batch replay around empty Backward/Step calls.
     /// </summary>
     bool IsInferenceOnly => false;
+    /// <summary>
+    /// False for a row whose Backward returns with device work still outstanding and whose PyTorch twin reports no
+    /// gradient breakdown: the host time of the call is then a submission time, not a gradient time, and is not
+    /// reported as one. The synchronized epoch time is unaffected.
+    /// </summary>
+    bool ReportsGradientTime => true;
     /// <summary>The loss of the most recent training step, or null for a model with no training step.</summary>
     double? LastLoss => null;
     /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
@@ -1366,6 +1372,56 @@ internal sealed class AiDotNetVisionModel(int seed, VisionFamily family) : AiDot
     }
 }
 
+/// <summary>
+/// The device allocator's peaks over a window that spans peak-counter resets. <see cref="BenchmarkPhaseTelemetry"/>
+/// resets the counters at every phase marker; each reset first folds the interval's peaks in here, so a read at the
+/// end of a phase returns the largest peak of the whole phase, not only what the last interval left.
+/// </summary>
+internal static class AllocatorPeakWindow
+{
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, long> Maxima = new(StringComparer.Ordinal);
+
+    /// <summary>Starts a window: clears the accumulated maxima and the allocator's counters.</summary>
+    public static void Begin()
+    {
+        lock (Gate)
+        {
+            Maxima.Clear();
+            AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
+        }
+    }
+
+    /// <summary>Folds the interval that just ended into the window, then resets the allocator's counters.</summary>
+    public static void FoldAndReset()
+    {
+        lock (Gate)
+        {
+            Fold();
+            AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
+        }
+    }
+
+    /// <summary>The window's peak for <paramref name="key"/> (the interval still open included), or null when the allocator does not report it.</summary>
+    public static long? Peak(string key)
+    {
+        lock (Gate)
+        {
+            Fold();
+            return Maxima.TryGetValue(key, out long bytes) ? bytes : null;
+        }
+    }
+
+    private static void Fold()
+    {
+        foreach (var pair in AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Stats())
+        {
+            if (!pair.Key.EndsWith(".peak", StringComparison.Ordinal)) continue;
+            if (!Maxima.TryGetValue(pair.Key, out long seen) || pair.Value > seen) Maxima[pair.Key] = pair.Value;
+        }
+    }
+}
+
 internal sealed class ResourceMonitor : IDisposable
 {
     private readonly Process _process = Process.GetCurrentProcess();
@@ -1378,6 +1434,12 @@ internal sealed class ResourceMonitor : IDisposable
 
     private ResourceMonitor()
     {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        // The allocator peaks cover this phase only, as benchmark.py resets torch's at the phase's start. They are this
+        // process's own counters, which no external sampler can supply, so they are tracked before the external-monitor
+        // return below: only the background sampling is the external runner's.
+        _trackAllocator = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (_trackAllocator) AllocatorPeakWindow.Begin();
         // The gate runner uses the same external sampler for both frameworks.
         if (Environment.GetEnvironmentVariable("AIDOTNET_BENCH_EXTERNAL_MONITOR") == "1")
         {
@@ -1397,10 +1459,6 @@ internal sealed class ResourceMonitor : IDisposable
         // benchmark.py's ResourceMonitor samples for torch on a CUDA device. It is device-wide, as on the torch side.
         // The sample is pinned to the engine's GPU (nvidia-smi --id); when that GPU cannot be identified, VRAM is
         // not reported rather than read from whichever GPU nvidia-smi lists first.
-        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        // The allocator peaks below cover this phase only, as benchmark.py resets torch's at the phase's start.
-        _trackAllocator = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
-        if (_trackAllocator) AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
         string? gpuId = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? NvidiaSmi.ResolveDevice(engine.Name) : null;
         if (gpuId is not null)
             _gpuTask = Task.Run(async () =>
@@ -1444,8 +1502,10 @@ internal sealed class ResourceMonitor : IDisposable
     // This process's device allocator peaks over the phase (GpuMemoryStats, PyTorch's allocator semantics): what
     // benchmark.py reads from torch.cuda.max_memory_allocated / max_memory_reserved. Unlike GpuMemMbPeak they exclude
     // the CUDA context and every other process on the device.
+    // The maximum over the whole phase: the phase markers reset the allocator's peak counters at every epoch boundary,
+    // so the maxima are accumulated across those resets (AllocatorPeakWindow) rather than read from the counters.
     private double? AllocatorPeak(string key)
-        => _trackAllocator && AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Stats().TryGetValue(key, out long bytes)
+        => _trackAllocator && AllocatorPeakWindow.Peak(key) is { } bytes
             ? Math.Round(bytes / 1024d / 1024d, 3)
             : null;
 

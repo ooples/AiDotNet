@@ -305,30 +305,34 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     private T _lastFeatureMatchingLoss;
 
     /// <summary>
-    /// The last discriminator loss, for diagnostics. Read from the discriminator when asked for: its compiled step
-    /// keeps the loss on the device, and reading it every step made the host wait for the device to finish that step
-    /// before it could prepare the next one.
+    /// The discriminator loss of the last GAN iteration, for diagnostics. The compiled step keeps its loss on the
+    /// device, and reading it every step made the host wait for the device to finish that step before it could prepare
+    /// the next one; so the step's loss is held as an unread copy (<see cref="_discriminatorLossCopy"/>) and read when
+    /// asked for. A copy, not the discriminator's current loss: a discriminator update made outside this network's
+    /// <c>Train</c> must not be reported as this iteration's loss.
     /// </summary>
     private T _lastDiscriminatorLoss
     {
         get
         {
-            if (_discriminatorLossPending)
+            if (_discriminatorLossCopy is { } copy)
             {
-                _discriminatorLossValue = Discriminator.GetLastLoss();
-                _discriminatorLossPending = false;
+                _discriminatorLossCopy = null;
+                _discriminatorLossValue = copy.Length > 0 ? copy[0] : NumOps.Zero;
+                copy.Dispose();
             }
             return _discriminatorLossValue;
         }
         set
         {
+            _discriminatorLossCopy?.Dispose();
+            _discriminatorLossCopy = null;
             _discriminatorLossValue = value;
-            _discriminatorLossPending = false;
         }
     }
 
     private T _discriminatorLossValue;
-    private bool _discriminatorLossPending;
+    private Tensor<T>? _discriminatorLossCopy;
 
     /// <summary>
     /// The last generator loss, for diagnostics. A compiled generator step leaves it on the device
@@ -1081,7 +1085,10 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // The gradient-penalty step below trains the discriminator again and replaces its last loss, so that path
         // reads this step's loss now; otherwise it stays on the device until something asks for it.
         bool readDiscriminatorLossNow = _useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null;
-        T combinedDiscLoss = readDiscriminatorLossNow ? Discriminator.GetLastLoss() : NumOps.Zero;
+        T combinedDiscLoss;
+        Tensor<T>? combinedDiscLossCopy = null;
+        if (readDiscriminatorLossNow) combinedDiscLoss = Discriminator.GetLastLoss();
+        else Discriminator.CaptureLastLoss(out combinedDiscLoss, out combinedDiscLossCopy);
 
         // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
         // penalty is enabled, run a separate discriminator optimizer step
@@ -1130,7 +1137,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // with labels [1; 0] is the average of the per-half losses, so the
         // monitoring value is comparable to the old two-step formulation.
         _lastDiscriminatorLoss = combinedDiscLoss;
-        _discriminatorLossPending = !readDiscriminatorLossNow;
+        _discriminatorLossCopy = combinedDiscLossCopy;
 
         // Train generator to fool discriminator (adversarial objective).
         // The non-saturating BCE-with-logits generator term below is

@@ -2014,6 +2014,13 @@ public static class CompiledTapeTrainingStep<T>
                     forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
                     foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection))
                         sizingScope.Keep(sized);
+                    // The rest of what a layer keeps between forwards: a parameter the selection above leaves out (a
+                    // frozen one is still read by every later forward) and every registered non-trainable buffer
+                    // (running statistics, a cached table). A lazy layer creates these in this forward too, and the
+                    // scope would free their device copy with the activations.
+                    foreach (var sized in CollectDeduplicatedParameters(layers))
+                        sizingScope.Keep(sized);
+                    KeepRegisteredBuffers(layers, sizingScope);
                 }
                 finally
                 {
@@ -2550,6 +2557,31 @@ public static class CompiledTapeTrainingStep<T>
                 }
                 finally { _currentState = previous; }
             }));
+    }
+
+    private static void KeepRegisteredBuffers(IReadOnlyList<ITrainableLayer<T>> layers, AiDotNet.Tensors.Engines.TensorScope scope)
+    {
+        var visited = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        for (int i = 0; i < layers.Count; i++)
+            KeepRegisteredBuffersRecursive(layers[i], scope, visited);
+    }
+
+    private static void KeepRegisteredBuffersRecursive(ILayer<T> layer, AiDotNet.Tensors.Engines.TensorScope scope,
+        HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer))
+            return;
+        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> withBuffers)
+        {
+            foreach (var (_, buffer) in withBuffers.GetRegisteredBuffers())
+            {
+                if (buffer is not null) scope.Keep(buffer);
+            }
+        }
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+            KeepRegisteredBuffersRecursive(subLayers[i], scope, visited);
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)

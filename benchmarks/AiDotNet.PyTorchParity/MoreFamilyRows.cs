@@ -226,6 +226,10 @@ internal sealed class AiDotNetDcganModel : IBenchmarkModel
 
     public void Forward() => _ = _model.GenerateImages(_noise);
 
+    // Train returns with the step's device work outstanding (nothing reads the loss), so the time of the call is how
+    // long the host took to submit it. benchmark.py's DCGAN row reports no gradient breakdown either.
+    public bool ReportsGradientTime => false;
+
     public void Backward()
     {
         // Train is the whole adversarial iteration: the discriminator update, then the generator update. The loss
