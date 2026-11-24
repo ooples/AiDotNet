@@ -206,10 +206,10 @@ internal sealed class StreamingStepMonitorReporter<T>
         _lastResourceTimestamp = now;
 
         var gpu = TryReadGpuMemory();
-        // GPU memory goes out as metrics only: TrainingMonitor reads LogResourceUsage's gpuMemory as a percentage
-        // (above 95 is a critical issue, which stops the streaming loop), so a value in MB would end the run. The
-        // device's utilization is the percentage LogResourceUsage's gpuUsage takes.
-        _monitor.LogResourceUsage(_sessionId, cpuPercent, workingSetMb, gpuUsage: gpu?.UtilizationPercent, gpuMemory: null);
+        // gpuMemory is the device's used memory in MB (the ITrainingMonitor contract; what nvidia-smi shows, every
+        // process on the device included). gpuUsage is the device's utilization percentage.
+        _monitor.LogResourceUsage(_sessionId, cpuPercent, workingSetMb, gpuUsage: gpu?.UtilizationPercent,
+            gpuMemory: gpu?.DeviceUsedMb);
         if (gpu is { } g)
         {
             _monitor.LogMetric(_sessionId, "gpu_memory_allocated_mb", _numOps.FromDouble(g.AllocatedMb), step);

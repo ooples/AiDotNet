@@ -357,6 +357,20 @@ public class TrainingMonitorTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
+    public async Task CheckForIssues_GpuMemoryInMegabytes_IsNotReadAsAPercentage()
+    {
+        // LogResourceUsage takes GPU memory in MB. 4000 MB was compared against 95 as a percentage and reported as
+        // critical, which stops a streaming run; against any device total (none known on the CPU engine, 10-24 GB on
+        // a GPU) it is not critical.
+        var sessionId = _monitor.StartSession("gpu-memory-mb-test");
+        _monitor.LogResourceUsage(sessionId, cpuUsage: 10, memoryUsage: 100, gpuUsage: 50, gpuMemory: 4000);
+
+        var issues = _monitor.CheckForIssues(sessionId);
+
+        Assert.DoesNotContain(issues, issue => issue.Contains("GPU memory"));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task CheckForIssues_WithRecentErrors_ReportsIssue()
     {
         // Arrange

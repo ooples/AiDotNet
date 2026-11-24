@@ -36,7 +36,7 @@ public class StreamingStepMonitorTests
 
     public StreamingStepMonitorTests(ITestOutputHelper output) => _output = output;
 
-    private static StreamingDataLoader<float, Tensor<float>, Tensor<float>> Loader(int samples = N)
+    internal static StreamingDataLoader<float, Tensor<float>, Tensor<float>> Loader(int samples = N)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         var x = new Tensor<float>[samples];
@@ -59,7 +59,7 @@ public class StreamingStepMonitorTests
             samples, (i, _) => Task.FromResult((x[i], y[i])), BatchSize);
     }
 
-    private static (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer) TinyModel(
+    internal static (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer) TinyModel(
         int epochs, bool eager = false, bool clip = true)
     {
         var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
@@ -368,7 +368,7 @@ public class StreamingStepMonitorTests
         }
     }
 
-    private sealed class RecordingMonitor : TrainingMonitor<float>
+    internal sealed class RecordingMonitor : TrainingMonitor<float>
     {
         private readonly object _gate = new();
         private readonly List<(string Name, int Step, double Value)> _metrics = new();
@@ -402,6 +402,63 @@ public class StreamingStepMonitorTests
         public double[] Values(string name)
         {
             lock (_gate) return _metrics.Where(m => m.Name == name).Select(m => m.Value).ToArray();
+        }
+    }
+}
+
+/// <summary>Resource reports of a streaming run on a GPU engine. Sets the process-wide engine: runs apart.</summary>
+[Collection("TrainingDiagnosticsSequential")]
+public class StreamingStepMonitorGpuTests
+{
+    [SkippableFact(Timeout = 300000)]
+    public async Task ResourceUsage_OnAGpuEngine_ReportsTheDevicesUsedMemoryInMegabytes()
+    {
+        await Task.Yield();
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        Skip.IfNot(AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.TryGetDeviceMemory(gpu.GetBackend()!, out _, out _),
+            "This backend's driver reports no device memory.");
+        var previous = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        // The test assembly sets AIDOTNET_DISABLE_GPU, under which BuildAsync puts the process on the CPU engine. This
+        // collection runs alone, so the opt-out is lifted for the run and the caller-assigned engine is kept.
+        var disableGpu = Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_GPU");
+        Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", null);
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpu;
+        try
+        {
+            var (model, optimizer) = StreamingStepMonitorTests.TinyModel(epochs: 2);
+            var monitor = new StreamingStepMonitorTests.RecordingMonitor();
+            await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureOptimizer(optimizer)
+                .ConfigureDataLoader(StreamingStepMonitorTests.Loader())
+                .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    Seed = 11,
+                    MonitorEveryNSteps = 5,
+                    MonitorResourceIntervalSeconds = 1e-6,
+                })
+                .ConfigureTrainingMonitor(monitor)
+                .BuildAsync();
+
+            // Every report carries the device's used memory (MB), and the run was not stopped as "critical" by it:
+            // read as a percentage, any value above 95 MB was.
+            Assert.Equal(new[] { 5, 10, 15, 20 }, monitor.Steps("train_loss"));
+            var used = monitor.Values("gpu_device_memory_used_mb");
+            Assert.NotEmpty(used);
+            Assert.Equal(used.Length, monitor.Resources.Count);
+            for (int i = 0; i < used.Length; i++)
+            {
+                Assert.True(monitor.Resources[i].GpuMemoryMb is double mb && mb > 0, $"report {i} has no GPU memory");
+                Assert.Equal(used[i], monitor.Resources[i].GpuMemoryMb!.Value, 0.5);
+            }
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = previous;
+            Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", disableGpu);
         }
     }
 }
