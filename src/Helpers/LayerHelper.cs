@@ -31443,15 +31443,24 @@ public static partial class LayerHelper<T>
         // Patch embedding layer
         yield return new PatchEmbeddingLayer<T>(patchSize, hiddenDim);
 
-        // Transformer encoder layers
+        // Transformer encoder (paper eqs. 2-3): pre-LN blocks, z' = MSA(LN(z)) + z, z = MLP(LN(z')) + z, with a GELU
+        // MLP. TransformerEncoderLayer is the post-LN ordering, which the paper does not use and which left this
+        // ViT far behind the reference at equal steps.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
+            yield return new TransformerEncoderBlock<T>(hiddenDim, numHeads, mlpDim,
+                ffnActivation: new GELUActivation<T>(), normPlacement: TransformerNormPlacement.PreNorm);
         }
 
-        // Classification head
+        // y = LN(z_L^0) (paper eq. 4): the final LayerNorm before the head. Applied to every token; the CLS slice
+        // that follows reads the same normalized z_L^0.
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Classification head: a linear layer emitting logits (the paper's MLP head at fine-tuning). The softmax
+        // belongs to the loss during training and to Predict at inference; a softmax here made a logits loss train
+        // on probabilities, and ViT never left chance.
         yield return new DenseLayer<T>(numClasses,
-            (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
+            (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
