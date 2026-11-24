@@ -9247,7 +9247,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Registered state lives as long as the layer. A lazily built buffer is often created on the device during
         // the first forward, inside a TensorScope that frees every GPU result it saw created when it ends (a compiled
         // step's sizing forward, a detached GAN forward); hand it back to its own lifetime so no open scope frees it.
-        AiDotNet.Tensors.Engines.TensorScope.Detach(tensor);
+        // Only while a scope is open: with none there is nothing to detach from, and detaching anyway changed how a
+        // traced step's running-statistic update was signed, so compiled closure replay refused it (MegaTTS2).
+        if (AiDotNet.Tensors.Engines.TensorScope.Current is not null)
+            AiDotNet.Tensors.Engines.TensorScope.Detach(tensor);
 
         lock (_bufferRegistrationLock)
         {
