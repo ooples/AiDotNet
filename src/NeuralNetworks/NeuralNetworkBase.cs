@@ -17882,6 +17882,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// running statistics still advance once per iteration, in the step.
     /// </remarks>
     internal Tensor<T> ForwardForTrainingDetached(Tensor<T> input)
+        => DetachedTrainingForward(input, consume: null)!;
+
+    /// <summary>
+    /// <see cref="ForwardForTrainingDetached(Tensor{T})"/> for a caller done with the output before this returns: hands
+    /// <paramref name="consume"/> the forward's own output instead of a detached copy of it.
+    /// </summary>
+    /// <remarks>
+    /// The output is valid only inside <paramref name="consume"/>: on the CPU it and whatever
+    /// <paramref name="consume"/> builds from it while the forward's arena is current go back to that arena's pool when
+    /// this returns, and on a device the forward's scope frees them. So an adversarial step builds its discriminator
+    /// batch from the generated samples here and trains on it at once, with no copy of the samples and no fresh
+    /// batch each iteration (a DCGAN CPU step allocated 9 MB of both on the large-object heap). Anything
+    /// <paramref name="consume"/> keeps must be created with <c>TensorArena.Suspend</c> and <c>TensorScope.Suspend</c>
+    /// active, as training another network on the batch must be.
+    /// </remarks>
+    internal void ForwardForTrainingDetached(Tensor<T> input, Action<Tensor<T>> consume)
+    {
+        if (consume is null) throw new ArgumentNullException(nameof(consume));
+        DetachedTrainingForward(input, consume);
+    }
+
+    private Tensor<T>? DetachedTrainingForward(Tensor<T> input, Action<Tensor<T>>? consume)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
@@ -17893,7 +17915,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var buffers = new List<Tensor<T>>();
         foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
         var saved = AiDotNet.Training.TensorCheckpoint<T>.Capture(buffers);
-        Tensor<T> output;
+        Tensor<T>? output = null;
         try
         {
             // The intermediates are host arrays on the CPU, which the scope above does not free: fresh every call,
@@ -17907,9 +17929,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             bool lazyForward = !_detachedForwardRan || HasUninitializedParameters;
             _detachedForwardRan = true;
             using var arena = lazyForward ? null : AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true);
+            Tensor<T> produced;
             using (new NoGradScope<T>())
+                produced = ForwardForTraining(input);
+            if (consume is not null)
             {
-                var produced = ForwardForTraining(input);
+                consume(produced);
+            }
+            else
+            {
                 using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
                     output = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { produced })[0];
             }
@@ -17918,7 +17946,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
-        return scope.Keep(output);
+        return output is null ? null : scope.Keep(output);
     }
 
     private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)

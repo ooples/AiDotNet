@@ -930,6 +930,46 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     }
 
     /// <summary>
+    /// One discriminator step on <c>[real; fake]</c> labelled <c>[1; 0]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Train the discriminator on real and fake samples in a SINGLE
+    /// forward+backward+optimizer-step instead of two sequential Train
+    /// calls. The BCE loss over a concatenated [real; fake] batch with
+    /// labels [1; 0] is mathematically equivalent to the average of the
+    /// two separate-step losses, but at half the disc compute per
+    /// iteration (one tape, one forward, one backward, one optimizer
+    /// step instead of two of each).
+    /// Secondary effect: BN now sees batch=2 instead of batch=1, so the
+    /// training-mode forward goes through the actual Engine.BatchNorm
+    /// path (computes real batch stats and updates running mean/variance)
+    /// instead of falling through the batch=1 inference fallback that
+    /// leaves running stats at defaults forever. That fixes a latent
+    /// bug where DCGAN's BN layers never accumulated useful running
+    /// statistics during training. (Pre-fix the batch=1 routing was the
+    /// only safe option because variance over one sample is 0 and the
+    /// gradient was pathological; at batch=2 variance is well-defined
+    /// and gradients flow normally per Ioffe and Szegedy 2015.)
+    /// </remarks>
+    /// <param name="insideGeneratorArena">The batch is built in the generator forward's arena
+    /// (<see cref="NeuralNetworkBase{T}.ForwardForTrainingDetached(Tensor{T}, Action{Tensor{T}})"/>): the
+    /// discriminator's step must not allocate what it keeps from that arena.</param>
+    private void TrainDiscriminatorOnCombinedBatch(Tensor<T> realImages, Tensor<T> fakeImages, int batchSize,
+        bool insideGeneratorArena)
+    {
+        var combinedImages = Engine.TensorConcatenate(new[] { realImages, fakeImages }, axis: 0);
+        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
+        var lblSpan = combinedLabels.Data.Span;
+        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
+        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
+        // What the discriminator's step keeps (its loss, its compiled plan's buffers) is its own: no caller's scope may
+        // free it, and the generator forward's arena must not hand its memory back to the pool.
+        using (AiDotNet.Tensors.Engines.TensorScope.Suspend())
+        using (insideGeneratorArena ? AiDotNet.Tensors.Helpers.TensorArena.Suspend() : null)
+            Discriminator.Train(combinedImages, combinedLabels);
+    }
+
+    /// <summary>
     /// Trains both the generator and discriminator using tensor-based operations throughout.
     /// </summary>
     /// <param name="input">The noise input for the generator (for batch training).</param>
@@ -1036,8 +1076,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         var dStepScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
         try
         {
-            var fakeImages = trainableGen.ForwardForTrainingDetached(input);
-
             // Cache real / fake batches only when an auxiliary loss path needs
             // them. Previously this clone ran unconditionally for UseFeatureMatching;
             // the WGAN-GP gradient-penalty path silently saw null batches and the
@@ -1046,37 +1084,18 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
             // training). Both paths now share the same gated cache.
             if (UseFeatureMatching || _useGradientPenalty)
             {
+                var fakeImages = trainableGen.ForwardForTrainingDetached(input);
                 _lastRealBatch = dStepScope.Keep(expectedOutput.Clone());
                 _lastFakeBatch = dStepScope.Keep(fakeImages.Clone());
+                TrainDiscriminatorOnCombinedBatch(expectedOutput, fakeImages, batchSize, insideGeneratorArena: false);
             }
-
-            // === Combined discriminator step ===
-            //
-            // Train the discriminator on real and fake samples in a SINGLE
-            // forward+backward+optimizer-step instead of two sequential Train
-            // calls. The BCE loss over a concatenated [real; fake] batch with
-            // labels [1; 0] is mathematically equivalent to the average of the
-            // two separate-step losses, but at half the disc compute per
-            // iteration (one tape, one forward, one backward, one optimizer
-            // step instead of two of each).
-            //
-            // Secondary effect: BN now sees batch=2 instead of batch=1, so the
-            // training-mode forward goes through the actual Engine.BatchNorm
-            // path (computes real batch stats and updates running mean/variance)
-            // instead of falling through the batch=1 inference fallback that
-            // leaves running stats at defaults forever. That fixes a latent
-            // bug where DCGAN's BN layers never accumulated useful running
-            // statistics during training. (Pre-fix the batch=1 routing was the
-            // only safe option because variance over one sample is 0 and the
-            // gradient was pathological; at batch=2 variance is well-defined
-            // and gradients flow normally per Ioffe & Szegedy 2015.)
-            var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
-            var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
-            var lblSpan = combinedLabels.Data.Span;
-            for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
-            for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
-            using (AiDotNet.Tensors.Engines.TensorScope.Suspend())
-                Discriminator.Train(combinedImages, combinedLabels);
+            else
+            {
+                // Nothing keeps the generated samples past this step, so the step trains on the generator forward's
+                // own output: the combined batch is built in that forward's arena and returned to its pool with it.
+                trainableGen.ForwardForTrainingDetached(input,
+                    fakeImages => TrainDiscriminatorOnCombinedBatch(expectedOutput, fakeImages, batchSize, insideGeneratorArena: true));
+            }
         }
         finally
         {

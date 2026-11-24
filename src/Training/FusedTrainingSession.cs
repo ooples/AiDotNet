@@ -535,11 +535,15 @@ internal sealed class FusedTrainingSession<T>
 
         // Each step's transient activations are reclaimed when it returns, the way PyTorch's caching allocator
         // returns an iteration's blocks; the plan's moments and persistent input/target are not arena-allocated
-        // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring.
+        // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring. It pools even nested
+        // (an adversarial step runs inside the caller's arena): the step's transients are dead at its return either way,
+        // and a nested arena that does not pool drops every buffer it rented, including those it took from the
+        // cross-arena pool. A DCGAN CPU step dropped 12 of them that way, so the generator's next detached forward
+        // allocated 69 MB afresh, and this arena another 16 MB of its own, every step.
         bool ran;
         T stepLoss;
         var deferredLoss = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
-        var stepArena = TensorArena.Create();
+        var stepArena = TensorArena.Create(poolWhenNested: true);
         try
         {
             ran = CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
