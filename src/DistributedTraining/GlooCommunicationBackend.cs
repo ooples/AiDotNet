@@ -145,6 +145,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <summary>
     /// The default per-wait timeout: 30 minutes, PyTorch's default for its Gloo process group. A peer may legitimately
     /// spend minutes outside a collective (rank 0 saving a large checkpoint, a first step's graph capture, validation).
+    /// It is longer than the shared-memory backend's default on purpose: Gloo spans machines, where a slow peer is
+    /// routine, so a dead peer takes up to this long (twice it for a queued send) to surface as an exception.
     /// </summary>
     public const int DefaultTimeoutMilliseconds = 1_800_000;
 

@@ -2895,6 +2895,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     bool isIdleDistributedNeuralRank = distCoordinator is not null
                         && processedInputs.Length == 0
                         && _model is NeuralNetworks.NeuralNetworkBase<T>;
+                    // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
+                    // path runs it (one micro-batch per step); the accumulated step is the eager reference.
+                    bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
+                        && gradientAccumulationSteps <= 1
+                        && _model is INeuralNetwork<T>;
+                    // Agreed before any rank enters the plan's exchange, and before the batch's type is looked at (every
+                    // rank reaches it, the idle one included): a rank that threw alone would leave the others waiting
+                    // in the all-reduce until the collective timeout. It costs one one-element all-reduce per step. The
+                    // flag cannot ride the gradient exchange: an idle rank has no batch to run the plan on, so it never
+                    // reaches that exchange. Nor can each rank derive it locally from the loader's slicing: that holds
+                    // only when every rank's inner loader yields the same global stream, which a pre-sharded loader, a
+                    // growing source or an AggregateSamples that filters samples breaks, and one rank deciding alone is
+                    // the hang this check exists to prevent.
+                    if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
+                        throw new NotSupportedException(
+                            "A rank received no samples this step; the data-parallel compiled update needs every rank to "
+                            + "have a batch (size the dataset to a multiple of the global batch, or turn the compiled "
+                            + "data-parallel update off).");
                     if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
                         && processedOutputs.Length > 0 && processedOutputs[0] is Tensor<T>)
                         || isIdleDistributedNeuralRank)
@@ -2906,16 +2924,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
                         }
 
-                        // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
-                        // path runs it (one micro-batch per step); the accumulated step is the eager reference.
-                        bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
-                            && gradientAccumulationSteps <= 1;
-                        // Agreed before any rank enters the plan's exchange: a rank that threw alone would leave the
-                        // others waiting in the all-reduce until the collective timeout.
-                        if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
-                            throw new NotSupportedException(
-                                "A rank received no samples this step; the data-parallel compiled update needs every rank to "
-                                + "have a batch (use drop-last batching, or turn the compiled data-parallel update off).");
                         if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)

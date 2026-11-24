@@ -53,6 +53,7 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
         TokensPerSample = other.TokensPerSample;
         MonitorGradNorm = other.MonitorGradNorm;
         MonitorResourceIntervalSeconds = other.MonitorResourceIntervalSeconds;
+        DataParallelUpdateInCompiledPlan = other.DataParallelUpdateInCompiledPlan;
     }
 
     /// <summary>

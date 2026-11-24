@@ -1321,6 +1321,35 @@ public static class Program
     }
 
     /// <summary>
+    /// The compiled data-parallel update needs every rank to have a batch. A tail step that leaves one rank empty (9
+    /// samples over a global batch of 8: the tail's one sample goes to rank 0) fails on both ranks with the same error,
+    /// agreed before either enters the plan's gradient exchange, instead of one rank throwing alone while the other
+    /// waits in the all-reduce until the collective timeout.
+    /// </summary>
+    [SkippableFact(Timeout = 400000)]
+    public async Task TwoProcessDdp_CompiledUpdate_TailStepWithAnEmptyRank_FailsOnBothRanks()
+    {
+        string? device = Environment.GetEnvironmentVariable("AIDOTNET_TEST_DDP_GPU");
+        Skip.If(string.IsNullOrWhiteSpace(device), "AIDOTNET_TEST_DDP_GPU (a CUDA_VISIBLE_DEVICES value) is not set.");
+        string session = "mp_tail_" + Guid.NewGuid().ToString("N");
+        WorkerSpec Spec(int rank) => new()
+        {
+            Mode = "StreamingTrain", BackendKind = "SharedMemory", Rank = rank, WorldSize = 2, SessionName = session,
+            UseGpu = true, CudaVisibleDevicesOverride = device, SampleCount = 9, LocalBatchSize = 4, MaxSteps = 4,
+            DataSeed = 2027, InitWeightSeed = 151, CompiledUpdate = true,
+        };
+        using var r0 = StartWorkerProcess(Spec(0));
+        using var r1 = StartWorkerProcess(Spec(1));
+        var (o0, o1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(150));
+        foreach (var (outcome, rank) in new[] { (o0, 0), (o1, 1) })
+        {
+            Assert.True(outcome.Result is { Succeeded: false },
+                $"rank {rank}: expected the tail step to be refused (exit={outcome.ExitCode}): {outcome.Result?.ExceptionMessage ?? outcome.Stderr}");
+            Assert.Contains("received no samples", outcome.Result!.ExceptionMessage ?? string.Empty);
+        }
+    }
+
+    /// <summary>
     /// DDP + mixed precision with the update in the plan: two processes on one GPU against one process on the full
     /// batch, both with the library's default mixed precision (FP16 matmuls, dynamic loss scaling in the plan). The
     /// loss scaler checks the reduced gradient, so the ranks' scales and skipped steps agree. Autocast converts the

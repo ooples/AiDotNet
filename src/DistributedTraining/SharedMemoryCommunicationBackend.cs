@@ -135,7 +135,10 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     /// <param name="worldSize">Total number of participating processes (<c>1..64</c>).</param>
     /// <param name="sessionName">Unique shared-memory session name shared by all ranks in the job.</param>
     /// <param name="slotCapacityBytes">Per-rank collective staging buffer capacity in bytes (default 64 MiB).</param>
-    /// <param name="timeoutMilliseconds">Maximum wait time in milliseconds before throwing a timeout error.</param>
+    /// <param name="timeoutMilliseconds">Maximum wait time in milliseconds before throwing a timeout error. The default
+    /// (2 minutes) is shorter than Gloo's 30 minutes: every rank is a process on this machine, so a long wait means a
+    /// dead or wedged peer sooner than a slow one. Raise it when a rank legitimately spends longer outside a collective
+    /// (saving a large checkpoint, a first step's graph capture).</param>
     public SharedMemoryCommunicationBackend(
         int rank,
         int worldSize,

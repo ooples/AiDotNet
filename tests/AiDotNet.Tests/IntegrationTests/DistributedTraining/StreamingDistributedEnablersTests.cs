@@ -1751,8 +1751,8 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
     {
         // 1a. SharedMemory rejects Rank 1 requesting larger slotCapacityBytes than existing Rank 0 mapping
         string mismatchLargerSession = "shm_mismatch_lg_" + Guid.NewGuid().ToString("N");
-        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchLargerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
-        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchLargerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchLargerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 10_000))
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchLargerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 30_000))
         {
             var t0 = Task.Run(() => r0.Initialize());
             var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));
@@ -1763,8 +1763,11 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
 
         // 1b. SharedMemory header validation rejects Rank 1 opening smaller slotCapacityBytes against existing Rank 0 mapping
         string mismatchSmallerSession = "shm_mismatch_sm_" + Guid.NewGuid().ToString("N");
-        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchSmallerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
-        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchSmallerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchSmallerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 10_000))
+        // Rank 1 waits for rank 0's mapping before it can read the header, and rank 0 gives the mapping up when its own
+        // wait for rank 1 times out: with 1.5 s each, a loaded machine let rank 0 time out and leave before rank 1
+        // attached. Both waits now have slack; the mismatch is still detected as soon as rank 1 reads the header.
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchSmallerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 30_000))
         {
             var t0 = Task.Run(() => r0.Initialize());
             var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));

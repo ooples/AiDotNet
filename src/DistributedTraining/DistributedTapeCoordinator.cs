@@ -405,7 +405,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     {
         ThrowIfDisposed();
         if (buffers is null) throw new ArgumentNullException(nameof(buffers));
-        if (WorldSize <= 1 || buffers.Count == 0) return;
+        if (WorldSize <= 1) return;
         EnsureBackendInitialized();
         var unique = new List<Tensor<T>>(buffers.Count);
         var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
@@ -416,12 +416,14 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             unique.Add(buffer);
             total += buffer.Length;
         }
-        if (total == 0) return;
-        // The layout must agree before any data moves: a rank with a different buffer set would unpack garbage.
+        // The layout must agree before any data moves (a rank with a different buffer set would unpack garbage), and
+        // every rank reaches this agreement, including one with no buffers: a rank that returned early would leave the
+        // others waiting in it until the collective timeout.
         if (!RanksAgree(unique.Count, total))
             throw new InvalidOperationException(
                 $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here), "
                 + "so rank 0's buffers cannot be broadcast onto them.");
+        if (total == 0) return;
         var flat = new Vector<T>(checked((int)total));
         if (Rank == 0)
         {

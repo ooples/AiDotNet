@@ -146,13 +146,6 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
-    /// With <see cref="TensorCodecOptions.EnableCompilation"/> true, <c>T=float</c>, and a plain
-    /// Adam optimizer (no LR scheduler, no adaptive rates), <c>TryTrainWithFusedOptimizer</c>
-    /// engages the compiled fused fwd+bwd+update kernel. Training must complete without
-    /// crashing and produce finite losses across multiple steps — any NaN/Inf indicates a
-    /// broken kernel that silently corrupts training state.
-    /// </summary>
-    /// <summary>
     /// FP16 mixed precision with a fused optimizer that is neither Adam nor SGD (RMSprop) trains on the fused compiled
     /// step: autocast and the loss scaler run inside the plan, RMSprop's own update applies the unscaled FP32 master
     /// gradients, every loss is finite and the loss descends. (It replaces the test of the removed environment-gated
@@ -209,6 +202,13 @@ public class FusedOptimizerIntegrationTests
         }
     }
 
+    /// <summary>
+    /// With <see cref="TensorCodecOptions.EnableCompilation"/> true, <c>T=float</c>, and a plain
+    /// Adam optimizer (no LR scheduler, no adaptive rates), <c>TryTrainWithFusedOptimizer</c>
+    /// engages the compiled fused fwd+bwd+update kernel. Training must complete without
+    /// crashing and produce finite losses across multiple steps — any NaN/Inf indicates a
+    /// broken kernel that silently corrupts training state.
+    /// </summary>
     [Fact(Timeout = 120000)]
     public async Task FusedAdam_TrainingCompletes_WithFiniteLossAcrossSteps()
     {

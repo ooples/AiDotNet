@@ -29,7 +29,9 @@ public partial class TrainingMonitorDashboard<T>
     // Requests served at once; more are answered 503 instead of queueing without bound on the thread pool.
     private const int MaxConcurrentRequests = 8;
     private readonly SemaphoreSlim _requestSlots = new(MaxConcurrentRequests, MaxConcurrentRequests);
-    private volatile bool _loopbackOnly = true;
+    // The host the server was bound to; a request's Host header must name it, a loopback name, an IP literal or
+    // this machine (see IsAllowedHost).
+    private volatile string _boundHost = "127.0.0.1";
 
     private static readonly JsonSerializerSettings WebJsonSettings = new()
     {
@@ -73,6 +75,10 @@ public partial class TrainingMonitorDashboard<T>
     /// <para>Calling it again while running returns the current URL. The server has no authentication: binding a
     /// host other than loopback exposes the training metrics to the network (and on Windows needs a URL
     /// reservation, <c>netsh http add urlacl</c>).</para>
+    /// <para>Against DNS rebinding (a web page that points its own host name at this machine to read the metrics), a
+    /// request is served only when its address names a loopback host, an IP address, the bound host itself or this
+    /// machine's own name. A server bound to every address ("+", "*", "0.0.0.0") is therefore opened by IP address,
+    /// by <c>localhost</c> or by the machine's name, not by another DNS alias (an FQDN or mDNS name gets 403).</para>
     /// <para><b>For Beginners:</b> call this once, open the returned address in a browser, and watch training live
     /// even when the process runs in the background without a console.</para>
     /// </remarks>
@@ -122,7 +128,7 @@ public partial class TrainingMonitorDashboard<T>
 
                     _listener = listener;
                     _webServerUrl = prefix;
-                    _loopbackOnly = IsLoopbackName(host);
+                    _boundHost = host;
                     _listenerThread = new Thread(() => ListenLoop(listener))
                     {
                         IsBackground = true,
@@ -229,6 +235,39 @@ public partial class TrainingMonitorDashboard<T>
             yield return "localhost";
     }
 
+    /// <summary>
+    /// Whether a request whose Host header is <paramref name="hostHeader"/> may be served by a server bound to
+    /// <paramref name="boundHost"/>. DNS rebinding points an attacker's own DNS name at this machine, so its requests
+    /// carry that name as Host: only names that cannot be rebound are accepted, namely loopback names, IP literals, the
+    /// bound host itself and this machine's own host name (exactly: a name that merely starts with it, such as
+    /// "machine.attacker.example", is a name the attacker controls). That holds for a wildcard bind ("+", "*", "0.0.0.0") too,
+    /// which a listener serves on every address including loopback. A request without a Host header is refused.
+    /// </summary>
+    private static bool IsAllowedHost(string? hostHeader, string boundHost)
+    {
+        string? name = HostNameOf(hostHeader);
+        if (string.IsNullOrEmpty(name)) return false;
+        string bare = name!.Trim().TrimStart('[').TrimEnd(']');
+        // A fully qualified name's trailing dot names the same host ("localhost." is localhost).
+        if (bare.EndsWith(".", StringComparison.Ordinal)) bare = bare.Substring(0, bare.Length - 1);
+        if (bare.Length == 0) return false;
+        if (IsLoopbackName(bare) || IPAddress.TryParse(bare, out _)) return true;
+        string boundBare = (boundHost ?? string.Empty).Trim().TrimStart('[').TrimEnd(']');
+        if (string.Equals(bare, boundBare, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach (var machine in s_machineNames.Value)
+            if (string.Equals(bare, machine, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    // This machine's own names (looked up once): the DNS host name and the NetBIOS name.
+    private static readonly Lazy<string[]> s_machineNames = new(() =>
+    {
+        var names = new List<string> { Environment.MachineName };
+        try { names.Add(Dns.GetHostName()); }
+        catch (System.Net.Sockets.SocketException) { }
+        return names.ToArray();
+    });
+
     private static bool IsLoopbackName(string? host)
     {
         if (string.IsNullOrEmpty(host)) return false;
@@ -306,9 +345,9 @@ public partial class TrainingMonitorDashboard<T>
         try
         {
             var request = context.Request;
-            // A loopback server answers only requests addressed to a loopback name: a page on another origin that
-            // re-points its own host name at 127.0.0.1 (DNS rebinding) sends its own name as Host and is refused.
-            if (_loopbackOnly && !IsLoopbackName(HostNameOf(request.Headers["Host"])))
+            // A page on another origin that re-points its own host name at this machine (DNS rebinding) sends its own
+            // name as Host and is refused, whatever address the server is bound to.
+            if (!IsAllowedHost(request.Headers["Host"], _boundHost))
             {
                 Respond(context, 403, "text/plain; charset=utf-8", "Forbidden");
                 return;

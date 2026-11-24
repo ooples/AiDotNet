@@ -67,6 +67,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         {
             var session = GetSession(sessionId);
             session.EndTime = DateTime.UtcNow;
+            _gpuMemoryWarnedSessions.Remove(sessionId);
         }
     }
 
@@ -362,6 +363,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
     public override List<string> CheckForIssues(string sessionId)
     {
         var issues = new List<string>();
+        string? gpuMemoryWarning = null;
 
         lock (SyncLock)
         {
@@ -401,9 +403,11 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                     && TryGetGpuDeviceTotalMemoryMB(out double gpuTotalMb) && gpuTotalMb > 0)
                 {
                     double gpuPercent = gpuMemoryMb / gpuTotalMb * 100.0;
-                    if (gpuPercent > 95)
-                        System.Diagnostics.Trace.TraceWarning(
-                            $"GPU memory in use on the device: {gpuMemoryMb:F0} MB ({gpuPercent:F1}% of {gpuTotalMb:F0} MB).");
+                    // Once per session: a run that keeps the device full would otherwise warn on every check. Traced
+                    // after the lock is released, so a slow listener does not hold up the monitor.
+                    if (gpuPercent > 95 && _gpuMemoryWarnedSessions.Add(sessionId))
+                        gpuMemoryWarning =
+                            $"GPU memory in use on the device: {gpuMemoryMb:F0} MB ({gpuPercent:F1}% of {gpuTotalMb:F0} MB).";
                 }
             }
 
@@ -434,13 +438,25 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
             }
         }
 
+        if (gpuMemoryWarning is not null) Trace.TraceWarning(gpuMemoryWarning);
         return issues;
     }
 
+    // Sessions already warned about a near-full GPU (guarded by SyncLock).
+    private readonly HashSet<string> _gpuMemoryWarnedSessions = new(StringComparer.Ordinal);
+
+    /// <summary>Test seam (this monitor only): the device total in MB to use instead of the current engine's.</summary>
+    internal double? GpuDeviceTotalMemoryMBOverrideForTest { get; set; }
+
     /// <summary>Total memory of the current GPU engine's device in MB, when the engine is a GPU engine.</summary>
-    private static bool TryGetGpuDeviceTotalMemoryMB(out double totalMb)
+    private bool TryGetGpuDeviceTotalMemoryMB(out double totalMb)
     {
         totalMb = 0;
+        if (GpuDeviceTotalMemoryMBOverrideForTest is double overrideMb)
+        {
+            totalMb = overrideMb;
+            return totalMb > 0;
+        }
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu
             || gpu.GetBackend() is not { } backend)
             return false;

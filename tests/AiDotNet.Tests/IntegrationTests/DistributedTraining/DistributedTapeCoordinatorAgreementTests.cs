@@ -56,6 +56,66 @@ public sealed class DistributedTapeCoordinatorAgreementTests
         Assert.All(OnTwoRanks((c, rank) => c.AllRanks(rank == 0)), Assert.False);
         Assert.All(OnTwoRanks((c, _) => c.AllRanks(true)), Assert.True);
     }
+
+    // A rank whose model registers no buffers used to return before the layout agreement while its peer waited in it
+    // until the collective timeout; now both ranks reach the agreement and both refuse the mismatch.
+    [Fact(Timeout = 120000)]
+    public async Task BroadcastBuffers_RankWithNoBuffers_FailsOnEveryRankInsteadOfHanging()
+    {
+        await Task.Yield();
+        var outcomes = OnTwoRanks((c, rank) =>
+        {
+            var buffers = rank == 0
+                ? new[] { new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 4 }) }
+                : Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>();
+            try { c.BroadcastBuffers(buffers); return "broadcast"; }
+            catch (InvalidOperationException) { return "refused"; }
+        });
+        Assert.All(outcomes, o => Assert.Equal("refused", o));
+
+        // Ranks that all register none agree and return without moving data.
+        var none = OnTwoRanks((c, _) => { c.BroadcastBuffers(Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()); return true; });
+        Assert.All(none, Assert.True);
+    }
+}
+
+/// <summary>The streaming options' copy keeps every setting (ConfigureStreamingTraining stores a copy).</summary>
+public sealed class StreamingTrainingOptionsCopyTests
+{
+    [Fact]
+    public void Copy_keeps_every_setting()
+    {
+        var source = new AiDotNet.Models.Options.StreamingTrainingOptions<float,
+            AiDotNet.Tensors.LinearAlgebra.Tensor<float>, AiDotNet.Tensors.LinearAlgebra.Tensor<float>>();
+        var properties = source.GetType()
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.DeclaredOnly)
+            .Where(p => p.CanRead && p.CanWrite && p.GetSetMethod() is not null)
+            .ToArray();
+        Assert.Contains(properties, p => p.Name == "DataParallelUpdateInCompiledPlan");
+        foreach (var p in properties)
+        {
+            var type = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+            if (type == typeof(bool)) p.SetValue(source, !((bool?)p.GetValue(source) ?? false));
+            else if (type == typeof(int)) p.SetValue(source, 7);
+            else if (type == typeof(long)) p.SetValue(source, 7L);
+            else if (type == typeof(double)) p.SetValue(source, 7.5);
+            else if (type == typeof(float)) p.SetValue(source, 7.5f);
+            else if (!type.IsValueType && p.GetValue(source) is null) continue;   // a reference left unset copies as null
+            else if (type.IsEnum)
+            {
+                var values = Enum.GetValues(type);
+                if (values.Length > 1) p.SetValue(source, values.GetValue(values.Length - 1));
+            }
+        }
+
+        var copy = new AiDotNet.Models.Options.StreamingTrainingOptions<float,
+            AiDotNet.Tensors.LinearAlgebra.Tensor<float>, AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(source);
+        foreach (var p in properties)
+            Assert.True(Equals(p.GetValue(source), p.GetValue(copy)), $"{p.Name} was not copied");
+        // The validation loader is shared, not cloned.
+        Assert.Same(source.ValidationLoader, copy.ValidationLoader);
+    }
 }
 
 /// <summary>The dropout base seed follows the configured seed (a fixed seed reproduces the masks) and stays in range.</summary>

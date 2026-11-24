@@ -155,6 +155,39 @@ public class TrainingMonitorDashboardWebServerTests
 
     }
 
+    // The check holds whatever the server is bound to: a wildcard bind serves loopback too, where http.sys does not
+    // filter the Host name, so the dashboard's own check is what refuses a rebound name.
+    [Theory]
+    [InlineData("127.0.0.1:8080", "+", true)]
+    [InlineData("localhost:8080", "+", true)]
+    [InlineData("[::1]:8080", "*", true)]
+    [InlineData("10.1.2.3:8080", "0.0.0.0", true)]
+    [InlineData("dash.example:8080", "dash.example", true)]
+    [InlineData("attacker.example:8080", "+", false)]
+    [InlineData("attacker.example:8080", "127.0.0.1", false)]
+    [InlineData("attacker.example", "dash.example", false)]
+    [InlineData("LOCALHOST:8080", "+", true)]
+    [InlineData("localhost.:8080", "+", true)]
+    [InlineData("[fe80::1%4]:8080", "+", true)]
+    [InlineData("127.0.0.1.attacker.example:8080", "+", false)]
+    [InlineData("localhost.attacker.example", "127.0.0.1", false)]
+    [InlineData("user@attacker.example:8080", "+", false)]
+    [InlineData("attacker.example.:8080", "+", false)]
+    [InlineData(".", "+", false)]
+    [InlineData("", "+", false)]
+    [InlineData(null, "127.0.0.1", false)]
+    public void Host_check_accepts_only_names_that_cannot_be_rebound(string? hostHeader, string boundHost, bool allowed)
+    {
+        var method = typeof(TrainingMonitorDashboard<double>).GetMethod("IsAllowedHost",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        Assert.Equal(allowed, (bool)method!.Invoke(null, new object?[] { hostHeader, boundHost })!);
+        // This machine's own name is not an attacker's, but a name that only starts with it is.
+        string machine = System.Net.Dns.GetHostName();
+        Assert.True((bool)method.Invoke(null, new object?[] { machine + ":8080", "+" })!);
+        Assert.False((bool)method.Invoke(null, new object?[] { machine + ".attacker.example:8080", "+" })!);
+    }
+
     private static async Task AssertNotServing(string url)
     {
         try
