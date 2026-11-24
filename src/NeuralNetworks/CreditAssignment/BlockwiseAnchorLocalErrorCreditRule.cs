@@ -36,18 +36,19 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly double _localWeight;
     private readonly int _seed;
+    private readonly int _auxRank;
+    private readonly int _hiddenDim;
+    private readonly double _auxLr;
+    private readonly Tensor<T>[] _auxU;
+    private readonly Tensor<T>[] _auxV;
+    private readonly Tensor<T>[] _auxParams;
+    private readonly Tensor<T>[] _auxM;
+    private readonly Tensor<T>[] _auxV2;
+    private int _auxAdamSteps;
     private Tensor<T>? _lastStepInput;
     private int _stepCounter;
 
     /// <summary>Creates a blockwise anchor local-error credit rule.</summary>
-    /// <param name="readoutLayerCount">Trailing layers forming the shared readout (language model: norm + head = 2).</param>
-    /// <param name="anchorStride">Maximum number of trainable hidden layers per decoupled block (e.g. 4 for 3 GDN + 1 MLA).</param>
-    /// <param name="maxCandidates">Candidate vocabulary subset size <c>U</c> for intermediate block anchors (<see cref="int.MaxValue"/> uses full vocabulary).</param>
-    /// <param name="localWeight">Base weight λ applied to each intermediate block anchor's local loss.</param>
-    /// <param name="detachReadoutOnHiddenBlocks">When <c>true</c> (default), intermediate block anchors detach the shared readout's own parameters so only the terminal block updates the readout.</param>
-    /// <param name="useDepthProgressiveWeight">When <c>true</c>, scales intermediate anchor <c>k</c>'s weight by <c>((k + 1) / H)²</c>.</param>
-    /// <param name="streamBlocksSequentially">When <c>true</c> (default), runs each decoupled block on its own sequential tape/scope for <c>O(AnchorStride)</c> activation memory with zero recomputation.</param>
-    /// <param name="seed">Optional deterministic seed when <paramref name="maxCandidates"/> samples negative vocabulary candidates.</param>
     public BlockwiseAnchorLocalErrorCreditRule(
         int readoutLayerCount = 2,
         int anchorStride = 4,
@@ -57,6 +58,42 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
         bool useDepthProgressiveWeight = true,
         bool streamBlocksSequentially = true,
         int? seed = null)
+        : this(readoutLayerCount, anchorStride, maxCandidates, localWeight, detachReadoutOnHiddenBlocks,
+               useDepthProgressiveWeight, streamBlocksSequentially, seed, 0, 0, 8, 1.5e-3)
+    {
+    }
+
+    /// <summary>Creates a blockwise anchor local-error credit rule with training-only residual frame-alignment heads.</summary>
+    public static BlockwiseAnchorLocalErrorCreditRule<T> CreateWithFrameAlignment(
+        int readoutLayerCount,
+        int anchorStride,
+        int maxCandidates,
+        double localWeight,
+        bool detachReadoutOnHiddenBlocks,
+        bool useDepthProgressiveWeight,
+        bool streamBlocksSequentially,
+        int? seed,
+        int auxiliaryProjectionRank,
+        int hiddenDimension,
+        int maxAnchorBlocks = 8,
+        double auxiliaryLearningRate = 1.5e-3)
+        => new(readoutLayerCount, anchorStride, maxCandidates, localWeight, detachReadoutOnHiddenBlocks,
+               useDepthProgressiveWeight, streamBlocksSequentially, seed,
+               auxiliaryProjectionRank, hiddenDimension, maxAnchorBlocks, auxiliaryLearningRate);
+
+    private BlockwiseAnchorLocalErrorCreditRule(
+        int readoutLayerCount,
+        int anchorStride,
+        int maxCandidates,
+        double localWeight,
+        bool detachReadoutOnHiddenBlocks,
+        bool useDepthProgressiveWeight,
+        bool streamBlocksSequentially,
+        int? seed,
+        int auxiliaryProjectionRank,
+        int hiddenDimension,
+        int maxAnchorBlocks,
+        double auxiliaryLearningRate)
     {
         if (readoutLayerCount < 1)
             throw new ArgumentOutOfRangeException(nameof(readoutLayerCount), "Must be at least 1.");
@@ -66,6 +103,10 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
             throw new ArgumentOutOfRangeException(nameof(maxCandidates), "Must be at least 2.");
         if (double.IsNaN(localWeight) || double.IsInfinity(localWeight) || localWeight <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(localWeight), "Must be positive and finite.");
+        if (auxiliaryProjectionRank < 0)
+            throw new ArgumentOutOfRangeException(nameof(auxiliaryProjectionRank), "Must be non-negative.");
+        if (auxiliaryProjectionRank > 0 && hiddenDimension < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "Must be positive when auxiliaryProjectionRank > 0.");
 
         ReadoutLayerCount = readoutLayerCount;
         AnchorStride = anchorStride;
@@ -75,6 +116,48 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
         UseDepthProgressiveWeight = useDepthProgressiveWeight;
         StreamBlocksSequentially = streamBlocksSequentially;
         _seed = seed ?? 20261111;
+        _auxRank = auxiliaryProjectionRank;
+        _hiddenDim = hiddenDimension;
+        _auxLr = auxiliaryLearningRate > 0.0 ? auxiliaryLearningRate : 1.5e-3;
+
+        if (_auxRank > 0 && _hiddenDim > 0 && maxAnchorBlocks > 0)
+        {
+            using var suspend = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var rng = new Random(_seed ^ 0x5A17C3);
+            double scaleU = Math.Sqrt(3.0 / _hiddenDim);
+            double scaleV = 0.02 * Math.Sqrt(3.0 / _auxRank);
+            T posU = Ops.FromDouble(scaleU), negU = Ops.FromDouble(-scaleU);
+            T posV = Ops.FromDouble(scaleV), negV = Ops.FromDouble(-scaleV);
+            _auxU = new Tensor<T>[maxAnchorBlocks];
+            _auxV = new Tensor<T>[maxAnchorBlocks];
+            _auxParams = new Tensor<T>[maxAnchorBlocks * 2];
+            _auxM = new Tensor<T>[maxAnchorBlocks * 2];
+            _auxV2 = new Tensor<T>[maxAnchorBlocks * 2];
+            int[] projShape = [_hiddenDim, _auxRank];
+            for (int b = 0; b < maxAnchorBlocks; b++)
+            {
+                _auxU[b] = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorRandomUniformRange<T>(projShape, negU, posU, rng.Next()));
+                _auxV[b] = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorRandomUniformRange<T>(projShape, negV, posV, rng.Next()));
+                _auxParams[2 * b] = _auxU[b];
+                _auxParams[2 * b + 1] = _auxV[b];
+                _auxM[2 * b] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>(projShape));
+                _auxM[2 * b + 1] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>(projShape));
+                _auxV2[2 * b] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>(projShape));
+                _auxV2[2 * b + 1] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>(projShape));
+            }
+        }
+        else
+        {
+            _auxU = Array.Empty<Tensor<T>>();
+            _auxV = Array.Empty<Tensor<T>>();
+            _auxParams = Array.Empty<Tensor<T>>();
+            _auxM = Array.Empty<Tensor<T>>();
+            _auxV2 = Array.Empty<Tensor<T>>();
+        }
     }
 
     /// <inheritdoc />
@@ -140,7 +223,7 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<Tensor<T>> AuxiliaryParameters => Array.Empty<Tensor<T>>();
+    public IReadOnlyList<Tensor<T>> AuxiliaryParameters => _auxParams;
 
     /// <inheritdoc />
     public void Initialize(ICreditAssignmentContext<T> context) { }
@@ -156,17 +239,29 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
             return null;
 
         var s = context.Step;
+        var hEval = context.Output;
+        if (_auxU.Length > 0 && hEval.Shape.Length >= 2 && hEval.Shape[^1] == _hiddenDim)
+        {
+            int anchorSlot = Math.Clamp(context.HiddenIndex / Math.Max(1, AnchorStride), 0, _auxU.Length - 1);
+            int rows = hEval.Length / _hiddenDim;
+            var h2d = hEval.Rank == 2 ? hEval : s.Engine.Reshape(hEval, [rows, _hiddenDim]);
+            var latent = s.Engine.TensorMatMul(h2d, _auxU[anchorSlot]);
+            var delta = s.Engine.TensorMatMulTransposed(latent, _auxV[anchorSlot]);
+            var adapted2d = s.Engine.TensorAdd(h2d, delta);
+            hEval = hEval.Rank == 2 ? adapted2d : s.Engine.Reshape(adapted2d, hEval.Shape.ToArray());
+        }
+
         Tensor<T>? local = null;
         if (MaxCandidates < int.MaxValue && s.TrySampledReadoutLoss is not null)
         {
             int stepSeed = AdvanceStepSeedCore(s.Input);
             local = s.TrySampledReadoutLoss(
-                context.Output, s.Target, MaxCandidates, DetachReadoutOnHiddenBlocks, stepSeed);
+                hEval, s.Target, MaxCandidates, DetachReadoutOnHiddenBlocks, stepSeed);
         }
 
         local ??= DetachReadoutOnHiddenBlocks
-            ? s.ReadoutLossDetached(context.Output, s.Target)
-            : s.ReadoutLoss(context.Output, s.Target);
+            ? s.ReadoutLossDetached(hEval, s.Target)
+            : s.ReadoutLoss(hEval, s.Target);
 
         double weight = _localWeight;
         if (UseDepthProgressiveWeight)
@@ -187,5 +282,54 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
     public void ApplyAuxiliaryGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         _lastStepInput = null;
+        if (_auxParams.Length == 0 || gradients.Count == 0)
+            return;
+
+        using var suspend = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        _auxAdamSteps++;
+        const double beta1 = 0.9, beta2 = 0.999, eps = 1e-8, wd = 0.01;
+        double bc1 = 1.0 - Math.Pow(beta1, _auxAdamSteps);
+        double bc2 = 1.0 - Math.Pow(beta2, _auxAdamSteps);
+        double stepSize = _auxLr / bc1;
+        double invSqrtBc2 = 1.0 / Math.Sqrt(bc2);
+
+        T beta1T = Ops.FromDouble(beta1);
+        T oneMinusBeta1T = Ops.FromDouble(1.0 - beta1);
+        T beta2T = Ops.FromDouble(beta2);
+        T oneMinusBeta2T = Ops.FromDouble(1.0 - beta2);
+        T invSqrtBc2T = Ops.FromDouble(invSqrtBc2);
+        T epsT = Ops.FromDouble(eps);
+        T stepSizeT = Ops.FromDouble(stepSize);
+        T wdScaleT = Ops.FromDouble(_auxLr * wd);
+
+        for (int i = 0; i < _auxParams.Length; i++)
+        {
+            var p = _auxParams[i];
+            if (!gradients.TryGetValue(p, out var g))
+                continue;
+            using var stepTmpScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
+            var mNew = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorAdd(
+                engine.TensorMultiplyScalar(_auxM[i], beta1T),
+                engine.TensorMultiplyScalar(g, oneMinusBeta1T)));
+            var vNew = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorAdd(
+                engine.TensorMultiplyScalar(_auxV2[i], beta2T),
+                engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusBeta2T)));
+            _auxM[i].Dispose();
+            _auxV2[i].Dispose();
+            _auxM[i] = mNew;
+            _auxV2[i] = vNew;
+
+            var denom = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(engine.TensorSqrt(_auxV2[i]), invSqrtBc2T),
+                epsT);
+            var adamStep = engine.TensorMultiplyScalar(engine.TensorDivide(_auxM[i], denom), stepSizeT);
+            var wdStep = engine.TensorMultiplyScalar(p, wdScaleT);
+            var totalUpdate = engine.TensorAdd(adamStep, wdStep);
+            engine.TensorSubtractInPlace(p, totalUpdate);
+        }
     }
 }
