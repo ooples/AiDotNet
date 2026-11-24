@@ -26664,3 +26664,6 @@ AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set
 static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!
 AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.get -> AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode
 AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.set -> void
+AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.get -> AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype?
+AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.set -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ConfigureWeightStreaming(AiDotNet.Deployment.Configuration.WeightStreamingConfig! config) -> void

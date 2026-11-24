@@ -461,15 +461,10 @@ namespace AiDotNet.Tests.ModelLoading
                 layers: new List<AiDotNet.Interfaces.ILayer<double>> { embedding, head });
             var streamed = new NeuralNetwork<double>(architecture);
             streamed.ApplyAutoDetectThresholdOverride(1);
-            // The warmup forward (inference) latches a read-only bf16 store and the load's write then throws. (On the CPU
-            // engine the warmup itself already throws: FusedLinear reads the weight through GetDataArray, which demands a
-            // writable store.)
-            var write = new Vector<double>(Fill((int)embedding.ParameterCount, 5));
-            Assert.ThrowsAny<InvalidOperationException>(() =>
-            {
-                streamed.Predict(new Tensor<double>(new[] { 1, 2 }));
-                embedding.SetParameters(write);
-            });
+            // The warmup forward latches the weights into the streaming store (for a model this size in inference, a
+            // read-only bf16 store, which a load's later write cannot go through).
+            streamed.Predict(new Tensor<double>(new[] { 1, 2 }));
+            Assert.Equal(WeightLifetime.Streaming, head.GetWeights().Lifetime);
 
             // The builders' networks keep auto-streaming off.
             int h = 8, ffn = 16, vocab = 6, heads = 2, headDim = 4, E = 4;

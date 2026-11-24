@@ -12693,6 +12693,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal void DisableAutoStreaming() => _streamingAutoDetectDisabled = true;
 
     /// <summary>
+    /// Forces weight streaming on for this network now, with the weights held in <paramref name="storeDtype"/>
+    /// (<c>null</c>: the store's default), and declares the network's current execution mode to the store.
+    /// </summary>
+    internal void ForceWeightStreaming(StreamingStoreDtype? storeDtype)
+    {
+        var options = new GpuOffloadOptions();
+        if (storeDtype is StreamingStoreDtype dtype) options.StreamingStoreDtype = dtype;
+        ConfigureWeightLifetime(options);
+        SetStreamingExecutionTrainingIfSupported(IsTrainingMode);
+    }
+
+    /// <summary>
+    /// Applies a weight-streaming configuration to this network directly, for a network built outside
+    /// <c>AiModelBuilder</c> (for example a pretrained checkpoint loaded through a model builder).
+    /// </summary>
+    /// <param name="config">
+    /// <c>Enabled = true</c> streams now (with <see cref="WeightStreamingConfig.StoreDtype"/>); <c>false</c> keeps the
+    /// network resident; <c>null</c> leaves auto-detect on, with <see cref="WeightStreamingConfig.ThresholdParameters"/>
+    /// as its threshold when set.
+    /// </param>
+    /// <remarks>
+    /// Weight streaming is process-global (one streaming store per process). Call
+    /// <see cref="SetTrainingMode"/> first: a bf16 store is read-only, so it is for inference.
+    /// </remarks>
+    public void ConfigureWeightStreaming(AiDotNet.Deployment.Configuration.WeightStreamingConfig config)
+    {
+        if (config is null) throw new ArgumentNullException(nameof(config));
+        if (config.ThresholdParameters is long custom && custom > 0) ApplyAutoDetectThresholdOverride(custom);
+        if (config.Enabled == false) { DisableAutoStreaming(); return; }
+        if (config.Enabled == true) ForceWeightStreaming(config.StoreDtype);
+    }
+
+    /// <summary>
     /// Sets a per-instance threshold for auto-detect. Used by
     /// <c>AiModelBuilder.ConfigureWeightStreaming(config)</c> so a caller's
     /// <c>WeightStreamingConfig.ThresholdParameters</c> actually drives the
