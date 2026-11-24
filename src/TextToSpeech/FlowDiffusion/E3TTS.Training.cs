@@ -7,6 +7,17 @@ public partial class E3TTS<T>
     private sealed record TrainingExample(int[] TokenIds, Tensor<T> Clean, Tensor<T> Noise, Tensor<T> Weights,
         double AlphaBar, int SpeakerId, double WeightSum);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A token/mel pair does not carry the supervision this model trains on, and the base step would walk the layers
+    /// on bare token ids (a shape error deep in the stack); Train(TtsTrainingSample) is the entry point.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        ThrowIfTokenMelTrainingUnsupported();
+        return false;
+    }
+
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed();
