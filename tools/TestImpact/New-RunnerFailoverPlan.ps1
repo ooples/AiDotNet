@@ -1,6 +1,7 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Json')]
 param(
-    [Parameter(Mandatory)] [string] $MatrixJson,
+    [Parameter(Mandatory, ParameterSetName = 'Json')] [string] $MatrixJson,
+    [Parameter(Mandatory, ParameterSetName = 'Path')] [string] $MatrixJsonPath,
     [Parameter(Mandatory)] [string] $Repository,
     [Parameter(Mandatory)] [string] $RunId,
     [Parameter(Mandatory)] [string] $RunAttempt,
@@ -13,6 +14,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/RunnerFailover.ps1"
+# CI passes the shard matrix as a file: it can outgrow Linux's 128 KiB limit on one environment string.
+if ($PSCmdlet.ParameterSetName -ceq 'Path') { $MatrixJson = Get-Content -LiteralPath $MatrixJsonPath -Raw }
+if ([string]::IsNullOrWhiteSpace($MatrixJson)) { throw 'The shard matrix is empty.' }
 $matrix = @($MatrixJson | ConvertFrom-Json)
 if ($matrix.Count -eq 0) { throw 'Cannot plan failover for an empty shard inventory.' }
 $run = Invoke-FailoverApi "repos/$Repository/actions/runs/$RunId"

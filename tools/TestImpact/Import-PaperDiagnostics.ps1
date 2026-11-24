@@ -12,10 +12,26 @@ $allClasses = @(Get-Content -LiteralPath $ClassListFile | ForEach-Object { $_.Tr
 $expected = @()
 New-Item -ItemType Directory -Path $Destination -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+# actions/download-artifact extracts into ArtifactRoot itself, not ArtifactRoot/<artifact name>, when the
+# pattern matches exactly one artifact (run 45309453002 recorded its only, successful slice as Missing).
+# A flattened root is bound to one slice: the only planned slice, or else the slice its summary names,
+# which the independent class plan below still has to confirm.
+$flatSlice = $null
+if ((Test-Path -LiteralPath $ArtifactRoot -PathType Container) -and
+    @(Get-ChildItem -LiteralPath $ArtifactRoot -Directory -Filter 'paper-fidelity-results-pr-*').Count -eq 0 -and
+    @(Get-ChildItem -LiteralPath $ArtifactRoot -Force).Count -gt 0) {
+    if ($slices.Count -eq 1) { $flatSlice = [string]$slices[0] }
+    else {
+        try {
+            $claimed = [string](Get-Content (Join-Path $ArtifactRoot 'slice-summary.json') -Raw -ErrorAction Stop | ConvertFrom-Json).slice
+            if ($claimed -match '^\d+$' -and @($slices | Where-Object { [string]$_ -ceq $claimed }).Count -eq 1) { $flatSlice = $claimed }
+        } catch { $flatSlice = $null }
+    }
+}
 foreach ($slice in $slices) {
     if ([string]$slice -notmatch '^\d+$') { throw 'Paper slice identity is not a nonnegative integer.' }
     $name = "Paper fidelity - slice $slice"; $slug = "Paper_fidelity_slice_$slice"; $expected += $name
-    $source = Join-Path $ArtifactRoot "paper-fidelity-results-pr-$slice"
+    $source = if ([string]$slice -ceq $flatSlice) { $ArtifactRoot } else { Join-Path $ArtifactRoot "paper-fidelity-results-pr-$slice" }
     if (-not (Test-Path -LiteralPath $source -PathType Container)) { continue }
     $target = Join-Path $Destination "coverage-$TestedSha-$slug"
     New-Item -ItemType Directory -Path $target -Force | Out-Null
