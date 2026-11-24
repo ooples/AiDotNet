@@ -454,11 +454,34 @@ public class StreamingStepMonitorGpuTests
                 Assert.True(monitor.Resources[i].GpuMemoryMb is double mb && mb > 0, $"report {i} has no GPU memory");
                 Assert.Equal(used[i], monitor.Resources[i].GpuMemoryMb!.Value, 0.5);
             }
+            // And it is the figure nvidia-smi prints for the device. Other processes can allocate between the reads:
+            // 256 MiB of slack, well below the 1.2-1.5 GB the driver's total - free was off under WDDM.
+            if (gpu.GetBackend() is AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend { DeviceUuidForTests: { } uuid }
+                && NvidiaSmiUsedMb(uuid) is double smiMb)
+                Assert.True(Math.Abs(used[^1] - smiMb) <= 256,
+                    $"reported {used[^1]:F1} MB of device memory in use; nvidia-smi {smiMb} MiB");
         }
         finally
         {
             AiDotNet.Tensors.Engines.AiDotNetEngine.Current = previous;
             Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", disableGpu);
         }
+    }
+
+    // nvidia-smi's memory.used (MiB) for the device with this UUID, or null where nvidia-smi is not on PATH.
+    private static double? NvidiaSmiUsedMb(string uuid)
+    {
+        try
+        {
+            var info = new System.Diagnostics.ProcessStartInfo("nvidia-smi",
+                $"-i {uuid} --query-gpu=memory.used --format=csv,noheader,nounits")
+            { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+            using var smi = System.Diagnostics.Process.Start(info)!;
+            string line = smi.StandardOutput.ReadToEnd().Trim();
+            smi.WaitForExit();
+            return smi.ExitCode == 0 && double.TryParse(line, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double mb) ? mb : null;
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; }
     }
 }

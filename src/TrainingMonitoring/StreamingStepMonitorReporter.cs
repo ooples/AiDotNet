@@ -243,7 +243,7 @@ internal sealed class StreamingStepMonitorReporter<T>
     }
 
     // The GPU allocator's own accounting (GpuMemoryStats) for the active GPU engine's backend; the device's memory in
-    // use by every process (total minus free, as the driver reports it) and its total; and the device's kernel and
+    // use by every process (as nvidia-smi reports it, through NVML on CUDA; else total minus free) and its total; and the device's kernel and
     // memory-traffic utilization over the driver's last sample period (NVML on CUDA). The device-wide figures are
     // null where the backend's driver does not report them.
     private static (double AllocatedMb, double ReservedMb, double TotalMb, double? DeviceUsedMb, double? UtilizationPercent,
@@ -257,7 +257,14 @@ internal sealed class StreamingStepMonitorReporter<T>
         var snapshot = GpuMemoryStats.Snapshot(backend);
         double totalMb = backend.GlobalMemoryBytes / BytesPerMegabyte;
         double? deviceUsedMb = null;
-        if (GpuMemoryStats.TryGetDeviceMemory(backend, out long freeBytes, out long totalBytes))
+        // The management library's figure first (NVML on CUDA: nvidia-smi's memory.used). The driver's total - free
+        // is the fallback only: under Windows' display driver model it answers this process's budget, over a GB off.
+        if (GpuUtilization.TryReadDeviceMemory(backend, out long usedBytes, out long nvmlTotalBytes))
+        {
+            deviceUsedMb = usedBytes / BytesPerMegabyte;
+            totalMb = nvmlTotalBytes / BytesPerMegabyte;
+        }
+        else if (GpuMemoryStats.TryGetDeviceMemory(backend, out long freeBytes, out long totalBytes))
         {
             deviceUsedMb = (totalBytes - freeBytes) / BytesPerMegabyte;
             totalMb = totalBytes / BytesPerMegabyte;
