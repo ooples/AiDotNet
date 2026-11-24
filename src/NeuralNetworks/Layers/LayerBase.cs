@@ -9244,6 +9244,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
 
+        // Registered state lives as long as the layer. A lazily built buffer is often created on the device during
+        // the first forward, inside a TensorScope that frees every GPU result it saw created when it ends (a compiled
+        // step's sizing forward, a detached GAN forward); hand it back to its own lifetime so no open scope frees it.
+        AiDotNet.Tensors.Engines.TensorScope.Detach(tensor);
+
         lock (_bufferRegistrationLock)
         {
             if (_disposed)
