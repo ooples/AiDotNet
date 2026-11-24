@@ -702,7 +702,7 @@ public enum ControlType
 /// Zero convolutions are 1×1 convolutions initialized to zero for safe integration with pretrained models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ControlNetEncoder<T> : IParameterSource<T>
+public class ControlNetEncoder<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterLayoutSource
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -811,6 +811,45 @@ public class ControlNetEncoder<T> : IParameterSource<T>
     /// <summary>
     /// Initializes a convolutional layer's weights and biases to zero (zero convolution per paper).
     /// </summary>
+    /// <summary>
+    /// Describes the encoder as the one aggregate slot its flat GetParameters/SetParameters carry, with the
+    /// readiness its convolutions actually have.
+    /// </summary>
+    /// <remarks>
+    /// The down blocks are shape-resolved but lazy until the first encode, while the zero convolutions are
+    /// written at construction. Without this, the owning model's manifest fell back to treating a plain
+    /// parameter source as fully materialized, so it claimed ~24 M values (at FLUX's widths) that no layer
+    /// held. Copy-on-write Clone then saw "registered parameter surface proves more than the layer state
+    /// covers", declined to share, and fell back to copying every weight of the 12 B-parameter
+    /// ControlNet-FLUX model -- materializing it twice, which ran past the nightly's 10-minute hang limit
+    /// and was reported as a crashed test host (#2447).
+    /// </remarks>
+    IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> AiDotNet.Models.Parameters.IParameterLayoutSource.GetParameterLayout()
+    {
+        long materialized = 0;
+        foreach (var block in _downBlocks) materialized += MaterializedCount(block);
+        foreach (var zc in _zeroConvs) materialized += MaterializedCount(zc);
+
+        var readiness = ParameterCount == 0
+            ? AiDotNet.Models.Parameters.ParameterReadiness.ParameterFree
+            : materialized >= ParameterCount
+                ? AiDotNet.Models.Parameters.ParameterReadiness.Materialized
+                : AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized;
+        return new[]
+        {
+            new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+                "$", AiDotNet.Models.Parameters.ParameterSlotRole.Trainable, readiness, ParameterCount,
+                materializedParameterCount: System.Math.Min(materialized, ParameterCount))
+        };
+    }
+
+    private static long MaterializedCount(ConvolutionalLayer<T> layer)
+    {
+        long count = 0;
+        foreach (var slot in layer.GetParameterLayout()) count += slot.MaterializedParameterCount;
+        return count;
+    }
+
     private static void ZeroInitializeConv(ConvolutionalLayer<T> layer)
     {
         // Vector<T>(int length) zero-fills the backing storage by default — the underlying
