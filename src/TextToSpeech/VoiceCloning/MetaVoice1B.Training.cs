@@ -19,6 +19,17 @@ public partial class MetaVoice1B<T>
         => _first is null ? parameters : TapeTrainingStep<T>.CollectParameters(
             _first.FineTuneLayers(_options.FineTuneLastBlocks).Cast<ILayer<T>>().ToList());
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A token/mel pair does not carry the supervision this model trains on, and the base step would walk the layers
+    /// on bare token ids (a shape error deep in the stack); Train(TtsTrainingSample) is the entry point.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        ThrowIfTokenMelTrainingUnsupported();
+        return false;
+    }
+
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         if (_first is null || _optimizer is null) throw new NotSupportedException("MetaVoice fine-tuning requires the native causal GPT.");
