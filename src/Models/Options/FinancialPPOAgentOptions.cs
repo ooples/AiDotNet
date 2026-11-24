@@ -97,4 +97,20 @@ public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
     /// CleanRL clips at 0.5.
     /// </summary>
     public double? MaxGradientNorm { get; set; }
+
+    /// <summary>
+    /// Extra inputs only the critic sees (asymmetric actor-critic, Pinto et al. 2018); 0 (the default) gives the
+    /// standard agent, whose critic sees exactly the actor's observation.
+    /// </summary>
+    /// <remarks>
+    /// <para>When positive, the critic's input is the observation followed by this many privileged values (for example
+    /// information available while training but not when acting), and experience must be stored with
+    /// <c>FinancialPPOAgent.StoreExperienceWithPrivilegedCritic</c>. The policy never sees the privileged values, so
+    /// acting needs only the observation. The critic is a baseline: it does not depend on the action, so it lowers the
+    /// variance of the advantage without biasing the Monte Carlo policy gradient (Baisero and Amato 2022 show the
+    /// observation must stay in the critic's input for the bootstrapped case, which this layout keeps).</para>
+    /// <para>The critic architecture's input size must be <c>StateSize + PrivilegedCriticInputSize</c>; the critic's
+    /// inputs are normalized by their own running statistics.</para>
+    /// </remarks>
+    public int PrivilegedCriticInputSize { get; set; }
 }

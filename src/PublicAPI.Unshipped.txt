@@ -26630,3 +26630,6 @@ AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Te
 AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.get -> bool
 AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.init -> void
 override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.BuildObservation(int step) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
