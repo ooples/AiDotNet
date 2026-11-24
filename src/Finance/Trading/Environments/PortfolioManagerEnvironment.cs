@@ -385,22 +385,35 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             return observation;
         }
 
-        double value = ToDouble(_portfolioValue);
-        bool valid = IsFiniteValue(value) && value > 0;
         int offset = WindowSize * NumAssets;
         int row = Math.Min(Math.Max(step, 0), MarketData.Shape[0] - 1);
         var prices = MarketData.Data.Span.Slice(row * NumAssets, _tradableCount);
         var units = _positions.AsSpan();
         var target = observation.AsWritableSpan();
+
+        // The book marked at THIS row, for both ratios. _portfolioValue is the valuation the step just rewarded, at
+        // the row before the one observed here: dividing positions marked at this row by it mixed two valuations
+        // (5 units bought at 100 out of 1,000, observed at 200, read weight 1.0 and cash 0.5; they are 2/3 and 1/3).
+        // _portfolioValue itself is left alone: the reward is computed from it.
+        double cashHeld = ToDouble(_cash);
+        double value = cashHeld;
+        Span<double> marked = _tradableCount <= 256 ? stackalloc double[_tradableCount] : new double[_tradableCount];
         for (int i = 0; i < _tradableCount; i++)
         {
             double u = ToDouble(units[i]);
             double price = ToDouble(prices[i]);
-            double weight = valid && u != 0 && IsFiniteValue(price) && price > 0 ? u * price / value : 0.0;
+            marked[i] = u != 0 && IsFiniteValue(price) && price > 0 ? u * price : 0.0;
+            value += marked[i];
+        }
+
+        bool valid = IsFiniteValue(value) && value > 0;
+        for (int i = 0; i < _tradableCount; i++)
+        {
+            double weight = valid ? marked[i] / value : 0.0;
             target[offset + i] = FromDouble(IsFiniteValue(weight) ? MathPolyfill.Clamp(weight, -10.0, 10.0) : 0.0);
         }
 
-        double cash = valid ? ToDouble(_cash) / value : 0.0;
+        double cash = valid ? cashHeld / value : 0.0;
         target[offset + NumAssets] = FromDouble(IsFiniteValue(cash) ? MathPolyfill.Clamp(cash, -10.0, 10.0) : 0.0);
         return observation;
     }
