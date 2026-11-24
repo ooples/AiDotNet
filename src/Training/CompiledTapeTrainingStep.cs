@@ -53,6 +53,16 @@ public static partial class CompiledTapeTrainingStep<T>
             _previousForceFresh = previousForceFresh;
         }
 
+        /// <summary>
+        /// The same fresh, exact-size allocations for the calling thread only, without the process-wide gate. A
+        /// data-parallel step runs collectives inside the scope (the vote that engages the in-plan update, the plan's
+        /// gradient exchange), and ranks that are threads of one process (an in-memory backend) then deadlock on the
+        /// gate: the rank holding it waits in a collective for its peer, which waits for the gate, until the collective
+        /// times out. The thread-scoped policy needs no gate, as no other thread's pooling changes.
+        /// </summary>
+        public static IDisposable? EnterOnThisThread(bool required)
+            => required ? TensorPool.ForceFreshAllocationsScope(true) : null;
+
         public static FirstCompiledStepAllocationScope Enter(bool required)
         {
             if (!required)
@@ -2956,7 +2966,8 @@ public static partial class CompiledTapeTrainingStep<T>
             var compositeKey = GetOrBuildCompositeShapeKey(input._shape, target._shape, shapeChanged);
             ICompiledTrainingPlan<T> plan;
             Tensor<T> lossOutput;
-            using (FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
+            // Thread-scoped: this block runs collectives (see EnterOnThisThread).
+            using (FirstCompiledStepAllocationScope.EnterOnThisThread(_configuredPlan is null || shapeChanged))
             {
                 bool compiledNow = false;
                 using (var stepRandom = CompiledStepRandom<T>.BeginRecording())

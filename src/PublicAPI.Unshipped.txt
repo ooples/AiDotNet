@@ -26662,3 +26662,5 @@ const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMil
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.get -> int
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set -> void
 static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!
+AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.get -> AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode
+AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.set -> void

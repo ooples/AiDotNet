@@ -342,7 +342,7 @@ internal sealed class FusedTrainingSession<T>
         }
         using var autocast = mixedPrecision is not null
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine autocastEngine
-                ? autocastEngine.EnterMatMulAutocast(mixedPrecision.MatMulPrecision)
+                ? autocastEngine.EnterMatMulAutocast(mixedPrecision.MatMulPrecision, mixedPrecision.MatMulAutocastMode)
                 : null;
         _mixedPrecision = mixedPrecision;
         return TryStepCore(request, out loss, out lossTensor);

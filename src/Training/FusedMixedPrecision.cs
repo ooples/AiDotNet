@@ -14,6 +14,9 @@ internal sealed class FusedMixedPrecision
     /// <summary>The precision matrix products multiply in.</summary>
     public required PrecisionMode MatMulPrecision { get; init; }
 
+    /// <summary>How the products' operands reach that precision (MixedPrecisionConfig.MatMulAutocastMode).</summary>
+    public AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode MatMulAutocastMode { get; init; }
+
     /// <summary>The plan's loss scaling, or null for none (BF16 needs none).</summary>
     public LossScalingOptions? LossScaling { get; init; }
 
@@ -22,8 +25,8 @@ internal sealed class FusedMixedPrecision
 
     /// <summary>Identifies the configuration, so a change after the plan committed is refused rather than half-applied.</summary>
     public string Signature => LossScaling is { } s
-        ? $"{MatMulPrecision}|scale {s.InitialScale} x{s.GrowthFactor}/{s.BackoffFactor} every {s.GrowthInterval} in [{s.MinScale},{s.MaxScale}] dynamic={s.Dynamic}"
-        : $"{MatMulPrecision}|no scaling";
+        ? $"{MatMulPrecision}/{MatMulAutocastMode}|scale {s.InitialScale} x{s.GrowthFactor}/{s.BackoffFactor} every {s.GrowthInterval} in [{s.MinScale},{s.MaxScale}] dynamic={s.Dynamic}"
+        : $"{MatMulPrecision}/{MatMulAutocastMode}|no scaling";
 
     /// <summary>
     /// The fused-path form of <paramref name="config"/>, or null with <paramref name="reason"/> when it has none (FP8,
@@ -49,6 +52,7 @@ internal sealed class FusedMixedPrecision
         return new FusedMixedPrecision
         {
             MatMulPrecision = precision,
+            MatMulAutocastMode = config.MatMulAutocastMode,
             HostScaler = scaler,
             LossScaling = scales
                 ? new LossScalingOptions

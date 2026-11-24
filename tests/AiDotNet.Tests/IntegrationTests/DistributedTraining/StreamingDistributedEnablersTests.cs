@@ -499,6 +499,97 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
         }
     }
 
+    // Two in-process ranks (threads of one process) run the compiled data-parallel update to the end and stay in step.
+    // The first compiled step used to hold a process-wide allocation gate across the update's collectives: the rank
+    // holding it waited in the vote for its peer, which waited for the gate, until the collective timed out.
+    [Fact(Timeout = 180000)]
+    public async Task CompiledDataParallelUpdate_TwoInProcessRanks_TrainWithoutDeadlock_AndAgree()
+    {
+        var init = CreateInitialWeights(seed: 123);
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 16, seed: 555);   // global batch 8: two full steps
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var opt = CreateAdamOptimizer(lr: 0.01, enableClipping: false, maxGradNorm: 1.0);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                    .ConfigureModel(model)
+                    .ConfigureOptimizer(opt)
+                    .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                    .ConfigureGpuAcceleration(CpuOnlyConfig())
+                    .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                    .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        Seed = 777,
+                        MaxSteps = 6,
+                        DataParallelUpdateInCompiledPlan = true,
+                    })
+                    .BuildAsync();
+                return model.GetParameters().ToArray();
+            })).ToArray();
+            var all = Task.WhenAll(tasks);
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(150))));
+            var results = await all;
+            Assert.Equal(results[0], results[1]);
+            Assert.NotEqual(init.ToArray(), results[0]);
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    // The compiled data-parallel update needs every rank to have a batch. A tail step that leaves one rank empty must
+    // fail on every rank, agreed before any rank enters the plan's exchange: a rank that threw alone would leave its peer
+    // waiting in the gradient all-reduce until the collective timeout.
+    [Fact(Timeout = 120000)]
+    public async Task CompiledDataParallelUpdate_TailStepWithAnEmptyRank_FailsOnEveryRankWithoutHanging()
+    {
+        var init = CreateInitialWeights(seed: 123);
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 9, seed: 555);   // global batch 8: the tail is 1 sample
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var opt = CreateAdamOptimizer(lr: 0.01, enableClipping: false, maxGradNorm: 1.0);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                try
+                {
+                    await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                        .ConfigureModel(model)
+                        .ConfigureOptimizer(opt)
+                        .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                        .ConfigureGpuAcceleration(CpuOnlyConfig())
+                        .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                        .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                        {
+                            Seed = 777,
+                            MaxSteps = 4,
+                            DataParallelUpdateInCompiledPlan = true,
+                        })
+                        .BuildAsync();
+                    return "completed";
+                }
+                catch (NotSupportedException ex) when (ex.Message.Contains("received no samples"))
+                {
+                    return "refused";
+                }
+            })).ToArray();
+            var all = Task.WhenAll(tasks);
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(90))));
+            Assert.All(await all, outcome => Assert.Equal("refused", outcome));
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
     #endregion
 
     #region (b) Uneven Micro-Batches + Token-Weighted Reduction + Tail Batches

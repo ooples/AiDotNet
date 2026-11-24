@@ -350,6 +350,22 @@ dotnet test --filter "DistributedTraining"
 - **Parameter Sharding**: Parameters distributed evenly and completely
 - **Gradient Synchronization**: Gradients averaged correctly
 
+## Resuming from a Checkpoint
+
+A checkpoint records each stochastic layer's random draw counters (dropout and other masks), so a resumed run draws the
+same masks the uninterrupted run would have drawn. The dropout base seed derives from the configured `Seed`.
+
+A checkpoint saved by a version that predates the draw counters still resumes, with a trace warning:
+
+```
+Checkpoint '<id>' records no dropout draw counters (it predates them); the model's N stochastic layer(s) restart their mask sequence on resume.
+```
+
+Training continues correctly, but the masks after the resume restart their sequence instead of continuing it, so the
+run is not bit-identical to one that never stopped. A model without dropout or other stochastic layers is unaffected
+and gets no warning. To get exact continuation, save a new checkpoint with the current version before you depend on
+reproducibility.
+
 ## Future Enhancements
 
 ### Phase 5 (Future Work)
