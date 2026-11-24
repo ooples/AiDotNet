@@ -78,9 +78,9 @@ public sealed class PretrainedBf16StreamingTests : IDisposable
 
         var report = WeightRegistry.GetStreamingReport();
         Assert.True(report.RegisteredEntryCount > 0, "no weights registered with the streaming store");
-        // bf16: 2 bytes per parameter (fp32 would be 4).
-        Assert.True(report.ResidentBytes <= 2L * net.ParameterCount,
-            $"resident {report.ResidentBytes} B for {net.ParameterCount} parameters");
+        // Every parameter is in the store (the experts and attention inside the decoder blocks included), at 2 bytes
+        // each (bf16; fp32 would be 4).
+        Assert.Equal(2L * net.ParameterCount, report.ResidentBytes);
         Assert.Equal(resident.Length, streamed.Length);
         for (int i = 0; i < resident.Length; i++)
             Assert.True(Math.Abs(resident[i] - streamed[i]) <= 1e-12, $"[{i}] {streamed[i]} vs {resident[i]}");

@@ -12455,41 +12455,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // goes to the pinned-host allocator, not the GC heap), so we
         // only enable the streaming-allocator hint for Streaming.
         bool useStreamingAlloc = _registrationLifetime == WeightLifetime.Streaming;
+        var visited = new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance);
 
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
             layer.SetStreamingAllocatorRecursively(useStreamingAlloc);
-            // Configuration is an observation boundary, not a materialization boundary. Generated
-            // GetTrainableParameters() initializes constructor-sized lazy layers on the way past;
-            // doing that here allocated and initialized every Q/K/V/O matrix in a foundation model
-            // before its first forward. Besides making configuration take tens of seconds, it defeated
-            // streaming's layer-at-a-time peak-memory contract. Register only tensors that already
-            // exist; the first-forward allocation path uses the streaming allocator and the refresh
-            // pass registers each tensor after it materializes.
-            foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
-            {
-                if (tensor is null || tensor.Length == 0) continue;
-                // Already-registered tensors (StreamingPoolHandle >= 0
-                // from a prior RegisterWeight) MUST be skipped on the
-                // refresh pass: a re-register would re-enter the
-                // streaming branch, hit SerializeToBytes on a tensor
-                // whose storage was already dropped by the first
-                // register's DropStorageForStreaming, and throw
-                // ArgumentOutOfRangeException from AsSpan(). Idempotency
-                // gate.
-                if (tensor.StreamingPoolHandle >= 0) continue;
-                // CRITICAL: set Lifetime BEFORE RegisterWeight. The
-                // registry's switch early-returns for Lifetime=Default,
-                // so without this assignment every register call is a
-                // silent no-op and the streaming pool never tracks the
-                // tensor. _registrationLifetime is set in
-                // ConfigureWeightLifetime to Streaming (disk-backed) or
-                // GpuOffload (pinned-host) based on whether the user
-                // wired in a real GPU offload allocator.
-                tensor.Lifetime = _registrationLifetime;
-                WeightRegistry.RegisterWeight(tensor);
-            }
+            RegisterLayerTensorsRecursively(layer, visited);
         }
 
         // Composite models often own trainable layers outside of the
@@ -12503,13 +12475,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (extra is null) continue;
             extra.SetStreamingAllocatorRecursively(useStreamingAlloc);
-            foreach (var tensor in extra.GetTrainableParametersWithoutMaterialization())
-            {
-                if (tensor is null || tensor.Length == 0) continue;
-                if (tensor.StreamingPoolHandle >= 0) continue;
-                tensor.Lifetime = _registrationLifetime;
-                WeightRegistry.RegisterWeight(tensor);
-            }
+            RegisterLayerTensorsRecursively(extra, visited);
         }
 
         // Some networks own RAW trainable tensors directly on the
@@ -12530,6 +12496,50 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             tensor.Lifetime = _registrationLifetime;
             WeightRegistry.RegisterWeight(tensor);
         }
+    }
+
+    /// <summary>
+    /// Registers <paramref name="layer"/>'s own trainable tensors and, recursively, those of its sub-layers. A
+    /// layer's trainable view lists only the tensors it owns, so a composite block (a decoder block holding its
+    /// attention, norms and a mixture of experts holding its router and experts) registered nothing but its own
+    /// direct tensors: an OLMoE-1B-7B network registered 4 of its tensors (0.41 GB) and kept the rest of its 6.9B
+    /// parameters out of the store.
+    /// </summary>
+    private void RegisterLayerTensorsRecursively(LayerBase<T> layer, HashSet<LayerBase<T>> visited)
+    {
+        if (!visited.Add(layer)) return;
+        // Configuration is an observation boundary, not a materialization boundary. Generated
+        // GetTrainableParameters() initializes constructor-sized lazy layers on the way past;
+        // doing that here allocated and initialized every Q/K/V/O matrix in a foundation model
+        // before its first forward. Besides making configuration take tens of seconds, it defeated
+        // streaming's layer-at-a-time peak-memory contract. Register only tensors that already
+        // exist; the first-forward allocation path uses the streaming allocator and the refresh
+        // pass registers each tensor after it materializes.
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // Already-registered tensors (StreamingPoolHandle >= 0
+            // from a prior RegisterWeight) MUST be skipped on the
+            // refresh pass: a re-register would re-enter the
+            // streaming branch, hit SerializeToBytes on a tensor
+            // whose storage was already dropped by the first
+            // register's DropStorageForStreaming, and throw
+            // ArgumentOutOfRangeException from AsSpan(). Idempotency
+            // gate.
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            // CRITICAL: set Lifetime BEFORE RegisterWeight. The
+            // registry's switch early-returns for Lifetime=Default,
+            // so without this assignment every register call is a
+            // silent no-op and the streaming pool never tracks the
+            // tensor. _registrationLifetime is set in
+            // ConfigureWeightLifetime to Streaming (disk-backed) or
+            // GpuOffload (pinned-host) based on whether the user
+            // wired in a real GPU offload allocator.
+            tensor.Lifetime = _registrationLifetime;
+            WeightRegistry.RegisterWeight(tensor);
+        }
+        foreach (var sub in layer.GetSubLayers())
+            if (sub is LayerBase<T> child) RegisterLayerTensorsRecursively(child, visited);
     }
 
     // ---------------------------------------------------------------------
