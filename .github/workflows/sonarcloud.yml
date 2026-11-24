@@ -973,8 +973,9 @@ jobs:
         if: steps.tooling.outputs.changed != 'false'
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
         # job before any matrix output is written; a step timeout converts it into outcome=failure,
-        # which the gate below turns into a full-matrix run.
-        timeout-minutes: 5
+        # which the gate below turns into a full-matrix run. Ten minutes: the self-tests take 2.5-4 minutes, and
+        # retried artifact downloads (curl 403/416/503) took a 5-minute budget past its end (run 45403161723).
+        timeout-minutes: 10
         shell: pwsh
         run: |
           ./tools/TestImpact/Select-Shards.ps1 -SelfTest
