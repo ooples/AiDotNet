@@ -26676,3 +26676,10 @@ override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.Bu
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig.NormTopKProb.get -> bool?
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.ConfigureProjectionNorm(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryNormWeight, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! keyNormWeight, double epsilon) -> void
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.UsesProjectionNorm.get -> bool
+*REMOVED*AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, int sharedFfnDim = 0) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation, int sharedFfnDim) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, int sharedFfnDim = 0, bool normalizeTopK = true) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.NormalizeTopK.get -> bool

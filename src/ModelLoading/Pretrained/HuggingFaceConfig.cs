@@ -93,6 +93,10 @@ public sealed class HuggingFaceConfig
     /// <summary>End-of-sequence token id, when declared.</summary>
     public int? EosTokenId { get; private init; }
 
+    /// <summary>Whether an MoE router renormalizes its kept top-k probabilities (<c>norm_topk_prob</c>); null when
+    /// absent (the architecture's own default applies: Mixtral always renormalizes, OLMoE and Qwen2-MoE do not).</summary>
+    public bool? NormTopKProb { get; private init; }
+
     /// <summary>Parses a <c>config.json</c> from its JSON text.</summary>
     /// <param name="json">The raw JSON contents.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="json"/> is null/empty.</exception>
@@ -165,6 +169,7 @@ public sealed class HuggingFaceConfig
             SharedExpertIntermediateSize = OptionalInt(root, "shared_expert_intermediate_size") ?? 0,
             BosTokenId = OptionalInt(root, "bos_token_id"),
             EosTokenId = OptionalInt(root, "eos_token_id"),
+            NormTopKProb = (bool?)root["norm_topk_prob"],
         };
     }
 
