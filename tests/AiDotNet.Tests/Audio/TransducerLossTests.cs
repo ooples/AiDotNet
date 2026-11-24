@@ -132,6 +132,34 @@ public class TransducerLossTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task TokenAndDuration_DurationsLongerThanTheUtterance_AreJumpsNoPathTakes()
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var labels = new[] { 2 };
+        var durations = new[] { 0, 1, 2, 3, 4 };   // Parakeet-TDT's durations, on a 3-frame utterance
+        var lattice = TdtLattice(3, labels.Length + 1, 4, durations.Length, seed: 23);
+        Tensor<double> grad;
+        double loss;
+        using (var tape = new GradientTape<double>())
+        {
+            var value = TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, durations, labels, 0);
+            loss = value[0];
+            grad = tape.ComputeGradients(value, new[] { lattice })[lattice];
+        }
+        Assert.Equal(-Math.Log(TdtBruteForce(lattice, 4, durations, labels, 0, 0)), loss, 10);
+        const double h = 1e-6;
+        for (int i = 0; i < lattice.Length; i++)
+        {
+            var plus = lattice.Clone(); plus.Data.Span[i] += h;
+            var minus = lattice.Clone(); minus.Data.Span[i] -= h;
+            double numeric = (TransducerLoss.ComputeTokenAndDuration(engine, plus, 4, durations, labels, 0)[0]
+                - TransducerLoss.ComputeTokenAndDuration(engine, minus, 4, durations, labels, 0)[0]) / (2 * h);
+            Assert.Equal(numeric, grad.Data.Span[i], 6);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task TokenAndDuration_IsTheNegativeLogOfEveryPath_AndItsGradientMatchesFiniteDifferences()
     {
         await Task.Yield();
