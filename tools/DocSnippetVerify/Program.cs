@@ -538,12 +538,41 @@ List<string> FacadeViolations(string source, string fileKey)
 
         bool isModel = receiver.AllInterfaces.Any(i => i.Name is "IFullModel" or "IPredictiveModel")
                        || receiver.Name is "IFullModel" or "IPredictiveModel";
-        if (isModel)
+        if (isModel && IsModelContractCall(model.GetSymbolInfo(call).Symbol as IMethodSymbol, receiver))
         {
             found.Add($"{fileKey}: {receiver.Name}.{name}(...) — train and predict through AiModelResult");
         }
     }
     return found;
+}
+
+// Whether a Train/Predict/Fit call binds to the model contract AiModelBuilder drives: a member of IModel,
+// IFullModel or IPredictiveModel (Train(TInput, TOutput), Predict(TInput), ...), or an override or
+// implementation of one. A domain overload with no facade route, such as a TTS model's
+// Train(TtsTrainingSample<T>), is not reaching past the facade, because the facade has nothing to call.
+// An unresolved call (no single symbol) still counts, so an ambiguous call is never excused.
+static bool IsModelContractCall(IMethodSymbol? method, ITypeSymbol receiver)
+{
+    if (method is null) return true;
+    static bool IsContractInterface(INamedTypeSymbol? type) =>
+        type is { TypeKind: TypeKind.Interface, Name: "IModel" or "IFullModel" or "IPredictiveModel" };
+    if (IsContractInterface(method.ContainingType)) return true;
+
+    var chain = new List<IMethodSymbol>();
+    for (var m = method; m is not null; m = m.OverriddenMethod) chain.Add(m.OriginalDefinition);
+
+    foreach (var iface in receiver.AllInterfaces.Where(IsContractInterface))
+    {
+        foreach (var member in iface.GetMembers(method.Name).OfType<IMethodSymbol>())
+        {
+            if (receiver.FindImplementationForInterfaceMember(member) is IMethodSymbol impl &&
+                chain.Any(c => SymbolEqualityComparer.Default.Equals(c, impl.OriginalDefinition)))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 // ── Completing a documented partial class ──
