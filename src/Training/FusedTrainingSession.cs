@@ -389,8 +389,10 @@ internal sealed class FusedTrainingSession<T>
         }
 
         bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
-        // The distributed step synchronizes, unscales and checks the gradients itself (DistributedTapeCoordinator).
-        if (isDistributed && _mixedPrecision is not null)
+        // The distributed step synchronizes, unscales and checks the gradients itself (DistributedTapeCoordinator),
+        // unless its update runs in the compiled plan, whose loss scaler checks the reduced gradient.
+        if (isDistributed && _mixedPrecision is not null
+            && _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator.CompiledOptimizerUpdate: false })
             return Decline("mixed precision with distributed training (the coordinator unscales on the eager tape)");
         if (isDistributed)
             AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.RejectUnsupportedRoute("distributed");

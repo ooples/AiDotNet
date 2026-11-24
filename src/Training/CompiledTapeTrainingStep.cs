@@ -1879,6 +1879,7 @@ public static partial class CompiledTapeTrainingStep<T>
                 distributedReplayTolerance,
                 new DistributedFusedConfig(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule,
                     fusedExtras, l2Regularization, l2AfterClip, useBf16Moments, int8MomentBlockSize),
+                mixedPrecision,
                 out lossValue);
         }
         // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
@@ -2253,7 +2254,8 @@ public static partial class CompiledTapeTrainingStep<T>
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
                 if (s_fusedDebug)
                     FdStep($"configured: clip {maxGradNorm}, l2 {l2Regularization} after clip {l2AfterClip}, type {optimizerType}, "
-                        + $"wd {weightDecay}, eps {epsilon}, schedule {(lrSchedule is null ? "none" : lrSchedule.GetType().Name)}");
+                        + $"wd {weightDecay}, eps {epsilon}, schedule {(lrSchedule is null ? "none" : lrSchedule.GetType().Name)}, "
+                        + $"mixed precision {mixedPrecision?.Signature ?? "off"}");
                 _configuredMaxGradNorm = maxGradNorm;
                 if (l2AfterClip)
                 {
@@ -2824,6 +2826,7 @@ public static partial class CompiledTapeTrainingStep<T>
         double? distributedEagerReplayLoss,
         double distributedReplayTolerance,
         DistributedFusedConfig fusedConfig,
+        FusedMixedPrecision? mixedPrecision,
         out T lossValue)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -2832,7 +2835,10 @@ public static partial class CompiledTapeTrainingStep<T>
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
 
-        if (distNet.ActiveMixedPrecisionContext is not null)
+        // Mixed precision has no reference path here (the coordinator's mixed precision is the eager tape's), so it runs
+        // only with the update in the plan, whose loss scaler checks the reduced gradient (every rank's verdict alike).
+        bool planMixedPrecision = mixedPrecision is not null && distCoord.CompiledOptimizerUpdate;
+        if (distNet.ActiveMixedPrecisionContext is not null && !planMixedPrecision)
         {
             Fd("distributed compiled step declined: mixed precision active");
             return false;
@@ -2880,7 +2886,7 @@ public static partial class CompiledTapeTrainingStep<T>
                 // its last batch with weight 0 (no tokens), so it contributes nothing to the sum and gets the same update.
                 collectivesStarted = true;
                 lossValue = RunDistributedCompiledUpdate(distNet, distCoord, idlePlan, parameters, eagerOptimizer,
-                    fusedConfig, maxGradNorm, localTokens: 0, verifyDistributedReplay, distributedEagerReplayLoss,
+                    fusedConfig, mixedPrecision, maxGradNorm, localTokens: 0, verifyDistributedReplay, distributedEagerReplayLoss,
                     distributedReplayTolerance, onGradients);
                 CurrentState.planOptimizerStep = -2;
                 _fusedStepCount++;
@@ -2891,7 +2897,13 @@ public static partial class CompiledTapeTrainingStep<T>
             {
                 collectivesStarted = true;
                 if (engaged is null && distCoord.CompiledOptimizerUpdate)
+                {
                     AgreeOnDistributedCompiledUpdate(distCoord, localReady: false);
+                    if (planMixedPrecision)
+                        throw new InvalidOperationException(
+                            "Mixed-precision data-parallel training runs only with the update in the compiled plan, which this "
+                            + "rank cannot engage without a batch on the first step.");
+                }
                 if (verifyDistributedReplay
                     && !VerifyDistributedReplayAgreement(
                         distCoord,
@@ -2972,19 +2984,24 @@ public static partial class CompiledTapeTrainingStep<T>
                 if (!useInPlanUpdate && distCoord.CompiledOptimizerUpdate)
                 {
                     collectivesStarted = true;
-                    bool eligible = DistributedCompiledUpdateEligible(distNet, distCoord, eagerOptimizer, fusedConfig);
+                    bool eligible = DistributedCompiledUpdateEligible(distNet, distCoord, eagerOptimizer, fusedConfig, mixedPrecision);
+                    // Mixed precision engages from the first step: there is no reference step to run before it.
                     useInPlanUpdate = AgreeOnDistributedCompiledUpdate(distCoord,
-                        localReady: !compiledNow && !verifyDistributedReplay && eligible);
+                        localReady: eligible && (planMixedPrecision || (!compiledNow && !verifyDistributedReplay)));
                     if (!useInPlanUpdate)
                         Fd($"distributed in-plan update not engaged this step (traced now={compiledNow}, replay check="
                             + $"{verifyDistributedReplay}, eligible={eligible}, every rank ready=false)");
+                    if (!useInPlanUpdate && planMixedPrecision)
+                        throw new InvalidOperationException(
+                            "Mixed-precision data-parallel training runs only with the update in the compiled plan, and not "
+                            + "every rank could engage it this step (a rank without a batch or an ineligible configuration).");
                 }
                 if (useInPlanUpdate)
                 {
                     collectivesStarted = true;
                     long tokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
                     lossValue = RunDistributedCompiledUpdate(distNet, distCoord, plan, parameters, eagerOptimizer,
-                        fusedConfig, maxGradNorm, tokens, verifyDistributedReplay, distributedEagerReplayLoss,
+                        fusedConfig, mixedPrecision, maxGradNorm, tokens, verifyDistributedReplay, distributedEagerReplayLoss,
                         distributedReplayTolerance, onGradients);
                     _configuredPlan = plan;
                     CurrentState.planOptimizerStep = -2;

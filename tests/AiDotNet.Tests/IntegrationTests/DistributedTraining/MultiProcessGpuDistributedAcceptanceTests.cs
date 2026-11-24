@@ -105,6 +105,8 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public string? CudaVisibleDevicesOverride { get; set; }
         // Runs the DDP optimizer update inside the compiled plan (AIDOTNET_DDP_COMPILED_UPDATE=1 in the worker).
         public bool CompiledUpdate { get; set; }
+        // Mixed precision (the library default: FP16 matmuls, dynamic loss scaling).
+        public bool MixedPrecision { get; set; }
         public string ResultPath { get; set; } = string.Empty;
     }
 
@@ -142,6 +144,8 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public List<BenchmarkSeedRecord> BenchmarkRecords { get; set; } = new();
         public long CompiledUpdateSteps { get; set; }
         public string? FusedMissReason { get; set; }
+        public float LossScale { get; set; }
+        public long OverflowSteps { get; set; }
         public long GradientExchanges { get; set; }
         public long UpdateGraphLaunches { get; set; }
         public bool SplitStepGraph { get; set; }
@@ -385,6 +389,8 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
                     ResumeFromLatestCheckpoint = spec.ResumeFromCheckpoint,
                 });
 
+            if (spec.MixedPrecision) builder.ConfigureMixedPrecision();
+
             if (!string.IsNullOrWhiteSpace(spec.CheckpointDir))
             {
                 var ckpt = new CheckpointManager<float, Tensor<float>, Tensor<float>>(spec.CheckpointDir);
@@ -415,6 +421,12 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
             result.FinalLearningRate = optimizer.GetCurrentLearningRate();
             var (updateSteps, exchanges, updateLaunches, split) = AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics;
             result.CompiledUpdateSteps = updateSteps;
+            if (AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanIdentity is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanLossScaling scaledPlan
+                && scaledPlan.ReadLossScaleState() is { } scaleState)
+            {
+                result.LossScale = scaleState.Scale;
+                result.OverflowSteps = scaleState.OverflowSteps;
+            }
             result.FusedMissReason = "route: " + model.LastTrainingRoute + " | gate: " + model.LastFusedGateMissReason + " | session: " + model.FusedSession.LastMissReason;
             result.GradientExchanges = exchanges;
             result.UpdateGraphLaunches = updateLaunches;
@@ -1307,6 +1319,69 @@ public static class Program
         Assert.True(ranksFused < 1e-6, $"compiled DDP ranks diverged by {ranksFused}");
         Assert.True(fusedVsEager < 1e-4, $"compiled DDP diverged from eager DDP by {fusedVsEager}");
         Assert.True(fusedVsSingle < 1e-4, $"compiled DDP diverged from one process by {fusedVsSingle}");
+    }
+
+    /// <summary>
+    /// DDP + mixed precision with the update in the plan: two processes on one GPU against one process on the full
+    /// batch, both with the library's default mixed precision (FP16 matmuls, dynamic loss scaling in the plan). The
+    /// loss scaler checks the reduced gradient, so the ranks' scales and skipped steps agree. Autocast converts the
+    /// GEMM operands to FP16 element by element and accumulates in FP32, so splitting the batch changes only the FP32
+    /// summation order (and the GEMM algorithm each shape gets) -- measured 5.1e-5 after 12 steps against FP16's own
+    /// 4.2e-3 effect, so the bound is 1e-4 -- provided both shapes' GEMMs autocast at all: measured
+    /// 2026-11-24, a one-process batch-8 run of this model moves only 6.4e-5 under FP16 (batch 16: 4.1e-3), so the
+    /// local batch here is 16 (global 32) and the test also checks that FP16 changed the result.
+    /// </summary>
+    [SkippableFact(Timeout = 400000)]
+    public async Task TwoProcessDdp_CompiledUpdateWithMixedPrecision_MatchesOneProcessMixedPrecision()
+    {
+        string? device = Environment.GetEnvironmentVariable("AIDOTNET_TEST_DDP_GPU");
+        Skip.If(string.IsNullOrWhiteSpace(device), "AIDOTNET_TEST_DDP_GPU (a CUDA_VISIBLE_DEVICES value) is not set.");
+        const int samples = 64, steps = 12, initSeed = 151, dataSeed = 2027;
+        WorkerSpec Spec(string backend, int rank, int world, int batch, string session, bool mixed = true) => new()
+        {
+            Mode = "StreamingTrain", BackendKind = backend, Rank = rank, WorldSize = world, SessionName = session,
+            UseGpu = true, CudaVisibleDevicesOverride = device, SampleCount = samples, LocalBatchSize = batch,
+            MaxSteps = steps, DataSeed = dataSeed, InitWeightSeed = initSeed, CompiledUpdate = world > 1,
+            MixedPrecision = mixed,
+        };
+
+        WorkerResult single, singleFp32;
+        using (var w = StartWorkerProcess(Spec("SingleProcess", 0, 1, 32, "unused")))
+            single = RequireSucceededResult(await WaitForWorkerAsync(w, TimeSpan.FromSeconds(120)), "1 process MP, batch 32");
+        using (var w = StartWorkerProcess(Spec("SingleProcess", 0, 1, 32, "unused", mixed: false)))
+            singleFp32 = RequireSucceededResult(await WaitForWorkerAsync(w, TimeSpan.FromSeconds(120)), "1 process FP32, batch 32");
+        string session = "mp_cumx_" + Guid.NewGuid().ToString("N");
+        using var r0 = StartWorkerProcess(Spec("SharedMemory", 0, 2, 16, session));
+        using var r1 = StartWorkerProcess(Spec("SharedMemory", 1, 2, 16, session));
+        var (o0, o1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(150));
+        foreach (var line in (o0.Stderr ?? string.Empty).Split('\n'))
+            if (line.Contains("[FUSED-MISS]")) _output.WriteLine("rank 0 " + line.TrimEnd());
+        var d0 = RequireSucceededResult(o0, "DDP MP rank 0");
+        var d1 = RequireSucceededResult(o1, "DDP MP rank 1");
+
+        double ranks = MaxAbsDiff(d0.FinalWeights, d1.FinalWeights);
+        double vsSingle = MaxAbsDiff(single.FinalWeights, d0.FinalWeights);
+        double moved = MaxAbsDiff(single.FinalWeights, InitialWorkerWeights(single.FinalWeights.Length, initSeed));
+        double precisionEffect = MaxAbsDiff(single.FinalWeights, singleFp32.FinalWeights);
+        _output.WriteLine($"MP device={device}: updateSteps r0={d0.CompiledUpdateSteps} r1={d1.CompiledUpdateSteps} "
+            + $"updateGraphLaunches={d0.UpdateGraphLaunches} split={d0.SplitStepGraph}");
+        _output.WriteLine($"MP loss scale: 1proc {single.LossScale} (overflow steps {single.OverflowSteps}), "
+            + $"rank0 {d0.LossScale} ({d0.OverflowSteps}), rank1 {d1.LossScale} ({d1.OverflowSteps})");
+        _output.WriteLine($"MP max|w| diffs: rank0-rank1={ranks:E3} compiled DDP-1proc={vsSingle:E3}; moved {moved:E3}; "
+            + $"MSE 1proc {single.FinalMse:F6}, DDP {d0.FinalMse:F6}, 1proc FP32 {singleFp32.FinalMse:F6}; "
+            + $"FP16 effect (1proc MP - 1proc FP32) {precisionEffect:E3}; DDP MP - 1proc FP32 {MaxAbsDiff(d0.FinalWeights, singleFp32.FinalWeights):E3}");
+
+        Assert.True(d0.CompiledUpdateSteps == steps && d1.CompiledUpdateSteps == steps,
+            $"the in-plan update ran {d0.CompiledUpdateSteps} / {d1.CompiledUpdateSteps} of {steps} steps");
+        Assert.True(d0.SplitStepGraph && d0.UpdateGraphLaunches > 0, "the update did not run as the captured update graph");
+        Assert.True(d0.LossScale > 0 && single.LossScale > 0, "no loss scaler state was read");
+        Assert.Equal(d0.LossScale, d1.LossScale);
+        Assert.Equal(d0.OverflowSteps, d1.OverflowSteps);
+        Assert.Equal(single.LossScale, d0.LossScale);
+        Assert.True(moved > 1e-2, "training must move the weights");
+        Assert.True(ranks < 1e-6, $"MP DDP ranks diverged by {ranks}");
+        Assert.True(precisionEffect > 1e-3, $"FP16 moved the one-process run by only {precisionEffect}: its GEMMs did not autocast");
+        Assert.True(vsSingle < 1e-4, $"MP DDP diverged from one MP process by {vsSingle}");
     }
 
     private static float[] InitialWorkerWeights(int length, int seed)

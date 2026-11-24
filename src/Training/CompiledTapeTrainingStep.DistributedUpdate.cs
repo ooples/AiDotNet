@@ -64,11 +64,12 @@ public static partial class CompiledTapeTrainingStep<T>
         NeuralNetworks.NeuralNetworkBase<T> distNet,
         DistributedTapeCoordinator<T> distCoord,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> eagerOptimizer,
-        in DistributedFusedConfig config)
+        in DistributedFusedConfig config,
+        FusedMixedPrecision? mixedPrecision)
     {
         string? why = !distCoord.CompiledOptimizerUpdate ? "not opted in"
             : distCoord.Strategy is not Enums.DistributedStrategy.DDP ? "strategy " + distCoord.Strategy + " shards the optimizer"
-            : distNet.ActiveMixedPrecisionContext is not null ? "eager mixed precision is active"
+            : distNet.ActiveMixedPrecisionContext is not null && mixedPrecision is null ? "mixed precision has no fused form"
             : config.UseBf16Moments || config.Int8MomentBlockSize > 0 ? "reduced-precision moments"
             : distNet.GetDistributedOptimizerRegularizer(eagerOptimizer) is not null ? "the optimizer regularizes its gradients"
             : null;
@@ -197,6 +198,7 @@ public static partial class CompiledTapeTrainingStep<T>
         Tensor<T>[] parameters,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> eagerOptimizer,
         in DistributedFusedConfig config,
+        FusedMixedPrecision? mixedPrecision,
         double maxGradNorm,
         long localTokens,
         bool verifyDistributedReplay,
@@ -248,7 +250,8 @@ public static partial class CompiledTapeTrainingStep<T>
                 linked?.MarkPendingFusedOptimizerStateInstalled();
                 Fd($"distributed in-plan update engaged: eager optimizer state {(linked is null ? "NOT installed" : "installed")}, "
                     + $"plan optimizer step {concrete.OptimizerStep}, clip {maxGradNorm}, l2 {config.L2Regularization} after clip {config.L2AfterClip}, "
-                    + $"type {config.Type}, wd {config.WeightDecay}, eps {config.Epsilon}");
+                    + $"type {config.Type}, wd {config.WeightDecay}, eps {config.Epsilon}, mixed precision {mixedPrecision?.Signature ?? "off"}, "
+                    + $"engine {AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name}");
                 if (eagerOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> exported)
                     AttachFusedOptimizerStateLink(plan, exported);
             }
@@ -256,6 +259,10 @@ public static partial class CompiledTapeTrainingStep<T>
             state.Plan = plan;
             state.LayoutChecked = false;
         }
+
+        // The plan's loss scaling (and its carry-over to a new shape's plan), as the single-process fused step sets it.
+        if (!TryConfigureMixedPrecision(plan, mixedPrecision))
+            throw _lastFallbackException ?? new InvalidOperationException("The compiled plan refused the loss scaling.");
 
         state.LocalTokens = localTokens;
         state.Exchanged = false;
