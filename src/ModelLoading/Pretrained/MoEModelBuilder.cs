@@ -82,7 +82,7 @@ public static class MoEModelBuilder<T>
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple, inputSize: 1, outputSize: vocab, layers: layers);
-        var network = new NeuralNetwork<T>(architecture);
+        var network = LlamaModelBuilder<T>.CreateImportNetwork(architecture);
 
         // Warmup materializes embed/attention/final-norm/lm-head + the router; a warmup forward only routes
         // to the top-k experts, so materialize every expert explicitly before loading their weights.

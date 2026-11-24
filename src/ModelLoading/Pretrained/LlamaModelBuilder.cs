@@ -114,7 +114,7 @@ public static class LlamaModelBuilder<T>
             taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple,
             inputSize: 1, outputSize: vocab, layers: layers);
-        var network = new NeuralNetwork<T>(architecture);
+        var network = LlamaModelBuilder<T>.CreateImportNetwork(architecture);
 
         // Materialize every lazily-shaped weight (GQA projections, FFN dense matrices, LM head) with a
         // single warmup forward, so the per-layer SetParameters/gamma writes below have real tensors to fill.
@@ -175,6 +175,20 @@ public static class LlamaModelBuilder<T>
         var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: numHeads * headDim);
         var attnParams = Concat(qT, kT, vT, oT, new T[hidden]); // trailing zeros = output bias
         attn.SetParameters(new Vector<T>(attnParams));
+    }
+
+    /// <summary>
+    /// Creates the network a builder loads checkpoint weights into, with automatic weight streaming off. A builder runs a
+    /// warmup forward to materialize lazy weights and then writes the checkpoint into them; above the auto-streaming
+    /// threshold (500M parameters) that warmup, in inference mode, moved every weight into a read-only bf16 streaming
+    /// store, and the load's first SetParameters threw (a read-only streaming store cannot be written). Imported weights
+    /// stay resident at full precision; a caller that wants streaming configures it explicitly after the load.
+    /// </summary>
+    internal static NeuralNetwork<T> CreateImportNetwork(NeuralNetworkArchitecture<T> architecture)
+    {
+        var network = new NeuralNetwork<T>(architecture);
+        network.DisableAutoStreaming();
+        return network;
     }
 
     // Reads an HF [outDim, inDim] q/k projection, optionally reorders each head's headDim output rows from the

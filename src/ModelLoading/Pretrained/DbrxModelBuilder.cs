@@ -83,7 +83,7 @@ public static class DbrxModelBuilder<T>
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple, inputSize: 1, outputSize: vocab, layers: layers);
-        var network = new NeuralNetwork<T>(architecture);
+        var network = LlamaModelBuilder<T>.CreateImportNetwork(architecture);
 
         var warmup = new Tensor<T>(new[] { 1, warmupSequenceLength });
         for (int p = 0; p < warmupSequenceLength; p++) warmup[0, p] = NumOps.Zero;

@@ -435,6 +435,68 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape.ToArray());
         }
 
+        /// <summary>
+        /// A builder warms the network up (inference) and then writes the checkpoint into its weights. Above the
+        /// auto-streaming threshold that warmup moved the weights into a read-only bf16 streaming store and the load
+        /// threw (OLMoE-1B-7B, 6.9B parameters). The failure mode, reproduced with a 1-parameter threshold, and the
+        /// builders' networks, which keep auto-streaming off so the load can write.
+        /// </summary>
+        [Fact]
+        public void Builders_load_weights_into_networks_that_do_not_auto_stream()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""MixtralForCausalLM""],
+                ""model_type"": ""mixtral"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""num_local_experts"": 4, ""num_experts_per_tok"": 2,
+                ""tie_word_embeddings"": false }");
+            var disabled = typeof(NeuralNetworkBase<double>).GetField("_streamingAutoDetectDisabled",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+            // The failure mode: a warmed-up network over the threshold rejects the load's write.
+            var embedding = new EmbeddingLayer<double>(6, 8);
+            var head = new DenseLayer<double>(6, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+            var architecture = new NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration,
+                complexity: AiDotNet.Enums.NetworkComplexity.Simple, inputSize: 1, outputSize: 6,
+                layers: new List<AiDotNet.Interfaces.ILayer<double>> { embedding, head });
+            var streamed = new NeuralNetwork<double>(architecture);
+            streamed.ApplyAutoDetectThresholdOverride(1);
+            // The warmup forward (inference) latches a read-only bf16 store and the load's write then throws. (On the CPU
+            // engine the warmup itself already throws: FusedLinear reads the weight through GetDataArray, which demands a
+            // writable store.)
+            var write = new Vector<double>(Fill((int)embedding.ParameterCount, 5));
+            Assert.ThrowsAny<InvalidOperationException>(() =>
+            {
+                streamed.Predict(new Tensor<double>(new[] { 1, 2 }));
+                embedding.SetParameters(write);
+            });
+
+            // The builders' networks keep auto-streaming off.
+            int h = 8, ffn = 16, vocab = 6, heads = 2, headDim = 4, E = 4;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 50),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 51),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 52),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 53),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(heads * headDim * h, 54),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(heads * headDim * h, 55),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 56),
+                ["model.layers.0.block_sparse_moe.gate.weight"] = Fill(E * h, 57),
+                ["model.norm.weight"] = Fill(h, 90),
+                ["lm_head.weight"] = Fill(vocab * h, 91),
+            };
+            for (int e = 0; e < E; e++)
+            {
+                string ep = $"model.layers.0.block_sparse_moe.experts.{e}.";
+                t[ep + "w1.weight"] = Fill(ffn * h, 60 + e);
+                t[ep + "w3.weight"] = Fill(ffn * h, 70 + e);
+                t[ep + "w2.weight"] = Fill(h * ffn, 80 + e);
+            }
+            var built = MoEModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.True((bool)disabled.GetValue(built)!);
+        }
+
         [Fact]
         public void Builder_Mixtral_MoE_BuildsAndForwards()
         {
