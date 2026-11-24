@@ -415,7 +415,113 @@ internal static class MaskSetPredictionLoss
     /// <param name="segments">The image's ground-truth segments.</param>
     /// <param name="sampled">The sampled pixels (<see cref="SamplePixels"/>).</param>
     /// <param name="temperature">The similarity temperature tau (0.3).</param>
+    /// <remarks>
+    /// <para>
+    /// The target <c>same[k, j] / max(sum_k same[k, j], 1)</c> with <c>same = y^T y</c> is never materialized: with
+    /// <c>logsoftmax[k, j] = sim[k, j] - LSE_j</c>, the cross-entropy of column <c>j</c> is
+    /// <c>(c_j LSE_j - sum_m y[m, j] (g_m . f_j) / tau) / max(c_j, 1)</c>, where <c>c_j = sum_k same[k, j]</c> and
+    /// <c>g_m = sum_k y[m, k] f_k</c> is segment <c>m</c>'s summed sampled feature. It is the same function, but it
+    /// needs only the column log-sum-exp of the similarity, which <see cref="SimilarityLogSumExp"/> computes a block of
+    /// columns at a time, so no <c>[S, S]</c> tensor (the similarity, its log-softmax, the target built in double, their
+    /// product, or any of their gradients) is ever held. kMaX-DeepLab evaluates the loss for every decoder stage at
+    /// S = 4096, where those tensors made instance discrimination about 7 GB of the model's 9.8 GB census peak, past the
+    /// census's 8 GiB ceiling.
+    /// </para>
+    /// <para>Half and BFloat16 keep the dense form, whose column sums accumulate in float.</para>
+    /// </remarks>
     internal static Tensor<T> InstanceDiscrimination<T>(Tensor<T> features, Segments<T> segments, int[] sampled, double temperature)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (sampled is null) throw new ArgumentNullException(nameof(sampled));
+        if (!(temperature > 0)) throw new ArgumentOutOfRangeException(nameof(temperature), "The temperature must be positive.");
+        if (IsNarrowFloat<T>()) return DenseInstanceDiscrimination(features, segments, sampled, temperature);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (sampled.Length == 0) return Tensor<T>.CreateDefault(new[] { 1 }, ops.Zero);
+        var index = new Tensor<int>(sampled, new[] { sampled.Length });
+        var f = engine.TensorIndexSelect(features, index, 1);                                                  // [D, S]
+        // The loss's constants, in double: c_j = sum_m y[m, j] * (sum_k y[m, k]) and its clamp at 1.
+        var yd = engine.TensorIndexSelect(segments.Masks, index, 1).Cast<double>();                           // [M, S]
+        var segmentTotals = engine.ReduceSum(yd, new[] { 1 }, true);                                           // [M, 1]
+        var columnTotals = engine.ReduceSum(
+            engine.TensorMultiply(yd, engine.TensorBroadcastTo(segmentTotals, yd.Shape.ToArray())), new[] { 0 }, false); // [S]
+        var clamped = engine.TensorClampMin(columnTotals, 1.0);
+        var lseWeight = engine.TensorDivide(columnTotals, clamped).Cast<T>();                                  // [S]
+        var alignedWeight = engine.TensorDivide(
+            Tensor<double>.CreateDefault(clamped.Shape.ToArray(), 1.0 / temperature), clamped).Cast<T>();     // [S]
+        var y = yd.Cast<T>();                                                                                  // [M, S]
+
+        var logSumExp = SimilarityLogSumExp(f, temperature);                                                   // [S]
+        var segmentSums = engine.TensorMatMul(f, engine.TensorTranspose(y));                                   // [D, M]
+        var aligned = engine.ReduceSum(
+            engine.TensorMultiply(y, engine.TensorMatMul(engine.TensorTranspose(segmentSums), f)), new[] { 0 }, false); // [S]
+        var losses = engine.TensorSubtract(
+            engine.TensorMultiply(lseWeight, logSumExp), engine.TensorMultiply(alignedWeight, aligned));      // [S]
+        int nonZero = engine.TensorSum(engine.TensorGreaterThan(engine.StopGradient(losses), ops.Zero).Cast<int>());
+        return WideMean(losses, Math.Max(1, nonZero));
+    }
+
+    /// <summary>Columns of the similarity computed together by <see cref="SimilarityLogSumExp"/>.</summary>
+    private const int SimilarityColumnBlock = 256;
+
+    /// <summary>
+    /// <c>LSE_j = log sum_k exp(f_k . f_j / tau)</c> for the columns <c>f_j</c> of <paramref name="f"/> <c>[D, S]</c>,
+    /// recorded on the tape as one node. Forward and backward walk <see cref="SimilarityColumnBlock"/> columns at a
+    /// time, so the largest tensor either holds is <c>[S, 256]</c>; the backward recomputes each block's softmax
+    /// <c>P</c> and adds <c>(1 / tau) (f_J (P g_J)^T)</c> to every column and <c>(1 / tau) f (P g_J)</c> to the block's own.
+    /// </summary>
+    internal static Tensor<T> SimilarityLogSumExp<T>(Tensor<T> f, double temperature)
+    {
+        if (f is null) throw new ArgumentNullException(nameof(f));
+        if (f.Rank != 2) throw new ArgumentException("Features must be [D, S].", nameof(f));
+        var engine = AiDotNetEngine.Current;
+        var scale = MathHelper.GetNumericOperations<T>().FromDouble(1.0 / temperature);
+        int d = f.Shape[0], s = f.Shape[1];
+        Tensor<T> logSumExp;
+        using (new NoGradScope<T>())
+        {
+            var transposed = engine.TensorTranspose(f);                                                        // [S, D]
+            var parts = new List<Tensor<T>>();
+            for (int start = 0; start < s; start += SimilarityColumnBlock)
+            {
+                int n = Math.Min(SimilarityColumnBlock, s - start);
+                var block = engine.TensorMultiplyScalar(
+                    engine.TensorMatMul(transposed, engine.TensorSlice(f, new[] { 0, start }, new[] { d, n })), scale); // [S, n]
+                parts.Add(engine.TensorLogSumExp(block, 0, false));
+            }
+            logSumExp = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
+        }
+
+        DifferentiableOps.RecordUnary("KMaXSimilarityLogSumExp", logSumExp, f, (gradOutput, inputs, _, _, eng, grads) =>
+        {
+            var x = inputs[0];
+            var xt = eng.TensorTranspose(x);
+            Tensor<T>? everyColumn = null;
+            var ownColumns = new List<Tensor<T>>();
+            for (int start = 0; start < s; start += SimilarityColumnBlock)
+            {
+                int n = Math.Min(SimilarityColumnBlock, s - start);
+                var columns = eng.TensorSlice(x, new[] { 0, start }, new[] { d, n });                       // [D, n]
+                var probability = eng.TensorSoftmax(eng.TensorMultiplyScalar(eng.TensorMatMul(xt, columns), scale), 0); // [S, n]
+                var upstream = eng.TensorBroadcastTo(
+                    eng.Reshape(eng.TensorSlice(gradOutput, new[] { start }, new[] { n }), new[] { 1, n }), new[] { s, n });
+                var weighted = eng.TensorMultiplyScalar(eng.TensorMultiply(probability, upstream), scale);  // [S, n]
+                var toRows = eng.TensorMatMul(columns, eng.TensorTranspose(weighted));                       // [D, S]
+                everyColumn = everyColumn is null ? toRows : eng.TensorAdd(everyColumn, toRows);
+                ownColumns.Add(eng.TensorMatMul(x, weighted));                                               // [D, n]
+            }
+
+            var own = ownColumns.Count == 1 ? ownColumns[0] : eng.TensorConcatenate(ownColumns.ToArray(), 1);
+            DifferentiableOps.AccumulateGrad(grads, x, eng.TensorAdd(everyColumn!, own), eng);
+        });
+        return logSumExp;
+    }
+
+    /// <summary>
+    /// <see cref="InstanceDiscrimination"/> with the target matrix materialized: the direct transcription of the
+    /// paper's cross-entropy, used for Half and BFloat16 and as the reference the factored form is tested against.
+    /// </summary>
+    internal static Tensor<T> DenseInstanceDiscrimination<T>(Tensor<T> features, Segments<T> segments, int[] sampled, double temperature)
     {
         if (features is null) throw new ArgumentNullException(nameof(features));
         if (sampled is null) throw new ArgumentNullException(nameof(sampled));

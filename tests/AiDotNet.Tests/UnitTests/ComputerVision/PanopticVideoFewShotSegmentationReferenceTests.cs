@@ -728,6 +728,40 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     }
 
     [Fact]
+    public void KMaXInstanceDiscrimination_FactoredForm_MatchesTheDenseTargetInValueAndGradient()
+    {
+        // The factored loss never builds the [S, S] target (#2390: kMaX-DeepLab's census peak passed 8 GiB holding one per
+        // decoder stage). It must stay the same function: three segments of unequal size, pixels left unsampled,
+        // un-normalized features so no cancellation hides a wrong term, and more sampled pixels than one 256-column block.
+        const int d = 3, hw = 600;
+        var rng = RandomHelper.CreateSeededRandom(2390);
+        var values = new double[d * hw];
+        for (int i = 0; i < values.Length; i++) values[i] = rng.NextDouble() * 2 - 1;
+        var masks = new double[3 * hw];
+        for (int p = 0; p < hw; p++) masks[(p % 7 < 3 ? 0 : p % 7 < 5 ? 1 : 2) * hw + p] = 1;
+        var segments = new MaskSetPredictionLoss.Segments<double>(T(new[] { 3, hw }, masks), new[] { 0, 1, 2 });
+        int[] sampled = Enumerable.Range(0, hw).Where(p => p % 11 != 4).ToArray();
+
+        (double Loss, double[] Gradient) Run(bool dense)
+        {
+            var features = T(new[] { d, hw }, values);
+            using var tape = new GradientTape<double>();
+            var loss = dense
+                ? MaskSetPredictionLoss.DenseInstanceDiscrimination(features, segments, sampled, 0.3)
+                : MaskSetPredictionLoss.InstanceDiscrimination(features, segments, sampled, 0.3);
+            var gradient = tape.ComputeGradients(loss, new[] { features })[features];
+            return (loss.ToArray()[0], gradient.ToArray());
+        }
+
+        var (denseLoss, denseGradient) = Run(dense: true);
+        var (factoredLoss, factoredGradient) = Run(dense: false);
+        Assert.Equal(denseLoss, factoredLoss, 10);
+        Assert.Equal(denseGradient.Length, factoredGradient.Length);
+        for (int i = 0; i < denseGradient.Length; i++) Assert.Equal(denseGradient[i], factoredGradient[i], 10);
+        Assert.Contains(factoredGradient, g => g != 0);
+    }
+
+    [Fact]
     public void KMaXSemanticLoss_IsTheMeanCrossEntropyOfTheSampledPixels()
     {
         // Two classes, two pixels: pixel 0 is class 0 with logits (1, 0), pixel 1 class 1 with logits (0, 0).
