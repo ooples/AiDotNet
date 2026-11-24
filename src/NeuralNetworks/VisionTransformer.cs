@@ -147,7 +147,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="numLayers">The number of transformer encoder layers (default: 12).</param>
     /// <param name="numHeads">The number of attention heads (default: 12).</param>
     /// <param name="mlpDim">The dimension of the feed-forward network (default: 3072).</param>
-    /// <param name="lossFunction">The loss function to use (defaults to categorical cross-entropy if null).</param>
+    /// <param name="lossFunction">The loss function, applied to the head's logits (defaults to cross-entropy with logits if null).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a Vision Transformer with your specifications.
@@ -187,7 +187,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         int numClasses,
         ILossFunction<T>? lossFunction = null,
         VisionTransformerOptions? options = null)
-        : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VisionTransformerOptions();
         Options = _options;
@@ -353,18 +353,18 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
         // #2384: the same engine-op forward as training. The element-by-element CLS/positional/slice loops this
         // replaced read every activation back to the host one indexer call at a time: half of a GPU b32 Predict.
-        return Accelerate(input, () => ForwardFromImages(input, batchSize));
+        // The head emits logits (ForwardForTraining's output, which the loss consumes); Predict returns the class
+        // probabilities documented above.
+        return Accelerate(input, () => Engine.Softmax(ForwardFromImages(input, batchSize), axis: -1));
     }
 
     /// <summary>
     /// Tape-tracked forward pass for training. Mirrors <see cref="Predict"/> but
     /// uses Engine ops (TensorConcatenate, TensorAdd, Reshape, TensorSlice)
-    /// so gradients flow back through the patch embedding, transformer encoder
-    /// stack, and classification head. Cls token and positional embeddings are
-    /// wrapped as constant Tensor&lt;T&gt; for the tape so the rest of the network
-    /// trains correctly — they retain their initialized values during training,
-    /// matching the common ViT fine-tuning practice of freezing the cls token
-    /// and positional embeddings while updating the encoder/head.
+    /// so gradients flow back through the patch embedding, CLS token, positional
+    /// embeddings, transformer encoder stack, final LayerNorm and classification
+    /// head. Returns the head's logits, which the loss consumes; <see cref="PredictCore"/>
+    /// applies the softmax.
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
