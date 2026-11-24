@@ -1081,13 +1081,40 @@ Assert-Contract ($sonarSkipReport.Contains('if: ${{ !fromJSON(env.SONAR_ANALYZE)
     'the SonarCloud status has no lightweight success path when analysis is skipped'
 foreach ($stepName in @(
     'Set up JDK 17', 'Checkout code', 'Setup .NET 10.0', 'Cache NuGet packages',
-    'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
+    'Set up pinned Tensors validation feed', 'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
     'Download current-run coverage artifacts', 'Restore dependencies', 'Begin SonarCloud analysis',
     'Build source generator first', 'Build (Release)', 'End SonarCloud analysis'
 )) {
     $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
     Assert-Contract ($step.Contains('fromJSON(env.SONAR_ANALYZE')) `
         "SonarCloud step '$stepName' can run for a non-runtime change or outside the nightly run"
+}
+# Every Sonar step except the skip report must carry the analysis gate, so a step added later cannot
+# run in the skipped-analysis path. Run 45309453002 ran the local Tensors feed action there without a
+# checkout and failed the job.
+foreach ($stepHeader in [Regex]::Matches($sonarJob, '(?m)^      - name: (?<name>[^\r\n]+?)\s*\r?$')) {
+    $stepName = $stepHeader.Groups['name'].Value
+    if ($stepName -ceq 'Report skipped analysis') { continue }
+    $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
+    Assert-Contract ([Regex]::IsMatch($step, '(?m)^        if: .*fromJSON\(env\.SONAR_ANALYZE\)')) `
+        "SonarCloud step '$stepName' runs in the skipped-analysis path"
+}
+# A local action (uses: ./...) is read from the checkout. In every job, a step that uses one must carry
+# the checkout step's condition, or the action is missing whenever that checkout is skipped.
+foreach ($jobHeader in [Regex]::Matches($validation, '(?m)^  (?<job>[A-Za-z0-9_-]+):\s*\r?$')) {
+    $jobName = $jobHeader.Groups['job'].Value
+    $jobBlock = Get-JobBlock -WorkflowText $validation -Job $jobName
+    foreach ($localStep in [Regex]::Matches($jobBlock,
+            '(?ms)^      - name: (?<name>[^\r\n]+?)\s*\r?\n(?:(?!^      - ).)*?^        uses: \./')) {
+        $checkout = [Regex]::Match($jobBlock.Substring(0, $localStep.Index),
+            '(?ms)^      - name: [^\r\n]+\r?\n(?:(?!^      - ).)*?^        uses: actions/checkout@(?:(?!^      - ).)*', 'RightToLeft')
+        $checkoutIf = [Regex]::Match($checkout.Value, '(?m)^        if: (?<cond>[^\r\n]+?)\s*\r?$')
+        if (-not $checkoutIf.Success) { continue }
+        $condition = $checkoutIf.Groups['cond'].Value -replace '^\$\{\{\s*|\s*\}\}$', ''
+        $stepBlock = Get-StepBlock -JobBlock $jobBlock -Step $localStep.Groups['name'].Value
+        Assert-Contract ($stepBlock.Contains($condition)) `
+            "job '$jobName' step '$($localStep.Groups['name'].Value)' uses a local action without its checkout condition '$condition'"
+    }
 }
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
 # library and tests for three frameworks under analyzers and never finished inside the job limit, and a
