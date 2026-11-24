@@ -16,6 +16,10 @@ foreach ($slice in $slices) {
     if ([string]$slice -notmatch '^\d+$') { throw 'Paper slice identity is not a nonnegative integer.' }
     $name = "Paper fidelity - slice $slice"; $slug = "Paper_fidelity_slice_$slice"; $expected += $name
     $source = Join-Path $ArtifactRoot "paper-fidelity-results-pr-$slice"
+    # actions/download-artifact extracts a pattern's ONLY match straight into its path, with no directory named after
+    # the artifact. A one-slice plan therefore lands in the root; its summary still has to name this slice below.
+    if (-not (Test-Path -LiteralPath $source -PathType Container) -and $slices.Count -eq 1 -and
+        (Test-Path -LiteralPath (Join-Path $ArtifactRoot 'slice-summary.json') -PathType Leaf)) { $source = $ArtifactRoot }
     if (-not (Test-Path -LiteralPath $source -PathType Container)) { continue }
     $target = Join-Path $Destination "coverage-$TestedSha-$slug"
     New-Item -ItemType Directory -Path $target -Force | Out-Null

@@ -151,8 +151,11 @@ try {
     Require ($combined.summary.totalTests -eq 2 -and $combined.summary.failedResultRecords -eq 1 -and $combined.summary.missingResultShards -eq 7 -and
         $combined.paperFidelity.available -and $combined.paperFidelity.expectedSlices -eq 3 -and $combined.paperFidelity.counts.totalTests -eq 9 -and
         $combined.paperFidelity.notExecutedTests -eq 1 -and -not $combined.baselinePublishable) 'Aggregate lost failed primary/paper cases, mixed the separate counts, or certified diagnostics.'
-    foreach ($mode in @('complete', 'four-of-five', 'retry-extra', 'missing-summary')) {
-        $root = Join-Path $scratch "paper-$mode"; $artifact = Join-Path $root 'artifacts/paper-fidelity-results-pr-0'
+    # 'extracted-to-root': actions/download-artifact puts a pattern's only match straight into its path, with no
+    # directory named after the artifact, which is the layout every one-slice plan produces.
+    foreach ($mode in @('complete', 'extracted-to-root', 'four-of-five', 'retry-extra', 'missing-summary')) {
+        $root = Join-Path $scratch "paper-$mode"
+        $artifact = if ($mode -eq 'extracted-to-root') { Join-Path $root 'artifacts' } else { Join-Path $root 'artifacts/paper-fidelity-results-pr-0' }
         $output = Join-Path $root 'output'; $input = Join-Path $root 'input'; $plan = Join-Path $root 'classes.txt'
         $classes = @($classList[0..4]); Put $plan ($classes -join "`n")
         for ($chunk = 1; $chunk -le 5; $chunk++) {
@@ -168,7 +171,7 @@ try {
         Require ($run.ExitCode -eq 0) ("Paper $mode report failed: " + $run.Text)
         $result = Get-Content (Join-Path $output 'ledger.json') -Raw | ConvertFrom-Json
         $expectedTotal = if ($mode -eq 'four-of-five') { 4 } else { 5 }
-        $expectedStatus = if ($mode -eq 'complete') { 'Passed' } else { 'Incomplete' }
+        $expectedStatus = if ($mode -in @('complete', 'extracted-to-root')) { 'Passed' } else { 'Incomplete' }
         Require ($result.shards[0].total -eq $expectedTotal -and $result.shards[0].status -ceq $expectedStatus -and
             -not $result.baselinePublishable) "Paper $mode lost partial observations, inflated retries, or hid an incomplete chunk inventory."
     }
