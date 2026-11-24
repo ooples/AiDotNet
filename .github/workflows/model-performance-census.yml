@@ -214,6 +214,28 @@ jobs:
             }
           }
 
+          # Fixtures read reference data (tokenizers, author configs, recorded tensors) while they are
+          # constructed. The managed closure above carries none of it, so every such fixture failed in
+          # 'construct' with DirectoryNotFoundException. Ship it in both places the fixtures look:
+          # the test project's Content items next to the runner (AppContext.BaseDirectory/<dir>/ReferenceData),
+          # and the tracked source tree under tests/AiDotNet.Tests for the fixtures that walk up to the repo root.
+          $sourceRoot = [IO.Path]::GetFullPath($source).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          $content = Get-ChildItem -LiteralPath $source -Recurse -File |
+            Where-Object { $_.FullName.Substring($sourceRoot.Length) -match '(^|[\\/])ReferenceData[\\/]' }
+          foreach ($file in $content) {
+            $destination = Join-Path $bundle $file.FullName.Substring($sourceRoot.Length)
+            New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($destination)) | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination $destination
+          }
+          $tracked = @(git ls-files -- 'tests/AiDotNet.Tests/**/ReferenceData/**')
+          if ($LASTEXITCODE -ne 0 -or $tracked.Count -eq 0) { throw 'Could not list the tracked test reference data.' }
+          foreach ($relative in $tracked) {
+            $destination = Join-Path $bundle $relative
+            New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($destination)) | Out-Null
+            Copy-Item -LiteralPath $relative -Destination $destination
+          }
+          Write-Host "Bundled $($content.Count) output reference files and $($tracked.Count) tracked reference files."
+
           # The scoped inventory is what the shards run and what the verifier counts.
           Copy-Item -LiteralPath 'artifacts/model-performance/inventory/test-list.txt' `
             -Destination 'artifacts/model-performance/test-bundle/test-list.txt'
