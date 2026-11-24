@@ -276,6 +276,33 @@ public class StreamingStepMonitorTests
         Assert.False(optimizer.ComputeGradientNormEveryStep, "the default path must not add a reduction");
     }
 
+    [Fact(Timeout = 180000)]
+    public async Task FusedCompiledStepWithTheDefaultClip_ReportsTheNormThePlansClipComputed()
+    {
+        await Task.Yield();
+        // The fused compiled plan clips inside the plan; the reported norm is the one it computed for that clip (its
+        // value against the gradients is tested in AiDotNet.Tensors), so no reduction is added.
+        var (model, optimizer) = TinyModel(epochs: 2, eager: false, clip: true);
+        var monitor = new RecordingMonitor();
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureDataLoader(Loader())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = 11,
+                MonitorGradNorm = true,
+                MonitorResourceIntervalSeconds = 0,
+            })
+            .ConfigureTrainingMonitor(monitor)
+            .BuildAsync();
+
+        Assert.Equal(new[] { 10, 20 }, monitor.Steps("train_loss"));
+        Assert.Equal(new[] { 10, 20 }, monitor.Steps("grad_norm"));
+        Assert.All(monitor.Values("grad_norm"), v => Assert.True(v > 0 && !double.IsInfinity(v)));
+        Assert.False(optimizer.ComputeGradientNormEveryStep, "the fused path must not add a reduction");
+    }
+
     /// <summary>
     /// Wall time of a small streaming run with step reporting on (every 10 steps) and off, paired and interleaved.
     /// Prints the raw medians; asserts only that both arms trained.

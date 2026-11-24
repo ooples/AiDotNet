@@ -235,6 +235,28 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
+    /// <summary>
+    /// The global gradient norm the compiled plan of one of <paramref name="owner"/>'s slots computed for its clip in the
+    /// last step it took, when that plan has clipped since <paramref name="lastSeenSteps"/> (which is updated). Null
+    /// when no plan of the owner clipped since, or when the norm is on the device and <paramref name="allowDeviceRead"/>
+    /// is false (reading it waits for the step's work).
+    /// </summary>
+    internal static double? TryReadPlanGradientNorm(object owner, ref long lastSeenSteps, bool allowDeviceRead)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        foreach (var state in SnapshotStates(owner))
+        {
+            if (state.configuredPlan is not AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanGradientNorm norms)
+                continue;
+            long steps = norms.GradientNormSteps;
+            if (steps == 0 || steps == lastSeenSteps) continue;
+            lastSeenSteps = steps;
+            if (!allowDeviceRead) return null;
+            return norms.TryGetLastGradientNorm(out double norm) ? norm : null;
+        }
+        return null;
+    }
+
     /// <summary>Drops every compiled plan, optimizer moment and step counter of <paramref name="owner"/>.</summary>
     /// <param name="owner">The model (or, for owner-less callers, the first layer) the state belongs to.</param>
     internal static void Invalidate(object owner)

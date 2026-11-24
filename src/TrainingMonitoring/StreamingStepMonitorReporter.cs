@@ -207,14 +207,21 @@ internal sealed class StreamingStepMonitorReporter<T>
 
         var gpu = TryReadGpuMemory();
         // GPU memory goes out as metrics only: TrainingMonitor reads LogResourceUsage's gpuMemory as a percentage
-        // (above 95 is a critical issue, which stops the streaming loop), so a value in MB would end the run.
-        _monitor.LogResourceUsage(_sessionId, cpuPercent, workingSetMb, gpuUsage: null, gpuMemory: null);
+        // (above 95 is a critical issue, which stops the streaming loop), so a value in MB would end the run. The
+        // device's utilization is the percentage LogResourceUsage's gpuUsage takes.
+        _monitor.LogResourceUsage(_sessionId, cpuPercent, workingSetMb, gpuUsage: gpu?.UtilizationPercent, gpuMemory: null);
         if (gpu is { } g)
         {
             _monitor.LogMetric(_sessionId, "gpu_memory_allocated_mb", _numOps.FromDouble(g.AllocatedMb), step);
             _monitor.LogMetric(_sessionId, "gpu_memory_reserved_mb", _numOps.FromDouble(g.ReservedMb), step);
             if (g.TotalMb > 0)
                 _monitor.LogMetric(_sessionId, "gpu_memory_total_mb", _numOps.FromDouble(g.TotalMb), step);
+            if (g.DeviceUsedMb is double deviceUsed)
+                _monitor.LogMetric(_sessionId, "gpu_device_memory_used_mb", _numOps.FromDouble(deviceUsed), step);
+            if (g.UtilizationPercent is double utilization)
+                _monitor.LogMetric(_sessionId, "gpu_utilization_percent", _numOps.FromDouble(utilization), step);
+            if (g.MemoryUtilizationPercent is double memoryUtilization)
+                _monitor.LogMetric(_sessionId, "gpu_memory_utilization_percent", _numOps.FromDouble(memoryUtilization), step);
         }
     }
 
@@ -235,9 +242,12 @@ internal sealed class StreamingStepMonitorReporter<T>
         }
     }
 
-    // The GPU allocator's own accounting (GpuMemoryStats) for the active GPU engine's backend, and the device's
-    // total memory. Device-wide used/free (cuMemGetInfo) is not exposed publicly by AiDotNet.Tensors.
-    private static (double AllocatedMb, double ReservedMb, double TotalMb)? TryReadGpuMemory()
+    // The GPU allocator's own accounting (GpuMemoryStats) for the active GPU engine's backend; the device's memory in
+    // use by every process (total minus free, as the driver reports it) and its total; and the device's kernel and
+    // memory-traffic utilization over the driver's last sample period (NVML on CUDA). The device-wide figures are
+    // null where the backend's driver does not report them.
+    private static (double AllocatedMb, double ReservedMb, double TotalMb, double? DeviceUsedMb, double? UtilizationPercent,
+        double? MemoryUtilizationPercent)? TryReadGpuMemory()
     {
         if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpuEngine)
             return null;
@@ -245,9 +255,21 @@ internal sealed class StreamingStepMonitorReporter<T>
         if (backend is null)
             return null;
         var snapshot = GpuMemoryStats.Snapshot(backend);
-        return (snapshot.AllocatedBytes / BytesPerMegabyte,
-            snapshot.ReservedBytes / BytesPerMegabyte,
-            backend.GlobalMemoryBytes / BytesPerMegabyte);
+        double totalMb = backend.GlobalMemoryBytes / BytesPerMegabyte;
+        double? deviceUsedMb = null;
+        if (GpuMemoryStats.TryGetDeviceMemory(backend, out long freeBytes, out long totalBytes))
+        {
+            deviceUsedMb = (totalBytes - freeBytes) / BytesPerMegabyte;
+            totalMb = totalBytes / BytesPerMegabyte;
+        }
+        double? utilization = null, memoryUtilization = null;
+        if (GpuUtilization.TryRead(backend, out int gpuPercent, out int memoryPercent))
+        {
+            utilization = gpuPercent;
+            memoryUtilization = memoryPercent;
+        }
+        return (snapshot.AllocatedBytes / BytesPerMegabyte, snapshot.ReservedBytes / BytesPerMegabyte, totalMb,
+            deviceUsedMb, utilization, memoryUtilization);
     }
 
     private static int ClampToInt(long value) =>

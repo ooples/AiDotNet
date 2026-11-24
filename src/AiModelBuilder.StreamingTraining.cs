@@ -1586,8 +1586,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // to a host double on a CPU engine (free to read), on the device for a GPU engine (reading it waits for the
         // device, so only with MonitorGradNorm). Without a network clip, the optimizer's clip by norm (or Adam's
         // anomaly guard) reduces it; only when neither does is an extra reduction needed, and only with
-        // MonitorGradNorm. A step taken by a fused compiled plan reports no norm: the plan clips internally and
-        // AiDotNet.Tensors exposes no accessor for the norm it computed.
+        // MonitorGradNorm. A step taken by a fused compiled plan reports the norm the plan's own clip computed, which
+        // stays on the device until read, so only with MonitorGradNorm.
         bool networkClips = network is not null && network.MaxGradNormValue > 0.0;
         if (monitorGradNorm && !networkClips && gradientOptimizer is not null && !gradientOptimizer.ComputeGradientNormEveryStep)
         {
@@ -1597,8 +1597,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         long lastClipCount = network?.GradientClipCount ?? 0L;
         long lastOptimizerStepCount = gradientOptimizer?.TapeStepCount ?? 0L;
+        long lastPlanNormSteps = 0L;
         double? GradNorm()
         {
+            // A fused compiled plan that clipped since the last report took the step: its norm is the step's.
+            if (network is not null
+                && Training.CompiledTapeTrainingStep<T>.TryReadPlanGradientNorm(network, ref lastPlanNormSteps, monitorGradNorm)
+                    is double planNorm)
+                return planNorm;
+
             if (network is not null)
             {
                 long clipCount = network.GradientClipCount;
@@ -1610,8 +1617,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
 
-            // Only when the optimizer's tape step ran since the last report: a fused compiled plan steps without it,
-            // and AiDotNet.Tensors' compiled plan does not expose the norm it reduces for its clip.
+            // Only when the optimizer's tape step ran since the last report: a fused compiled plan steps without it.
             if (gradientOptimizer is not null)
             {
                 long stepCount = gradientOptimizer.TapeStepCount;
