@@ -98,6 +98,13 @@ def validate(path: Path, side: str, model: str, device: str, dataset_meta: dict,
 COLUMNS = ("model", "device", "dataset", "launch", "framework", "configuration", "epoch", "train_seconds",
            "samples_per_second", "train_loss", "test_accuracy", "cumulative_train_seconds", "eval_seconds",
            "data_wait_seconds", "parameters", "rss_mb_peak", "gpu_mem_mb_peak", "flags")
+# A side whose slowest launch's throughput is below its fastest's by more than this factor is flagged unstable: the
+# same rule as run_matrix.py's UNSTABLE_SPREAD for the main matrix.
+UNSTABLE_SPREAD = 1.5
+# Models whose AiDotNet GPU training is not bit-reproducible: identical runs at a locked, verified clock report
+# different losses from the first epoch (README, "Large-data runs"). For them, launches that disagree say nothing about
+# the hardware, so ai-launches-disagree is not raised.
+NONDETERMINISTIC_ON_GPU = frozenset({"gru", "vit"})
 
 
 def summarize(rows: list[dict]) -> list[dict]:
@@ -131,11 +138,15 @@ def summarize(rows: list[dict]) -> list[dict]:
         ai_rate = [ai[l]["samples"] / ai[l]["seconds"] for l in launches]
         pt_rate = [pt[l]["samples"] / pt[l]["seconds"] for l in launches]
         flags = set().union(*(ai[l]["flags"] | pt[l]["flags"] for l in launches))
-        # AiDotNet's GPU and CPU training is deterministic: every launch trains on the same data in the same order and
-        # must report the same loss and accuracy for every epoch. Launches that disagree computed different values for
-        # identical work, which on a healthy machine does not happen (a GPU fault, see the README).
-        if len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
+        # AiDotNet's CPU training, and its GPU training outside NONDETERMINISTIC_ON_GPU, is deterministic: every launch
+        # trains on the same data in the same order and must report the same loss and accuracy for every epoch.
+        # Launches that disagree computed different values for identical work, which on a healthy machine does not
+        # happen (a GPU fault, see the README).
+        deterministic = device != "cuda" or model not in NONDETERMINISTIC_ON_GPU
+        if deterministic and len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
             flags.add("ai-launches-disagree")
+        if max(ai_rate) / min(ai_rate) > UNSTABLE_SPREAD or max(pt_rate) / min(pt_rate) > UNSTABLE_SPREAD:
+            flags.add("unstable")
         summary.append(dict(
             model=model, device=device, dataset=dataset, launches=len(launches),
             samples_per_launch=round(ai[launches[0]]["samples"]),
@@ -155,13 +166,14 @@ def summarize(rows: list[dict]) -> list[dict]:
 
 def markdown(summary: list[dict]) -> str:
     lines = ["| Model | Device | Dataset | Samples per launch | AiDotNet samples/s | PyTorch samples/s (configuration) | "
-             "PyTorch time ÷ AiDotNet time, median (range) | Final test accuracy, AiDotNet / PyTorch |",
-             "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |"]
+             "PyTorch time ÷ AiDotNet time, median (range) | Final test accuracy, AiDotNet / PyTorch | Flags |",
+             "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |"]
     for s in summary:
         lines.append(f"| {s['model']} | {s['device']} | {s['dataset']} | {s['samples_per_launch']:,} | "
                      f"{s['ai_samples_per_second']:,.0f} | {s['torch_samples_per_second']:,.0f} (`{s['torch_configuration']}`) | "
                      f"{s['torch_time_over_ai']:.2f} ({s['ratio_min']:.2f}–{s['ratio_max']:.2f}) | "
-                     f"{s['ai_test_accuracy']:.2%} / {s['torch_test_accuracy']:.2%} |")
+                     f"{s['ai_test_accuracy']:.2%} / {s['torch_test_accuracy']:.2%} | "
+                     f"{', '.join(s['flags'].split(';')) if s['flags'] else ''} |")
     return "\n".join(lines) + "\n"
 
 
