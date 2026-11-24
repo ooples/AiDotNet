@@ -54,7 +54,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
+    /// <inheritdoc/>
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc/>
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>The convolutional trunk, shared with <see cref="ResNetNetwork{T}"/>.</summary>
@@ -99,8 +101,10 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return input;
     }
 
+    /// <inheritdoc/>
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input) => Trunk.Forward(Batched(input));
 
+    /// <inheritdoc/>
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
@@ -122,6 +126,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// <summary>Loads the trunk straight from <paramref name="source"/>.</summary>
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Trunk.LoadTorchWeights(source);
 
+    /// <inheritdoc/>
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
@@ -129,6 +134,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         foreach (var layer in Layers) BackboneSerialization.WriteLayerParameters(writer, (LayerBase<T>)layer);
     }
 
+    /// <inheritdoc/>
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (ResNetVariant)reader.ReadInt32();
@@ -144,6 +150,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => ExtractFeatures(input)[3];
 
     protected override void InitializeLayers()
@@ -163,6 +170,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -174,6 +182,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         }
     };
 
+    /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +

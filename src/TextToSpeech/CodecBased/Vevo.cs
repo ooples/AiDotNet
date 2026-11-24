@@ -36,6 +36,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceRate = 24000;
+/// var reference = Tensor&lt;float&gt;.CreateRandom(1, 3 * referenceRate);   // a few seconds of the target voice
+/// var sourceRate = 16000;
+/// var source = Tensor&lt;float&gt;.CreateRandom(1, 2 * sourceRate);         // the speech to convert
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new Vevo&lt;float&gt;(architecture, new VevoOptions());
 /// model.LoadReferenceWeights(new VevoCheckpoints { Directory = "Vevo", Hubert = "hubert-large-ll60k/pytorch_model.bin" });

@@ -35,6 +35,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -69,6 +70,7 @@ public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     // The encoder-decoder on the native path; null in ONNX mode or with custom layers.
     private OpenAiWhisperNetwork<T>? _network;
     internal OpenAiWhisperNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -144,8 +146,11 @@ public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("OLMoASR does not support streaming.");
 
     // Whisper's English encoding decodes when the vocabulary is its; otherwise each token is its vocabulary entry or code point.
@@ -197,10 +202,13 @@ public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     private Tensor<T> PromptLogits(Tensor<T> input) =>
         ForwardNativeWaveformBatch(input, _network, (net, wave) => net.Logits(Prompt(), net.Encode(Window(wave))));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return PromptLogits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : PromptLogits(input);
 
     // The text tokens a training target names: ids [length] below the special tokens, or one distribution per token
@@ -266,6 +274,7 @@ public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "OLMoASR-Native" : "OLMoASR-ONNX", Description = "OLMoASR: Whisper's encoder-decoder trained on open data (Ai2 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(OLMoASR<T>)); }

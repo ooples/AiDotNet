@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> DiffWave starts every synthesis from the same plain noise; PriorGrad starts from noise
 /// that is already loud where the speech is loud and quiet where it is quiet, so there is less left to learn.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PriorGrad vocoder with data-dependent adaptive prior
+/// // using mel-conditioned noise instead of isotropic Gaussian
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PriorGrad&lt;double&gt;(architecture, "priorgrad.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PriorGrad&lt;double&gt;(architecture, new PriorGradOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

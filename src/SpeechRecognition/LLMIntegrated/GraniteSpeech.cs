@@ -36,6 +36,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -77,6 +78,7 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private GraniteSpeechNetwork<T>? _network;
     internal GraniteSpeechNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -131,9 +133,13 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Granite-speech does not support streaming.");
 
     // Granite's tokenizer decodes when the vocabulary is Granite's; otherwise each token is its vocabulary entry or code point.
@@ -188,10 +194,13 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         ForwardNativeWaveformBatch(input, _network, (net, wave) =>
             net.FirstLogits(net.Prompt(net.Speech(Samples(wave), training), _options.SystemPrompt, _options.Instruction)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
 
     private int[] Labels(Tensor<T> target, int outputs, int excluded) =>
@@ -292,6 +301,7 @@ public partial class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "GraniteSpeech-Native" : "GraniteSpeech-ONNX", Description = "Granite-speech: conformer CTC encoder, window Q-Former and Granite LLM (IBM 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(GraniteSpeech<T>)); }

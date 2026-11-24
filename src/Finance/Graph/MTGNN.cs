@@ -79,7 +79,7 @@ namespace AiDotNet.Finance.Graph;
 /// var model = new MTGNN&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode: load pre-trained MTGNN model
-/// var onnxModel = new MTGNN&lt;double&gt;(architecture, "mtgnn_forecast.onnx");
+/// var onnxModel = new MTGNN&lt;double&gt;(architecture, "mtgnn_forecast.onnx", options: null, predefinedAdjacency: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]

@@ -36,6 +36,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new SpeechT5&lt;float&gt;(architecture, new SpeechT5Options());
 /// model.LoadReferenceWeights(new SpeechT5Checkpoints { Model = "speecht5_tts/pytorch_model.bin",

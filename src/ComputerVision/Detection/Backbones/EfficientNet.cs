@@ -123,6 +123,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => ExtractFeatures(input)[3];
 
     protected override void InitializeLayers()
@@ -153,6 +154,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         }
     };
 
+    /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");

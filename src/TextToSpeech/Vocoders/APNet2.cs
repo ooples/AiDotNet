@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// for every frame and turns that into audio with an inverse Fourier transform; a stronger backbone lets it work at a
 /// higher sampling rate and a longer frame shift.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an APNet2 vocoder with ResNet backbone
+/// // and multi-resolution STFT loss for high-quality waveform reconstruction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new APNet2&lt;double&gt;(architecture, "apnet2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

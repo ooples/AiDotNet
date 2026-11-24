@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> Instead of building every audio sample with neural layers, the network predicts a tiny
 /// spectrogram and a fixed mathematical transform turns it into sound, which is much faster.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an iSTFTNet vocoder for fast mel-to-waveform conversion
+/// // using inverse short-time Fourier transform for reconstruction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ISTFTNet&lt;double&gt;(architecture, "istftnet.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ISTFTNet&lt;double&gt;(architecture, new ISTFTNetOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

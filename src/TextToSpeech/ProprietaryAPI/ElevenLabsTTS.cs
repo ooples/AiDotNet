@@ -13,6 +13,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new ElevenLabsTTS&lt;float&gt;(new ElevenLabsTTSOptions { ApiKey = "…" }).Synthesize("Hello")</c>
 /// returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new ElevenLabsTTS&lt;float&gt;(new ElevenLabsTTSOptions { ApiKey = "your-api-key" });
+/// Tensor&lt;float&gt; audio = tts.Synthesize("Hello from ElevenLabs!");
+/// </code>
+/// </example>
 public class ElevenLabsTTS<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

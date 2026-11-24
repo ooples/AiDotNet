@@ -34,6 +34,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// </remarks>
 /// <example>
 /// <code>
+/// var volume = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
@@ -92,6 +93,7 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
         InitializeLayers();
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _runtime is not null) return;
@@ -246,6 +248,7 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target)
@@ -312,6 +315,7 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

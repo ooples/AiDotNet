@@ -29,6 +29,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var options = SpeechGPTOptions.Release7B();
 /// var model = new SpeechGPT&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);

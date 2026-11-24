@@ -37,12 +37,16 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// </remarks>
 /// <example>
 /// <code>
+/// var values = new double[200];
+/// for (int i = 0; i &lt; values.Length; i++) values[i] = Math.Sin(i / 10.0);
 /// var series = new Vector&lt;double&gt;(values);
 /// var timeIndex = new Matrix&lt;double&gt;(values.Length, 1);
 /// for (int i = 0; i &lt; values.Length; i++) timeIndex[i, 0] = i;
-/// var model = new DeepANT&lt;double&gt;(new DeepANTOptions&lt;double&gt; { WindowSize = 45 });
-/// model.Train(timeIndex, series);
-/// bool[] anomalies = model.DetectAnomalies(series);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DeepANT&lt;double&gt;(new DeepANTOptions&lt;double&gt; { WindowSize = 45 }))
+///     .Build(timeIndex, series);
+/// // DeepANT flags a point as anomalous when it is far from this prediction
+/// Vector&lt;double&gt; predicted = result.Predict(timeIndex);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

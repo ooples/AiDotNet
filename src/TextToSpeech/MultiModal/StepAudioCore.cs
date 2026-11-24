@@ -15,10 +15,15 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// recording's transcript and dual-codebook ids, its 22.05 kHz mel <c>[frames, 80]</c> and CAM++ x-vector.</summary>
 public sealed class StepAudioSpeaker<T>
 {
+    /// <summary>The speaker's name in the release's speaker table.</summary>
     public required string Name { get; init; }
+    /// <summary>The transcript of the speaker's prompt recording.</summary>
     public required string PromptText { get; init; }
+    /// <summary>The prompt recording's dual-codebook token ids.</summary>
     public required int[] PromptCode { get; init; }
+    /// <summary>The prompt recording's 22.05 kHz mel spectrogram, <c>[frames, 80]</c>.</summary>
     public required Tensor<T> PromptMel { get; init; }
+    /// <summary>The speaker's CAM++ x-vector.</summary>
     public required Tensor<T> Embedding { get; init; }
 }
 

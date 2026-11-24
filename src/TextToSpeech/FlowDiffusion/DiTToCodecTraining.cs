@@ -10,23 +10,40 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// Semantic finetuning uses a frozen ByT5-base decoder and requires its pretrained weights.</remarks>
 public sealed class DiTToCodecTrainingOptions
 {
+    /// <summary>Crop lengths, in mel frames, of the multi-length critics (one critic per entry).</summary>
     public int[] DiscriminatorWindows { get; set; } = { 32, 64, 128 };
+    /// <summary>Frequency-resolution reductions of the multi-resolution spectrogram critics (one critic per entry).</summary>
     public int[] ResolutionDivisors { get; set; } = { 1, 2, 4 };
+    /// <summary>Channel width of every critic convolution.</summary>
     public int DiscriminatorChannels { get; set; } = 32;
+    /// <summary>Weight of the Mel-VAE reconstruction loss.</summary>
     public double ReconstructionWeight { get; set; } = 1;
+    /// <summary>Weight of the residual-quantizer commitment loss.</summary>
     public double CommitmentWeight { get; set; } = 0.25;
+    /// <summary>Weight of the critics' adversarial loss on the generator.</summary>
     public double AdversarialWeight { get; set; } = 1;
+    /// <summary>Weight of the critics' feature-matching loss on the generator.</summary>
     public double FeatureMatchingWeight { get; set; } = 1;
+    /// <summary>Weight of the ByT5 semantic loss during semantic finetuning (DiTTo equation 2).</summary>
     public double SemanticWeight { get; set; } = 1;
+    /// <summary>Adam learning rate of the codec generator and the critics.</summary>
     public double LearningRate { get; set; } = 2e-4;
+    /// <summary>Model width of the frozen ByT5-base decoder used for semantic finetuning.</summary>
     public int SemanticModelDim { get; set; } = 1536;
+    /// <summary>Feed-forward width of the ByT5-base decoder.</summary>
     public int SemanticFeedForwardDim { get; set; } = 3968;
+    /// <summary>Per-head key/value width of the ByT5-base decoder.</summary>
     public int SemanticKeyValueDim { get; set; } = 64;
+    /// <summary>Attention heads of the ByT5-base decoder.</summary>
     public int SemanticHeads { get; set; } = 12;
+    /// <summary>Decoder layers of the ByT5-base decoder.</summary>
     public int SemanticDecoderLayers { get; set; } = 6;
+    /// <summary>Byte vocabulary size of the ByT5 decoder.</summary>
     public int SemanticVocabulary { get; set; } = 384;
 
+    /// <summary>Creates the options with the defaults above.</summary>
     public DiTToCodecTrainingOptions() { }
+    /// <summary>Creates a deep copy of <paramref name="other"/>.</summary>
     public DiTToCodecTrainingOptions(DiTToCodecTrainingOptions other)
     {
         Validation.Guard.NotNull(other);

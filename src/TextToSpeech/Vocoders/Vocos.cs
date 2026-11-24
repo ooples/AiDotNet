@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> Rather than building audio sample by sample, Vocos predicts how loud and in what phase each
 /// frequency is in every frame and lets an inverse Fourier transform assemble the sound, which is very fast.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Vocos vocoder with ConvNeXt backbone
+/// // reconstructing waveforms from Fourier coefficients via ISTFT
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Vocos&lt;double&gt;(architecture, "vocos.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Vocos&lt;double&gt;(architecture, new VocosOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

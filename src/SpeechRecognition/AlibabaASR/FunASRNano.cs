@@ -39,6 +39,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -68,6 +69,7 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private FunAsrNanoNetwork<T>? _network;
     internal FunAsrNanoNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -133,9 +135,13 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         return network.CtcGreedy(network.Encode(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds)));
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Fun-ASR-nano does not support streaming.");
 
     // Qwen's tokenizer decodes when the vocabulary is Qwen's; otherwise each token is its vocabulary entry or code point.
@@ -172,10 +178,13 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             net.FirstLogits(net.Prompt(net.Encode(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds)), instruction)));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
     private int[] Tokens(FunAsrNanoNetwork<T> network, Tensor<T> target)
@@ -244,6 +253,7 @@ public partial class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FunASRNano-Native" : "FunASRNano-ONNX", Description = "Fun-ASR-nano: SenseVoice-Small encoder, adaptor and Qwen3-0.6B (Tongyi Lab 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumTpEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FunASRNano<T>)); }

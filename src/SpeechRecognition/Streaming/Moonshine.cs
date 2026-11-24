@@ -25,6 +25,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -57,6 +58,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     private ConformerAsrNetwork<T>? _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => true;
@@ -106,9 +108,12 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new BufferedSession(this, language ?? _options.Language);
 
     // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
@@ -181,8 +186,10 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         return network.DecoderLogits(new[] { network.StartToken }, encoded);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
@@ -214,9 +221,11 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Moonshine-Native" : "Moonshine-ONNX", Description = "Moonshine Tiny: an encoder-decoder Transformer over the raw waveform with rotary positions", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Moonshine<T>)); }
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     // Collects the audio fed to it and transcribes the buffer on each partial result.
@@ -249,6 +258,7 @@ public partial class Moonshine<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
             return result;
         }
 
+        /// <inheritdoc/>
         public void Dispose() => _disposed = true;
     }
 }

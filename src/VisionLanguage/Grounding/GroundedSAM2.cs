@@ -40,6 +40,7 @@ public sealed record GroundedSegment<T>(GroundingDetection<T> Detection, Tensor<
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageSegmentation,
@@ -172,8 +173,10 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         return image.Rank == 3 ? Engine.Reshape(embedding, embedding.Shape.ToArray().Skip(1).ToArray()) : embedding;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
 
     /// <summary>Grounding DINO's detections of the caption's phrases (the official <c>predict</c>).</summary>
@@ -389,6 +392,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => true;
 
     /// <summary>SAM 2's preprocessing: images in 0..1 resized to SamImageSize and normalized.</summary>

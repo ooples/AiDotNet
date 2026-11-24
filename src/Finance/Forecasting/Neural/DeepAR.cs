@@ -83,8 +83,10 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     private readonly Random _random;
     private DeepARNetwork<T>? _network;
 
+    /// <inheritdoc/>
     public override int PatchSize => 1;
 
+    /// <inheritdoc/>
     public override int Stride => 1;
 
     /// <summary>Each input column is its own series: DeepAR is one global model over many series.</summary>
@@ -187,6 +189,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         Layers.AddRange(layers);
     }
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => UseNativeMode;
 
     /// <inheritdoc />
@@ -195,8 +198,10 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
         => UseNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -269,6 +274,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return UseNativeMode ? ForecastNative(historicalData, quantiles) : ForecastOnnx(historicalData);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
@@ -351,6 +357,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return WindowLoss(input, target, training: false)[0];
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -365,6 +372,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         }, x.Shape[0], steps, x.Shape[2]);
     }
 
+    /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         if (predictions is null) throw new ArgumentNullException(nameof(predictions));
@@ -404,6 +412,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return y;
     }
 
+    /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
@@ -416,6 +425,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         };
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
@@ -428,6 +438,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return new Tensor<T>(output.ToArray().Select(v => NumOps.FromDouble(v)).ToArray(), output.Dimensions.ToArray());
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> prediction, int stepsUsed)
     {
         int batch = input.Shape[0], length = input.Shape[1], series = input.Shape[2];
@@ -442,6 +453,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return shifted;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0) return new Tensor<T>(new[] { 1, totalSteps, NumFeatures });
@@ -459,6 +471,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return result;
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing) OnnxSession?.Dispose();

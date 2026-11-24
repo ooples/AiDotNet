@@ -39,6 +39,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ObjectDetection,
@@ -138,8 +139,10 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
         return image.Rank == 3 ? Engine.Reshape(tokens, new[] { tokens.Shape[1], tokens.Shape[2] }) : tokens;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
 
     /// <summary>
@@ -213,6 +216,7 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => true;
 
     /// <summary>Normalizes images in 0..1 with the options' mean and deviation (ImageNet's).</summary>

@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// This implements the released <c>Fun-CosyVoice3-0.5B-2512</c> topology. PyTorch state dictionaries are loaded after
 /// conversion to safetensors; the frozen prompt tokenizer remains the release's <c>speech_tokenizer_v3.onnx</c>.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CosyVoice 3 model for zero-shot multilingual TTS
+/// // with enhanced semantic tokens and multi-scale flow matching
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CosyVoice3&lt;double&gt;(architecture, "cosyvoice3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CosyVoice3&lt;double&gt;(architecture, new CosyVoice3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -92,16 +108,21 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
             throw new ArgumentException("DiTHeads times DiTHeadDim must equal DiTDim.");
     }
 
+    /// <inheritdoc/>
     protected override CosyVoiceFamilyOptions Settings => _options;
+    /// <inheritdoc/>
     protected override int TextVocabularySize => _options.VocabSize;
+    /// <inheritdoc/>
     protected override double MelMaximumFrequency => _options.SampleRate / 2.0;
 
+    /// <inheritdoc/>
     public override int[] Tokenize(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         return _text.Encode(text);
     }
 
+    /// <inheritdoc/>
     public override string Detokenize(IEnumerable<int> ids) => _text.Decode(ids);
 
     // The native S3 network is deliberately not built: the v3 release distributes and invokes this frozen encoder as ONNX.
@@ -129,6 +150,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
     internal CosyVoice3Flow<T>? DiTFlowModel => _flow;
     internal HiftGenerator<T>? CausalVocoder => _vocoder;
 
+    /// <inheritdoc/>
     protected override void BuildLanguageModel(List<LayerBase<T>> layers, Random initialization)
     {
         var o = _options;
@@ -149,9 +171,11 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
             SpecialsInSpeechEmbedding: true, BiasFreeDecoder: true), initialization);
     }
 
+    /// <inheritdoc/>
     protected override void BuildFlow(List<LayerBase<T>> layers, Random initialization) =>
         _flow = new CosyVoice3Flow<T>(Engine, layers, _options, initialization);
 
+    /// <inheritdoc/>
     protected override void BuildVocoder(List<LayerBase<T>> layers, Random initialization)
     {
         int stages = _options.HiftUpsampleRates.Length;
@@ -166,6 +190,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         _vocoder = new HiftGenerator<T>(Engine, layers, configuration, initialization);
     }
 
+    /// <inheritdoc/>
     protected override void BuildSpeechTokenizer(List<LayerBase<T>> layers, Random initialization)
     {
         // speech_tokenizer_v3.onnx is opened when a release directory (or explicit path) is supplied.
@@ -177,6 +202,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         return text.Contains(marker) ? text.ToArray() : _text.Encode(DefaultSystemPrompt).Concat(text).ToArray();
     }
 
+    /// <inheritdoc/>
     protected override int[] GenerateWithLanguageModel(IReadOnlyList<int> text, IReadOnlyList<int> promptText,
         IReadOnlyList<int> promptSpeech, Tensor<T>? xvector, Random random)
     {
@@ -186,11 +212,13 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         return Lm.Generate(preparedText, preparedPrompt, promptSpeech, random).ToArray();
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> LanguageModelLoss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Tensor<T> xvector,
         bool training, Random random) => Lm.Loss(EnsureSystemPrompt(text), speech, random);
 
     private protected override void LoadLanguageModel(TorchTensorSource source) => Lm.LoadTorchWeights(source, "");
 
+    /// <inheritdoc/>
     public override Tensor<T> TokensToMel(IReadOnlyList<int> tokens, Random random)
     {
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
@@ -207,14 +235,20 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         return DiTFlow.Inference(tokens, promptTokens, promptMel, speaker, noise);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> FlowTrainingLoss(IReadOnlyList<int> speech, Tensor<T> target, Tensor<T> xvector,
         bool training, Random random) => DiTFlow.TrainingLoss(speech, target, xvector, training, random);
 
+    /// <inheritdoc/>
     protected override Tensor<T> VocoderForward(Tensor<T> mel, Random random) => CausalHift.Forward(mel, random);
+    /// <inheritdoc/>
     protected override Tensor<T> VocoderPredictF0(Tensor<T> mel) => CausalHift.PredictF0(mel);
+    /// <inheritdoc/>
     protected override Tensor<T> VocoderSource(Tensor<T> f0, Random random) => CausalHift.Source(f0, random);
+    /// <inheritdoc/>
     protected override Tensor<T> VocoderDecode(Tensor<T> mel, Tensor<T> source) => CausalHift.Decode(mel, source);
 
+    /// <inheritdoc/>
     public override int[] SpeechTokens(Tensor<T> recording, int sampleRate)
     {
         ThrowIfDisposed();
@@ -252,6 +286,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         _options.SpeakerEncoderOnnxPath = path;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForwardSpeakerEncoder(Tensor<T> features)
     {
         if (_speakerEncoderOnnx is null) return base.ForwardSpeakerEncoder(features);
@@ -260,6 +295,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         return _speakerEncoderOnnx.Run(new Dictionary<string, Tensor<T>> { [inputs[0].Name] = features }).Values.First();
     }
 
+    /// <inheritdoc/>
     protected override void LoadSpeakerEncoderCheckpoint(string modelDirectory)
     {
         string converted = Path.Combine(modelDirectory, "campplus.safetensors");
@@ -274,6 +310,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         else OpenSpeakerEncoder(File.Exists(original) ? original : _options.SpeakerEncoderOnnxPath ?? original);
     }
 
+    /// <inheritdoc/>
     protected override void LoadSpeechTokenizerWeights(string modelDirectory, string speechTokenizerFile)
     {
         string path = !string.IsNullOrWhiteSpace(_options.SpeechTokenizerPath) ? _options.SpeechTokenizerPath! :
@@ -285,6 +322,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
     /// <summary>Loads original <c>llm/flow/hift.pt</c> and frozen ONNX encoders, or converted safetensors components.</summary>
     public void LoadPretrainedWeights(string modelDirectory) => LoadReleasedWeights(modelDirectory, "speech_tokenizer_v3.onnx");
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -302,6 +340,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         return metadata;
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing) _speechTokenizerOnnx?.Dispose();

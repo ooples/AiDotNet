@@ -36,6 +36,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -83,6 +84,7 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Phi4AudioNetwork<T>? _network;
     internal Phi4AudioNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -132,9 +134,13 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Phi-4-multimodal does not support streaming.");
 
     // Phi's tokenizer decodes when the vocabulary is Phi's; otherwise each token is its vocabulary entry or code point.
@@ -195,10 +201,13 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         ForwardNativeWaveformBatch(input, _network, (net, wave) =>
             net.FirstLogits(net.Prompt(net.Speech(Samples(wave)), _options.Instruction)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
     private int[] Transcript(Phi4AudioNetwork<T> network, Tensor<T> target)
@@ -311,6 +320,7 @@ public partial class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Phi4Audio-Native" : "Phi4Audio-ONNX", Description = "Phi-4-multimodal speech: conformer encoder, projector and Phi-4-Mini with speech LoRA (Microsoft 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Phi4Audio<T>)); }
