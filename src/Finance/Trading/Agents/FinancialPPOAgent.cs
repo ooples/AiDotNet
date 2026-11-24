@@ -96,6 +96,10 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private double[]? _observationSum;
     private double[]? _observationSumOfSquares;
     private double _observationCount = ObservationStatisticsEpsilon;
+    // The critic's own statistics when it has privileged inputs (PrivilegedCriticInputSize > 0); unused otherwise.
+    private double[]? _criticObservationSum;
+    private double[]? _criticObservationSumOfSquares;
+    private double _criticObservationCount = ObservationStatisticsEpsilon;
 
     // The rollout: raw observations (normalized at update time, under the statistics the update uses), the actions,
     // rewards, value predictions made when each step was taken, episode ends and legal-action masks.
@@ -106,6 +110,9 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     [Scratch] private readonly List<bool> _dones = new();
     [Scratch] private readonly List<bool[]?> _stepMasks = new();
     [Scratch] private Vector<T>? _lastNextState;
+    // The critic's raw inputs (observation + privileged values) when the critic is asymmetric; empty otherwise.
+    [Scratch] private readonly List<Vector<T>> _criticStates = new();
+    [Scratch] private Vector<T>? _lastNextCriticState;
 
     [Scratch] private Vector<T>? _lastActionRawState;
     [Scratch] private Vector<T>? _lastActionVector;
@@ -150,7 +157,10 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         ValidatePpoOptions(_ppoOptions);
 
         EnsurePpoDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize, headColumnNorm: 0.01);
-        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize, 1, headColumnNorm: 1.0);
+        if (_ppoOptions.PrivilegedCriticInputSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), _ppoOptions.PrivilegedCriticInputSize,
+                "PrivilegedCriticInputSize must be zero or positive.");
+        EnsurePpoDefaultLayers(criticArchitecture, options.StateSize + _ppoOptions.PrivilegedCriticInputSize, 1, headColumnNorm: 1.0);
 
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
@@ -235,17 +245,20 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     #region Observation statistics
 
     // Baselines' RunningMeanStd over the raw observations: mean = sum / count, std = sqrt(max(sumsq / count - mean², 1e-2)).
-    private (Tensor<T> Mean, Tensor<T> Std) ObservationStatistics(int size)
+    private (Tensor<T> Mean, Tensor<T> Std) ObservationStatistics(int size, bool critic = false)
     {
         var engine = AiDotNetEngine.Current;
         Tensor<double> sum;
         Tensor<double> squares;
         double count;
-        if (_observationSum is { } s && s.Length == size && _observationSumOfSquares is { } q && q.Length == size)
+        var (pooledSum, pooledSquares, pooledCount) = critic
+            ? (_criticObservationSum, _criticObservationSumOfSquares, _criticObservationCount)
+            : (_observationSum, _observationSumOfSquares, _observationCount);
+        if (pooledSum is { } s && s.Length == size && pooledSquares is { } q && q.Length == size)
         {
             sum = new Tensor<double>(s, new[] { size });
             squares = new Tensor<double>(q, new[] { size });
-            count = _observationCount;
+            count = pooledCount;
         }
         else
         {
@@ -262,14 +275,17 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         return (mean.Cast<T>(), std.Cast<T>());
     }
 
-    private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states)
+    private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states, bool critic = false)
     {
         int size = states[0].Length;
         RequireStableStateSize(states, size);
         var engine = AiDotNetEngine.Current;
         Tensor<double> sum;
         Tensor<double> squares;
-        if (_observationSum is { } existingSum && _observationSumOfSquares is { } existingSquares && existingSum.Length == size)
+        var (existingSum, existingSquares, count) = critic
+            ? (_criticObservationSum, _criticObservationSumOfSquares, _criticObservationCount)
+            : (_observationSum, _observationSumOfSquares, _observationCount);
+        if (existingSum is not null && existingSquares is not null && existingSum.Length == size)
         {
             sum = new Tensor<double>(existingSum, new[] { size });
             squares = new Tensor<double>(existingSquares, new[] { size });
@@ -279,15 +295,23 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             sum = new Tensor<double>(new[] { size });
             squares = new Tensor<double>(new[] { size });
             engine.TensorFill(squares, ObservationStatisticsEpsilon);
-            _observationCount = ObservationStatisticsEpsilon;
+            count = ObservationStatisticsEpsilon;
         }
 
         // Widened before squaring and summing, so neither the squares nor the sums can overflow T.
         var observations = engine.TensorStack(states.Select(state => state.AsTensor()).ToArray(), 0).Cast<double>();
-        _observationSum = engine.TensorAdd(sum, engine.ReduceSum(observations, new[] { 0 }, false)).ToArray();
-        _observationSumOfSquares = engine.TensorAdd(
+        var newSum = engine.TensorAdd(sum, engine.ReduceSum(observations, new[] { 0 }, false)).ToArray();
+        var newSquares = engine.TensorAdd(
             squares, engine.ReduceSum(engine.TensorMultiply(observations, observations), new[] { 0 }, false)).ToArray();
-        _observationCount += states.Count;
+        count += states.Count;
+        if (critic)
+        {
+            (_criticObservationSum, _criticObservationSumOfSquares, _criticObservationCount) = (newSum, newSquares, count);
+        }
+        else
+        {
+            (_observationSum, _observationSumOfSquares, _observationCount) = (newSum, newSquares, count);
+        }
     }
 
     private static void RequireStableStateSize(IEnumerable<Vector<T>> states, int stateSize)
@@ -310,11 +334,18 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         return engine.TensorClamp(z, NumOps.Negate(clip), clip);
     }
 
-    private Tensor<T> NormalizedRow(Vector<T> state)
+    private Tensor<T> NormalizedRow(Vector<T> state, bool critic = false)
     {
-        var (mean, std) = ObservationStatistics(state.Length);
+        var (mean, std) = ObservationStatistics(state.Length, critic);
         return Normalize(Tensor<T>.FromVector(state, new[] { 1, state.Length }), mean, std);
     }
+
+    private bool HasPrivilegedCritic => _ppoOptions.PrivilegedCriticInputSize > 0;
+
+    // V(s) for a stored step: the critic's own input and statistics when it is asymmetric.
+    private T CriticValue(Vector<T> state, Vector<T>? criticState) => HasPrivilegedCritic
+        ? _critic.Predict(NormalizedRow(criticState ?? throw new InvalidOperationException("The asymmetric critic needs its input."), critic: true)).GetFlat(0)
+        : _critic.Predict(NormalizedRow(state)).GetFlat(0);
 
     #endregion
 
@@ -447,6 +478,46 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        if (HasPrivilegedCritic)
+            throw new InvalidOperationException(
+                $"This agent's critic takes {_ppoOptions.PrivilegedCriticInputSize} privileged inputs; store experience with "
+                + "StoreExperienceWithPrivilegedCritic.");
+        StoreStep(state, action, reward, nextState, done, null, null);
+    }
+
+    /// <summary>
+    /// Stores one step for an agent whose critic has privileged inputs (<see cref="FinancialPPOAgentOptions{T}.PrivilegedCriticInputSize"/>).
+    /// </summary>
+    /// <param name="state">The observation the action was selected from (the actor's input).</param>
+    /// <param name="action">The action from the immediately preceding <c>SelectAction</c> call.</param>
+    /// <param name="reward">The step's reward.</param>
+    /// <param name="nextState">The next observation.</param>
+    /// <param name="done">Whether the episode ended.</param>
+    /// <param name="privileged">The critic-only values at <paramref name="state"/>.</param>
+    /// <param name="nextPrivileged">The critic-only values at <paramref name="nextState"/> (bootstraps the rollout's last step).</param>
+    public void StoreExperienceWithPrivilegedCritic(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done,
+        Vector<T> privileged, Vector<T> nextPrivileged)
+    {
+        if (!HasPrivilegedCritic)
+            throw new InvalidOperationException("This agent's critic has no privileged inputs (PrivilegedCriticInputSize is 0).");
+        if (privileged is null || privileged.Length != _ppoOptions.PrivilegedCriticInputSize)
+            throw new ArgumentException($"Expected {_ppoOptions.PrivilegedCriticInputSize} privileged values.", nameof(privileged));
+        if (nextPrivileged is null || nextPrivileged.Length != _ppoOptions.PrivilegedCriticInputSize)
+            throw new ArgumentException($"Expected {_ppoOptions.PrivilegedCriticInputSize} privileged values.", nameof(nextPrivileged));
+        StoreStep(state, action, reward, nextState, done, Concatenate(state, privileged), Concatenate(nextState, nextPrivileged));
+    }
+
+    private static Vector<T> Concatenate(Vector<T> head, Vector<T> tail)
+    {
+        var joined = new T[head.Length + tail.Length];
+        head.AsSpan().CopyTo(joined);
+        tail.AsSpan().CopyTo(joined.AsSpan(head.Length));
+        return new Vector<T>(joined);
+    }
+
+    private void StoreStep(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done,
+        Vector<T>? criticState, Vector<T>? nextCriticState)
+    {
         if (action.Length != TradingOptions.ActionSize)
             throw new ArgumentException($"Expected an action of {TradingOptions.ActionSize} entries, got {action.Length}.", nameof(action));
         MarkHiddenEpisodeBoundaryIfNeeded(state);
@@ -473,10 +544,15 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _states.Add(CopyVector(state));
         _actions.Add(CopyVector(action));
         _rewards.Add(reward);
-        _values.Add(_critic.Predict(NormalizedRow(state)).GetFlat(0));
+        _values.Add(CriticValue(state, criticState));
         _dones.Add(done);
         _stepMasks.Add(mask);
         _lastNextState = CopyVector(nextState);
+        if (criticState is not null && nextCriticState is not null)
+        {
+            _criticStates.Add(criticState);
+            _lastNextCriticState = nextCriticState;
+        }
     }
 
     private void MarkHiddenEpisodeBoundaryIfNeeded(Vector<T> currentRawState)
@@ -531,6 +607,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         var (rawAdvantages, returns) = AdvantagesAndReturns();
         var advantages = Standardize(rawAdvantages);
         UpdateObservationStatistics(_states);
+        if (HasPrivilegedCritic) UpdateObservationStatistics(_criticStates, critic: true);
         var order = Enumerable.Range(0, n).ToArray();
         var oldLogProbs = OldLogProbabilities(order);
 
@@ -573,6 +650,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         _values.Clear();
         _dones.Clear();
         _stepMasks.Clear();
+        _criticStates.Clear();
     }
 
     // Baselines' add_vtarg_and_adv: delta_t = r_t + gamma * V(s_(t+1)) * (1 - done_t) - V(s_t) and
@@ -583,7 +661,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         int n = _states.Count;
         T gamma = TradingOptions.DiscountFactor;
         T gammaLambda = NumOps.Multiply(gamma, NumOps.FromDouble(TradingOptions.GAELambda));
-        T bootstrap = _dones[n - 1] ? NumOps.Zero : _critic.Predict(NormalizedRow(_lastNextState ?? throw new InvalidOperationException("The rollout has no next state."))).GetFlat(0);
+        T bootstrap = _dones[n - 1] ? NumOps.Zero : CriticValue(
+            _lastNextState ?? throw new InvalidOperationException("The rollout has no next state."), _lastNextCriticState);
 
         var rewards = new Vector<T>(_rewards).AsTensor();
         var values = new Vector<T>(_values).AsTensor();
@@ -689,9 +768,20 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         var adv = engine.TensorTake(advantages, rows);
         var ret = engine.Reshape(engine.TensorTake(returns, rows), new[] { b, 1 });
         int stateSize = states.Shape[1];
+        // The critic's batch: its own normalized inputs when asymmetric, else the actor's states (packed once).
+        Tensor<T>? criticStates = null;
+        if (HasPrivilegedCritic)
+        {
+            var criticRows = indices.Select(index => _criticStates[index]).ToArray();
+            var (criticMean, criticStd) = ObservationStatistics(criticRows[0].Length, critic: true);
+            criticStates = Normalize(engine.TensorStack(criticRows.Select(row => row.AsTensor()).ToArray(), 0), criticMean, criticStd);
+        }
+        int criticSize = criticStates?.Shape[1] ?? 0;
         // Everything the objective reads per step travels in the packed input, which a compiled step rebinds on
         // every replay; the bias is packed as zeros when no step was masked.
-        var packed = StepInputPacking<T>.Pack(states, actions, bias ?? new Tensor<T>([b, actionSize]), old, adv, ret);
+        var packed = criticStates is null
+            ? StepInputPacking<T>.Pack(states, actions, bias ?? new Tensor<T>([b, actionSize]), old, adv, ret)
+            : StepInputPacking<T>.Pack(states, actions, bias ?? new Tensor<T>([b, actionSize]), old, adv, ret, criticStates);
         double clip = TradingOptions.PPOClipRange;
         double entropyCoefficient = TradingOptions.EntropyCoefficient, valueCoefficient = TradingOptions.ValueCoefficient;
 
@@ -711,6 +801,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             var oldLogProb = Next([b]);
             var advantage = Next([b]);
             var target = Next([b, 1]);
+            var criticInput = criticSize > 0 ? Next([b, criticSize]) : s;
 
             var (logProb, entropy) = LogProbabilityAndEntropy(Actor.ForwardForTraining(s), a, maskBias);
             var ratio = engine.TensorExp(engine.TensorSubtract(logProb, oldLogProb));
@@ -720,7 +811,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             // min(x, y) = −max(−x, −y)
             var pessimistic = engine.TensorNegate(engine.TensorMax(engine.TensorNegate(surrogate), engine.TensorNegate(clipped)));
             var policyLoss = engine.TensorNegate(engine.ReduceMean(pessimistic, [0], keepDims: false));
-            var difference = engine.TensorSubtract(Critic.ForwardForTraining(s), target);
+            var difference = engine.TensorSubtract(Critic.ForwardForTraining(criticInput), target);
             var valueLoss = engine.ReduceMean(engine.TensorMultiply(difference, difference), [0, 1], keepDims: false);
             var loss = engine.TensorAdd(policyLoss, engine.TensorMultiplyScalar(valueLoss, NumOps.FromDouble(valueCoefficient)));
             if (entropyCoefficient != 0)

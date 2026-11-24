@@ -26627,3 +26627,9 @@ AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Capacity.get
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Position.get -> int
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.CreateStepState(int batchSize = 1, int? capacity = null) -> AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>!
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.get -> bool
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.init -> void
+override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.BuildObservation(int step) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
