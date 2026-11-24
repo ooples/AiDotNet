@@ -420,9 +420,23 @@ $buildJob = Get-JobBlock -WorkflowText $validation -Job 'build'
 $impactStep = Get-StepBlock -JobBlock $buildJob -Step 'Select affected tests'
 Assert-Contract ([bool] $impactStep -and $impactStep.Contains('./tools/TestImpact/Select-AffectedTests.ps1')) `
     'the Build job does not run the test-level selection'
+# The chosen matrix reaches the selection as a file: inline through env it can outgrow Linux's 128 KiB limit on one
+# environment string, and the step then cannot start ("Argument list too long"). The write step must read it straight
+# from select-shards, and the selection must read that file.
+$matrixFileStep = Get-StepBlock -JobBlock $buildJob -Step 'Write chosen shard matrix'
+Assert-Contract ([bool] $matrixFileStep -and
+    $matrixFileStep.Contains('${{ needs.select-shards.outputs.matrix }}') -and
+    $matrixFileStep.Contains('selected-shard-matrix.json')) `
+    "the test-level selection does not start from select-shards' matrix"
+Assert-Contract ($impactStep.Contains('SELECTED_MATRIX_PATH: selected-shard-matrix.json')) `
+    'the test-level selection does not read the chosen matrix file'
+Assert-Contract ($impactStep.Contains('needs.select-shards.outputs.skipped }}')) `
+    "the test-level selection does not start from select-shards' skipped"
+# Select-AffectedTests never reads select-shards' ledger_matrix: it writes its own, or an empty one so the
+# consumers fall back to select-shards'. Passing it in again would only restore the size hazard.
+Assert-Contract (-not $impactStep.Contains('needs.select-shards.outputs.ledger_matrix')) `
+    "the test-level selection is handed select-shards' ledger_matrix it never reads"
 foreach ($output in 'matrix', 'ledger_matrix', 'skipped') {
-    Assert-Contract ($impactStep.Contains("needs.select-shards.outputs.$output }}")) `
-        "the test-level selection does not start from select-shards' $output"
     Assert-Contract ($buildJob.Contains("${output}: `${{ steps.impact.outputs.$output }}")) `
         "the Build job does not publish the narrowed $output"
 }
