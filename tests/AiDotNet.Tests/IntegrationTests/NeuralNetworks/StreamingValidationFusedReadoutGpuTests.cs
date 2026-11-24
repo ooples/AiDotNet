@@ -27,6 +27,42 @@ public class StreamingValidationFusedReadoutGpuTests
     private const int Inputs = 16, Hidden = 64, Vocabulary = 32768, Rows = 4096;
     private const long LogitsBytes = (long)Rows * Vocabulary * sizeof(float);   // 512 MiB
 
+    // A head whose weights are created from its first input was not yet initialized at the first validation score,
+    // so that score went through Predict and the decomposed loss and every later one through the fused readout: the
+    // first score of a run differed from the next in the last bits (10.3973904 vs 10.3973894 on the GPU test below).
+    [Fact]
+    public void First_score_of_a_lazy_head_uses_the_fused_readout_and_equals_the_next()
+    {
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = new CpuEngine();
+        try
+        {
+            const int rows = 64, vocabulary = 512;
+            var network = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputSize: Inputs, outputSize: vocabulary, layers: new List<ILayer<float>>
+                {
+                    new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
+                    new DenseLayer<float>(vocabulary, (IActivationFunction<float>?)null),
+                }) { RandomSeed = 8 });
+            Assert.False(((LayerBase<float>)network.Layers[^1]).IsInitialized);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261131);
+            var x = new Tensor<float>(new[] { rows, Inputs });
+            var ids = new Tensor<float>(new[] { rows });
+            for (int i = 0; i < x.Length; i++) x.SetFlat(i, (float)(rng.NextDouble() * 2 - 1));
+            for (int r = 0; r < rows; r++) ids.SetFlat(r, rng.Next(vocabulary));
+            var loss = new CrossEntropyWithLogitsLoss<float>();
+
+            long fusedBefore = DenseLayer<float>.FusedReadoutLossCount;
+            float first = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, ids);
+            Assert.Equal(fusedBefore + 1, DenseLayer<float>.FusedReadoutLossCount);
+            float second = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, ids);
+            Assert.Equal(fusedBefore + 2, DenseLayer<float>.FusedReadoutLossCount);
+            Assert.Equal(BitConverter.SingleToInt32Bits(second), BitConverter.SingleToInt32Bits(first));
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     [SkippableFact]
     public void Validation_peak_stays_below_one_logits_tensor()
     {

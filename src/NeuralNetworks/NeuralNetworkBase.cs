@@ -10187,10 +10187,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// collects the parameters it trains, and a lazy head reached only inside the loss misses that forward: MobileNetV2
     /// then predicted differently from its own clone after training. The full forward runs until the head is initialized.
     /// </summary>
-    private IFusedReadoutLossLayer<T>? FusedReadoutForTraining()
+    private IFusedReadoutLossLayer<T>? FusedReadoutForTraining() => FusedReadoutHead(allowUninitialized: false);
+
+    /// <summary>
+    /// The fused readout head, or null when this model cannot use one. With <paramref name="allowUninitialized"/> a
+    /// lazy head whose weights do not exist yet (they are created from its first input) is returned too; the caller
+    /// initializes it from the readout's input before using it.
+    /// </summary>
+    private IFusedReadoutLossLayer<T>? FusedReadoutHead(bool allowUninitialized)
     {
         if (Layers.Count < 2 || Layers[^1] is not IFusedReadoutLossLayer<T> head) return null;
-        if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
+        if (!allowUninitialized && Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
         if (_weightLifetimeConfigured || this is ICompositeLoss<T>)
             return null;
         if (_forwardForTrainingOverridden < 0)
@@ -10254,7 +10261,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         RequireArchitectureAgreesWithInput();
         EnsureParametersReady();
         CompleteOwnOptionsSeedDeferral();
-        if (!InferenceForwardIsLayerChain || FusedReadoutForTraining() is not { } head) return false;
+        // A lazy head (weights created from its first input) is accepted here and initialized from the readout input
+        // below. Declining it sent a model's first validation pass through Predict and the decomposed loss, whose
+        // value differs from the fused loss in the last bits, so the first score of a run differed from every later
+        // one on the same batch and weights.
+        if (!InferenceForwardIsLayerChain || FusedReadoutHead(allowUninitialized: true) is not { } head) return false;
 
         bool wasTraining = IsTrainingMode;
         bool priorDefer = _deferLazyShapeResolutionToForward;
@@ -10294,6 +10305,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     current = Layers[i].Forward(current);
                 }
+            }
+            if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false } lazyHead)
+            {
+                // Its weights outlive this call: created outside every scope, as its own first forward creates them.
+                using (TensorScope.Suspend())
+                    lazyHead.InitializeFromInputWithoutForward(current);
+                if (FusedReadoutForTraining() is null) return false;
             }
             if (head.TryComputeFusedLoss(current, target, loss) is not { } fused) return false;
             value = fused.Data.Span[0];

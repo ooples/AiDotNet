@@ -3529,6 +3529,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// directly so weight allocation always happens after shape resolution.
     /// </summary>
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
+    /// <summary>
+    /// Resolves and initializes this layer from <paramref name="input"/> as its first forward would, without running
+    /// the forward: for a caller that computes the layer's result another way (a fused readout loss) and needs its
+    /// weights to exist first.
+    /// </summary>
+    internal void InitializeFromInputWithoutForward(Tensor<T> input) => EnsureInitializedFromInput(input);
+
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
         lock (InitializationLock)
