@@ -501,12 +501,22 @@ jobs:
       #
       # With TEST_IMPACT_REPACK=on it then packs the slices it kept into time-balanced jobs (the matrix output
       # holds packed jobs); with report it only records what packing would do; unset or off, it is as it was.
+      #
+      # The chosen matrix goes to a file, not an environment variable: a large selection can pass Linux's 128 KiB
+      # limit on one environment string, and the step then cannot start at all ("Argument list too long"). The run
+      # script is written to a file before it runs, so the expression expanded in it has no such limit.
+      - name: Write chosen shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath selected-shard-matrix.json -Encoding utf8
+
       - name: Select affected tests
         id: impact
         shell: pwsh
         env:
-          SELECTED_MATRIX: ${{ needs.select-shards.outputs.matrix }}
-          SELECTED_LEDGER_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
+          SELECTED_MATRIX_PATH: selected-shard-matrix.json
           SELECTED_SKIPPED: ${{ needs.select-shards.outputs.skipped }}
           REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
@@ -2606,7 +2616,6 @@ jobs:
       SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
       SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
       SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
       TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -2614,11 +2623,22 @@ jobs:
     steps:
     - &runner-failover-checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    # The shard matrix goes to a file, not an environment variable: with test-level filters it outgrew Linux's
+    # 128 KiB limit on one environment string, and every process in the job then failed to start ("Argument list
+    # too long"). The run script is written to a file before it runs, so the expression expanded in it has no such
+    # limit, and the value is still read straight from the producing jobs' outputs, as it was through env.
+    - &write-shard-matrix
+      name: Write shard matrix
+      shell: pwsh
+      run: |
+        @'
+        ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+        '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
     - name: Classify original attempt evidence
       id: plan
       shell: pwsh
       run: |
-        ./tools/TestImpact/New-RunnerFailoverPlan.ps1 -MatrixJson $env:MATRIX_JSON `
+        ./tools/TestImpact/New-RunnerFailoverPlan.ps1 -MatrixJsonPath shard-matrix.json `
           -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
           -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
           -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
@@ -2686,7 +2706,6 @@ jobs:
       SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
       SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
       SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
       TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -2695,6 +2714,7 @@ jobs:
       PLAN_ARTIFACT_DIGEST: ${{ needs.runner-failover-plan.outputs.artifact_digest }}
     steps:
     - *runner-failover-checkout
+    - *write-shard-matrix
     - name: Verify immutable recovery plan archive
       if: needs.select-shards.outputs.requires_tests == 'true'
       shell: pwsh
@@ -2706,7 +2726,7 @@ jobs:
       if: needs.select-shards.outputs.requires_tests == 'true'
       shell: pwsh
       run: |
-        ./tools/TestImpact/Resolve-RunnerFailoverResults.ps1 -MatrixJson $env:MATRIX_JSON -PlanPath runner-failover-plan/plan.json `
+        ./tools/TestImpact/Resolve-RunnerFailoverResults.ps1 -MatrixJsonPath shard-matrix.json -PlanPath runner-failover-plan/plan.json `
           -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
           -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
           -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
@@ -2714,7 +2734,7 @@ jobs:
       if: needs.select-shards.outputs.requires_tests == 'false'
       shell: pwsh
       run: |
-        ./tools/TestImpact/Write-EmptyShardProof.ps1 -MatrixJson $env:MATRIX_JSON `
+        ./tools/TestImpact/Write-EmptyShardProof.ps1 -MatrixJsonPath shard-matrix.json `
           -RequiresValidation $env:REQUIRES_VALIDATION -RequiresTests $env:REQUIRES_TESTS
     - name: Preserve original attempts and logical shard evidence
       id: upload
@@ -3137,10 +3157,16 @@ jobs:
           ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           '@ | Set-Content -LiteralPath expected-shard-matrix.json -Encoding utf8
 
+      - name: Write shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
+
       - name: Stage missing initial primary TRX diagnostics
         shell: pwsh
         env: &diagnostic-intake-env
-          MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
           SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
           SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
           REQUIRES_VALIDATION: ${{ needs.select-shards.outputs.requires_validation }}
@@ -3150,7 +3176,7 @@ jobs:
           COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
           SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
         run: |
-          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJsonPath shard-matrix.json `
             -AttemptRoot primary-attempt-diagnostics -CanonicalRoot current-test-results -ArtifactPrefix coverage `
             -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
             -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
@@ -3822,11 +3848,18 @@ jobs:
           path: primary-attempt-diagnostics
           merge-multiple: false
 
+      - name: Write shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
+
       - name: Stage missing initial primary TRX diagnostics
         shell: pwsh
         env: *diagnostic-intake-env
         run: |
-          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJsonPath shard-matrix.json `
             -AttemptRoot primary-attempt-diagnostics -CanonicalRoot TestDiagnostics -ArtifactPrefix test-results `
             -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
             -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `

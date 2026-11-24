@@ -1,9 +1,13 @@
-[CmdletBinding()]
-param([Parameter(Mandatory)] [string] $MatrixJson,
+[CmdletBinding(DefaultParameterSetName = 'Json')]
+param([Parameter(Mandatory, ParameterSetName = 'Json')] [string] $MatrixJson,
+    [Parameter(Mandatory, ParameterSetName = 'Path')] [string] $MatrixJsonPath,
     [Parameter(Mandatory)] [string] $RequiresValidation, [Parameter(Mandatory)] [string] $RequiresTests,
     [string] $OutputDirectory = 'runner-failover-proof')
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/RunnerFailover.ps1"
+# CI passes the shard matrix as a file: it can outgrow Linux's 128 KiB limit on one environment string.
+if ($PSCmdlet.ParameterSetName -ceq 'Path') { $MatrixJson = Get-Content -LiteralPath $MatrixJsonPath -Raw }
+if ([string]::IsNullOrWhiteSpace($MatrixJson)) { throw 'The shard matrix is empty.' }
 $matrix = ConvertFrom-Json -InputObject $MatrixJson -NoEnumerate
 if ($RequiresValidation -cnotin @('true', 'false') -or $RequiresTests -cne 'false' -or
     $matrix -isnot [array] -or $matrix.Count -ne 0) { throw 'Only an explicitly empty, non-runtime selection may emit empty shard proof.' }
