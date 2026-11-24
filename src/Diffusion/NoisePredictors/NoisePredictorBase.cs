@@ -968,6 +968,13 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         EnsureParameterStructureReady();
         if (intent == AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe) return;
 
+        // Engage streaming BEFORE the walk below materializes anything (#2447). GetParameters and
+        // SetParameters reach this first, and only engaged later (inside the slot enumeration), by
+        // which point every layer had already been materialized onto the heap: SiT at paper scale held
+        // its whole 6.3 GB fp64 weight set resident and then OOMed allocating the 6.3 GB flat vector
+        // under the nightly's 11.2 GB heap cap. No-op below the threshold and after the first call.
+        MaybeEngageWeightStreaming();
+
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
@@ -1350,7 +1357,13 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             }
         }
 
-        // Don't reconfigure (or clobber) a registry another model is using.
+        // Don't reconfigure (or clobber) a registry another model is using. A model that was dropped
+        // without Dispose (a test that failed mid round-trip, a caller that let a predictor go) still
+        // owns its entries until they are pruned: counting those kept every later foundation-scale
+        // predictor in the process from streaming at all, so it materialized fully resident and
+        // OOMed -- MMDiT-X's round-trip after FLUX's in the nightly (#2447). Prune collected owners
+        // first; a LIVE owner's entries are never touched.
+        WeightRegistry.PruneDeadEntries();
         if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
 
         // Atomically claim engagement: if a concurrent call on this same instance already
@@ -1374,9 +1387,20 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // predictor supports parameter round-trips, so full precision is the correct order-independent
             // behavior; resident memory is still bounded by the resident cap.
             StreamingStoreDtype = AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision,
+            // #2447: parameter IO maps each weight writably into one parameter file instead of round-
+            // tripping it through the pool. The pool's backing file is append-only -- every dirty
+            // eviction appends and no slice is ever reused -- and the owner write-back marks every
+            // materialized weight dirty whether or not it changed, so each parameter walk appended the
+            // whole model again: a FLUX GetParameterChunks/SetParameterChunks round-trip wrote ~5.9x its
+            // 48 GB weight set and filled the CI runner's disk (and then the runner itself). A writable
+            // mapping is updated in place, so the model occupies the disk once however often it is read
+            // or written; LayerBase releases the duplicate pool entry as soon as a weight is mapped.
+            // Inference keeps the read-only path (the mapping is only taken outside inference mode).
+            EnableZeroCopyMmapResidency = true,
         };
         try
         {
+            ReleaseIdleParameterFile();
             WeightRegistry.Configure(offloadOptions);
         }
         catch (InvalidOperationException)
@@ -1406,6 +1430,48 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         {
             if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
         }
+    }
+
+    // One process-exit hook for the whole process, however many predictors engage streaming.
+    private static int _parameterFileExitHookInstalled;
+
+    /// <summary>
+    /// Returns the registry's parameter file (the writable mappings parameter IO places weights in,
+    /// see <see cref="MaybeEngageWeightStreaming"/>) to the disk before a new streaming session starts,
+    /// and makes sure the process deletes it on exit.
+    /// </summary>
+    /// <remarks>
+    /// <para>The file is bump-allocated and only <see cref="WeightRegistry.Reset"/> releases it --
+    /// <see cref="WeightRegistry.Configure"/> keeps it. Without this, every foundation-scale predictor a
+    /// process engages appends its whole weight set to the same file: the nightly's
+    /// NewConditionerContractTests alone engage SiT (6 GB), FLUX (48 GB) and MMDiT-X (15 GB) in one
+    /// process, which is nearly all of the runner's 76 GB /tmp. A process that ends without a Reset also
+    /// left the file behind for the next test process.</para>
+    /// <para>Only an idle registry is reset: no registered streaming entry (the caller has just
+    /// checked), no outstanding reservation from a forward in flight, and no GPU offload allocator,
+    /// whose live allocations Reset would free. A weight that is still mapped keeps its own mapping of
+    /// the file, so an earlier predictor that is still alive reads and writes its weights unchanged;
+    /// the space comes back when those mappings are released.</para>
+    /// </remarks>
+    private static void ReleaseIdleParameterFile()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _parameterFileExitHookInstalled, 1) == 0)
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try { WeightRegistry.Reset(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        "NoisePredictorBase: could not release the streaming parameter file at exit: " + ex.Message);
+                }
+            };
+        }
+
+        if (WeightRegistry.OffloadAllocator is not null) return;
+        var pool = WeightRegistry.CurrentStreamingPool;
+        if (pool is not null && (pool.RegisteredEntryCount > 0 || pool.ReservedBytes > 0)) return;
+        WeightRegistry.Reset();
     }
 
     /// <summary>
@@ -1446,6 +1512,9 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                 // Skip placeholders (lazy weights not yet resolved) and tensors
                 // already registered (idempotent across forwards).
                 if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
+                // Already mapped by a parameter walk (#2447): the mapping is the weight's only copy and is
+                // resident by construction; registering would copy it back into the pool and drop it.
+                if (tensor.IsWritableMmapAliased) continue;
                 tensor.Lifetime = WeightLifetime.Streaming;
                 WeightRegistry.RegisterWeight(tensor);
             }
