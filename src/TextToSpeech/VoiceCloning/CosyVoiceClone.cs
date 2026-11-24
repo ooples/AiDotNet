@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// synthesizing the requested text in that voice. All generation and training behavior comes from the real CosyVoice
 /// implementation, so this convenience API cannot drift into a placeholder model.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CosyVoice model for scalable zero-shot voice cloning
+/// // using supervised semantic tokens and OT-CFM decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CosyVoiceClone&lt;double&gt;(architecture, "cosyvoice.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CosyVoiceClone&lt;double&gt;(architecture, new CosyVoiceCloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

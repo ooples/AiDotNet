@@ -339,6 +339,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// ids, as this model's front end reads text).</summary>
     public Tensor<T> TextToTokens(string text) => PreprocessText(text);
 
+    /// <summary>Synthesizes <paramref name="text"/>: tokenizes it, runs the model (ONNX or native) and post-processes the output into audio.</summary>
     public virtual Tensor<T> Synthesize(string text)
     {
         var tokens = PreprocessText(text);

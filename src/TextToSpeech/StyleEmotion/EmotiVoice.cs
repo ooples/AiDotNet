@@ -34,6 +34,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <para><b>For Beginners:</b> Tell EmotiVoice how to say something — "happy", "sad", "angry", "whispering" — and pick one
 /// of its two thousand voices; it reads the text in that voice and mood.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an EmotiVoice model for emotion-controlled multi-voice TTS
+/// // with prompt-based emotion and style control (happy, sad, angry, etc.)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new EmotiVoice&lt;double&gt;(architecture, "emotivoice.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

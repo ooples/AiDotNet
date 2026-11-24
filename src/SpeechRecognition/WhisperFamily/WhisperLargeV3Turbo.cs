@@ -31,6 +31,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -63,6 +64,7 @@ public partial class WhisperLargeV3Turbo<T> : AudioNeuralNetworkBase<T>, ISpeech
     // The openai-whisper network on the native path; null in ONNX mode or with custom layers.
     private WhisperRecognizer<T>? _whisper;
     internal WhisperRecognizer<T>? Whisper => _whisper;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -99,12 +101,16 @@ public partial class WhisperLargeV3Turbo<T> : AudioNeuralNetworkBase<T>, ISpeech
         return TranscribeNativeWhisper(audio, _whisper, language ?? _options.Language, ResolveReturnTimestamps(includeTimestamps) || _options.WordTimestamps, _options.Temperatures);
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) { ThrowIfDisposed(); return DetectNativeWhisperLanguage(audio, _whisper); }
 
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { ThrowIfDisposed(); return DetectNativeWhisperLanguageProbabilities(audio, _whisper); }
 
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("WhisperLargeV3Turbo does not support streaming.");
 
     protected override void InitializeLayers() => InitializeLayersCore();
@@ -121,10 +127,13 @@ public partial class WhisperLargeV3Turbo<T> : AudioNeuralNetworkBase<T>, ISpeech
     }
     private Tensor<T> PromptLogits(Tensor<T> input) => ForwardNativeWhisperBatch(input, _whisper, _options.Language);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return PromptLogits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => PromptLogits(input);
 
     /// <inheritdoc />
@@ -147,6 +156,7 @@ public partial class WhisperLargeV3Turbo<T> : AudioNeuralNetworkBase<T>, ISpeech
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WhisperLargeV3Turbo-Native" : "WhisperLargeV3Turbo-ONNX", Description = "Whisper large-v3-turbo: large-v3's encoder with the decoder pruned to 4 layers and fine-tuned", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WhisperLargeV3Turbo<T>)); }

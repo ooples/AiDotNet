@@ -351,6 +351,7 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     private Tensor<T> Unbatch(Tensor<T> audio, Tensor<T> x)
         => audio.Rank == 1 ? Engine.Reshape(x, new[] { x.Shape[1], x.Shape[2] }) : x;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -360,6 +361,7 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         input = ToEncoderRate(input);

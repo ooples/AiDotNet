@@ -116,6 +116,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
         }
     }
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>Whether the losses compare raw vectors (the reference code) rather than L2-normalized ones.</summary>
@@ -288,6 +289,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
 
     Tensor<T> IResidualVectorQuantizer<T>.Forward(Tensor<T> latent) => Forward(latent);
 
+    /// <inheritdoc/>
     public override void ResetState()
     {
     }

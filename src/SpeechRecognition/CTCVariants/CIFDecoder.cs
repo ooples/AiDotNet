@@ -34,6 +34,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -63,6 +64,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private CifAsrNetwork<T>? _network;
     internal CifAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -110,9 +112,13 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("This CIF model does not support streaming.");
 
     // Each label is its vocabulary entry when a vocabulary is configured, otherwise its Unicode code point.
@@ -159,8 +165,10 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             return net.Decode(ParaformerNetwork<T>.Integrate(Engine, encoded, net.Alphas(encoded), 1));
         });
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input);
 
     private int[] Labels(Tensor<T> target) => ParseCtcOrTokenTargetLabels(target, _options.VocabSize, ConformerAsrNetwork<T>.GreedyCtc);
@@ -188,6 +196,7 @@ public partial class CIFDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "CIFDecoder-Native" : "CIFDecoder-ONNX", Description = "CIF: a self-attention encoder, continuous integrate-and-fire and a non-autoregressive decoder (Dong and Xu 2020)", FeatureCount = 1, Complexity = _options.NumLayersPerResolution * _options.NumResolutions + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CIFDecoder<T>)); }

@@ -17,6 +17,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <see cref="IVoiceCloner{T}"/>. The reference transcript remains mandatory because Eq. 3 conditions the AR model on
 /// both the enrolled phonemes and enrolled acoustic codes.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VALL-E X model for cross-lingual zero-shot voice cloning
+/// // with language ID conditioning for multi-language synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VALLEXClone&lt;double&gt;(architecture, "vallex.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VALLEXClone&lt;double&gt;(architecture, new VALLEXCloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

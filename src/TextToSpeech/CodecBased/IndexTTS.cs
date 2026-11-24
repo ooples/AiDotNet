@@ -34,6 +34,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var promptAudio = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var promptSampleRate = 24000;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new IndexTTS&lt;float&gt;(architecture, new IndexTTSOptions());
 /// model.LoadReferenceWeights("Index-TTS");             // gpt.pth, bigvgan_generator.pth, dvae.pth, bpe.model

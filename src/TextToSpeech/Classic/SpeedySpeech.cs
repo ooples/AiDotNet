@@ -40,6 +40,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> SpeedySpeech decides how long each phoneme lasts, stretches the phonemes to that many
 /// frames, and paints the whole spectrogram at once with stacks of convolutions — no attention, so it is fast.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SpeedySpeech model for lightweight non-autoregressive TTS
+/// // with convolutional residual blocks and teacher-student duration distillation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SpeedySpeech&lt;double&gt;(architecture, "speedyspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SpeedySpeech&lt;double&gt;(architecture, new SpeedySpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -373,6 +389,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         return Engine.TensorAdd(Engine.TensorMultiply(mask, quadratic), Engine.TensorMultiply(inverse, linear));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -381,6 +398,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

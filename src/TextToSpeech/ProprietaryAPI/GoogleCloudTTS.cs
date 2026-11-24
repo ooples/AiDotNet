@@ -13,6 +13,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new GoogleCloudTTS&lt;float&gt;(new GoogleCloudTTSOptions { ApiKey = "…" }).Synthesize("Hello")</c>
 /// returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new GoogleCloudTTS&lt;float&gt;(new GoogleCloudTTSOptions { ApiKey = "your-api-key", LanguageCode = "en-US" });
+/// Tensor&lt;float&gt; audio = tts.Synthesize("Hello from Google Cloud!");
+/// </code>
+/// </example>
 public class GoogleCloudTTS<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

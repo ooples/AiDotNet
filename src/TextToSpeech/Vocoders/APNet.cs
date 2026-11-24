@@ -25,6 +25,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// is (amplitude) and where each wave is in its cycle (phase) for every frame, and an inverse Fourier transform turns
 /// that into audio, which is very fast.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an APNet vocoder for amplitude-phase spectrum prediction
+/// // with separate amplitude and phase branches reconstructed via iSTFT
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new APNet&lt;double&gt;(architecture, "apnet.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new APNet&lt;double&gt;(architecture, new APNetOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

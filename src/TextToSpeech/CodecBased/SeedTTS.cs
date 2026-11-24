@@ -30,6 +30,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// its configurable defaults are proprietary production settings.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Seed-TTS model for large-scale autoregressive synthesis
+/// // with self-distillation for in-context learning and voice control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SeedTTS&lt;double&gt;(architecture, "seedtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SeedTTS&lt;double&gt;(architecture, new SeedTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -102,10 +118,15 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int NumCodebooks => _options.NumCodebooks;
     /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc/>
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => 1;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override int OutputFeatureWidth => _options.CodebookSize + 2;
+    /// <summary>The component <c>Train(TtsTrainingSample)</c> optimizes, from the options.</summary>
     public SeedTTSTrainingComponent TrainingComponent => _options.TrainingComponent;
 
     /// <summary>Whether the native graph contains the four paper blocks rather than caller-supplied sequential layers.</summary>
@@ -200,6 +221,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             : embedding;
     }
 
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => _options.TrainingComponent switch
     {
         SeedTTSTrainingComponent.TokenLanguageModel => TtsSupervision.Text | TtsSupervision.CodecTokens,
@@ -211,8 +233,10 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         _ => throw new InvalidOperationException("Unknown Seed-TTS training component."),
     };
 
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         if (!HasPaperPipeline || _optimizer is null)
@@ -238,6 +262,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, training: true), _optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         if (!HasPaperPipeline) throw new NotSupportedException("The objective requires the native paper pipeline.");
@@ -285,6 +310,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, WeightDecay = _options.WeightDecay });
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!HasPaperPipeline) return parameters;
@@ -327,12 +353,16 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return Tokens(ids);
     }
 
+    /// <inheritdoc/>
     public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
         ? LayerInputDomain.Indices(_options.VocabSize) : base.GetInputDomain(inputShape);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

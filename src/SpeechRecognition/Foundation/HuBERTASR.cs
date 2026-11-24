@@ -99,7 +99,9 @@ public partial class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         var detected = DetectLanguage(audio);
@@ -145,10 +147,13 @@ public partial class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!_options.FreezeFeatureEncoder) return parameters;
@@ -160,6 +165,7 @@ public partial class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     }
 
 
+    /// <inheritdoc/>
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
         => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
             && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
@@ -172,6 +178,7 @@ public partial class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "HuBERTASR-Native" : "HuBERTASR-ONNX", Description = "HuBERT: hidden-unit BERT SSL + CTC (Meta, 2021)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 

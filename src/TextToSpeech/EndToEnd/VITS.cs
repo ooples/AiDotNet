@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <para><b>For Beginners:</b> VITS goes straight from text to a waveform in one network: it learns a hidden "voice
 /// space" from real audio, learns to predict that space from text, and learns a vocoder that turns it into sound.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VITS model for end-to-end TTS with conditional VAE,
+/// // normalizing flows, and adversarial training for parallel synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VITS&lt;double&gt;(architecture, "vits.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VITS&lt;double&gt;(architecture, new VITSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

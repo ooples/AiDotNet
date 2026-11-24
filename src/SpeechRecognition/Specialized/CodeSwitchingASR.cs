@@ -46,14 +46,16 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;double&gt;.CreateRandom(1, 16000);   // 1 s at 16 kHz
+/// var transcriptTokenIds = new Tensor&lt;double&gt;(new[] { 4 }, new Vector&lt;double&gt;(new double[] { 17, 402, 9, 2 }));
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputSize: 16000, outputSize: 6002);
-/// var model = new CodeSwitchingASR&lt;double&gt;(architecture);
-/// model.Train(waveform, transcriptTokenIds);
-/// var result = model.Transcribe(waveform);
-/// var language = model.DetectLanguage(waveform);   // from the learned LID decoder
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new CodeSwitchingASR&lt;double&gt;(architecture))
+///     .Build(waveform, transcriptTokenIds);
+/// var logits = result.Predict(waveform);   // per-frame token logits over the mixed-language vocabulary
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -137,6 +139,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         InitializeLayersCore();
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers() => InitializeLayersCore();
 
     private void InitializeLayersCore()
@@ -156,6 +159,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     private protected override int? NativeWaveformMaxAudioLengthSeconds =>
         _network is not null ? _options.MaxAudioLengthSeconds : null;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => base.PreprocessAudio(rawAudio);
 
     private CodeSwitchingAsrNetwork<T> RequireNetwork() =>
@@ -264,6 +268,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         return result;
     }
 
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null)
         => throw new NotSupportedException("CodeSwitchingASR does not support streaming.");
 
@@ -272,8 +277,10 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         ForwardNativeWaveformBatch(input, _network, (network, wave) =>
             network.CtcLogits(network.Encode(network.FeatureTensor(PreprocessAudio(wave)), training, training ? _random : null)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     // The transcript a training target names: token ids [length], or one distribution per frame [frames, V] read as a

@@ -48,6 +48,7 @@ public sealed class SpeechGptResponse<T>
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording16kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var options = SpeechGPTOptions.Release7B();
 /// options.Vocoder = SpeechGptVocoder.ReleaseLJ;

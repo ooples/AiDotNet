@@ -36,10 +36,17 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceAudio = Tensor&lt;float&gt;.CreateRandom(1, 3 * 32000);   // 3 s at 32 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var options = new GPTSoVITSOptions { TextLanguage = GptSoVitsTextLanguage.English, PromptLanguage = GptSoVitsTextLanguage.English };
 /// var model = new GPTSoVITS&lt;float&gt;(architecture, options);
-/// model.LoadReferenceWeights(new GptSoVitsCheckpoints { Directory = "GPT-SoVITS/pretrained_models" });
+/// model.LoadReferenceWeights(new GptSoVitsCheckpoints
+/// {
+///     TextToSemantic = "GPT-SoVITS/pretrained_models/s1v3.ckpt",
+///     Synthesizer = "GPT-SoVITS/pretrained_models/v2Pro/s2Gv2ProPlus.pth",
+///     Hubert = "GPT-SoVITS/pretrained_models/chinese-hubert-base/pytorch_model.bin",
+///     SpeakerVerification = "GPT-SoVITS/pretrained_models/sv/pretrained_eres2netv2w24s4ep4.ckpt",
+/// });
 /// model.Voice = model.CreateVoice(referenceAudio, 32000, "What the reference recording says.");
 /// var audio = model.Synthesize("Text to speak in that voice.");   // 32 kHz for v2ProPlus
 /// </code>

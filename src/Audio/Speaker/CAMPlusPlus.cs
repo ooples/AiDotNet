@@ -306,6 +306,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     private CamPlusPlusEncoder<T> Encoder =>
         _encoder ?? throw new InvalidOperationException("The CAM++ encoder exists only for the native default topology.");
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();

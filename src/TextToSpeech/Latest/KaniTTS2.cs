@@ -25,6 +25,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceRecording = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new KaniTTS2&lt;float&gt;(architecture, new KaniTTS2Options());
 /// model.LoadReferenceWeights("kani-tts-2-en");                                 // model.safetensors, tokenizer.json, config.json

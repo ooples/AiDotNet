@@ -20,6 +20,7 @@ public partial class DiTToTTS<T>
         return false;
     }
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();
@@ -42,6 +43,7 @@ public partial class DiTToTTS<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => LengthObjective(example), _optimizer!);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();

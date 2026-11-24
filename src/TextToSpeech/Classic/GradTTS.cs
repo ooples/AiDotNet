@@ -36,6 +36,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> Grad-TTS first sketches a blurry spectrogram from the text, then refines it step by step
 /// by removing noise, the way image diffusion models paint pictures.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grad-TTS model for diffusion-based speech synthesis
+/// // using score matching and stochastic differential equations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GradTTS&lt;double&gt;(architecture, "gradtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -420,6 +436,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         return Engine.TensorAdd(Engine.TensorAdd(durationLoss, priorLoss), diffusionLoss);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -428,6 +445,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

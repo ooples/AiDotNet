@@ -38,6 +38,22 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <para><b>For Beginners:</b> You describe how the speech should sound ("A lady whispers to her friend slowly") and give
 /// the text to speak; the model produces a mel spectrogram in that style.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PromptTTS model for description-conditioned speech synthesis
+/// // controlling speaker attributes via natural language prompts
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PromptTTS&lt;double&gt;(architecture, "prompttts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PromptTTS&lt;double&gt;(architecture, new PromptTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

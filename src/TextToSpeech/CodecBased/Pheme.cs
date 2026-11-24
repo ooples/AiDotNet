@@ -73,6 +73,7 @@ public enum PhemeTrainingStage
 /// </remarks>
 /// <example>
 /// <code>
+/// var promptAudio16kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var pheme = new Pheme&lt;float&gt;(architecture, new PhemeOptions());

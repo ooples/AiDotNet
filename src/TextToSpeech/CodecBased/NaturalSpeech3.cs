@@ -38,7 +38,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new NaturalSpeech3&lt;float&gt;(architecture, new NaturalSpeech3Options());
 /// model.LoadFACodec("ns3_facodec_encoder.bin", "ns3_facodec_decoder.bin");
-/// model.Voice = model.CreateVoice(prompt, model.TextToPhonemes("what the prompt says"), promptDurations);   // 16 kHz
+/// var prompt = Tensor&lt;float&gt;.CreateRandom(1, 3 * 16000);              // 3 s of the target voice at 16 kHz
+/// int[] promptPhonemes = model.TextToPhonemes("what the prompt says");
+/// int[] promptDurations = new int[promptPhonemes.Length];                 // FACodec frames per phoneme, e.g. from an aligner
+/// for (int i = 0; i &lt; promptDurations.Length; i++) promptDurations[i] = 240 / promptDurations.Length;
+/// model.Voice = model.CreateVoice(prompt, promptPhonemes, promptDurations);
 /// var audio = model.Synthesize("The quick brown fox.");
 /// </code>
 /// </example>

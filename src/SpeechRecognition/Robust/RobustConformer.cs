@@ -36,14 +36,20 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// </remarks>
 /// <example>
 /// <code>
+/// var noisyWaveforms = Tensor&lt;float&gt;.CreateRandom(1, 16000);   // 16 kHz
+/// var cleanWaveforms = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var transcriptCodePoints = new Tensor&lt;float&gt;(new[] { 5 }, new Vector&lt;float&gt;(new float[] { 104, 101, 108, 108, 111 }));   // "hello"
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputSize: 16000, outputSize: 128);
 /// var model = new RobustConformer&lt;float&gt;(architecture);
-/// model.ContinualPretrain(noisyWaveforms, cleanWaveforms);
-/// model.Train(waveform, transcriptCodePoints);
-/// var text = model.Transcribe(waveform).Text;
+/// model.ContinualPretrain(noisyWaveforms, cleanWaveforms);   // the paper's robustness pretraining
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(waveform, transcriptCodePoints);
+/// var logits = result.Predict(waveform);   // per-frame character logits
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -80,6 +86,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     [AiDotNet.Attributes.Scratch]
     private bool _inContinualPretrain;
     internal NoiseRobustWav2Vec2Network<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -129,9 +136,13 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("RobustConformer does not support streaming.");
 
     protected override void InitializeLayers() => InitializeLayersCore();
@@ -159,10 +170,13 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         return _network.Stack.Run(input, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder, _options.FinalDropout);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
+    /// <inheritdoc/>
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
         => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && !_inContinualPretrain && _options.FreezeFeatureEncoder
             && _network is not null && _network.Stack.IsFeatureEncoderLayer(Layers[layerIndex])
@@ -245,6 +259,7 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RobustConformer-Native" : "RobustConformer-ONNX", Description = "Noise-robust wav2vec 2.0 with speech reconstruction (Wang et al. 2021) + CTC", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RobustConformer<T>)); }
