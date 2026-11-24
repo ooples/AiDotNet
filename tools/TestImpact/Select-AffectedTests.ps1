@@ -56,6 +56,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# select-shards' chosen matrix. CI passes it as a file (SELECTED_MATRIX_PATH): a large selection outgrows Linux's
+# 128 KiB limit on one environment string. SELECTED_MATRIX still works for callers that pass it inline. An unreadable
+# file reads as empty, which falls through to the same passthrough as an empty or unparsable matrix.
+$selectedMatrixJson = if ($env:SELECTED_MATRIX_PATH) {
+    try { Get-Content -LiteralPath $env:SELECTED_MATRIX_PATH -Raw -ErrorAction Stop } catch { '' }
+} else { $env:SELECTED_MATRIX }
+
 function Get-RepackedMatrix {
     <#
         Layer 2: the matrix with its slices packed into time-balanced jobs, as JSON, or $null to leave the matrix one
@@ -143,7 +150,7 @@ function Write-Passthrough([string] $Why) {
     # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
     # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
     # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
-    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
+    $passed = @(try { @($selectedMatrixJson | ConvertFrom-Json) } catch { @() })
     # The one exception, and only with TEST_IMPACT_REPACK=on: the chosen selection repacked into time-balanced jobs
     # (Layer 2). It carries the same shards once, so it is the size select-shards' own matrix already was, and
     # ledger_matrix and skipped still fall back to select-shards. Empty in every other case, as before.
@@ -272,7 +279,7 @@ if (-not $plan.resolved) {
 # coverage selection) never runs here, however TypeImpact reaches it.
 try {
     $chosen = [Collections.Generic.HashSet[string]]::new(
-        [string[]] @($env:SELECTED_MATRIX | ConvertFrom-Json | ForEach-Object { [string] $_.name } | Where-Object { $_ }),
+        [string[]] @($selectedMatrixJson | ConvertFrom-Json | ForEach-Object { [string] $_.name } | Where-Object { $_ }),
         [StringComparer]::Ordinal)
 }
 catch { $chosen = $null }
