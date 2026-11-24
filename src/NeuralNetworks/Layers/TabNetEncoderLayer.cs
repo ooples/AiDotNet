@@ -200,6 +200,10 @@ public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
         // is a tape-safe way to take the [:, :n_d] and [:, n_d:] slices of the
         // feature-transformer output without a (tape-fragile) tensor slice op.
         // They are the first n_d and the last n_a columns of the [ftOut, ftOut] identity.
+        // The selectors live as long as the layer, so they must not come from an ambient TensorArena: a layer
+        // built inside one had its selectors recycled by the next Reset, and backward then read a [1, 128]
+        // matmul operand out of a 64-element buffer.
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             var identity = Engine.TensorEye<T>(ftOut);
