@@ -351,5 +351,89 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
     "metric": "trainStepMs",
     "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "53c7c2c00f",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 4.25 -> 679.59 ms. Local A/B on one machine, master b45f47fa3e vs the branch: warm step 2.7 ms vs 556 ms; cold (first) step 1212 vs 1387 ms; construct 622 vs 732 ms. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "53c7c2c00f",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
   }
 ]
