@@ -85,7 +85,12 @@ jobs:
     # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
     # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
     # with enough time for analysis and upload on the expanded native model source.
-    timeout-minutes: 120
+    #
+    # 120 -> 180: the scheduled run of 2026-11-25 (45588195426) finished every step, upload included, and
+    # was cancelled at 120 minutes 11 seconds while completing the job; the night before took 119 minutes.
+    # Since 2026-11-24 the traced build takes about 60 minutes (36 the night before) and the analysis 55.
+    # The limit bounds a hung job; it must not sit on the job's normal duration.
+    timeout-minutes: 180
     if: "${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
