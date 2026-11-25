@@ -115,9 +115,14 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// 
     /// Some key points about the Sparsemax derivative:
     /// - For outputs that are zero, the derivatives are also zero (these outputs don't respond to small input changes)
-    /// - For non-zero outputs, the derivatives form a specific pattern:
-    ///   - When i=j (diagonal elements): the derivative is 1
-    ///   - When i?j: the derivative is negative and depends on the output values
+    /// - The non-zero outputs (the "support", k of them) all equal their input minus one shared threshold, and that
+    ///   threshold is the average of the support's inputs minus 1/k. So:
+    ///   - When i=j (diagonal elements): the derivative is 1 - 1/k
+    ///   - When i and j are different members of the support: the derivative is -1/k
+    ///   - When j is outside the support: the derivative is 0
+    ///
+    /// In matrix form this is diag(s) - s s^T / k, where s is 1 on the support and 0 elsewhere (Martins and
+    /// Astudillo, 2016, equation 11).
     /// 
     /// During neural network training, this matrix helps determine how to adjust the weights based on errors.
     /// The sparsity of Sparsemax can make training more efficient because many derivatives will be zero.
@@ -134,16 +139,19 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
         var engine = Engine;
         var output = Tensor<T>.FromVector(Activate(input));
 
-        // byColumn[i, j] = output[j]; byRow[i, j] = output[i]
-        var byColumn = engine.TensorTile(engine.Reshape(output, new[] { 1, d }), new[] { d, 1 });
-        var byRow = engine.TensorTile(engine.Reshape(output, new[] { d, 1 }), new[] { 1, d });
+        // s[i] = 1 where the output is positive (the support), 0 elsewhere
+        var support = engine.TensorGreaterThan(output, NumOps.Zero);
+        T supportSize = engine.TensorSum(support);
+        if (!NumOps.GreaterThan(supportSize, NumOps.Zero))
+        {
+            // Only a NaN input leaves the support empty; there is nothing to differentiate
+            return new Matrix<T>(d, d);
+        }
 
-        // Rows whose output is positive: 1 on the diagonal, -(output[j] / output[i]) off it.
-        // Every other row is zero.
-        var supported = ReplaceDiagonal(
-            engine.TensorNegate(engine.TensorDivide(byColumn, byRow)), engine.TensorOnesLike(output));
-        return engine.TensorWhere(
-            engine.TensorGreaterThan(byRow, NumOps.Zero), supported, engine.TensorZerosLike(supported)).ToMatrix();
+        // On the support the output is input - tau with tau = (sum of the support's inputs - 1) / |S|,
+        // so J = diag(s) - s s^T / |S|
+        var shared = engine.TensorDivideScalar(engine.TensorOuter(support, support), supportSize);
+        return engine.TensorSubtract(engine.TensorDiag(support), shared).ToMatrix();
     }
 
 }

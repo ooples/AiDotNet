@@ -154,13 +154,10 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 1. How the softmax output changes with respect to the normalized input
     /// 2. How the normalized input changes with respect to the original input
     /// 
-    /// For diagonal elements (when i=j):
-    /// - term1: How the softmax output changes if its own input increases
-    /// - term2: How the normalization affects this relationship
-    /// 
-    /// For off-diagonal elements (when i?j):
-    /// - term1: How one output changes when a different input increases
-    /// - term2: How the normalization creates interdependencies between inputs
+    /// The chain rule multiplies the two: with u = x / ||x|| and y = softmax(u),
+    /// J = (diag(y) - y y^T) * (I - u u^T) / ||x||.
+    /// The first factor is the ordinary softmax Jacobian; the second is the Jacobian of the normalization, which
+    /// removes the part of any input change that points along x (scaling x does not change the output).
     /// 
     /// Don't worry if the math seems complex - the neural network library handles these calculations automatically.
     /// The important thing to understand is that this function helps the network learn by showing how changes in
@@ -175,11 +172,14 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
 
-        // J[i, j] = (term1 - term2) / norm, with term1 the softmax-form entry (output[i] * (1 - output[i])
-        // on the diagonal, -output[i] * output[j] off it) and term2 = input[i] * input[j] / norm^2
-        var term1 = SoftmaxJacobian(Tensor<T>.FromVector(output));
-        var term2 = engine.TensorDivideScalar(engine.TensorOuter(values, values), NumOps.Multiply(norm, norm));
-        return engine.TensorDivideScalar(engine.TensorSubtract(term1, term2), norm).ToMatrix();
+        // Chain rule through u = x / ||x||: J = S (I - u u^T) / ||x|| = (S - (S u) u^T) / ||x||, with S the
+        // softmax Jacobian diag(y) - y y^T evaluated at u
+        int n = input.Length;
+        var softmaxJacobian = SoftmaxJacobian(Tensor<T>.FromVector(output));
+        var unit = engine.TensorDivideScalar(values, norm);
+        var alongUnit = engine.TensorMatMul(softmaxJacobian, engine.Reshape(unit, new[] { n, 1 }));
+        var projected = engine.TensorMatMul(alongUnit, engine.Reshape(unit, new[] { 1, n }));
+        return engine.TensorDivideScalar(engine.TensorSubtract(softmaxJacobian, projected), norm).ToMatrix();
     }
 
 }

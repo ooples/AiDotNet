@@ -279,6 +279,9 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 2. For each class, it calculates how changes to the input affect the probability of that class
     /// 3. These calculations help the neural network learn by adjusting weights in the right direction
     /// 
+    /// A class probability is a product of one factor per tree level, so by the product rule its derivative is a
+    /// sum with one term per level: that level's factor is differentiated and every other level's factor is kept.
+    /// 
     /// The "Jacobian matrix" is simply a collection of all these derivatives organized in rows and columns,
     /// where each row corresponds to an output class and each column to an input dimension.
     /// </para>
@@ -293,16 +296,46 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var engine = Engine;
         var (right, active) = PathMasks();
         var sigmoids = NodeSigmoids(input);
+        var oneMinusSigmoids = engine.TensorAddScalar(engine.TensorNegate(sigmoids), NumOps.One);
 
-        // Each visited node contributes its weights scaled by sigmoid * (1 - sigmoid), added when the
-        // path goes right and subtracted when it goes left
-        var factors = engine.TensorMultiply(
-            sigmoids, engine.TensorAddScalar(engine.TensorNegate(sigmoids), NumOps.One));
-        var signed = engine.TensorWhere(right, factors, engine.TensorNegate(factors));
-        var coefficients = engine.TensorWhere(active, signed, engine.TensorZerosLike(signed));
+        // P[c] is the product over the path of f[c, d] = sigmoid[d] (right) or 1 - sigmoid[d] (left), and
+        // each factor's derivative with respect to its node score z[d] = w[d] . x is +/- sigmoid (1 - sigmoid).
+        // The product rule keeps every other factor of the path:
+        //   dP[c]/dz[d] = (product of f[c, e] for e != d) * (+/-) sigmoid[d] (1 - sigmoid[d])
+        //               = P[c] (1 - sigmoid[d]) going right, -P[c] sigmoid[d] going left,
+        // written through "the other factors" so a factor of exactly zero does not divide.
+        var step = engine.TensorWhere(
+            active, engine.TensorWhere(right, sigmoids, oneMinusSigmoids), engine.TensorOnesLike(sigmoids));
+        var before = ExclusiveCumulativeProduct(step);
+        var after = engine.TensorFlip(
+            ExclusiveCumulativeProduct(engine.TensorFlip(step, new[] { 1 })), new[] { 1 });
+        var others = engine.TensorMultiply(before, after);
+
+        var slope = engine.TensorMultiply(sigmoids, oneMinusSigmoids);
+        var signed = engine.TensorWhere(right, slope, engine.TensorNegate(slope));
+        var coefficients = engine.TensorWhere(
+            active, engine.TensorMultiply(signed, others), engine.TensorZerosLike(signed));
 
         // Row c of the Jacobian is the coefficient-weighted sum of the node weight rows
         return engine.TensorMatMul(coefficients, Tensor<T>.FromRowMatrix(_nodeWeights)).ToMatrix();
+    }
+
+    /// <summary>
+    /// For a [classes, depth] tensor, the product of each row's entries strictly before each position
+    /// (1 at the first position).
+    /// </summary>
+    private Tensor<T> ExclusiveCumulativeProduct(Tensor<T> step)
+    {
+        var engine = Engine;
+        if (_treeDepth == 1)
+        {
+            return engine.TensorOnesLike(step);
+        }
+
+        var inclusive = engine.TensorCumProd(step, 1);
+        var shifted = engine.TensorSlice(inclusive, new[] { 0, 0 }, new[] { _numClasses, _treeDepth - 1 });
+        var ones = engine.TensorOnesLike(engine.TensorSlice(step, new[] { 0, 0 }, new[] { _numClasses, 1 }));
+        return engine.TensorConcatenate(new[] { ones, shifted }, 1);
     }
 
     /// <summary>
