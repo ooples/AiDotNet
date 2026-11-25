@@ -72,6 +72,11 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 3. Divides each element by the sum of all exponential values
     /// </para>
     /// <para>
+    /// The norm is <c>sqrt(sum(x^2) + 1e-12)</c>, the same stabilised norm the tensor overload uses, so the zero
+    /// vector gives the uniform distribution instead of 0 / 0. This overload is the tensor overload applied to the
+    /// vector, so the two always return the same values.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> This method transforms a vector of numbers (like scores for different classes) into 
     /// probabilities that add up to 1. Here's how it works step by step:
     /// 
@@ -96,20 +101,12 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Compute the L2 norm of the input vector
-        T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (input.Length == 0)
+            return new Vector<T>(0);
 
-        // Normalize the input vector
-        Vector<T> normalizedInput = input.Transform(x => NumOps.Divide(x, norm));
-
-        // Apply exponential function to each element
-        Vector<T> expValues = normalizedInput.Transform(NumOps.Exp);
-
-        // Compute the sum of exponential values
-        T sum = expValues.Sum();
-
-        // Divide each exponential value by the sum
-        return expValues.Transform(x => NumOps.Divide(x, sum));
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
