@@ -412,6 +412,28 @@ public static class ElementExtensions
         Assert.Equal(0, Count(diagnostics, "ADNELEM002"));
     }
 
+    // The documented over-count: a host floating-point member of the loop item counts like a member of the numeric
+    // type, so a per-item setting is not told apart from per-item data (2 calls: the conversion and the sum). A
+    // double that is not read from the item (a parameter) leaves the same loop uncounted.
+    // Mutation: stop matching the host floating-point types in IsItemMember.
+    [Theory]
+    [InlineData("layer.LearningRate", 2)]
+    [InlineData("rate", 0)]
+    public async Task HostFloatingPointMemberOfTheLoopItem_IsReported_AndAHostScalarIsNot(string value, int expected)
+    {
+        var diagnostics = await RunAsync(Subject(@"
+    public sealed class Layer { public double LearningRate; }
+
+    public T Total(List<Layer> layers, double rate)
+    {
+        T total = _ops.Zero;
+        foreach (var layer in layers) total = _ops.Add(total, _ops.FromDouble(" + value + @"));
+        return total;
+    }"));
+
+        Assert.Equal(expected, Count(diagnostics, "ADNELEM002"));
+    }
+
     // Mutation: drop ConvertsIntegerElement from TouchesElement: bytes, ids and labels lifted into the numeric type
     // one at a time are no longer seen (2 calls each: the conversion and the sum).
     [Theory]

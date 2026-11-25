@@ -43,7 +43,10 @@ namespace AiDotNet.Generators;
 /// of an integer buffer (<c>FromDouble(bytes[i])</c>), though not one read from a dictionary of tallies or from a
 /// fixed position (<c>shape[0]</c>). Known boundary, not counted: a value computed by a method on the item
 /// (<c>item.GetFitness()</c>), a delegate that is not a local initialized with a lambda (a <c>Func&lt;int, T&gt;</c>
-/// field or parameter), and an accessor without source that is not handed the buffer. A loop that
+/// field or parameter), and an accessor without source that is not handed the buffer. Known over-count: because
+/// the host floating-point types count, a loop over objects that reads a <c>double</c> setting of each item
+/// (<c>foreach (var layer in layers) ... FromDouble(layer.LearningRate)</c>) counts like one that reads a value of
+/// the numeric type from each item; the analyzer cannot tell a per-item setting from per-item data. A loop that
 /// touches none of these is not a loop over elements: it counts epochs, layers, batches or the terms of a series, and
 /// its numeric calls are scalar bookkeeping between whole-tensor operations, which no engine op replaces. An element
 /// access inside a nested loop belongs to that nested loop, so the scalar step after an inner element loop is not
@@ -215,7 +218,9 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
     private static bool IsLoopScope(IOperation operation)
     {
         if (operation is ILoopOperation) return true;
-        if (operation is IAnonymousFunctionOperation or ILocalFunctionOperation)
+        // Only a lambda can be the per-item argument: a local function is declared in a block and reaches a call
+        // as a method group, never as the argument operation itself.
+        if (operation is IAnonymousFunctionOperation)
         {
             var argument = operation.Parent is IDelegateCreationOperation creation ? creation.Parent : operation.Parent;
             if (argument is IArgumentOperation { Parent: IInvocationOperation invocation }
