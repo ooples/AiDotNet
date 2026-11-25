@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -32,8 +34,16 @@ namespace AiDotNet.Generators;
 /// touches an element of the numeric type in its own body: an indexer or array element of that type, a
 /// <c>foreach</c> variable of that type, a per-item lambda that takes or returns one, or a member of a collection of
 /// that type that takes or returns one (<c>list.Add(value)</c>, <c>tensor.GetFlat(i)</c>, <c>enumerator.Current</c>),
-/// or a field or property of that type on the item the loop is on (<c>items[i].Score</c>). The host
-/// floating-point types count as the numeric type here, so a loop converting a <c>double[]</c> still counts. A loop that
+/// or a field or property of that type on the item the loop is on (<c>items[i].Score</c>, <c>item.Box.X1</c>, also
+/// when the item is the parameter of a per-item lambda). An element fetched through a call counts as well: an
+/// accessor that is given a position and returns the element (<c>Get(values, i)</c>, <c>values.ElementAt(i)</c>,
+/// <c>wrapper.Get(i)</c>, a local function or local lambda that indexes the buffer), <c>Unsafe.Add</c>, and a
+/// pointer (<c>p[i]</c>, <c>*p</c>). The host floating-point types count as the numeric type here, so a loop
+/// converting a <c>double[]</c> still counts, and so does a conversion into the numeric type of a value indexed out
+/// of an integer buffer (<c>FromDouble(bytes[i])</c>), though not one read from a dictionary of tallies or from a
+/// fixed position (<c>shape[0]</c>). Known boundary, not counted: a value computed by a method on the item
+/// (<c>item.GetFitness()</c>), a delegate that is not a local initialized with a lambda (a <c>Func&lt;int, T&gt;</c>
+/// field or parameter), and an accessor without source that is not handed the buffer. A loop that
 /// touches none of these is not a loop over elements: it counts epochs, layers, batches or the terms of a series, and
 /// its numeric calls are scalar bookkeeping between whole-tensor operations, which no engine op replaces. An element
 /// access inside a nested loop belongs to that nested loop, so the scalar step after an inner element loop is not
@@ -242,6 +252,85 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    /// <summary>
+    /// A conversion into the numeric type (<c>FromDouble</c> and its siblings) of a value indexed out of an integer
+    /// buffer, or of the variable of a <c>foreach</c> over one: pixel bytes, token ids or class labels lifted into
+    /// the numeric type one at a time. A dictionary of tallies is not a buffer, and neither is a fixed position
+    /// (<c>shape[0]</c>).
+    /// </summary>
+    private static bool ConvertsIntegerElement(IInvocationOperation call)
+    {
+        if (!call.TargetMethod.Name.StartsWith("From", StringComparison.Ordinal)) return false;
+        var pending = new Stack<IOperation>();
+        foreach (var argument in call.Arguments) pending.Push(argument);
+        while (pending.Count > 0)
+        {
+            var operation = pending.Pop();
+            switch (operation)
+            {
+                case IAnonymousFunctionOperation or ILocalFunctionOperation:
+                    continue;
+                case IArrayElementReferenceOperation element
+                    when IsInteger(element.Type) && element.Indices.Any(i => !i.ConstantValue.HasValue):
+                    return true;
+                case IPropertyReferenceOperation { Property.IsIndexer: true, Instance: { } buffer } indexer
+                    when IsInteger(indexer.Type) && IsIntegerBuffer(Unwrap(buffer).Type)
+                         && indexer.Arguments.Any(a => !a.Value.ConstantValue.HasValue):
+                    return true;
+                case ILocalReferenceOperation local when IsInteger(local.Type) && IsIntegerBufferItem(call, local.Local):
+                    return true;
+            }
+
+            foreach (var child in operation.ChildOperations) pending.Push(child);
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a local is the variable of an enclosing <c>foreach</c> over an integer buffer.</summary>
+    private static bool IsIntegerBufferItem(IOperation from, ILocalSymbol local)
+    {
+        for (var current = from.Parent; current is not null; current = current.Parent)
+        {
+            if (current is IForEachLoopOperation forEach
+                && forEach.Locals.Contains(local, SymbolEqualityComparer.Default))
+                return IsIntegerBuffer(Unwrap(forEach.Collection).Type);
+        }
+
+        return false;
+    }
+
+    private static bool IsInteger(ITypeSymbol? type)
+        => type is not null && type.SpecialType is SpecialType.System_SByte or SpecialType.System_Byte
+               or SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Int32
+               or SpecialType.System_UInt32 or SpecialType.System_Int64 or SpecialType.System_UInt64;
+
+    /// <summary>An array, span, memory or list of integers. A dictionary is not one.</summary>
+    private static bool IsIntegerBuffer(ITypeSymbol? type)
+    {
+        switch (type)
+        {
+            case IArrayTypeSymbol array:
+                return IsInteger(array.ElementType);
+            case INamedTypeSymbol named:
+                if (named.Name is "Span" or "ReadOnlySpan" or "Memory" or "ReadOnlyMemory"
+                    && named.TypeArguments.Length == 1 && IsInteger(named.TypeArguments[0]))
+                    return true;
+                return IsIntegerList(named) || named.AllInterfaces.Any(IsIntegerList);
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsIntegerList(INamedTypeSymbol type)
+        => type.Name is "IList" or "IReadOnlyList" && type.TypeArguments.Length == 1 && IsInteger(type.TypeArguments[0]);
+
+    private static IOperation Unwrap(IOperation operation)
+    {
+        while (operation is IConversionOperation conversion) operation = conversion.Operand;
+        return operation;
+    }
+
     /// <summary>Whether a loop scope reads or writes an element of the numeric type outside its nested loops.</summary>
     private static bool TouchesElement(IOperation scope, ITypeSymbol elementType)
     {
@@ -262,6 +351,9 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
             var operation = pending.Pop();
             if (IsLoopScope(operation)) continue;
             if (IsElementAccess(operation, elementType) || IsItemMember(operation, scope, elementType)) return true;
+            if (operation is IInvocationOperation lifted && HoldsElement(lifted.Type, elementType)
+                && ConvertsIntegerElement(lifted))
+                return true;
             foreach (var child in operation.ChildOperations) pending.Push(child);
         }
 
@@ -278,19 +370,129 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
                 return HoldsElement(indexer.Type, elementType);
             case IPropertyReferenceOperation { Instance: { } receiver } property:
                 return Same(property.Type, elementType) && IsElementCollection(receiver.Type, elementType);
-            case IInvocationOperation { Instance: { } receiver } invocation:
-                return IsElementCollection(receiver.Type, elementType)
-                       && (Same(invocation.TargetMethod.ReturnType, elementType)
-                           || invocation.TargetMethod.Parameters.Any(p => Same(p.Type, elementType)));
+            case IInvocationOperation invocation:
+                return IsElementCall(invocation, elementType);
+            default:
+                // p[i] and *p on a pointer have no public operation of their own.
+                return operation.Kind == OperationKind.None
+                       && (operation.Syntax is ElementAccessExpressionSyntax
+                           || operation.Syntax.IsKind(SyntaxKind.PointerIndirectionExpression))
+                       && HoldsElement(operation.Type ?? operation.SemanticModel?.GetTypeInfo(operation.Syntax).Type, elementType);
+        }
+    }
+
+    /// <summary>
+    /// A call that reads or writes one element:
+    /// <list type="bullet">
+    /// <item>a member of a collection of the numeric type that takes or returns one (<c>list.Add(value)</c>,
+    /// <c>tensor.GetFlat(i)</c>);</item>
+    /// <item><c>Unsafe.Add(ref first, i)</c> and its siblings stepping a reference to the numeric type;</item>
+    /// <item>a call that is given a position and returns the numeric type, when it is an accessor: for a method,
+    /// local function or local lambda with source, a value it returns is an indexed element or a conversion of one
+    /// (<c>T Get(T[] a, int i) =&gt; a[i]</c>, <c>wrapper.Get(i)</c>, <c>T At(int i) =&gt; values[i]</c>,
+    /// <c>return NumOps.ToDouble(tensor[c, y, x]);</c>); for a method
+    /// without source, it is also handed a collection of the numeric type (<c>values.ElementAt(i)</c>).</item>
+    /// </list>
+    /// A whole-buffer reduction (<c>engine.DotProduct(a, b)</c>) takes no position, and a method with source that
+    /// computes its result (<c>schedule.Rate(epoch)</c>) is not an accessor. A delegate that is not a local
+    /// initialized with a lambda cannot be read and is not counted.
+    /// </summary>
+    private static bool IsElementCall(IInvocationOperation invocation, ITypeSymbol elementType)
+    {
+        var method = invocation.TargetMethod;
+        if (invocation.Instance is { } receiver && IsElementCollection(receiver.Type, elementType)
+            && (Same(method.ReturnType, elementType) || method.Parameters.Any(p => Same(p.Type, elementType))))
+            return true;
+
+        if (!HoldsElement(method.ReturnType, elementType)) return false;
+        if (method.ContainingType is { Name: "Unsafe" }
+            && method.Name is "Add" or "Subtract" or "AddByteOffset" or "SubtractByteOffset")
+            return true;
+        if (!invocation.Arguments.Any(a => IsPosition(Unwrap(a.Value).Type))) return false;
+
+        if (method.MethodKind == MethodKind.DelegateInvoke)
+        {
+            return invocation.Instance is { } target && Unwrap(target) is ILocalReferenceOperation local
+                   && local.Local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax
+                   {
+                       Initializer.Value: AnonymousFunctionExpressionSyntax lambda
+                   }
+                   && ReturnsAnElement(lambda.Body);
+        }
+
+        var declaration = (method.ReducedFrom ?? method).OriginalDefinition.DeclaringSyntaxReferences
+            .Select(r => r.GetSyntax())
+            .FirstOrDefault(n => n is BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax);
+        switch (declaration)
+        {
+            case BaseMethodDeclarationSyntax declared:
+                return ReturnsAnElement((SyntaxNode?)declared.ExpressionBody?.Expression ?? declared.Body);
+            case LocalFunctionStatementSyntax localFunction:
+                return ReturnsAnElement((SyntaxNode?)localFunction.ExpressionBody?.Expression ?? localFunction.Body);
+            default:
+                return invocation.Arguments.Any(a => IsElementCollection(Unwrap(a.Value).Type, elementType));
+        }
+    }
+
+    private static bool IsPosition(ITypeSymbol? type)
+        => IsInteger(type) || type is { Name: "Index", ContainingNamespace.Name: "System" };
+
+    /// <summary>Whether a body returns an indexed element, or a conversion of one, on some path.</summary>
+    private static bool ReturnsAnElement(SyntaxNode? body)
+    {
+        switch (body)
+        {
+            case ExpressionSyntax expression:
+                return IsElementExpression(expression);
+            case BlockSyntax block:
+                var returns = block.DescendantNodes(n => n is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax))
+                    .OfType<ReturnStatementSyntax>().ToList();
+                return returns.Any(r => r.Expression is not null && IsElementExpression(r.Expression));
             default:
                 return false;
         }
     }
 
+    private static bool IsElementExpression(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case CastExpressionSyntax cast:
+                    expression = cast.Expression;
+                    continue;
+                case RefExpressionSyntax reference:
+                    expression = reference.Expression;
+                    continue;
+                case ElementAccessExpressionSyntax:
+                    return true;
+                case InvocationExpressionSyntax { ArgumentList.Arguments: { Count: 1 } arguments }:
+                    // A conversion of the element: NumOps.ToDouble(tensor[i]), Convert.ToDouble(a[i])
+                    expression = arguments[0].Expression;
+                    continue;
+                case MemberAccessExpressionSyntax member:
+                    // A member of the element: items[i].Score
+                    expression = member.Expression;
+                    continue;
+                case PrefixUnaryExpressionSyntax prefix:
+                    return prefix.IsKind(SyntaxKind.PointerIndirectionExpression);
+                case TupleExpressionSyntax tuple:
+                    return tuple.Arguments.Any(a => IsElementExpression(a.Expression));
+                default:
+                    return false;
+            }
+        }
+    }
+
     /// <summary>
-    /// A field or property of the numeric type read from the item a loop is on: <c>items[i].Value</c>, or
-    /// <c>item.Value</c> on the variable of the enclosing <c>foreach</c>. The values live in objects rather than in
-    /// one buffer, but the loop still visits one of them per iteration.
+    /// A field or property of the numeric type read from the item a loop is on: <c>items[i].Value</c>,
+    /// <c>item.Value</c> on the variable of the enclosing <c>foreach</c> or on the parameter of the enclosing per-item
+    /// lambda, at any depth (<c>item.Box.X1</c>). The values live in objects rather than in one buffer, but the loop
+    /// still visits one of them per iteration.
     /// </summary>
     private static bool IsItemMember(IOperation operation, IOperation scope, ITypeSymbol elementType)
     {
@@ -298,13 +500,23 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
             || member is not (IPropertyReferenceOperation or IFieldReferenceOperation)
             || !HoldsElement(member.Type, elementType))
             return false;
-        while (instance is IConversionOperation conversion) instance = conversion.Operand;
+        // Walk to the root of the member chain: items[i].Box.X1 is still a value of the item the loop is on.
+        while (true)
+        {
+            if (instance is IConversionOperation conversion) instance = conversion.Operand;
+            else if (instance is IMemberReferenceOperation { Instance: { } inner } chain
+                     && chain is not IPropertyReferenceOperation { Property.IsIndexer: true }) instance = inner;
+            else break;
+        }
+
         return instance switch
         {
             IArrayElementReferenceOperation => true,
             IPropertyReferenceOperation { Property.IsIndexer: true } => true,
             ILocalReferenceOperation local => scope is IForEachLoopOperation forEach
                                               && forEach.Locals.Contains(local.Local, SymbolEqualityComparer.Default),
+            IParameterReferenceOperation parameter => scope is IAnonymousFunctionOperation lambda
+                                                      && lambda.Symbol.Parameters.Contains(parameter.Parameter, SymbolEqualityComparer.Default),
             _ => false,
         };
     }

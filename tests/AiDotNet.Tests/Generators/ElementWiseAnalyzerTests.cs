@@ -50,6 +50,9 @@ public sealed class Subject<T>
     {
         // The compiled snippets use the real tensor types, so their assembly must be loaded before the scan.
         GC.KeepAlive(typeof(Tensor<double>));
+        // Types the snippets name that are not otherwise loaded on every target framework.
+        GC.KeepAlive(typeof(System.Runtime.CompilerServices.Unsafe));
+        GC.KeepAlive(typeof(ValueTuple<int, int>));
         var references = new List<MetadataReference>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -63,7 +66,8 @@ public sealed class Subject<T>
     }
 
     private static async Task<ImmutableArray<Diagnostic>> RunAsync(
-        string source, string? baseline = null, bool gate = true, bool newestFramework = true)
+        string source, string? baseline = null, bool gate = true, bool newestFramework = true,
+        bool allowUnsafe = false)
     {
         var parseOptions = new CSharpParseOptions(LanguageVersion.Latest,
             preprocessorSymbols: newestFramework ? new[] { "NET10_0_OR_GREATER" } : Array.Empty<string>());
@@ -71,7 +75,7 @@ public sealed class Subject<T>
             "ElementWiseGateSubject",
             new[] { CSharpSyntaxTree.ParseText(source, parseOptions) },
             References(),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: allowUnsafe));
 
         var compileErrors = compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
         Assert.True(compileErrors.Length == 0, "The snippet must compile: " + string.Join("; ", compileErrors.Take(3)));
@@ -262,6 +266,182 @@ public sealed class Subject<T>
     }"));
 
         Assert.Equal(2, Count(diagnostics, "ADNELEM002"));
+    }
+
+    private const string Helpers = @"
+    private T Get(T[] a, int i) => a[i];
+    private static T GetChecked(T[] a, int i) { if (i < 0) throw new ArgumentOutOfRangeException(nameof(i)); return a[i]; }
+    private static (T, T) Pair(T[] a, int i) => (a[i], a[i + 1]);
+    private T DotAll(T[] a, T[] b) => _ops.Zero;
+    private double AsDouble(T[] a, int i) { if (i >= a.Length) return 0.0; return _ops.ToDouble(a[i]); }
+    private T Rate(int epoch) => _ops.FromDouble(1.0 / (epoch + 1));
+    private T Percentile(T[] a, int p) { T best = a[0]; return _ops.Add(best, best); }
+    private readonly Func<int, T> _schedule = _ => default(T);
+    public sealed class Wrapper
+    {
+        private readonly T[] _data;
+        public Wrapper(T[] data) { _data = data; }
+        public T Get(int i) => _data[i];
+    }
+";
+
+    private const string Extensions = @"
+public static class ElementExtensions
+{
+    public static T At<T>(this T[] values, int i) => values[i];
+}";
+
+    private static string Sum(string body)
+        => Subject(Helpers + "public T Sum(T[] values) { T total = _ops.Zero; " + body + " return total; }") + Extensions;
+
+    // Mutation: drop ILoopOperation / IteratingMethods entries, or the IsElementCollection member cases: each of
+    // these is one numeric call on one element per iteration, whatever the loop is spelled as.
+    [Theory]
+    [InlineData("for (int i = 0; i < values.Length; i++) total = _ops.Add(total, values[i]);")]
+    [InlineData("int i = 0; while (i < values.Length) { total = _ops.Add(total, values[i]); i++; }")]
+    [InlineData("foreach (var v in values) total = _ops.Add(total, v);")]
+    [InlineData("using var e = ((IEnumerable<T>)values).GetEnumerator(); while (e.MoveNext()) total = _ops.Add(total, e.Current);")]
+    [InlineData("total = values.Aggregate(total, (a, v) => _ops.Add(a, v));")]
+    [InlineData("Array.ForEach(values, v => total = _ops.Add(total, v));")]
+    [InlineData("var span = values.AsSpan(); for (int i = 0; i < span.Length; i++) total = _ops.Add(total, span[i]);")]
+    public async Task ElementLoop_InAnyLoopForm_IsReported(string body)
+    {
+        var diagnostics = await RunAsync(Sum(body));
+
+        Assert.Equal(1, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: return false from IsElementCall after the collection-member case (the rule before this test): an
+    // element read through a helper, an extension, ElementAt, a local function, a local lambda, a wrapper method,
+    // Unsafe.Add or a tuple-returning helper then passes the gate with no diagnostic.
+    [Theory]
+    [InlineData(1, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, Get(values, i));")]
+    [InlineData(1, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, GetChecked(values, i));")]
+    [InlineData(1, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, values.At(i));")]
+    [InlineData(2, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, _ops.FromDouble(AsDouble(values, i)));")]
+    [InlineData(1, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, values.ElementAt(i));")]
+    [InlineData(1, "T At(int i) => values[i]; for (int i = 0; i < values.Length; i++) total = _ops.Add(total, At(i));")]
+    [InlineData(1, "Func<int, T> at = i => values[i]; for (int i = 0; i < values.Length; i++) total = _ops.Add(total, at(i));")]
+    [InlineData(1, "var wrapper = new Wrapper(values); for (int i = 0; i < values.Length; i++) total = _ops.Add(total, wrapper.Get(i));")]
+    [InlineData(1, "ref T first = ref values[0]; for (int i = 0; i < values.Length; i++) { ref T r = ref System.Runtime.CompilerServices.Unsafe.Add(ref first, i); total = _ops.Add(total, r); }")]
+    [InlineData(1, "var all = values; System.Threading.Tasks.Parallel.For(0, all.Length, i => { T local = _ops.Add(_ops.Zero, Get(all, i)); });")]
+    [InlineData(2, "for (int i = 0; i + 1 < values.Length; i++) { (T a, T b) = Pair(values, i); total = _ops.Add(total, _ops.Add(a, b)); }")]
+    public async Task ElementFetchedThroughACall_IsReported(int expected, string body)
+    {
+        var diagnostics = await RunAsync(Sum(body));
+
+        Assert.Equal(expected, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: make IsElementCall return true for any call that returns the numeric type: the scalar bookkeeping
+    // this rule exists to leave alone is counted again. The third line is the documented boundary: a delegate held
+    // in a field cannot be read, so it is not counted.
+    [Theory]
+    [InlineData("for (int k = 0; k < 3; k++) total = _ops.Add(total, DotAll(values, values));")]
+    [InlineData("for (int epoch = 0; epoch < 3; epoch++) total = _ops.Add(total, Rate(epoch));")]
+    [InlineData("for (int epoch = 0; epoch < 3; epoch++) total = _ops.Add(total, _schedule(epoch));")]
+    [InlineData("Func<int, T> rate = e => _ops.FromDouble(e); for (int epoch = 0; epoch < 3; epoch++) total = _ops.Add(total, rate(epoch));")]
+    [InlineData("for (int k = 0; k < 3; k++) total = _ops.Add(total, Percentile(values, k));")]
+    [InlineData("T Twice(int k) => _ops.FromDouble(2.0 * k); for (int k = 0; k < 3; k++) total = _ops.Add(total, Twice(k));")]
+    public async Task ScalarReachedThroughACall_IsNotReported(string body)
+    {
+        var diagnostics = await RunAsync(Sum(body));
+
+        Assert.Equal(0, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: drop the pointer cases of IsElementAccess.
+    [Theory]
+    [InlineData("total = _ops.Add(total, _ops.FromDouble(p[i]));")]
+    [InlineData("total = _ops.Add(total, _ops.FromDouble(*(p + i)));")]
+    public async Task ElementReadThroughAPointer_IsReported(string step)
+    {
+        var diagnostics = await RunAsync(Subject(@"
+    public unsafe T Sum(double* p, int n)
+    {
+        T total = _ops.Zero;
+        for (int i = 0; i < n; i++) " + step + @"
+        return total;
+    }"), allowUnsafe: true);
+
+        Assert.Equal(2, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: drop the IParameterReferenceOperation arm of IsItemMember, or its walk up the member chain.
+    [Fact]
+    public async Task MemberOfALambdaItemOrANestedMember_IsReported()
+    {
+        var diagnostics = await RunAsync(Subject(@"
+    public sealed class Node { public T Score; public Node Next; }
+
+    public int Above(List<Node> items, T threshold)
+        => items.Count(r => _ops.GreaterThan(r.Score, threshold));
+
+    public T TotalOfNext(List<Node> items)
+    {
+        T total = _ops.Zero;
+        for (int i = 0; i < items.Count; i++) total = _ops.Add(total, items[i].Next.Score);
+        return total;
+    }
+
+    public T TotalOfNextEach(List<Node> items)
+    {
+        T total = _ops.Zero;
+        foreach (var item in items) total = _ops.Add(total, item.Next.Score);
+        return total;
+    }"));
+
+        Assert.Equal(3, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // The documented boundary: a value computed by a method on the loop item is not an element of any buffer.
+    // Mutation: count any call that returns the numeric type.
+    [Fact]
+    public async Task ValueComputedByAMethodOnTheLoopItem_IsNotReported()
+    {
+        var diagnostics = await RunAsync(Subject(@"
+    public struct Item { public T Score; public T GetFitness() => Score; }
+
+    public T Total(List<Item> items)
+    {
+        T total = _ops.Zero;
+        foreach (var item in items) total = _ops.Add(total, item.GetFitness());
+        return total;
+    }"));
+
+        Assert.Equal(0, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: drop ConvertsIntegerElement from TouchesElement: bytes, ids and labels lifted into the numeric type
+    // one at a time are no longer seen (2 calls each: the conversion and the sum).
+    [Theory]
+    [InlineData("byte[] pixels", "for (int i = 0; i < pixels.Length; i++) total = _ops.Add(total, _ops.FromDouble(pixels[i]));")]
+    [InlineData("int[] ids", "for (int i = 0; i < ids.Length; i++) total = _ops.Add(total, _ops.FromDouble(ids[i]));")]
+    [InlineData("long[] ticks", "foreach (long tick in ticks) total = _ops.Add(total, _ops.FromDouble(tick));")]
+    [InlineData("List<int> ids", "foreach (int id in ids) total = _ops.Add(total, _ops.FromDouble(id));")]
+    [InlineData("IReadOnlyList<int> ids", "for (int i = 0; i < ids.Count; i++) total = _ops.Add(total, _ops.FromDouble(ids[i]));")]
+    [InlineData("ReadOnlySpan<byte> pixels", "for (int i = 0; i < pixels.Length; i++) total = _ops.Add(total, _ops.FromDouble(pixels[i] / 255.0));")]
+    public async Task IntegerBufferConvertedElementByElement_IsReported(string parameter, string body)
+    {
+        var diagnostics = await RunAsync(Subject(
+            "public T Sum(" + parameter + ") { T total = _ops.Zero; " + body + " return total; }"));
+
+        Assert.Equal(2, Count(diagnostics, "ADNELEM002"));
+    }
+
+    // Mutation: treat every integer as element data: a dictionary of tallies and a fixed dimension are scalar
+    // bookkeeping, not a buffer being converted.
+    [Theory]
+    [InlineData("Dictionary<string, int> tallies", "foreach (var pair in tallies) total = _ops.Add(total, _ops.FromDouble(pair.Value));")]
+    [InlineData("Dictionary<int, int> tallies", "foreach (int key in tallies.Keys) total = _ops.Add(total, _ops.FromDouble(tallies[key]));")]
+    [InlineData("int[] shape", "for (int k = 0; k < 3; k++) total = _ops.Add(total, _ops.FromDouble(shape[0]));")]
+    [InlineData("int count", "for (int k = 0; k < count; k++) total = _ops.Add(total, _ops.FromDouble(k));")]
+    public async Task IntegerThatIsNotABufferElement_IsNotReported(string parameter, string body)
+    {
+        var diagnostics = await RunAsync(Subject(
+            "public T Sum(" + parameter + ") { T total = _ops.Zero; " + body + " return total; }"));
+
+        Assert.Equal(0, Count(diagnostics, "ADNELEM002"));
     }
 
     // Mutation: return false from IsExempt.
