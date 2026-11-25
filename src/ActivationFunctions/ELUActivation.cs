@@ -164,6 +164,12 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A tensor holding 1 where the input is positive and alpha * exp(x) elsewhere.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // x > 0: 1; otherwise ELU(x, alpha) + alpha = alpha * (exp(x) - 1) + alpha
         var engine = Engine;
         var negativeBranch = engine.TensorAddScalar(

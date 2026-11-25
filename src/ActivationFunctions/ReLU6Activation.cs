@@ -125,6 +125,12 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     /// <returns>A new tensor containing the derivatives of the ReLU6 function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // 1 where 0 < x < 6, 0 elsewhere: the product of the two 0/1 comparison masks
         var engine = Engine;
         return engine.TensorMultiply(

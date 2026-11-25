@@ -72,6 +72,11 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 3. Divides each element by the sum of all exponential values
     /// </para>
     /// <para>
+    /// The norm is <c>sqrt(sum(x^2) + 1e-12)</c>, the same stabilised norm the tensor overload uses, so the zero
+    /// vector gives the uniform distribution instead of 0 / 0. This overload is the tensor overload applied to the
+    /// vector, so the two always return the same values.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> This method transforms a vector of numbers (like scores for different classes) into 
     /// probabilities that add up to 1. Here's how it works step by step:
     /// 
@@ -96,20 +101,12 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        // Compute the L2 norm of the input vector
-        T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (input.Length == 0)
+            return new Vector<T>(0);
 
-        // Normalize the input vector
-        Vector<T> normalizedInput = input.Transform(x => NumOps.Divide(x, norm));
-
-        // Apply exponential function to each element
-        Vector<T> expValues = normalizedInput.Transform(NumOps.Exp);
-
-        // Compute the sum of exponential values
-        T sum = expValues.Sum();
-
-        // Divide each exponential value by the sum
-        return expValues.Transform(x => NumOps.Divide(x, sum));
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
@@ -166,23 +163,77 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        int n = input.Length;
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        if (UseScalarJacobian(n))
+        {
+            return ScalarJacobian(input, Activate(input));
+        }
+
         var engine = Engine;
         var values = Tensor<T>.FromVector(input);
-        // The tensor forward pass, which stabilises the norm; the Jacobian below is of that function
-        var output = Activate(values);
+        var p = Activate(values);
 
-        // The stabilised norm of the forward pass, sqrt(||x||^2 + epsilon): the Jacobian of that function, finite
-        // at the zero vector. d(x / norm)/dx is still (I - u u^T) / norm with u = x / norm.
-        T norm = NumOps.Sqrt(NumOps.Add(input.Transform(x => NumOps.Multiply(x, x)).Sum(), NormalizationEpsilon));
-
-        // Chain rule through u = x / ||x||: J = S (I - u u^T) / ||x|| = (S - (S u) u^T) / ||x||, with S the
-        // softmax Jacobian diag(y) - y y^T evaluated at u
-        int n = input.Length;
-        var softmaxJacobian = SoftmaxJacobian(output);
+        // The same stabilised norm as the forward pass: sqrt(sum(x^2) + epsilon)
+        T norm = NumOps.Sqrt(NumOps.Add(engine.TensorSum(engine.TensorMultiply(values, values)), NormalizationEpsilon));
         var unit = engine.TensorDivideScalar(values, norm);
-        var alongUnit = engine.TensorMatMul(softmaxJacobian, engine.Reshape(unit, new[] { n, 1 }));
-        var projected = engine.TensorMatMul(alongUnit, engine.Reshape(unit, new[] { 1, n }));
-        return engine.TensorDivideScalar(engine.TensorSubtract(softmaxJacobian, projected), norm).ToMatrix();
+
+        // J = S (I - u u^T) / norm with S = diag(p) - p p^T the softmax Jacobian at u = x / norm.
+        // S u = p * u - p (p . u), so J = (diag(p) - p p^T - (S u) u^T) / norm.
+        var pu = engine.TensorMultiply(p, unit);
+        var su = engine.TensorSubtract(pu, engine.TensorMultiplyScalar(p, engine.TensorSum(pu)));
+        var outers = engine.TensorAdd(engine.TensorOuter(p, p), engine.TensorOuter(su, unit));
+        var diagonal = engine.TensorSubtract(
+            p, engine.TensorAdd(engine.TensorMultiply(p, p), engine.TensorMultiply(su, unit)));
+        return SquareWithDiagonal(
+            engine.TensorDivideScalar(engine.TensorNegate(outers), norm), engine.TensorDivideScalar(diagonal, norm));
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarJacobian(Vector<T> input, Vector<T> output)
+    {
+        int n = input.Length;
+        var x = input.AsSpan();
+        var p = output.AsSpan();
+        T sumSquares = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(x[i], x[i]));
+        }
+
+        // The same stabilised norm as the forward pass, and the same J = (diag(p) - p p^T - (S u) u^T) / norm
+        T norm = NumOps.Sqrt(NumOps.Add(sumSquares, NormalizationEpsilon));
+        var unit = new T[n];
+        T dot = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            unit[i] = NumOps.Divide(x[i], norm);
+            dot = NumOps.Add(dot, NumOps.Multiply(p[i], unit[i]));
+        }
+
+        var jacobian = new Matrix<T>(n, n);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < n; i++)
+        {
+            T su = NumOps.Subtract(NumOps.Multiply(p[i], unit[i]), NumOps.Multiply(p[i], dot));
+            int row = i * n;
+            for (int j = 0; j < n; j++)
+            {
+                T outers = NumOps.Add(NumOps.Multiply(p[i], p[j]), NumOps.Multiply(su, unit[j]));
+                cells[row + j] = NumOps.Divide(NumOps.Negate(outers), norm);
+            }
+
+            T diagonal = NumOps.Subtract(
+                p[i], NumOps.Add(NumOps.Multiply(p[i], p[i]), NumOps.Multiply(su, unit[i])));
+            cells[row + i] = NumOps.Divide(diagonal, norm);
+        }
+
+        return jacobian;
     }
 
 }

@@ -150,6 +150,12 @@ public class SignActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // (x > 0) - (x < 0): 1 for positive, -1 for negative and 0 for everything else, the same three
         // branches as the scalar function
         var engine = Engine;

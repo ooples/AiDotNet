@@ -2744,7 +2744,6 @@
 3	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ComputePathDerivative(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
 2	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ComputePathProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
 1	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.InitializeWeights()
-1	ADNELEM002|AiDotNet.ActivationFunctions.TaylorSoftmaxActivation<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM002|AiDotNet.ActiveLearning.BALD<T>.AddDropoutNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double, int)
 1	ADNELEM002|AiDotNet.ActiveLearning.Batch.GradientBatchStrategy<T, TInput, TOutput>.KMeansPlusPlusSelection(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, int)
 2	ADNELEM002|AiDotNet.ActiveLearning.Batch.SubmodularBatchStrategy<T, TInput, TOutput>.GreedyMaximizationWithScores(int[], AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
