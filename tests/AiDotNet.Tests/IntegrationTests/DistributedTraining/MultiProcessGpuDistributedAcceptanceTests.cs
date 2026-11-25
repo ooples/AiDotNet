@@ -107,7 +107,11 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
             {
                 if (!worker.HasExited)
                 {
+#if NET8_0_OR_GREATER
                     worker.Kill(entireProcessTree: true);
+#else
+                    worker.Kill();
+#endif
                 }
             }
             catch (InvalidOperationException ex)
