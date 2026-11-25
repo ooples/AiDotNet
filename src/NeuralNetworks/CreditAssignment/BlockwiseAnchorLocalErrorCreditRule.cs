@@ -240,9 +240,10 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
 
         var s = context.Step;
         var hEval = context.Output;
-        if (_auxU.Length > 0 && hEval.Shape.Length >= 2 && hEval.Shape[^1] == _hiddenDim)
+        if (_auxU.Length > 0 && hEval.Shape.Length >= 2 && hEval.Shape[hEval.Shape.Length - 1] == _hiddenDim)
         {
-            int anchorSlot = Math.Clamp(context.HiddenIndex / Math.Max(1, AnchorStride), 0, _auxU.Length - 1);
+            int rawSlot = context.HiddenIndex / Math.Max(1, AnchorStride);
+            int anchorSlot = Math.Min(_auxU.Length - 1, Math.Max(0, rawSlot));
             int rows = hEval.Length / _hiddenDim;
             var h2d = hEval.Rank == 2 ? hEval : s.Engine.Reshape(hEval, [rows, _hiddenDim]);
             var latent = s.Engine.TensorMatMul(h2d, _auxU[anchorSlot]);
