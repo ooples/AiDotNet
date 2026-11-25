@@ -2,6 +2,8 @@
 # Shrink-only: a member may not exceed its count. Regenerate with tools/ElementWise/Update-ElementWiseBaseline.ps1.
 2	ADNELEM001|AiDotNet.ActivationFunctions.ActivationFunctionBase<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM001|AiDotNet.ActivationFunctions.ActivationFunctionBase<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
+1	ADNELEM001|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
+1	ADNELEM001|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.InitializeWeights()
 2	ADNELEM001|AiDotNet.ActiveLearning.BALD<T>.AddDropoutNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double, int)
 1	ADNELEM001|AiDotNet.ActiveLearning.Batch.SubmodularBatchStrategy<T, TInput, TOutput>.GreedyMaximizationWithScores(int[], AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
 2	ADNELEM001|AiDotNet.ActiveLearning.BatchBALD<T>.AddDropoutNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double, int)
@@ -2739,6 +2741,9 @@
 1	ADNELEM001|PowellOptimizer<T, TInput, TOutput>.PowellLineMinimize(AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput>.DerivativeFreeSearch, double[], double[], double, int)
 1	ADNELEM001|SimulatedAnnealingOptimizer<T, TInput, TOutput>.GenerateNeighborSolution(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>)
 2	ADNELEM001|SimulatedAnnealingOptimizer<T, TInput, TOutput>.Minimize(AiDotNet.Tensors.LinearAlgebra.Vector<T>, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>, T>, int, T)
+3	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ComputePathDerivative(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
+2	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ComputePathProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>, int)
+1	ADNELEM002|AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.InitializeWeights()
 1	ADNELEM002|AiDotNet.ActivationFunctions.TaylorSoftmaxActivation<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM002|AiDotNet.ActiveLearning.BALD<T>.AddDropoutNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double, int)
 1	ADNELEM002|AiDotNet.ActiveLearning.Batch.GradientBatchStrategy<T, TInput, TOutput>.KMeansPlusPlusSelection(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, int)
