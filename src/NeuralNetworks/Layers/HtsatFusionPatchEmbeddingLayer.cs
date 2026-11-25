@@ -123,35 +123,40 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
             throw new ArgumentException(
                 $"The image height ({height}) and width ({width}) must each be divisible by the patch size {_patchSize}.", nameof(images));
 
-        // longer flags as a [batch] 0/1 tensor (mask > 0.5; NaN counts as not longer).
-        var longer = new Tensor<T>(new[] { batch });
+        // Rows whose local views are fused, ascending (torch.nonzero is row-major): mask > 0.5, NaN counts as not
+        // longer. Which rows those are decides which rows the fusion branch runs on, so the mask is read here, outside
+        // any graph recording. CLAP's front end derives it from the clip length, which is fixed for a compiled plan.
+        Tensor<int>? longerIndices = null;
         if (longerMask is not null)
         {
             if (longerMask.Length != batch)
                 throw new ArgumentException($"The longer mask has {longerMask.Length} entries for a batch of {batch}.", nameof(longerMask));
-            longer = Engine.TensorGreaterThan(longerMask.Reshape(new[] { batch }), NumOps.FromDouble(0.5));
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+            {
+                var flagged = Engine.TensorNonzero(
+                    Engine.TensorGreaterThan(longerMask.Reshape(new[] { batch }), NumOps.FromDouble(0.5)));
+                if (flagged.Shape[0] > 0)
+                    longerIndices = flagged.Reshape(new[] { flagged.Shape[0] });
+            }
         }
-        if (IsTrainingMode && Engine.TensorCountNonzero(longer) == 0)
+        // A forward run only to resolve lazy shapes ahead of a training trace runs in evaluation mode with draws
+        // suppressed. It takes the fusion branch too (on row 0, drawing nothing), or the branch's weights would first
+        // be created inside the trace, after the plan's parameters were collected.
+        if (longerIndices is null && batch > 0
+            && (IsTrainingMode || AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward))
         {
-            // htsat.forward: "if self.training: x['longer'][torch.randint(0, B, (1,))] = True".
-            long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
-            var rng = RandomSeed.HasValue
-                ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
-                : RandomHelper.CreateSecureRandom();
-            var one = new Tensor<T>(new[] { 1 });
-            one.Fill(NumOps.One);
-            longer = Engine.TensorSetSlice(longer, one, new[] { rng.Next(batch) });
+            // htsat.forward: "if self.training: x['longer'][torch.randint(0, B, (1,))] = True". The row is a per-step
+            // draw, so a compiled training plan picks a new one on every replay instead of keeping the traced step's.
+            longerIndices = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { 1 },
+                row => row.AsWritableSpan()[0] = NextRandomLongerRow(batch));
         }
 
         var global = _projection.Forward(Engine.TensorSlice(images, new[] { 0, 0, 0, 0 }, new[] { batch, 1, height, width }));
         int gridW = global.Shape[3];
 
-        // Row indices of the longer clips in ascending order (torch.nonzero is row-major).
-        var nonzero = Engine.TensorNonzero(longer);
-        int longerCount = nonzero.Shape[0];
-        if (longerCount > 0)
+        if (longerIndices is not null)
         {
-            var longerIndices = nonzero.Reshape(new[] { longerCount });
+            int longerCount = longerIndices.Length;
             var globalLonger = Gather(global, longerIndices);
             var local = LocalMaps(Gather(images, longerIndices), gridW);
             var fused = _fusion.Forward(globalLonger, local);
@@ -164,6 +169,16 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
 
         var tokens = Engine.Reshape(Engine.TensorPermute(global, new[] { 0, 2, 3, 1 }), new[] { batch, gridH * gridW, _embedDim });
         return _norm.Forward(tokens);
+    }
+
+    // One row of the batch, from this layer's seeded stream: a generator per draw, keyed by the draw's number.
+    private int NextRandomLongerRow(int batch)
+    {
+        long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
+        var rng = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+            : RandomHelper.CreateSecureRandom();
+        return rng.Next(batch);
     }
 
     private Tensor<T> Gather(Tensor<T> source, Tensor<int> indices)
