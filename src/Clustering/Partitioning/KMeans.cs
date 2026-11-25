@@ -188,7 +188,8 @@ public partial class KMeans<T> : ClusteringBase<T>
         public KMeansData(Matrix<T> x, bool euclidean, T tolerance)
         {
             X = x;
-            Values = ClusteringTensorOps.ToTensor(x);
+            Raw = ClusteringTensorOps.ToTensor(x);
+            Values = Raw;
             Euclidean = euclidean;
             Tolerance = tolerance;
             if (euclidean && x.Rows > 0)
@@ -235,6 +236,9 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         public Matrix<T> X { get; }
 
+        /// <summary><see cref="X"/> as a [rows, columns] tensor, copied once per fit instead of once per iteration.</summary>
+        public Tensor<T> Raw { get; }
+
         /// <summary>
         /// The data as a [rows, columns] tensor, shifted to its column means (and divided by <see cref="Scale"/>)
         /// when Euclidean.
@@ -254,22 +258,24 @@ public partial class KMeans<T> : ClusteringBase<T>
         var x = data.X;
         var centers = InitializeCenters(data);
 
-        Vector<T> labels = new Vector<T>(x.Rows);
-        Vector<T>? previousLabels = null;
+        // Labels stay cluster indices (int) between iterations: converting them to and from T every iteration cost
+        // more than the assignment itself.
+        int[] labels = new int[x.Rows];
+        int[]? previousLabels = null;
         bool unchanged = false;
         int iterations = 0;
         while (iterations < _options.MaxIterations)
         {
             // Assignment step: assign each point to nearest center
-            labels = AssignLabels(data, centers);
+            labels = AssignLabelIndices(data, centers);
             iterations++;
 
             // Update step: compute new centers, and whether the sum of the centers' squared shifts is within tolerance
-            var newCenters = UpdateCenters(x, labels, centers);
+            var newCenters = UpdateCenters(data, labels, centers);
             bool shiftWithinTolerance = HasConverged(data, centers, newCenters);
 
             centers = newCenters;
-            if (previousLabels is not null && Engine.TensorEqual(labels.AsTensor(), previousLabels.AsTensor()))
+            if (previousLabels is not null && labels.AsSpan().SequenceEqual(previousLabels))
             {
                 unchanged = true;
                 break;
@@ -281,10 +287,11 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         // Label every row by the centers returned, unless the last assignment already did.
         if (iterations > 0 && !unchanged)
-            labels = AssignLabels(data, centers);
+            labels = AssignLabelIndices(data, centers);
 
-        T inertia = iterations > 0 ? ComputeInertia(data, labels, centers) : NumOps.Zero;
-        return (centers, labels, inertia, iterations);
+        var labelVector = ClusteringTensorOps.FromIntArray<T>(labels);
+        T inertia = iterations > 0 ? ComputeInertia(data, labelVector, centers) : NumOps.Zero;
+        return (centers, labelVector, inertia, iterations);
     }
 
     /// <summary>
@@ -367,6 +374,14 @@ public partial class KMeans<T> : ClusteringBase<T>
         chosen[0] = _random.Next(rows);
 
         int trials = LocalTrials(_options.NumClusters);
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(double) && data.Euclidean && data.RowNorms is not null && data.Values.IsContiguous
+            && data.RowNorms.IsContiguous)
+        {
+            KMeansPlusPlusOfDoubles(data, chosen, trials);
+            return ClusteringTensorOps.SelectRows(x, chosen);
+        }
+#endif
         Vector<T>? minDistances = null;
         for (int k = 1; k < _options.NumClusters; k++)
         {
@@ -399,6 +414,123 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         return ClusteringTensorOps.SelectRows(x, chosen);
     }
+
+#if NET7_0_OR_GREATER
+    /// <summary>
+    /// <see cref="InitializeKMeansPlusPlus"/> for double Euclidean data, filling <paramref name="chosen"/> after its
+    /// first entry. It keeps one running nearest-distance array, lowered in O(rows) per new center, and draws each
+    /// candidate from the running sum in place.
+    /// </summary>
+    /// <remarks>
+    /// Every value is the engine form's, operation for operation: the engine's cumulative sum, column sums, row norms
+    /// and matrix product all accumulate in index order without fused multiply-adds, its sorted search returns the first
+    /// running sum at or above the threshold, and its arg-min the first minimum. So the draws, the chosen centers and
+    /// the fit are identical to that form's for a given seed. As engine operations (a gather, a transpose, a product,
+    /// broadcasts, a cumulative sum and a search per draw) seeding took a quarter of a k-means fit (#2524).
+    /// </remarks>
+    private void KMeansPlusPlusOfDoubles(KMeansData data, int[] chosen, int trials)
+    {
+        var values = data.Values;
+        var rowNorms = data.RowNorms!;
+        int rows = values.Shape[0];
+        int columns = values.Shape[1];
+        int blocks = (rows + NearestBlockRows - 1) / NearestBlockRows;
+
+        var minDistances = new double[rows];
+        var cumulative = new double[rows];
+        var lowered = new double[rows * trials];
+        var potentials = new double[trials];
+        var candidates = new int[trials];
+        var candidateNorms = new double[trials];
+
+        // [rows, count] of min(current nearest, squared distance to candidate t), or the bare distance on the first
+        // pass, written into lowered; rows are independent, so blocks of them run in parallel.
+        void LowerTo(int count, bool first)
+        {
+            var points = ClusteringTensorOps.AsDoubles(values.AsSpan());
+            for (int t = 0; t < count; t++)
+            {
+                var point = points.Slice(candidates[t] * columns, columns);
+                double norm = 0.0;
+                for (int j = 0; j < columns; j++) norm += point[j] * point[j];
+                candidateNorms[t] = norm;
+            }
+
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)rows * columns * count, block =>
+            {
+                var x = ClusteringTensorOps.AsDoubles(values.AsSpan());
+                var norms = ClusteringTensorOps.AsDoubles(rowNorms.AsSpan());
+                int end = Math.Min(rows, (block + 1) * NearestBlockRows);
+                for (int r = block * NearestBlockRows; r < end; r++)
+                {
+                    var row = x.Slice(r * columns, columns);
+                    for (int t = 0; t < count; t++)
+                    {
+                        var point = x.Slice(candidates[t] * columns, columns);
+                        double dot = 0.0;
+                        for (int j = 0; j < columns; j++) dot += row[j] * point[j];
+
+                        // ||x||^2 + ||c||^2 - 2 x.c, clamped at zero (rounding can leave a coincident row below it).
+                        double distance = Math.Max(norms[r] + candidateNorms[t] - dot * 2.0, 0.0);
+                        lowered[r * count + t] = first ? distance : Math.Min(minDistances[r], distance);
+                    }
+                }
+            });
+        }
+
+        candidates[0] = chosen[0];
+        LowerTo(1, first: true);
+        Array.Copy(lowered, minDistances, rows);
+
+        for (int k = 1; k < chosen.Length; k++)
+        {
+            // Candidates with probability proportional to the squared distance to the nearest chosen center: draw t is
+            // the first row whose running sum reaches u_t * total, or row 0 when none does.
+            double running = 0.0;
+            for (int r = 0; r < rows; r++) cumulative[r] = running += minDistances[r];
+            double total = rows > 0 ? cumulative[rows - 1] : 0.0;
+            for (int t = 0; t < trials; t++)
+            {
+                double threshold = _random.NextDouble() * total;
+                int low = 0, high = rows;
+                while (low < high)
+                {
+                    int middle = (low + high) >> 1;
+                    if (cumulative[middle] < threshold) low = middle + 1;
+                    else high = middle;
+                }
+
+                candidates[t] = low < rows ? low : 0;
+            }
+
+            LowerTo(trials, first: false);
+
+            // The candidate whose potential (the summed lowered distances) is lowest, the first drawn on a tie.
+            int best = 0;
+            if (trials > 1)
+            {
+                Array.Clear(potentials, 0, trials);
+                for (int r = 0; r < rows; r++)
+                    for (int t = 0; t < trials; t++)
+                        potentials[t] += lowered[r * trials + t];
+
+                double bestPotential = double.IsNaN(potentials[0]) ? double.PositiveInfinity : potentials[0];
+                for (int t = 1; t < trials; t++)
+                {
+                    double potential = double.IsNaN(potentials[t]) ? double.PositiveInfinity : potentials[t];
+                    if (potential < bestPotential)
+                    {
+                        bestPotential = potential;
+                        best = t;
+                    }
+                }
+            }
+
+            chosen[k] = candidates[best];
+            for (int r = 0; r < rows; r++) minDistances[r] = lowered[r * trials + best];
+        }
+    }
+#endif
 
     /// <summary>
     /// Squared distance from every row of the data to the data rows at <paramref name="rowIndices"/>, as
@@ -444,12 +576,16 @@ public partial class KMeans<T> : ClusteringBase<T>
     /// pairwise distances.
     /// </summary>
     private Vector<T> AssignLabels(KMeansData data, Matrix<T> centers)
+        => ClusteringTensorOps.FromIntArray<T>(AssignLabelIndices(data, centers));
+
+    /// <summary><see cref="AssignLabels"/> as cluster indices.</summary>
+    private int[] AssignLabelIndices(KMeansData data, Matrix<T> centers)
     {
         var x = data.X;
         if (!data.Euclidean || data.RowNorms is null || data.Origin is null || centers.Rows == 0)
         {
             var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-            return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(distanceMetric, x, centers));
+            return ClusteringTensorOps.NearestCenters(distanceMetric, x, centers);
         }
 
         int rows = x.Rows;
@@ -465,7 +601,7 @@ public partial class KMeans<T> : ClusteringBase<T>
         int rowsPerBlock = Math.Max(1, Math.Min(rows, AssignmentBlockElements / clusters));
         if (rowsPerBlock >= rows)
         {
-            return ClusteringTensorOps.FromIntArray<T>(NearestCenterIndices(data.Values, centersT, halfCenterNorms));
+            return NearestCenterIndices(data.Values, centersT, halfCenterNorms);
         }
 
         var nearest = new int[rows];
@@ -476,7 +612,7 @@ public partial class KMeans<T> : ClusteringBase<T>
             Array.Copy(NearestCenterIndices(values, centersT, halfCenterNorms), 0, nearest, start, count);
         }
 
-        return ClusteringTensorOps.FromIntArray<T>(nearest);
+        return nearest;
     }
 
     /// <summary>Upper bound on the elements of one [rows, clusters] block of the Euclidean assignment.</summary>
@@ -491,10 +627,82 @@ public partial class KMeans<T> : ClusteringBase<T>
     {
         int rows = values.Shape[0];
         int clusters = centersT.Shape[1];
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(double) && values.IsContiguous && centersT.IsContiguous && halfCenterNorms.IsContiguous)
+            return NearestCentersOfDoubles(values, centersT, halfCenterNorms);
+#endif
         var scores = Engine.TensorSubtract(
             Engine.TensorBroadcastTo(halfCenterNorms, new[] { rows, clusters }), Engine.TensorMatMul(values, centersT));
         return Engine.TensorArgMin(scores, 1).ToArray();
     }
+
+#if NET7_0_OR_GREATER
+    /// <summary>Rows per parallel block of <see cref="NearestCentersOfDoubles"/>.</summary>
+    private const int NearestBlockRows = 1024;
+
+    /// <summary>
+    /// <see cref="NearestCenterIndices"/> for double in one pass per row: the row's products with every center (a SIMD
+    /// vector of centers per feature), its scores <c>||c||^2 / 2 - x.c</c> and their minimum, the lowest index on a
+    /// tie; blocks of rows run in parallel. As engine operations (a matrix product, a broadcast, a subtraction and an
+    /// arg-min over [rows, clusters], each with its own buffer and dispatch) one k-means iteration took 4x as long
+    /// (#2524).
+    /// </summary>
+    private static int[] NearestCentersOfDoubles(Tensor<T> values, Tensor<T> centersT, Tensor<T> halfCenterNorms)
+    {
+        int rows = values.Shape[0];
+        int columns = values.Shape[1];
+        int clusters = centersT.Shape[1];
+
+        // Centers by feature, the clusters padded to whole SIMD vectors; a padding cluster is never read back.
+        int width = System.Numerics.Vector<double>.Count;
+        int vectors = (clusters + width - 1) / width;
+        int padded = vectors * width;
+        var centers = ClusteringTensorOps.AsDoubles(centersT.AsSpan());
+        var byFeature = new double[columns * padded];
+        for (int j = 0; j < columns; j++)
+            centers.Slice(j * clusters, clusters).CopyTo(byFeature.AsSpan(j * padded, clusters));
+        var halfNorms = ClusteringTensorOps.AsDoubles(halfCenterNorms.AsSpan()).Slice(0, clusters).ToArray();
+
+        var nearest = new int[rows];
+        int blocks = (rows + NearestBlockRows - 1) / NearestBlockRows;
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)rows * columns * clusters, block =>
+        {
+            var x = ClusteringTensorOps.AsDoubles(values.AsSpan());
+            var centerVectors = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(
+                new ReadOnlySpan<double>(byFeature));
+            Span<double> dots = stackalloc double[padded];
+            var dotVectors = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(dots);
+            int end = Math.Min(rows, (block + 1) * NearestBlockRows);
+            for (int r = block * NearestBlockRows; r < end; r++)
+            {
+                dotVectors.Clear();
+                var row = x.Slice(r * columns, columns);
+                for (int j = 0; j < columns; j++)
+                {
+                    var value = new System.Numerics.Vector<double>(row[j]);
+                    var featureCenters = centerVectors.Slice(j * vectors, vectors);
+                    for (int v = 0; v < vectors; v++) dotVectors[v] += value * featureCenters[v];
+                }
+
+                int best = 0;
+                double bestScore = halfNorms[0] - dots[0];
+                for (int c = 1; c < clusters; c++)
+                {
+                    double score = halfNorms[c] - dots[c];
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        best = c;
+                    }
+                }
+
+                nearest[r] = best;
+            }
+        });
+
+        return nearest;
+    }
+#endif
 
     /// <summary>
     /// <c>||x||^2 + ||c||^2 - 2 x.c</c> as [rows, clusters]: the squared distances up to rounding (which can
@@ -511,10 +719,10 @@ public partial class KMeans<T> : ClusteringBase<T>
         return Engine.TensorSubtract(norms, Engine.TensorMultiplyScalar(dots, NumOps.FromDouble(2.0)));
     }
 
-    private Matrix<T> UpdateCenters(Matrix<T> x, Vector<T> labels, Matrix<T> oldCenters)
+    private Matrix<T> UpdateCenters(KMeansData data, int[] labels, Matrix<T> oldCenters)
     {
         // Mean of each cluster; an empty cluster keeps its old center
-        var means = ClusteringTensorOps.ClusterMeans(x, labels, _options.NumClusters, out var counts);
+        var means = ClusteringTensorOps.ClusterMeans(data.Raw, labels, _options.NumClusters, out var counts);
         return ClusteringTensorOps.RowsWherePositive(counts, means, oldCenters);
     }
 
