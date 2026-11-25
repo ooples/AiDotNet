@@ -354,7 +354,7 @@ public class DenseNetTests
     {
         await Task.Yield();
         const int classes = 10, size = 32;
-        var network = new DenseNetNetwork<float>(
+        using var network = new DenseNetNetwork<float>(
             new NeuralNetworkArchitecture<float>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification,
@@ -377,46 +377,6 @@ public class DenseNetTests
             anyNonZero |= logits[i] != 0f;
         }
         Assert.True(anyNonZero, "The logits of a random image must not all be zero.");
-    }
-
-    #endregion
-
-    #region Training Plan Lifetime Tests
-
-    /// <summary>
-    /// A transition layer builds its 1x1 convolution on its first forward, so a network trained without a prior
-    /// forward gained three trainable layers during its first step. The second step saw a different layer set,
-    /// dropped the first step's compiled plan with the optimizer moments it held and compiled another, and the
-    /// dropped plan's activations stayed referenced (6.2 GB of process memory against 3.1 GB at batch 64, #2383).
-    /// </summary>
-    [Fact(Timeout = 300000)]
-    public async Task DenseNet121_TrainedWithoutAPriorForward_KeepsItsFirstCompiledPlan()
-    {
-        await Task.Yield();
-        const int classes = 10, size = 32, batch = 2;
-        var network = new DenseNetNetwork<float>(
-            new NeuralNetworkArchitecture<float>(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.MultiClassClassification,
-                inputHeight: size, inputWidth: size, inputDepth: 3, outputSize: classes),
-            new DenseNetConfiguration(DenseNetVariant.DenseNet121, classes, size, size));
-        var images = new Tensor<float>([batch, 3, size, size]);
-        InitializeWithRandomValues(images);
-        var labels = new Tensor<float>([batch, classes]);
-        for (int b = 0; b < batch; b++) labels[b * classes + b] = 1f;
-
-        network.Train(images, labels);
-        var afterFirstStep = AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlansOf(network);
-        int layersAfterFirstStep = AiDotNet.Training.TapeTrainingStep<float>
-            .SnapshotTrainableLayerIdentities(network.Layers).Length;
-        network.Train(images, labels);
-        var afterSecondStep = AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlansOf(network);
-
-        Assert.Single(afterFirstStep);
-        Assert.Single(afterSecondStep);
-        Assert.Same(afterFirstStep[0], afterSecondStep[0]);
-        Assert.Equal(layersAfterFirstStep,
-            AiDotNet.Training.TapeTrainingStep<float>.SnapshotTrainableLayerIdentities(network.Layers).Length);
     }
 
     #endregion

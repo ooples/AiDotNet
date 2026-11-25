@@ -93,13 +93,6 @@ public class DenseBlockGpuInferenceScopeTests
                 "No GPU backend available for the DenseBlock inference peak test.");
             AiDotNetEngine.Current = gpu;
             var backend = gpu.GetBackend();
-            // The allocator peak shows what the block keeps alive only where a released buffer is back in the pool
-            // before a later dispatch asks for one. Vulkan queues dispatches without waiting and returns a buffer when
-            // the submission that last used it completes (VulkanDevice.DeferredSubmit), so its peak is the memory of
-            // the queued work whatever the block has released: 164,904,704 bytes for this block, four times all of its
-            // concatenations together.
-            Skip.If(backend is AiDotNet.Tensors.Engines.DirectGpu.Vulkan.VulkanBackend,
-                "Vulkan's allocator peak measures queued work, not what the block keeps alive.");
             var block = new DenseBlock<float>(deepLayers, growth);
             var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2383);
             var input = new Tensor<float>(new[] { batch, channels, size, size });
@@ -117,11 +110,14 @@ public class DenseBlockGpuInferenceScopeTests
             long baseline = AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot(backend).AllocatedBytes;
             AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats(backend);
             long peak;
+            long live;
             using (var scope = TensorScope.Begin())
             {
                 _ = block.Forward(input);
                 backend.Synchronize();
-                peak = AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot(backend).PeakAllocatedBytes - baseline;
+                var stats = AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot(backend);
+                peak = stats.PeakAllocatedBytes - baseline;
+                live = stats.AllocatedBytes - baseline;
             }
             backend.Synchronize();
 
@@ -129,8 +125,16 @@ public class DenseBlockGpuInferenceScopeTests
             long outputBytes = (channels + deepLayers * growth) * plane;
             // Every running concatenation at once: sum over k = 1..L of (c + k * growth) channels.
             long everyConcatenation = (deepLayers * channels + growth * deepLayers * (deepLayers + 1) / 2) * plane;
-            _output.WriteLine($"peak {peak} bytes; block output {outputBytes}; every concatenation {everyConcatenation}");
+            _output.WriteLine($"live {live} bytes; peak {peak} bytes; block output {outputBytes}; every concatenation {everyConcatenation}");
             Assert.True(peak > 0, "The device allocator must observe the block's allocations.");
+            // What the block keeps alive once its queued work has run: its output and nothing else. This holds on
+            // every backend, whatever the backend parks while work is still queued.
+            Assert.True(live == outputBytes,
+                $"A {deepLayers}-layer block still holds {live} bytes once its work has run; its output is {outputBytes} " +
+                $"bytes and its concatenations are {everyConcatenation} bytes in all.");
+            // The transient peak. A backend that returns a released buffer only when the submission that last used it
+            // completes, with no bound on the bytes parked meanwhile, fails here for the work it has queued, not for
+            // anything the block holds.
             Assert.True(peak < everyConcatenation / 2,
                 $"A {deepLayers}-layer block peaked at {peak} bytes: its concatenations ({everyConcatenation} bytes in all) " +
                 $"are being held to the end of the call; its output is {outputBytes} bytes.");
