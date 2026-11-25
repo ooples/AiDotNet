@@ -1,13 +1,23 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Threading.Tasks;
+using AiDotNet.ActiveLearning.Data;
+using AiDotNet.CheckpointManagement;
+using AiDotNet.Configuration;
+using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Data.Loaders;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Regression;
+using AiDotNet.Regularization;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
@@ -112,7 +122,9 @@ public sealed class StreamingDistributedGradientModelTests
         int[] rankBatchSizes,
         long maxSteps,
         int seed,
-        Vector<double>[]? rankInitialParameters = null)
+        Vector<double>[]? rankInitialParameters = null,
+        Func<IAiModelBuilder<double, Matrix<double>, Vector<double>>, IAiModelBuilder<double, Matrix<double>, Vector<double>>>? configure = null,
+        bool resume = false)
     {
         var backends = CreateBackends(worldSize);
         try
@@ -126,7 +138,7 @@ public sealed class StreamingDistributedGradientModelTests
                     model.SetParameters(rankInitialParameters[rank].Clone());
                 }
 
-                await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                IAiModelBuilder<double, Matrix<double>, Vector<double>> builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                     .ConfigureModel(model)
                     .ConfigureDataLoader(CreateLoader(inputs, targets, rankBatchSizes[rank]))
                     .ConfigureGpuAcceleration(CpuOnlyConfig())
@@ -135,8 +147,9 @@ public sealed class StreamingDistributedGradientModelTests
                     {
                         Seed = seed,
                         MaxSteps = maxSteps,
-                    })
-                    .BuildAsync();
+                        ResumeFromLatestCheckpoint = resume,
+                    });
+                await (configure is null ? builder : configure(builder)).BuildAsync();
 
                 finals[rank] = model.GetParameters();
             })).ToArray();
@@ -200,16 +213,18 @@ public sealed class StreamingDistributedGradientModelTests
     /// Gradient descent on the mean gradient of each global batch, computed without the builder or any distributed
     /// code: the batches come from an undistributed loader of <paramref name="globalBatch"/> samples, shuffled with
     /// the seed the streaming loop gives epoch <c>e</c> (<c>seed + e</c>), and the step uses the 0.01 learning rate
-    /// the loop applies when no optimizer is configured.
+    /// the loop applies when no optimizer is configured, unless <paramref name="learningRateAtStep"/> gives the
+    /// rate of each step. <paramref name="l2Strength"/> adds <c>strength * parameters</c> to the gradient.
     /// </summary>
     private static async Task<Vector<double>> GlobalBatchMeanGradientDescentAsync(
         Matrix<double>[] inputs,
         Vector<double>[] targets,
         int globalBatch,
         long steps,
-        int seed)
+        int seed,
+        Func<long, double>? learningRateAtStep = null,
+        double l2Strength = 0.0)
     {
-        const double learningRate = 0.01;
         var loader = CreateLoader(inputs, targets, globalBatch);
         await loader.LoadAsync();
 
@@ -226,9 +241,10 @@ public sealed class StreamingDistributedGradientModelTests
             await foreach (var (batchInputs, batchTargets) in loader.GetBatchesAsync(shuffle: true, seed: seed + epoch))
             {
                 double[] gradient = FullDatasetMeanGradient(batchInputs, batchTargets, new Vector<double>(parameters));
+                double learningRate = learningRateAtStep is null ? 0.01 : learningRateAtStep(taken);
                 for (int j = 0; j < parameters.Length; j++)
                 {
-                    parameters[j] -= learningRate * gradient[j];
+                    parameters[j] -= learningRate * (gradient[j] + l2Strength * parameters[j]);
                 }
 
                 if (++taken == steps)
@@ -434,5 +450,281 @@ public sealed class StreamingDistributedGradientModelTests
         {
             ShutdownBackends(backends);
         }
+    }
+
+    private static StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>> CreateScheduledSgd(
+        double baseLearningRate,
+        double gamma)
+    {
+        return new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new StochasticGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = baseLearningRate,
+                MaxIterations = 50,
+                UseAdaptiveLearningRate = false,
+                UseEarlyStopping = false,
+                LearningRateScheduler = new ExponentialLRScheduler(baseLearningRate, gamma),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task GradientModel_ManyRanks_UseTheRateThePerBatchSchedulerHasReached()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 16, seed: 71);
+        const long steps = 6;
+        const double baseRate = 0.04;
+        const double gamma = 0.5;
+
+        // Step k (from 0) must use baseRate * gamma^k. A scheduler that never advanced would use baseRate throughout.
+        var expected = await GlobalBatchMeanGradientDescentAsync(
+            inputs, targets, globalBatch: 4, steps, seed: 19, learningRateAtStep: step => baseRate * Math.Pow(gamma, step));
+        var constantRate = await GlobalBatchMeanGradientDescentAsync(
+            inputs, targets, globalBatch: 4, steps, seed: 19, learningRateAtStep: _ => baseRate);
+        Assert.True(MaxAbsDiff(expected, constantRate) > 1e-4, "This data cannot tell a decaying rate from a constant one.");
+
+        var multi = await TrainRanksAsync(
+            inputs, targets, worldSize: 2, rankBatchSizes: new[] { 2, 2 }, maxSteps: steps, seed: 19,
+            configure: builder => builder.ConfigureOptimizer(CreateScheduledSgd(baseRate, gamma)));
+
+        Assert.True(MaxAbsDiff(multi[0], multi[1]) == 0.0, "Ranks diverged.");
+        double diff = MaxAbsDiff(expected, multi[0]);
+        Assert.True(diff < 1e-12, $"Two ranks differ from descent at the scheduled rates by {diff:R}.");
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task GradientModel_WithoutABackend_UsesTheRateThePerBatchSchedulerHasReached()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 12, seed: 73);
+        const long steps = 7;
+        const double baseRate = 0.04;
+        const double gamma = 0.5;
+
+        // Batches of one sample, so a batch is one update whichever way the path steps.
+        var expected = await GlobalBatchMeanGradientDescentAsync(
+            inputs, targets, globalBatch: 1, steps, seed: 29, learningRateAtStep: step => baseRate * Math.Pow(gamma, step));
+
+        var model = CreateModel();
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(CreateScheduledSgd(baseRate, gamma))
+            .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 1))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>> { Seed = 29, MaxSteps = steps })
+            .BuildAsync();
+
+        double diff = MaxAbsDiff(expected, model.GetParameters());
+        Assert.True(diff < 1e-12, $"One process differs from descent at the scheduled rates by {diff:R}.");
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task GradientModel_ManyRanks_AddTheRegularizationPenaltyToTheReducedGradient()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 16, seed: 79);
+        const long steps = 6;
+        const double strength = 0.75;
+
+        var expected = await GlobalBatchMeanGradientDescentAsync(inputs, targets, globalBatch: 4, steps, seed: 37, l2Strength: strength);
+        var unregularized = await GlobalBatchMeanGradientDescentAsync(inputs, targets, globalBatch: 4, steps, seed: 37);
+        Assert.True(MaxAbsDiff(expected, unregularized) > 1e-4, "This data cannot tell a penalized run from a plain one.");
+
+        var multi = await TrainRanksAsync(
+            inputs, targets, worldSize: 2, rankBatchSizes: new[] { 2, 2 }, maxSteps: steps, seed: 37,
+            configure: builder => builder.ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(
+                new RegularizationOptions { Type = RegularizationType.L2, Strength = strength })));
+
+        Assert.True(MaxAbsDiff(multi[0], multi[1]) == 0.0, "Ranks diverged.");
+        double diff = MaxAbsDiff(expected, multi[0]);
+        Assert.True(diff < 1e-12, $"Two ranks differ from L2-penalized descent by {diff:R}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GradientModel_ManyRanks_ResumeFromACheckpointOntoTheUninterruptedRun()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 20, seed: 83);
+        string checkpointDir = Path.Combine(Path.GetTempPath(), "aidotnet-grad-resume-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(checkpointDir);
+        try
+        {
+            IAiModelBuilder<double, Matrix<double>, Vector<double>> WithCheckpoints(
+                IAiModelBuilder<double, Matrix<double>, Vector<double>> builder)
+            {
+                var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>(checkpointDir);
+                manager.ConfigureAutoCheckpointing(saveFrequency: 100, keepLast: 5, saveOnImprovement: false);
+                return WithScheduledOptimizer(builder).ConfigureCheckpointManager(manager);
+            }
+
+            // A rate that decays every step, so resuming at the wrong step or with a restarted schedule shows.
+            IAiModelBuilder<double, Matrix<double>, Vector<double>> WithScheduledOptimizer(
+                IAiModelBuilder<double, Matrix<double>, Vector<double>> builder) =>
+                builder.ConfigureOptimizer(CreateScheduledSgd(baseLearningRate: 0.04, gamma: 0.8));
+
+            var uninterrupted = await TrainRanksAsync(
+                inputs, targets, worldSize: 2, rankBatchSizes: new[] { 3, 3 }, maxSteps: 9, seed: 43,
+                configure: WithScheduledOptimizer);
+
+            // Four steps, which stops inside the second epoch and leaves a checkpoint; then both ranks start from
+            // parameters that are nothing like the trained ones and resume to step 9.
+            await TrainRanksAsync(
+                inputs, targets, worldSize: 2, rankBatchSizes: new[] { 3, 3 }, maxSteps: 4, seed: 43, configure: WithCheckpoints);
+            var scrambled = new Vector<double>(new[] { 5.0, -5.0, 5.0, -5.0 });
+            var resumed = await TrainRanksAsync(
+                inputs, targets, worldSize: 2, rankBatchSizes: new[] { 3, 3 }, maxSteps: 9, seed: 43,
+                rankInitialParameters: new[] { scrambled, scrambled.Clone() }, configure: WithCheckpoints, resume: true);
+
+            Assert.True(MaxAbsDiff(resumed[0], resumed[1]) == 0.0, "Ranks diverged after the resume.");
+            double diff = MaxAbsDiff(uninterrupted[0], resumed[0]);
+            Assert.True(diff == 0.0, $"The resumed run differs from the uninterrupted one by {diff:R}.");
+            Assert.True(MaxAbsDiff(uninterrupted[0], InitialParameters()) > 1e-6, "The uninterrupted run must have trained.");
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(checkpointDir, recursive: true);
+            }
+            catch (IOException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"Could not delete the test checkpoint directory {checkpointDir}: {ex}");
+            }
+        }
+    }
+
+    [Theory(Timeout = 90000)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task GradientModel_GradientAccumulation_IsRefusedInsteadOfIgnored(int worldSize)
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 89);
+        var backends = CreateBackends(worldSize);
+        try
+        {
+            await Task.WhenAll(Enumerable.Range(0, worldSize).Select(rank => Task.Run(async () =>
+            {
+                var model = CreateModel();
+                var refused = await Assert.ThrowsAsync<NotSupportedException>(() =>
+                    new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                        .ConfigureModel(model)
+                        .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 2))
+                        .ConfigureGpuAcceleration(CpuOnlyConfig())
+                        .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                        .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>>
+                        {
+                            Seed = 1,
+                            MaxSteps = 1,
+                            GradientAccumulationSteps = 2,
+                        })
+                        .BuildAsync());
+                Assert.Contains("GradientAccumulationSteps", refused.Message, StringComparison.Ordinal);
+                Assert.True(MaxAbsDiff(InitialParameters(), model.GetParameters()) == 0.0, "The refused build still trained the model.");
+            })));
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    /// <summary>Scores samples by their position and records what the curriculum pass handed it.</summary>
+    private sealed class RecordingDifficultyEstimator : IDifficultyEstimator<double, Matrix<double>, Vector<double>>
+    {
+        public int EstimateDifficultiesCalls { get; private set; }
+
+        public IDataset<double, Matrix<double>, Vector<double>>? LastDataset { get; private set; }
+
+        public Vector<double>? ParametersOfTheModelFirstSeen { get; private set; }
+
+        public string Name => nameof(RecordingDifficultyEstimator);
+
+        public bool RequiresModel => false;
+
+        public double EstimateDifficulty(
+            Matrix<double> input,
+            Vector<double> expectedOutput,
+            IFullModel<double, Matrix<double>, Vector<double>>? model = null) => 0.5;
+
+        public Vector<double> EstimateDifficulties(
+            IDataset<double, Matrix<double>, Vector<double>> dataset,
+            IFullModel<double, Matrix<double>, Vector<double>>? model = null)
+        {
+            EstimateDifficultiesCalls++;
+            LastDataset = dataset;
+            if (model is not null && ParametersOfTheModelFirstSeen is null)
+            {
+                ParametersOfTheModelFirstSeen = model.GetParameters().Clone();
+            }
+
+            var scores = new double[dataset.Count];
+            for (int i = 0; i < scores.Length; i++)
+            {
+                scores[i] = (double)i / Math.Max(1, scores.Length - 1);
+            }
+
+            return new Vector<double>(scores);
+        }
+
+        public void Update(int epoch, IFullModel<double, Matrix<double>, Vector<double>> model)
+        {
+        }
+
+        public void Reset()
+        {
+        }
+
+        public int[] GetSortedIndices(Vector<double> difficulties)
+        {
+            int[] indices = Enumerable.Range(0, difficulties.Length).ToArray();
+            Array.Sort(indices, (a, b) => difficulties[a].CompareTo(difficulties[b]));
+            return indices;
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CurriculumLearning_OnStreaming_RunsItsPassOnTheStreamTrainedModel()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 16, seed: 97);
+        var (curriculumInputs, curriculumTargets) = CreateDataset(sampleCount: 8, seed: 98);
+        var curriculumDataset = new InMemoryDataset<double, Matrix<double>, Vector<double>>(curriculumInputs, curriculumTargets);
+        var estimator = new RecordingDifficultyEstimator();
+
+        async Task<Vector<double>> TrainAsync(bool withCurriculum)
+        {
+            var model = CreateModel();
+            IAiModelBuilder<double, Matrix<double>, Vector<double>> builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                .ConfigureModel(model)
+                .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 4))
+                .ConfigureGpuAcceleration(CpuOnlyConfig())
+                .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>> { Seed = 7, MaxSteps = 6 });
+            if (withCurriculum)
+            {
+                builder = builder.ConfigureCurriculumLearning(new CurriculumLearningOptions<double, Matrix<double>, Vector<double>>
+                {
+                    Dataset = curriculumDataset,
+                    CustomDifficultyEstimator = estimator,
+                    TotalEpochs = 4,
+                    NumPhases = 2,
+                    RandomSeed = 5,
+                });
+            }
+
+            await builder.BuildAsync();
+            return model.GetParameters();
+        }
+
+        Vector<double> streamOnly = await TrainAsync(withCurriculum: false);
+        Vector<double> withCurriculumPass = await TrainAsync(withCurriculum: true);
+
+        Assert.True(estimator.EstimateDifficultiesCalls >= 1, "The curriculum pass never ranked its dataset.");
+        Assert.Same(curriculumDataset, estimator.LastDataset);
+
+        // The pass started from the stream-trained model, not from the untrained one.
+        Vector<double> seen = estimator.ParametersOfTheModelFirstSeen
+            ?? throw new InvalidOperationException("The estimator was not given the model.");
+        Assert.True(MaxAbsDiff(streamOnly, seen) == 0.0, "The curriculum pass did not start from the stream-trained model.");
+        Assert.True(MaxAbsDiff(streamOnly, InitialParameters()) > 1e-6, "The stream run must have trained.");
+
+        // And it trained the model further.
+        Assert.True(MaxAbsDiff(streamOnly, withCurriculumPass) > 1e-9, "The curriculum pass left the model as the stream run did.");
     }
 }
