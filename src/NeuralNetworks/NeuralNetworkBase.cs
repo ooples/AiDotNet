@@ -12753,11 +12753,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Undoes <see cref="BeginIncrementalWeightStreaming"/> after a load that failed partway: every tensor of this
     /// network already in the store is unregistered (freeing its store entry), and the store goes back to
-    /// <paramref name="previous"/>, the options it had before the load began. Without this a failed load left the
+    /// <paramref name="previous"/>, the options it had before the load began, with its training/inference hint back at
+    /// <paramref name="previousExecutionTraining"/>. Without this a failed load left the
     /// process-global store configured for the abandoned network and holding its loaded blocks, so the next
     /// <c>WeightRegistry.Configure</c> threw on the live handles.
     /// </summary>
-    internal void AbortIncrementalWeightStreaming(GpuOffloadOptions previous)
+    internal void AbortIncrementalWeightStreaming(GpuOffloadOptions previous, bool? previousExecutionTraining)
     {
         var visited = new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance);
         for (int i = 0; i < Layers.Count; i++)
@@ -12769,6 +12770,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _weightLifetimeConfigured = false;
         _registrationLifetime = WeightLifetime.Default;
         WeightRegistry.Configure(previous);
+        WeightRegistry.SetStreamingExecutionTraining(previousExecutionTraining);
     }
 
     private static void UnregisterLayerTensorsRecursively(LayerBase<T> layer, HashSet<LayerBase<T>> visited)

@@ -109,7 +109,8 @@ public sealed class PretrainedBf16StreamingTests : IDisposable
 
     /// <summary>
     /// The streaming store is process-global. A streamed load that fails partway leaves it as it was before the load:
-    /// none of the blocks already loaded stays registered, and the options are the previous ones, so the process can
+    /// none of the blocks already loaded stays registered, and the options and the training/inference hint are the
+    /// previous ones, so the process can
     /// configure the store again. Before, the store kept the abandoned network's blocks and its bf16 options, and the
     /// next Configure threw on the live handles.
     /// </summary>
@@ -117,12 +118,14 @@ public sealed class PretrainedBf16StreamingTests : IDisposable
     public void A_streamed_load_that_fails_partway_leaves_the_store_as_it_was()
     {
         var before = WeightRegistry.CurrentOptions;
+        bool? hintBefore = WeightRegistry.StreamingExecutionTraining;   // null (unknown) after the reset
         var (config, t) = Checkpoint(layers: 2);
         Assert.Throws<IOException>(() =>
             MoEModelBuilder<double>.BuildStreamed(config, new FailingSource(t, failingBlock: 1), StreamingStoreDtype.Bf16));
 
         Assert.Equal(0, WeightRegistry.GetStreamingReport().RegisteredEntryCount);
         Assert.Same(before, WeightRegistry.CurrentOptions);
+        Assert.Equal(hintBefore, WeightRegistry.StreamingExecutionTraining);   // the load had set it
         WeightRegistry.Configure(new GpuOffloadOptions());   // threw "live registered handles" before
     }
 

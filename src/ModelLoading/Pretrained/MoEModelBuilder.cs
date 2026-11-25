@@ -63,6 +63,10 @@ public static class MoEModelBuilder<T>
     {
         Guard.NotNull(config);
         Guard.NotNull(weights);
+        // The store as the caller had it, before building the network (whose warmup forward already sets the store's
+        // training/inference hint): a streamed load that fails puts this back.
+        var previousStore = WeightRegistry.CurrentOptions;
+        bool? previousExecutionTraining = WeightRegistry.StreamingExecutionTraining;
         if (warmupSequenceLength < 1)
             throw new ArgumentOutOfRangeException(nameof(warmupSequenceLength));
         if (config.NumLocalExperts <= 0 || config.NumExpertsPerTok <= 0)
@@ -122,8 +126,7 @@ public static class MoEModelBuilder<T>
         }
 
         // The store is process-global: a load that throws partway puts it back as it was, without the blocks
-        // already loaded, rather than leaving it configured for a network the caller never received.
-        var previousStore = WeightRegistry.CurrentOptions;
+        // already loaded, rather than leaving it configured (options and training/inference hint) for a network the caller never received.
         network.BeginIncrementalWeightStreaming(weightStore!.Value);
         try
         {
@@ -131,7 +134,7 @@ public static class MoEModelBuilder<T>
         }
         catch (Exception loadFailure)
         {
-            try { network.AbortIncrementalWeightStreaming(previousStore); }
+            try { network.AbortIncrementalWeightStreaming(previousStore, previousExecutionTraining); }
             catch (Exception restoreFailure)
             {
                 throw new AggregateException(
