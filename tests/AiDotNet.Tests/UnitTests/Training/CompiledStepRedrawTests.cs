@@ -349,6 +349,75 @@ public class CompiledStepRedrawTests
         Assert.InRange(keptCount, 1, draws - 1);
     }
 
+    /// <summary>
+    /// Wav2Vec2 language identification with LayerDrop off: the waveform standardization, the dropouts and the
+    /// SpecAugment time mask all run inside the training forward. The 300-sample clips are shorter than the feature
+    /// encoder's 400-sample receptive field and are zero-padded to it, which used to be a host copy of the traced
+    /// batch (#2592).
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(8000)]
+    [InlineData(300)]
+    public async Task Wav2Vec2_language_identification_follows_the_eager_tape_on_every_compiled_step(int samples)
+    {
+        await Task.Yield();
+        var data = RandomHelper.CreateSeededRandom(5);
+        var eagerLosses = TrainModelsSideBySide(
+            () => new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<double>(
+                new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                    inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                    taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
+                    inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+                new[] { "en", "es", "fr", "de" },
+                new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions
+                {
+                    HiddenSize = 16, NumLayers = 2, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16,
+                    HiddenDropout = 0.2, FeatureProjectionDropout = 0.2, LayerDrop = 0.0,
+                }),
+            model => model.FusedSession,
+            step =>
+            {
+                var target = new Tensor<double>(new[] { 2, 4 });
+                target[0, step % 4] = 1.0;
+                target[1, (step + 2) % 4] = 1.0;
+                return (Random(data, 2, samples), target);
+            });
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// Trains two identically seeded models through their own <c>Train</c>, one on the compiled plan and one with its
+    /// session disabled, on the same fresh batch each step. Returns the eager losses, after requiring the compiled arm
+    /// to engage and to follow them step for step.
+    /// </summary>
+    private static List<double> TrainModelsSideBySide<TModel>(Func<TModel> build,
+        Func<TModel, FusedTrainingSession<double>> sessionOf,
+        Func<int, (Tensor<double> Input, Tensor<double> Target)> batchOf)
+        where TModel : AiDotNet.NeuralNetworks.NeuralNetworkBase<double>
+    {
+        using var fused = build();
+        using var eager = build();
+        var fusedSession = sessionOf(fused);
+        var eagerSession = sessionOf(eager);
+        eagerSession.IsDisabled = true;
+        var eagerLosses = new List<double>();
+        for (int step = 0; step < Steps; step++)
+        {
+            var (input, target) = batchOf(step);
+            fused.Train(input, target);
+            Assert.True(fusedSession.IsCommitted && !fusedSession.LastStepRanOutsidePlan,
+                $"step {step}: fused path did not engage ({fusedSession.LastMissReason ?? fused.LastFusedGateMissReason}).");
+            eager.Train(input, target);
+            Assert.False(eagerSession.IsCommitted, $"step {step}: the eager arm ran on a compiled plan.");
+            double fusedLoss = fused.GetLastLoss(), eagerLoss = eager.GetLastLoss();
+            Assert.True(
+                Math.Abs(fusedLoss - eagerLoss) <= Tolerance * Math.Max(1.0, Math.Abs(eagerLoss)),
+                $"step {step}: fused loss {fusedLoss:R} differs from eager loss {eagerLoss:R}; the plan replays stale per-step state.");
+            eagerLosses.Add(eagerLoss);
+        }
+        return eagerLosses;
+    }
+
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
     private static List<double> TrainSideBySide(
         IReadOnlyList<ITrainableLayer<double>> fusedLayers, Func<Tensor<double>, Tensor<double>> fusedForward,

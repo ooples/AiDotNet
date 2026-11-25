@@ -925,39 +925,46 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     }
 
     /// <summary>
-    /// Why the training forward cannot be compiled once and replayed, or null when it can.
+    /// Why the training forward cannot be compiled once and replayed. With the pinned AiDotNet.Tensors it never can.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The log-mel front end is recorded in training traces (AiDotNet.Tensors 0.151.0 and later,
-    /// ooples/AiDotNet.Tensors#1750). The Swin drop-path masks and the SpecAugment stripes are
-    /// <see cref="AiDotNet.Training.CompiledStepRandom{T}"/> draws, and the random crop of a clip longer than
-    /// <see cref="CLAPModelOptions.ClipSamples"/> is a gather through per-step indices. A compiled plan recomputes and
-    /// redraws all of them on every replay.
+    /// TEMPORARY OPT-OUT (#2592). In AiDotNet.Tensors 0.150.0 the log-mel front end's STFT has no training-trace
+    /// graph branch, and host-scalar reductions read unrealized lazy buffers inside a training trace, so a compiled
+    /// plan keeps the traced step's spectra as constants. ooples/AiDotNet.Tensors#1750 (in 0.151.0 and later) records
+    /// the front end, but that alone does not make the plan correct. Measured on 0.152.1 with this clause lifted and
+    /// drop-path, text dropout, SpecAugment and feature fusion all off: the trace first refuses the HTS-AT bicubic
+    /// resize matrix (a cast and a one-hot across element types); with that matrix built outside the recording the
+    /// plan compiles, and its loss already differs from the eager tape's on the traced step (1.7278 against 1.6973)
+    /// and does not follow it afterwards (2.04 against 0.61 on the next step, same batch). The clause stays until a
+    /// compiled step matches the eager step. The front end runs on every training forward, so this applies whatever
+    /// the options are. It must not be gated on the regularization settings.
     /// </para>
     /// <para>
-    /// TEMPORARY OPT-OUT (#2592): the feature-fusion crop offsets are still drawn on the host every step, so a plan
-    /// would keep the traced step's three local views. This clause stays until those crops are drawn through
-    /// <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>.
+    /// The feature-fusion crop offsets are drawn on the host every step. That clause stays after #1750 until the crops
+    /// are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. The Swin drop-path masks and the
+    /// SpecAugment stripes already are, so they need no break.
     /// </para>
     /// </remarks>
     /// <seealso cref="SupportsFusedCompiledTraining"/>
-    internal string? FusedTrainingBreakReason()
+    internal string FusedTrainingBreakReason()
         => _options.EnableFeatureFusion
-            ? "CLAP's feature-fusion crops are drawn on the host each step"
-            : null;
+            ? "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592), and "
+              + "its feature-fusion crops are drawn on the host each step"
+            : "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592)";
 
     /// <summary>
-    /// TEMPORARY OPT-OUT (#2592): with feature fusion, the fused compiled training path is off for every entry point
-    /// until the fusion crops are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. Without fusion
-    /// nothing in the training forward is drawn on the host, and the model trains on the compiled plan.
+    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off for every entry point until a compiled step
+    /// of this model matches its eager step (see <see cref="FusedTrainingBreakReason"/>) and the feature-fusion crops
+    /// are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. Remove this override then.
     /// </summary>
     /// <remarks>
     /// <see cref="FusedTrainingBreakReason"/> breaks only the contrastive step's own request. The base class's custom
     /// and declared-objective steps (<c>TrainWithCustomLossFused</c>, <c>TrainObjectiveFused</c>) build their own
-    /// request around <see cref="ForwardForTraining"/>, which runs the same front end, and consult only this flag.
+    /// request around <see cref="ForwardForTraining"/>, which runs the same log-mel front end, and consult only this
+    /// flag. With it left on, those steps compiled a plan that kept the traced step's spectra.
     /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => !_options.EnableFeatureFusion;
+    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <summary>
     /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):

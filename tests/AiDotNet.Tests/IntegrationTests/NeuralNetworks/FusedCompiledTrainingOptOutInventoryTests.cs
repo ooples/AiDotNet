@@ -88,9 +88,9 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         //   data-dependent per point cloud:
         "PointTransformerV3", "Sonata",
 
-        // - audio models with temporary (#2592) opt-outs for unrecorded log-mel / host-drawn feature-fusion crops
-        //   (CLAPModel) and host-side short-clip receptive-field padding (Wav2Vec2LanguageIdentifier):
-        "CLAPModel", "Wav2Vec2LanguageIdentifier",
+        // - CLAP's temporary (#2592) opt-out: its compiled step does not match its eager step, and its feature-fusion
+        //   crops are drawn on the host each step:
+        "CLAPModel",
     };
 
     [Fact]

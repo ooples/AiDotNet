@@ -26231,7 +26231,6 @@ AiDotNet.Models.Options.TabROptions<T>.NumericEmbeddingDimension.set -> void
 AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.None = 0 -> AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.PeriodicLinearReLU = 1 -> AiDotNet.Enums.TabRNumericEmbedding
-override AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T>.SupportsFusedCompiledTraining.get -> bool
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42) -> void
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<double[,]!>! sketches) -> double[,]!
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.RecoverTopK(double[,]! mergedSketch, int gradientLength) -> T[]!
