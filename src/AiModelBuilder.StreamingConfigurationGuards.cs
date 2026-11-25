@@ -4,133 +4,220 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet;
 
 /// <content>
-/// Training configuration on the streaming supervised path: options the streaming loop honours are pushed into the
-/// optimizer here, and options only the in-memory supervised path can honour are refused instead of being dropped.
+/// Training configuration on the streaming supervised path: options the streaming loop honours are wired in here,
+/// and the options that cannot work on a stream are refused, each for its own reason, instead of being dropped.
 /// </content>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
-    /// Refuses training options that only the in-memory supervised path consumes.
+    /// Refuses the training options that need the whole training set at once, which a streaming loader never
+    /// holds. Every configured one is named in the same error.
     /// </summary>
     /// <remarks>
-    /// Each of these replaces or reshapes the in-memory training run (a search over trainings, a different trainer,
-    /// a second training pass, or a rewrite of the materialised training set). The streaming loop trains batch by
-    /// batch from the loader and has no place where they apply, so a build that carried on would return a model
-    /// trained without them and give no sign of it.
+    /// LoRA, knowledge distillation, fine-tuning, the training pipeline, curriculum learning and regularization
+    /// are not in this list: the streaming path applies them.
     /// </remarks>
-    /// <exception cref="NotSupportedException">One of the options is configured.</exception>
+    /// <exception cref="NotSupportedException">One or more of the options is configured.</exception>
     private void RejectTrainingConfigurationUnsupportedOnStreaming()
     {
-        string? dropped = null;
+        var refused = new List<string>();
         if (_hyperparameterOptimizer is not null && _hyperparameterSearchSpace is not null)
         {
-            dropped = nameof(ConfigureHyperparameterOptimizer);
-        }
-        else if (_federatedLearningOptions is not null)
-        {
-            dropped = nameof(ConfigureFederatedLearning);
-        }
-        else if (_knowledgeDistillationOptions is not null)
-        {
-            dropped = nameof(ConfigureKnowledgeDistillation);
-        }
-        else if (_configuredDistillationStrategy is not null)
-        {
-            dropped = nameof(ConfigureDistillationStrategy);
-        }
-        else if (_continualLearningEnabled)
-        {
-            dropped = nameof(ConfigureContinualLearning);
-        }
-        else if (_curriculumLearningOptions is { Dataset: not null })
-        {
-            dropped = nameof(ConfigureCurriculumLearning);
-        }
-        else if (_fineTuningConfiguration is { Enabled: true })
-        {
-            dropped = nameof(ConfigureFineTuning);
-        }
-        else if (_trainingPipelineConfiguration?.Stages is { Count: > 0 })
-        {
-            dropped = nameof(ConfigureTrainingPipeline);
-        }
-        else if (_selfSupervisedLearningPretrainAction is not null || _selfSupervisedLearningConfig?.Method is not null)
-        {
-            dropped = nameof(ConfigureSelfSupervisedLearning);
-        }
-        else if (_loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>)
-        {
-            // The in-memory path swaps the adapters into the network before training; here the network would be
-            // trained in full while the result still carried the LoRA configuration.
-            dropped = nameof(ConfigureLoRA);
-        }
-        else if (_trainingGroups is not null)
-        {
-            dropped = nameof(ConfigureTrainingGroups);
-        }
-        else if (_dataPreparationPipeline is { Count: > 0 })
-        {
-            dropped = nameof(ConfigureDataPreparation);
-        }
-        else if (_crossValidator is not null)
-        {
-            dropped = nameof(ConfigureCrossValidation);
-        }
-        else if (_configuredDataSplitter is not null)
-        {
-            dropped = nameof(ConfigureDataSplitter);
+            refused.Add(
+                $"{nameof(ConfigureHyperparameterOptimizer)}: every trial is a complete training run over the same " +
+                "training and validation rows, and a stream is read once, in order, with no rows held back to score " +
+                "a trial on.");
         }
 
-        if (dropped is not null)
+        if (_federatedLearningOptions is not null)
         {
+            refused.Add(
+                $"{nameof(ConfigureFederatedLearning)}: the training rows are partitioned across the simulated " +
+                "clients before the first round, which needs every row and its index up front.");
+        }
+
+        if (_continualLearningEnabled)
+        {
+            refused.Add(
+                $"{nameof(ConfigureContinualLearning)}: the continual learner takes the task as an indexable " +
+                "dataset that it subsets, shuffles and revisits (replay memory, importance estimates over the " +
+                "task), and a stream has no index to revisit.");
+        }
+
+        if (_selfSupervisedLearningPretrainAction is not null || _selfSupervisedLearningConfig?.Method is not null)
+        {
+            refused.Add(
+                $"{nameof(ConfigureSelfSupervisedLearning)}: pretraining makes its own passes over all the " +
+                "unlabeled inputs before the supervised fit starts.");
+        }
+
+        if (_trainingGroups is not null)
+        {
+            refused.Add(
+                $"{nameof(ConfigureTrainingGroups)}: the group ids are matched to training rows by position, and " +
+                "a shuffled stream has no stable row positions.");
+        }
+
+        if (_dataPreparationPipeline is { Count: > 0 })
+        {
+            refused.Add(
+                $"{nameof(ConfigureDataPreparation)}: its operations add and remove rows (resampling, outlier " +
+                "removal) from statistics over the whole set. Per-feature transforms do work on a stream; " +
+                "configure those through the preprocessing pipeline.");
+        }
+
+        if (_crossValidator is not null)
+        {
+            refused.Add(
+                $"{nameof(ConfigureCrossValidation)}: every fold retrains on a different subset of the same rows.");
+        }
+
+        if (_configuredDataSplitter is not null)
+        {
+            refused.Add(
+                $"{nameof(ConfigureDataSplitter)}: a splitter divides rows it holds. On a stream, pass the " +
+                "held-out data as StreamingTrainingOptions.ValidationLoader.");
+        }
+
+        if (refused.Count == 0)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"The streaming data-loader path cannot honour {refused.Count} configured option(s), and training " +
+            "without them would give no sign of it. Remove the call(s), or load the data through an " +
+            "IInputOutputDataLoader if it fits in memory:" + Environment.NewLine +
+            string.Join(Environment.NewLine, refused.Select(reason => " - " + reason)));
+    }
+
+    /// <summary>
+    /// Refuses, for a run with more than one rank, the configured trainers that update the model on each rank
+    /// separately with nothing exchanged between the ranks.
+    /// </summary>
+    /// <exception cref="NotSupportedException">More than one rank and one or more such trainers.</exception>
+    private void RejectUnsynchronizedTrainersOnMultipleRanks(DistributedTraining.ICommunicationBackend<T>? distBackend)
+    {
+        if (distBackend is not { WorldSize: > 1 })
+        {
+            return;
+        }
+
+        var refused = new List<string>();
+        if (_knowledgeDistillationOptions is not null || _configuredDistillationStrategy is not null)
+        {
+            refused.Add(nameof(ConfigureKnowledgeDistillation));
+        }
+
+        if (_fineTuningConfiguration is { Enabled: true })
+        {
+            refused.Add(nameof(ConfigureFineTuning));
+        }
+
+        if (_trainingPipelineConfiguration?.Stages is { Count: > 0 })
+        {
+            refused.Add(nameof(ConfigureTrainingPipeline));
+        }
+
+        if (_curriculumLearningOptions is { Dataset: not null })
+        {
+            refused.Add(nameof(ConfigureCurriculumLearning));
+        }
+
+        if (refused.Count == 0)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"{string.Join(", ", refused)} cannot run on {distBackend.WorldSize} ranks: each trains the model through " +
+            "its own trainer, which exchanges no gradients, so every rank would finish with different weights. Run " +
+            "with one rank, or run the stage on the trained model after the distributed build.");
+    }
+
+    /// <summary>
+    /// Checks, before anything is changed, that the streaming loop has a place to apply
+    /// <see cref="ConfigureRegularization"/> for the configured model and optimizer.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Nothing on this path could apply the penalty.</exception>
+    private void EnsureStreamingRegularizationCanBeApplied()
+    {
+        if (_regularization is null || _model is null)
+        {
+            return;
+        }
+
+        if (_model is NeuralNetworks.NeuralNetworkBase<T>)
+        {
+            bool tensorTraining = typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>);
+            bool optimizerSteps = _optimizer is null
+                ? tensorTraining
+                : _optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>
+                    && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+            if (optimizerSteps)
+            {
+                return;
+            }
+
             throw new NotSupportedException(
-                $"{dropped} is not supported on the streaming data-loader path: it is applied by the in-memory " +
-                "supervised path, which needs the whole training set materialised, and the streaming loop would " +
-                "train without it. Use an IInputOutputDataLoader (for example InMemoryDataLoader), or remove the " +
-                $"{dropped} call.");
+                $"{nameof(ConfigureRegularization)} on the streaming data-loader path is applied by the optimizer " +
+                "that steps the network, which must be a gradient-based optimizer over tensors (AdamOptimizer, " +
+                "AdamWOptimizer, StochasticGradientDescentOptimizer and the like). " +
+                (_optimizer is null
+                    ? $"This build trains {typeof(TInput).Name} inputs against {typeof(TOutput).Name} targets, for " +
+                      "which no such optimizer can be created."
+                    : $"{_optimizer.GetType().Name} is not one, so the network would step without the penalty.") +
+                $" Pass one to {nameof(ConfigureOptimizer)}.");
+        }
+
+        if (_model is IGradientComputable<T, TInput, TOutput> && _model is IParameterizable<T, TInput, TOutput>)
+        {
+            if (_regularization is Regularization.RegularizationBase<T, TInput, TOutput>
+                || typeof(TOutput) == typeof(Vector<T>))
+            {
+                return;
+            }
+
+            throw new NotSupportedException(
+                $"{nameof(ConfigureRegularization)} on the streaming data-loader path adds the penalty to the " +
+                $"parameter gradient, a Vector<{typeof(T).Name}>. {_regularization.GetType().Name} can only regularize " +
+                $"{typeof(TOutput).Name} values; derive it from RegularizationBase to give it the vector overload.");
+        }
+
+        throw new NotSupportedException(
+            $"{nameof(ConfigureRegularization)} cannot be applied to {_model.GetType().Name} on the streaming " +
+            "data-loader path: the model neither steps through an optimizer nor exposes its gradient and parameters " +
+            "(IGradientComputable and IParameterizable), so there is no update to add the penalty to.");
+    }
+
+    /// <summary>
+    /// Gives a neural network with no builder optimizer an <see cref="Optimizers.AdamOptimizer{T, TInput, TOutput}"/>
+    /// when regularization is configured, as the in-memory path does, so there is an optimizer to carry the
+    /// penalty.
+    /// </summary>
+    private void PromoteStreamingOptimizerForRegularization()
+    {
+        if (_regularization is not null && _optimizer is null && _model is NeuralNetworks.NeuralNetworkBase<T>)
+        {
+            _optimizer = new Optimizers.AdamOptimizer<T, TInput, TOutput>(_model);
         }
     }
 
     /// <summary>
-    /// Pushes <see cref="ConfigureRegularization"/> into the optimizer the streaming loop steps with, as the
-    /// in-memory path does.
+    /// Pushes <see cref="ConfigureRegularization"/> into the optimizer that steps a neural network, as the
+    /// in-memory path does. The tape step applies the optimizer's regularization to the gradients, once.
     /// </summary>
     /// <remarks>
-    /// A neural network on the streaming path steps through the configured optimizer, whose regularization the tape
-    /// step applies to the gradients. Any other model updates itself through
-    /// <see cref="IGradientComputable{T, TInput, TOutput}"/> without an optimizer, so there is nothing that could
-    /// apply the penalty and the configuration is refused.
+    /// Models that update through <see cref="IGradientComputable{T, TInput, TOutput}"/> have no optimizer step;
+    /// their penalty is added to the gradient by <see cref="RegularizeStreamingGradient"/>.
     /// </remarks>
-    /// <exception cref="NotSupportedException">The model does not train through an optimizer on this path.</exception>
-    /// <exception cref="InvalidOperationException">No gradient-based optimizer is configured.</exception>
     private void ApplyStreamingRegularization()
     {
-        if (_regularization is null)
-        {
-            return;
-        }
-
-        if (_model is not NeuralNetworks.NeuralNetworkBase<T>)
-        {
-            throw new NotSupportedException(
-                $"{nameof(ConfigureRegularization)} is not supported on the streaming data-loader path for " +
-                $"{_model?.GetType().Name ?? "a null model"}: only neural networks step through an optimizer there, " +
-                "and the regularization is applied by the optimizer. Use an IInputOutputDataLoader, or remove the " +
-                $"{nameof(ConfigureRegularization)} call.");
-        }
-
-        // The loop hands the network the configured optimizer only when it is a tensor optimizer; any other
-        // optimizer would take the penalty and never step.
-        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer
-            && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>)
+        if (_regularization is not null
+            && _model is NeuralNetworks.NeuralNetworkBase<T>
+            && _optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer)
         {
             gradientOptimizer.SetRegularization(_regularization);
-            return;
         }
-
-        throw new InvalidOperationException(
-            $"{nameof(ConfigureRegularization)} on the streaming data-loader path needs a gradient-based optimizer " +
-            $"configured through {nameof(ConfigureOptimizer)} (AdamOptimizer, AdamWOptimizer and the like); the " +
-            $"active optimizer is {_optimizer?.GetType().Name ?? "not configured"}, which has no regularization slot.");
     }
 }

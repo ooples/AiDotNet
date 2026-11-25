@@ -2470,6 +2470,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         RejectBuildTimeAdversarialTraining(RobustnessBuildPath.StreamingSupervised);
         RejectTrainingConfigurationUnsupportedOnStreaming();
+        EnsureStreamingRegularizationCanBeApplied();
 
         // ConfigureAugmentation isn't wired into the streaming path —
         // BuildSupervisedInternalAsync's one-shot offline augmentation
@@ -2514,10 +2515,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Push configured training components into the model/optimizer, exactly as the in-memory path does.
         // The streaming path previously skipped this, so ConfigureLossFunction / ConfigureLearningRateScheduler
         // were silently ignored whenever a streaming loader was used.
+        PromoteStreamingOptimizerForRegularization();
         ApplyConfiguredLossFunction();
         ApplyConfiguredLearningRateScheduler();
         ApplyConfiguredCreditRule();
         ApplyStreamingRegularization();
+
+        // LoRA adapters go in before mixed precision and before any rank exchanges or restores parameters, as on
+        // the in-memory path, so everything after this sees the adapted network.
+        await ApplyConfiguredLoRAAdaptersAsync(() => PeekStreamingLoRAWarmupSampleAsync(
+            (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>)?.InnerLoader ?? streamingLoader,
+            cancellationToken));
 
         var (mixedPrecisionEngaged, mixedPrecisionStatus) = ConfigureStreamingMixedPrecision();
 
@@ -2531,12 +2539,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // its gradient and parameters synchronizes through ExecuteStreamingDistributedGradientStep when there is
         // more than one rank. One rank has nothing to exchange and trains exactly as it does with no backend.
         EnsureStreamingModelSupportsDistributedTraining(distBackend);
+        RejectUnsynchronizedTrainersOnMultipleRanks(distBackend);
+        EnsureStreamingGradientAccumulationIsHonoured();
         bool gradientModelDistributed = IsStreamingGradientModelDistributed(distBackend);
 
         IStreamingDataLoader<T, TInput, TOutput> rawLoader =
             (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>)?.InnerLoader
             ?? streamingLoader;
-        Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>? distLoader = distBackend is not null
+        // One rank reads the caller's loader directly, as a run with no backend does: wrapping it would re-cut the
+        // batches of a loader that yields its own batch sizes.
+        Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>? distLoader = distBackend is { WorldSize: > 1 }
             ? (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>
                 ?? new Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>(rawLoader, distBackend))
             : (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>);
@@ -2600,6 +2612,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 SynchronizeStreamingGradientModelInitialParameters(distBackend);
             }
+
+            // Knowledge distillation replaces the ordinary step: each sample is trained against the teacher.
+            Func<TInput[], TOutput[], T>? distillationStep = CreateStreamingDistillationStep();
 
             // Start a training-monitor session for this streaming run (the streaming path did not
             // previously open one, so the configured monitor never received per-epoch metrics).
@@ -2882,7 +2897,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     bool isIdleDistributedNeuralRank = distCoordinator is not null
                         && processedInputs.Length == 0
                         && _model is NeuralNetworks.NeuralNetworkBase<T>;
-                    if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
+                    if (distillationStep is not null)
+                    {
+                        epochLoss = AddLossScalars(epochLoss, distillationStep(processedInputs, processedOutputs));
+                        epochBatches++;
+                    }
+                    else if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
                         && processedOutputs.Length > 0 && processedOutputs[0] is Tensor<T>)
                         || isIdleDistributedNeuralRank)
                         && _model is INeuralNetwork<T> nn)
@@ -2967,15 +2987,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         // (e.g. logistic regression / classical online learners).
                         for (int i = 0; i < processedInputs.Length; i++)
                         {
-                            var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], processedOutputs[i], lossFunction);
-                            double currentLr;
-                            if (_optimizer is IGradientBasedOptimizer<T, TInput, TOutput> gbo)
-                                currentLr = gbo.GetCurrentLearningRate();
-                            else if (_optimizer is not null)
-                                currentLr = _optimizer.GetOptions().InitialLearningRate;
-                            else
-                                currentLr = 0.01;
-                            var modelLr = numOps.FromDouble(currentLr);
+                            var gradients = RegularizeStreamingGradient(
+                                InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], processedOutputs[i], lossFunction));
+                            var modelLr = numOps.FromDouble(ResolveStreamingGradientModelLearningRate());
                             InterfaceGuard.GradientComputable(_model).ApplyGradients(gradients, modelLr);
 
                             var prediction = _model.Predict(processedInputs[i]);
@@ -2985,6 +2999,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             epochLoss = numOps.Add(epochLoss, loss);
                             epochBatches++;
                         }
+
+                        EndStreamingGradientModelBatch();
                     }
 
                     globalStep++;
@@ -3071,6 +3087,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     continue;
                 }
 
+                EndStreamingGradientModelEpoch();
                 totalLoss = numOps.Add(totalLoss, epochLoss);
                 totalBatches += epochBatches;
 
@@ -3161,6 +3178,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         _trainingMonitor.EndSession(streamingMonitorSessionId);
                     }
                 }
+            }
+
+            // Fine-tuning, the training pipeline and the curriculum pass train on data of their own, so they run on
+            // the stream-trained model exactly as they run after the in-memory fit.
+            if (HasConfiguredPostTrainingStage)
+            {
+                _model = await RunConfiguredPostTrainingStagesAsync(_model, cancellationToken)
+                    ?? throw new InvalidOperationException("A post-training stage returned no model.");
             }
 
             resultModel = WrapStreamingModelForDistributed(_model, distBackend);
@@ -4059,209 +4084,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // LORA ADAPTATION (if configured)
-        // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
-        if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
-        {
-            System.Diagnostics.Trace.TraceInformation("Applying LoRA adapters to neural network layers...");
-
-            // AiDotNet#1370 shape oracle: pre-loop asks every layer to declare its
-            // shape from constructor args alone (TryDeclareShape). Layers like
-            // MultiHeadAttentionLayer (knows embeddingDim from ctor) and any
-            // layer constructed with explicit shape (e.g. LayerNormalizationLayer
-            // with the featureSize ctor) return true without needing input.
-            // Lazy convs / inferred-shape layers still return false and trigger
-            // the existing warmup forward as a fallback.
-            // PR #1388 review C7iL5: TryDeclareShape() is a public virtual
-            // extension point — a custom layer override can throw arbitrary
-            // exceptions. Treat non-fatal failures as "shape not declared"
-            // (falls back to the warmup forward below), but let cancellation
-            // and OOM propagate so the host can still abort. Trace the
-            // failure with the layer type + full exception so the operator
-            // can diagnose silently-skipped declarations.
-            static bool TryDeclareShapeSafely(NeuralNetworks.Layers.LayerBase<T> layer)
-            {
-                try
-                {
-                    return layer.TryDeclareShape();
-                }
-                catch (Exception ex) when (
-                    ex is not OperationCanceledException
-                    && ex is not OutOfMemoryException
-                    && ex is not StackOverflowException)
-                {
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"TryDeclareShape failed for {layer.GetType().FullName} — " +
-                        $"treating as 'needs warmup': {ex}");
-                    return false;
-                }
-            }
-
-            // PR #1388 review C8mvN: only let LoRA-targeted layers drive the
-            // warmup-skip decision. A non-target lazy layer (e.g. a lazy
-            // ActivationLayer or DropoutLayer) won't be wrapped by ApplyLoRA
-            // anyway — counting it as "needs warmup" forces the warmup
-            // forward needlessly on mixed networks. Use the configuration's
-            // own non-mutating eligibility predicate when available; for a
-            // custom ILoRAConfiguration implementation that doesn't expose
-            // one, fall back to "every LayerBase counts" (conservative —
-            // may force an unnecessary warmup, but never skips one
-            // incorrectly).
-            var loraTargetProbe = _loraConfiguration as LoRA.DefaultLoRAConfiguration<T>;
-
-            int declaredCount = 0;
-            int needsWarmupCount = 0;
-            for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
-            {
-                var layer = neuralNetForLoRA.Layers[i];
-                if (layer is not NeuralNetworks.Layers.LayerBase<T> declarable)
-                {
-                    // Non-LayerBase<T> layers (rare, e.g. wrapper adapters from a
-                    // prior pass) bypass the oracle entirely — the ApplyLoRA call
-                    // handles its own shape probing.
-                    continue;
-                }
-                if (loraTargetProbe is not null && !loraTargetProbe.IsLoRATarget(declarable))
-                {
-                    // Not a LoRA target — its shape doesn't gate the warmup-skip
-                    // decision. Skip without bumping either counter.
-                    continue;
-                }
-                if (TryDeclareShapeSafely(declarable))
-                    declaredCount++;
-                else
-                    needsWarmupCount++;
-            }
-
-            // If every shape-aware layer declared successfully, skip the warmup
-            // forward entirely — this is the win that beats PyTorch / HuggingFace
-            // PEFT's construction-time shape requirement: we get the zero-warmup
-            // behavior when shapes are known, AND still support lazy layers via
-            // the warmup fallback below when needed.
-            bool skipWarmup = needsWarmupCount == 0;
-            if (skipWarmup)
-            {
-                System.Diagnostics.Trace.TraceInformation(
-                    $"LoRA warmup forward SKIPPED — all {declaredCount} shape-aware layer(s) " +
-                    "declared shape from constructor args (AiDotNet#1370 shape oracle).");
-            }
-            else
-            {
-                System.Diagnostics.Trace.TraceInformation(
-                    $"LoRA warmup forward required — {needsWarmupCount} layer(s) still need a forward " +
-                    $"pass to resolve shape ({declaredCount} declared from ctor).");
-
-                // Warmup forward to materialise lazy-init layers that didn't
-                // self-declare. LoRAAdapterBase.CreateLoRALayer needs the
-                // layer's input/output dimensions at adapter-construction
-                // time; lazy layers that fall through TryDeclareShape report
-                // (0, …) until first Forward materialises the shape.
-                // Without the warmup, LoRALayer's ctor would throw
-                // ArgumentOutOfRangeException("Output size must be positive").
-                // Best-effort: if the warmup throws (e.g. the user wired a
-                // forward path that requires training mode), the ApplyLoRA-side
-                // IsShapeResolved guard silently skips still-unresolved layers
-                // so the wrap loop succeeds on the materialised ones.
-                // Discovered by AiDotNet#1345 Bucket10 ConfigureLoRA test.
-                try
-                {
-                    bool prevTrainingMode = neuralNetForLoRA.IsTrainingMode;
-                    neuralNetForLoRA.SetTrainingMode(false);
-                    try
-                    {
-                        // One sample is enough to resolve lazy-layer shapes;
-                        // a full-dataset forward would do O(N) work and
-                        // allocate a full pass of activation tensors just to
-                        // shape-resolve. Carve off a 1-row probe.
-                        var warmupProbe = TrySliceFirstSampleForLoRAWarmup(x);
-                        var warmupResult = _model.Predict(warmupProbe);
-                        System.GC.KeepAlive(warmupResult);
-                    }
-                    finally
-                    {
-                        neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Cancellation propagates — caller wants out, not a swallowed warmup.
-                    throw;
-                }
-                catch (OutOfMemoryException)
-                {
-                    // Critical: don't mask. The host may need to abort.
-                    // StackOverflowException is intentionally NOT listed —
-                    // modern .NET terminates the process on SOE rather than
-                    // letting it propagate, so a catch clause for it is
-                    // unreachable (review #1368 C7mpq).
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    // Best-effort warmup: documented forward-mode requirements
-                    // (e.g. layers that need IsTrainingMode=true) can throw here.
-                    // The ApplyLoRA-side IsShapeResolved guard silently skips
-                    // still-unresolved layers so the wrap loop succeeds on
-                    // materialized ones (review #1368 C6WOG: narrowed to let
-                    // OperationCanceledException + OutOfMemoryException +
-                    // StackOverflowException propagate; everything else is
-                    // genuine warmup variance and stays as a Trace warning).
-                    // Include ex.ToString() so the trace carries the full
-                    // stack trace + inner exceptions, not just the top-frame
-                    // message. Trace.TraceWarning is the only signal an
-                    // operator has when the warmup fails silently (this PR's
-                    // review C88M6: ex.Message dropped the origin frame and
-                    // any chained inner exception, leaving a downstream
-                    // skipped-lazy-layer mystery if the warmup actually
-                    // failed inside an unrelated subsystem).
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"LoRA warmup forward failed (proceeding — layers that materialised get wrapped; " +
-                        $"lazy ones skipped via IsShapeResolved guard): {ex}");
-                }
-            }
-
-            int adaptedCount = 0;
-            int skippedLazyCount = 0;
-            for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
-            {
-                var originalLayer = neuralNetForLoRA.Layers[i];
-
-                // AiDotNet#1370: gate on TryDeclareShape() rather than IsShapeResolved.
-                // Layers like MHA that allocate weights from ctor-known dims return true
-                // from TryDeclareShape even when InputShape still has a -1 seq placeholder
-                // — LoRA wraps weight matrices, the seq placeholder doesn't matter.
-                //
-                // PR #1388 follow-up review C9PtZ: only probe TryDeclareShape on
-                // layers that ApplyLoRA would actually wrap. A non-target lazy
-                // layer (e.g. a lazy ActivationLayer or DropoutLayer) would get
-                // its TryDeclareShape called, potentially allocating weights or
-                // emitting a Trace warning, only for ApplyLoRA below to return
-                // it unchanged. Gate on the same IsLoRATarget predicate the
-                // pre-scan loop uses so the side effects of TryDeclareShape
-                // only run for actual adaptation candidates.
-                if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
-                    && (loraTargetProbe is null || loraTargetProbe.IsLoRATarget(lazyCheck))
-                    && !TryDeclareShapeSafely(lazyCheck))
-                {
-                    skippedLazyCount++;
-                    continue;
-                }
-
-                var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
-
-                // If the layer was adapted (wrapped with LoRA), update the list
-                if (!ReferenceEquals(originalLayer, adaptedLayer))
-                {
-                    neuralNetForLoRA.Layers[i] = adaptedLayer;
-                    adaptedCount++;
-                }
-            }
-
-            if (skippedLazyCount > 0)
-            {
-                System.Diagnostics.Trace.TraceInformation($"LoRA skipped {skippedLazyCount} layer(s) whose shape was not resolved post-warmup.");
-            }
-            System.Diagnostics.Trace.TraceInformation($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
-        }
+        // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning. The streaming path
+        // calls the same helper with a sample peeked from its loader.
+        await ApplyConfiguredLoRAAdaptersAsync(() => Task.FromResult(TrySliceFirstSampleForLoRAWarmup(x)));
 
 
         // Wrap model and optimizer for distributed training if configured
@@ -5528,199 +5353,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // optimizer dispatch and its epoch-bridge handling (distillation runs its own gradient loop).
         knowledgeDistillationHandled:
 
-        // ============================================================================
-        // FINE-TUNING (#1357 / #1361) — applies preference learning, RLHF, SFT, etc.
-        // to the optimizer-trained model BEFORE metric finalization so that any
-        // checkpoint/result returned reflects the post-fine-tune weights.
-        // ============================================================================
-        if (_fineTuningConfiguration?.Enabled == true)
-        {
-            var ftImpl = _fineTuningConfiguration.Implementation
-                ?? throw new InvalidOperationException(
-                    "ConfigureFineTuning was enabled but no Implementation was provided. " +
-                    "Set FineTuningConfiguration.Implementation to a concrete IFineTuning<T, TInput, TOutput> instance " +
-                    "(e.g. new SupervisedFineTuning<...>(options), new DirectPreferenceOptimization<...>(options)).");
-            if (_fineTuningConfiguration.TrainingData is null)
-                throw new InvalidOperationException(
-                    "ConfigureFineTuning was enabled but no TrainingData was supplied. " +
-                    "Set FineTuningConfiguration.TrainingData to a FineTuningData<T, TInput, TOutput> appropriate for the chosen method " +
-                    "(SFT needs Inputs+Outputs; DPO/SimPO need preference pairs; RLHF/GRPO need rewards).");
-            if (optimizationResult.BestSolution is null)
-                throw new InvalidOperationException(
-                    "ConfigureFineTuning was enabled but the optimizer did not produce a BestSolution to fine-tune. " +
-                    "This usually means main training failed silently — check earlier logs.");
-
-            // Honor the BuildAsync caller's cancellation token across the
-            // fine-tune await — without this the awaited operation cannot
-            // be cancelled once the optimizer's main-training pass returns
-            // (review #1361 fix #5).
-            var fineTunedModel = await ftImpl.FineTuneAsync(
-                optimizationResult.BestSolution,
-                _fineTuningConfiguration.TrainingData,
-                cancellationToken).ConfigureAwait(false);
-
-            // Rebind so downstream metric/checkpoint code sees the post-FT
-            // model. The optimizer-result metrics are still pre-FT (computed
-            // earlier in this method) — a full rebind that re-evaluates loss
-            // on the fine-tuned model is tracked as a heavy-lift follow-up
-            // (review #1361 fix #4 partial).
-            optimizationResult.BestSolution = fineTunedModel;
-            _model = fineTunedModel;
-        }
-
-        // ============================================================================
-        // STAGED TRAINING PIPELINE (#1361 #2) — executes the user-defined sequence of
-        // training stages after main training (and any one-shot fine-tuning). Each
-        // stage takes the previous stage's output model + its own training data and
-        // produces the next stage's input model. Stages with Enabled=false or whose
-        // RunCondition returns false are skipped. The final stage's output replaces
-        // optimizationResult.BestSolution so downstream consumers see the post-
-        // pipeline weights.
-        // ============================================================================
-        if (_trainingPipelineConfiguration?.Stages is { Count: > 0 } stages)
-        {
-            if (optimizationResult.BestSolution is null)
-                throw new InvalidOperationException(
-                    "ConfigureTrainingPipeline was provided but main training did not produce a BestSolution. " +
-                    "Check earlier logs for an upstream training failure.");
-
-            var currentModel = optimizationResult.BestSolution;
-            TrainingStageResult<T, TInput, TOutput>? previousStageResult = null;
-
-            for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
-            {
-                var stage = stages[stageIndex];
-                if (!stage.Enabled) continue;
-                if (stage.RunCondition is { } cond && !cond(previousStageResult)) continue;
-
-                if (stage.CustomTrainingFunction is null)
-                    throw new InvalidOperationException(
-                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has Enabled=true but no " +
-                        $"CustomTrainingFunction. The current wire-up requires each enabled stage to provide " +
-                        $"its own training delegate; the StageType={stage.StageType} / FineTuningMethod=" +
-                        $"{stage.FineTuningMethod} auto-dispatch path is not yet implemented. " +
-                        $"Set stage.CustomTrainingFunction to an async (model, data, ct) => trainedModel delegate, " +
-                        $"or remove this stage from the pipeline.");
-                if (stage.TrainingData is null && !stage.IsEvaluationOnly)
-                    throw new InvalidOperationException(
-                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has no TrainingData and is " +
-                        $"not marked IsEvaluationOnly. Each training stage needs a FineTuningData<T, TInput, " +
-                        $"TOutput> appropriate for its FineTuningMethod.");
-
-                var stageStart = DateTime.UtcNow;
-                var stageResult = new TrainingStageResult<T, TInput, TOutput>
-                {
-                    StageName = stage.Name,
-                    StageIndex = stageIndex,
-                };
-                try
-                {
-                    if (!stage.IsEvaluationOnly)
-                    {
-                        // Pass through the BuildAsync caller's cancellation token
-                        // so user-supplied stage delegates can honor cancellation
-                        // (review #1361 fix #5).
-                        currentModel = await stage.CustomTrainingFunction(
-                            currentModel,
-                            (stage.TrainingData ?? throw new InvalidOperationException("stage.TrainingData is null where it is required.")),
-                            cancellationToken).ConfigureAwait(false);
-                        if (currentModel is null)
-                            throw new InvalidOperationException(
-                                $"TrainingPipeline stage '{stage.Name}' returned null from " +
-                                $"CustomTrainingFunction. Stages must return a non-null model.");
-                    }
-                    stageResult.Model = currentModel;
-                    stageResult.Success = true;
-                }
-                catch (Exception ex)
-                {
-                    stageResult.Success = false;
-                    stageResult.ErrorMessage = ex.Message;
-                    throw;
-                }
-                finally
-                {
-                    stageResult.Duration = DateTime.UtcNow - stageStart;
-                }
-                previousStageResult = stageResult;
-            }
-
-            // Rebind _model so downstream weight-streaming reports, checkpoint
-            // writes, and any other consumer that reads _model directly sees
-            // the post-pipeline model (review #1361 fix #4 partial — the
-            // optimizer metrics on optimizationResult are still pre-pipeline;
-            // re-evaluating them on the pipeline-output model is the heavy-
-            // lift follow-up).
-            optimizationResult.BestSolution = currentModel;
-            _model = currentModel;
-        }
-
-        // ============================================================================
-        // CURRICULUM LEARNING (#1361 #3) — runs a curriculum-scheduled refinement pass
-        // over a user-supplied Dataset after main training (and any fine-tuning /
-        // pipeline stages). The CurriculumLearner ranks samples by difficulty using
-        // either the user's CustomDifficultyEstimator or a LossBasedDifficultyEstimator
-        // tied to the trained model's internal loss, then trains in phases from easy
-        // to hard. The post-curriculum model replaces optimizationResult.BestSolution.
-        //
-        // Dataset auto-extraction from the configured DataLoader is out-of-scope for
-        // this wire-up — different loaders have different per-sample contracts. When
-        // the caller does not supply CurriculumLearningOptions.Dataset, the curriculum
-        // pass is skipped (configuration-only mode).
-        // ============================================================================
-        if (_curriculumLearningOptions is not null && _curriculumLearningOptions.Dataset is not null)
-        {
-            if (optimizationResult.BestSolution is null)
-                throw new InvalidOperationException(
-                    "ConfigureCurriculumLearning was provided with a Dataset but main training did not " +
-                    "produce a BestSolution to curriculum-train. Check earlier logs for an upstream " +
-                    "training failure.");
-
-            var curriculumConfig = new AiDotNet.CurriculumLearning.CurriculumLearnerConfig<T>
-            {
-                TotalEpochs = _curriculumLearningOptions.TotalEpochs ?? 100,
-                NumPhases = _curriculumLearningOptions.NumPhases ?? 5,
-                InitialDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
-                    _curriculumLearningOptions.InitialDataFraction ?? 0.2),
-                FinalDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
-                    _curriculumLearningOptions.FinalDataFraction ?? 1.0),
-                ScheduleType = _curriculumLearningOptions.ScheduleType,
-                RecalculateDifficulties = _curriculumLearningOptions.RecalculateDifficulties ?? false,
-                DifficultyRecalculationFrequency = _curriculumLearningOptions.DifficultyRecalculationFrequency ?? 10,
-                NormalizeDifficulties = _curriculumLearningOptions.NormalizeDifficulties ?? true,
-                EarlyStoppingPatience = _curriculumLearningOptions.EarlyStopping?.Patience ?? 10,
-                EarlyStoppingMinDelta = MathHelper.GetNumericOperations<T>().FromDouble(
-                    _curriculumLearningOptions.EarlyStopping?.MinDelta ?? 0.001),
-                UseEarlyStopping = _curriculumLearningOptions.EarlyStopping?.Enabled ?? true,
-                BatchSize = _curriculumLearningOptions.BatchSize ?? 32,
-                LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001),
-                ShuffleWithinPhase = _curriculumLearningOptions.ShuffleWithinPhase ?? true,
-                UseDifficultyWeighting = _curriculumLearningOptions.UseDifficultyWeighting ?? false,
-                RandomSeed = _curriculumLearningOptions.RandomSeed,
-                Verbosity = _curriculumLearningOptions.Verbosity,
-            };
-
-            var difficultyEstimator = _curriculumLearningOptions.CustomDifficultyEstimator
-                ?? new AiDotNet.CurriculumLearning.DifficultyEstimators
-                       .LossBasedDifficultyEstimator<T, TInput, TOutput>(
-                           lossFunction: null,
-                           normalize: curriculumConfig.NormalizeDifficulties);
-
-            var curriculumLearner = new AiDotNet.CurriculumLearning.CurriculumLearner<T, TInput, TOutput>(
-                baseModel: optimizationResult.BestSolution,
-                config: curriculumConfig,
-                difficultyEstimator: difficultyEstimator,
-                scheduler: _curriculumLearningOptions.CustomScheduler);
-
-            curriculumLearner.Train(_curriculumLearningOptions.Dataset);
-
-            // The CurriculumLearner mutates BaseModel in place; reassign to make the
-            // post-curriculum weights explicit for downstream consumers.
-            // Rebind _model so downstream consumers see the post-curriculum
-            // weights (review #1361 fix #4 partial).
-            optimizationResult.BestSolution = curriculumLearner.BaseModel;
-            _model = curriculumLearner.BaseModel;
-        }
+        // Post-training stages, each on its own data: one-shot fine-tuning (#1357 / #1361), the staged training
+        // pipeline (#1361 #2) and the curriculum-scheduled refinement pass (#1361 #3). The streaming path runs
+        // the same helper after its loop. Optimizer metrics on optimizationResult stay pre-stage.
+        optimizationResult.BestSolution = await RunConfiguredPostTrainingStagesAsync(
+            optimizationResult.BestSolution, cancellationToken).ConfigureAwait(false);
 
         // Adversarial training (EnableAdversarialTraining) is the last training stage: it fits the defended model on
         // the training split as the model sees it (after data preparation, preprocessing and augmentation), never on

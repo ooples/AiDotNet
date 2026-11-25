@@ -62,7 +62,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     private void SynchronizeStreamingGradientModelInitialParameters(DistributedTraining.ICommunicationBackend<T> distBackend)
     {
-        if (distBackend.WorldSize <= 1 || _model is null)
+        if (_model is null)
         {
             return;
         }
@@ -160,20 +160,96 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // One collective carries the gradient sum and the loss sum.
         Vector<T> reduced = Vector<T>.Concatenate(
             new List<Vector<T>> { gradientSum, new Vector<T>(new[] { lossSum }) });
-        if (distBackend.WorldSize > 1)
-        {
-            distBackend.AllReduce(reduced, DistributedTraining.ReductionOperation.Sum);
-        }
+        distBackend.AllReduce(reduced, DistributedTraining.ReductionOperation.Sum);
 
+        // Every rank holds the same parameters and the same reduced sum, so the penalty and the update are the
+        // same on every rank.
         T sampleCount = numOps.FromDouble(globalSampleCount);
-        Vector<T> meanGradient = reduced.GetSubVector(0, parameterCount).Divide(sampleCount);
+        Vector<T> meanGradient = RegularizeStreamingGradient(reduced.GetSubVector(0, parameterCount).Divide(sampleCount));
         gradientModel.ApplyGradients(meanGradient, numOps.FromDouble(ResolveStreamingGradientModelLearningRate()));
+        EndStreamingGradientModelBatch();
         return numOps.Divide(reduced[parameterCount], sampleCount);
     }
 
     /// <summary>
-    /// The learning rate of a gradient-model step: the optimizer's current rate when it is gradient-based, its
-    /// configured initial rate otherwise, and 0.01 when no optimizer is configured.
+    /// Adds the <see cref="ConfigureRegularization"/> penalty to a gradient-model gradient, taken at the model's
+    /// current parameters (for L2, <c>gradient + strength * parameters</c>).
+    /// </summary>
+    private Vector<T> RegularizeStreamingGradient(Vector<T> gradient)
+    {
+        if (_regularization is null || _model is null)
+        {
+            return gradient;
+        }
+
+        Vector<T> parameters = InterfaceGuard.Parameterizable(_model).GetParameters();
+        if (_regularization is Regularization.RegularizationBase<T, TInput, TOutput> regularizationBase)
+        {
+            return regularizationBase.Regularize(gradient, parameters);
+        }
+
+        if (gradient is TOutput typedGradient && parameters is TOutput typedParameters
+            && _regularization.Regularize(typedGradient, typedParameters) is Vector<T> regularized)
+        {
+            return regularized;
+        }
+
+        throw new NotSupportedException(
+            $"{_regularization.GetType().Name} cannot regularize the parameter gradient of {_model.GetType().Name}.");
+    }
+
+    /// <summary>
+    /// Refuses gradient accumulation for a model the streaming loop updates sample by sample.
+    /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// <c>GradientAccumulationSteps</c> is above 1 and the model is not a neural network.
+    /// </exception>
+    private void EnsureStreamingGradientAccumulationIsHonoured()
+    {
+        int accumulationSteps = _streamingTrainingOptions?.GradientAccumulationSteps ?? 1;
+        if (accumulationSteps > 1 && _model is not null && _model is not INeuralNetwork<T>)
+        {
+            throw new NotSupportedException(
+                $"GradientAccumulationSteps = {accumulationSteps} is not supported for {_model.GetType().Name} on the " +
+                "streaming data-loader path: only neural networks accumulate micro-batches there, and the run " +
+                "would stop after fewer samples than the step budget asks for. Set GradientAccumulationSteps to 1.");
+        }
+    }
+
+    /// <summary>
+    /// Ends a loader batch for a model the streaming loop updates itself: a learning-rate scheduler stepping per
+    /// batch advances here, so the next update uses the next scheduled rate.
+    /// </summary>
+    /// <remarks>
+    /// A neural network ends its batches inside its own optimizer step, and distillation trains at a fixed rate.
+    /// </remarks>
+    private void EndStreamingGradientModelBatch()
+    {
+        if (_model is not INeuralNetwork<T>
+            && _knowledgeDistillationOptions is null
+            && _optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer)
+        {
+            gradientOptimizer.OnBatchEnd();
+        }
+    }
+
+    /// <summary>
+    /// Ends an epoch for a model the streaming loop updates itself, so a scheduler stepping per epoch advances.
+    /// </summary>
+    private void EndStreamingGradientModelEpoch()
+    {
+        if (_model is not INeuralNetwork<T>
+            && _knowledgeDistillationOptions is null
+            && _optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer)
+        {
+            gradientOptimizer.OnEpochEnd();
+        }
+    }
+
+    /// <summary>
+    /// The learning rate of a gradient-model step: the optimizer's current rate when it is gradient-based (the
+    /// rate its scheduler has reached), its configured initial rate otherwise, and 0.01 when no optimizer is
+    /// configured.
     /// </summary>
     private double ResolveStreamingGradientModelLearningRate()
     {
