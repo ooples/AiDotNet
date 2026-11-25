@@ -613,11 +613,258 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         double scale = Engine.TensorMaxValue(Engine.TensorAbs(wide));
         // An all-zero (or non-finite) matrix has no usable spectral radius; avoids an exact float equality.
         if (!(scale > 0) || double.IsInfinity(scale)) return NumOps.Zero;
-        var normalized = Engine.TensorDivide(wide, Tensor<double>.CreateDefault(wide.Shape.ToArray(), scale));
-        var eigenvalues = LinalgDispatch<double>.Eig(normalized).Values;
-        var modulus = Engine.TensorSqrt(
-            Engine.ReduceSum(Engine.TensorMultiply(eigenvalues, eigenvalues), [1], keepDims: false));
-        return NumOps.FromDouble(Engine.TensorMaxValue(modulus) * scale);
+        int n = wide.Shape[0];
+        var normalized = new double[n * n];
+        wide.Data.Span.Slice(0, n * n).CopyTo(normalized);
+        for (int i = 0; i < normalized.Length; i++) normalized[i] /= scale;
+
+        // Eigenvalues only, in place: about 10 n^3 flops over one n x n buffer. LinalgDispatch.Eig (AiDotNet.Tensors
+        // Linalg.Eig) allocates O(n^3) - 98 MB for the default 100-neuron reservoir, 774 MB for 200 - and took
+        // ~170 ms, which made LiquidStateMachine construction 4.7x slower in the census. It remains the fallback if
+        // the QR iteration does not converge.
+        double radius = SpectralRadiusInPlace(normalized, n);
+        if (double.IsNaN(radius))
+        {
+            var eigenvalues = LinalgDispatch<double>.Eig(
+                Engine.TensorDivide(wide, Tensor<double>.CreateDefault(wide.Shape.ToArray(), scale))).Values;
+            radius = Engine.TensorMaxValue(Engine.TensorSqrt(
+                Engine.ReduceSum(Engine.TensorMultiply(eigenvalues, eigenvalues), [1], keepDims: false)));
+        }
+
+        return NumOps.FromDouble(radius * scale);
+    }
+
+    /// <summary>
+    /// The largest eigenvalue modulus of the row-major <paramref name="n"/> x <paramref name="n"/> matrix
+    /// <paramref name="a"/>, which is overwritten; NaN if the QR iteration does not converge.
+    /// </summary>
+    /// <remarks>
+    /// Balancing, reduction to upper Hessenberg form by stabilized elementary similarity transforms, and the
+    /// Francis double-shift QR iteration (the EISPACK balanc/elmhes/hqr sequence, as in Press et al., Numerical
+    /// Recipes, 3rd ed., section 11.6). Complex conjugate pairs are resolved as 2 x 2 blocks, so a dominant complex
+    /// pair is measured exactly, unlike a power iteration.
+    /// </remarks>
+    internal static double SpectralRadiusInPlace(double[] a, int n)
+    {
+        if (n == 0) return 0;
+        const double radix = 2.0;
+        const double eps = 2.220446049250313e-16;
+
+        // Balance: scale rows and columns by powers of two so their norms match, which bounds the rounding error.
+        for (bool done = false; !done;)
+        {
+            done = true;
+            for (int i = 0; i < n; i++)
+            {
+                double r = 0, c = 0;
+                for (int j = 0; j < n; j++)
+                {
+                    if (j == i) continue;
+                    c += Math.Abs(a[j * n + i]);
+                    r += Math.Abs(a[i * n + j]);
+                }
+
+                if (c == 0 || r == 0) continue;
+                double g = r / radix, f = 1, total = c + r;
+                while (c < g) { f *= radix; c *= radix * radix; }
+                g = r * radix;
+                while (c > g) { f /= radix; c /= radix * radix; }
+                if ((c + r) / f < 0.95 * total)
+                {
+                    done = false;
+                    g = 1 / f;
+                    for (int j = 0; j < n; j++) a[i * n + j] *= g;
+                    for (int j = 0; j < n; j++) a[j * n + i] *= f;
+                }
+            }
+        }
+
+        // Reduce to upper Hessenberg form with partial pivoting.
+        for (int m = 1; m < n - 1; m++)
+        {
+            double x = 0;
+            int pivot = m;
+            for (int j = m; j < n; j++)
+            {
+                if (Math.Abs(a[j * n + m - 1]) > Math.Abs(x)) { x = a[j * n + m - 1]; pivot = j; }
+            }
+
+            if (pivot != m)
+            {
+                for (int j = m - 1; j < n; j++) (a[pivot * n + j], a[m * n + j]) = (a[m * n + j], a[pivot * n + j]);
+                for (int j = 0; j < n; j++) (a[j * n + pivot], a[j * n + m]) = (a[j * n + m], a[j * n + pivot]);
+            }
+
+            if (x == 0) continue;
+            for (int i = m + 1; i < n; i++)
+            {
+                double y = a[i * n + m - 1];
+                if (y == 0) continue;
+                y /= x;
+                a[i * n + m - 1] = 0;
+                for (int j = m; j < n; j++) a[i * n + j] -= y * a[m * n + j];
+                for (int j = 0; j < n; j++) a[j * n + m] += y * a[j * n + i];
+            }
+        }
+
+        // Francis double-shift QR on the Hessenberg matrix, deflating one real eigenvalue or one 2 x 2 block at a time.
+        double anorm = 0;
+        for (int i = 0; i < n; i++)
+            for (int j = Math.Max(i - 1, 0); j < n; j++) anorm += Math.Abs(a[i * n + j]);
+
+        double radius = 0, shift = 0, p = 0, q = 0, rr = 0, z = 0;
+        int nn = n - 1;
+        while (nn >= 0)
+        {
+            int its = 0, l;
+            do
+            {
+                for (l = nn; l > 0; l--)
+                {
+                    double sum = Math.Abs(a[(l - 1) * n + l - 1]) + Math.Abs(a[l * n + l]);
+                    if (sum == 0) sum = anorm;
+                    if (Math.Abs(a[l * n + l - 1]) <= eps * sum)
+                    {
+                        a[l * n + l - 1] = 0;
+                        break;
+                    }
+                }
+
+                double x = a[nn * n + nn];
+                if (l == nn)
+                {
+                    radius = Math.Max(radius, Math.Abs(x + shift));
+                    nn--;
+                    continue;
+                }
+
+                double y = a[(nn - 1) * n + nn - 1];
+                double w = a[nn * n + nn - 1] * a[(nn - 1) * n + nn];
+                if (l == nn - 1)
+                {
+                    p = 0.5 * (y - x);
+                    q = p * p + w;
+                    z = Math.Sqrt(Math.Abs(q));
+                    x += shift;
+                    if (q >= 0)
+                    {
+                        z = p + (p >= 0 ? z : -z);
+                        radius = Math.Max(radius, Math.Abs(x + z));
+                        if (z != 0) radius = Math.Max(radius, Math.Abs(x - w / z));
+                    }
+                    else
+                    {
+                        radius = Math.Max(radius, Math.Sqrt((x + p) * (x + p) + z * z));
+                    }
+
+                    nn -= 2;
+                    continue;
+                }
+
+                if (its == 60) return double.NaN;
+                if (its == 10 || its == 20 || its == 40)
+                {
+                    // Exceptional shift, to break a cycle.
+                    shift += x;
+                    for (int i = 0; i <= nn; i++) a[i * n + i] -= x;
+                    double sum = Math.Abs(a[nn * n + nn - 1]) + Math.Abs(a[(nn - 1) * n + nn - 2]);
+                    y = x = 0.75 * sum;
+                    w = -0.4375 * sum * sum;
+                }
+
+                ++its;
+                int mm;
+                for (mm = nn - 2; mm >= l; mm--)
+                {
+                    z = a[mm * n + mm];
+                    rr = x - z;
+                    double s2 = y - z;
+                    p = (rr * s2 - w) / a[(mm + 1) * n + mm] + a[mm * n + mm + 1];
+                    q = a[(mm + 1) * n + mm + 1] - z - rr - s2;
+                    rr = a[(mm + 2) * n + mm + 1];
+                    s2 = Math.Abs(p) + Math.Abs(q) + Math.Abs(rr);
+                    p /= s2;
+                    q /= s2;
+                    rr /= s2;
+                    if (mm == l) break;
+                    double u = Math.Abs(a[mm * n + mm - 1]) * (Math.Abs(q) + Math.Abs(rr));
+                    double v = Math.Abs(p)
+                        * (Math.Abs(a[(mm - 1) * n + mm - 1]) + Math.Abs(z) + Math.Abs(a[(mm + 1) * n + mm + 1]));
+                    if (u <= eps * v) break;
+                }
+
+                for (int i = mm; i < nn - 1; i++)
+                {
+                    a[(i + 2) * n + i] = 0;
+                    if (i != mm) a[(i + 2) * n + i - 1] = 0;
+                }
+
+                for (int k = mm; k < nn; k++)
+                {
+                    if (k != mm)
+                    {
+                        p = a[k * n + k - 1];
+                        q = a[(k + 1) * n + k - 1];
+                        rr = k + 1 != nn ? a[(k + 2) * n + k - 1] : 0;
+                        x = Math.Abs(p) + Math.Abs(q) + Math.Abs(rr);
+                        if (x != 0)
+                        {
+                            p /= x;
+                            q /= x;
+                            rr /= x;
+                        }
+                    }
+
+                    double norm = Math.Sqrt(p * p + q * q + rr * rr);
+                    double s = p >= 0 ? norm : -norm;
+                    if (s == 0) continue;
+                    if (k == mm)
+                    {
+                        if (l != mm) a[k * n + k - 1] = -a[k * n + k - 1];
+                    }
+                    else
+                    {
+                        a[k * n + k - 1] = -s * x;
+                    }
+
+                    p += s;
+                    x = p / s;
+                    y = q / s;
+                    z = rr / s;
+                    q /= p;
+                    rr /= p;
+                    for (int j = k; j <= nn; j++)
+                    {
+                        p = a[k * n + j] + q * a[(k + 1) * n + j];
+                        if (k + 1 != nn)
+                        {
+                            p += rr * a[(k + 2) * n + j];
+                            a[(k + 2) * n + j] -= p * z;
+                        }
+
+                        a[(k + 1) * n + j] -= p * y;
+                        a[k * n + j] -= p * x;
+                    }
+
+                    int last = Math.Min(nn, k + 3);
+                    for (int i = l; i <= last; i++)
+                    {
+                        p = x * a[i * n + k] + y * a[i * n + k + 1];
+                        if (k + 1 != nn)
+                        {
+                            p += z * a[i * n + k + 2];
+                            a[i * n + k + 2] -= p * rr;
+                        }
+
+                        a[i * n + k + 1] -= p * q;
+                        a[i * n + k] -= p;
+                    }
+                }
+            }
+            while (l + 1 < nn);
+        }
+
+        return radius;
     }
 
 }
