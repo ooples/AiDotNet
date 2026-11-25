@@ -749,23 +749,9 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
     {
         int embedDim = _options.EmbeddingDimension;
-        int totalElements = batchSize * embedDim;
-        // Box–Muller via the seeded _random so DPCTGANOptions.Seed makes the
-        // packed training path reproducible — Engine.TensorRandomUniformRange
-        // bypasses _random and breaks the seed contract that the rest of the
-        // sampler stack (CTGANDataSampler, _random.NextDouble paths) honours.
-        var noiseData = new T[totalElements];
-        for (int i = 0; i < totalElements; i += 2)
-        {
-            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
-            double u2 = _random.NextDouble();
-            double r = Math.Sqrt(-2.0 * Math.Log(u1));
-            double theta = 2.0 * Math.PI * u2;
-            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
-            if (i + 1 < totalElements)
-                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
-        }
-        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+        // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
+        // draw reproducible (an engine random fill would bypass _random).
+        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, embedDim], _random);
     }
 
     private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
@@ -988,14 +974,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-    {
-        var v = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            v[i] = SampleStandardNormal();
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
 
     #endregion
 

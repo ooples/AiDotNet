@@ -964,18 +964,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// Creates a standard normal random vector of the given size.
     /// </summary>
     private Vector<T> CreateStandardNormalVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            // Box-Muller transform
-            double u1 = Math.Max(1e-10, _random.NextDouble());
-            double u2 = _random.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z);
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(size, _random, BoxMullerGuard.Floored);
 
     /// <summary>
     /// Creates a random binary mask vector where each element is 1 (observed) with probability (1 - missingRate).
@@ -1007,13 +996,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-            v[j] = matrix[row, j];
-        return v;
-    }
+        => matrix.GetRow(row);
 
     private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
