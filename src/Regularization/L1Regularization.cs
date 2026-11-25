@@ -130,23 +130,14 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// </remarks>
     public override Matrix<T> Regularize(Matrix<T> data)
     {
-        var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        var result = new Matrix<T>(data.Rows, data.Columns);
-
-        for (int i = 0; i < data.Rows; i++)
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                var value = data[i, j];
-                var sub = NumOps.Subtract(NumOps.Abs(value), regularizationStrength);
-                result[i, j] = NumOps.Multiply(
-                    NumOps.SignOrZero(value),
-                    NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
-                );
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return result;
+        // sign(value) * max(|value| - strength, 0) for every element
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return SoftThreshold(Tensor<T>.FromMatrix(data), regularizationStrength).ToMatrix();
     }
 
     /// <summary>
@@ -163,19 +154,13 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// </remarks>
     public override Vector<T> Regularize(Vector<T> data)
     {
-        var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        var result = new Vector<T>(data.Length);
-
-        for (int i = 0; i < data.Length; i++)
+        if (data.Length == 0)
         {
-            var value = data[i];
-            var sub = NumOps.Subtract(NumOps.Abs(value), regularizationStrength);
-            result[i] = NumOps.Multiply(
-                NumOps.SignOrZero(value),
-                NumOps.GreaterThan(sub, NumOps.Zero) ? sub : NumOps.Zero
-            );
+            return new Vector<T>(0);
         }
 
-        return result;
+        // sign(value) * max(|value| - strength, 0) for every element
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return SoftThreshold(Tensor<T>.FromVector(data), regularizationStrength).ToVector();
     }
 }
