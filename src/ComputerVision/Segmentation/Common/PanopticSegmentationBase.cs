@@ -72,4 +72,20 @@ public abstract partial class PanopticSegmentationBase<T> : SegmentationModelBas
 
     /// <inheritdoc/>
     public abstract PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image);
+
+    /// <summary>
+    /// Panoptic segmentation for a model whose prediction is per-pixel class logits: every stuff class present
+    /// becomes one segment and every connected component of a thing class becomes one instance.
+    /// </summary>
+    /// <param name="image">The input image.</param>
+    /// <returns>The semantic, instance and panoptic maps and the segment list; see
+    /// <see cref="SegmentationPostProcessing.PanopticFromSemanticLogits{T}"/>.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> the network says which class each pixel belongs to. For background-like classes
+    /// ("stuff", such as sky or road) all the pixels of a class form one segment. For countable classes ("things",
+    /// such as people or cars) each separate blob of pixels is treated as its own object.</para>
+    /// </remarks>
+    private protected PanopticSegmentationResult<T> SegmentPanopticFromSemanticPrediction(Tensor<T> image)
+        => SegmentationPostProcessing.PanopticFromSemanticLogits(
+            SegmentationTensorOps.EnsureUnbatched(Predict(image)), _numStuffClasses, _numClasses);
 }
