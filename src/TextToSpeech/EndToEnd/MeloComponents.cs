@@ -41,11 +41,7 @@ internal sealed class MeloTextEncoder<T>
     public NormedConv1DLayer<T> Projection { get; }
 
     private static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var t = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) t[i] = NumOps.FromDouble(ids[i]);
-        return t;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     /// <summary>
     /// The hidden states <c>[1, hidden, L]</c> and the prior's mean and log-scale <c>[1, out, L]</c> of a symbol
