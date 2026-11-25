@@ -416,28 +416,6 @@ public static class CompiledTapeTrainingStep<T>
             && target.Shape[0] == input.Shape[0]
             ? input.Slice(0, 0, 1)
             : input;
-
-    /// <summary>
-    /// Runs the lazy-initialization forward ahead of a fused step, for a model whose trainable-layer set is not final
-    /// until its first forward: a composite layer that builds a child from the shape it is first given (a DenseNet
-    /// transition's 1x1 convolution, sized from its input channels) adds that child to the set then. Collected before
-    /// that forward, the set changed between the first step and the second, so the second step dropped the first step's
-    /// plan with its optimizer moments and compiled another. <paramref name="sizedLayers"/> and
-    /// <paramref name="sizedExtraTensors"/> are read after the forward; the parameters and registered buffers they
-    /// reach are kept, the forward's activations are freed.
-    /// </summary>
-    internal static void SizeLazyLayers(Tensor<T> input, Tensor<T>? target, Func<Tensor<T>, Tensor<T>> forward,
-        Func<IReadOnlyList<ITrainableLayer<T>>> sizedLayers, Func<IReadOnlyList<Tensor<T>>?> sizedExtraTensors)
-    {
-        // Per-step random draws are suppressed, as in the fused step's own lazy-initialization forward.
-        using var noDraws = CompiledStepRandom<T>.SuppressDraws();
-        using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
-        forward(LazyInitializationSample(input, target, t_leadingAxisIsBatch));
-        var layers = sizedLayers();
-        foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, sizedExtraTensors(), selection: null))
-            sizingScope.Keep(sized);
-        KeepRegisteredBuffers(layers, sizingScope);
-    }
     /// <summary>
     /// One persistent input/target pair per batch shape seen since the last full invalidation, so a loop that
     /// alternates shapes - full batches and the short last batch of every epoch - keeps each shape's compiled plan
@@ -1473,7 +1451,10 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        // Re-collects the trainable layers after the lazy-initialization forward; see
+        // FusedTrainingStepRequest.LayersAfterLazyInitialization. Null = layers is final.
+        Func<IReadOnlyList<ITrainableLayer<T>>>? layersAfterLazyInitialization = null)
     {
         // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
         AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
@@ -1525,7 +1506,8 @@ public static class CompiledTapeTrainingStep<T>
                 verifyDistributedReplay: verifyDistributedReplay,
                 distributedEagerReplayLoss: distributedEagerReplayLoss,
                 distributedReplayTolerance: distributedReplayTolerance,
-                closureObjective: closureObjective);
+                closureObjective: closureObjective,
+                layersAfterLazyInitialization: layersAfterLazyInitialization);
         }
         finally
         {
@@ -1820,7 +1802,10 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        // Re-collects the trainable layers after the lazy-initialization forward; see
+        // FusedTrainingStepRequest.LayersAfterLazyInitialization. Null = layers is final.
+        Func<IReadOnlyList<ITrainableLayer<T>>>? layersAfterLazyInitialization = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -2050,6 +2035,15 @@ public static class CompiledTapeTrainingStep<T>
                     // are kept.
                     using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
                     forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
+                    // The forward may have built child layers (a composite sized from its first input). From here on
+                    // the step trains, remembers and compares the set that includes them, which is the set every
+                    // later step arrives with.
+                    if (layersAfterLazyInitialization is not null
+                        && layersAfterLazyInitialization() is { Count: > 0 } sizedLayers)
+                    {
+                        layers = sizedLayers;
+                    }
+
                     foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection))
                         sizingScope.Keep(sized);
                     // The rest of what a layer keeps between forwards: a parameter the selection above leaves out (a
