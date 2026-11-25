@@ -12,16 +12,22 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
-    /// Gets whether the streaming run trains a non-neural gradient model under a distributed backend.
+    /// Gets whether the streaming run trains a non-neural gradient model across more than one rank.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Neural networks synchronize on the tape path through
     /// <see cref="DistributedTraining.DistributedTapeCoordinator{T}"/>. Every other model that exposes its gradient
     /// and its parameters is synchronized by <see cref="ExecuteStreamingDistributedGradientStep"/>.
+    /// </para>
+    /// <para>
+    /// A backend with one rank is not a distributed run: there is no peer to exchange with, so the model takes the
+    /// same per-sample updates it takes with no backend configured and ends on the same parameters.
+    /// </para>
     /// </remarks>
     private bool IsStreamingGradientModelDistributed(DistributedTraining.ICommunicationBackend<T>? distBackend)
     {
-        return distBackend is not null
+        return distBackend is { WorldSize: > 1 }
             && _model is not null
             && _model is not INeuralNetwork<T>
             && _model is IGradientComputable<T, TInput, TOutput>

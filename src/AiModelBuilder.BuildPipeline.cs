@@ -2469,6 +2469,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         CancellationToken cancellationToken = default)
     {
         RejectBuildTimeAdversarialTraining(RobustnessBuildPath.StreamingSupervised);
+        RejectTrainingConfigurationUnsupportedOnStreaming();
 
         // ConfigureAugmentation isn't wired into the streaming path —
         // BuildSupervisedInternalAsync's one-shot offline augmentation
@@ -2516,6 +2517,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ApplyConfiguredLossFunction();
         ApplyConfiguredLearningRateScheduler();
         ApplyConfiguredCreditRule();
+        ApplyStreamingRegularization();
 
         var (mixedPrecisionEngaged, mixedPrecisionStatus) = ConfigureStreamingMixedPrecision();
 
@@ -2526,7 +2528,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // Neural networks synchronize on the tape path (DistributedTapeCoordinator); every other model that exposes
-        // its gradient and parameters synchronizes through ExecuteStreamingDistributedGradientStep.
+        // its gradient and parameters synchronizes through ExecuteStreamingDistributedGradientStep when there is
+        // more than one rank. One rank has nothing to exchange and trains exactly as it does with no backend.
         EnsureStreamingModelSupportsDistributedTraining(distBackend);
         bool gradientModelDistributed = IsStreamingGradientModelDistributed(distBackend);
 
@@ -2538,8 +2541,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 ?? new Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>(rawLoader, distBackend))
             : (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>);
 
+        // The coordinator exists only to exchange with other ranks. With one rank it would still weight and
+        // re-normalize every gradient by the token count, which rounds differently from the plain step, so a
+        // one-rank backend trains through the same code as no backend and lands on the same weights bit for bit.
         using DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator =
-            distBackend is not null && _model is NeuralNetworks.NeuralNetworkBase<T>
+            distBackend is { WorldSize: > 1 } && _model is NeuralNetworks.NeuralNetworkBase<T>
                 ? new DistributedTraining.DistributedTapeCoordinator<T>(
                     distBackend,
                     _distributedStrategy,
@@ -2936,15 +2942,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
                     else if (gradientModelDistributed && distBackend is not null && distLoader is not null)
                     {
-                        // Distributed gradient model: every rank applies the mean gradient of the whole global
-                        // batch once per step, so N ranks train as one process would on the same global batch.
-                        T stepLoss = ExecuteStreamingDistributedGradientStep(
+                        // Several ranks training a gradient model: every rank applies the mean gradient of the
+                        // whole global batch once per step, so the ranks stay identical.
+                        T globalBatchLoss = ExecuteStreamingDistributedGradientStep(
                             processedInputs,
                             processedOutputs,
                             lossFunction,
                             distBackend,
                             distLoader.LastBatchGlobalSampleCount);
-                        epochLoss = AddLossScalars(epochLoss, stepLoss);
+                        epochLoss = AddLossScalars(epochLoss, globalBatchLoss);
                         epochBatches++;
                     }
                     else if (distBackend is { WorldSize: > 1 })
