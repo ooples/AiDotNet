@@ -28,6 +28,18 @@ namespace AiDotNet.Generators;
 /// scalar access is intended carries <c>[ScalarKernel("reason")]</c>.
 /// </para>
 /// <para>
+/// ADNELEM002 is about arithmetic on the elements of a buffer, so a numeric call counts only when a loop around it
+/// touches an element of the numeric type in its own body: an indexer or array element of that type, a
+/// <c>foreach</c> variable of that type, a per-item lambda that takes or returns one, or a member of a collection of
+/// that type that takes or returns one (<c>list.Add(value)</c>, <c>tensor.GetFlat(i)</c>, <c>enumerator.Current</c>),
+/// or a field or property of that type on the item the loop is on (<c>items[i].Score</c>). The host
+/// floating-point types count as the numeric type here, so a loop converting a <c>double[]</c> still counts. A loop that
+/// touches none of these is not a loop over elements: it counts epochs, layers, batches or the terms of a series, and
+/// its numeric calls are scalar bookkeeping between whole-tensor operations, which no engine op replaces. An element
+/// access inside a nested loop belongs to that nested loop, so the scalar step after an inner element loop is not
+/// counted against the outer one.
+/// </para>
+/// <para>
 /// The gate runs on the newest target framework only (the compilation that defines <c>NET10_0_OR_GREATER</c>):
 /// <c>#if</c> blocks make the counts differ between frameworks, and one framework is enough to stop a new occurrence.
 /// </para>
@@ -110,6 +122,8 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
                     var declaring = invocation.TargetMethod.ContainingType?.OriginalDefinition;
                     if (declaring is null || !IsNumericOperations(declaring, numericOperations)) return;
                     if (!IsInsideLoop(operation.Operation) || IsExempt(operation.ContainingSymbol)) return;
+                    var elementType = NumericElementType(invocation.TargetMethod.ContainingType, numericOperations);
+                    if (!RunsPerElement(operation.Operation, elementType)) return;
                     string member = MemberKey(operation.ContainingSymbol);
                     string key = NumericOperationInLoop.Id + "|" + member;
                     counts.AddOrUpdate(key, 1, (_, n) => n + 1);
@@ -181,19 +195,168 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
     {
         for (var current = operation.Parent; current is not null; current = current.Parent)
         {
-            if (current is ILoopOperation) return true;
-            if (current is IAnonymousFunctionOperation or ILocalFunctionOperation)
-            {
-                // A lambda iterates when it is the argument of a per-element method (Parallel.For, LINQ).
-                var argument = current.Parent is IDelegateCreationOperation creation ? creation.Parent : current.Parent;
-                if (argument is IArgumentOperation { Parent: IInvocationOperation invocation }
-                    && IteratingMethods.Contains(invocation.TargetMethod.Name))
-                    return true;
-            }
+            if (IsLoopScope(current)) return true;
         }
 
         return false;
     }
+
+    /// <summary>A loop statement, or a lambda that a per-element method (Parallel.For, LINQ) runs once per item.</summary>
+    private static bool IsLoopScope(IOperation operation)
+    {
+        if (operation is ILoopOperation) return true;
+        if (operation is IAnonymousFunctionOperation or ILocalFunctionOperation)
+        {
+            var argument = operation.Parent is IDelegateCreationOperation creation ? creation.Parent : operation.Parent;
+            if (argument is IArgumentOperation { Parent: IInvocationOperation invocation }
+                && IteratingMethods.Contains(invocation.TargetMethod.Name))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The T of the <c>INumericOperations&lt;T&gt;</c> a numeric call is made on, when it can be told.</summary>
+    private static ITypeSymbol? NumericElementType(INamedTypeSymbol? type, INamedTypeSymbol numericOperations)
+    {
+        if (type is null) return null;
+        if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, numericOperations))
+            return type.TypeArguments.Length == 1 ? type.TypeArguments[0] : null;
+        var implemented = type.AllInterfaces.FirstOrDefault(i =>
+            SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, numericOperations));
+        return implemented is { TypeArguments.Length: 1 } ? implemented.TypeArguments[0] : null;
+    }
+
+    /// <summary>
+    /// Whether a numeric call runs once per element: some loop around it touches an element of the numeric type in
+    /// its own body (not only inside a nested loop). An unknown numeric type counts as per-element.
+    /// </summary>
+    private static bool RunsPerElement(IOperation call, ITypeSymbol? elementType)
+    {
+        if (elementType is null) return true;
+        for (var current = call.Parent; current is not null; current = current.Parent)
+        {
+            if (IsLoopScope(current) && TouchesElement(current, elementType)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a loop scope reads or writes an element of the numeric type outside its nested loops.</summary>
+    private static bool TouchesElement(IOperation scope, ITypeSymbol elementType)
+    {
+        switch (scope)
+        {
+            case IForEachLoopOperation forEach when forEach.Locals.Any(l => HoldsElement(l.Type, elementType)):
+                return true;
+            case IAnonymousFunctionOperation lambda when TakesOrMakesElement(lambda.Symbol, elementType):
+                return true;
+            case ILocalFunctionOperation local when TakesOrMakesElement(local.Symbol, elementType):
+                return true;
+        }
+
+        var pending = new Stack<IOperation>();
+        foreach (var child in scope.ChildOperations) pending.Push(child);
+        while (pending.Count > 0)
+        {
+            var operation = pending.Pop();
+            if (IsLoopScope(operation)) continue;
+            if (IsElementAccess(operation, elementType) || IsItemMember(operation, scope, elementType)) return true;
+            foreach (var child in operation.ChildOperations) pending.Push(child);
+        }
+
+        return false;
+    }
+
+    private static bool IsElementAccess(IOperation operation, ITypeSymbol elementType)
+    {
+        switch (operation)
+        {
+            case IArrayElementReferenceOperation element:
+                return HoldsElement(element.Type, elementType);
+            case IPropertyReferenceOperation { Property.IsIndexer: true } indexer:
+                return HoldsElement(indexer.Type, elementType);
+            case IPropertyReferenceOperation { Instance: { } receiver } property:
+                return Same(property.Type, elementType) && IsElementCollection(receiver.Type, elementType);
+            case IInvocationOperation { Instance: { } receiver } invocation:
+                return IsElementCollection(receiver.Type, elementType)
+                       && (Same(invocation.TargetMethod.ReturnType, elementType)
+                           || invocation.TargetMethod.Parameters.Any(p => Same(p.Type, elementType)));
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// A field or property of the numeric type read from the item a loop is on: <c>items[i].Value</c>, or
+    /// <c>item.Value</c> on the variable of the enclosing <c>foreach</c>. The values live in objects rather than in
+    /// one buffer, but the loop still visits one of them per iteration.
+    /// </summary>
+    private static bool IsItemMember(IOperation operation, IOperation scope, ITypeSymbol elementType)
+    {
+        if (operation is not IMemberReferenceOperation { Instance: { } instance } member
+            || member is not (IPropertyReferenceOperation or IFieldReferenceOperation)
+            || !HoldsElement(member.Type, elementType))
+            return false;
+        while (instance is IConversionOperation conversion) instance = conversion.Operand;
+        return instance switch
+        {
+            IArrayElementReferenceOperation => true,
+            IPropertyReferenceOperation { Property.IsIndexer: true } => true,
+            ILocalReferenceOperation local => scope is IForEachLoopOperation forEach
+                                              && forEach.Locals.Contains(local.Local, SymbolEqualityComparer.Default),
+            _ => false,
+        };
+    }
+
+    /// <summary>A buffer or sequence of the numeric type: a tensor type, an array, a span or memory, or an enumerable/enumerator of it.</summary>
+    private static bool IsElementCollection(ITypeSymbol? type, ITypeSymbol elementType)
+    {
+        switch (type)
+        {
+            case null:
+                return false;
+            case IArrayTypeSymbol array:
+                return Same(array.ElementType, elementType);
+            case INamedTypeSymbol named:
+                if (IsTensorType(named)) return true;
+                if (named.Name is "Span" or "ReadOnlySpan" or "Memory" or "ReadOnlyMemory"
+                    && named.TypeArguments.Length == 1 && Same(named.TypeArguments[0], elementType))
+                    return true;
+                return IsSequenceOf(named, elementType) || named.AllInterfaces.Any(i => IsSequenceOf(i, elementType));
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsSequenceOf(INamedTypeSymbol type, ITypeSymbol elementType)
+        => type.Name is "IEnumerable" or "IEnumerator" && type.TypeArguments.Length == 1
+           && Same(type.TypeArguments[0], elementType);
+
+    /// <summary>
+    /// A per-item lambda that receives an element, or produces one (a <c>Select</c> that projects anything to the
+    /// numeric type builds a buffer of it one element at a time).
+    /// </summary>
+    private static bool TakesOrMakesElement(IMethodSymbol method, ITypeSymbol elementType)
+        => method.Parameters.Any(p => HoldsElement(p.Type, elementType)) || HoldsElement(method.ReturnType, elementType);
+
+    /// <summary>The numeric type itself, or a tuple or key/value pair that carries one.</summary>
+    private static bool HoldsElement(ITypeSymbol? type, ITypeSymbol elementType)
+    {
+        if (Same(type, elementType)) return true;
+        return type is INamedTypeSymbol named && (named.IsTupleType || named.Name == "KeyValuePair")
+               && named.TypeArguments.Any(a => HoldsElement(a, elementType));
+    }
+
+    /// <summary>
+    /// The numeric type, or a host floating-point type: a loop that converts a <c>double[]</c> into values of the
+    /// numeric type (or back) is a loop over elements as much as one that stays in the numeric type.
+    /// </summary>
+    private static bool Same(ITypeSymbol? left, ITypeSymbol right)
+        => left is not null
+           && (SymbolEqualityComparer.Default.Equals(left, right)
+               || left.SpecialType is SpecialType.System_Double or SpecialType.System_Single or SpecialType.System_Decimal
+               || left is { Name: "Half", ContainingNamespace.Name: "System" });
 
     private static bool IsExempt(ISymbol? symbol)
     {
