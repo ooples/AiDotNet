@@ -69,7 +69,7 @@ function Test-FailoverInfrastructureFailure {
     if (Test-FailoverSuccessfulJob $Job) { return $false }
     $conclusion = [string](Get-FailoverProperty $Job 'conclusion' '')
     if ($conclusion -in @('success', 'skipped', 'neutral', '', 'unknown')) { return $false }
-    $messages = @($Annotations | ForEach-Object { [string]$_.message })
+    $messages = @($Annotations | ForEach-Object { [string](Get-FailoverProperty $_ 'message' '') })
     if (@($messages | Where-Object { $_ -match '(?i)manually cancel|supersed' }).Count -gt 0) { return $false }
     if (Test-IsSelfHostedFailoverJob $Job) {
         # Self-hosted runners are opportunistic capacity: any non-success outcome on a self-hosted
@@ -86,12 +86,70 @@ function Test-FailoverInfrastructureFailure {
     $steps = @(Get-FailoverProperty $Job 'steps' @())
     if (@($steps | Where-Object { $_.conclusion -in @('failure', 'timed_out') }).Count -gt 0) { return $false }
     if (@($messages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out' }).Count -gt 0) { return $false }
-    return @($Annotations | Where-Object {
-        $_.annotation_level -eq 'failure' -and $_.path -eq '.github' -and $_.start_line -eq 1 -and
-        ([string]$_.message -match '^The (self-hosted|hosted) runner lost communication with the server\.' -or
-         [string]$_.message -match '^The runner has received a shutdown signal\.' -or
-         [string]$_.message -match '^The hosted runner encountered an error running your job\.')
-    }).Count -gt 0
+    return Test-FailoverRunnerLossEvidence $Annotations
+}
+
+# The server's own runner-loss annotations, from the start of the message. GitHub appends advice after the
+# first sentence, so the end is open; the start is not, or a step that merely prints the sentence would match.
+$script:FailoverRunnerLossPattern = '^The (self-hosted|hosted) runner lost communication with the server\.|' +
+    '^The runner has received a shutdown signal\.|^The hosted runner encountered an error running your job\.'
+
+function Test-FailoverRunnerLossAnnotation {
+    param($Annotation)
+    return [string](Get-FailoverProperty $Annotation 'annotation_level' '') -ceq 'failure' -and
+        [string](Get-FailoverProperty $Annotation 'path' '') -ceq '.github' -and
+        [string](Get-FailoverProperty $Annotation 'start_line' '') -ceq '1' -and
+        [string](Get-FailoverProperty $Annotation 'message' '') -cmatch $script:FailoverRunnerLossPattern
+}
+
+# AN ALLOWLIST, NOT A DENYLIST. A job counts as a lost runner only when it has failure-level evidence and
+# EVERY failure-level annotation is one of the server's runner-loss messages. Naming the product failures to
+# exclude cannot work: "System.OutOfMemoryException", "[FAIL]", "Test run failed: 3 failed" and
+# "Process completed with exit code 1." all slipped past a six-word list of them. Anything that is not a
+# notice or a warning is treated as failure-level, so an unknown level refuses the rerun.
+function Test-FailoverRunnerLossEvidence {
+    param([AllowEmptyCollection()] [object[]] $Annotations = @())
+    $failureLevel = @($Annotations | Where-Object { [string](Get-FailoverProperty $_ 'annotation_level' '') -cnotin @('notice', 'warning') })
+    if ($failureLevel.Count -eq 0) { return $false }
+    return @($failureLevel | Where-Object { -not (Test-FailoverRunnerLossAnnotation $_) }).Count -eq 0
+}
+
+# The most recent earlier run of the same workflow, branch and event that ran to an end. Cancelled and
+# skipped runs are passed over: they say nothing about whether a shard kept its runner.
+function Get-FailoverPreviousRun {
+    param([Parameter(Mandatory)] $Run, [Parameter(Mandatory)] [string] $Repository)
+    $workflowId = [string](Get-FailoverProperty $Run 'workflow_id' '')
+    $eventName = [string](Get-FailoverProperty $Run 'event' '')
+    $branch = [string](Get-FailoverProperty $Run 'head_branch' '')
+    $number = 0L
+    if ($workflowId -notmatch '^[1-9][0-9]*$' -or $eventName -notmatch '^[a-z_]+$' -or
+        -not [long]::TryParse([string](Get-FailoverProperty $Run 'run_number' ''), [ref] $number) -or $number -le 0) {
+        throw 'Run does not identify its workflow, event and run number.'
+    }
+    $query = "repos/$Repository/actions/workflows/$workflowId/runs?event=$eventName&status=completed"
+    if ($branch) { $query += "&branch=$([uri]::EscapeDataString($branch))" }
+    $response = Invoke-FailoverApi $query
+    $earlier = @(@(Get-FailoverProperty $response 'workflow_runs' @()) | Where-Object {
+        [long]$_.run_number -lt $number -and [string]$_.conclusion -cnotin @('cancelled', 'skipped') -and
+        [string]$_.event -ceq $eventName -and [string](Get-FailoverProperty $_ 'head_branch' '') -ceq $branch
+    } | Sort-Object { [long]$_.run_number } -Descending)
+    if ($earlier.Count -eq 0) { return $null }
+    return $earlier[0]
+}
+
+# True when the job of the same name lost its runner on the previous run too. A shard that dies twice running
+# is not bad luck with a machine: its workload is exhausting the runner, and a third attempt elsewhere would
+# only turn that into a green tick.
+function Test-FailoverLostOnPreviousRun {
+    param([Parameter(Mandatory)] [string] $JobName, $PreviousRun, [AllowEmptyCollection()] [object[]] $PreviousJobs = @(),
+        [Parameter(Mandatory)] [string] $Repository)
+    if ($null -eq $PreviousRun) { return $false }
+    foreach ($job in @($PreviousJobs | Where-Object { [string]$_.name -ceq $JobName })) {
+        if ([string](Get-FailoverProperty $job 'conclusion' '') -cne 'failure' -or -not (Get-FailoverProperty $job 'check_run_url' '')) { continue }
+        $annotations = @(Get-FailoverAnnotations $job $Repository ([string]$PreviousRun.head_sha))
+        if (Test-FailoverRunnerLossEvidence $annotations) { return $true }
+    }
+    return $false
 }
 
 function Get-FailoverJobPool {
@@ -322,7 +380,9 @@ function Get-FailoverExpectedCoverage {
 }
 
 function New-FailoverAlternateShard {
-    param($Shard, $Job, [AllowEmptyCollection()] [object[]] $Runners = @(), [bool] $TrustedSameRepository, [bool] $AlreadyRetried = $false)
+    param($Shard, $Job, [AllowEmptyCollection()] [object[]] $Runners = @(), [bool] $TrustedSameRepository, [bool] $AlreadyRetried = $false,
+        # Alternates this plan has already sent to the self-hosted pool. The planner counts them.
+        [int] $SelfHostedAuthorized = 0)
     if ($AlreadyRetried -or (Get-FailoverProperty $Shard 'failoverAttempt' '') -or
         (Get-FailoverProperty $Shard 'failoverOriginalJobId' '')) { throw 'Only one alternate attempt is permitted.' }
     $pool = Get-FailoverJobPool $Job $Runners
@@ -337,6 +397,12 @@ function New-FailoverAlternateShard {
             $labels -contains 'Linux' -and $labels -contains 'X64'
         })
         if ($qualified.Count -eq 0) { throw 'No idle, online Linux/X64 CPU alternate is available.' }
+        # THE CAP: one alternate per idle runner. Every lost shard used to be authorised against the same idle
+        # machine (seven against one on run 45538563502), which queues them behind each other for hours on a
+        # box that was sized for one. Shards past the cap are not rerun and stay Missing, so the run is red.
+        if ($SelfHostedAuthorized -ge $qualified.Count) {
+            throw "Alternate capacity is used up: $($qualified.Count) idle Linux/X64 CPU runner(s), one alternate each, $SelfHostedAuthorized already authorised."
+        }
         $runner = @('self-hosted', 'Linux', 'X64', 'aidotnet-cpu')
     }
     $copy = $Shard.PSObject.Copy()
