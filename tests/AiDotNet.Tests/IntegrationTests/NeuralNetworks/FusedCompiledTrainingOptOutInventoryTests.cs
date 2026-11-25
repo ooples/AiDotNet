@@ -87,10 +87,6 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         // - point-cloud transformers whose space-filling-curve serialization and octree pooling indices are
         //   data-dependent per point cloud:
         "PointTransformerV3", "Sonata",
-
-        // - CLAP's temporary (#2592) opt-out: its compiled step does not match its eager step, and its feature-fusion
-        //   crops are drawn on the host each step:
-        "CLAPModel",
     };
 
     [Fact]

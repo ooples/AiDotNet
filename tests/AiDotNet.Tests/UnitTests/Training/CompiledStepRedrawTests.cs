@@ -363,24 +363,101 @@ public class CompiledStepRedrawTests
         await Task.Yield();
         var data = RandomHelper.CreateSeededRandom(5);
         var eagerLosses = TrainModelsSideBySide(
-            () => new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<double>(
-                new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
-                    inputType: AiDotNet.Enums.InputType.TwoDimensional,
-                    taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
-                    inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
-                new[] { "en", "es", "fr", "de" },
-                new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions
-                {
-                    HiddenSize = 16, NumLayers = 2, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16,
-                    HiddenDropout = 0.2, FeatureProjectionDropout = 0.2, LayerDrop = 0.0,
-                }),
+            LanguageIdentifierWithoutLayerDrop,
             model => model.FusedSession,
+            step => (Random(data, 2, samples), LanguageTargets(step)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// Two identically seeded language identifiers trained on the compiled plan end at the same weights: the plan
+    /// redraws the dropouts and the time mask from the model's seeded streams, in the order the eager tape draws them
+    /// (#2592; the model family's determinism check runs the default options, whose LayerDrop of 0.1 keeps the model on
+    /// the eager tape).
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(8000)]
+    [InlineData(300)]
+    public async Task Wav2Vec2_language_identification_is_reproducible_on_the_compiled_plan(int samples)
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            var data = RandomHelper.CreateSeededRandom(5);
+            using var model = LanguageIdentifierWithoutLayerDrop();
+            for (int step = 0; step < Steps; step++)
+            {
+                model.Train(Random(data, 2, samples), LanguageTargets(step));
+                Assert.True(model.FusedSession.IsCommitted && !model.FusedSession.LastStepRanOutsidePlan,
+                    $"step {step}: fused path did not engage ({model.FusedSession.LastMissReason ?? model.LastFusedGateMissReason}).");
+            }
+            return model.GetParameters().ToArray();
+        }
+
+        var first = Trained();
+        using var untrained = LanguageIdentifierWithoutLayerDrop();
+        Assert.NotEqual(untrained.GetParameters().ToArray(), first);
+        Assert.Equal(first, Trained());
+    }
+
+    private static AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<double> LanguageIdentifierWithoutLayerDrop()
+        => new(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            new[] { "en", "es", "fr", "de" },
+            new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions
+            {
+                HiddenSize = 16, NumLayers = 2, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16,
+                HiddenDropout = 0.2, FeatureProjectionDropout = 0.2, LayerDrop = 0.0,
+            });
+
+    private static Tensor<double> LanguageTargets(int step)
+    {
+        var target = new Tensor<double>(new[] { 2, 4 });
+        target[0, step % 4] = 1.0;
+        target[1, (step + 2) % 4] = 1.0;
+        return target;
+    }
+
+    /// <summary>
+    /// CLAP's contrastive step (#2592). Everything its training forward does per step has to be recomputed or redrawn
+    /// by the compiled plan: the log-mel front end, the random crop of a clip longer than the clip length (12,000
+    /// samples against 8,192), the three feature-fusion crops of such a clip (20,000 samples), the fusion branch's
+    /// random row when no clip is longer (6,000 samples with fusion), SpecAugment, drop-path, the text dropout, and
+    /// the text tower's position ids and padding mask, which follow each batch's captions.
+    /// The first compiled step is held to the eager step like every other: HTS-AT's patch merging used to gather
+    /// through indices a trace had not computed yet, so the traced step alone merged token 0 into every patch.
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(false, 6000)]
+    [InlineData(false, 12000)]
+    [InlineData(true, 6000)]
+    [InlineData(true, 20000)]
+    public async Task Clap_follows_the_eager_tape_on_every_compiled_step(bool featureFusion, int samples)
+    {
+        await Task.Yield();
+        var eagerLosses = TrainModelsSideBySide(
+            () => AiDotNet.Tests.Audio.ClapReferenceTests.Build(featureFusion),
+            model => TapeTrainingStepper<double>.ForOwner(model).Session,
             step =>
             {
-                var target = new Tensor<double>(new[] { 2, 4 });
-                target[0, step % 4] = 1.0;
-                target[1, (step + 2) % 4] = 1.0;
-                return (Random(data, 2, samples), target);
+                var audio = new Tensor<double>(new[] { 2, samples });
+                var span = audio.AsWritableSpan();
+                for (int b = 0; b < 2; b++)
+                {
+                    double frequency = b == 0 ? 600.0 + 150.0 * step : 4200.0 - 300.0 * step;
+                    for (int i = 0; i < samples; i++)
+                        span[b * samples + i] = (0.4 + 0.1 * step) * Math.Sin(2 * Math.PI * frequency * i / 48000.0);
+                }
+                // Captions of a different length each step (1 is the padding id): RoBERTa's position ids and its
+                // attention mask follow the padding, so a plan that kept the traced batch's would embed and attend
+                // the later captions as if they were padded like the first.
+                var captions = new Tensor<double>(new[] { 2, 6 }, new Vector<double>(step % 2 == 0
+                    ? new double[] { 0, 5 + step, 9, 2, 1, 1, 0, 33, 41 - step, 17, 2, 1 }
+                    : new double[] { 0, 5 + step, 2, 1, 1, 1, 0, 33, 41 - step, 17, 23, 2 }));
+                return (audio, captions);
             });
         Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
     }
