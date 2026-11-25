@@ -48,7 +48,12 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// var model = new AudioPaLM&lt;float&gt;(architecture, options);
 /// model.LoadGemmaWeights("gemma-2b");
 /// model.FitSpeechTokenizer(recordings);        // the audio tokens' k-means codebook
-/// model.Train(new TtsTrainingSample&lt;float&gt; { Tokens = textIds, Audio = recording });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(new List&lt;TtsTrainingSample&lt;float&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;float&gt; { Tokens = textIds, Audio = recording }
+///     });
 /// model.Voice = new TtsVoice&lt;float&gt; { ReferenceAudio = voiceRecording };
 /// var audio = model.Synthesize("Hello world.");
 /// string text = model.Transcribe(recording, "English");

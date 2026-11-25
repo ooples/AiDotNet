@@ -42,7 +42,12 @@ namespace AiDotNet.Audio.MusicGen;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
 /// var clip = Tensor&lt;float&gt;.CreateRandom(1, 32000);
 /// var musicGen = new MusicGenModel&lt;float&gt;(architecture, new MusicGenOptions { ModelSize = MusicGenModelSize.Small });
-/// musicGen.Train(new MusicGenTrainingSample&lt;float&gt; { Audio = clip, Description = "lofi hip hop with a mellow piano" });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(musicGen)
+///     .Build(new List&lt;MusicGenTrainingSample&lt;float&gt;&gt;
+///     {
+///         new MusicGenTrainingSample&lt;float&gt; { Audio = clip, Description = "lofi hip hop with a mellow piano" }
+///     });
 /// var music = musicGen.GenerateMusic("an upbeat 80s synth-pop track", durationSeconds: 10);
 /// </code>
 /// </example>
@@ -63,7 +68,7 @@ namespace AiDotNet.Audio.MusicGen;
     Source = "Section 3.1: AdamW with beta1 = 0.9, beta2 = 0.95, decoupled weight decay 0.1, gradient clipping 1.0 and a "
              + "cosine schedule with 4000 warmup steps. The paper gives no learning rate; 1e-4 is audiocraft's.")]
 public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>, IPaperOptimizerVariant,
-    ITrainingObjectiveProvider<T>
+    ITrainingObjectiveProvider<T>, ISampleObjectiveModel<T, MusicGenTrainingSample<T>>
 {
     /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
     public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed)
@@ -487,6 +492,37 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
             var chroma = _options.MelodyConditioning ? Chroma(codes ? Decode(c) : target) : null;
             return Core.Loss(c, Condition(input, chroma, false, random), false, random)[0];
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// The training objective on a clip and its description, without updating the model: deterministic, with no
+    /// condition, melody or word dropout and no metadata augmentation, so held-out clips are measured the same way
+    /// every time.
+    /// </summary>
+    /// <param name="sample">The clip (its codes or its recording) and its description.</param>
+    /// <returns>The cross-entropy of the clip's codes under the model.</returns>
+    public T EvaluateTrainingObjective(MusicGenTrainingSample<T> sample)
+    {
+        Guard.NotNull(sample);
+        ThrowIfDisposed();
+        var codes = CodesOf(sample.Codes, sample.Audio);
+        string? description = sample.Description is { } text && text.Trim().Length > 0 ? text.Trim() : null;
+        var tokens = description is null ? null : TextToTokens(description);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+            var condition = _options.MelodyConditioning
+                ? Condition(tokens, Chroma(sample.Melody ?? sample.Audio ?? Decode(codes)), false, random)
+                : Condition(tokens, false, random);
+            return Core.Loss(codes, condition, false, random)[0];
         }
         finally
         {

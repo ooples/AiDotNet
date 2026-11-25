@@ -119,8 +119,10 @@ jobs:
       # 1424 -> 1439 (#2389): this step never ran while the markdown pass above failed, so 17 broken examples
       # accumulated unseen (14 clustering examples on an undeclared dataMatrix, three builder examples on undeclared
       # network/optimizer/builder variables). All 17 compile now.
+      #
+      # 1439 -> 1441 (#2390): AiModelBuilder.Build(samples) and ConfigureSampleObjectiveTraining ship with examples.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1439 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1441 --max-fail 0
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,

@@ -43,7 +43,8 @@ namespace AiDotNet.TextToSpeech;
     Note = "One frame per input position: the input's second axis is carried through as TIME and the "
          + "width is appended. Models whose Predict ends somewhere else state their own width through "
          + "OutputFeatureWidth, or decline by leaving it at 0.")]
-public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeContract,
+    ISampleObjectiveModel<T, TtsTrainingSample<T>>
 {
     /// <summary>
     /// The width of this model's <c>Predict</c> output, or 0 for "not stated".

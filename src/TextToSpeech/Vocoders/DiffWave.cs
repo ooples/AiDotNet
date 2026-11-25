@@ -36,7 +36,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// var speech = vocoder.MelToWaveform(mel);
 /// // Unconditional and class-conditional generation (§5.2, §5.3).
 /// var digits = new DiffWave&lt;float&gt;(architecture, DiffWaveOptions.ClassConditional(numClasses: 10));
-/// digits.Train(new TtsTrainingSample&lt;float&gt; { Tokens = none, Audio = clip, ClassLabel = 7 });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(digits)
+///     .Build(new List&lt;TtsTrainingSample&lt;float&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;float&gt; { Tokens = none, Audio = clip, ClassLabel = 7 }
+///     });
 /// var seven = digits.Generate(classLabel: 7);
 /// </code>
 /// </example>

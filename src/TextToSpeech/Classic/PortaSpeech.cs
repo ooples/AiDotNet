@@ -58,7 +58,12 @@ public enum PortaSpeechTrainingPhase
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 /// var model = new PortaSpeech&lt;double&gt;(architecture, new PortaSpeechOptions());
-/// model.Train(new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations });
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(new List&lt;TtsTrainingSample&lt;double&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations }
+///     });
 /// model.CurrentPhase = PortaSpeechTrainingPhase.PostNet;   // after the generator has converged
 /// var spectrogram = model.TextToMel("hello world");
 /// </code>

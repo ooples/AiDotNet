@@ -58,7 +58,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 /// var model = new AdaSpeech&lt;double&gt;(architecture, new AdaSpeechOptions());
-/// model.Train(new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations, SpeakerId = 3 });
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(new List&lt;TtsTrainingSample&lt;double&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations, SpeakerId = 3 }
+///     });
 /// model.Voice = new TtsVoice&lt;double&gt; { SpeakerId = 3, Reference = referenceMel };
 /// var spectrogram = model.Synthesize("hello world");
 /// </code>
