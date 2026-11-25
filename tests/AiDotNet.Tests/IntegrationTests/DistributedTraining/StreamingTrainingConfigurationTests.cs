@@ -568,6 +568,7 @@ public sealed class StreamingTrainingConfigurationTests
         yield return new object[] { "ConfigureSelfSupervisedLearning" };
         yield return new object[] { "ConfigureCrossValidation" };
         yield return new object[] { "ConfigureHyperparameterOptimizer" };
+        yield return new object[] { "ConfigureLoRA" };
     }
 
     [Theory(Timeout = 90000)]
@@ -604,6 +605,8 @@ public sealed class StreamingTrainingConfigurationTests
                 new KFoldCrossValidator<float, Tensor<float>, Tensor<float>>(new CrossValidationOptions { NumberOfFolds = 2 })),
             "ConfigureHyperparameterOptimizer" => builder.ConfigureHyperparameterOptimizer(
                 new RandomSearchOptimizer<float, Tensor<float>, Tensor<float>>(maximize: false, seed: 1), searchSpace, nTrials: 1),
+            "ConfigureLoRA" => builder.ConfigureLoRA(
+                new AiDotNet.LoRA.DefaultLoRAConfiguration<float>(rank: 4, alpha: 4, freezeBaseLayer: true)),
             _ => throw new ArgumentOutOfRangeException(nameof(option), option, "Unknown option."),
         };
 
