@@ -216,6 +216,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             HiddenDropout = o.HiddenDropout,
             AttentionDropout = o.HiddenDropout,
             ActivationDropout = o.HiddenDropout,
+            LayerDrop = o.LayerDrop,
         });
         _poolingProjection = new DenseLayer<T>(o.ClassifierProjectionSize, (IActivationFunction<T>)new ActivationFunctions.IdentityActivation<T>());
         _classifierLayer = new DenseLayer<T>(_languageIdToCode.Count, (IActivationFunction<T>)new ActivationFunctions.IdentityActivation<T>());
@@ -409,20 +410,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => ForwardNative(PreprocessAudio(input));
 
-    /// <summary>
-    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off until the pinned AiDotNet.Tensors contains
-    /// ooples/AiDotNet.Tensors#1750. Remove this override then.
-    /// </summary>
-    /// <remarks>
-    /// The dropout masks, the SpecAugment time mask and LayerDrop are <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>
-    /// draws, and the waveform standardization is graph ops, so a plan redraws and recomputes them on every replay.
-    /// AiDotNet.Tensors 0.150.0 still freezes host reads made inside a training trace into the plan as constants.
-    /// Identically seeded models then trained through the plan to different weights. #1750 makes such reads fail
-    /// closed. Before this override goes, the zero-padding of clips shorter than the receptive field in
-    /// <c>ForwardNative</c>, a host loop over the input, has to become a graph op.
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
-
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
@@ -494,13 +481,10 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         int field = 1;
         var c = _network.Configuration;
         for (int i = c.ConvKernels.Length - 1; i >= 0; i--) field = (field - 1) * c.ConvStrides[i] + c.ConvKernels[i];
+        // A graph op, not a host copy: a training trace refuses a host read of the waveform, and a compiled plan has to
+        // pad each replay's batch, not the traced one.
         if (waveform.Shape[1] < field)
-        {
-            var padded = new Tensor<T>(new[] { waveform.Shape[0], field });
-            for (int b = 0; b < waveform.Shape[0]; b++)
-                for (int i = 0; i < waveform.Shape[1]; i++) padded[b, i] = waveform[b, i];
-            waveform = padded;
-        }
+            waveform = Engine.Concat(new[] { waveform, new Tensor<T>(new[] { waveform.Shape[0], field - waveform.Shape[1] }) }, 1);
         var hidden = _network.Forward(waveform, IsTrainingMode, _random).Hidden;                                    // [B, L, H]
         int batch = hidden.Shape[0], frames = hidden.Shape[1];
         var projected = Engine.Reshape(_poolingProjection.Forward(Engine.Reshape(hidden, new[] { batch * frames, hidden.Shape[2] })),

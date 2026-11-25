@@ -167,13 +167,20 @@ internal sealed class ClapAudioFrontEnd<T>
         int batch = waveforms.Shape[0], overflow = waveforms.Shape[1] - clip;
         if (batch == 0) return new Tensor<T>(new[] { batch, clip });
         var engine = AiDotNetEngine.Current;
-        var crops = new Tensor<T>[batch];
-        for (int b = 0; b < batch; b++)
+        int samples = waveforms.Shape[1];
+        // One offset per row, drawn in row order. The crop is a gather through per-step indices, so a compiled
+        // training plan redraws the offsets on every replay instead of keeping the traced step's slices.
+        var positions = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { batch * clip }, indices =>
         {
-            int offset = random.Next(overflow + 1);
-            crops[b] = engine.TensorSlice(waveforms, new[] { b, offset }, new[] { 1, clip });
-        }
-        return engine.Concat(crops, 0);
+            var span = indices.AsWritableSpan();
+            for (int b = 0; b < batch; b++)
+            {
+                int first = b * samples + random.Next(overflow + 1), at = b * clip;
+                for (int k = 0; k < clip; k++) span[at + k] = first + k;
+            }
+        });
+        return engine.Reshape(engine.TensorGather(engine.Reshape(waveforms, new[] { batch * samples }), positions, axis: 0),
+            new[] { batch, clip });
     }
 
     /// <summary>

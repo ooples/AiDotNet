@@ -265,6 +265,17 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
     public double HiddenDropout { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets the probability of skipping each transformer layer during a training step (LayerDrop, Huang et al.
+    /// 2016; transformers' <c>layerdrop</c>).
+    /// </summary>
+    /// <value>Default is 0.1, the reference configuration's.</value>
+    /// <remarks>
+    /// A skipped layer does not run and is not stepped, which one compiled graph cannot express, so a model with a
+    /// positive rate trains on the eager tape. With 0 the training step runs on the fused compiled plan.
+    /// </remarks>
+    public double LayerDrop { get; set; } = 0.1;
+
+    /// <summary>
     /// Gets or sets the width of the projector before mean pooling (transformers' <c>classifier_proj_size</c>, 256).
     /// </summary>
     public int ClassifierProjectionSize { get; set; } = 256;

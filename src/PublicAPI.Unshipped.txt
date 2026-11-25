@@ -1997,6 +1997,8 @@ override AiDotNet.Audio.Generation.SoundStream<T>.SampleTrainingBandwidth(System
 AiDotNet.Audio.Generation.SoundStream<T>.TrainDenoising(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, bool denoise) -> void
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.get -> int
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.set -> void
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.get -> double
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.set -> void
 static AiDotNet.Audio.Pitch.WorldPitchDetector<T>.GetSamplesForHarvest(int fs, int xLength, double framePeriod) -> int
 override AiDotNet.Audio.Generation.SoundStream<T>.GeneratorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.Generation.SoundStream<T>.DiscriminatorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
