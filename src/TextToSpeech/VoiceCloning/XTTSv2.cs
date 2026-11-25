@@ -332,6 +332,17 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A token/mel pair does not carry the supervision this model trains on, and the base step would walk the layers
+    /// on bare token ids (a shape error deep in the stack); Train(TtsTrainingSample) is the entry point.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        ThrowIfTokenMelTrainingUnsupported();
+        return false;
+    }
+
+    /// <inheritdoc />
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         RequirePipeline();

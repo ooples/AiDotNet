@@ -281,8 +281,12 @@ jobs:
             # Flux contract tests with "No space left on device" on exactly that path, so those
             # tests measured the disk and not the model (#2087). Each chunk owns its own pools, so
             # reclaiming them here is safe and keeps one chunk's leftovers out of the next one.
-            $pools = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory `
-              -Filter 'aidotnet-streaming-pool-*' -ErrorAction SilentlyContinue
+            # Parameter IO maps a streamed model's weights into one aidotnet-paramio-<id>.bin file next to
+            # the pools (#2447) -- the whole model, e.g. 48 GB for FLUX. The process deletes it on exit,
+            # but a killed chunk cannot, so it is swept with the pools.
+            $pools = @(Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory `
+              -Filter 'aidotnet-streaming-pool-*' -ErrorAction SilentlyContinue) + @(Get-ChildItem `
+              -Path ([System.IO.Path]::GetTempPath()) -File -Filter 'aidotnet-paramio-*.bin' -ErrorAction SilentlyContinue)
             $removed = 0
             $stillThere = @()
             foreach ($pool in $pools) {

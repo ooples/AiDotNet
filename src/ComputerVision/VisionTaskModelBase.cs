@@ -176,7 +176,8 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
         try
         {
             RecordTrainingLoss(TensorModelTrainer<T>.Step(
-                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), TrainingForward, optimizer: TrainingOptimizer));
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), TrainingForward, RawStepLoss,
+                TrainingOptimizer));
         }
         finally
         {
@@ -184,6 +185,14 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
             SetTrainingMode(wasTraining);
         }
     }
+
+    /// <summary>
+    /// The objective of the raw-output <see cref="Train"/> step: mean squared error between <see cref="TrainingForward"/>'s
+    /// output and the target. A model whose training forward carries positions that are not predictions overrides it to
+    /// average over its predictions only.
+    /// </summary>
+    private protected virtual Tensor<T> RawStepLoss(Tensor<T> predicted, Tensor<T> target)
+        => TensorModelTrainer<T>.MeanSquaredError(predicted, target);
 
     /// <summary>
     /// One training step on typed targets. <paramref name="forward"/> produces the heads the loss reads, and
@@ -216,11 +225,37 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
     public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Builds the copy without carrying this model's own parameter values through <see cref="Serialize"/> only to
+    /// overwrite them, unless a derived model adds to Serialize or Deserialize.
+    /// </remarks>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
-        var copy = DeepCopy();
-        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
-        return copy;
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (!PersistsOnlyTheBaseState)
+        {
+            var copy = DeepCopy();
+            InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
+            return copy;
+        }
+
+        // The same topology resolution Serialize performs before a copy is taken.
+        if (_resolvedInputShape is null)
+            Predict(new Tensor<T>(DeferredParameterProbeShape));
+        return CopyWithParameters(parameters);
+    }
+
+    /// <summary>Whether Serialize and Deserialize are this base's, so the parameters and declared state are all they carry.</summary>
+    private bool PersistsOnlyTheBaseState
+    {
+        get
+        {
+            var type = GetType();
+            var serialize = type.GetMethod(nameof(Serialize), Type.EmptyTypes);
+            var deserialize = type.GetMethod(nameof(Deserialize), new[] { typeof(byte[]) });
+            return serialize?.DeclaringType == typeof(VisionTaskModelBase<T>)
+                && deserialize?.DeclaringType == typeof(ModelBase<T, Tensor<T>, Tensor<T>>);
+        }
     }
 
     // DeepCopy is deliberately NOT overridden. MemberwiseClone gave a shallow copy that shared every layer with

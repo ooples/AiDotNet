@@ -291,9 +291,13 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
         SetTrainingModeCore(true);
         try
         {
+            // The mean runs over the predictions only: the padding rows of the per-RoI heads and the data outputs
+            // carry the target's values, and counting them made the loss depend on how many proposals survived NMS.
+            int predictionCount = -1;
             RecordTrainingLoss(TensorModelTrainer<T>.Step(
                 this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate),
-                x => CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(x), DataOutputIndices, expectedOutput)));
+                x => CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(x), DataOutputIndices, expectedOutput, out predictionCount),
+                (predicted, target) => CvTensorOps<T>.MeanSquaredErrorOverPredictions(predicted, target, predictionCount)));
         }
         finally
         {

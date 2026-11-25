@@ -442,14 +442,10 @@ public partial class MelSpectrogram<T>
     /// <returns>Filterbank matrix [nMels, nFreqs].</returns>
     private static Tensor<T> CreateMelFilterbank(int nMels, int nFft, int sampleRate, double fMin, double fMax)
     {
-        // Suspend any active caller TensorArena and gradient tape: CreateMelFilterbank is also reachable directly
+        // Suspend any active caller TensorArena: CreateMelFilterbank is also reachable directly
         // and builds a long-lived filterbank matrix whose storage and shape must survive step-arena resets.
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
-        using var noGradT = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var engine = AiDotNetEngine.Current;
         int numFreqs = nFft / 2 + 1;
-        var shape = new[] { nMels, numFreqs };
 
         // Compute Mel frequencies for filter centers
         double melMin = HzToMel(fMin);
@@ -468,40 +464,36 @@ public partial class MelSpectrogram<T>
         // Convert Hz to FFT bin indices
         var binPoints = hzPoints.Select(hz => (int)Math.Floor((nFft + 1) * hz / sampleRate)).ToArray();
 
-        // Per-filter edges as [nMels, numFreqs] columns, frequency bins as rows. Bin indices are integers and the
-        // edge weights were computed in double: Half cannot represent bin indices above 2048 (nFft >= 4096), so the
-        // triangles are built in double and only the finished weights are cast to T.
-        Tensor<double> Edges(int offset) => engine.TensorBroadcastTo(
-            new Tensor<int>(new[] { nMels, 1 }, new Vector<int>(binPoints.Skip(offset).Take(nMels).ToArray())).Cast<double>(), shape);
-        var left = Edges(0);
-        var center = Edges(1);
-        var right = Edges(2);
-        var freqs = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<double>(0, numFreqs, 1), new[] { 1, numFreqs }), shape);
+        // The triangles are built in double over one flat buffer and cast to T once: bin indices are integers, and
+        // Half cannot represent the ones above 2048 (nFft >= 4096). This runs once per model, at construction. As
+        // engine ops it took about a dozen [nMels, numFreqs] double temporaries (~30 MB for a census audio model) and
+        // JIT-compiled double broadcast/compare/where kernels that nothing else in a float model uses, which cost
+        // ~60 ms of first construction (Tempogram, PANNs, ConformerFP, SpeakerEmbeddingExtractor, PeakNetFP: 2.6-3x
+        // constructMs in the census after the element-wise sweep #2524).
+        var weights = new double[nMels * numFreqs];
+        var span = weights.AsSpan();
+        for (int mel = 0; mel < nMels; mel++)
+        {
+            int left = binPoints[mel], center = binPoints[mel + 1], right = binPoints[mel + 2];
+            var row = span.Slice(mel * numFreqs, numFreqs);
 
-        // Triangular filters: rising edge (f - left) / (center - left) on [left, center),
-        // falling edge (right - f) / (right - center) on [center, right), zero elsewhere.
-        // A non-empty edge range implies a non-zero denominator; the masked-out quotients are discarded.
-        var rising = engine.TensorDivide(engine.TensorSubtract(freqs, left), engine.TensorSubtract(center, left));
-        var falling = engine.TensorDivide(engine.TensorSubtract(right, freqs), engine.TensorSubtract(right, center));
-        var onRising = engine.TensorMultiply(
-            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(freqs, left)), engine.TensorLessThan(freqs, center));
-        var onFalling = engine.TensorMultiply(
-            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(freqs, center)), engine.TensorLessThan(freqs, right));
-        var filterbank = engine.TensorWhere(onRising, rising,
-            engine.TensorWhere(onFalling, falling, new Tensor<double>(shape))).Cast<T>();
+            // Rising edge (f - left) / (center - left) on [left, center), falling edge (right - f) / (right - center)
+            // on [center, right), zero elsewhere. A non-empty edge range implies a non-zero denominator.
+            for (int f = Math.Max(left, 0); f < Math.Min(center, numFreqs); f++)
+                row[f] = (double)(f - left) / (center - left);
+            for (int f = Math.Max(center, 0); f < Math.Min(right, numFreqs); f++)
+                row[f] = (double)(right - f) / (right - center);
 
-        // Normalize each filter to have unit area (Slaney-style normalization); filters summing to at most
-        // 1e-8 are left unnormalized
-        var sums = engine.TensorBroadcastTo(engine.ReduceSum(filterbank, new[] { 1 }, true), shape);
-        var normalized = engine.TensorWhere(
-            engine.TensorGreaterThan(sums, NumOps.FromDouble(1e-8)),
-            engine.TensorDivide(filterbank, sums),
-            filterbank);
+            // Normalize each filter to unit area (Slaney-style); filters summing to at most 1e-8 stay unnormalized.
+            double sum = 0;
+            for (int f = 0; f < numFreqs; f++) sum += row[f];
+            if (sum > 1e-8)
+            {
+                for (int f = 0; f < numFreqs; f++) row[f] /= sum;
+            }
+        }
 
-        var owned = new Tensor<T>(new[] { nMels, numFreqs });
-        normalized.Data.Span.CopyTo(owned.Data.Span);
-        return owned;
+        return new Tensor<T>(new[] { nMels, numFreqs }, new Vector<T>(ConversionsHelper.FromDoubles<T>(weights)));
     }
 
     /// <summary>

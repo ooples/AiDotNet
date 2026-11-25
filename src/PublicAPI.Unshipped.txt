@@ -26634,3 +26634,7 @@ override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.Bu
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
