@@ -2944,7 +2944,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             lossFunction,
                             distBackend,
                             distLoader.LastBatchGlobalSampleCount);
-                        epochLoss = numOps.Add(epochLoss, stepLoss);
+                        epochLoss = AddLossScalars(epochLoss, stepLoss);
                         epochBatches++;
                     }
                     else if (distBackend is { WorldSize: > 1 })

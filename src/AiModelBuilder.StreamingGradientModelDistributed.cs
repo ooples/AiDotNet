@@ -139,7 +139,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         for (int i = 0; i < inputs.Length; i++)
         {
             // Loss and gradient are both taken at the parameters the step started from.
-            lossSum = numOps.Add(lossSum, SampleLoss(model, lossFunction, inputs[i], outputs[i]));
+            lossSum = AddLossScalars(lossSum, SampleLoss(model, lossFunction, inputs[i], outputs[i]));
             Vector<T> sampleGradient = gradientModel.ComputeGradients(inputs[i], outputs[i], lossFunction);
             if (sampleGradient.Length != parameterCount)
             {
