@@ -36,14 +36,11 @@ internal sealed class FusedMixedPrecision
     {
         var config = context.Config;
         reason = null;
-        PrecisionMode precision;
-        switch (config.PrecisionType)
+        // The precision the eager steps autocast in too (MixedPrecisionAutocast), so both paths cast the same products.
+        if (MixedPrecision.MixedPrecisionAutocast.MatMulPrecision(config) is not { } precision)
         {
-            case Enums.MixedPrecisionType.FP16: precision = PrecisionMode.Float16; break;
-            case Enums.MixedPrecisionType.BF16: precision = PrecisionMode.BFloat16; break;
-            default:
-                reason = $"mixed precision {config.PrecisionType} has no fused form (FP16 and BF16 do)";
-                return null;
+            reason = $"mixed precision {config.PrecisionType} has no fused form (FP16 and BF16 do)";
+            return null;
         }
         var scaler = context.LossScaler;
         // From the configuration, not scaler.Scale: once a plan owns the scaler, reading its scale synchronizes with the

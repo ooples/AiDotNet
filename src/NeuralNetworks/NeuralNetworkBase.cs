@@ -8807,6 +8807,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 "Use EnableMixedPrecision / AiModelBuilder.ConfigureMixedPrecision which validate T.");
         }
 
+        // On a GPU engine the step's matrix products autocast (MixedPrecisionAutocast), as the fused compiled step's do:
+        // the weights stay FP32 and the scope closes when the masters are "restored".
+        if (MixedPrecisionAutocast.TryEnter(mpCtx) is { } autocast)
+        {
+            snapshots = new AutocastWorkingWeights(autocast);
+            targets = new List<Tensor<T>>();
+            restored = false;
+            return;
+        }
+
         snapshots = new List<float[]>(parameters.Count);
         targets = new List<Tensor<T>>(parameters.Count);
         restored = false;
@@ -8841,6 +8851,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         ref bool restored)
     {
         if (restored || snapshots is null || targets is null) return;
+        if (snapshots is AutocastWorkingWeights autocast)
+        {
+            autocast.Dispose();
+            restored = true;
+            return;
+        }
         for (int p = 0; p < targets.Count && p < snapshots.Count; p++)
         {
             var param = targets[p];
@@ -16047,7 +16063,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     $"This indicates the context was attached through a non-public path; use " +
                     $"EnableMixedPrecision / AiModelBuilder.ConfigureMixedPrecision which validate T.");
             }
-            if (mpCtx is not null && typeof(T) == typeof(float))
+            // On a GPU engine the step's matrix products autocast instead (MixedPrecisionAutocast), as the fused compiled
+            // step's do: the weights stay FP32, and restoring the masters closes the scope before the optimizer update.
+            if (mpCtx is not null && typeof(T) == typeof(float) && MixedPrecisionAutocast.TryEnter(mpCtx) is { } mpAutocast)
+            {
+                mpFp32Snapshots = new AutocastWorkingWeights(mpAutocast);
+                mpSnapshotTargets = new List<Tensor<T>>();
+                mpFp32Restored = false;
+                mpCtxForFinally = mpCtx;
+            }
+            else if (mpCtx is not null && typeof(T) == typeof(float))
             {
                 int totalParams = trainableParams.Count + extraTrainableTensors.Count;
                 mpFp32Snapshots = new List<float[]>(totalParams);
@@ -16112,6 +16137,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             void RestoreFp32MastersIfNeeded()
             {
                 if (mpFp32Restored) return;
+                if (mpFp32Snapshots is AutocastWorkingWeights stepAutocast)
+                {
+                    stepAutocast.Dispose();
+                    mpFp32Restored = true;
+                    return;
+                }
                 if (mpSnapshotTargets is null || mpFp32Snapshots is null) return;
                 var targets = mpSnapshotTargets;
                 var snaps = mpFp32Snapshots;
@@ -16685,6 +16716,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         finally
         {
             localCreditResult?.Dispose();
+            // An autocast step that threw before its masters were restored still closes its autocast scope.
+            (mpFp32Snapshots as AutocastWorkingWeights)?.Dispose();
             // Emergency FP32 master restore: if the happy-path unscale-and-
             // restore block didn't run (an exception inside the try block —
             // ForwardForTraining / ComputeTapeLoss / ComputeGradients —
