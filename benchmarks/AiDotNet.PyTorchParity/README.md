@@ -1,6 +1,6 @@
 # AiDotNet ⇄ PyTorch parity benchmark
 
-## Run all 11 model families
+## Run the model families
 
 From the repository root, the following command builds this AiDotNet checkout in Release and runs its models against **Python PyTorch with `torch.compile`**. It covers MLP, CNN, LSTM, Transformer, GRU, ResNet-18, ResNet-50, VGG-11, MobileNetV2, DenseNet-121 and ViT. Each framework runs alone in a fresh process for every model, device and launch.
 
@@ -11,15 +11,44 @@ python -m pip install torch==2.14.1 torchvision==0.29.1 --index-url https://down
 python -m pip install psutil==7.2.2 numpy==2.5.4
 ```
 
-On Windows CUDA also run `python -m pip install triton-windows==3.9.0.post30`. For a CPU-only machine, use the PyTorch CPU wheel index and pass `--devices cpu`.
+On Windows CUDA also run `python -m pip install triton-windows==3.9.0.post30`. For a CPU-only machine, use the PyTorch CPU wheel index and pass `--devices cpu`. The A-6 family rows also need `python -m pip install transformers` (the whisper-tiny twin), and `--classical` needs `python -m pip install scikit-learn xgboost lightgbm`.
 
 ```shell
 python benchmarks/AiDotNet.PyTorchParity/run_matrix.py
 ```
 
-The full comparison runs two launches on CUDA and CPU. Both frameworks use eight threads, seed 1234, and three epochs of 20 updates at batch size 64. Inference measures 100 calls at each of batches 1, 8 and 16 after warm-up. The runner alternates framework order between launches. For a quick execution check, run `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models cnn --devices cpu --smoke`. Smoke timings only check execution.
+The full comparison runs nine launches on CUDA and CPU, and every row reports the median and interquartile range (IQR) over them. Both frameworks use eight threads, seed 1234, and three epochs of 20 updates at batch size 64. Inference measures 100 calls at each of batches 1, 8 and 16 after warm-up. The runner rotates framework order between launches. For a quick execution check, run `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models cnn --devices cpu --smoke`. Smoke timings only check execution.
 
 The printed run directory contains the hardware and runtime versions, git revision, binary hashes, commands, exit codes, logs, raw JSON and a CSV with each launch's median training time per update and inference latency in milliseconds. In the CSV, `torch_over_ai` is PyTorch time divided by AiDotNet time. Failed pairs are listed in `completion.json` and the process exits nonzero. The runner first checks the supported models (MLP, CNN, LSTM and Transformer) against a same-weights PyTorch update on each requested device. The other seven rows compare timings and report parameter counts. The PyTorch implementation and its model-specific notes are in [benchmark.py](pytorch/benchmark.py).
+
+### A-6 family rows (#2395)
+
+`--models families` (or `all`, or any of the row names) adds eight rows. Each runs at its paper's input shape, so it carries its own batch sizes; the heavy rows time fewer updates and inference calls per launch:
+
+| Row | Family | Training batch | Inference batches | Updates per epoch | Inference calls |
+| --- | --- | ---: | --- | ---: | ---: |
+| `ddpm` | diffusion (Ho et al. CIFAR-10 U-Net, one DDPM step) | 4 | 1, 4 | 5 | 10 |
+| `decoder-lm` | decoder-only (GPT-style) language model | 64 | 1, 8, 16 | 20 | 100 |
+| `whisper-tiny` | ASR, encoder-decoder (vs transformers' Whisper) | 4 | 1, 4 | 5 | 10 |
+| `wav2vec2-base` | ASR, CTC | 4 | 1, 4 | 5 | 10 |
+| `hifigan-v1` | TTS vocoder (GAN) | 1 | 1 | 5 | 10 |
+| `faster-rcnn` | detection (ResNet-50 FPN, vs torchvision) | 1 | 1 | 10 | 10 |
+| `gcn` | GNN, graph convolution | 64 | 1, 8, 16 | 20 | 100 |
+| `gat` | GNN, graph attention (Cora-sized graph) | 1 | 1 | 20 | 100 |
+
+Every row's table entry carries both parameter counts and the median first and last training loss of both sides. The summary flags `parameters-differ` and `loss-not-falling`. One family twin differs by design: faster-rcnn's RPN objectness is Ren et al.'s 2k-way softmax in AiDotNet and torchvision's k sigmoid scores (771 parameters).
+
+### Locked GPU clocks
+
+A CUDA launch samples the GPU every 0.5 s with `nvidia-smi -lms 500` into `<launch>.clocks.csv`. Its receipt records the SM and memory clocks under load (samples at 50% utilization or more). A launch is flagged `clock-varied` when the loaded SM clock moved more than 3%, and `clock-unlocked` when it missed a requested lock by more than 3%. From an elevated prompt, `--lock-gpu-clock MHZ` and `--lock-memory-clock MHZ` run `nvidia-smi -lgc MHZ,MHZ` and `-lmc MHZ,MHZ` before the launches and `-rgc` / `-rmc` after them. A laptop driver can refuse a lock. The refusal is then recorded in `protocol.json`, the run continues, and the per-launch clocks show what ran.
+
+```shell
+python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models all --devices cuda --lock-gpu-clock 1800 --lock-memory-clock 7001
+```
+
+### Classical ML (`--classical`)
+
+`run_matrix.py --classical` runs `ClassicalBench.cs` against `pytorch/classical.py` (scikit-learn, XGBoost and LightGBM) for nine launches, alternating which side goes first. Both sides fit the same 20,000 x 20 CSV, scored on 5,000 held-out rows. Each launch fits every row `--classical-repeats` times (default 3) and reports the median. The summary gives the median and IQR of those per-launch medians, and the fastest Python library's fit time divided by AiDotNet's. The all-core rows use every core on both sides and the `_1job` rows use one thread. Classical ML runs on the CPU only.
 
 By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash.
 
