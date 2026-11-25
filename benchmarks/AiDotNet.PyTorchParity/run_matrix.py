@@ -141,15 +141,34 @@ def on_external_power():
     return None if batteries else True
 
 
+# The nvidia-smi selector (GPU-<uuid>) of the GPU the CUDA launches use; set by main(). None queries every GPU.
+GPU_ID = None
+
+
+def gpu_selector():
+    """nvidia-smi arguments that restrict a query, lock or reset to the benchmark GPU."""
+    return [f"--id={GPU_ID}"] if GPU_ID else []
+
+
+def benchmark_gpu_id(torch):
+    """The UUID selector of CUDA device 0 of this process: the GPU every launch uses. By UUID, because CUDA orders
+    devices (and applies CUDA_VISIBLE_DEVICES) differently from nvidia-smi's PCI order."""
+    try:
+        uuid = str(torch.cuda.get_device_properties(0).uuid)
+    except (AttributeError, AssertionError, RuntimeError):
+        return None  # an older PyTorch without the property: queries fall back to every GPU
+    return uuid if uuid.startswith("GPU-") else f"GPU-{uuid}"
+
+
 def nvidia_smi(*args):
     if not shutil.which("nvidia-smi"):
         return None
-    result = subprocess.run(["nvidia-smi", *args], text=True, capture_output=True)
+    result = subprocess.run(["nvidia-smi", *gpu_selector(), *args], text=True, capture_output=True)
     return result.stdout.strip() if result.returncode == 0 else None
 
 
 def gpu_state():
-    """Clocks, temperature, power, utilization and the clock-limiting reasons of the first GPU."""
+    """Clocks, temperature, power, utilization and the clock-limiting reasons of the benchmark GPU."""
     fields = ["clocks.sm", "clocks.max.sm", "temperature.gpu", "power.draw", "pstate", "utilization.gpu"]
     for reasons in ("clocks_event_reasons.active", "clocks_throttle_reasons.active"):  # renamed in driver 535
         line = nvidia_smi(f"--query-gpu={','.join(fields + [reasons])}", "--format=csv,noheader,nounits")
@@ -220,7 +239,7 @@ def start_clock_sampler(stem, device):
     if device != "cuda" or not shutil.which("nvidia-smi"):
         return None
     out = stem.with_suffix(".clocks.csv").open("w", encoding="utf-8")
-    process = subprocess.Popen(["nvidia-smi", f"--query-gpu={','.join(CLOCK_FIELDS)}", "--format=csv,noheader,nounits",
+    process = subprocess.Popen(["nvidia-smi", *gpu_selector(), f"--query-gpu={','.join(CLOCK_FIELDS)}", "--format=csv,noheader,nounits",
                                 "-lms", str(int(CLOCK_SAMPLE_SECONDS * 1000))], stdout=out, stderr=subprocess.DEVNULL)
     return process, out
 
@@ -238,10 +257,13 @@ def stop_clock_sampler(sampler, stem):
     out.close()
     samples = []
     for line in stem.with_suffix(".clocks.csv").read_text(encoding="utf-8").splitlines():
+        values = line.split(",")
+        if len(values) != len(CLOCK_FIELDS):
+            continue  # a line cut off by terminate()
         try:
-            samples.append(dict(zip(CLOCK_FIELDS, (float(v) for v in line.split(",")))))
+            samples.append(dict(zip(CLOCK_FIELDS, (float(v) for v in values))))
         except ValueError:
-            continue  # "[N/A]" or a line cut off by terminate()
+            continue  # "[N/A]", or a field cut off by terminate()
     loaded = [s for s in samples if s["utilization.gpu"] >= LOADED_GPU_PERCENT]
     if not loaded:
         return dict(samples=len(samples), loadedSamples=0)
@@ -265,13 +287,13 @@ def clock_flags(clocks):
     return flags
 
 
-def lock_clocks(sm, mem):
-    """Lock the GPU's SM and memory clocks with nvidia-smi -lgc / -lmc (needs an elevated prompt). Return what each
-    request printed; a refused lock is recorded, not fatal, and every CUDA launch still records its clocks."""
-    result = {}
+def lock_clocks(sm, mem, result):
+    """Lock the GPU's SM and memory clocks with nvidia-smi -lgc / -lmc (needs an elevated prompt). Record what each
+    request printed in RESULT as it is made, so a failure later still leaves the taken locks for reset_clocks; a
+    refused lock is recorded, not fatal, and every CUDA launch still records its clocks."""
     for key, flag, value in (("sm", "-lgc", sm), ("mem", "-lmc", mem)):
         if value:
-            done = subprocess.run(["nvidia-smi", flag, f"{value},{value}"], text=True, capture_output=True)
+            done = subprocess.run(["nvidia-smi", *gpu_selector(), flag, f"{value},{value}"], text=True, capture_output=True)
             result[key] = dict(mhz=value, exitCode=done.returncode, output=(done.stdout + done.stderr).strip())
             if done.returncode == 0:
                 LOCKED_CLOCKS[key] = value
@@ -283,7 +305,7 @@ def lock_clocks(sm, mem):
 def reset_clocks(locked):
     for key, flag in (("sm", "-rgc"), ("mem", "-rmc")):
         if key in locked:
-            subprocess.run(["nvidia-smi", flag], capture_output=True)
+            subprocess.run(["nvidia-smi", *gpu_selector(), flag], capture_output=True)
 
 
 def run(cmd, stem, env, device=None, allow_battery=False):
@@ -867,12 +889,27 @@ def main():
         sys.exit(run_classical(dest, info, env, args.allow_battery))
     if "cuda" in info["devices"] and not torch.cuda.is_available():
         parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
+    global GPU_ID
+    if "cuda" in info["devices"]:
+        GPU_ID = benchmark_gpu_id(torch)
+        if args.resume and info.get("gpuId") not in (None, GPU_ID):
+            parser.error(f"--resume needs the run's GPU {info['gpuId']}; this process sees {GPU_ID}.")
+        info["gpuId"] = GPU_ID
+    lock_sm, lock_mem = args.lock_gpu_clock, args.lock_memory_clock
+    if args.resume and info.get("clockLocks"):
+        # Continue with the recorded request: the remaining launches get the same locks and the same clock checks.
+        requested = info["clockLocks"][0]
+        recorded_sm, recorded_mem = (requested.get(k, {}).get("mhz") for k in ("sm", "mem"))
+        if (lock_sm or lock_mem) and (lock_sm, lock_mem) != (recorded_sm, recorded_mem):
+            parser.error(f"--resume continues with the run's recorded clock locks (SM {recorded_sm}, memory "
+                         f"{recorded_mem} MHz); omit --lock-gpu-clock / --lock-memory-clock or pass the same values.")
+        lock_sm, lock_mem = recorded_sm, recorded_mem
     locked = {}
-    if "cuda" in info["devices"] and (args.lock_gpu_clock or args.lock_memory_clock):
-        locked = lock_clocks(args.lock_gpu_clock, args.lock_memory_clock)
-        info.setdefault("clockLocks", []).append(dict(time=now(), **locked))
-        save(dest / "protocol.json", info)
     try:
+        if "cuda" in info["devices"] and (lock_sm or lock_mem):
+            lock_clocks(lock_sm, lock_mem, locked)
+            info.setdefault("clockLocks", []).append(dict(time=now(), **locked))
+            save(dest / "protocol.json", info)
         problems = run_models(dest, info, env, args.allow_battery)
     finally:
         reset_clocks(locked)
@@ -939,8 +976,14 @@ def run_classical(dest, info, env, allow_battery):
         order = ["aidotnet", "python"] if launch % 2 else ["python", "aidotnet"]
         if order[0] == "python" and not (directory / "train.csv").is_file():
             # The C# side writes the data (seeded, the same every launch); reuse launch 1's so Python can go first.
-            for name in ("train.csv", "test.csv"):
-                shutil.copyfile(dest / "classical-1" / name, directory / name)
+            seed = [dest / "classical-1" / name for name in ("train.csv", "test.csv")]
+            if all(path.is_file() for path in seed):
+                for path in seed:
+                    shutil.copyfile(path, directory / path.name)
+            else:
+                # Launch 1's C# side wrote no data (it failed): this launch's C# side runs first and writes its own.
+                print(f"classical-{launch}: no seed data from launch 1; running AiDotNet first", flush=True)
+                order.reverse()
         for side in order:
             stem = dest / f"classical-{side}-{launch}"
             if succeeded(stem):

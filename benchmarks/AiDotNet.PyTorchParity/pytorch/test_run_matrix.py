@@ -1,5 +1,6 @@
 """Tests for run_matrix.py's per-row schedules, median/IQR summary, loss evidence and classical summary."""
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +21,33 @@ class QuantileTests(unittest.TestCase):
         self.assertEqual(rm.quantile(values, 0.25), 3)
         self.assertEqual(rm.quantile(values, 0.75), 7)
         self.assertAlmostEqual(rm.quantile([1, 2, 3, 4], 0.25), 1.75)
+
+
+class ClockSampleTests(unittest.TestCase):
+    def test_lines_cut_off_or_unreadable_are_discarded(self):
+        class Exited:
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            stem = Path(directory) / "launch"
+            stem.with_suffix(".clocks.csv").write_text(
+                "1500, 7000, 90, 60, 200\n1500,7000\n[N/A], 7000, 90, 60, 200\n", encoding="utf-8")
+            clocks = rm.stop_clock_sampler((Exited(), open(Path(directory) / "out.txt", "w")), stem)
+        self.assertEqual((clocks["samples"], clocks["loadedSamples"], clocks["smMedianMhz"]), (1, 1, 1500.0))
+
+    def test_queries_name_the_benchmark_gpu(self):
+        previous = rm.GPU_ID
+        try:
+            rm.GPU_ID = None
+            self.assertEqual(rm.gpu_selector(), [])
+            rm.GPU_ID = "GPU-0000"
+            self.assertEqual(rm.gpu_selector(), ["--id=GPU-0000"])
+        finally:
+            rm.GPU_ID = previous
 
 
 class ScheduleTests(unittest.TestCase):

@@ -378,7 +378,9 @@ public partial class KMeans<T> : ClusteringBase<T>
         if (typeof(T) == typeof(double) && data.Euclidean && data.RowNorms is not null && data.Values.IsContiguous
             && data.RowNorms.IsContiguous)
         {
-            KMeansPlusPlusOfDoubles(data, chosen, trials);
+            // One cluster is the first center alone: no distances to compute, and no draws past the first.
+            if (_options.NumClusters > 1)
+                KMeansPlusPlusOfDoubles(data, chosen, trials);
             return ClusteringTensorOps.SelectRows(x, chosen);
         }
 #endif
@@ -639,6 +641,8 @@ public partial class KMeans<T> : ClusteringBase<T>
 #if NET7_0_OR_GREATER
     /// <summary>Rows per parallel block of <see cref="NearestCentersOfDoubles"/>.</summary>
     private const int NearestBlockRows = 1024;
+    // Dot products per row kept on the stack in NearestCentersOfDoubles (512 doubles = 4 KB).
+    private const int MaxStackDots = 512;
 
     /// <summary>
     /// <see cref="NearestCenterIndices"/> for double in one pass per row: the row's products with every center (a SIMD
@@ -670,7 +674,8 @@ public partial class KMeans<T> : ClusteringBase<T>
             var x = ClusteringTensorOps.AsDoubles(values.AsSpan());
             var centerVectors = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(
                 new ReadOnlySpan<double>(byFeature));
-            Span<double> dots = stackalloc double[padded];
+            // The cluster count is unbounded (and deserialized): beyond a few KB the dot products go on the heap.
+            Span<double> dots = padded <= MaxStackDots ? stackalloc double[padded] : new double[padded];
             var dotVectors = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(dots);
             int end = Math.Min(rows, (block + 1) * NearestBlockRows);
             for (int r = block * NearestBlockRows; r < end; r++)

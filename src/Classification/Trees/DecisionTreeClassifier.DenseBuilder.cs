@@ -200,10 +200,12 @@ public partial class DecisionTreeClassifier<T>
     {
         int shift = ScaleShift(count);
         // A share of the node is a product with the reciprocal of its size, as the engine's divide-by-scalar forms it.
-        T inverseTotal = NumOps.Divide(NumOps.One, ScaledCount(count, shift));
+        T scaledTotal = ScaledCount(count, shift);
+        T inverseTotal = NumOps.Divide(NumOps.One, scaledTotal);
+        float inverseTotalFloat = 1.0f / NumOps.ToFloat(scaledTotal);
         var probabilities = new T[counts.Length];
         for (int c = 0; c < counts.Length; c++)
-            probabilities[c] = NumOps.Multiply(ScaledCountInParts(counts[c], shift), inverseTotal);
+            probabilities[c] = Share(ScaledCountInParts(counts[c], shift), inverseTotal, inverseTotalFloat);
 
         // The first class with the most rows, as numpy's argmax.
         int predictedClass = Array.IndexOf(counts, counts.Max());
@@ -273,7 +275,9 @@ public partial class DecisionTreeClassifier<T>
         int shift = ScaleShift(count);
         T nodeImpurity = Impurity(totalCounts, count, shift);
         // A child's share of the node is a product with the reciprocal of the node's size (the engine's divide-by-scalar).
-        T inverseTotal = NumOps.Divide(NumOps.One, ScaledCount(count, shift));
+        T scaledTotal = ScaledCount(count, shift);
+        T inverseTotal = NumOps.Divide(NumOps.One, scaledTotal);
+        float inverseTotalFloat = 1.0f / NumOps.ToFloat(scaledTotal);
         T half = NumOps.FromDouble(0.5);
 
         // For double the candidates are scored in double directly: the same operations in the same order as the
@@ -345,8 +349,8 @@ public partial class DecisionTreeClassifier<T>
                 }
                 else
                 {
-                    T leftShare = NumOps.Multiply(ScaledCountInParts(leftSize, shift), inverseTotal);
-                    T rightShare = NumOps.Multiply(ScaledCountInParts(rightSize, shift), inverseTotal);
+                    T leftShare = Share(ScaledCountInParts(leftSize, shift), inverseTotal, inverseTotalFloat);
+                    T rightShare = Share(ScaledCountInParts(rightSize, shift), inverseTotal, inverseTotalFloat);
                     T weighted = NumOps.Add(
                         NumOps.Multiply(leftShare, Impurity(left, leftSize, shift)),
                         NumOps.Multiply(rightShare, Impurity(right, rightSize, shift)));
@@ -378,7 +382,11 @@ public partial class DecisionTreeClassifier<T>
     private T Impurity(int[] classCounts, int size, int shift)
     {
         T denominator = ScaledCountInParts(size, shift);
+        // A narrow T (Half, BFloat16) sums its per-class terms in float and rounds once, as the engine's reduction
+        // does; summing in T would round after every addition and lose small terms against a large one.
+        bool narrow = IsNarrowFloat;
         T sum = NumOps.Zero;
+        float sumFloat = 0.0f;
         if (UsesEntropy)
         {
             // -sum p log2 p over the classes present (0 log 0 = 0).
@@ -388,21 +396,39 @@ public partial class DecisionTreeClassifier<T>
                 T log = NumOps.GreaterThan(p, NumOps.Zero)
                     ? NumOps.FromDouble(Log2(NumOps.ToDouble(p)))
                     : NumOps.Zero;
-                sum = NumOps.Add(sum, NumOps.Multiply(p, log));
+                T term = NumOps.Multiply(p, log);
+                if (narrow) sumFloat += NumOps.ToFloat(term);
+                else sum = NumOps.Add(sum, term);
             }
 
-            return NumOps.Negate(sum);
+            return NumOps.Negate(narrow ? NumOps.FromFloat(sumFloat) : sum);
         }
 
         // 1 - sum p^2
         for (int c = 0; c < NumClasses; c++)
         {
             T p = NumOps.Divide(ScaledCountInParts(classCounts[c], shift), denominator);
-            sum = NumOps.Add(sum, NumOps.Multiply(p, p));
+            T term = NumOps.Multiply(p, p);
+            if (narrow) sumFloat += NumOps.ToFloat(term);
+            else sum = NumOps.Add(sum, term);
         }
 
-        return NumOps.Subtract(NumOps.One, sum);
+        return NumOps.Subtract(NumOps.One, narrow ? NumOps.FromFloat(sumFloat) : sum);
     }
+
+    /// <summary>Whether T is a floating type narrower than float, whose CPU engine kernels compute in float.</summary>
+    private static readonly bool IsNarrowFloat =
+        typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
+
+    /// <summary>
+    /// <paramref name="part"/> times the reciprocal of the node's size, as the engine's divide-by-scalar forms it: for a
+    /// narrow T the reciprocal and the product are formed in float and rounded once, so the reciprocal is not first
+    /// rounded to T.
+    /// </summary>
+    private T Share(T part, T inverseTotal, float inverseTotalFloat)
+        => IsNarrowFloat
+            ? NumOps.FromFloat(NumOps.ToFloat(part) * inverseTotalFloat)
+            : NumOps.Multiply(part, inverseTotal);
 
     /// <summary>Whether the criterion is entropy (or log loss, the same split criterion) rather than Gini.</summary>
     private bool UsesEntropy =>
