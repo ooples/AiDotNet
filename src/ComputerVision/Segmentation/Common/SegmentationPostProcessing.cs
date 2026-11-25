@@ -316,6 +316,7 @@ internal static class SegmentationPostProcessing
 
         var engine = AiDotNetEngine.Current;
         var probability = engine.Reshape(SegmentationTensorOps.Sigmoid(scoreMap).Cast<double>(), [height, width]);
+        var flatProbability = engine.Reshape(probability, [height * width]);
         double[] thresholds = [0.3, 0.5, 0.7];
         var masks = new Tensor<T>[thresholds.Length];
         var scores = new double[thresholds.Length];
@@ -327,7 +328,10 @@ internal static class SegmentationPostProcessing
             double areaLow = engine.TensorSum(AtLeast(probability, thresholds[m] - 0.05));
             double areaHigh = engine.TensorSum(AtLeast(probability, thresholds[m] + 0.05));
             masks[m] = inside.Cast<T>();
-            scores[m] = area > 0 ? engine.TensorSum(engine.TensorMultiply(probability, inside)) / area : 0;
+            // Bin 1 collects the probabilities inside the mask, added in pixel order as a row-by-row scan adds them.
+            double[] binSum = engine.TensorScatterAdd(
+                new Tensor<double>([2]), engine.Reshape(inside.Cast<int>(), [height * width]), flatProbability, 0).ToArray();
+            scores[m] = area > 0 ? binSum[1] / area : 0;
             stability[m] = areaLow > 0 ? areaHigh / areaLow : 0;
         }
 
