@@ -173,17 +173,24 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     {
         var predictor = new SiTPredictor<double>();
 
-        var parameters = predictor.GetParameters();
-        int length = parameters.Length;
+        var (length, expected) = ReadFingerprintAndWriteBack(predictor);
         Assert.True(length > 0);
-        var expected = Fingerprint(parameters);
-
-        predictor.SetParameters(parameters);
-        parameters = null!;
 
         var retrieved = predictor.GetParameters();
         Assert.Equal(length, retrieved.Length);
         Assert.Equal(expected, Fingerprint(retrieved));
+    }
+
+    // The first flat vector lives only inside this frame, so it is unreachable by the time the caller
+    // reads the parameters back. Not inlined: an inlined body would keep the vector in the caller's frame.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (int Length, (double Sum, double Weighted, long Bits) Fingerprint) ReadFingerprintAndWriteBack(
+        SiTPredictor<double> predictor)
+    {
+        var parameters = predictor.GetParameters();
+        var fingerprint = Fingerprint(parameters);
+        predictor.SetParameters(parameters);
+        return (parameters.Length, fingerprint);
     }
 
     // Exact for a bitwise-identical vector (same values, same order, same summation order) and
