@@ -16742,6 +16742,50 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Training.FusedTrainingSession<T>? _fusedSession;
 
     /// <summary>
+    /// The layer structure version whose lazily built layers <see cref="SizeLazyLayerSetForFusedTraining"/> has
+    /// already sized, so a layer that never resolves cannot cost a forward on every step.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int? _fusedLazyLayerSetSizedVersion;
+
+    /// <summary>
+    /// Makes the trainable-layer set final before the fused step collects it. A composite layer that builds a child
+    /// from the shape it is first given (a DenseNet transition's 1x1 convolution, sized from its input channels) adds
+    /// that child on its first forward. A model trained without a prior forward therefore handed the fused step one
+    /// layer set on its first step and a larger one on its second: the second step discarded the first step's
+    /// compiled plan, with the optimizer moments it held, and compiled a new one.
+    /// </summary>
+    private void SizeLazyLayerSetForFusedTraining(Tensor<T> input, Tensor<T> expected)
+    {
+        if (_fusedLazyLayerSetSizedVersion == _layerStructureVersion || input.Length == 0) return;
+        _fusedLazyLayerSetSizedVersion = _layerStructureVersion;
+        if (!AnyLayerNeedsShapeResolution()) return;
+
+        // In inference mode with no tape, as the fused step's own lazy-initialization forward runs: nothing is
+        // recorded, no running statistic moves and no dropout mask is drawn.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            using (new NoGradScope<T>())
+                Training.CompiledTapeTrainingStep<T>.SizeLazyLayers(input, expected, x => ForwardForTraining(x),
+                    () => Training.TapeTrainingStep<T>.SnapshotTrainableLayerIdentities(Layers),
+                    CollectFusedExtraTrainableTensors);
+        }
+        catch (Exception ex)
+        {
+            // Best effort: the fused step's own forward surfaces a real model error with its full context.
+            AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
+                AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
+                $"[NeuralNetworkBase] lazy layer sizing forward failed ({ex.GetType().Name}): {ex.Message}");
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>
     /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
     /// <see cref="TryTrainWithFusedOptimizer"/> bails out early, consumed
     /// (and cleared) by the post-success diagnostic block in
@@ -17043,6 +17087,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // residual blocks, transformer layers) expose those children via
         // GetSubLayers() but aren't ITrainableLayer themselves. Without
         // recursion the fused path silently stops updating part of the model.
+        SizeLazyLayerSetForFusedTraining(input, expected);
         var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");

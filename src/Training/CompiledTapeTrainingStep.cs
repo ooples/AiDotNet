@@ -240,6 +240,22 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
+    /// <summary>
+    /// The plans currently configured for <paramref name="owner"/>, one per layer set it has trained. A plan holds
+    /// its optimizer moments, so the same instance from one step to the next is what shows the moments carried over.
+    /// </summary>
+    internal static IReadOnlyList<object> ConfiguredPlansOf(object owner)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        var plans = new List<object>();
+        foreach (var state in SnapshotStates(owner))
+        {
+            if (state.configuredPlan is { } plan) plans.Add(plan);
+        }
+
+        return plans;
+    }
+
     /// <summary>Drops every compiled plan, optimizer moment and step counter of <paramref name="owner"/>.</summary>
     /// <param name="owner">The model (or, for owner-less callers, the first layer) the state belongs to.</param>
     internal static void Invalidate(object owner)
@@ -400,6 +416,28 @@ public static class CompiledTapeTrainingStep<T>
             && target.Shape[0] == input.Shape[0]
             ? input.Slice(0, 0, 1)
             : input;
+
+    /// <summary>
+    /// Runs the lazy-initialization forward ahead of a fused step, for a model whose trainable-layer set is not final
+    /// until its first forward: a composite layer that builds a child from the shape it is first given (a DenseNet
+    /// transition's 1x1 convolution, sized from its input channels) adds that child to the set then. Collected before
+    /// that forward, the set changed between the first step and the second, so the second step dropped the first step's
+    /// plan with its optimizer moments and compiled another. <paramref name="sizedLayers"/> and
+    /// <paramref name="sizedExtraTensors"/> are read after the forward; the parameters and registered buffers they
+    /// reach are kept, the forward's activations are freed.
+    /// </summary>
+    internal static void SizeLazyLayers(Tensor<T> input, Tensor<T>? target, Func<Tensor<T>, Tensor<T>> forward,
+        Func<IReadOnlyList<ITrainableLayer<T>>> sizedLayers, Func<IReadOnlyList<Tensor<T>>?> sizedExtraTensors)
+    {
+        // Per-step random draws are suppressed, as in the fused step's own lazy-initialization forward.
+        using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+        using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
+        forward(LazyInitializationSample(input, target, t_leadingAxisIsBatch));
+        var layers = sizedLayers();
+        foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, sizedExtraTensors(), selection: null))
+            sizingScope.Keep(sized);
+        KeepRegisteredBuffers(layers, sizingScope);
+    }
     /// <summary>
     /// One persistent input/target pair per batch shape seen since the last full invalidation, so a loop that
     /// alternates shapes - full batches and the short last batch of every epoch - keeps each shape's compiled plan

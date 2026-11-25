@@ -187,8 +187,11 @@ internal sealed class FusedTrainingSession<T>
     private readonly Action? _onReset;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
-    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again.
-    private object? _verifiedPlan;
+    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again. Held weakly:
+    // it is only ever compared by identity, and a strong reference kept a replaced plan and every activation buffer
+    // it owns (2.3 GB for DenseNet-121 at batch 64) alive until the next check, up to PersistenceRecheckInterval
+    // steps later.
+    private WeakReference<object>? _verifiedPlan;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
     private object? _objectiveKey;
@@ -461,7 +464,8 @@ internal sealed class FusedTrainingSession<T>
         // reduction per parameter plus a synchronous readback that drains the device (6-14 ms every 16 steps on
         // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
         bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
-            && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
+            && _verifiedPlan.TryGetTarget(out var verifiedPlan)
+            && ReferenceEquals(verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
         using var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
@@ -714,7 +718,9 @@ internal sealed class FusedTrainingSession<T>
             {
                 _persistenceVerified = true;
                 _stepsSincePersistenceCheck = 0;
-                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity;
+                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity is { } configured
+                    ? new WeakReference<object>(configured)
+                    : null;
             }
         }
 
