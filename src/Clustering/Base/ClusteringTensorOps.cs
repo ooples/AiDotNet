@@ -334,23 +334,79 @@ internal static class ClusteringTensorOps
 
     /// <summary>Per-cluster sums of the rows of x [k, d] and member counts [k].</summary>
     internal static Matrix<T> ClusterSums<T>(Matrix<T> x, Vector<T> labels, int k, out Vector<T> counts)
+        => ClusterSums(ToTensor(x), ToIntArray(labels), k, out counts);
+
+    /// <summary>
+    /// Per-cluster sums of the rows of <paramref name="x"/> ([n, d]) by cluster index <paramref name="ids"/> ([n]), as
+    /// [k, d], and member counts [k]; indices outside [0, k) are not counted.
+    /// </summary>
+    internal static Matrix<T> ClusterSums<T>(Tensor<T> x, int[] ids, int k, out Vector<T> counts)
     {
         var engine = Engine;
-        int n = labels.Length;
-        var ids = ToIntArray(labels);
+        int n = ids.Length;
 
         // Counts are taken in int: accumulated in half precision they stop growing at 2048.
         counts = FromIntArray<T>(CountIds(ids, k));
         if (n > 0 && AllWithin(ids, k))
         {
+#if NET7_0_OR_GREATER
+            if (typeof(T) == typeof(double) && x.IsContiguous)
+            {
+                // Fixed blocks of rows are summed in parallel, each in row order, and the block sums added in block
+                // order: the result does not depend on the thread count. One pass without the scatter-add's per-call
+                // setup, which dominated k-means' update step.
+                int d = x.Shape[1];
+                int blocks = (n + SumBlockRows - 1) / SumBlockRows;
+                var partial = new double[blocks * k * d];
+                AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)n * d, block =>
+                {
+                    var source = AsDoubles(x.AsSpan());
+                    var target = partial.AsSpan(block * k * d, k * d);
+                    int end = Math.Min(n, (block + 1) * SumBlockRows);
+                    for (int r = block * SumBlockRows; r < end; r++)
+                    {
+                        var row = source.Slice(r * d, d);
+                        var sum = target.Slice(ids[r] * d, d);
+                        for (int c = 0; c < d; c++) sum[c] += row[c];
+                    }
+                });
+
+                var sums = new Tensor<T>(new[] { k, d });
+                var total = AsWritableDoubles(sums.AsWritableSpan());
+                for (int block = 0; block < blocks; block++)
+                {
+                    var part = partial.AsSpan(block * k * d, k * d);
+                    for (int m = 0; m < total.Length; m++) total[m] += part[m];
+                }
+
+                return sums.ToMatrix();
+            }
+#endif
             // Every label names a cluster: scatter-add the rows, O(n d), instead of an [n, k] mask product.
             var index = Vector<int>.Wrap(ids).AsTensor();
-            return engine.TensorIndexAdd(new Tensor<T>(new[] { k, x.Columns }), 0, index, ToTensor(x)).ToMatrix();
+            return engine.TensorIndexAdd(new Tensor<T>(new[] { k, x.Shape[1] }), 0, index, x).ToMatrix();
         }
 
-        var mask = OneHotMask(labels, k);
-        return engine.TensorMatMul(engine.TensorTranspose(mask), ToTensor(x)).ToMatrix();
+        var mask = OneHotRows<T>(ids, k);
+        return engine.TensorMatMul(engine.TensorTranspose(mask), x).ToMatrix();
     }
+
+    /// <summary>Rows per block of the parallel per-cluster sums.</summary>
+    private const int SumBlockRows = 2048;
+
+#if NET7_0_OR_GREATER
+    /// <summary>A span of T as doubles; only valid when T is double.</summary>
+    internal static ReadOnlySpan<double> AsDoubles<T>(ReadOnlySpan<T> values)
+        => System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
+            ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(values)), values.Length);
+
+    /// <summary>A writable span of T as doubles; only valid when T is double.</summary>
+    internal static Span<double> AsWritableDoubles<T>(Span<T> values)
+        => System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+            ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(values)), values.Length);
+#endif
 
     /// <summary>
     /// Per-cluster means of the rows of x [k, d]; clusters without members get a zero row. Also returns the counts.
@@ -358,6 +414,16 @@ internal static class ClusteringTensorOps
     internal static Matrix<T> ClusterMeans<T>(Matrix<T> x, Vector<T> labels, int k, out Vector<T> counts)
     {
         var sums = ClusterSums(x, labels, k, out counts);
+        return DivideRows(sums, counts);
+    }
+
+    /// <summary>
+    /// Per-cluster means of the rows of <paramref name="x"/> ([n, d]) by cluster index <paramref name="ids"/>, as
+    /// [k, d]; clusters without members get a zero row. Also returns the counts.
+    /// </summary>
+    internal static Matrix<T> ClusterMeans<T>(Tensor<T> x, int[] ids, int k, out Vector<T> counts)
+    {
+        var sums = ClusterSums(x, ids, k, out counts);
         return DivideRows(sums, counts);
     }
 

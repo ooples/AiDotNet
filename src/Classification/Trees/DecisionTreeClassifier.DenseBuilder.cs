@@ -14,11 +14,11 @@ namespace AiDotNet.Classification.Trees;
 /// count saturates a narrow T such as Half).
 /// </para>
 /// <para>
-/// Everything that touches values is engine work in T, batched over the candidates of every considered feature:
-/// thresholds (midpoints between consecutive distinct values), the impurity of both sides, the weighted gain, and the
-/// first best candidate (features in order, thresholds ascending, as scikit-learn's strict comparison). Class
-/// frequencies are formed from the integer counts by <see cref="ScaledCounts"/>, which keeps every intermediate
-/// representable in T.
+/// The sweep scores each boundary between distinct values as it passes it, in T: the threshold (the midpoint of the
+/// two values), the impurity of both sides, the weighted gain, and the first best candidate (features in order,
+/// thresholds ascending, as scikit-learn's strict comparison). Class frequencies are formed from the integer counts by
+/// <see cref="ScaledCountInParts"/>, which keeps every intermediate representable in T. These are per-candidate scalar
+/// operations, not engine calls: a node has tens to thousands of candidates, too few to repay an engine dispatch.
 /// </para>
 /// </remarks>
 public partial class DecisionTreeClassifier<T>
@@ -58,6 +58,10 @@ public partial class DecisionTreeClassifier<T>
     private int[] _featurePool = new int[0];
     [Scratch]
     private int[] _selectedFeatures = new int[0];
+    [Scratch]
+    private int[] _leftCounts = new int[0];
+    [Scratch]
+    private int[] _rightCounts = new int[0];
 
     private static readonly DenseTreeData<T> EmptyDenseData = new(new Matrix<T>(0, 0));
 
@@ -79,6 +83,8 @@ public partial class DecisionTreeClassifier<T>
         _partitionScratch = new int[count];
         _featurePool = new int[NumFeatures];
         _selectedFeatures = new int[NumFeatures];
+        _leftCounts = new int[NumClasses];
+        _rightCounts = new int[NumClasses];
         _denseSampleCount = count;
 
         // Each data row's index into the class labels: the column where its label equals a class. Rows outside the
@@ -110,6 +116,8 @@ public partial class DecisionTreeClassifier<T>
             _partitionScratch = new int[0];
             _featurePool = new int[0];
             _selectedFeatures = new int[0];
+            _leftCounts = new int[0];
+            _rightCounts = new int[0];
         }
     }
 
@@ -187,12 +195,15 @@ public partial class DecisionTreeClassifier<T>
         return false;
     }
 
+    [AiDotNet.Attributes.ScalarKernel("One probability per class of one leaf: a handful of values, below what an engine dispatch repays.")]
     private DecisionNode<T> CreateDenseLeaf(int[] counts, int count)
     {
-        var engine = AiDotNetEngine.Current;
         int shift = ScaleShift(count);
-        var classCounts = new Tensor<int>(counts, new[] { counts.Length });
-        var probabilities = engine.TensorDivideScalar(ScaledCounts(classCounts, shift), ScaledCount(count, shift)).ToVector();
+        // A share of the node is a product with the reciprocal of its size, as the engine's divide-by-scalar forms it.
+        T inverseTotal = NumOps.Divide(NumOps.One, ScaledCount(count, shift));
+        var probabilities = new T[counts.Length];
+        for (int c = 0; c < counts.Length; c++)
+            probabilities[c] = NumOps.Multiply(ScaledCountInParts(counts[c], shift), inverseTotal);
 
         // The first class with the most rows, as numpy's argmax.
         int predictedClass = Array.IndexOf(counts, counts.Max());
@@ -200,7 +211,7 @@ public partial class DecisionTreeClassifier<T>
         return new DecisionNode<T>
         {
             IsLeaf = true,
-            ClassProbabilities = probabilities,
+            ClassProbabilities = new Vector<T>(probabilities),
             PredictedClass = predictedClass,
             NumSamples = count
         };
@@ -234,26 +245,46 @@ public partial class DecisionTreeClassifier<T>
     }
 
     /// <summary>
-    /// The best split of the node's rows. One sort per considered feature and one integer sweep collect, for each
-    /// distinct value, the class counts at or below it; the thresholds, impurities and gains of every candidate of
-    /// every feature are then one batch of engine work in T.
+    /// The best split of the node's rows. One sort per considered feature and one sweep over it: at each boundary
+    /// between two distinct values the left and right class counts are known, and the candidate is scored in place.
     /// </summary>
+    /// <remarks>
+    /// Scoring runs per candidate in T (in double directly when T is double), with the arithmetic of the batched engine
+    /// form it replaces (#2524): the same scaled counts, a share as a product with the reciprocal of the node's size
+    /// (the engine's divide-by-scalar), the same products and sums in the same order, and strict comparison so the
+    /// first best candidate wins (features in order, thresholds ascending). Trees are identical to that form's. A
+    /// node's batch was a few dozen candidates to a few thousand, so dispatching about 40 engine operations and their
+    /// tensors per node cost far more than the arithmetic: a 100-tree forest on 20,000 x 20 fitted in 36-49 s on one
+    /// thread instead of 3.4 s.
+    /// </remarks>
+    [AiDotNet.Attributes.ScalarKernel("Scores each split candidate as the sweep passes it; a node has too few candidates to repay engine dispatch (the batched engine form made a 100-tree forest 10-14x slower, #2524).")]
     private (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) FindBestDenseSplit(
         int start, int count, int[] totalCounts)
     {
         int classes = NumClasses;
         int featureCount = SelectDenseFeatures();
         var ranks = _denseData.Ranks;
+        var values = _denseData.DistinctValues;
+        var left = _leftCounts;
+        var right = _rightCounts;
+        int minLeaf = Options.MinSamplesLeaf;
 
-        // Per candidate: its feature, its lower rank, where the values on either side sit in DistinctValues, and the
-        // class counts of the rows ranked at most the lower value. Candidates are scored in batches of bounded size so
-        // the class-count tables never cover every threshold of every feature at once (rows x features x classes).
-        var batch = new CandidateBatch(classes);
-        var running = new int[classes];
-        var runRanks = new List<int>();
-        var runCounts = new List<int>();
+        // gain = impurity(node) - (n_left / n) impurity(left) - (n_right / n) impurity(right)
+        int shift = ScaleShift(count);
+        T nodeImpurity = Impurity(totalCounts, count, shift);
+        // A child's share of the node is a product with the reciprocal of the node's size (the engine's divide-by-scalar).
+        T inverseTotal = NumOps.Divide(NumOps.One, ScaledCount(count, shift));
+        T half = NumOps.FromDouble(0.5);
+
+        // For double the candidates are scored in double directly: the same operations in the same order as the
+        // generic path below, without an interface call per operation (which made scoring 2x slower).
+        bool doubles = typeof(T) == typeof(double);
+        bool entropy = UsesEntropy;
+        double inverseTotalDouble = doubles ? (double)(object)inverseTotal! : 0.0;
+        double nodeImpurityDouble = doubles ? (double)(object)nodeImpurity! : 0.0;
+        double bestGainDouble = 0.0;
+
         var best = (Feature: -1, Threshold: NumOps.Zero, ThresholdRank: 0, Gain: NumOps.Zero, Found: false);
-
         for (int s = 0; s < featureCount; s++)
         {
             int feature = _selectedFeatures[s];
@@ -266,171 +297,154 @@ public partial class DecisionTreeClassifier<T>
 
             SortByRank(count);
 
-            // One run per distinct value: its rank and the cumulative class counts after it.
-            Array.Clear(running, 0, classes);
-            runRanks.Clear();
-            runCounts.Clear();
-            int nanRank = _denseData.NanRank[feature];
-            bool hasNan = false;
-            for (int i = 0; i < count; )
-            {
-                int rank = (int)(_sortKeys[i] >> 32);
-                hasNan |= rank == nanRank;
-                for (; i < count && (int)(_sortKeys[i] >> 32) == rank; i++)
-                    running[(int)(uint)_sortKeys[i]]++;
-                runRanks.Add(rank);
-                runCounts.AddRange(running);
-            }
-
             // A NaN compares false with every threshold, so no row ever moves left: the feature cannot split here.
-            if (hasNan)
+            // NaNs share the rank above every numeric one, so they sort last.
+            int nanRank = _denseData.NanRank[feature];
+            if (nanRank >= 0 && (int)(_sortKeys[count - 1] >> 32) == nanRank)
                 continue;
 
             int offset = _denseData.ValueOffsets[feature];
-            for (int k = 0; k + 1 < runRanks.Count; k++)
+            Array.Clear(left, 0, classes);
+            int leftSize = 0;
+            for (int i = 0; i < count; )
             {
-                batch.Feature.Add(feature);
-                batch.LowerRank.Add(runRanks[k]);
-                batch.LowerValue.Add(offset + runRanks[k]);
-                batch.UpperValue.Add(offset + runRanks[k + 1]);
-                batch.LeftCounts.AddRange(runCounts.GetRange(k * classes, classes));
+                // Move the run of one distinct value left; the boundary after it is a candidate unless it is the last.
+                int rank = (int)(_sortKeys[i] >> 32);
+                for (; i < count && (int)(_sortKeys[i] >> 32) == rank; i++)
+                {
+                    left[(int)(uint)_sortKeys[i]]++;
+                    leftSize++;
+                }
+
+                if (i >= count)
+                    break;
+
+                // Both children must keep MinSamplesLeaf rows.
+                int rightSize = count - leftSize;
+                if (leftSize < minLeaf || rightSize < minLeaf)
+                    continue;
+
+                for (int c = 0; c < classes; c++)
+                    right[c] = totalCounts[c] - left[c];
+
+                // A NaN gain never wins (scikit-learn's ">" is false for it); a tie keeps the earlier candidate.
+                T gain;
+                if (doubles)
+                {
+                    double weightedDouble =
+                        ScaledCountAsDouble(leftSize, shift) * inverseTotalDouble
+                            * ImpurityOfDoubles(left, classes, leftSize, shift, entropy)
+                        + ScaledCountAsDouble(rightSize, shift) * inverseTotalDouble
+                            * ImpurityOfDoubles(right, classes, rightSize, shift, entropy);
+                    double gainDouble = nodeImpurityDouble - weightedDouble;
+                    if (double.IsNaN(gainDouble) || (best.Found && !(gainDouble > bestGainDouble)))
+                        continue;
+
+                    bestGainDouble = gainDouble;
+                    gain = (T)(object)gainDouble;
+                }
+                else
+                {
+                    T leftShare = NumOps.Multiply(ScaledCountInParts(leftSize, shift), inverseTotal);
+                    T rightShare = NumOps.Multiply(ScaledCountInParts(rightSize, shift), inverseTotal);
+                    T weighted = NumOps.Add(
+                        NumOps.Multiply(leftShare, Impurity(left, leftSize, shift)),
+                        NumOps.Multiply(rightShare, Impurity(right, rightSize, shift)));
+                    gain = NumOps.Subtract(nodeImpurity, weighted);
+                    if (NumOps.IsNaN(gain) || (best.Found && !NumOps.GreaterThan(gain, best.Gain)))
+                        continue;
+                }
+
+                // threshold = lower/2 + upper/2 (the midpoint without overflowing a narrow T). When rounding lands it
+                // on the upper value (adjacent values in a narrow T) it is the lower value instead, as scikit-learn's
+                // splitter does, so the split still separates the two runs and the left side is exactly the rows at
+                // most the lower value.
+                T lower = values[offset + rank];
+                T upper = values[offset + (int)(_sortKeys[i] >> 32)];
+                T midpoint = NumOps.Add(NumOps.Multiply(lower, half), NumOps.Multiply(upper, half));
+                T threshold = NumOps.GreaterThanOrEquals(midpoint, upper) ? lower : midpoint;
+                best = (feature, threshold, rank, gain, true);
             }
-
-            if (batch.LeftCounts.Count >= CandidateCountBudget)
-                best = Better(best, ScoreCandidates(batch, count, totalCounts));
         }
 
-        return Better(best, ScoreCandidates(batch, count, totalCounts));
-    }
-
-    // Class counts (ints) one candidate batch holds before it is scored: 4 MB, whatever the rows, features and classes.
-    private const int CandidateCountBudget = 1 << 20;
-
-    /// <summary>Split candidates gathered for one scoring batch.</summary>
-    private sealed class CandidateBatch
-    {
-        internal CandidateBatch(int classes) => Classes = classes;
-        internal int Classes { get; }
-        internal List<int> Feature { get; } = new List<int>();
-        internal List<int> LowerRank { get; } = new List<int>();
-        internal List<int> LowerValue { get; } = new List<int>();
-        internal List<int> UpperValue { get; } = new List<int>();
-        internal List<int> LeftCounts { get; } = new List<int>();
-
-        internal void Clear()
-        {
-            Feature.Clear();
-            LowerRank.Clear();
-            LowerValue.Clear();
-            UpperValue.Clear();
-            LeftCounts.Clear();
-        }
-    }
-
-    // The earlier batch keeps a tie, so the first candidate with the largest gain wins as it did in one batch.
-    private (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) Better(
-        (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) current,
-        (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) next)
-        => next.Found && (!current.Found || NumOps.GreaterThan(next.Gain, current.Gain)) ? next : current;
-
-    /// <summary>
-    /// The best candidate of <paramref name="batch"/> (its first with the largest gain), scored as one batch of engine
-    /// work in T; the batch is cleared afterwards.
-    /// </summary>
-    private (int Feature, T Threshold, int ThresholdRank, T Gain, bool Found) ScoreCandidates(
-        CandidateBatch batch, int count, int[] totalCounts)
-    {
-        int classes = batch.Classes;
-        int candidates = batch.Feature.Count;
-        if (candidates == 0)
-            return (-1, NumOps.Zero, 0, NumOps.Zero, false);
-
-        var engine = AiDotNetEngine.Current;
-        var countShape = new[] { candidates, classes };
-
-        // threshold = lower/2 + upper/2 (the midpoint without overflowing a narrow T). When rounding lands it on the
-        // upper value (adjacent values in a narrow T) it is the lower value instead, as scikit-learn's splitter does,
-        // so the split still separates the two runs and the rows at most the lower value are exactly the left side.
-        var lower = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(batch.LowerValue.ToArray(), new[] { candidates }));
-        var upper = engine.TensorTake(_denseData.DistinctValues, new Tensor<int>(batch.UpperValue.ToArray(), new[] { candidates }));
-        T half = NumOps.FromDouble(0.5);
-        var midpoints = engine.TensorAdd(engine.TensorMultiplyScalar(lower, half), engine.TensorMultiplyScalar(upper, half));
-        var thresholds = engine.TensorWhere(engine.TensorGreaterEqual(midpoints, upper), lower, midpoints);
-
-        var left = new Tensor<int>(batch.LeftCounts.ToArray(), countShape);
-        var totals = engine.TensorBroadcastTo(new Tensor<int>((int[])totalCounts.Clone(), new[] { 1, classes }), countShape);
-        var right = engine.TensorSubtract(totals, left);
-        var leftSizes = engine.ReduceSum(left, new[] { 1 }, false);
-        var rightSizes = engine.TensorSubtract(
-            new Tensor<int>(Enumerable.Repeat(count, candidates).ToArray(), new[] { candidates }), leftSizes);
-
-        // Both children must keep MinSamplesLeaf rows.
-        var minLeaf = new Tensor<int>(Enumerable.Repeat(Options.MinSamplesLeaf, candidates).ToArray(), new[] { candidates });
-        var allowed = engine.TensorMultiply(
-            engine.TensorGreaterEqual(leftSizes, minLeaf), engine.TensorGreaterEqual(rightSizes, minLeaf));
-
-        // gain = impurity(node) - (n_left / n) impurity(left) - (n_right / n) impurity(right)
-        int shift = ScaleShift(count);
-        T nodeImpurity = Impurity(new Tensor<int>((int[])totalCounts.Clone(), new[] { 1, classes }),
-            new Tensor<int>(new[] { count }, new[] { 1 }), shift).GetFlat(0);
-        T scaledTotal = ScaledCount(count, shift);
-        var leftShare = engine.TensorDivideScalar(ScaledCounts(leftSizes, shift), scaledTotal);
-        var rightShare = engine.TensorDivideScalar(ScaledCounts(rightSizes, shift), scaledTotal);
-        var weighted = engine.TensorAdd(
-            engine.TensorMultiply(leftShare, Impurity(left, leftSizes, shift)),
-            engine.TensorMultiply(rightShare, Impurity(right, rightSizes, shift)));
-        var gains = engine.TensorSubtract(engine.TensorFullLike(weighted, nodeImpurity), weighted);
-
-        // A NaN gain never wins (scikit-learn's ">" is false for it); neither does a disallowed candidate.
-        var notNan = engine.TensorWhere(engine.TensorIsNan(gains), engine.TensorZerosLike(gains), engine.TensorOnesLike(gains));
-        var usable = engine.TensorMultiply(allowed, notNan.Cast<int>());
-        int usableCount = engine.TensorSum(usable);
-        if (usableCount == 0)
-        {
-            batch.Clear();
-            return (-1, NumOps.Zero, 0, NumOps.Zero, false);
-        }
-
-        var lowest = engine.TensorFullLike(gains, NumOps.MinValue);
-        var masked = engine.TensorWhere(usable.Cast<T>(), gains, lowest);
-
-        // The first candidate with the largest gain: the maximal entries weighted by (candidates - position).
-        T bestGain = engine.TensorMaxValue(masked);
-        var isBest = engine.TensorMultiply(engine.TensorEquals(masked, bestGain).Cast<int>(), usable);
-        var priority = engine.TensorMultiply(isBest, new Tensor<int>(
-            Enumerable.Range(0, candidates).Select(i => candidates - i).ToArray(), new[] { candidates }));
-        int best = engine.TensorArgMax(priority, 0).GetFlat(0);
-
-        var result = (batch.Feature[best], thresholds.GetFlat(best), batch.LowerRank[best], bestGain, true);
-        batch.Clear();
-        return result;
+        return best;
     }
 
     /// <summary>
-    /// The configured criterion (Gini, or entropy in bits as scikit-learn) of each row of per-class
-    /// <paramref name="classCounts"/> [rows, classes] over its <paramref name="sizes"/> [rows].
+    /// The configured criterion (Gini, or entropy in bits as scikit-learn) of per-class <paramref name="classCounts"/>
+    /// over <paramref name="size"/> rows.
     /// </summary>
-    private Tensor<T> Impurity(Tensor<int> classCounts, Tensor<int> sizes, int shift)
+    [AiDotNet.Attributes.ScalarKernel("The impurity of one candidate side over a handful of classes, called once per candidate by the split sweep.")]
+    private T Impurity(int[] classCounts, int size, int shift)
     {
-        var engine = AiDotNetEngine.Current;
-        int rows = classCounts.Shape[0], classes = classCounts.Shape[1];
-        var shape = new[] { rows, classes };
-        var p = engine.TensorDivide(
-            ScaledCounts(classCounts, shift),
-            engine.TensorBroadcastTo(engine.Reshape(ScaledCounts(sizes, shift), new[] { rows, 1 }), shape));
-
-        if (Options.Criterion is ClassificationSplitCriterion.Entropy or ClassificationSplitCriterion.LogLoss)
+        T denominator = ScaledCountInParts(size, shift);
+        T sum = NumOps.Zero;
+        if (UsesEntropy)
         {
             // -sum p log2 p over the classes present (0 log 0 = 0).
-            var present = engine.TensorGreaterThan(p, NumOps.Zero);
-            var safe = engine.TensorWhere(present, p, engine.TensorOnesLike(p));
-            return engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(p, engine.TensorLog2(safe)), new[] { 1 }, false));
+            for (int c = 0; c < NumClasses; c++)
+            {
+                T p = NumOps.Divide(ScaledCountInParts(classCounts[c], shift), denominator);
+                T log = NumOps.GreaterThan(p, NumOps.Zero)
+                    ? NumOps.FromDouble(Log2(NumOps.ToDouble(p)))
+                    : NumOps.Zero;
+                sum = NumOps.Add(sum, NumOps.Multiply(p, log));
+            }
+
+            return NumOps.Negate(sum);
         }
 
         // 1 - sum p^2
-        return engine.TensorSubtract(
-            engine.TensorFullLike(engine.ReduceSum(p, new[] { 1 }, false), NumOps.One),
-            engine.ReduceSum(engine.TensorMultiply(p, p), new[] { 1 }, false));
+        for (int c = 0; c < NumClasses; c++)
+        {
+            T p = NumOps.Divide(ScaledCountInParts(classCounts[c], shift), denominator);
+            sum = NumOps.Add(sum, NumOps.Multiply(p, p));
+        }
+
+        return NumOps.Subtract(NumOps.One, sum);
+    }
+
+    /// <summary>Whether the criterion is entropy (or log loss, the same split criterion) rather than Gini.</summary>
+    private bool UsesEntropy =>
+        Options.Criterion is ClassificationSplitCriterion.Entropy or ClassificationSplitCriterion.LogLoss;
+
+    /// <summary><see cref="Impurity"/> for double: the same operations in the same order, in double.</summary>
+    private static double ImpurityOfDoubles(int[] classCounts, int classes, int size, int shift, bool entropy)
+    {
+        double denominator = ScaledCountAsDouble(size, shift);
+        double sum = 0.0;
+        if (entropy)
+        {
+            for (int c = 0; c < classes; c++)
+            {
+                double p = ScaledCountAsDouble(classCounts[c], shift) / denominator;
+                sum += p * (p > 0.0 ? Log2(p) : 0.0);
+            }
+
+            return -sum;
+        }
+
+        for (int c = 0; c < classes; c++)
+        {
+            double p = ScaledCountAsDouble(classCounts[c], shift) / denominator;
+            sum += p * p;
+        }
+
+        return 1.0 - sum;
+    }
+
+    /// <summary><see cref="ScaledCountInParts"/> in double.</summary>
+    private static double ScaledCountAsDouble(int count, int shift)
+        => shift == 0 ? count : (count >> shift) + (count & ((1 << shift) - 1)) * (1.0 / (1 << shift));
+
+    /// <summary>log2 of <paramref name="value"/>: Math.Log2 where the framework has it, as the engine's TensorLog2.</summary>
+    private static double Log2(double value)
+    {
+#if NET5_0_OR_GREATER
+        return Math.Log2(value);
+#else
+        return Math.Log(value, 2.0);
+#endif
     }
 
     /// <summary>
@@ -445,21 +459,16 @@ public partial class DecisionTreeClassifier<T>
     }
 
     /// <summary>
-    /// <paramref name="counts"/> / 2^<paramref name="shift"/> in T, as quotient + remainder * 2^-shift: both parts are
+    /// <paramref name="count"/> / 2^<paramref name="shift"/> in T, as quotient + remainder * 2^-shift: both parts are
     /// small integers, so no step overflows a narrow T, and for double the value is exact.
     /// </summary>
-    private Tensor<T> ScaledCounts(Tensor<int> counts, int shift)
+    private T ScaledCountInParts(int count, int shift)
     {
         if (shift == 0)
-            return counts.Cast<T>();
+            return NumOps.FromDouble(count);
 
-        var engine = AiDotNetEngine.Current;
-        int mask = (1 << shift) - 1;
-        var values = counts.ToArray();
-        var quotient = new Tensor<int>(values.Select(c => c >> shift).ToArray(), counts.Shape.ToArray());
-        var remainder = new Tensor<int>(values.Select(c => c & mask).ToArray(), counts.Shape.ToArray());
-        return engine.TensorAdd(
-            quotient.Cast<T>(), engine.TensorMultiplyScalar(remainder.Cast<T>(), NumOps.FromDouble(1.0 / (1 << shift))));
+        return NumOps.Add(NumOps.FromDouble(count >> shift),
+            NumOps.Multiply(NumOps.FromDouble(count & ((1 << shift) - 1)), NumOps.FromDouble(1.0 / (1 << shift))));
     }
 
     /// <summary>One count / 2^<paramref name="shift"/> in T (exact in double, one rounding into T).</summary>
