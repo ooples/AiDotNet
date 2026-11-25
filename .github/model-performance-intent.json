@@ -232,5 +232,124 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.FlowStateTests",
     "metric": "cpuMs",
     "reason": "e15c12f2a5 made the financial model bases declare their exact input geometry, so the census now probes FlowState on the input it is built for instead of a flat vector: [512] with 758,240 parameters at 1afde6bc50, [1,2048,1] with 619,264 at a4838391ff, held on every run since. A larger workload, not a slower one. Census 36391048631: regressed 3.09x (512.31 -> 1585.15); limit is 2.50x."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "53c7c2c00f",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MARS5TTSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. MARS5TTS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 17.57 -> 917.02 ms (52.2x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 16-17 ms vs 571-613 ms; cold (first) step 897-1396 / 882-1198 ms, unchanged; construct unchanged; allocated MB 606 -> 771. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GPTSoVITSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. GPTSoVITS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 10.77 -> 529.04 ms (49.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 7-9 ms vs 297-306 ms; cold (first) step 660-1029 / 689-724 ms, unchanged; construct unchanged; allocated MB 747-750 -> 803-807. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GPTSoVITSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. GPTSoVITS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 10.77 -> 529.04 ms (49.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 7-9 ms vs 297-306 ms; cold (first) step 660-1029 / 689-724 ms, unchanged; construct unchanged; allocated MB 747-750 -> 803-807. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GPTSoVITSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. GPTSoVITS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 10.77 -> 529.04 ms (49.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 7-9 ms vs 297-306 ms; cold (first) step 660-1029 / 689-724 ms, unchanged; construct unchanged; allocated MB 747-750 -> 803-807. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GPTSoVITSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. GPTSoVITS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 10.77 -> 529.04 ms (49.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 7-9 ms vs 297-306 ms; cold (first) step 660-1029 / 689-724 ms, unchanged; construct unchanged; allocated MB 747-750 -> 803-807. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GPTSoVITSTests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. GPTSoVITS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 10.77 -> 529.04 ms (49.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 7-9 ms vs 297-306 ms; cold (first) step 660-1029 / 689-724 ms, unchanged; construct unchanged; allocated MB 747-750 -> 803-807. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "53c7c2c00f",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "92f75c9b9c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests",
+    "metric": "trainStepMs",
+    "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. SpeechT5 trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample (tokens, recording, durations, pitch); the warm step used to call Train(input, target), which hands the model the fixture's mel-shaped target as the sample's audio and measured a much smaller step than the cold one. CI run 45479480621: 24.20 -> 74.64 ms (3.1x). Local A/B on one machine, two runs each through the shard script, master b45f47fa3e vs the branch: warm step 23-25 ms vs 57-58 ms; cold (first) step 387-398 / 409-418 ms, unchanged; construct unchanged; allocated MB 44 -> 45. Only the measured step changed, not the model."
   }
 ]
