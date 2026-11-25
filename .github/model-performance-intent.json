@@ -435,5 +435,54 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.StyleTTSZSTests",
     "metric": "trainStepMs",
     "reason": "92f75c9b9c made the census warm train step go through TrainOn, like the cold step. StyleTTSZS trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TtsTrainingSample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI run 45536623031: 7.47 -> 627.42 ms; its cold (first) step on that run was 1129 ms, so the warm step now sits below the cold step instead of 150x under it. Only the measured step changed, not the model."
+  },
+  {
+    "commit": "b45f47fa3e",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "30f65f23d9",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "e97be25c45",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "2b1bacf53d",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "53c7c2c00f",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "d639ba6ea6",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
+  },
+  {
+    "commit": "3a6a4378bc",
+    "origin": "3c8907ba0c",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MaskGCTTests",
+    "metric": "trainStepMs",
+    "reason": "3c8907ba0c made the census warm train step go through TrainOn, like the cold step. MaskGCT trains on the sample objective (TrainsOnSampleObjective), so TrainOn trains it on the fixture's synthetic TTS sample; the warm step used to call Train(input, target), which measured a much smaller step than the cold one. CI: Xeon 6975P 12.0-14.3 ms on master, 75.0 ms on c1cc87bc27 (the branch before the peak sampler). Local A/B, one machine, 3 interleaved runs each: master b45f47fa3e warm step 6.6-14.1 ms, 225 MB allocated; master + only the warm-step test change 51.5-389.2 ms, 234 MB; the branch 42.6-141.0 ms, 234 MB. Branch == warm-step-only, so only the measured step changed, not the model."
   }
 ]
