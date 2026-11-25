@@ -268,12 +268,26 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
     /// Gets or sets the probability of skipping each transformer layer during a training step (LayerDrop, Huang et al.
     /// 2016; transformers' <c>layerdrop</c>).
     /// </summary>
-    /// <value>Default is 0.1, the reference configuration's.</value>
+    /// <value>Default is 0.1, the reference configuration's. Must be in [0, 1).</value>
     /// <remarks>
-    /// A skipped layer does not run and is not stepped, which one compiled graph cannot express, so a model with a
-    /// positive rate trains on the eager tape. With 0 the training step runs on the fused compiled plan.
+    /// The skip is a per-step 0/1 gate on each layer's output, so one compiled graph serves every step and the model
+    /// trains on the fused compiled plan at any rate. A dropped layer's gradient is zero for that step; an optimizer
+    /// with momentum or weight decay still moves it, which the reference's skipped layer is not.
     /// </remarks>
-    public double LayerDrop { get; set; } = 0.1;
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative, 1 or more, or not a number.</exception>
+    public double LayerDrop
+    {
+        get => _layerDrop;
+        set
+        {
+            // 1 would skip every encoder layer on every training step; a negative value or NaN is not a probability.
+            if (!(value >= 0.0 && value < 1.0))
+                throw new ArgumentOutOfRangeException(nameof(value), value, "LayerDrop must be in [0, 1).");
+            _layerDrop = value;
+        }
+    }
+
+    private double _layerDrop = 0.1;
 
     /// <summary>
     /// Gets or sets the width of the projector before mean pooling (transformers' <c>classifier_proj_size</c>, 256).

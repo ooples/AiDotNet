@@ -85,9 +85,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     // Wav2Vec2ForSequenceClassification: a projector, mean pooling over frames, a classifier).
     private Audio.Foundations.Wav2Vec2Network<T>? _network;
 
-    /// <inheritdoc />
-    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
-    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private DenseLayer<T>? _poolingProjection;
     private DenseLayer<T>? _classifierLayer;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
@@ -217,6 +214,9 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             AttentionDropout = o.HiddenDropout,
             ActivationDropout = o.HiddenDropout,
             LayerDrop = o.LayerDrop,
+            // A per-step gate rather than a skipped layer, so the default configuration trains on the fused compiled
+            // plan (#2592), as WavLM does.
+            LayerDropPolicy = Audio.Foundations.LayerDropPolicy.StepGate,
         });
         _poolingProjection = new DenseLayer<T>(o.ClassifierProjectionSize, (IActivationFunction<T>)new ActivationFunctions.IdentityActivation<T>());
         _classifierLayer = new DenseLayer<T>(_languageIdToCode.Count, (IActivationFunction<T>)new ActivationFunctions.IdentityActivation<T>());
