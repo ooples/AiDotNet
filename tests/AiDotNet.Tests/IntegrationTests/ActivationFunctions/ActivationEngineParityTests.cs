@@ -50,6 +50,31 @@ public class ActivationEngineParityTests
         }
     }
 
+    /// <summary>
+    /// Central-difference Jacobian of <paramref name="function"/> at <paramref name="point"/>: column j is
+    /// (f(x + h e_j) - f(x - h e_j)) / 2h. Independent of any closed form, so it catches a wrong formula.
+    /// </summary>
+    private static double[,] NumericalJacobian(Func<double[], double[]> function, double[] point, double step = 1e-6)
+    {
+        int outputs = function(point).Length;
+        var jacobian = new double[outputs, point.Length];
+        for (int j = 0; j < point.Length; j++)
+        {
+            var forward = (double[])point.Clone();
+            var backward = (double[])point.Clone();
+            forward[j] += step;
+            backward[j] -= step;
+            var high = function(forward);
+            var low = function(backward);
+            for (int i = 0; i < outputs; i++)
+            {
+                jacobian[i, j] = (high[i] - low[i]) / (2.0 * step);
+            }
+        }
+
+        return jacobian;
+    }
+
     private static double[,] SoftmaxForm(IReadOnlyList<double> p)
     {
         int n = p.Count;
@@ -248,29 +273,57 @@ public class ActivationEngineParityTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SparsemaxActivation_Jacobian_MatchesElementDefinition()
+    public async Task SparsemaxActivation_Jacobian_IsDiagOfSupportMinusSharedThreshold()
     {
+        // Martins and Astudillo (2016), eq. 11: J = diag(s) - s s^T / |S|, s the indicator of the support.
+        // The Jacobian used to put -(output[j] / output[i]) off the diagonal and 1 on it, which is not the
+        // derivative of max(0, z - tau(z)) (it is not even symmetric, and its rows do not sum to zero).
         var sparsemax = new SparsemaxActivation<double>();
-        var input = new Vector<double>(new[] { 0.9, -1.1, 0.6, 0.0, 0.7 });
+        var values = new[] { 0.9, -1.1, 0.6, 0.0, 0.7 };
+        var input = new Vector<double>(values);
         var output = sparsemax.Activate(input).ToArray();
         int n = output.Length;
-        Assert.Contains(output, v => v == 0.0);
-        Assert.True(output.Count(v => v > 0.0) >= 2);
+        int supportSize = output.Count(v => v > 0.0);
+        Assert.Equal(3, supportSize);
+        Assert.Equal(2, output.Count(v => v == 0.0));
 
         var expected = new double[n, n];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                expected[i, j] = output[i] > 0.0 ? (i == j ? 1.0 : -(output[j] / output[i])) : 0.0;
+                bool both = output[i] > 0.0 && output[j] > 0.0;
+                expected[i, j] = (i == j && both ? 1.0 : 0.0) - (both ? 1.0 / supportSize : 0.0);
             }
         }
 
-        AssertMatrix(expected, sparsemax.Derivative(input), Tolerance, "sparsemax jacobian");
+        // Hand values: 2/3 on the support's diagonal, -1/3 between two members of the support
+        Assert.Equal(2.0 / 3.0, expected[0, 0], 15);
+        Assert.Equal(-1.0 / 3.0, expected[0, 2], 15);
+        Assert.Equal(0.0, expected[0, 1], 15);
+
+        var jacobian = sparsemax.Derivative(input);
+        AssertMatrix(expected, jacobian, Tolerance, "sparsemax jacobian");
+
+        // Sparsemax is piecewise linear, so the central difference is exact away from a kink
+        var numerical = NumericalJacobian(x => sparsemax.Activate(new Vector<double>(x)).ToArray(), values);
+        AssertMatrix(numerical, jacobian, 1e-8, "sparsemax jacobian vs finite differences");
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SphericalSoftmaxActivation_Jacobian_MatchesElementDefinition()
+    public async Task SparsemaxActivation_Jacobian_OfASingleWinner_IsZero()
+    {
+        // One coordinate far above the rest takes all the mass: the output is the constant one-hot vector
+        // in a neighbourhood, so every derivative is 0 (the support has one member and 1 - 1/1 = 0)
+        var sparsemax = new SparsemaxActivation<double>();
+        var input = new Vector<double>(new[] { 5.0, 0.1, -2.0 });
+        Assert.Equal(new[] { 1.0, 0.0, 0.0 }, sparsemax.Activate(input).ToArray());
+
+        AssertMatrix(new double[3, 3], sparsemax.Derivative(input), Tolerance, "single-winner jacobian");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmaxActivation_Jacobian_IsTheChainRuleThroughTheNormalization()
     {
         var spherical = new SphericalSoftmaxActivation<double>();
         var values = new[] { 0.3, -1.1, 2.0, 0.5 };
@@ -279,18 +332,43 @@ public class ActivationEngineParityTests
         int n = values.Length;
         double norm = Math.Sqrt(values.Sum(v => v * v));
 
+        // y = softmax(u), u = x / ||x||: J = S (I - u u^T) / ||x|| with S = diag(y) - y y^T.
+        // The Jacobian used to be (S - u u^T) / ||x||, which subtracts the projector from the softmax
+        // Jacobian instead of multiplying by its complement.
+        var softmaxForm = SoftmaxForm(output);
+        var unit = values.Select(v => v / norm).ToArray();
         var expected = new double[n, n];
         for (int i = 0; i < n; i++)
         {
+            double alongUnit = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                alongUnit += softmaxForm[i, k] * unit[k];
+            }
+
             for (int j = 0; j < n; j++)
             {
-                double term1 = i == j ? output[i] * (1.0 - output[i]) : -output[i] * output[j];
-                double term2 = values[i] * values[j] / (norm * norm);
-                expected[i, j] = (term1 - term2) / norm;
+                expected[i, j] = (softmaxForm[i, j] - alongUnit * unit[j]) / norm;
             }
         }
 
-        AssertMatrix(expected, spherical.Derivative(input), Tolerance, "spherical softmax jacobian");
+        var jacobian = spherical.Derivative(input);
+        AssertMatrix(expected, jacobian, Tolerance, "spherical softmax jacobian");
+
+        var numerical = NumericalJacobian(x => spherical.Activate(new Vector<double>(x)).ToArray(), values);
+        AssertMatrix(numerical, jacobian, 1e-8, "spherical softmax jacobian vs finite differences");
+
+        // The output does not change when x is scaled, so x is in the null space of the Jacobian
+        for (int i = 0; i < n; i++)
+        {
+            double alongInput = 0.0;
+            for (int j = 0; j < n; j++)
+            {
+                alongInput += jacobian[i, j] * values[j];
+            }
+
+            Assert.True(Math.Abs(alongInput) <= 1e-12, $"J x should be 0 but row {i} gave {alongInput:R}");
+        }
     }
 
     private static double[,] SquashJacobian(IReadOnlyList<double> x)
@@ -417,8 +495,10 @@ public class ActivationEngineParityTests
         var values = new[] { 0.3, -1.1, 2.0, 0.0, 0.7 };
         var reference = RandomHelper.CreateSeededRandom(seed);
 
-        // logits = x + temperature * gumbel, then softmax(logits / temperature)
-        var exponentials = values.Select(x => Math.Exp((x + temperature * StandardGumbel(reference)) / temperature)).ToArray();
+        // y = softmax((x + gumbel) / temperature) (Jang et al., 2017, eq. 1; torch.nn.functional.gumbel_softmax
+        // computes "(logits + gumbels) / tau"). The vector overload used to scale the noise by the temperature
+        // first, which cancelled the division and left softmax(x / temperature + gumbel).
+        var exponentials = values.Select(x => Math.Exp((x + StandardGumbel(reference)) / temperature)).ToArray();
         double sum = exponentials.Sum();
         var expected = exponentials.Select(v => v / sum).ToArray();
 
@@ -448,6 +528,22 @@ public class ActivationEngineParityTests
         var output = new GumbelSoftmaxActivation<double>(temperature, seed).Activate(input);
 
         AssertValues(expected, output.ToArray(), 1e-10, "gumbel softmax tensor");
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(0.25)]
+    [InlineData(1.0)]
+    [InlineData(3.0)]
+    public async Task GumbelSoftmaxActivation_VectorAndTensorOverloads_DrawTheSameSample(double temperature)
+    {
+        const int seed = 23;
+        var values = new[] { 0.3, -1.1, 2.0, 0.0, 0.9 };
+
+        var fromVector = new GumbelSoftmaxActivation<double>(temperature, seed).Activate(new Vector<double>(values));
+        var fromTensor = new GumbelSoftmaxActivation<double>(temperature, seed)
+            .Activate(new Tensor<double>(new[] { values.Length }, new Vector<double>(values)));
+
+        AssertValues(fromTensor.ToArray(), fromVector.ToArray(), 1e-12, "gumbel softmax vector vs tensor");
     }
 
     [Fact(Timeout = 120000)]
@@ -504,17 +600,15 @@ public class ActivationEngineParityTests
         var expectedJacobian = new double[numClasses, numClasses];
         for (int c = 0; c < numClasses; c++)
         {
-            double probability = 1.0;
+            // The factors class c picks up along its path, and whether each one is a right turn
+            var factors = new List<double>();
+            var rightTurns = new List<bool>();
             int node = 1;
             for (int d = 0; d < depth; d++)
             {
                 bool goRight = (c & (1 << (depth - d - 1))) != 0;
-                probability *= goRight ? sigmoids[d] : 1.0 - sigmoids[d];
-                double factor = sigmoids[d] * (1.0 - sigmoids[d]);
-                for (int j = 0; j < numClasses; j++)
-                {
-                    expectedJacobian[c, j] += (goRight ? factor : -factor) * flatWeights[d * numClasses + j];
-                }
+                factors.Add(goRight ? sigmoids[d] : 1.0 - sigmoids[d]);
+                rightTurns.Add(goRight);
 
                 node = node * 2 + (goRight ? 1 : 0);
                 if (node >= numClasses)
@@ -523,10 +617,41 @@ public class ActivationEngineParityTests
                 }
             }
 
+            double probability = 1.0;
+            foreach (double factor in factors)
+            {
+                probability *= factor;
+            }
+
             expectedProbabilities[c] = probability;
+
+            // Product rule: differentiate one factor, keep the others. The Jacobian used to drop "the
+            // others", which is only right for a path of length 1.
+            for (int d = 0; d < factors.Count; d++)
+            {
+                double others = 1.0;
+                for (int e = 0; e < factors.Count; e++)
+                {
+                    if (e != d)
+                    {
+                        others *= factors[e];
+                    }
+                }
+
+                double slope = sigmoids[d] * (1.0 - sigmoids[d]);
+                double coefficient = (rightTurns[d] ? slope : -slope) * others;
+                for (int j = 0; j < numClasses; j++)
+                {
+                    expectedJacobian[c, j] += coefficient * flatWeights[d * numClasses + j];
+                }
+            }
         }
 
+        var jacobian = hierarchical.Derivative(input);
         AssertValues(expectedProbabilities, hierarchical.Activate(input).ToArray(), Tolerance, "path probabilities");
-        AssertMatrix(expectedJacobian, hierarchical.Derivative(input), Tolerance, "path derivatives");
+        AssertMatrix(expectedJacobian, jacobian, Tolerance, "path derivatives");
+
+        var numerical = NumericalJacobian(x => hierarchical.Activate(new Vector<double>(x)).ToArray(), values);
+        AssertMatrix(numerical, jacobian, 1e-8, "path derivatives vs finite differences");
     }
 }
