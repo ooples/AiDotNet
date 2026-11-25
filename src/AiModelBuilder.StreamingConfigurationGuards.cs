@@ -220,4 +220,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             gradientOptimizer.SetRegularization(_regularization);
         }
     }
+
+    /// <summary>
+    /// Refuses a checkpoint manager the streaming loop could not write through: a checkpoint stores the optimizer
+    /// next to the model, so without <see cref="ConfigureOptimizer"/> nothing would be saved and a later resume
+    /// would find no checkpoint, with no sign of either during the run.
+    /// </summary>
+    private void EnsureStreamingCheckpointsCanBeWritten()
+    {
+        if (_checkpointManager is not null && _optimizer is null)
+        {
+            throw new InvalidOperationException(
+                "ConfigureCheckpointManager on a streaming build needs ConfigureOptimizer: a checkpoint stores the " +
+                "optimizer's state next to the model's, so with no optimizer the run would write no checkpoint at all. " +
+                "Configure the optimizer the model trains with, or remove the checkpoint manager.");
+        }
+    }
 }

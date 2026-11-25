@@ -2516,6 +2516,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // The streaming path previously skipped this, so ConfigureLossFunction / ConfigureLearningRateScheduler
         // were silently ignored whenever a streaming loader was used.
         PromoteStreamingOptimizerForRegularization();
+        EnsureStreamingCheckpointsCanBeWritten();
         ApplyConfiguredLossFunction();
         ApplyConfiguredLearningRateScheduler();
         ApplyConfiguredCreditRule();
