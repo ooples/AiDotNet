@@ -1569,12 +1569,17 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
         if (System.Threading.Volatile.Read(ref _parameterFileFullyMapped) != 0) return;
 
-        // What the walk will add to the file. A layer whose own weights are not materialized yet allocates them
-        // through the streaming allocator (it was flagged when streaming engaged) and the walk maps every one.
-        // Of a materialized layer's weights it maps those with a streaming lifetime that are not mapped yet; a
-        // weight that was allocated resident (before streaming engaged, or by a layer that does not allocate
-        // lazily) is never mapped and needs no disk.
+        // What the walk will put on the disk. A layer whose own weights are not materialized yet allocates them
+        // through the streaming allocator (it was flagged when streaming engaged), and the walk then maps every
+        // one. Of a materialized layer's weights it maps those with a streaming lifetime that are not mapped yet.
+        // Not counted:
+        //  - a weight that was allocated resident (before streaming engaged, or by a layer that does not allocate
+        //    lazily): it is never mapped;
+        //  - a weight a forward already registered with the pool: its bytes may be in the pool's file already,
+        //    and whether a walk maps it a second time depends on the registry's mode (it does not in inference).
+        //    Counting it would refuse walks that fit; not counting it leaves that one path unchecked.
         long pendingElements = 0;
+        bool heldByThePool = false;
         HashSet<Tensor<T>>? counted = null;
         foreach (var layer in ReflectInstanceLayers(this))
         {
@@ -1589,6 +1594,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 if (tensor.IsWritableMmapAliased || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (tensor.StreamingPoolHandle >= 0)
+                {
+                    heldByThePool = true;
+                    continue;
+                }
+
                 // A container and its child can both list the same tensor.
                 counted ??= new HashSet<Tensor<T>>(TensorReferenceComparer.Instance);
                 if (counted.Add(tensor)) pendingElements = checked(pendingElements + tensor.Length);
@@ -1599,7 +1610,9 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         long remainingBytes = checked(pendingElements * elementBytes);
         if (remainingBytes <= 0)
         {
-            System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 1);
+            // Nothing left to ask the volume for, now or later, unless the pool still holds weights a later
+            // walk may map.
+            if (!heldByThePool) System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 1);
             return;
         }
 
