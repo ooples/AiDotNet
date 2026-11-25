@@ -94,10 +94,13 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        Vector<T> expValues = input.Transform(x => TaylorExp(x, _order));
-        T sum = expValues.Sum();
+        if (input.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
 
-        return expValues.Transform(x => NumOps.Divide(x, sum));
+        // Same Taylor polynomial and normalization as the tensor overload
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
@@ -112,7 +115,10 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         // Build 1 + x + x^2/2! + ... + x^order/order! iteratively, running a
         // power tensor x^n and accumulating the factorial-weighted terms.
-        var result = Engine.TensorAddScalar(input, NumOps.One);       // 1 + x
+        // Order 0 keeps only the constant term; every higher order starts from 1 + x
+        var result = _order >= 1
+            ? Engine.TensorAddScalar(input, NumOps.One)               // 1 + x
+            : Engine.TensorOnesLike(input);                           // 1
         Tensor<T> power = input;
         double factorial = 1.0;
         for (int n = 2; n <= _order; n++)
@@ -152,62 +158,9 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        // J[i, i] = y[i] * (1 - y[i]); J[i, j] = -y[i] * y[j]
         Vector<T> output = Activate(input);
-        int d = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Multiply(output[i], NumOps.Subtract(NumOps.One, output[i]));
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Multiply(NumOps.Negate(output[i]), output[j]);
-                }
-            }
-        }
-
-        return jacobian;
-    }
-
-    /// <summary>
-    /// Approximates the exponential function e^x using a Taylor series expansion.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <param name="order">The order of the Taylor series approximation.</param>
-    /// <returns>An approximation of e^x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method approximates the exponential function (e^x) using a mathematical
-    /// technique called a Taylor series. Instead of calculating the exact value of e^x, which can be
-    /// computationally expensive, it uses a sum of simpler terms to get close to the right answer.
-    /// 
-    /// The formula used is: e^x ˜ 1 + x + x²/2! + x³/3! + ... + xn/n!
-    /// 
-    /// Where:
-    /// - x is the input value
-    /// - n is the order of approximation
-    /// - n! (factorial) means n × (n-1) × (n-2) × ... × 1
-    /// 
-    /// Higher orders give more accurate results but require more computation.
-    /// </para>
-    /// </remarks>
-    private T TaylorExp(T x, int order)
-    {
-        T result = NumOps.One;
-        T term = NumOps.One;
-
-        for (int n = 1; n <= order; n++)
-        {
-            term = NumOps.Divide(NumOps.Multiply(term, x), NumOps.FromDouble(n));
-            result = NumOps.Add(result, term);
-        }
-
-        return result;
+        return SoftmaxJacobian(Tensor<T>.FromVector(output)).ToMatrix();
     }
 
 }

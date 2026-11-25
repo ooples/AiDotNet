@@ -152,25 +152,25 @@ public class ELUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A diagonal matrix containing the derivatives for each input element.</returns>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
+        // Diagonal elements are the derivative at each point; off-diagonal elements are zero for
+        // element-wise activation functions
+        return ElementwiseJacobian(input);
+    }
 
-        for (int i = 0; i < n; i++)
-        {
-            // Set diagonal elements to the derivative at that point
-            jacobian[i, i] = Derivative(input[i]);
-
-            // Off-diagonal elements are zero for element-wise activation functions
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    jacobian[i, j] = NumOps.Zero;
-                }
-            }
-        }
-
-        return jacobian;
+    /// <summary>
+    /// Calculates the derivative of the ELU function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A tensor holding 1 where the input is positive and alpha * exp(x) elsewhere.</returns>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        // x > 0: 1; otherwise ELU(x, alpha) + alpha = alpha * (exp(x) - 1) + alpha
+        var engine = Engine;
+        var negativeBranch = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorExp(input), NumOps.One), _alpha),
+            _alpha);
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(input, NumOps.Zero), engine.TensorOnesLike(input), negativeBranch);
     }
 
     #region GPU Training Support

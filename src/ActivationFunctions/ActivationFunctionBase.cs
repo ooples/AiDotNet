@@ -163,6 +163,52 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
         return derivative.PointwiseMultiply(outputGradient);
     }
 
+    /// <summary>
+    /// Builds the Jacobian of an element-wise activation for a vector input: a diagonal matrix whose
+    /// diagonal is the tensor derivative of <paramref name="input"/>.
+    /// </summary>
+    /// <param name="input">The vector at which the derivative is evaluated.</param>
+    /// <returns>The [n, n] diagonal Jacobian.</returns>
+    /// <remarks>
+    /// Only valid for activations whose <see cref="Derivative(Tensor{T})"/> returns one value per input
+    /// element. The derivative and the diagonal placement both run as whole-tensor engine operations.
+    /// </remarks>
+    protected Matrix<T> ElementwiseJacobian(Vector<T> input)
+    {
+        if (input.Length == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        return Engine.TensorDiag(Derivative(Tensor<T>.FromVector(input))).ToMatrix();
+    }
+
+    /// <summary>
+    /// Returns <paramref name="offDiagonal"/> with its main diagonal replaced by <paramref name="diagonal"/>.
+    /// </summary>
+    /// <param name="offDiagonal">The [n, n] tensor supplying every off-diagonal entry.</param>
+    /// <param name="diagonal">The [n] tensor supplying the diagonal entries.</param>
+    /// <returns>The combined [n, n] tensor.</returns>
+    protected Tensor<T> ReplaceDiagonal(Tensor<T> offDiagonal, Tensor<T> diagonal)
+    {
+        var engine = Engine;
+        return engine.TensorWhere(engine.TensorEye<T>(diagonal.Length), engine.TensorDiag(diagonal), offDiagonal);
+    }
+
+    /// <summary>
+    /// Builds the Jacobian shared by the softmax family from the output probabilities:
+    /// J[i, i] = p[i] * (1 - p[i]) and J[i, j] = -(p[i] * p[j]) for i != j.
+    /// </summary>
+    /// <param name="probabilities">The [n] output of the activation.</param>
+    /// <returns>The [n, n] Jacobian tensor.</returns>
+    protected Tensor<T> SoftmaxJacobian(Tensor<T> probabilities)
+    {
+        var engine = Engine;
+        var offDiagonal = engine.TensorNegate(engine.TensorOuter(probabilities, probabilities));
+        var oneMinus = engine.TensorAddScalar(engine.TensorNegate(probabilities), NumOps.One);
+        return ReplaceDiagonal(offDiagonal, engine.TensorMultiply(probabilities, oneMinus));
+    }
+
     #region GPU Training Support
 
     /// <summary>
