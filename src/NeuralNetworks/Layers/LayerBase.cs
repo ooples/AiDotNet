@@ -6552,6 +6552,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Gets the number of values the optimizer trains in this layer and its sub-layers: the summed
+    /// <c>Length</c> of the distinct (by reference) tensors reachable through
+    /// <see cref="GetTrainableParameters"/> and, recursively, <see cref="GetSubLayers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This differs from <see cref="ParameterCount"/> in two ways. <see cref="ParameterCount"/> is the length of the
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> state vector, so it also counts buffers registered with
+    /// <see cref="RegisterBuffer"/> (state that is saved and restored but never learned), and it sums each layer's
+    /// listed tensors plus its sub-layers' tensors, so a tensor listed both by a layer and by one of its sub-layers is
+    /// counted twice. This count excludes buffers and counts each tensor once.
+    /// </para>
+    /// <para>
+    /// It runs the same walk the tape training step uses to collect the tensors it updates, so it equals what
+    /// PyTorch reports as <c>sum(p.numel() for p in module.parameters() if p.requires_grad)</c>. Tensors that are not
+    /// materialized yet (lazy layers before their first forward) have length zero and contribute nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> the number of weights training actually adjusts in this layer.</para>
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            var tensors = new List<Tensor<T>>();
+            var seen = new HashSet<Tensor<T>>(global::AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            global::AiDotNet.Training.TapeTrainingStep<T>.CollectLayerParameters(this, tensors, seen, materializedOnly: true);
+            long total = 0;
+            foreach (var tensor in tensors) total += tensor.Length;
+            return total;
+        }
+    }
+
+    /// <summary>
     /// True iff every registered sub-layer has finished its lazy-shape
     /// resolution (and thus has a stable trainable-parameter set). Used by
     /// <see cref="ParameterCount"/> to gate cache reuse: a sub-layer's

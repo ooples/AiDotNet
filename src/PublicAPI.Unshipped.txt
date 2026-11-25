@@ -22482,6 +22482,7 @@ override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ForwardTraced(Ai
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.UpdateParameters(T learningRate) -> void
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ResetState() -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainableParameterCount.get -> long
+AiDotNet.NeuralNetworks.Layers.LayerBase<T>.TrainableParameterCount.get -> long
 AiDotNet.Models.ModelBase<T, TInput, TOutput>.TrainableParameterCount.get -> long
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null) -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
