@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// likelihood objective. Text-to-speech is the paper's insertion-at-the-end case; <see cref="EditSpeech"/> performs
 /// general infilling while preserving unmasked codec frames exactly.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VoiceCraft model for zero-shot speech editing and TTS
+/// // with token rearrangement for in-context learning from wild recordings
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VoiceCraft&lt;double&gt;(architecture, "voicecraft.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VoiceCraft&lt;double&gt;(architecture, new VoiceCraftOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -110,20 +126,30 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     public int NumCodebooks => _options.NumCodebooks;
     /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc/>
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => _options.NumCodebooks;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override int OutputFeatureWidth => _options.AudioVocabularySize;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredVoice => TtsSupervision.ReferenceRecording;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => TtsSupervision.Text;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
+    /// <summary>Whether the native audio codec and decoder-only transformer are both present.</summary>
     public bool HasPaperPipeline => _codec is not null && _network is not null;
 
     /// <inheritdoc />
     public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
         ? LayerInputDomain.Indices(_options.TextVocabularySize) : base.GetInputDomain(inputShape);
+    /// <summary>Number of transformer layers in the native decoder (0 before it is built).</summary>
     public int TransformerLayerCount => _network?.LayerCount ?? 0;
+    /// <summary>Size of the phone vocabulary: the checkpoint mapping when one is set, otherwise the built-in table.</summary>
     public int PhoneVocabularySize => _phoneVocabulary?.Count ?? VoiceCraftPhoneTokenizer.Count;
 
     /// <summary>Sets the original checkpoint's phn2num mapping without changing its token IDs.</summary>
@@ -137,6 +163,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentException("Phone vocabulary needs unique IDs within the text embedding table.", nameof(vocabulary));
         _phoneVocabulary = vocabulary.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
     }
+    /// <summary>Whether the trainable codec's quantizer codebooks have been initialized.</summary>
     public bool CodecCodebooksInitialized => _codecNetwork?.CodebooksInitialized ?? false;
 
     /// <summary>Runs the release's eSpeak-style IPA front end and exact checkpoint <c>phn2num</c> table.</summary>
@@ -233,6 +260,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return CodesToTensor(_codec!.Encode(audio));
     }
 
+    /// <summary>Resamples <paramref name="audio"/> from <paramref name="sampleRate"/> to the codec rate and encodes it as <c>[frames, four codebooks]</c> VoiceCraft tokens.</summary>
     public Tensor<T> EncodeToTokens(Tensor<T> audio, int sampleRate)
         => EncodeToTokens(Resample(audio, sampleRate, _options.SampleRate));
 
@@ -258,8 +286,10 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return new Tensor<int>(flat, new[] { rows.Count, nq }).Cast<T>();
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => TokenizeText(text);
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -274,6 +304,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return loss;
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -335,9 +366,12 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return current;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

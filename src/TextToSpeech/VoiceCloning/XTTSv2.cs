@@ -28,6 +28,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// HiFi-GAN upsampler. The public training path implements the released GPT fine-tuning objective (text CE × .01 plus
 /// acoustic CE) while the dVAE, speaker encoder and waveform decoder act as pretrained feature modules.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an XTTS v2 model for multilingual zero-shot TTS
+/// // using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new XTTSv2&lt;double&gt;(architecture, "xttsv2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new XTTSv2&lt;double&gt;(architecture, new XTTSv2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -103,11 +119,16 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodebookSize => _options.CodebookSize;
     /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => 1;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredVoice => TtsSupervision.ReferenceRecording;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision =>
         TtsSupervision.CodecTokens | TtsSupervision.ReferenceRecording;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
     /// <inheritdoc />
@@ -118,10 +139,15 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>Whether the native dVAE, conditioning/GPT, H/ASP and HiFi-GAN components are present.</summary>
     public bool HasPaperPipeline => _dvae is not null && _languageModel is not null
         && _speakerEncoder is not null && _decoder is not null;
+    /// <summary>Number of GPT transformer layers in the native pipeline (0 before it is built).</summary>
     public int TransformerLayerCount => _languageModel?.LayerCount ?? 0;
+    /// <summary>Number of attention blocks in the conditioning encoder (0 before it is built).</summary>
     public int ConditioningAttentionBlocks => _languageModel?.ConditioningBlocks ?? 0;
+    /// <summary>Number of perceiver conditioning latents the speaker prompt is compressed to (0 before it is built).</summary>
     public int ConditioningLatentCount => _languageModel?.ConditioningLatents ?? 0;
+    /// <summary>The discrete VAE's time downsampling factor, mel frames per audio token (0 before it is built).</summary>
     public int DvaeDownsampleFactor => _dvae?.DownsampleFactor ?? 0;
+    /// <summary>Whether the BPE text tokenizer has been loaded.</summary>
     public bool TokenizerLoaded => _tokenizer is not null;
 
     /// <summary>Synthesizes in <see cref="TtsModelBase{T}.Voice"/>'s reference voice.</summary>
@@ -361,7 +387,9 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         finally { SetTrainingMode(wasTraining); }
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => XttsOps<T>.Ids(TokenizeText(text));
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -399,6 +427,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         return _decoder!.Forward(generated.Latents, speaker);
     }
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
     /// <inheritdoc />

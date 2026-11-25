@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// components are deliberately not collapsed into one generic transformer because they are trained independently and
 /// perform different jobs in the paper.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TorToise TTS model for high-quality synthesis through scaling
+/// // with multi-voice conditioning and CLVP re-ranking
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new TortoiseTTS&lt;double&gt;(architecture, "tortoisetts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new TortoiseTTS&lt;double&gt;(architecture, new TortoiseTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -96,14 +112,23 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc/>
     public int NumCodebooks => 1;
+    /// <inheritdoc/>
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc/>
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => 1;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override int OutputFeatureWidth => _options.CodebookSize + 2;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredVoice => TtsSupervision.ReferenceRecording;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => TtsSupervision.Text | TtsSupervision.Recording;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
     /// <summary>Whether this instance owns all five native TorToiSe inference components.</summary>
@@ -194,6 +219,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
             (_, _) => (_clvp ?? throw new InvalidOperationException("CLVP is not initialized.")).ContrastiveBatchLoss(texts, speech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17)), _optimizer);
     }
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -209,6 +235,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, speech, condition), _optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -248,6 +275,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
                 { InitialLearningRate = _options.VocoderTraining.LearningRate, Beta1 = .5, Beta2 = .9 });
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (_options.TrainingComponent != TortoiseTrainingComponent.UnivNet || _univNet is null) return parameters;
@@ -313,9 +341,12 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return current;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -489,6 +520,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return TortoiseOps<T>.Ids(TextIds(TortoiseOps<T>.Ids(ids)));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => TokenizeText(text);
 
     private int[] TextIds(string text) => TextIds(PreprocessText(text));

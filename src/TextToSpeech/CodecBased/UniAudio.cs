@@ -22,6 +22,21 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// paper's two-scale Transformer. Every condition is serialized as three-token patches. The global Transformer models
 /// frames; its previous-frame state conditions a local Transformer that generates the three RVQ levels within a frame.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniAudio model for universal audio generation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
+///     inputSize: 512,
+///     outputSize: 24000);
+///
+/// var model = new UniAudio&lt;float&gt;(architecture, "uniaudio.onnx");
+///
+/// // Synthesize speech from text
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello, world!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -89,12 +104,18 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodebookSize => _options.CodebookSize;
     /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => _options.NumCodebooks;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override int OutputFeatureWidth => _options.JointVocabularySize;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredVoice => TtsSupervision.ReferenceRecording;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => _options.TrainingComponent == UniAudioTrainingComponent.UniversalCodec
         ? TtsSupervision.Recording : TtsSupervision.Text | TtsSupervision.Recording;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
     /// <summary>Whether this instance owns the released universal codec and both Transformer scales.</summary>
@@ -193,8 +214,10 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         return _codec!.Decode(_codec.Unflatten(UniAudioOps<T>.IdsOf(tokens)));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => TokenizePhones(text);
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -206,6 +229,7 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => SequenceObjective(sequence, firstTarget), _optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -252,9 +276,12 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         return current;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

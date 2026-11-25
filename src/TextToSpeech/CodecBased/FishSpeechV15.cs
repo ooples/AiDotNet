@@ -24,6 +24,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceRate = 44100;
+/// var reference = Tensor&lt;float&gt;.CreateRandom(1, 3 * referenceRate);   // a few seconds of the target voice
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
 /// var model = new FishSpeechV15&lt;float&gt;(architecture, new FishSpeechV15Options());
 /// model.LoadReferenceWeights("fish-speech-1.5");      // model.pth, the Firefly-GAN generator, tokenizer.tiktoken

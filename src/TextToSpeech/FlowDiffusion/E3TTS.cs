@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// The authors published a paper and samples but no code or weights, so non-BERT weights use an explicit AiDotNet
 /// conversion schema documented by <see cref="LoadConvertedWeights"/>.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E3 TTS model for simple non-autoregressive diffusion TTS
+/// // without explicit duration modeling for streamlined synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new E3TTS&lt;double&gt;(architecture, "e3tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new E3TTS&lt;double&gt;(architecture, new E3TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -104,18 +120,25 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ? LayerInputDomain.Indices(_options.BertVocabularySize) : base.GetInputDomain(inputShape);
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc/>
     public int MaxTextLength => Math.Min(_options.MaxTextLength, _options.BertMaxPositions);
+    /// <inheritdoc/>
     public new int HiddenDim => _options.HiddenDim;
     /// <inheritdoc />
     public int NumFlowSteps => _options.NumDiffusionSteps;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => TtsSupervision.Text | TtsSupervision.Recording;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     protected override ParameterSlotRole ResolveLayerParameterRole(int layerIndex, ParameterSlotRole declared) =>
         _useNativeMode && layerIndex >= 0 && layerIndex < Layers.Count && _frozen.Contains(Layers[layerIndex])
             ? ParameterSlotRole.Frozen : declared;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => IndexTtsOps.Ids<T>(TokenizeText(text));
 
     /// <summary>Tokenizes plain text as BERT-base-uncased subwords, including [CLS] and [SEP].</summary>
@@ -148,6 +171,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new TtsVoice<T> { ReferenceAudio = audio, ReferenceTokens = IndexTtsOps.Ids<T>(TokenizeText(transcript)) };
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
@@ -325,6 +349,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return Engine.TensorSlice(waveform, new[] { 0 }, new[] { MathPolyfill.Clamp(last, 1, length) });
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -341,12 +366,14 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return TrimTrailingSilence(Sample(Encode(ids), _options.InferenceWaveformSamples, null, null, _options.DefaultSpeakerId));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is { Count: > 0 } && Layers.Count == 0) Layers.AddRange(Architecture.Layers);
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = _useNativeMode ? "E3-TTS-Native" : "E3-TTS-ONNX",

@@ -43,6 +43,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// which letters it is reading at each step; a second network sharpens the result into a full spectrogram that can be
 /// turned into sound.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Tacotron model for sequence-to-sequence TTS
+/// // with CBHG encoder and autoregressive decoder with attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Tacotron&lt;double&gt;(architecture, "tacotron.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Tacotron&lt;double&gt;(architecture, new TacotronOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -83,6 +99,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     private CbhgLayer<T>? _postCbhg;
     private DenseLayer<T>? _linearProjection;
 
+    /// <summary>Creates a Tacotron that runs the exported ONNX model at <paramref name="modelPath"/> for inference.</summary>
     public Tacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, TacotronOptions? options = null)
         : base(architecture)
     {
@@ -102,6 +119,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         InitializeLayers();
     }
 
+    /// <summary>Creates a trainable native Tacotron; the optimizer defaults to the paper's.</summary>
     public Tacotron(
         NeuralNetworkArchitecture<T> architecture,
         TacotronOptions? options = null,
@@ -159,6 +177,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <remarks>"We also found pre-emphasis (0.97) to be helpful" (§4).</remarks>
     protected override double PreEmphasis => _options.PreEmphasis;
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -438,6 +457,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         return Engine.ReduceMean(diff, Enumerable.Range(0, diff.Rank).ToArray(), keepDims: false);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -446,6 +466,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -467,6 +488,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Tacotron<T>));
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -9,10 +9,15 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </summary>
 public sealed class DiTToCheckpointPaths
 {
+    /// <summary>The public SpeechT5 checkpoint that supplies the text encoder.</summary>
     public required string SpeechT5 { get; init; }
+    /// <summary>The CLaM-TTS Mel-VAE weights, converted to AiDotNet tensor names.</summary>
     public required string MelVae { get; init; }
+    /// <summary>The DiTTo diffusion transformer weights, converted to AiDotNet tensor names.</summary>
     public required string DiffusionTransformer { get; init; }
+    /// <summary>The latent-length predictor weights, converted to AiDotNet tensor names.</summary>
     public required string LengthPredictor { get; init; }
+    /// <summary>The public BigVGAN vocoder checkpoint.</summary>
     public required string BigVgan { get; init; }
 }
 

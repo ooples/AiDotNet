@@ -36,6 +36,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> Glow-TTS learns an exactly reversible mapping between spectrograms and simple Gaussian
 /// noise shaped by the text; to speak, it draws noise shaped by the text and runs the mapping backwards.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Glow-TTS model for flow-based non-autoregressive speech synthesis
+/// // with monotonic alignment search (MAS) for text-audio alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GlowTTS&lt;double&gt;(architecture, "glowtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GlowTTS&lt;double&gt;(architecture, new GlowTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -364,6 +380,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         return Engine.TensorAdd(mle, durationLoss);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -372,6 +389,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

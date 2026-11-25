@@ -9,12 +9,17 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 public partial class MetaVoice1B<T>
 {
     internal double? TrainingSpeakerDrawForAudit { get; set; }
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => HasPaperPipeline
         ? TtsSupervision.CodecTokens | TtsSupervision.ReferenceRecording : TtsSupervision.None;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => HasPaperPipeline;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => 8;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => 1024;
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
         => _first is null ? parameters : TapeTrainingStep<T>.CollectParameters(
             _first.FineTuneLayers(_options.FineTuneLastBlocks).Cast<ILayer<T>>().ToList());
@@ -33,6 +38,7 @@ public partial class MetaVoice1B<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildFirstStageObjective(sample), _optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed();

@@ -30,6 +30,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <para><b>For Beginners:</b> F5-TTS learns to fill in a masked part of a spectrogram given the text; to speak, it
 /// fills in everything after an optional voice prompt.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an F5-TTS model for flow-matching TTS with DiT backbone
+/// // generating fluent and faithful speech from text
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new F5TTS&lt;double&gt;(architecture, "f5tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new F5TTS&lt;double&gt;(architecture, new F5TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -105,20 +121,26 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc/>
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc/>
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc/>
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a mel spectrogram from text (the paper pairs it with Vocos).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    /// <inheritdoc/>
     protected override FlowMatchingSettings Settings => new(_options.VocabSize, _options.MelChannels, _options.MaskFractionMin,
         _options.MaskFractionMax, _options.AudioDropProbability, _options.ConditionDropProbability,
         _options.NumFunctionEvaluations, _options.CfgStrength, _options.SwayCoefficient, _options.FramesPerCharacter,
         _options.Speed, _options.SamplingSeed);
 
+    /// <inheritdoc/>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
+    /// <inheritdoc/>
     protected override bool HasPaperBackbone => _time is not null;
 
     protected override void InitializeLayers()
@@ -176,6 +198,7 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
             }));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -184,6 +207,7 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -197,6 +221,7 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

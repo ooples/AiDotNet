@@ -45,6 +45,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// read a spectrogram into the same internal representation it reads text into, then practises reproducing the new
 /// speaker's recordings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AdaSpeech 2 model for adaptive TTS using untranscribed speech data
+/// // with mel-to-phoneme pipeline for semi-supervised adaptation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new AdaSpeech2&lt;double&gt;(architecture, "adaspeech2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new AdaSpeech2&lt;double&gt;(architecture, new AdaSpeech2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -265,6 +281,7 @@ public partial class AdaSpeech2<T> : AdaSpeech<T>
         }
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = base.GetModelMetadata();

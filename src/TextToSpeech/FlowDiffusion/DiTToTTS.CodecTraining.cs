@@ -53,6 +53,7 @@ public partial class DiTToTTS<T>
         _codecTrainer.DecoderWeightsLoaded = true;
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!IsCodecStage) return parameters;

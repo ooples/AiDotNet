@@ -14,6 +14,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// encoder/Perceiver, GPT-2, H/ASP speaker encoder and speaker-conditioned HiFi-GAN from <see cref="XTTSv2{T}"/>
 /// and adapts its reference-audio overload to <see cref="IVoiceCloner{T}"/>.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an XTTS v2 Clone model for multilingual zero-shot voice cloning
+/// // using GPT-2 backbone with 6-second reference audio for speaker identity
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new XTTSv2Clone&lt;double&gt;(architecture, "xttsv2clone.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new XTTSv2Clone&lt;double&gt;(architecture, new XTTSv2CloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -46,7 +62,9 @@ public partial class XTTSv2Clone<T> : XTTSv2<T>, IVoiceCloner<T>
         _cloneOptions = options ?? new XTTSv2CloneOptions();
     }
 
+    /// <inheritdoc/>
     public double MinReferenceDuration => _cloneOptions.MinReferenceDurationSec;
+    /// <inheritdoc/>
     public int SpeakerEmbeddingDim => _cloneOptions.SpeakerEmbeddingDim;
 
     /// <inheritdoc />

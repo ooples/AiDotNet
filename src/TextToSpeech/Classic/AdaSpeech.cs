@@ -49,6 +49,10 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// adjusting only a few thousand numbers per speaker.</para>
 /// <example>
 /// <code>
+/// var tokens = new Tensor&lt;double&gt;(new[] { 3 }, new Vector&lt;double&gt;(new double[] { 12, 40, 7 }));   // phoneme ids
+/// var durations = new[] { 4, 6, 5 };                                                             // frames per phoneme
+/// var mel = Tensor&lt;double&gt;.CreateRandom(15, 80);                                                // [frames, 80]
+/// var referenceMel = Tensor&lt;double&gt;.CreateRandom(120, 80);                                      // the target speaker's speech
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
@@ -167,6 +171,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// the paper uses MelGAN).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Phonemes(text, true, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
@@ -416,6 +421,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
                 CollectConditionalProjections(child, into);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -424,6 +430,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

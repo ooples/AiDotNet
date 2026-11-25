@@ -65,6 +65,7 @@ public partial class UniAudio<T>
         _codecDiscriminatorOptimizer = Optimizer();
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!HasPaperPipeline) return parameters;

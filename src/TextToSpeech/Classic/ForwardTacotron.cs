@@ -39,6 +39,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> ForwardTacotron decides how long, how high and how loud each sound is, then paints the
 /// whole spectrogram at once, so it never skips or repeats words.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Forward Tacotron model for non-autoregressive TTS
+/// // using duration predictor instead of attention for robust alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ForwardTacotron&lt;double&gt;(architecture, "forward_tacotron.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ForwardTacotron&lt;double&gt;(architecture, new ForwardTacotronOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -473,6 +489,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         }
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -481,6 +498,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
