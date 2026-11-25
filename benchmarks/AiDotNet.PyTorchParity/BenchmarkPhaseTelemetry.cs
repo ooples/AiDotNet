@@ -22,7 +22,7 @@ internal static class BenchmarkPhaseTelemetry
             var devices = GpuMemoryStats.DeviceNames.ToDictionary(name => name, name => GpuMemoryStats.Snapshot(name));
             // Snapshot the interval that just ended, then reset every allocator/driver-pool high-water mark.
             // Calls occur outside timing regions on both frameworks; device-wide VRAM sampling stays separate.
-            GpuMemoryStats.ResetPeakStats();
+            AllocatorPeakWindow.FoldAndReset();
             return new
             {
                 previous_phase = PreviousPhase ?? "startup",

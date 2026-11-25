@@ -1,5 +1,6 @@
-[CmdletBinding()]
-param([Parameter(Mandatory)] [string] $MatrixJson, [Parameter(Mandatory)] [string] $AttemptRoot,
+[CmdletBinding(DefaultParameterSetName = 'Json')]
+param([Parameter(Mandatory, ParameterSetName = 'Json')] [string] $MatrixJson,
+    [Parameter(Mandatory, ParameterSetName = 'Path')] [string] $MatrixJsonPath, [Parameter(Mandatory)] [string] $AttemptRoot,
     [Parameter(Mandatory)] [string] $CanonicalRoot, [Parameter(Mandatory)] [ValidateSet('coverage', 'test-results')] [string] $ArtifactPrefix,
     [Parameter(Mandatory)] [string] $TestedSha, [Parameter(Mandatory)] [string] $RunId,
     [Parameter(Mandatory)] [string] $RunAttempt, [Parameter(Mandatory)] [AllowEmptyString()] [string] $SourceArtifactId,
@@ -7,6 +8,9 @@ param([Parameter(Mandatory)] [string] $MatrixJson, [Parameter(Mandatory)] [strin
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/RunnerFailover.ps1"
+# CI passes the shard matrix as a file: it can outgrow Linux's 128 KiB limit on one environment string.
+if ($PSCmdlet.ParameterSetName -ceq 'Path') { $MatrixJson = Get-Content -LiteralPath $MatrixJsonPath -Raw }
+if ([string]::IsNullOrWhiteSpace($MatrixJson)) { throw 'The shard matrix is empty.' }
 $matrix = @($MatrixJson | ConvertFrom-Json)
 $records = [Collections.Generic.List[object]]::new()
 New-Item -ItemType Directory -Path $CanonicalRoot -Force | Out-Null

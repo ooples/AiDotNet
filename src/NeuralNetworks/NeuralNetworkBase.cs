@@ -573,10 +573,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // reference, so a read always sees the most recent step's loss.
     private Tensor<T>? _pendingLossTensor;
 
-    private void SetLastLossDeferred(Tensor<T> lossTensor)
+    private protected void SetLastLossDeferred(Tensor<T> lossTensor)
     {
         _pendingLossTensor = lossTensor;
         _lastLossRecorded = true;
+    }
+
+    /// <summary>
+    /// The loss of the step that just ran, bound to that step: its value when it is already on the host, or an owned
+    /// copy of the deferred loss tensor (still unread, so nothing waits for the device). A compiled plan reuses its
+    /// loss tensor, so a caller that reports this step's loss later -- after another step of this network may have
+    /// run -- must hold the copy rather than ask <see cref="GetLastLoss"/> then. The caller disposes the copy.
+    /// </summary>
+    internal void CaptureLastLoss(out T value, out Tensor<T>? deferredCopy)
+    {
+        if (_pendingLossTensor is { } pending && pending.Length > 0)
+        {
+            // Outside any scope, arena or tape: the copy outlives the step and is not part of a gradient.
+            using var noScope = TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new NoGradScope<T>();
+            deferredCopy = Engine.TensorAddScalar(pending, NumOps.Zero);
+            value = NumOps.Zero;
+            return;
+        }
+
+        deferredCopy = null;
+        value = GetLastLoss();
     }
 
     /// <summary>
@@ -15010,6 +15033,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer)
             ?? GetOrCreateBaseOptimizer();
 
+    /// <summary>
+    /// <c>TrainCustomTapeStep</c>
+    /// without reading the loss on the host. A compiled step returns its loss tensor, which the plan reuses (and
+    /// overwrites) every step, and <paramref name="loss"/> is then zero; an eager step returns its loss in
+    /// <paramref name="loss"/> and null.
+    /// </summary>
+    internal Tensor<T>? TrainCustomTapeStepDeferred(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> lossFunction,
+        out T loss)
+    {
+        var sink = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
+        loss = TrainCustomTapeStep(input, target, forward, lossFunction, optimizer: null, parameterProvider: null,
+            sessionPerOptimizer: false, deferredLoss: sink);
+        return sink.Value;
+    }
+
     protected internal T TrainCustomTapeStep(
         Tensor<T> input,
         Tensor<T> target,
@@ -15060,7 +15102,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         System.Reflection.MethodInfo? warmupKey = null,
         Func<T>? eagerFallback = null,
         bool clipCustomObjective = true,
-        string? eagerReason = null)
+        string? eagerReason = null,
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -15068,6 +15111,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(loss);
         ThrowIfCannotTrain();
         using var reentrancyGuard = AcquireTrainSentinel();
+        if (deferredLoss is not null) deferredLoss.Value = null;
 
         var resolvedOptimizer = ResolveCustomStepOptimizer(optimizer);
         var session = sessionPerOptimizer ? ObjectiveSession(resolvedOptimizer) : FusedSession;
@@ -15167,6 +15211,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
         MarkTrainMutationStarted();
         T lossValue = NumOps.Zero;
+        Tensor<T>? lossTensor = null;
         Training.FusedStepOutcome outcome;
         if (parameters.Count == 0)
         {
@@ -15175,13 +15220,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         else
         {
             using var fusedAttemptArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-            outcome = session.TryStep(request, out lossValue);
+            outcome = session.TryStep(request, out lossValue, out lossTensor);
         }
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
             if (session.LastStepRanOutsidePlan) CustomOutsidePlanStepCount++;
             else CustomFusedStepCount++;
             InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+            if (lossTensor is not null)
+            {
+                if (deferredLoss is not null)
+                {
+                    // The caller reads the loss when it needs it: reading it here would wait for the device to finish
+                    // this step before the host could prepare the next one.
+                    deferredLoss.Value = lossTensor;
+                    SetLastLossDeferred(lossTensor);
+                    return NumOps.Zero;
+                }
+                lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            }
         }
         else
         {
@@ -17811,6 +17868,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return lossValue;
     }
 
+    // Whether ForwardForTrainingDetached has run once (its first call may size lazy layers, so it runs without an arena).
+    private bool _detachedForwardRan;
+
     /// <summary>
     /// A training-mode forward that records nothing and leaves every layer's registered state (BatchNorm running
     /// statistics and the like) as it found it; the output is a detached copy.
@@ -17822,21 +17882,71 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// running statistics still advance once per iteration, in the step.
     /// </remarks>
     internal Tensor<T> ForwardForTrainingDetached(Tensor<T> input)
+        => DetachedTrainingForward(input, consume: null)!;
+
+    /// <summary>
+    /// <see cref="ForwardForTrainingDetached(Tensor{T})"/> for a caller done with the output before this returns: hands
+    /// <paramref name="consume"/> the forward's own output instead of a detached copy of it.
+    /// </summary>
+    /// <remarks>
+    /// The output is valid only inside <paramref name="consume"/>: on the CPU it and whatever
+    /// <paramref name="consume"/> builds from it while the forward's arena is current go back to that arena's pool when
+    /// this returns, and on a device the forward's scope frees them. So an adversarial step builds its discriminator
+    /// batch from the generated samples here and trains on it at once, with no copy of the samples and no fresh
+    /// batch each iteration (a DCGAN CPU step allocated 9 MB of both on the large-object heap). Anything
+    /// <paramref name="consume"/> keeps must be created with <c>TensorArena.Suspend</c> and <c>TensorScope.Suspend</c>
+    /// active, as training another network on the batch must be.
+    /// </remarks>
+    internal void ForwardForTrainingDetached(Tensor<T> input, Action<Tensor<T>> consume)
+    {
+        if (consume is null) throw new ArgumentNullException(nameof(consume));
+        DetachedTrainingForward(input, consume);
+    }
+
+    private Tensor<T>? DetachedTrainingForward(Tensor<T> input, Action<Tensor<T>>? consume)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
+        // Every device result of this forward -- each layer's output, the statistics snapshot -- is dead once the output
+        // is copied out and the statistics restored: the scope frees them when it ends, as PyTorch frees a no-grad
+        // forward's intermediates at their last use, instead of leaving them to the garbage collector (a DCGAN generator's
+        // detached forward held ~550 MB of dead activations across steps that way).
+        using var scope = AiDotNet.Tensors.Engines.TensorScope.Begin();
         var buffers = new List<Tensor<T>>();
         foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
         var saved = AiDotNet.Training.TensorCheckpoint<T>.Capture(buffers);
+        Tensor<T>? output = null;
         try
         {
+            // The intermediates are host arrays on the CPU, which the scope above does not free: fresh every call,
+            // a DCGAN generator's ~80 MB of them per iteration went to the large-object heap and forced a gen-2
+            // collection about once an iteration (trimming the shared array pool, so the convolutions' packing
+            // scratch was faulted in afresh each time). An arena hands the same arrays back on the next call. The
+            // output is copied out with the arena suspended, so nothing returned is arena-backed. It pools even nested
+            // (a declared-objective step runs this inside its own step arena, and a nested arena that does not pool drops
+            // every array it rented: the whole forward was allocated afresh each step). The first call, and any call
+            // while parameters are still unsized, runs without it: weights a lazy layer creates must not be arena-backed.
+            bool lazyForward = !_detachedForwardRan || HasUninitializedParameters;
+            _detachedForwardRan = true;
+            using var arena = lazyForward ? null : AiDotNet.Tensors.Helpers.TensorArena.Create(poolWhenNested: true);
+            Tensor<T> produced;
             using (new NoGradScope<T>())
-                return AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
+                produced = ForwardForTraining(input);
+            if (consume is not null)
+            {
+                consume(produced);
+            }
+            else
+            {
+                using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+                    output = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { produced })[0];
+            }
         }
         finally
         {
             AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
+        return output is null ? null : scope.Keep(output);
     }
 
     private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)

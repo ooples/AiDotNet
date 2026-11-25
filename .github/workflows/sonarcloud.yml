@@ -501,12 +501,22 @@ jobs:
       #
       # With TEST_IMPACT_REPACK=on it then packs the slices it kept into time-balanced jobs (the matrix output
       # holds packed jobs); with report it only records what packing would do; unset or off, it is as it was.
+      #
+      # The chosen matrix goes to a file, not an environment variable: a large selection can pass Linux's 128 KiB
+      # limit on one environment string, and the step then cannot start at all ("Argument list too long"). The run
+      # script is written to a file before it runs, so the expression expanded in it has no such limit.
+      - name: Write chosen shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath selected-shard-matrix.json -Encoding utf8
+
       - name: Select affected tests
         id: impact
         shell: pwsh
         env:
-          SELECTED_MATRIX: ${{ needs.select-shards.outputs.matrix }}
-          SELECTED_LEDGER_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
+          SELECTED_MATRIX_PATH: selected-shard-matrix.json
           SELECTED_SKIPPED: ${{ needs.select-shards.outputs.skipped }}
           REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
@@ -963,8 +973,9 @@ jobs:
         if: steps.tooling.outputs.changed != 'false'
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
         # job before any matrix output is written; a step timeout converts it into outcome=failure,
-        # which the gate below turns into a full-matrix run.
-        timeout-minutes: 5
+        # which the gate below turns into a full-matrix run. Ten minutes: the self-tests take 2.5-4 minutes, and
+        # retried artifact downloads (curl 403/416/503) took a 5-minute budget past its end (run 45403161723).
+        timeout-minutes: 10
         shell: pwsh
         run: |
           ./tools/TestImpact/Select-Shards.ps1 -SelfTest
@@ -983,6 +994,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Resolve-CertifiedShardMap self-test failed' }
           ./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Receive-RequiredArtifact self-test failed' }
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Restore-ArtifactFolders self-test failed' }
           ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub API retry self-test failed' }
           # #2131: the cancellation reporter only ever runs on a cancelled run, so its three
@@ -2606,7 +2619,6 @@ jobs:
       SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
       SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
       SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
       TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -2614,11 +2626,22 @@ jobs:
     steps:
     - &runner-failover-checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    # The shard matrix goes to a file, not an environment variable: with test-level filters it outgrew Linux's
+    # 128 KiB limit on one environment string, and every process in the job then failed to start ("Argument list
+    # too long"). The run script is written to a file before it runs, so the expression expanded in it has no such
+    # limit, and the value is still read straight from the producing jobs' outputs, as it was through env.
+    - &write-shard-matrix
+      name: Write shard matrix
+      shell: pwsh
+      run: |
+        @'
+        ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+        '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
     - name: Classify original attempt evidence
       id: plan
       shell: pwsh
       run: |
-        ./tools/TestImpact/New-RunnerFailoverPlan.ps1 -MatrixJson $env:MATRIX_JSON `
+        ./tools/TestImpact/New-RunnerFailoverPlan.ps1 -MatrixJsonPath shard-matrix.json `
           -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
           -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
           -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
@@ -2686,7 +2709,6 @@ jobs:
       SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
-      MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
       SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
       SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
       TRUSTED_SAME_REPOSITORY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -2695,6 +2717,7 @@ jobs:
       PLAN_ARTIFACT_DIGEST: ${{ needs.runner-failover-plan.outputs.artifact_digest }}
     steps:
     - *runner-failover-checkout
+    - *write-shard-matrix
     - name: Verify immutable recovery plan archive
       if: needs.select-shards.outputs.requires_tests == 'true'
       shell: pwsh
@@ -2706,7 +2729,7 @@ jobs:
       if: needs.select-shards.outputs.requires_tests == 'true'
       shell: pwsh
       run: |
-        ./tools/TestImpact/Resolve-RunnerFailoverResults.ps1 -MatrixJson $env:MATRIX_JSON -PlanPath runner-failover-plan/plan.json `
+        ./tools/TestImpact/Resolve-RunnerFailoverResults.ps1 -MatrixJsonPath shard-matrix.json -PlanPath runner-failover-plan/plan.json `
           -Repository $env:GITHUB_REPOSITORY -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
           -TestedSha $env:GITHUB_SHA -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
           -TrustedSameRepository ($env:TRUSTED_SAME_REPOSITORY -ceq 'true') -SelfHostedRunnerToken $env:SELF_HOSTED_RUNNER_TOKEN
@@ -2714,7 +2737,7 @@ jobs:
       if: needs.select-shards.outputs.requires_tests == 'false'
       shell: pwsh
       run: |
-        ./tools/TestImpact/Write-EmptyShardProof.ps1 -MatrixJson $env:MATRIX_JSON `
+        ./tools/TestImpact/Write-EmptyShardProof.ps1 -MatrixJsonPath shard-matrix.json `
           -RequiresValidation $env:REQUIRES_VALIDATION -RequiresTests $env:REQUIRES_TESTS
     - name: Preserve original attempts and logical shard evidence
       id: upload
@@ -2972,6 +2995,16 @@ jobs:
           path: current-test-results
           merge-multiple: false
 
+      - name: Restore the artifact folder of a lone match (current-test-results)
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'current-test-results' -Pattern 'coverage-${{ github.sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
+
       - name: Download immutable primary attempts for missing diagnostics
         continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -2982,6 +3015,16 @@ jobs:
 
       # Post-merge delta reuse: the shards this run did not re-run are the pull request's results,
       # so the landed commit's ledger covers every shard the pull request validated.
+
+      - name: Restore the artifact folder of a lone match (primary-attempt-diagnostics)
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'primary-attempt-diagnostics' -Pattern 'shard-attempt-primary-${{ github.sha }}-*-${{ github.run_attempt }}' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
       - name: Download pull-request shard results for delta import
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
@@ -2992,6 +3035,16 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ needs.validation-source.outputs.import_run_id }}
           github-token: ${{ github.token }}
+
+      - name: Restore the artifact folder of a lone match (delta-import-staging)
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ needs.validation-source.outputs.import_run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'delta-import-staging' -Pattern 'coverage-${{ needs.validation-source.outputs.import_sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
 
       - name: Import pull-request shard results
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
@@ -3113,6 +3166,17 @@ jobs:
           run-id: ${{ steps.promoted-baseline.outputs.source_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Restore the artifact folder of a lone match (promoted-baseline-test-results)
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outputs.promoted_valid == 'true'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ steps.promoted-baseline.outputs.source_run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'promoted-baseline-test-results' -Pattern 'coverage-${{ steps.promoted-baseline.outputs.tested_sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
+
       - name: Download legacy baseline TRX artifacts
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
         id: baseline-trx-download
@@ -3130,6 +3194,17 @@ jobs:
       # Linux's 128 KiB limit on a single environment string, and the next step then failed to start at all
       # ("An error occurred trying to start process '/usr/bin/pwsh' ... Argument list too long"). A run script is
       # written to a file before it executes, so the expression expanded here has no such limit.
+
+      - name: Restore the artifact folder of a lone match (baseline-test-results)
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ steps.baseline.outputs.baseline_run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'baseline-test-results' -Pattern 'coverage-${{ steps.baseline.outputs.baseline_sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
       - name: Write expected shard matrix
         shell: pwsh
         run: |
@@ -3137,10 +3212,16 @@ jobs:
           ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           '@ | Set-Content -LiteralPath expected-shard-matrix.json -Encoding utf8
 
+      - name: Write shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
+
       - name: Stage missing initial primary TRX diagnostics
         shell: pwsh
         env: &diagnostic-intake-env
-          MATRIX_JSON: ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
           SOURCE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
           SOURCE_ARTIFACT_DIGEST: ${{ needs.build.outputs.artifact_digest }}
           REQUIRES_VALIDATION: ${{ needs.select-shards.outputs.requires_validation }}
@@ -3150,7 +3231,7 @@ jobs:
           COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
           SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
         run: |
-          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJsonPath shard-matrix.json `
             -AttemptRoot primary-attempt-diagnostics -CanonicalRoot current-test-results -ArtifactPrefix coverage `
             -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
             -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
@@ -3468,6 +3549,8 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Set up pinned Tensors validation feed
+        # A local action is read from the checkout, so it must share the checkout's gate.
+        if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: ./.github/actions/setup-tensors-validation
         with:
           artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
@@ -3526,6 +3609,16 @@ jobs:
           pattern: coverage-${{ needs.validation-source.outputs.import_sha }}-*
           path: delta-import-staging
           merge-multiple: false
+
+      - name: Restore the artifact folder of a lone match (delta-import-staging)
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ needs.validation-source.outputs.import_run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'delta-import-staging' -Pattern 'coverage-${{ needs.validation-source.outputs.import_sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
 
       - name: Import pull-request coverage
         if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
@@ -3803,6 +3896,16 @@ jobs:
           pattern: test-results-${{ github.sha }}-*
           path: TestDiagnostics
 
+      - name: Restore the artifact folder of a lone match (TestDiagnostics)
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'TestDiagnostics' -Pattern 'test-results-${{ github.sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
+
       - name: Download pull-request diagnostics for delta import
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
@@ -3814,6 +3917,16 @@ jobs:
           run-id: ${{ needs.validation-source.outputs.import_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Restore the artifact folder of a lone match (delta-import-staging)
+        if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ needs.validation-source.outputs.import_run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'delta-import-staging' -Pattern 'test-results-${{ needs.validation-source.outputs.import_sha }}-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
+
       - name: Download immutable primary attempts for missing diagnostics
         continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -3822,11 +3935,28 @@ jobs:
           path: primary-attempt-diagnostics
           merge-multiple: false
 
+      - name: Restore the artifact folder of a lone match (primary-attempt-diagnostics)
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'primary-attempt-diagnostics' -Pattern 'shard-attempt-primary-${{ github.sha }}-*-${{ github.run_attempt }}' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
+
+      - name: Write shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.matrix || needs.select-shards.outputs.matrix }}
+          '@ | Set-Content -LiteralPath shard-matrix.json -Encoding utf8
+
       - name: Stage missing initial primary TRX diagnostics
         shell: pwsh
         env: *diagnostic-intake-env
         run: |
-          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJson $env:MATRIX_JSON `
+          ./tools/TestImpact/Import-PrimaryAttemptDiagnostics.ps1 -MatrixJsonPath shard-matrix.json `
             -AttemptRoot primary-attempt-diagnostics -CanonicalRoot TestDiagnostics -ArtifactPrefix test-results `
             -TestedSha $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
             -SourceArtifactId $env:SOURCE_ARTIFACT_ID -SourceArtifactDigest $env:SOURCE_ARTIFACT_DIGEST `
@@ -3979,6 +4109,17 @@ jobs:
           pattern: paper-fidelity-results-pr-*
           path: paper-diagnostic-artifacts
           merge-multiple: false
+
+      - name: Restore the artifact folder of a lone match (paper-diagnostic-artifacts)
+        if: always() && needs.paper-fidelity-plan.result == 'success' && needs.paper-fidelity-plan.outputs.mode != 'None'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root 'paper-diagnostic-artifacts' -Pattern 'paper-fidelity-results-pr-*' `
+            -Repository '${{ github.repository }}' -RunId $env:ARTIFACT_RUN_ID
 
       - name: Download paper-fidelity class plan
         if: always() && needs.paper-fidelity-plan.result == 'success' && needs.paper-fidelity-plan.outputs.mode != 'None'
