@@ -23,6 +23,7 @@ internal static class Program
             return 2;
         }
 
+        using var peaks = new ProcessPeakSampler();
         object? fixture = null;
         int exitCode = 0;
         try

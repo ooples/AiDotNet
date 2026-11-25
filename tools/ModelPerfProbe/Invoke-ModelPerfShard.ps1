@@ -193,6 +193,17 @@ foreach ($testName in $assigned) {
     }
     $standardOutput = $stdout.GetAwaiter().GetResult()
     $standardError = $stderr.GetAwaiter().GetResult()
+    # The runner reports its own peaks: the OS working-set high-water mark and private memory sampled every 5 ms.
+    # Polling from here every 250 ms saw a one-second fixture four or five times, so a transient peak was caught or
+    # missed by timing alone (UnifiedMultimodalNetwork: 749 MB on seven nights, 450 MB on one, same allocations),
+    # and a missed peak became a baseline the next ordinary run then failed. Keep the larger of the two observers.
+    $peakLine = [Regex]::Match($standardOutput, '(?m)^AIDOTNET_PROCESS_PEAKS (?<ws>\d+) (?<private>\d+)\s*$')
+    if ($peakLine.Success) {
+        $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, [long]$peakLine.Groups['ws'].Value)
+        $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, [long]$peakLine.Groups['private'].Value)
+    } elseif ($exitCode -eq 0) {
+        Write-Warning "$fixture exited cleanly without an AIDOTNET_PROCESS_PEAKS line; its memory peaks are 250 ms samples only."
+    }
     $stopwatch.Stop()
     $runnerCpuToWallRatio = if ($stopwatch.Elapsed.TotalMilliseconds -gt 0) {
         $runnerCpuMs / $stopwatch.Elapsed.TotalMilliseconds
