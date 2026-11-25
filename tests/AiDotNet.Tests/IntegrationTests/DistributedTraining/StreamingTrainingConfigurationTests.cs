@@ -31,10 +31,11 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// Issue #2554: the streaming supervised path must act on the training configuration it is given. Each test here
 /// fails if the configuration it names were dropped: a one-rank distributed backend against no backend, mixed
 /// precision observed inside the forward pass, a backend supplied only through the sharding configuration,
-/// regularization, and the options that only the in-memory path can honour.
+/// regularization, the options that need the whole training set at once, and (in the second half of this class)
+/// the options the streaming path applies: LoRA, knowledge distillation and the post-training stages.
 /// </summary>
 [Collection("SequentialDistributedStreamingEnablers")]
-public sealed class StreamingTrainingConfigurationTests
+public sealed partial class StreamingTrainingConfigurationTests
 {
     private const int InDim = 8;
     private const int HiddenDim = 16;
@@ -57,6 +58,8 @@ public sealed class StreamingTrainingConfigurationTests
 
         public int ForwardCallsWithEveryWeightInHalfPrecision { get; private set; }
 
+        public int ForwardCallsWithEveryWeightInBFloat16 { get; private set; }
+
         protected override Tensor<float> ForwardTraced(Tensor<float> input)
         {
             if (Recording)
@@ -65,6 +68,11 @@ public sealed class StreamingTrainingConfigurationTests
                 if (GetTrainableParameters().All(IsHeldExactlyByHalf))
                 {
                     ForwardCallsWithEveryWeightInHalfPrecision++;
+                }
+
+                if (GetTrainableParameters().All(IsHeldExactlyByBFloat16))
+                {
+                    ForwardCallsWithEveryWeightInBFloat16++;
                 }
             }
 
@@ -78,6 +86,21 @@ public sealed class StreamingTrainingConfigurationTests
         for (int i = 0; i < values.Length; i++)
         {
             if (!IsHalfValue(values[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>BF16 is the top 16 bits of the FP32 pattern, so a BF16 value has the low 16 bits clear.</summary>
+    private static bool IsHeldExactlyByBFloat16(Tensor<float> tensor)
+    {
+        ReadOnlySpan<float> values = tensor.Data.Span;
+        for (int i = 0; i < values.Length; i++)
+        {
+            if ((BitConverter.ToInt32(BitConverter.GetBytes(values[i]), 0) & 0xFFFF) != 0)
             {
                 return false;
             }
@@ -178,7 +201,8 @@ public sealed class StreamingTrainingConfigurationTests
 
     private static FeedForwardNeuralNetwork<float> CreateMlp(
         IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer,
-        ILayer<float>? hiddenLayer = null)
+        ILayer<float>? hiddenLayer = null,
+        ILossFunction<float>? lossFunction = null)
     {
         var layers = new List<ILayer<float>>
         {
@@ -195,7 +219,7 @@ public sealed class StreamingTrainingConfigurationTests
         var network = new FeedForwardNeuralNetwork<float>(
             architecture,
             optimizer: optimizer,
-            lossFunction: new MeanSquaredErrorLoss<float>());
+            lossFunction: lossFunction ?? new MeanSquaredErrorLoss<float>());
         _ = network.Predict(new Tensor<float>(new[] { 1, InDim }));
         return network;
     }
@@ -263,12 +287,14 @@ public sealed class StreamingTrainingConfigurationTests
     }
 
     [Theory(Timeout = 90000)]
-    [InlineData(DistributedStrategy.DDP, 1)]
-    [InlineData(DistributedStrategy.ZeRO1, 1)]
-    [InlineData(DistributedStrategy.ZeRO2, 1)]
-    [InlineData(DistributedStrategy.FSDP, 1)]
-    [InlineData(DistributedStrategy.DDP, 2)]
-    public async Task NeuralNetwork_OneRankBackend_TrainsExactlyLikeNoBackend(DistributedStrategy strategy, int accumulationSteps)
+    [InlineData(DistributedStrategy.DDP, 1, false)]
+    [InlineData(DistributedStrategy.ZeRO1, 1, false)]
+    [InlineData(DistributedStrategy.ZeRO2, 1, false)]
+    [InlineData(DistributedStrategy.FSDP, 1, false)]
+    [InlineData(DistributedStrategy.DDP, 2, false)]
+    [InlineData(DistributedStrategy.DDP, 1, true)]
+    public async Task NeuralNetwork_OneRankBackend_TrainsExactlyLikeNoBackend(
+        DistributedStrategy strategy, int accumulationSteps, bool mixedPrecision)
     {
         var (inputs, targets) = CreateDataset(sampleCount: 20, seed: 301);
         const long steps = 7;
@@ -287,6 +313,11 @@ public sealed class StreamingTrainingConfigurationTests
                 .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 6))
                 .ConfigureGpuAcceleration(CpuOnlyConfig())
                 .ConfigureStreamingTraining(options);
+            if (mixedPrecision)
+            {
+                builder = builder.ConfigureMixedPrecision(new MixedPrecisionConfig { PrecisionType = MixedPrecisionType.FP16 });
+            }
+
             if (backend is not null)
             {
                 builder = builder.ConfigureDistributedTraining(backend, strategy);
@@ -297,6 +328,11 @@ public sealed class StreamingTrainingConfigurationTests
         }
 
         Vector<float> expected = await TrainAsync(backend: null);
+
+        // Equality below would also hold if neither run had trained.
+        Vector<float> initial = CreateInitialWeights(expected.Length, seed: 302);
+        double moved = MaxAbsDiff(initial, expected);
+        Assert.True(moved > 1e-3, $"The run without a backend barely trained (largest weight change {moved:R}).");
 
         var oneRank = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1, "one_rank_" + Guid.NewGuid().ToString("N"));
         Vector<float> actual;
@@ -362,7 +398,7 @@ public sealed class StreamingTrainingConfigurationTests
 
             // Each rank reads half of every global batch. Ranks that ignored the configuration would each train on
             // their own batches of 4 and match neither each other's data nor the batch-of-8 reference.
-            Assert.True(MaxAbsDiff(models[0].GetParameters(), models[1].GetParameters()) < 1e-6, "The ranks diverged.");
+            Assert.True(MaxAbsDiff(models[0].GetParameters(), models[1].GetParameters()) == 0.0, "The ranks diverged.");
             double diff = MaxAbsDiff(reference.GetParameters(), models[0].GetParameters());
             Assert.True(diff < 1e-5, $"Two ranks differ from one process at the same global batch by {diff:R}.");
         }
@@ -375,7 +411,7 @@ public sealed class StreamingTrainingConfigurationTests
     [Theory(Timeout = 90000)]
     [InlineData(MixedPrecisionType.FP16)]
     [InlineData(MixedPrecisionType.BF16)]
-    public async Task MixedPrecision_OnStreaming_RunsTheForwardInLowPrecisionScalesTheLossAndKeepsFullPrecisionMasters(
+    public async Task MixedPrecision_OnStreaming_RunsTheForwardInLowPrecisionAndKeepsFullPrecisionMasters(
         MixedPrecisionType precision)
     {
         var (inputs, targets) = CreateDataset(sampleCount: 24, seed: 321);
@@ -406,6 +442,8 @@ public sealed class StreamingTrainingConfigurationTests
             model.SetParameters(startingWeights.Clone());
             Assert.False(probe.GetTrainableParameters().All(IsHeldExactlyByHalf),
                 "The starting weights must not already be FP16 values, or the probe could not tell the two apart.");
+            Assert.False(probe.GetTrainableParameters().All(IsHeldExactlyByBFloat16),
+                "The starting weights must not already be BF16 values, or the probe could not tell the two apart.");
 
             var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
@@ -440,18 +478,23 @@ public sealed class StreamingTrainingConfigurationTests
         Assert.StartsWith("engaged:", mixedResult.MixedPrecisionStatus, StringComparison.Ordinal);
         Assert.True(mixedModel.IsMixedPrecisionEnabled);
 
-        // The forward pass ran on low-precision weights. BF16 keeps fewer mantissa bits than FP16 but a wider
-        // exponent, so for these magnitudes a BF16 value is not in general an FP16 value; FP16 is checked exactly.
+        // Every forward pass ran on weights of the configured precision, checked by bit pattern for both.
         Assert.True(mixedProbe.ForwardCalls >= steps, $"The probe saw {mixedProbe.ForwardCalls} forward passes for {steps} steps.");
         if (precision == MixedPrecisionType.FP16)
         {
             Assert.Equal(mixedProbe.ForwardCalls, mixedProbe.ForwardCallsWithEveryWeightInHalfPrecision);
         }
+        else
+        {
+            Assert.Equal(mixedProbe.ForwardCalls, mixedProbe.ForwardCallsWithEveryWeightInBFloat16);
+        }
 
         // Without the configuration no forward pass ever sees low-precision weights.
         Assert.Equal(0, fullProbe.ForwardCallsWithEveryWeightInHalfPrecision);
+        Assert.Equal(0, fullProbe.ForwardCallsWithEveryWeightInBFloat16);
 
-        // The loss scaler took part in every optimizer step and grew on schedule, and nothing overflowed.
+        // The loss scaler was updated on every optimizer step and grew on schedule, and nothing overflowed. That the
+        // loss is actually multiplied by the scale is shown by MixedPrecision_OnStreaming_BackpropagatesTheScaledLoss.
         LossScaler<float> scaler = (mixedModel.ActiveMixedPrecisionContext
             ?? throw new InvalidOperationException("Mixed precision is enabled but the model has no context.")).LossScaler;
         Assert.Equal((int)steps, scaler.TotalUpdates);
@@ -478,140 +521,450 @@ public sealed class StreamingTrainingConfigurationTests
             $"The reported loss {mixedLoss:R} is not on the scale of the FP32 loss {fullLoss:R}; a scaled loss leaked out.");
     }
 
-    [Fact(Timeout = 90000)]
-    public async Task Regularization_OnStreaming_ReachesTheOptimizerAndShrinksTheWeights()
-    {
-        var (inputs, targets) = CreateDataset(sampleCount: 24, seed: 331);
-        const long steps = 12;
+    private static StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>> CreateSgd(double learningRate) =>
+        new StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = learningRate,
+                MaxIterations = 1,
+                // One step over every row with no momentum, on whichever path the optimizer runs.
+                BatchSize = 64,
+                InitialMomentum = 0.0,
+                UseAdaptiveLearningRate = false,
+                UseEarlyStopping = false,
+                Tolerance = 0.0,
+                EnableGradientClipping = false,
+                FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>(),
+            });
 
-        async Task<(Vector<float> Weights, AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer)> TrainAsync(
-            IRegularization<float, Tensor<float>, Tensor<float>>? regularization)
+    /// <summary>
+    /// The mean of prediction times target: a loss whose gradient with respect to a prediction is the target over
+    /// the element count, whatever the prediction is. That lets a test choose the size of the gradient exactly.
+    /// </summary>
+    private sealed class MeanProductLoss : LossFunctionBase<float>
+    {
+        public override float CalculateLoss(Vector<float> predicted, Vector<float> actual)
         {
-            var optimizer = CreateAdam(clip: false);
+            ValidateVectorLengths(predicted, actual);
+            double sum = 0.0;
+            for (int i = 0; i < predicted.Length; i++)
+            {
+                sum += (double)predicted[i] * actual[i];
+            }
+
+            return (float)(sum / predicted.Length);
+        }
+
+        public override Tensor<float> ComputeTapeLoss(Tensor<float> predicted, Tensor<float> target)
+        {
+            var product = Engine.TensorMultiply(predicted, target);
+            return Engine.ReduceMean(product, Enumerable.Range(0, product.Shape.Length).ToArray(), keepDims: false);
+        }
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task MixedPrecision_OnStreaming_BackpropagatesTheScaledLoss()
+    {
+        // With the loss mean(prediction * target) and every target 1e36, the gradient reaching the output layer is
+        // 1e36 over the element count: finite in FP32, but not once the loss is multiplied by a loss scale of 2^20.
+        // So a step that really backpropagates the scaled loss overflows and is skipped, while the same step at
+        // scale 1 goes through. A step that only kept the scaler's counters would train in both runs. The network
+        // clips the gradient to norm 1, so an ordinary learning rate moves the weights by an ordinary amount.
+        var (inputs, smallTargets) = CreateDataset(sampleCount: 8, seed: 361);
+        var targets = smallTargets
+            .Select(target => new Tensor<float>(new[] { OutDim }, new Vector<float>(Enumerable.Repeat(1.0e36f, target.Length).ToArray())))
+            .ToArray();
+        const double largeScale = 1048576.0;
+
+        async Task<(Vector<float> Start, Vector<float> End, LossScaler<float> Scaler)> TrainOneStepAsync(double lossScale)
+        {
+            var optimizer = CreateSgd(learningRate: 0.05);
+            var model = CreateMlp(optimizer, lossFunction: new MeanProductLoss());
+            Vector<float> start = CreateInitialWeights(model.GetParameters().Length, seed: 362);
+            model.SetParameters(start.Clone());
+            await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureOptimizer(optimizer)
+                .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 8))
+                .ConfigureGpuAcceleration(CpuOnlyConfig())
+                .ConfigureStreamingTraining(StepOptions(1))
+                .ConfigureMixedPrecision(new MixedPrecisionConfig
+                {
+                    PrecisionType = MixedPrecisionType.FP16,
+                    InitialLossScale = lossScale,
+                    MinLossScale = 1.0,
+                    EnableDynamicScaling = true,
+                    ScaleGrowthInterval = 1000,
+                })
+                .BuildAsync();
+            LossScaler<float> scaler = (model.ActiveMixedPrecisionContext
+                ?? throw new InvalidOperationException("Mixed precision is enabled but the model has no context.")).LossScaler;
+            return (start, model.GetParameters(), scaler);
+        }
+
+        var unscaled = await TrainOneStepAsync(lossScale: 1.0);
+        Assert.Equal(0, unscaled.Scaler.SkippedUpdates);
+        Assert.True(MaxAbsDiff(unscaled.Start, unscaled.End) > 1e-4,
+            $"At loss scale 1 the step must go through, or the scaled run below proves nothing. Moved {MaxAbsDiff(unscaled.Start, unscaled.End):R}.");
+
+        var scaled = await TrainOneStepAsync(lossScale: largeScale);
+        Assert.Equal(1, scaled.Scaler.SkippedUpdates);
+        Assert.Equal(largeScale / 2.0, scaled.Scaler.Scale);
+        Assert.True(MaxAbsDiff(scaled.Start, scaled.End) == 0.0,
+            "The scaled loss overflowed, so the step had to be skipped and the FP32 masters left as they were.");
+    }
+
+    private static L2Regularization<float, Tensor<float>, Tensor<float>> CreateL2(double strength) =>
+        new L2Regularization<float, Tensor<float>, Tensor<float>>(
+            new RegularizationOptions { Type = RegularizationType.L2, Strength = strength });
+
+    [Fact(Timeout = 90000)]
+    public async Task Regularization_OnStreaming_OneSgdStepAddsThePenaltyGradientExactlyOnce()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 331);
+        const double learningRate = 0.05;
+        const double strength = 0.5;
+        Vector<float>? start = null;
+
+        async Task<Vector<float>> TrainOneStepAsync(IRegularization<float, Tensor<float>, Tensor<float>>? regularization)
+        {
+            var optimizer = CreateSgd(learningRate);
             var model = CreateMlp(optimizer);
-            model.SetParameters(CreateInitialWeights(model.GetParameters().Length, seed: 332));
+            start = CreateInitialWeights(model.GetParameters().Length, seed: 332);
+            model.SetParameters(start.Clone());
             var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
                 .ConfigureOptimizer(optimizer)
                 .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 8))
                 .ConfigureGpuAcceleration(CpuOnlyConfig())
-                .ConfigureStreamingTraining(StepOptions(steps));
+                .ConfigureStreamingTraining(StepOptions(1));
             if (regularization is not null)
             {
                 builder = builder.ConfigureRegularization(regularization);
+                await builder.BuildAsync();
+                Assert.Same(regularization, optimizer.ActiveRegularization);
+            }
+            else
+            {
+                await builder.BuildAsync();
             }
 
-            await builder.BuildAsync();
-            return (model.GetParameters(), optimizer);
+            return model.GetParameters();
         }
 
-        var l2 = new L2Regularization<float, Tensor<float>, Tensor<float>>(
-            new RegularizationOptions { Type = RegularizationType.L2, Strength = 5.0 });
+        Vector<float> plain = await TrainOneStepAsync(regularization: null);
+        Vector<float> regularized = await TrainOneStepAsync(CreateL2(strength));
+        Vector<float> w0 = start ?? throw new InvalidOperationException("The training helper did not record the starting weights.");
+        Assert.True(MaxAbsDiff(w0, plain) > 1e-4, "The run without regularization must have taken its step.");
 
-        var (plain, _) = await TrainAsync(regularization: null);
-        var (regularized, regularizedOptimizer) = await TrainAsync(l2);
+        // Same start and same batch, so the two runs differ by the penalty term alone:
+        // w_plain = w0 - lr * g and w_reg = w0 - lr * (g + strength * w0). Applied twice gives twice this; dropped
+        // gives zero; a wrong strength scales it.
+        double largestPenaltyStep = 0.0;
+        for (int i = 0; i < w0.Length; i++)
+        {
+            double expected = -learningRate * strength * w0[i];
+            largestPenaltyStep = Math.Max(largestPenaltyStep, Math.Abs(expected));
+            double actual = (double)regularized[i] - plain[i];
+            Assert.True(Math.Abs(actual - expected) < 2e-7,
+                $"Weight {i}: the penalty moved it by {actual:R}, expected -lr * strength * w0 = {expected:R}.");
+        }
 
-        Assert.Same(l2, regularizedOptimizer.ActiveRegularization);
-        Assert.True(MaxAbsDiff(plain, regularized) > 1e-3, "The configured regularization did not change training.");
-        Assert.True(Norm(regularized) < Norm(plain),
-            $"A strong L2 penalty left the weights larger ({Norm(regularized):R}) than no penalty ({Norm(plain):R}).");
+        Assert.True(largestPenaltyStep > 1e-3, "The penalty step is too small for the 2e-7 bound to tell once from twice.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Regularization_OnStreaming_MatchesTheInMemoryPathOnTheSameData()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 371);
+        const double learningRate = 0.05;
+        const double strength = 0.5;
+        Vector<float>? start = null;
+
+        async Task<Vector<float>> TrainOneStepAsync(bool streaming, bool regularize)
+        {
+            var optimizer = CreateSgd(learningRate);
+            var model = CreateMlp(optimizer);
+            start = CreateInitialWeights(model.GetParameters().Length, seed: 372);
+            model.SetParameters(start.Clone());
+            IAiModelBuilder<float, Tensor<float>, Tensor<float>> builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureOptimizer(optimizer)
+                .ConfigureGpuAcceleration(CpuOnlyConfig());
+            if (streaming)
+            {
+                builder = builder
+                    .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 8))
+                    .ConfigureStreamingTraining(StepOptions(1));
+            }
+            else
+            {
+                // Every row in one batch, the same batch the streaming run steps on.
+                var x = new Tensor<float>(new[] { inputs.Length, InDim });
+                var y = new Tensor<float>(new[] { inputs.Length, OutDim });
+                for (int i = 0; i < inputs.Length; i++)
+                {
+                    for (int d = 0; d < InDim; d++) x[i, d] = inputs[i][d];
+                    for (int o = 0; o < OutDim; o++) y[i, o] = targets[i][o];
+                }
+
+                builder = builder.ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(x, y));
+            }
+
+            // The run without the penalty says so explicitly. Left unsaid, the in-memory path falls back to the
+            // optimizer options' own default L2 (strength 0.01) while the streaming path applies none, and the
+            // comparison below would measure that default instead of the configured penalty.
+            builder = builder.ConfigureRegularization(regularize
+                ? CreateL2(strength)
+                : new NoRegularization<float, Tensor<float>, Tensor<float>>());
+
+            var result = await builder.BuildAsync();
+            return ((result.OptimizationResult ?? throw new InvalidOperationException("The build returned no optimization result."))
+                .BestSolution ?? throw new InvalidOperationException("The build returned no model.")).GetParameters();
+        }
+
+        Vector<float> streamPlain = await TrainOneStepAsync(streaming: true, regularize: false);
+        Vector<float> streamRegularized = await TrainOneStepAsync(streaming: true, regularize: true);
+        Vector<float> memoryPlain = await TrainOneStepAsync(streaming: false, regularize: false);
+        Vector<float> memoryRegularized = await TrainOneStepAsync(streaming: false, regularize: true);
+        Vector<float> w0 = start ?? throw new InvalidOperationException("The training helper did not record the starting weights.");
+
+        // What the penalty did to each weight, per path. The in-memory path holds some rows out for validation, so
+        // the two paths step on different rows and are compared on the effect of the penalty, which for one plain
+        // SGD step does not depend on the rows: -learningRate * strength * weight.
+        double largest = 0.0;
+        for (int i = 0; i < w0.Length; i++)
+        {
+            double onStream = (double)streamRegularized[i] - streamPlain[i];
+            double inMemory = (double)memoryRegularized[i] - memoryPlain[i];
+            largest = Math.Max(largest, Math.Abs(onStream));
+            Assert.True(Math.Abs(onStream - inMemory) < 2e-7,
+                $"Weight {i}: the penalty moved it by {onStream:R} on the stream and {inMemory:R} in memory.");
+        }
+
+        Assert.True(largest > 1e-3, "The penalty changed nothing, so the comparison proves nothing.");
     }
 
     [Fact(Timeout = 90000)]
-    public async Task Regularization_OnStreaming_IsRefusedWhenNothingCouldApplyIt()
+    public async Task Regularization_OnStreaming_WithNoBuilderOptimizer_TrainsThroughAdamCarryingThePenalty()
     {
         var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 341);
-        var l2 = new L2Regularization<float, Tensor<float>, Tensor<float>>(
-            new RegularizationOptions { Type = RegularizationType.L2, Strength = 0.5 });
 
-        // A neural network with no optimizer configured on the builder: there is no slot to put the penalty in.
-        var optimizer = CreateAdam();
-        var network = CreateMlp(optimizer);
-        var missingOptimizer = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-                .ConfigureModel(network)
-                .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 4))
-                .ConfigureGpuAcceleration(CpuOnlyConfig())
-                .ConfigureRegularization(l2)
-                .ConfigureStreamingTraining(StepOptions(1))
-                .BuildAsync());
-        Assert.Contains("ConfigureRegularization", missingOptimizer.Message, StringComparison.Ordinal);
+        // No ConfigureOptimizer call. The in-memory path promotes the default to Adam for a regularized build, and
+        // so does the streaming path. With a penalty this strong, strength * w dominates the data gradient, and
+        // Adam's first step moves every weight by about its learning rate against the sign of its gradient: toward
+        // zero. Without the penalty the step follows the data gradient, whose signs do not line up with the weights.
+        var model = CreateMlp(CreateAdam());
+        Vector<float> start = CreateInitialWeights(model.GetParameters().Length, seed: 342);
+        model.SetParameters(start.Clone());
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 8))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureRegularization(CreateL2(1000.0))
+            .ConfigureStreamingTraining(StepOptions(1))
+            .BuildAsync();
 
-        // A model that updates itself without an optimizer.
-        var rowInputs = new[] { new Matrix<double>(1, 2), new Matrix<double>(1, 2) };
-        var rowTargets = new[] { new Vector<double>(new[] { 1.0 }), new Vector<double>(new[] { 2.0 }) };
-        var regression = new MultipleRegression<double>();
-        regression.SetParameters(new Vector<double>(new[] { 0.1, 0.2, 0.0 }));
-        var notOptimizerTrained = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        Vector<float> end = model.GetParameters();
+        int considered = 0;
+        for (int i = 0; i < start.Length; i++)
+        {
+            if (Math.Abs(start[i]) < 0.05f)
+            {
+                continue;
+            }
+
+            considered++;
+            Assert.True(Math.Abs(end[i]) < Math.Abs(start[i]),
+                $"Weight {i} went from {start[i]:R} to {end[i]:R}: a strong L2 penalty must pull it toward zero.");
+        }
+
+        Assert.True(considered > start.Length / 2, "Too few weights are large enough to judge.");
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task Regularization_OnStreaming_GradientModel_AddsThePenaltyToTheGradient()
+    {
+        // One sample and one step, so the update is p0 - lr * (g + strength * p0) whether the model steps per
+        // sample or per batch. No optimizer is configured, so the learning rate is the path's 0.01.
+        const double learningRate = 0.01;
+        const double strength = 0.5;
+        var rowInput = new Matrix<double>(1, 2);
+        rowInput[0, 0] = 0.7;
+        rowInput[0, 1] = -0.4;
+        var rowTarget = new Vector<double>(new[] { 1.5 });
+        var p0 = new Vector<double>(new[] { 0.3, -0.2, 0.1 });
+
+        async Task<Vector<double>> TrainOneStepAsync(bool regularize)
+        {
+            var regression = new MultipleRegression<double>();
+            regression.SetParameters(p0.Clone());
+            IAiModelBuilder<double, Matrix<double>, Vector<double>> builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureModel(regression)
                 .ConfigureDataLoader(new StreamingDataLoader<double, Matrix<double>, Vector<double>>(
-                    sampleCount: rowInputs.Length,
-                    sampleReader: (idx, ct) => Task.FromResult((rowInputs[idx], rowTargets[idx])),
-                    batchSize: 2,
+                    sampleCount: 1,
+                    sampleReader: (idx, ct) => Task.FromResult((rowInput, rowTarget)),
+                    batchSize: 1,
                     prefetchCount: 1,
                     numWorkers: 1))
-                .ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(
-                    new RegularizationOptions { Type = RegularizationType.L2, Strength = 0.5 }))
-                .BuildAsync());
-        Assert.Contains("ConfigureRegularization", notOptimizerTrained.Message, StringComparison.Ordinal);
+                .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>> { Seed = 3, MaxSteps = 1 });
+            if (regularize)
+            {
+                builder = builder.ConfigureRegularization(new L2Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Type = RegularizationType.L2, Strength = strength }));
+            }
+
+            await builder.BuildAsync();
+            return regression.GetParameters();
+        }
+
+        Vector<double> plain = await TrainOneStepAsync(regularize: false);
+        Vector<double> regularized = await TrainOneStepAsync(regularize: true);
+        for (int i = 0; i < p0.Length; i++)
+        {
+            Assert.NotEqual(p0[i], plain[i]);
+            Assert.Equal(-learningRate * strength * p0[i], regularized[i] - plain[i], 15);
+        }
     }
 
-    public static IEnumerable<object[]> InMemoryOnlyOptions()
+    [Fact(Timeout = 90000)]
+    public async Task Regularization_OnStreaming_IsRefusedWhenTheOptimizerCouldNotCarryIt()
     {
-        yield return new object[] { "ConfigureTrainingGroups" };
-        yield return new object[] { "ConfigureFederatedLearning" };
-        yield return new object[] { "ConfigureKnowledgeDistillation" };
-        yield return new object[] { "ConfigureDistillationStrategy" };
-        yield return new object[] { "ConfigureContinualLearning" };
-        yield return new object[] { "ConfigureFineTuning" };
-        yield return new object[] { "ConfigureSelfSupervisedLearning" };
-        yield return new object[] { "ConfigureCrossValidation" };
-        yield return new object[] { "ConfigureHyperparameterOptimizer" };
-        yield return new object[] { "ConfigureLoRA" };
-    }
-
-    [Theory(Timeout = 90000)]
-    [MemberData(nameof(InMemoryOnlyOptions))]
-    public async Task InMemoryOnlyTrainingOption_OnStreaming_IsRefusedInsteadOfDropped(string option)
-    {
-        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 351);
-        var optimizer = CreateAdam();
-        var model = CreateMlp(optimizer);
+        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 381);
+        var model = CreateMlp(CreateAdam());
         Vector<float> before = model.GetParameters();
 
-        IAiModelBuilder<float, Tensor<float>, Tensor<float>> builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+        // A network steps through the builder optimizer only when it is gradient-based; with this one it would
+        // step through its own optimizer, which never sees the penalty.
+        var refused = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureOptimizer(new NormalOptimizer<float, Tensor<float>, Tensor<float>>(null))
+                .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 4))
+                .ConfigureGpuAcceleration(CpuOnlyConfig())
+                .ConfigureRegularization(CreateL2(0.5))
+                .ConfigureStreamingTraining(StepOptions(1))
+                .BuildAsync());
+        Assert.Contains(nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureRegularization), refused.Message, StringComparison.Ordinal);
+        Assert.Contains("NormalOptimizer", refused.Message, StringComparison.Ordinal);
+        Assert.True(MaxAbsDiff(before, model.GetParameters()) == 0.0, "The refused build still trained the model.");
+    }
+
+    /// <summary>A row operation that does nothing; configuring it is what the data-preparation guard reacts to.</summary>
+    private sealed class PassThroughRowOperation : AiDotNet.Preprocessing.DataPreparation.IRowOperation<float>
+    {
+        public bool IsFitted { get; private set; }
+
+        public string Description => nameof(PassThroughRowOperation);
+
+        public (Matrix<float> X, Vector<float> y) FitResample(Matrix<float> X, Vector<float> y)
+        {
+            IsFitted = true;
+            return (X, y);
+        }
+
+        public (Tensor<float> X, Tensor<float> y) FitResampleTensor(Tensor<float> X, Tensor<float> y)
+        {
+            IsFitted = true;
+            return (X, y);
+        }
+    }
+
+    private static IAiModelBuilder<float, Tensor<float>, Tensor<float>> ConfigureWholeSetOption(
+        IAiModelBuilder<float, Tensor<float>, Tensor<float>> builder,
+        string option)
+    {
+        var searchSpace = new HyperparameterSearchSpace();
+        searchSpace.AddContinuous("learning_rate", 1e-4, 1e-2);
+        return option switch
+        {
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureTrainingGroups) =>
+                builder.ConfigureTrainingGroups(new[] { new[] { 0, 1 }, new[] { 2, 3 } }),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureFederatedLearning) =>
+                builder.ConfigureFederatedLearning(new FederatedLearningOptions()),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureContinualLearning) =>
+                builder.ConfigureContinualLearning(),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureSelfSupervisedLearning) =>
+                builder.ConfigureSelfSupervisedLearning(null, (pretrained, _, _) => Task.FromResult(pretrained)),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureCrossValidation) =>
+                builder.ConfigureCrossValidation(
+                    new KFoldCrossValidator<float, Tensor<float>, Tensor<float>>(new CrossValidationOptions { NumberOfFolds = 2 })),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureHyperparameterOptimizer) =>
+                builder.ConfigureHyperparameterOptimizer(
+                    new RandomSearchOptimizer<float, Tensor<float>, Tensor<float>>(maximize: false, seed: 1), searchSpace, nTrials: 1),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureDataPreparation) =>
+                builder.ConfigureDataPreparation(preparation => preparation.Add(new PassThroughRowOperation())),
+            nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureDataSplitter) =>
+                builder.ConfigureDataSplitter(new AiDotNet.Preprocessing.DataPreparation.Splitting.Basic.TrainTestSplitter<float>()),
+            _ => throw new ArgumentOutOfRangeException(nameof(option), option, "Unknown option."),
+        };
+    }
+
+    public static IEnumerable<object[]> WholeSetOptions()
+    {
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureTrainingGroups) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureFederatedLearning) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureContinualLearning) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureSelfSupervisedLearning) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureCrossValidation) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureHyperparameterOptimizer) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureDataPreparation) };
+        yield return new object[] { nameof(IAiModelBuilder<float, Tensor<float>, Tensor<float>>.ConfigureDataSplitter) };
+    }
+
+    private IAiModelBuilder<float, Tensor<float>, Tensor<float>> StreamingBuilderFor(FeedForwardNeuralNetwork<float> model, AdamOptimizer<float, Tensor<float>, Tensor<float>> optimizer)
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 351);
+        return new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
             .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 4))
             .ConfigureGpuAcceleration(CpuOnlyConfig())
             .ConfigureStreamingTraining(StepOptions(2));
+    }
 
-        var searchSpace = new HyperparameterSearchSpace();
-        searchSpace.AddContinuous("learning_rate", 1e-4, 1e-2);
-        builder = option switch
-        {
-            "ConfigureTrainingGroups" => builder.ConfigureTrainingGroups(new[] { new[] { 0, 1 }, new[] { 2, 3 } }),
-            "ConfigureFederatedLearning" => builder.ConfigureFederatedLearning(new FederatedLearningOptions()),
-            "ConfigureKnowledgeDistillation" => builder.ConfigureKnowledgeDistillation(),
-            "ConfigureDistillationStrategy" => builder.ConfigureDistillationStrategy(
-                DistillationStrategyFactory<float>.CreateResponseBasedStrategy(2.0, 0.0)),
-            "ConfigureContinualLearning" => builder.ConfigureContinualLearning(),
-            "ConfigureFineTuning" => builder.ConfigureFineTuning(
-                new FineTuningConfiguration<float, Tensor<float>, Tensor<float>> { Enabled = true }),
-            "ConfigureSelfSupervisedLearning" => builder.ConfigureSelfSupervisedLearning(
-                null, (pretrained, _, _) => Task.FromResult(pretrained)),
-            "ConfigureCrossValidation" => builder.ConfigureCrossValidation(
-                new KFoldCrossValidator<float, Tensor<float>, Tensor<float>>(new CrossValidationOptions { NumberOfFolds = 2 })),
-            "ConfigureHyperparameterOptimizer" => builder.ConfigureHyperparameterOptimizer(
-                new RandomSearchOptimizer<float, Tensor<float>, Tensor<float>>(maximize: false, seed: 1), searchSpace, nTrials: 1),
-            "ConfigureLoRA" => builder.ConfigureLoRA(
-                new AiDotNet.LoRA.DefaultLoRAConfiguration<float>(rank: 4, alpha: 4, freezeBaseLayer: true)),
-            _ => throw new ArgumentOutOfRangeException(nameof(option), option, "Unknown option."),
-        };
+    [Theory(Timeout = 90000)]
+    [MemberData(nameof(WholeSetOptions))]
+    public async Task OptionThatNeedsTheWholeTrainingSet_OnStreaming_IsRefusedInsteadOfDropped(string option)
+    {
+        var optimizer = CreateAdam();
+        var model = CreateMlp(optimizer);
+        Vector<float> before = model.GetParameters();
+
+        var builder = ConfigureWholeSetOption(StreamingBuilderFor(model, optimizer), option);
 
         var refused = await Assert.ThrowsAsync<NotSupportedException>(() => builder.BuildAsync());
-        Assert.Contains(option, refused.Message, StringComparison.Ordinal);
+        Assert.Contains(option + ":", refused.Message, StringComparison.Ordinal);
         Assert.True(MaxAbsDiff(before, model.GetParameters()) == 0.0, "The refused build still trained the model.");
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task OptionsThatNeedTheWholeTrainingSet_OnStreaming_AreAllNamedInOneError()
+    {
+        var optimizer = CreateAdam();
+        var model = CreateMlp(optimizer);
+        string[] options = WholeSetOptions().Select(row => (string)row[0]).ToArray();
+
+        var builder = StreamingBuilderFor(model, optimizer);
+        foreach (string option in options)
+        {
+            builder = ConfigureWholeSetOption(builder, option);
+        }
+
+        var refused = await Assert.ThrowsAsync<NotSupportedException>(() => builder.BuildAsync());
+        foreach (string option in options)
+        {
+            Assert.Contains(option + ":", refused.Message, StringComparison.Ordinal);
+        }
+
+        // Each option carries its own reason: no two lines of the message are the same after the option name.
+        string[] reasons = refused.Message
+            .Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.StartsWith(" - ", StringComparison.Ordinal))
+            .Select(line => line.Substring(line.IndexOf(':') + 1))
+            .ToArray();
+        Assert.Equal(options.Length, reasons.Length);
+        Assert.Equal(reasons.Length, reasons.Distinct(StringComparer.Ordinal).Count());
     }
 }
