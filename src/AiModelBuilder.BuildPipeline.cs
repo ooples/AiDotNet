@@ -2525,12 +2525,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distBackend.Initialize();
         }
 
-        if (distBackend is { WorldSize: > 1 } && _model is not NeuralNetworks.NeuralNetworkBase<T>)
-        {
-            throw new NotSupportedException(
-                "Distributed streaming training currently supports only NeuralNetworkBase models. " +
-                "Use a neural network model or disable ConfigureDistributedTraining for this model.");
-        }
+        // Neural networks synchronize on the tape path (DistributedTapeCoordinator); every other model that exposes
+        // its gradient and parameters synchronizes through ExecuteStreamingDistributedGradientStep.
+        EnsureStreamingModelSupportsDistributedTraining(distBackend);
+        bool gradientModelDistributed = IsStreamingGradientModelDistributed(distBackend);
 
         IStreamingDataLoader<T, TInput, TOutput> rawLoader =
             (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>)?.InnerLoader
@@ -2591,6 +2589,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 distBackend,
                 distCoordinator,
                 cancellationToken);
+
+            if (gradientModelDistributed && distBackend is not null)
+            {
+                SynchronizeStreamingGradientModelInitialParameters(distBackend);
+            }
 
             // Start a training-monitor session for this streaming run (the streaming path did not
             // previously open one, so the configured monitor never received per-epoch metrics).
@@ -2930,6 +2933,27 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                                 }
                             }
                         }
+                    }
+                    else if (gradientModelDistributed && distBackend is not null && distLoader is not null)
+                    {
+                        // Distributed gradient model: every rank applies the mean gradient of the whole global
+                        // batch once per step, so N ranks train as one process would on the same global batch.
+                        T stepLoss = ExecuteStreamingDistributedGradientStep(
+                            processedInputs,
+                            processedOutputs,
+                            lossFunction,
+                            distBackend,
+                            distLoader.LastBatchGlobalSampleCount);
+                        epochLoss = numOps.Add(epochLoss, stepLoss);
+                        epochBatches++;
+                    }
+                    else if (distBackend is { WorldSize: > 1 })
+                    {
+                        // Reaching the per-sample branch below with several ranks would train each rank on its own
+                        // slice with no exchange and let the ranks drift apart.
+                        throw new InvalidOperationException(
+                            $"Distributed streaming training has no synchronized step for {_model.GetType().Name} with " +
+                            $"{typeof(TInput).Name} inputs and {typeof(TOutput).Name} targets.");
                     }
                     else
                     {
