@@ -175,7 +175,8 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// - It makes the process of selecting categories differentiable
     /// - It helps prevent the network from getting stuck in suboptimal solutions
     /// 
-    /// The formula used is: -log(-log(u)) * temperature, where u is a uniform random value between 0 and 1.
+    /// The formula used is: -log(-log(u)), where u is a uniform random value between 0 and 1. The temperature is
+    /// applied afterwards, when the noisy values are divided by it inside the softmax.
     /// </para>
     /// </remarks>
     private Vector<T> SampleGumbel(int size)
@@ -185,7 +186,9 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
             return new Vector<T>(0);
         }
 
-        return Engine.TensorMultiplyScalar(StandardGumbel(new[] { size }), _temperature).ToVector();
+        // y = softmax((x + g) / temperature) with g standard Gumbel noise (Jang et al., 2017, equation 1):
+        // the temperature divides the noisy logits once, in Softmax below, and does not scale the noise
+        return StandardGumbel(new[] { size }).ToVector();
     }
 
     /// <summary>
