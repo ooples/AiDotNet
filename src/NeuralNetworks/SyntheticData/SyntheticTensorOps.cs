@@ -539,4 +539,172 @@ internal static class SyntheticTensorOps<T>
 
         return e;
     }
+
+    /// <summary>
+    /// <paramref name="count"/> standard normal draws by the Box-Muller cosine branch, two uniforms per draw taken
+    /// from <paramref name="random"/> in order: <c>sqrt(-2 ln u1) * cos(2 pi u2)</c>. <paramref name="guard"/> says
+    /// how the first uniform is kept away from zero.
+    /// </summary>
+    internal static double[] StandardNormalDraws(int count, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
+    {
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        var draws = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            double first = random.NextDouble();
+            double u2 = random.NextDouble();
+            double u1 = guard switch
+            {
+                BoxMullerGuard.Complement => 1.0 - first,
+                BoxMullerGuard.FlooredComplement => Math.Max(1.0 - first, 1e-10),
+                _ => Math.Max(1e-10, first),
+            };
+            draws[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        return draws;
+    }
+
+    /// <summary>
+    /// A vector of <paramref name="length"/> standard normal values; see <see cref="StandardNormalDraws"/>.
+    /// </summary>
+    internal static Vector<T> StandardNormalVector(int length, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
+        => length == 0
+            ? new Vector<T>(0)
+            : new Vector<T>(new Tensor<double>(StandardNormalDraws(length, random, guard), new[] { length }).Cast<T>().ToArray());
+
+    /// <summary>
+    /// A tensor of standard normal values, filled in row-major order; see <see cref="StandardNormalDraws"/>.
+    /// </summary>
+    internal static Tensor<T> StandardNormalTensor(int[] shape, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
+    {
+        int count = ElementCount(shape);
+        return count == 0
+            ? new Tensor<T>(shape)
+            : new Tensor<double>(StandardNormalDraws(count, random, guard), shape).Cast<T>();
+    }
+
+    /// <summary>
+    /// Overwrites every element of <paramref name="target"/> with a standard normal value, in row-major order; see
+    /// <see cref="StandardNormalDraws"/>.
+    /// </summary>
+    internal static void FillStandardNormal(Tensor<T> target, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
+    {
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0) return;
+        new Tensor<double>(StandardNormalDraws(target.Length, random, guard), new[] { target.Length }).Cast<T>()
+            .AsSpan().CopyTo(target.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// A tensor of standard normal values that uses both Box-Muller outputs: each pair of uniforms
+    /// <c>(u1, u2)</c> from <paramref name="random"/> fills two consecutive elements with
+    /// <c>r cos(theta)</c> and <c>r sin(theta)</c>, <c>r = sqrt(-2 ln(1 - u1))</c>, <c>theta = 2 pi u2</c>.
+    /// An odd element count drops the last sine.
+    /// </summary>
+    internal static Tensor<T> StandardNormalPairTensor(int[] shape, Random random)
+    {
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        int count = ElementCount(shape);
+        if (count == 0) return new Tensor<T>(shape);
+
+        var draws = new double[count];
+        for (int i = 0; i < count; i += 2)
+        {
+            double u1 = 1.0 - random.NextDouble();
+            double u2 = random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            draws[i] = r * Math.Cos(theta);
+            if (i + 1 < count)
+                draws[i + 1] = r * Math.Sin(theta);
+        }
+
+        return new Tensor<double>(draws, shape).Cast<T>();
+    }
+
+    /// <summary>
+    /// A tensor of uniform draws from [0, 1), one <c>NextDouble</c> per element in row-major order.
+    /// </summary>
+    internal static Tensor<T> UniformTensor(int[] shape, Random random)
+    {
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        int count = ElementCount(shape);
+        if (count == 0) return new Tensor<T>(shape);
+
+        var draws = new double[count];
+        for (int i = 0; i < count; i++)
+            draws[i] = random.NextDouble();
+        return new Tensor<double>(draws, shape).Cast<T>();
+    }
+
+    /// <summary>
+    /// The sinusoidal timestep embedding of diffusion models (Ho et al. 2020): with <c>half = dimension / 2</c>
+    /// and <c>freq_i = exp(-ln(10000) * i / half)</c>, element <c>i</c> is <c>sin(timestep * freq_i)</c> and
+    /// element <c>i + half</c> is <c>cos(timestep * freq_i)</c>. An odd dimension leaves its last element 0.
+    /// </summary>
+    internal static Vector<T> SinusoidalTimestepEmbedding(int timestep, int dimension)
+    {
+        if (dimension == 0) return new Vector<T>(0);
+
+        var values = new double[dimension];
+        int half = dimension / 2;
+        for (int i = 0; i < half; i++)
+        {
+            double freq = Math.Exp(-Math.Log(10000.0) * i / half);
+            double angle = timestep * freq;
+            values[i] = Math.Sin(angle);
+            if (i + half < dimension) values[i + half] = Math.Cos(angle);
+        }
+
+        return new Vector<T>(new Tensor<double>(values, new[] { dimension }).Cast<T>().ToArray());
+    }
+
+    /// <summary>
+    /// Copies the column metadata for a data matrix, numbering the columns, computing the statistics of the
+    /// numerical ones with <paramref name="computeStatistics"/>, and listing the categories of a categorical column
+    /// that declares none: the distinct values of the column, written invariantly and sorted ordinally.
+    /// </summary>
+    internal static List<ColumnMetadata> PrepareColumns(
+        Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, Action<Matrix<T>, int, ColumnMetadata> computeStatistics)
+    {
+        var prepared = new List<ColumnMetadata>(columns.Count);
+        for (int col = 0; col < columns.Count; col++)
+        {
+            var meta = columns[col].Clone();
+            meta.ColumnIndex = col;
+            if (meta.IsNumerical)
+                computeStatistics(data, col, meta);
+            else if (meta.IsCategorical && meta.NumCategories == 0)
+                meta.Categories = DistinctValueLabels(data, col);
+            prepared.Add(meta);
+        }
+
+        return prepared;
+    }
+
+    /// <summary>
+    /// The distinct values of a column as invariant-culture strings, sorted ordinally.
+    /// </summary>
+    internal static IReadOnlyList<string> DistinctValueLabels(Matrix<T> data, int column)
+    {
+        var labels = new HashSet<string>();
+        if (data.Rows > 0)
+        {
+            double[] values = Tensor<T>.FromVector(data.GetColumn(column)).Cast<double>().ToArray();
+            foreach (double value in values)
+                labels.Add(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return labels.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
+    }
+
+    private static int ElementCount(int[] shape)
+    {
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
+        int count = 1;
+        foreach (int dimension in shape)
+            count = checked(count * dimension);
+        return count;
+    }
 }
