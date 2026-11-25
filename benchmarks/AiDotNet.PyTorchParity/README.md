@@ -50,6 +50,50 @@ python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models all --devices cu
 
 `run_matrix.py --classical` runs `ClassicalBench.cs` against `pytorch/classical.py` (scikit-learn, XGBoost and LightGBM) for nine launches, alternating which side goes first. Both sides fit the same 20,000 x 20 CSV, scored on 5,000 held-out rows. Each launch fits every row `--classical-repeats` times (default 3) and reports the median. The summary gives the median and IQR of those per-launch medians, and the fastest Python library's fit time divided by AiDotNet's. The all-core rows use every core on both sides and the `_1job` rows use one thread. Classical ML runs on the CPU only.
 
+### A-6 CPU results (2026-11-25)
+
+Intel Core i7-13850HX, 8 threads, PyTorch 2.14.1 with `torch.compile`. Nine launches each, unlocked laptop (no CI job during any launch). Most rows carry the `unstable` flag: AiDotNet's slowest launch was over 1.5x its fastest on those rows, while PyTorch's stayed within a few percent. faster-rcnn's `parameters-differ` is the RPN objectness difference above. The CUDA table waits for a locked-clock run.
+
+**CPU**: milliseconds per training update or inference call, median (interquartile range) over 9 launches. The ratio is PyTorch time ÷ AiDotNet time (IQR of the per-launch ratios); above 1 means AiDotNet took less time. PyTorch is the fastest configuration for each row. ⚑ marks a row with a flag in summary.csv.
+
+| Model | Operation | Batch | AiDotNet ms | PyTorch ms | PyTorch ÷ AiDotNet | Parameters (AiDotNet / PyTorch) | Loss first → last (AiDotNet; PyTorch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| ddpm | train | 4 | 296 (231–304) | 486 (475–505) torch-compile-fused | 1.64 (1.58–2.13) ⚑ | 30,734,851 / 30,734,851 | 0.9907 → 0.2891; 0.9812 → 0.4611 |
+| ddpm | inference | 1 | 35.6 (24.9–39.1) | 41.9 (41.6–43.7) torch-compile | 1.18 (1.12–1.69) ⚑ | 30,734,851 / 30,734,851 |  |
+| ddpm | inference | 4 | 88.5 (57.5–93.1) | 141 (138–153) torch-compile | 1.60 (1.55–2.36) ⚑ | 30,734,851 / 30,734,851 |  |
+| decoder-lm | train | 64 | 63 (60.3–84) | 60.5 (59.8–61.5) torch-compile-fused | 0.96 (0.73–1.00) ⚑ | 526,976 / 526,976 | 6.383 → 0.0559; 6.358 → 0.105 |
+| decoder-lm | inference | 1 | 0.558 (0.526–1.08) | 0.716 (0.579–0.749) torch-compile | 1.28 (0.67–1.34) ⚑ | 526,976 / 526,976 |  |
+| decoder-lm | inference | 8 | 2.09 (2.01–3.7) | 2.58 (2.49–2.65) torch-compile | 1.24 (0.71–1.24) ⚑ | 526,976 / 526,976 |  |
+| decoder-lm | inference | 16 | 4 (3.87–7.09) | 4.49 (4.31–4.63) torch-compile | 1.12 (0.65–1.16) ⚑ | 526,976 / 526,976 |  |
+| whisper-tiny | train | 4 | 1,840 (1,232–1,986) | 2,055 (2,038–2,065) torch-compile-fused | 1.12 (1.04–1.65) ⚑ | 37,184,640 / 37,184,640 | 10.92 → 7.305; 10.97 → 7.367 |
+| whisper-tiny | inference | 1 | 118 (112–185) | 168 (165–172) torch-compile | 1.42 (0.94–1.52) ⚑ | 37,184,640 / 37,184,640 |  |
+| whisper-tiny | inference | 4 | 660 (451–721) | 649 (643–659) torch-compile | 0.98 (0.87–1.45) ⚑ | 37,184,640 / 37,184,640 |  |
+| wav2vec2-base | train | 4 | 1,488 (1,239–1,596) | 1,352 (1,329–1,365) torch-compile-fused | 0.91 (0.84–1.09) | 90,197,410 / 90,197,410 | 284.5 → 85.33; 258.9 → 86.4 |
+| wav2vec2-base | inference | 1 | 195 (140–221) | 123 (122–130) torch-compile-fused | 0.63 (0.56–0.89) ⚑ | 90,197,410 / 90,197,410 |  |
+| wav2vec2-base | inference | 4 | 614 (500–730) | 415 (406–416) torch-compile-fused | 0.68 (0.57–0.80) | 90,197,410 / 90,197,410 |  |
+| hifigan-v1 | train | 1 | 2,276 (1,580–2,363) | 2,144 (2,120–2,175) torch-compile | 0.94 (0.93–1.36) ⚑ | 84,660,721 / 84,660,721 | 133.2 → 45.99; 339.6 → 55.65 |
+| hifigan-v1 | inference | 1 | 387 (363–596) | 1,017 (975–1,036) torch-compile-fused | 2.63 (1.62–2.85) ⚑ | 84,660,721 / 84,660,721 |  |
+| faster-rcnn | train | 1 | 522 (453–536) | 1,162 (1,155–1,206) torch-compile | 2.23 (2.21–2.85) ⚑ | 41,809,177 / 41,808,406 | 6.393 → 0.903; 5.42 → 1.804 |
+| faster-rcnn | inference | 1 | 209 (143–213) | 355 (343–376) torch-compile | 1.70 (1.67–2.47) ⚑ | 41,809,177 / 41,808,406 |  |
+| gcn | train | 64 | 1.28 (1.26–1.34) | 1.87 (1.65–1.89) torch-compile-fused | 1.46 (1.28–1.50) | 5,898 / 5,898 | 2.313 → 2.195; 2.306 → 2.227 |
+| gcn | inference | 1 | 0.019 (0.019–0.02) | 0.062 (0.062–0.14) torch-compile | 3.26 (3.26–7.30) ⚑ | 5,898 / 5,898 |  |
+| gcn | inference | 8 | 0.067 (0.065–0.071) | 0.084 (0.083–0.161) torch-compile-fused | 1.25 (1.24–2.27) ⚑ | 5,898 / 5,898 |  |
+| gcn | inference | 16 | 0.128 (0.075–0.13) | 0.178 (0.101–0.181) torch-compile | 1.39 (1.33–1.44) ⚑ | 5,898 / 5,898 |  |
+| gat | train | 1 | 16.4 (15.9–16.8) | 749 (746–766) torch-compile | 45.54 (44.38–47.11) | 92,373 / 92,373 | 2.148 → 1.922; 1.955 → 1.88 |
+| gat | inference | 1 | 3.4 (3.32–3.46) | 47.7 (47.3–50.1) torch-compile-fused | 14.04 (13.77–14.87) | 92,373 / 92,373 |  |
+
+**CPU, classical ML**: fit and predict milliseconds, median (interquartile range) over 9 launches of each launch's median. The ratio is the fastest Python library's fit time ÷ AiDotNet's; above 1 means AiDotNet fit faster. Quality is held-out accuracy, R² or k-means inertia. ⚑ marks a row with a flag in classical_summary.csv.
+
+| Row | AiDotNet fit | scikit-learn fit | XGBoost fit | LightGBM fit | Fastest ÷ AiDotNet | AiDotNet predict | scikit-learn predict | Quality (AiDotNet / scikit-learn / XGBoost / LightGBM) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| random_forest | 41,471 (41,003–41,548) | 4,183 (4,154–4,195) | – | – | 0.10 (scikit-learn) | 70.2 (69.7–71) | 53.2 (52.5–53.4) | accuracy: 0.8176 / 0.816 / – / – |
+| random_forest_all_cores | 14,828 (14,700–15,162) | 384 (383–392) | – | – | 0.03 (scikit-learn) | 24.6 (24.5–25.7) | 32.1 (31.3–32.4) | accuracy: 0.8176 / 0.816 / – / – |
+| hist_gradient_boosting | 286 (271–318) | 245 (235–255) | 126 (124–129) | 129 (128–132) | 0.44 (xgboost) | 5.22 (4.6–6.51) | 2.83 (2.73–2.84) | accuracy: 0.8252 / 0.8246 / 0.8274 / 0.8316 |
+| hist_gradient_boosting_1job | 289 (283–292) | 331 (330–334) | 424 (422–427) | 216 (213–219) | 0.75 (lightgbm) | 10.9 (10.6–11.2) | 13.3 (13.2–13.6) | accuracy: 0.8252 / 0.8246 / 0.8274 / 0.8316 |
+| logistic_regression | 3.55 (3.35–3.65) | 4.4 (4.15–4.64) | – | – | 1.24 (scikit-learn) | 0.173 (0.172–0.176) | 0.222 (0.214–0.226) | accuracy: 0.642 / 0.642 / – / – |
+| ridge | 2.8 (2.8–2.91) | 2.45 (2.37–2.47) | – | – | 0.87 (scikit-learn) ⚑ | 0.0872 (0.0849–0.0922) | 0.155 (0.145–0.158) | r2: 0.997 / 0.997 / – / – |
+| kmeans | 660 (633–668) | 60.2 (59.5–63.2) | – | – | 0.09 (scikit-learn) | – | – | inertia: 3.502e+05 / 3.502e+05 / – / – |
+
 By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash.
 
 ### Compare to the archived runs
