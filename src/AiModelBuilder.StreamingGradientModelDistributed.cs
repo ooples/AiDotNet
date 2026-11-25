@@ -18,11 +18,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para>
     /// Neural networks synchronize on the tape path through
     /// <see cref="DistributedTraining.DistributedTapeCoordinator{T}"/>. Every other model that exposes its gradient
-    /// and its parameters is synchronized by <see cref="ExecuteStreamingDistributedGradientStep"/>.
+    /// and its parameters is synchronized by <see cref="AccumulateStreamingGradientModelStep"/>.
     /// </para>
     /// <para>
     /// A backend with one rank is not a distributed run: there is no peer to exchange with, so the model takes the
-    /// same per-sample updates it takes with no backend configured and ends on the same parameters.
+    /// step it takes with no backend configured and ends on the same parameters.
     /// </para>
     /// </remarks>
     private bool IsStreamingGradientModelDistributed(DistributedTraining.ICommunicationBackend<T>? distBackend)
@@ -114,61 +114,204 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Runs one data-parallel step of a gradient model: the update every rank applies is the mean gradient over
-    /// the whole global batch, as if one process had trained on all of it.
+    /// What a gradient model has accumulated toward its next update: the gradient and loss sums of the
+    /// micro-batches seen since the last update, and how many samples they cover.
     /// </summary>
-    /// <param name="inputs">This rank's slice of the global batch; empty on a rank the tail step left idle.</param>
+    private sealed class StreamingGradientStepState
+    {
+        public StreamingGradientStepState(T zero)
+        {
+            LossSum = zero;
+        }
+
+        public Vector<T>? GradientSum { get; set; }
+
+        public T LossSum { get; set; }
+
+        public long SampleCount { get; set; }
+
+        public int MicroBatches { get; set; }
+    }
+
+    /// <summary>
+    /// Adds one loader batch to a gradient model's pending update and, once
+    /// <paramref name="accumulationSteps"/> batches are in, applies the update.
+    /// </summary>
+    /// <param name="state">The pending update.</param>
+    /// <param name="inputs">This process's samples of the batch; empty on a rank the tail step left idle.</param>
     /// <param name="outputs">The targets matching <paramref name="inputs"/>.</param>
     /// <param name="lossFunction">The loss whose gradient and value are computed.</param>
-    /// <param name="distBackend">The communication backend shared by the ranks.</param>
-    /// <param name="globalSampleCount">The number of samples in the global batch across all ranks.</param>
-    /// <returns>The mean loss over the global batch, measured before the update.</returns>
+    /// <param name="distBackend">The backend shared by the ranks, or <c>null</c> for one process.</param>
+    /// <param name="globalSampleCount">The number of samples in the batch across all ranks.</param>
+    /// <param name="accumulationSteps">How many batches make one update.</param>
+    /// <param name="stepLoss">The mean loss over the samples of the update, measured before it.</param>
+    /// <returns><c>true</c> when the update was applied; <c>false</c> while batches are still accumulating.</returns>
     /// <remarks>
-    /// Each rank sums its per-sample gradients, the sums are all-reduced, and the total is divided by the global
-    /// sample count. Ranks with different slice sizes are therefore weighted by their sample counts, and an idle
-    /// rank contributes zeros but still applies the same update.
+    /// The update is the mean gradient over every sample of the batch, taken at the parameters the step started
+    /// from. That is the same rule for one process and for several ranks: the per-sample gradients are summed in
+    /// global sample order and the total is divided by the global sample count, so ranks with different slice
+    /// sizes are weighted by their sample counts and an idle rank adds nothing but still applies the same update.
+    /// N ranks therefore take, bit for bit, the step one process takes on the same batch.
     /// </remarks>
-    private T ExecuteStreamingDistributedGradientStep(
+    private bool AccumulateStreamingGradientModelStep(
+        StreamingGradientStepState state,
         TInput[] inputs,
         TOutput[] outputs,
         ILossFunction<T> lossFunction,
-        DistributedTraining.ICommunicationBackend<T> distBackend,
-        long globalSampleCount)
+        DistributedTraining.ICommunicationBackend<T>? distBackend,
+        long globalSampleCount,
+        int accumulationSteps,
+        out T stepLoss)
     {
         var model = _model ?? throw new InvalidOperationException("Streaming training requires a configured model.");
         var gradientModel = InterfaceGuard.GradientComputable(model);
         var numOps = MathHelper.GetNumericOperations<T>();
-        int parameterCount = InterfaceGuard.Parameterizable(model).GetParameters().Length;
 
-        var gradientSum = new Vector<T>(parameterCount);
-        T lossSum = numOps.Zero;
-        for (int i = 0; i < inputs.Length; i++)
+        int parameterCount = model is IParameterizable<T, TInput, TOutput> parameterizable
+            ? parameterizable.GetParameters().Length
+            : -1;
+
+        // Loss and gradient of one local sample, taken at the parameters the step started from (nothing is
+        // applied before the whole update is).
+        (Vector<T> Gradient, T Loss) Evaluate(int i)
         {
-            // Loss and gradient are both taken at the parameters the step started from.
-            lossSum = AddLossScalars(lossSum, SampleLoss(model, lossFunction, inputs[i], outputs[i]));
-            Vector<T> sampleGradient = gradientModel.ComputeGradients(inputs[i], outputs[i], lossFunction);
-            if (sampleGradient.Length != parameterCount)
+            T loss = SampleLoss(model, lossFunction, inputs[i], outputs[i]);
+            Vector<T> gradient = gradientModel.ComputeGradients(inputs[i], outputs[i], lossFunction);
+            if (parameterCount < 0)
             {
-                throw new InvalidOperationException(
-                    $"{model.GetType().Name}.ComputeGradients returned {sampleGradient.Length} values for a model with " +
-                    $"{parameterCount} parameters; distributed streaming training needs one gradient per parameter.");
+                parameterCount = gradient.Length;
             }
 
-            gradientSum = gradientSum.Add(sampleGradient);
+            if (gradient.Length != parameterCount)
+            {
+                throw new InvalidOperationException(
+                    $"{model.GetType().Name}.ComputeGradients returned {gradient.Length} values where " +
+                    $"{parameterCount} were expected; streaming training needs one gradient per parameter.");
+            }
+
+            return (gradient, loss);
         }
 
-        // One collective carries the gradient sum and the loss sum.
-        Vector<T> reduced = Vector<T>.Concatenate(
-            new List<Vector<T>> { gradientSum, new Vector<T>(new[] { lossSum }) });
-        distBackend.AllReduce(reduced, DistributedTraining.ReductionOperation.Sum);
+        // The running sums continue from the batches already accumulated, and every sample is added to them one
+        // at a time in global sample order. One process does exactly that, holding one gradient at a time. Several
+        // ranks do the same by passing the running sums along in rank order (the loader hands rank r the r-th
+        // contiguous slice of the global batch): each rank adds its own samples and broadcasts the result to the
+        // others. The additions and their order are then the ones a single process performs, so the result is the
+        // same bit for bit, which a sum of per-rank sums is not. The price is one broadcast per rank and step in
+        // place of one all-reduce, and each rank keeping its slice's per-sample gradients until its turn (they
+        // are computed up front so the ranks work in parallel).
+        Vector<T>? gradientSum = state.GradientSum;
+        T lossSum = state.LossSum;
+        if (distBackend is { WorldSize: > 1 })
+        {
+            var evaluated = new (Vector<T> Gradient, T Loss)[inputs.Length];
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                evaluated[i] = Evaluate(i);
+            }
 
-        // Every rank holds the same parameters and the same reduced sum, so the penalty and the update are the
-        // same on every rank.
-        T sampleCount = numOps.FromDouble(globalSampleCount);
-        Vector<T> meanGradient = RegularizeStreamingGradient(reduced.GetSubVector(0, parameterCount).Divide(sampleCount));
-        gradientModel.ApplyGradients(meanGradient, numOps.FromDouble(ResolveStreamingGradientModelLearningRate()));
+            if (parameterCount < 0)
+            {
+                throw new InvalidOperationException(
+                    $"{model.GetType().Name} was given an empty batch and does not expose its parameters, so the " +
+                    "size of its gradient is unknown.");
+            }
+
+            Vector<T> runningSum = gradientSum ?? new Vector<T>(parameterCount);
+            for (int turn = 0; turn < distBackend.WorldSize; turn++)
+            {
+                if (turn == distBackend.Rank)
+                {
+                    foreach (var (gradient, loss) in evaluated)
+                    {
+                        runningSum = runningSum.Add(gradient);
+                        lossSum = AddLossScalars(lossSum, loss);
+                    }
+                }
+
+                (runningSum, lossSum) = BroadcastRunningSums(distBackend, turn, runningSum, lossSum);
+            }
+
+            gradientSum = runningSum;
+        }
+        else
+        {
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                var (gradient, loss) = Evaluate(i);
+                gradientSum = (gradientSum ?? new Vector<T>(parameterCount)).Add(gradient);
+                lossSum = AddLossScalars(lossSum, loss);
+            }
+        }
+
+        if (gradientSum is null)
+        {
+            // An empty batch with nothing accumulated before it: there is nothing to add and nothing to apply.
+            stepLoss = numOps.Zero;
+            return false;
+        }
+
+        state.GradientSum = gradientSum;
+        state.LossSum = lossSum;
+        state.SampleCount += globalSampleCount;
+        state.MicroBatches++;
+        if (state.MicroBatches < accumulationSteps)
+        {
+            stepLoss = numOps.Zero;
+            return false;
+        }
+
+        stepLoss = ApplyAccumulatedStreamingGradientModelStep(state);
+        return true;
+    }
+
+    /// <summary>
+    /// Hands the running gradient and loss sums from the rank whose turn it is to every other rank, in one
+    /// collective that carries both.
+    /// </summary>
+    private static (Vector<T> GradientSum, T LossSum) BroadcastRunningSums(
+        DistributedTraining.ICommunicationBackend<T> backend,
+        int root,
+        Vector<T> gradientSum,
+        T lossSum)
+    {
+        int parameterCount = gradientSum.Length;
+        Vector<T> running = backend.Broadcast(
+            Vector<T>.Concatenate(new List<Vector<T>> { gradientSum, new Vector<T>(new[] { lossSum }) }),
+            root);
+        return (running.GetSubVector(0, parameterCount), running[parameterCount]);
+    }
+
+    /// <summary>
+    /// Applies a gradient model's pending update, the mean gradient over every accumulated sample, and clears it.
+    /// Also used to flush the micro-batches left over at the end of an epoch.
+    /// </summary>
+    /// <returns>The mean loss over the accumulated samples.</returns>
+    private T ApplyAccumulatedStreamingGradientModelStep(StreamingGradientStepState state)
+    {
+        var model = _model ?? throw new InvalidOperationException("Streaming training requires a configured model.");
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Vector<T> gradientSum = state.GradientSum
+            ?? throw new InvalidOperationException("There is no accumulated gradient to apply.");
+        T lossSum = state.LossSum;
+        long accumulatedSamples = state.SampleCount;
+        state.GradientSum = null;
+        state.LossSum = numOps.Zero;
+        state.SampleCount = 0;
+        state.MicroBatches = 0;
+        if (accumulatedSamples <= 0)
+        {
+            return numOps.Zero;
+        }
+
+        // Every rank holds the same parameters and the same sums, so the penalty and the update are the same on
+        // every rank.
+        T sampleCount = numOps.FromDouble(accumulatedSamples);
+        Vector<T> meanGradient = RegularizeStreamingGradient(gradientSum.Divide(sampleCount));
+        InterfaceGuard.GradientComputable(model).ApplyGradients(
+            meanGradient, numOps.FromDouble(ResolveStreamingGradientModelLearningRate()));
         EndStreamingGradientModelBatch();
-        return numOps.Divide(reduced[parameterCount], sampleCount);
+        return numOps.Divide(lossSum, sampleCount);
     }
 
     /// <summary>
@@ -199,26 +342,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Refuses gradient accumulation for a model the streaming loop updates sample by sample.
-    /// </summary>
-    /// <exception cref="NotSupportedException">
-    /// <c>GradientAccumulationSteps</c> is above 1 and the model is not a neural network.
-    /// </exception>
-    private void EnsureStreamingGradientAccumulationIsHonoured()
-    {
-        int accumulationSteps = _streamingTrainingOptions?.GradientAccumulationSteps ?? 1;
-        if (accumulationSteps > 1 && _model is not null && _model is not INeuralNetwork<T>)
-        {
-            throw new NotSupportedException(
-                $"GradientAccumulationSteps = {accumulationSteps} is not supported for {_model.GetType().Name} on the " +
-                "streaming data-loader path: only neural networks accumulate micro-batches there, and the run " +
-                "would stop after fewer samples than the step budget asks for. Set GradientAccumulationSteps to 1.");
-        }
-    }
-
-    /// <summary>
-    /// Ends a loader batch for a model the streaming loop updates itself: a learning-rate scheduler stepping per
-    /// batch advances here, so the next update uses the next scheduled rate.
+    /// Ends an update of a model the streaming loop updates itself: a learning-rate scheduler stepping per batch
+    /// advances here, so the next update uses the next scheduled rate.
     /// </summary>
     /// <remarks>
     /// A neural network ends its batches inside its own optimizer step, and distillation trains at a fixed rate.

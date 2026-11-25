@@ -124,7 +124,8 @@ public sealed class StreamingDistributedGradientModelTests
         int seed,
         Vector<double>[]? rankInitialParameters = null,
         Func<IAiModelBuilder<double, Matrix<double>, Vector<double>>, IAiModelBuilder<double, Matrix<double>, Vector<double>>>? configure = null,
-        bool resume = false)
+        bool resume = false,
+        int accumulationSteps = 1)
     {
         var backends = CreateBackends(worldSize);
         try
@@ -148,6 +149,7 @@ public sealed class StreamingDistributedGradientModelTests
                         Seed = seed,
                         MaxSteps = maxSteps,
                         ResumeFromLatestCheckpoint = resume,
+                        GradientAccumulationSteps = accumulationSteps,
                     });
                 await (configure is null ? builder : configure(builder)).BuildAsync();
 
@@ -293,10 +295,9 @@ public sealed class StreamingDistributedGradientModelTests
         }
     }
 
-    // The two tests below used a one-rank backend run as their reference. A one-rank backend now trains exactly like
-    // no backend (per-sample updates, see GradientModel_OneRankBackend_TrainsExactlyLikeNoBackend), so the reference
-    // is computed here instead: plain gradient descent on the mean gradient of each global batch, with the batches
-    // read from an undistributed loader.
+    // The reference of the two tests below is computed here, without the builder: plain gradient descent on the mean
+    // gradient of each global batch, with the batches read from an undistributed loader. The comparison against a
+    // real one-process build is GradientModel_ManyRanks_ReproduceOneProcessAtTheSameGlobalBatch.
     [Theory(Timeout = 90000)]
     [InlineData(2, 16, 2)]
     [InlineData(3, 16, 2)]
@@ -361,11 +362,65 @@ public sealed class StreamingDistributedGradientModelTests
         double diff = MaxAbsDiff(expected, oneRank[0]);
         Assert.True(diff == 0.0, $"A one-rank backend changed the training result by {diff:R}.");
 
-        // Per-sample updates are not one mean-gradient step per batch, so the equality above would not hold if
-        // the one-rank run had taken the synchronized step that several ranks take.
+        // Both take one mean-gradient step per batch, the step several ranks take on a global batch.
         var meanGradientRun = await GlobalBatchMeanGradientDescentAsync(inputs, targets, batchSize, steps, seed: 13);
-        Assert.True(MaxAbsDiff(expected, meanGradientRun) > 1e-6,
-            "This data cannot tell per-sample updates from a mean-gradient step, so the equality above proves nothing.");
+        double fromReference = MaxAbsDiff(expected, meanGradientRun);
+        Assert.True(fromReference < 1e-12, $"One process differs from mean-gradient descent over its batches by {fromReference:R}.");
+    }
+
+    private static async Task<Vector<double>> TrainOneProcessAsync(
+        Matrix<double>[] inputs,
+        Vector<double>[] targets,
+        int batchSize,
+        long maxSteps,
+        int seed,
+        int accumulationSteps = 1)
+    {
+        var model = CreateModel();
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>>
+            {
+                Seed = seed,
+                MaxSteps = maxSteps,
+                GradientAccumulationSteps = accumulationSteps,
+            })
+            .BuildAsync();
+        return model.GetParameters();
+    }
+
+    // Issue #2554: a run on N ranks reproduces a one-process run at the same global batch.
+    // Every rank adds the gathered per-sample gradients in global sample order, the order one process adds them
+    // in, so the comparison is bit for bit.
+    [Theory(Timeout = 90000)]
+    [InlineData(new[] { 2, 2 }, 16)]
+    [InlineData(new[] { 2, 2, 2 }, 16)]
+    [InlineData(new[] { 4, 2 }, 18)]
+    [InlineData(new[] { 2, 2, 2 }, 7)]
+    public async Task GradientModel_ManyRanks_ReproduceOneProcessAtTheSameGlobalBatch(int[] rankBatchSizes, int sampleCount)
+    {
+        var (inputs, targets) = CreateDataset(sampleCount, seed: 101);
+        int worldSize = rankBatchSizes.Length;
+        int globalBatch = rankBatchSizes.Sum();
+        const long steps = 9;
+
+        Vector<double> oneProcess = await TrainOneProcessAsync(inputs, targets, globalBatch, steps, seed: 53);
+        Assert.True(MaxAbsDiff(oneProcess, InitialParameters()) > 1e-6, "The one-process run must have trained.");
+
+        var ranks = await TrainRanksAsync(inputs, targets, worldSize, rankBatchSizes, maxSteps: steps, seed: 53);
+        for (int r = 0; r < worldSize; r++)
+        {
+            Assert.True(MaxAbsDiff(ranks[0], ranks[r]) == 0.0, $"Rank {r} diverged from rank 0.");
+            double diff = MaxAbsDiff(oneProcess, ranks[r]);
+            Assert.True(diff == 0.0, $"Rank {r} of {worldSize} differs from one process at the same global batch by {diff:R}.");
+        }
+
+        // The same ranks without the exchange would each be one process at its own batch size, which is elsewhere.
+        Vector<double> perRankBatchAlone = await TrainOneProcessAsync(inputs, targets, rankBatchSizes[0], steps, seed: 53);
+        Assert.True(MaxAbsDiff(oneProcess, perRankBatchAlone) > 1e-6,
+            "This data cannot tell a run at the global batch from a run at one rank's batch.");
     }
 
     [Fact(Timeout = 90000)]
@@ -591,39 +646,40 @@ public sealed class StreamingDistributedGradientModelTests
         }
     }
 
-    [Theory(Timeout = 90000)]
-    [InlineData(1)]
-    [InlineData(2)]
-    public async Task GradientModel_GradientAccumulation_IsRefusedInsteadOfIgnored(int worldSize)
+    [Fact(Timeout = 90000)]
+    public async Task GradientModel_GradientAccumulation_MakesOneUpdateFromSeveralBatches()
     {
-        var (inputs, targets) = CreateDataset(sampleCount: 8, seed: 89);
-        var backends = CreateBackends(worldSize);
-        try
-        {
-            await Task.WhenAll(Enumerable.Range(0, worldSize).Select(rank => Task.Run(async () =>
-            {
-                var model = CreateModel();
-                var refused = await Assert.ThrowsAsync<NotSupportedException>(() =>
-                    new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-                        .ConfigureModel(model)
-                        .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize: 2))
-                        .ConfigureGpuAcceleration(CpuOnlyConfig())
-                        .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
-                        .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>>
-                        {
-                            Seed = 1,
-                            MaxSteps = 1,
-                            GradientAccumulationSteps = 2,
-                        })
-                        .BuildAsync());
-                Assert.Contains("GradientAccumulationSteps", refused.Message, StringComparison.Ordinal);
-                Assert.True(MaxAbsDiff(InitialParameters(), model.GetParameters()) == 0.0, "The refused build still trained the model.");
-            })));
-        }
-        finally
-        {
-            ShutdownBackends(backends);
-        }
+        var (inputs, targets) = CreateDataset(sampleCount: 21, seed: 89);
+        const long steps = 8;
+
+        // Two batches of 3 per update cover the samples one batch of 6 covers, in the same order, including the
+        // short update that flushes the 3 samples left at the end of each 21-sample epoch.
+        Vector<double> oneBatchOfSix = await TrainOneProcessAsync(inputs, targets, batchSize: 6, steps, seed: 61);
+        Vector<double> twoBatchesOfThree = await TrainOneProcessAsync(inputs, targets, batchSize: 3, steps, seed: 61, accumulationSteps: 2);
+        double diff = MaxAbsDiff(oneBatchOfSix, twoBatchesOfThree);
+        Assert.True(diff == 0.0, $"Two batches of 3 accumulated differ from one batch of 6 by {diff:R}.");
+
+        // Ignoring the setting would step once per batch of 3 instead.
+        Vector<double> notAccumulated = await TrainOneProcessAsync(inputs, targets, batchSize: 3, steps, seed: 61);
+        Assert.True(MaxAbsDiff(oneBatchOfSix, notAccumulated) > 1e-6, "This data cannot tell accumulated batches from separate steps.");
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task GradientModel_ManyRanks_GradientAccumulation_MatchesOneProcess()
+    {
+        var (inputs, targets) = CreateDataset(sampleCount: 20, seed: 91);
+        const long steps = 7;
+
+        // Two ranks of 2, two global batches per update: 8 samples per update, as one process at batch 8.
+        Vector<double> oneProcess = await TrainOneProcessAsync(inputs, targets, batchSize: 8, steps, seed: 67);
+        var ranks = await TrainRanksAsync(
+            inputs, targets, worldSize: 2, rankBatchSizes: new[] { 2, 2 }, maxSteps: steps, seed: 67,
+            configure: null, resume: false, accumulationSteps: 2);
+
+        Assert.True(MaxAbsDiff(ranks[0], ranks[1]) == 0.0, "Ranks diverged.");
+        double diff = MaxAbsDiff(oneProcess, ranks[0]);
+        Assert.True(diff < 1e-12, $"Two ranks accumulating two global batches differ from one process at batch 8 by {diff:R}.");
+        Assert.True(MaxAbsDiff(oneProcess, InitialParameters()) > 1e-6, "The one-process run must have trained.");
     }
 
     /// <summary>Scores samples by their position and records what the curriculum pass handed it.</summary>

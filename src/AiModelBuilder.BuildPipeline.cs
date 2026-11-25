@@ -2537,11 +2537,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // Neural networks synchronize on the tape path (DistributedTapeCoordinator); every other model that exposes
-        // its gradient and parameters synchronizes through ExecuteStreamingDistributedGradientStep when there is
-        // more than one rank. One rank has nothing to exchange and trains exactly as it does with no backend.
+        // its gradient and parameters takes one mean-gradient step per batch (AccumulateStreamingGradientModelStep),
+        // summed across the ranks when there is more than one. One rank has nothing to exchange and trains exactly as it
+        // does with no backend.
         EnsureStreamingModelSupportsDistributedTraining(distBackend);
         RejectUnsynchronizedTrainersOnMultipleRanks(distBackend);
-        EnsureStreamingGradientAccumulationIsHonoured();
         bool gradientModelDistributed = IsStreamingGradientModelDistributed(distBackend);
 
         IStreamingDataLoader<T, TInput, TOutput> rawLoader =
@@ -2613,6 +2613,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 SynchronizeStreamingGradientModelInitialParameters(distBackend);
             }
+
+            // The pending update of a model the loop steps itself (anything that is not a tape-trained network).
+            var gradientStepState = new StreamingGradientStepState(numOps.Zero);
 
             // Knowledge distillation replaces the ordinary step: each sample is trained against the teacher.
             Func<TInput[], TOutput[], T>? distillationStep = CreateStreamingDistillationStep();
@@ -2965,43 +2968,52 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     {
                         // Several ranks training a gradient model: every rank applies the mean gradient of the
                         // whole global batch once per step, so the ranks stay identical.
-                        T globalBatchLoss = ExecuteStreamingDistributedGradientStep(
+                        if (!AccumulateStreamingGradientModelStep(
+                            gradientStepState,
                             processedInputs,
                             processedOutputs,
                             lossFunction,
                             distBackend,
-                            distLoader.LastBatchGlobalSampleCount);
+                            distLoader.LastBatchGlobalSampleCount,
+                            gradientAccumulationSteps,
+                            out T globalBatchLoss))
+                        {
+                            continue;
+                        }
+
                         epochLoss = AddLossScalars(epochLoss, globalBatchLoss);
                         epochBatches++;
                     }
                     else if (distBackend is { WorldSize: > 1 })
                     {
-                        // Reaching the per-sample branch below with several ranks would train each rank on its own
-                        // slice with no exchange and let the ranks drift apart.
+                        // Reaching the branch below with several ranks would train each rank on its own slice
+                        // with no exchange and let the ranks drift apart.
                         throw new InvalidOperationException(
                             $"Distributed streaming training has no synchronized step for {_model.GetType().Name} with " +
                             $"{typeof(TInput).Name} inputs and {typeof(TOutput).Name} targets.");
                     }
                     else
                     {
-                        // Non-neural-network model that exposes IGradientComputable
-                        // (e.g. logistic regression / classical online learners).
-                        for (int i = 0; i < processedInputs.Length; i++)
+                        // Non-neural-network model that exposes IGradientComputable (e.g. logistic regression /
+                        // classical online learners), in one process: one update per batch with the mean gradient
+                        // over the batch. This is the step several ranks take on a global batch, so a run on N
+                        // ranks reproduces a one-process run at the same global batch, and the configured batch
+                        // size means what it says.
+                        if (!AccumulateStreamingGradientModelStep(
+                            gradientStepState,
+                            processedInputs,
+                            processedOutputs,
+                            lossFunction,
+                            distBackend: null,
+                            processedInputs.Length,
+                            gradientAccumulationSteps,
+                            out T batchLoss))
                         {
-                            var gradients = RegularizeStreamingGradient(
-                                InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], processedOutputs[i], lossFunction));
-                            var modelLr = numOps.FromDouble(ResolveStreamingGradientModelLearningRate());
-                            InterfaceGuard.GradientComputable(_model).ApplyGradients(gradients, modelLr);
-
-                            var prediction = _model.Predict(processedInputs[i]);
-                            var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
-                            var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(processedOutputs[i]);
-                            var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
-                            epochLoss = numOps.Add(epochLoss, loss);
-                            epochBatches++;
+                            continue;
                         }
 
-                        EndStreamingGradientModelBatch();
+                        epochLoss = AddLossScalars(epochLoss, batchLoss);
+                        epochBatches++;
                     }
 
                     globalStep++;
@@ -3080,6 +3092,51 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
+                }
+
+                // The same for a model the loop steps itself: the micro-batches left at the end of the epoch make
+                // one last, smaller update, which is a step like any other.
+                if (!stepBudgetReached && gradientStepState.MicroBatches > 0)
+                {
+                    epochLoss = AddLossScalars(epochLoss, ApplyAccumulatedStreamingGradientModelStep(gradientStepState));
+                    epochBatches++;
+                    globalStep++;
+                    cursorEpoch = epoch;
+                    cursorBatchInEpoch = batchInEpoch;
+                    cursorSamplesInEpoch = samplesInEpoch;
+                    if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
+                        && globalStep % streamingOptions.ValidateEveryNSteps == 0)
+                    {
+                        lastValidationLoss = await EvaluateStreamingValidationAsync(
+                            streamingOptions, globalStep, streamingMonitorSessionId);
+                        hasValidationLoss = true;
+                    }
+
+                    if (TryCoordinatedStreamingCheckpoint(
+                        epoch,
+                        batchInEpoch,
+                        samplesInEpoch,
+                        globalStep,
+                        numOps.Divide(epochLoss, numOps.FromDouble(epochBatches)),
+                        hasValidationLoss,
+                        lastValidationLoss,
+                        streamingOptions,
+                        rawLoader,
+                        distLoader,
+                        distBackend,
+                        distCoordinator,
+                        gradientAccumulationSteps,
+                        forceSave: false,
+                        fitSeed: activeFitSeed,
+                        fitBatchSize: activeFitBatchSize))
+                    {
+                        lastCheckpointStep = globalStep;
+                    }
+
+                    if (streamingOptions?.MaxSteps is long tailBudget && globalStep >= tailBudget)
+                    {
+                        stepBudgetReached = true;
+                    }
                 }
 
                 // A resumed epoch whose remaining batches were all skipped trained nothing; don't report it as an epoch.
