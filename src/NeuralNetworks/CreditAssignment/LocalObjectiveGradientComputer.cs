@@ -349,6 +349,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 var hDetached = engine.StopGradient(h);
                 Tensor<T> lossVal;
                 Tensor<T> gradH;
+                using (var innerScope = TensorScope.Begin())
                 using (var innerTape = new GradientTape<T>())
                 {
                     // A transpose traced here belongs to the inner tape and dies with it; caching it in the step-wide
@@ -357,14 +358,17 @@ internal static class LocalObjectiveGradientComputer<T>
                     lossVal = ReadoutLossOn(hDetached, t, ref innerState);
                     var innerGrads = innerTape.ComputeGradients(lossVal, sources: new[] { hDetached });
                     innerTape.Retain(lossVal);
+                    innerScope.Keep(lossVal);
                     if (innerGrads.TryGetValue(hDetached, out var gh))
                     {
                         innerTape.Retain(gh);
+                        innerScope.Keep(gh);
                         gradH = gh;
                     }
                     else
                     {
                         gradH = new Tensor<T>(h.Shape.ToArray());
+                        innerScope.Keep(gradH);
                     }
                 }
                 var dot = ReduceToScalar(engine, engine.TensorMultiply(h, gradH));
@@ -965,20 +969,24 @@ internal static class LocalObjectiveGradientComputer<T>
                 var hDetached = engine.StopGradient(h);
                 Tensor<T> lossVal;
                 Tensor<T> gradH;
+                using (var innerScope = TensorScope.Begin())
                 using (var innerTape = new GradientTape<T>())
                 {
                     FusedReadoutPreparedState<T> innerState = default;
                     lossVal = ReadoutLossOn(hDetached, t, ref innerState);
                     var innerGrads = innerTape.ComputeGradients(lossVal, sources: new[] { hDetached });
                     innerTape.Retain(lossVal);
+                    innerScope.Keep(lossVal);
                     if (innerGrads.TryGetValue(hDetached, out var gh))
                     {
                         innerTape.Retain(gh);
+                        innerScope.Keep(gh);
                         gradH = gh;
                     }
                     else
                     {
                         gradH = new Tensor<T>(h.Shape.ToArray());
+                        innerScope.Keep(gradH);
                     }
                 }
                 var dot = ReduceToScalar(engine, engine.TensorMultiply(h, gradH));
