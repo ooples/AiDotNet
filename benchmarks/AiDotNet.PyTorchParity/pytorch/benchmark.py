@@ -25,6 +25,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import argparse
 import json
 import math
@@ -44,7 +45,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from benchmark_telemetry import mark_phase
+from benchmark_telemetry import begin_peak_window, mark_phase, window_peaks
 
 BATCH_SIZES = [1, 8, 32, 128]
 
@@ -55,6 +56,10 @@ class ResourceSummary:
     rss_mb_peak: float | None
     gpu_util_percent_avg: float | None
     gpu_mem_mb_peak: float | None
+    # This process's caching-allocator peaks over the phase (torch.cuda.max_memory_allocated / max_memory_reserved):
+    # unlike gpu_mem_mb_peak (device-wide nvidia-smi), they exclude the CUDA context and every other process.
+    gpu_allocated_mb_peak: float | None = None
+    gpu_reserved_mb_peak: float | None = None
 
 
 @dataclass
@@ -101,8 +106,14 @@ class ModelResult:
 
 
 class ResourceMonitor:
-    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True) -> None:
+    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True, gpu_id: str | None = None,
+                 torch_device: torch.device | None = None) -> None:
         self.sample_seconds = sample_seconds
+        # The CUDA device whose allocator peaks the phase reports (None: not a CUDA run).
+        self.torch_device = torch_device if torch_device is not None and torch_device.type == "cuda" else None
+        # The GPU the benchmark runs on, as an nvidia-smi --id (its UUID): unqualified, nvidia-smi lists every GPU and
+        # the first line was read, which on a two-GPU machine is not necessarily this one (the C# side does the same).
+        self.gpu_id = gpu_id
         # nvidia-smi reports SYSTEM-WIDE GPU utilization/memory, not this
         # process's. On a CPU-only benchmark run that attributes whatever the
         # desktop GPU happens to be doing (browser, compositor, other apps)
@@ -119,6 +130,9 @@ class ResourceMonitor:
         self._thread = threading.Thread(target=self._sample, daemon=True)
 
     def __enter__(self) -> ResourceMonitor:
+        if self.torch_device is not None:
+            torch.cuda.synchronize(self.torch_device)
+            begin_peak_window(self.torch_device)
         self.process.cpu_percent(interval=None)
         if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
             self._thread.start()
@@ -134,7 +148,7 @@ class ResourceMonitor:
             self.cpu.append(self.process.cpu_percent(interval=None))
             self.rss_mb.append(self.process.memory_info().rss / 1024 / 1024)
             if self.track_gpu:
-                gpu = query_nvidia_smi()
+                gpu = query_nvidia_smi(self.gpu_id)
                 if gpu is not None:
                     util, mem = gpu
                     self.gpu_util.append(util)
@@ -142,6 +156,9 @@ class ResourceMonitor:
             time.sleep(self.sample_seconds)
 
     def summary(self) -> ResourceSummary:
+        # Over the whole phase: the phase markers reset torch's peak counters at every epoch boundary, so the
+        # maxima are accumulated across those resets (benchmark_telemetry) instead of read from the counters.
+        allocated_peak, reserved_peak = window_peaks(self.torch_device) if self.torch_device is not None else (0, 0)
         return ResourceSummary(
             # No samples (the external monitor owns sampling, or the run was shorter than one interval) is
             # unavailable, not zero.
@@ -149,17 +166,29 @@ class ResourceMonitor:
             rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else None,
             gpu_util_percent_avg=round(statistics.fmean(self.gpu_util), 3) if self.gpu_util else None,
             gpu_mem_mb_peak=round(max(self.gpu_mem), 3) if self.gpu_mem else None,
+            gpu_allocated_mb_peak=round(allocated_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
+            gpu_reserved_mb_peak=round(reserved_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
         )
 
 
-def query_nvidia_smi() -> tuple[float, float] | None:
+def cuda_smi_id(device: torch.device) -> str | None:
+    """nvidia-smi's --id for a CUDA device: its UUID, as torch reports it (None when torch cannot tell)."""
+    if device.type != "cuda":
+        return None
+    try:
+        return "GPU-" + str(torch.cuda.get_device_properties(device).uuid)
+    except (RuntimeError, AttributeError):
+        return None
+
+
+def query_nvidia_smi(gpu_id: str | None = None) -> tuple[float, float] | None:
     try:
         output = subprocess.check_output(
             [
                 "nvidia-smi",
                 "--query-gpu=utilization.gpu,memory.used",
                 "--format=csv,noheader,nounits",
-            ],
+            ] + ([f"--id={gpu_id}"] if gpu_id else []),
             text=True,
             timeout=1,
             stderr=subprocess.DEVNULL,
@@ -1320,6 +1349,21 @@ class CoraGAT(nn.Module):
         return x.to(device), x[..., :GAT_CLASSES].argmax(dim=-1).to(device)
 
 
+# --precision (main sets it): "fp32" or "bf16".
+PRECISION = "fp32"
+
+
+def autocast_region(device: torch.device) -> contextlib.AbstractContextManager:
+    """--precision bf16: ONE forward/loss region under torch.autocast (a no-op context for fp32).
+
+    A fresh context per region, left before the optimizer update. Autocast caches the BF16 cast of each parameter for
+    the life of the outermost context, keyed by the tensor and not by its version: a context held across
+    optimizer.step() feeds the next forward the weights from before the update.
+    """
+    if PRECISION == "bf16":
+        return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    return contextlib.nullcontext()
+
 DCGAN_LATENT, DCGAN_IMAGE = 100, 64
 
 
@@ -1370,10 +1414,11 @@ class DCGAN64(nn.Module):
         generator_optimizer, discriminator_optimizer = self._optimizers
         batch = z.shape[0]
 
-        with torch.no_grad():
-            fake = self.generator(z)
         labels = torch.cat([torch.ones(batch, 1, device=z.device), torch.zeros(batch, 1, device=z.device)])
-        discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
+        with autocast_region(z.device):
+            with torch.no_grad():
+                fake = self.generator(z)
+            discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
         discriminator_optimizer.zero_grad(set_to_none=True)
         discriminator_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 1.0)
@@ -1382,7 +1427,9 @@ class DCGAN64(nn.Module):
         self.discriminator.eval()
         self.discriminator.requires_grad_(False)
         try:
-            generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
+            # A new region: the discriminator's weights changed in the update above.
+            with autocast_region(z.device):
+                generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
             generator_optimizer.zero_grad(set_to_none=True)
             generator_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.generator.parameters(), 1.0)
@@ -1782,26 +1829,29 @@ class HifiGanV1(nn.Module):
         mel = mel[:, :, start:start + frames]
         real = audio[:, start * HIFI_HOP:(start + frames) * HIFI_HOP].unsqueeze(1)
 
-        with torch.no_grad():
-            fake = self.generator(mel)
-        discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
-                                 for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
+        with autocast_region(mel.device):
+            with torch.no_grad():
+                fake = self.generator(mel)
+            discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
+                                     for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
         discriminator_optimizer.zero_grad(set_to_none=True)
         discriminator_loss.backward()
         discriminator_optimizer.step()
 
         self.discriminators.requires_grad_(False)
         try:
-            generated = self.generator(mel)
-            fake_out = self.discriminators(generated)
-            with torch.no_grad():
-                real_out = self.discriminators(real)
-                real_mel = self.loss_mel(real.squeeze(1))
-            adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
-            matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
-                           for r, g in zip(rf, gf))
-            mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
-            generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
+            # A new region: the discriminators' weights changed in the update above.
+            with autocast_region(mel.device):
+                generated = self.generator(mel)
+                fake_out = self.discriminators(generated)
+                with torch.no_grad():
+                    real_out = self.discriminators(real)
+                    real_mel = self.loss_mel(real.squeeze(1))
+                adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
+                matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
+                               for r, g in zip(rf, gf))
+                mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
+                generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
             generator_optimizer.zero_grad(set_to_none=True)
             generator_loss.backward()
             generator_optimizer.step()
@@ -1969,7 +2019,9 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
     start_total = time.perf_counter()
     first_loss: torch.Tensor | None = None
-    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
+    # --precision bf16: each forward/loss region runs under its own torch.autocast (autocast_region), as the C# side
+    # runs the steps under AutocastScope; the backward and the optimizer update run outside it.
+    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device), torch_device=device) as monitor:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
@@ -1988,20 +2040,22 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                     continue
 
                 optimizer.zero_grad(set_to_none=True)
-                if hasattr(model, "training_loss"):
-                    # A row with its own objective (DDPM's noise regression) computes its loss itself.
-                    loss = model.training_loss(x, y)
-                elif getattr(model, "loss_from_forward", False):
-                    # A row whose forward returns its own loss given the target (DeepAR's likelihood), called through
-                    # the module so a --compile run compiles the loss too.
-                    loss = model(x, y)
-                elif getattr(model, "regression", False):
-                    # A forecaster: mean squared error of the forecast against the continuation.
-                    loss = F.mse_loss(model(x), y)
-                else:
-                    logits = model(x)
-                    # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
-                    loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+                with autocast_region(device):
+                    if hasattr(model, "training_loss"):
+                        # A row with its own objective (DDPM's noise regression) computes its loss itself.
+                        loss = model.training_loss(x, y)
+                    elif getattr(model, "loss_from_forward", False):
+                        # A row whose forward returns its own loss given the target (DeepAR's likelihood), called
+                        # through the module so a --compile run compiles the loss too.
+                        loss = model(x, y)
+                    elif getattr(model, "regression", False):
+                        # A forecaster: mean squared error of the forecast against the continuation.
+                        loss = F.mse_loss(model(x), y)
+                    else:
+                        logits = model(x)
+                        # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a
+                        # class one.
+                        loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     # A copy: a CUDA-graph replay overwrites the step's output buffer.
                     first_loss = loss.detach().clone()
@@ -2298,6 +2352,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "warmup_min_ms": args.warmup_min_ms,
             "inference_batch_sizes": inference_batches,
             "seed": args.seed,
+            "precision": PRECISION,
         },
         "results": [asdict(result) for result in model_results],
     }
@@ -2339,7 +2394,12 @@ def main() -> None:
                         help="Select the installed CPU backend only for a shared LSTM run. Omit to keep PyTorch's runtime default.")
     parser.add_argument("--require-matched-workload", action="store_true")
 
+    parser.add_argument("--precision", default="fp32", choices=["fp32", "bf16"],
+                        help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
+                             "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    global PRECISION
+    PRECISION = args.precision
 
     allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")
     if allocation_trace:

@@ -151,8 +151,10 @@ try {
     Require ($combined.summary.totalTests -eq 2 -and $combined.summary.failedResultRecords -eq 1 -and $combined.summary.missingResultShards -eq 7 -and
         $combined.paperFidelity.available -and $combined.paperFidelity.expectedSlices -eq 3 -and $combined.paperFidelity.counts.totalTests -eq 9 -and
         $combined.paperFidelity.notExecutedTests -eq 1 -and -not $combined.baselinePublishable) 'Aggregate lost failed primary/paper cases, mixed the separate counts, or certified diagnostics.'
-    foreach ($mode in @('complete', 'four-of-five', 'retry-extra', 'missing-summary')) {
-        $root = Join-Path $scratch "paper-$mode"; $artifact = Join-Path $root 'artifacts/paper-fidelity-results-pr-0'
+    foreach ($mode in @('complete', 'four-of-five', 'retry-extra', 'missing-summary', 'flattened')) {
+        # 'flattened': one matching artifact, which actions/download-artifact extracts into the path itself.
+        $root = Join-Path $scratch "paper-$mode"
+        $artifact = if ($mode -eq 'flattened') { Join-Path $root 'artifacts' } else { Join-Path $root 'artifacts/paper-fidelity-results-pr-0' }
         $output = Join-Path $root 'output'; $input = Join-Path $root 'input'; $plan = Join-Path $root 'classes.txt'
         $classes = @($classList[0..4]); Put $plan ($classes -join "`n")
         for ($chunk = 1; $chunk -le 5; $chunk++) {
@@ -168,11 +170,30 @@ try {
         Require ($run.ExitCode -eq 0) ("Paper $mode report failed: " + $run.Text)
         $result = Get-Content (Join-Path $output 'ledger.json') -Raw | ConvertFrom-Json
         $expectedTotal = if ($mode -eq 'four-of-five') { 4 } else { 5 }
-        $expectedStatus = if ($mode -eq 'complete') { 'Passed' } else { 'Incomplete' }
+        $expectedStatus = if ($mode -in @('complete', 'flattened')) { 'Passed' } else { 'Incomplete' }
         Require ($result.shards[0].total -eq $expectedTotal -and $result.shards[0].status -ceq $expectedStatus -and
             -not $result.baselinePublishable) "Paper $mode lost partial observations, inflated retries, or hid an incomplete chunk inventory."
     }
-    Write-Host 'Primary/paper diagnostics fixtures passed: canonical deduplication, initial failure retained over retry, 4 binding rejections, corrupt/missing evidence, real analyzer counts and baseline refusal.'
+    # One matching artifact is extracted into the download path itself, with no per-artifact folder.
+    # With several planned slices, the flattened artifact binds only to the slice its summary names.
+    $root = Join-Path $scratch 'paper-flattened-multi'; $artifact = Join-Path $root 'artifacts'
+    $output = Join-Path $root 'output'; $input = Join-Path $root 'input'; $plan = Join-Path $root 'classes.txt'
+    Put $plan ($classList -join "`n")
+    $selected = @(Select-PaperFidelitySlice -Classes $classList -Slice 1 -SliceCount 3)
+    for ($chunk = 1; $chunk -le $selected.Count; $chunk++) { Put (Join-Path $artifact ('chunk{0:d3}.trx' -f $chunk)) $passed }
+    Write-PaperManifest $artifact $classList 1 3
+    & "$PSScriptRoot/Import-PaperDiagnostics.ps1" -SlicesJson '[0,1,2]' -ArtifactRoot $artifact `
+        -Destination $input -TestedSha $sha -OutputDirectory $output -ClassListFile $plan -ChunkSize 1
+    $run = Invoke-Analyzer $regression @{ CurrentResultsPath = $input; OutputDirectory = $output; CurrentSha = $sha
+        ExpectedShardNames = @('Paper fidelity - slice 0', 'Paper fidelity - slice 1', 'Paper fidelity - slice 2')
+        EvidenceProvenancePath = (Join-Path $output 'evidence-provenance.json') }
+    Require ($run.ExitCode -eq 1) ("Flattened paper slice hid the two missing slices: " + $run.Text)
+    $result = Get-Content (Join-Path $output 'ledger.json') -Raw | ConvertFrom-Json
+    $comparison = Get-Content (Join-Path $output 'comparison.json') -Raw | ConvertFrom-Json
+    $flatShard = @($result.shards | Where-Object { $_.name -ceq 'Paper fidelity - slice 1' })
+    Require ($flatShard.Count -eq 1 -and $flatShard[0].status -ceq 'Passed' -and $flatShard[0].total -eq $selected.Count -and
+        @($result.shards).Count -eq 1 -and @($comparison.missingExpectedShards).Count -eq 2) 'Flattened paper artifact was not bound to the slice its summary names.'
+    Write-Host 'Primary/paper diagnostics fixtures passed: canonical deduplication, initial failure retained over retry, 4 binding rejections, corrupt/missing evidence, flattened single-artifact downloads, real analyzer counts and baseline refusal.'
 }
 finally {
     $absolute = [IO.Path]::GetFullPath($scratch)

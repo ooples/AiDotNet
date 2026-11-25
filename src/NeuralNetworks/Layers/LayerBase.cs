@@ -3509,6 +3509,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Persistent weights must own contiguous storage outside any step/inference TensorArena so
         // WeightRegistry streaming never encounters arena slab views (IsView == true).
         using var _ = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        // Nor inside a TensorScope: a first forward run in one (a detached training forward, a sizing forward) would
+        // have its scope free the weight's device copy with the activations, before the step that reads it.
+        using var noScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
         if (UseStreamingAllocator) return WeightRegistry.AllocateStreaming<T>(shape);
         return nonStreamingAllocator?.Invoke() ?? new Tensor<T>(shape);
     }
@@ -9332,6 +9335,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             throw new ArgumentNullException(nameof(tensor));
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Buffer name must not be empty.", nameof(name));
+
+        // Registered state lives as long as the layer. A lazily built buffer is often created on the device during
+        // the first forward, inside a TensorScope that frees every GPU result it saw created when it ends (a compiled
+        // step's sizing forward, a detached GAN forward); hand it back to its own lifetime so no open scope frees it.
+        // Only while a scope is open: with none there is nothing to detach from, and detaching anyway changed how a
+        // traced step's running-statistic update was signed, so compiled closure replay refused it (MegaTTS2).
+        if (AiDotNet.Tensors.Engines.TensorScope.Current is not null)
+            AiDotNet.Tensors.Engines.TensorScope.Detach(tensor);
 
         lock (_bufferRegistrationLock)
         {

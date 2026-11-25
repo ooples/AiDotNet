@@ -420,9 +420,23 @@ $buildJob = Get-JobBlock -WorkflowText $validation -Job 'build'
 $impactStep = Get-StepBlock -JobBlock $buildJob -Step 'Select affected tests'
 Assert-Contract ([bool] $impactStep -and $impactStep.Contains('./tools/TestImpact/Select-AffectedTests.ps1')) `
     'the Build job does not run the test-level selection'
+# The chosen matrix reaches the selection as a file: inline through env it can outgrow Linux's 128 KiB limit on one
+# environment string, and the step then cannot start ("Argument list too long"). The write step must read it straight
+# from select-shards, and the selection must read that file.
+$matrixFileStep = Get-StepBlock -JobBlock $buildJob -Step 'Write chosen shard matrix'
+Assert-Contract ([bool] $matrixFileStep -and
+    $matrixFileStep.Contains('${{ needs.select-shards.outputs.matrix }}') -and
+    $matrixFileStep.Contains('selected-shard-matrix.json')) `
+    "the test-level selection does not start from select-shards' matrix"
+Assert-Contract ($impactStep.Contains('SELECTED_MATRIX_PATH: selected-shard-matrix.json')) `
+    'the test-level selection does not read the chosen matrix file'
+Assert-Contract ($impactStep.Contains('needs.select-shards.outputs.skipped }}')) `
+    "the test-level selection does not start from select-shards' skipped"
+# Select-AffectedTests never reads select-shards' ledger_matrix: it writes its own, or an empty one so the
+# consumers fall back to select-shards'. Passing it in again would only restore the size hazard.
+Assert-Contract (-not $impactStep.Contains('needs.select-shards.outputs.ledger_matrix')) `
+    "the test-level selection is handed select-shards' ledger_matrix it never reads"
 foreach ($output in 'matrix', 'ledger_matrix', 'skipped') {
-    Assert-Contract ($impactStep.Contains("needs.select-shards.outputs.$output }}")) `
-        "the test-level selection does not start from select-shards' $output"
     Assert-Contract ($buildJob.Contains("${output}: `${{ steps.impact.outputs.$output }}")) `
         "the Build job does not publish the narrowed $output"
 }
@@ -1067,7 +1081,7 @@ Assert-Contract ($sonarSkipReport.Contains('if: ${{ !fromJSON(env.SONAR_ANALYZE)
     'the SonarCloud status has no lightweight success path when analysis is skipped'
 foreach ($stepName in @(
     'Set up JDK 17', 'Checkout code', 'Setup .NET 10.0', 'Cache NuGet packages',
-    'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
+    'Set up pinned Tensors validation feed', 'Cache SonarCloud packages', 'Cache SonarCloud scanner', 'Install SonarCloud scanner',
     'Download current-run coverage artifacts', 'Restore dependencies', 'Begin SonarCloud analysis',
     'Build source generator first', 'Build (Release)', 'End SonarCloud analysis'
 )) {
@@ -1075,6 +1089,63 @@ foreach ($stepName in @(
     Assert-Contract ($step.Contains('fromJSON(env.SONAR_ANALYZE')) `
         "SonarCloud step '$stepName' can run for a non-runtime change or outside the nightly run"
 }
+# Every Sonar step except the skip report must carry the analysis gate, so a step added later cannot
+# run in the skipped-analysis path. Run 45309453002 ran the local Tensors feed action there without a
+# checkout and failed the job.
+foreach ($stepHeader in [Regex]::Matches($sonarJob, '(?m)^      - name: (?<name>[^\r\n]+?)\s*\r?$')) {
+    $stepName = $stepHeader.Groups['name'].Value
+    if ($stepName -ceq 'Report skipped analysis') { continue }
+    $step = Get-StepBlock -JobBlock $sonarJob -Step $stepName
+    Assert-Contract ([Regex]::IsMatch($step, '(?m)^        if: .*fromJSON\(env\.SONAR_ANALYZE\)')) `
+        "SonarCloud step '$stepName' runs in the skipped-analysis path"
+}
+# A local action (uses: ./...) is read from the checkout. In every job, a step that uses one must carry
+# the checkout step's condition, or the action is missing whenever that checkout is skipped.
+foreach ($jobHeader in [Regex]::Matches($validation, '(?m)^  (?<job>[A-Za-z0-9_-]+):\s*\r?$')) {
+    $jobName = $jobHeader.Groups['job'].Value
+    $jobBlock = Get-JobBlock -WorkflowText $validation -Job $jobName
+    foreach ($localStep in [Regex]::Matches($jobBlock,
+            '(?ms)^      - name: (?<name>[^\r\n]+?)\s*\r?\n(?:(?!^      - ).)*?^        uses: \./')) {
+        $checkout = [Regex]::Match($jobBlock.Substring(0, $localStep.Index),
+            '(?ms)^      - name: [^\r\n]+\r?\n(?:(?!^      - ).)*?^        uses: actions/checkout@(?:(?!^      - ).)*', 'RightToLeft')
+        $checkoutIf = [Regex]::Match($checkout.Value, '(?m)^        if: (?<cond>[^\r\n]+?)\s*\r?$')
+        if (-not $checkoutIf.Success) { continue }
+        $condition = $checkoutIf.Groups['cond'].Value -replace '^\$\{\{\s*|\s*\}\}$', ''
+        $stepBlock = Get-StepBlock -JobBlock $jobBlock -Step $localStep.Groups['name'].Value
+        Assert-Contract ($stepBlock.Contains($condition)) `
+            "job '$jobName' step '$($localStep.Groups['name'].Value)' uses a local action without its checkout condition '$condition'"
+    }
+}
+# actions/download-artifact extracts a lone pattern match into `path` itself rather than path/<name>,
+# so a run with one shard, attempt or slice recorded its only result as Missing (run 45309453002).
+# Every unmerged pattern download must be followed directly by the restore step for the same root,
+# pattern, source run and condition.
+$restoreScriptPath = Join-Path $PSScriptRoot 'Restore-ArtifactFolders.ps1'
+Assert-Contract (Test-Path -LiteralPath $restoreScriptPath -PathType Leaf) 'Restore-ArtifactFolders.ps1 is missing'
+$unmergedPatternDownloads = 0
+foreach ($jobHeader in [Regex]::Matches($validation, '(?m)^  (?<job>[A-Za-z0-9_-]+):\s*\r?$')) {
+    $jobName = $jobHeader.Groups['job'].Value
+    $jobBlock = Get-JobBlock -WorkflowText $validation -Job $jobName
+    $steps = @([Regex]::Matches($jobBlock, '(?ms)^      - .*?(?=^      - |\z)') | ForEach-Object Value)
+    for ($index = 0; $index -lt $steps.Count; $index++) {
+        $step = $steps[$index]
+        if (-not $step.Contains('uses: actions/download-artifact@')) { continue }
+        $patternLine = [Regex]::Match($step, '(?m)^          pattern: (?<value>[^\r\n]+?)\s*\r?$')
+        if (-not $patternLine.Success -or [Regex]::IsMatch($step, '(?m)^          merge-multiple: true\s*\r?$')) { continue }
+        $unmergedPatternDownloads++
+        $stepName = [Regex]::Match($step, '(?m)^      - name: (?<name>[^\r\n]+?)\s*\r?$').Groups['name'].Value
+        $path = [Regex]::Match($step, '(?m)^          path: (?<value>[^\r\n]+?)\s*\r?$').Groups['value'].Value
+        $runIdLine = [Regex]::Match($step, '(?m)^          run-id: (?<value>[^\r\n]+?)\s*\r?$')
+        $runId = if ($runIdLine.Success) { $runIdLine.Groups['value'].Value } else { '${{ github.run_id }}' }
+        $condition = [Regex]::Match($step, '(?m)^        if: [^\r\n]+?\s*\r?$').Value.Trim()
+        $restore = if ($index + 1 -lt $steps.Count) { $steps[$index + 1] } else { '' }
+        Assert-Contract ($restore.Contains("./tools/TestImpact/Restore-ArtifactFolders.ps1 -Root '$path' -Pattern '$($patternLine.Groups['value'].Value)'") -and
+            $restore.Contains("ARTIFACT_RUN_ID: $runId") -and $restore.Contains('GH_TOKEN: ${{ github.token }}') -and
+            [Regex]::Match($restore, '(?m)^        if: [^\r\n]+?\s*\r?$').Value.Trim() -ceq $condition) `
+            "job '$jobName' step '$stepName' downloads a pattern unmerged without restoring a lone artifact's folder for '$path'"
+    }
+}
+Assert-Contract ($unmergedPatternDownloads -ge 10) "only $unmergedPatternDownloads unmerged pattern downloads were found; the contract no longer sees the workflow's downloads"
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
 # library and tests for three frameworks under analyzers and never finished inside the job limit, and a
 # build per project recompiled the main library under Sonar for every project referencing it (run

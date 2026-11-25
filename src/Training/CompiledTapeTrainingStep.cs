@@ -2026,8 +2026,8 @@ public static partial class CompiledTapeTrainingStep<T>
             // here makes the new data visible.
             // A view (a slice, a shifted window) is materialized first: only a contiguous tensor has one span, and a
             // view input used to throw here, sending every step of a model that passes slices to the eager tape.
-            input.Contiguous().AsSpan().CopyTo(_persistentInput.AsWritableSpan());
-            target.Contiguous().AsSpan().CopyTo((_persistentTarget ?? throw new InvalidOperationException("_persistentTarget is null where it is required.")).AsWritableSpan());
+            CopyStepData(input, _persistentInput);
+            CopyStepData(target, _persistentTarget ?? throw new InvalidOperationException("_persistentTarget is null where it is required."));
 
             // Force layer initialization before collecting parameters — DenseLayer
             // replaces _weights with a new tensor on first Forward.
@@ -2074,7 +2074,20 @@ public static partial class CompiledTapeTrainingStep<T>
                 {
                     // Per-step random draws (CompiledStepRandom) are suppressed for the same reason.
                     using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                    // Its activations are dead once it returns: freed here, not left to the garbage collector across
+                    // the first traced step (~270 MB on a DCGAN generator step at batch 64). The weights it sized
+                    // are kept.
+                    using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
                     forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
+                    foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection))
+                        sizingScope.Keep(sized);
+                    // The rest of what a layer keeps between forwards: a parameter the selection above leaves out (a
+                    // frozen one is still read by every later forward) and every registered non-trainable buffer
+                    // (running statistics, a cached table). A lazy layer creates these in this forward too, and the
+                    // scope would free their device copy with the activations.
+                    foreach (var sized in CollectDeduplicatedParameters(layers))
+                        sizingScope.Keep(sized);
+                    KeepRegisteredBuffers(layers, sizingScope);
                 }
                 finally
                 {
@@ -2493,6 +2506,31 @@ public static partial class CompiledTapeTrainingStep<T>
             }));
     }
 
+    private static void KeepRegisteredBuffers(IReadOnlyList<ITrainableLayer<T>> layers, AiDotNet.Tensors.Engines.TensorScope scope)
+    {
+        var visited = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
+        for (int i = 0; i < layers.Count; i++)
+            KeepRegisteredBuffersRecursive(layers[i], scope, visited);
+    }
+
+    private static void KeepRegisteredBuffersRecursive(ILayer<T> layer, AiDotNet.Tensors.Engines.TensorScope scope,
+        HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer))
+            return;
+        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> withBuffers)
+        {
+            foreach (var (_, buffer) in withBuffers.GetRegisteredBuffers())
+            {
+                if (buffer is not null) scope.Keep(buffer);
+            }
+        }
+
+        var subLayers = layer.GetSubLayers();
+        for (int i = 0; i < subLayers.Count; i++)
+            KeepRegisteredBuffersRecursive(subLayers[i], scope, visited);
+    }
+
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
     {
         var visited = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
@@ -2624,6 +2662,23 @@ public static partial class CompiledTapeTrainingStep<T>
     /// <c>Equals</c> compares data, not shape, so a per-call data difference
     /// would force an unnecessary recompile.
     /// </summary>
+    /// <summary>
+    /// Copies one step's batch into the persistent tensor the compiled plan reads. A device-resident batch (a generated
+    /// sample, a batch assembled on the device) is copied on the device into the plan's own input buffer: copying it
+    /// through host spans downloaded the whole batch every step, waiting for the device to produce it, only for the
+    /// plan to upload it again.
+    /// </summary>
+    private static void CopyStepData(Tensor<T> source, Tensor<T> destination)
+    {
+        if (source.IsGpuResident
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine engine)
+        {
+            ((AiDotNet.Tensors.Engines.IEngine)engine).TensorCopy(source.IsContiguous ? source : source.Contiguous(), destination);
+            return;
+        }
+        source.Contiguous().AsSpan().CopyTo(destination.AsWritableSpan());
+    }
+
     private static bool ShapesEqual(int[] a, int[] b)
     {
         if (a.Length != b.Length) return false;

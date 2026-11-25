@@ -166,10 +166,18 @@ public class ScopedInferenceReleaseTests
         if (family == CnnFamily.ResNet) Assert.False(new DerivedResNet(Arch(null)).ReleasesPredictResults);
     }
 
+    // ResNet builds the paper's network from its configuration and refuses caller-supplied layers, so it can never run
+    // a layer whose results must outlive Predict; the custom-layer case below covers the families that accept them.
+    [Fact]
+    public void ResNet_refuses_custom_layers()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() => Build(CnnFamily.ResNet, custom: true));
+        Assert.Contains("custom layers are not supported", ex.Message);
+    }
+
     // Caller-supplied layers may carry a tensor between calls, so Predict must not free what they produced.
     [SkippableTheory]
     [InlineData(CnnFamily.DenseNet)]
-    [InlineData(CnnFamily.ResNet)]
     [InlineData(CnnFamily.Vgg)]
     [Trait("Category", "GPU")]
     public void Custom_layers_keep_their_predict_results(CnnFamily family)

@@ -8,6 +8,32 @@ from pathlib import Path
 
 _previous_phase: str | None = None
 
+# The largest allocator peaks seen since begin_peak_window(), across every reset a phase marker makes. A marker resets
+# torch's peak counters at each boundary, so a summary read after the last marker would otherwise report only what was
+# live then, not the peak of the phase.
+_window_peaks: dict[str, int] = {"allocated": 0, "reserved": 0}
+
+
+def begin_peak_window(device: object = None) -> None:
+    """Start a peak window: clear the accumulated maxima and torch's counters."""
+    import torch
+    _window_peaks["allocated"] = 0
+    _window_peaks["reserved"] = 0
+    torch.cuda.reset_peak_memory_stats(device)
+
+
+def fold_peaks(device: object = None) -> None:
+    """Fold torch's current peak counters into the window's maxima (call before any reset)."""
+    import torch
+    _window_peaks["allocated"] = max(_window_peaks["allocated"], torch.cuda.max_memory_allocated(device))
+    _window_peaks["reserved"] = max(_window_peaks["reserved"], torch.cuda.max_memory_reserved(device))
+
+
+def window_peaks(device: object = None) -> tuple[int, int]:
+    """(allocated, reserved) peak bytes over the whole window, the interval still open included."""
+    fold_peaks(device)
+    return _window_peaks["allocated"], _window_peaks["reserved"]
+
 
 def mark_phase(model: str, phase: str) -> bool:
     """Record a phase boundary. Returns True when it snapshotted and reset the CUDA allocator peaks.
@@ -44,6 +70,7 @@ def mark_phase(model: str, phase: str) -> bool:
                 "peak_reserved_bytes": stats.get("reserved_bytes.all.peak"),
             }},
         }
+        fold_peaks()
         torch.cuda.reset_peak_memory_stats()
         reset_peaks = True
     else:

@@ -1575,6 +1575,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ExtraBranchFusedCollectionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FusedInferenceParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FusedTrainingArenaBoundednessTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.ConsumingDetachedForwardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.GanAdversarialStepTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Generation.AutoregressiveDecoderTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GenomeActivationCollectionTests.|
@@ -1672,6 +1673,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TransformerTrainingPipelineTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.ClosureObjectiveRecordedShapeTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.NestedFusedStepArenaTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.DisabledGroupedClippingFusedTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.GraphLayerTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.TransformerShapeCompatibilityTests.|

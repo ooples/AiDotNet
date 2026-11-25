@@ -26669,3 +26669,9 @@ AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.get -> AiDotN
 AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.set -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ConfigureWeightStreaming(AiDotNet.Deployment.Configuration.WeightStreamingConfig! config) -> void
 static AiDotNet.ModelLoading.Pretrained.MoEModelBuilder<T>.BuildStreamed(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig! config, AiDotNet.Agentic.Models.Local.INamedTensorSource! weights, AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype weightStore, int warmupSequenceLength = 8) -> AiDotNet.NeuralNetworks.NeuralNetwork<T>!
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.get -> bool
+AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.init -> void
+override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.BuildObservation(int step) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
+AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
