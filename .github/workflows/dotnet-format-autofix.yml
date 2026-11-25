@@ -6,9 +6,11 @@ on:
     - cron: '15 3 * * *'
   workflow_dispatch:
 
+# Runs queue instead of cancelling each other: this job pushes a branch and then opens a pull request,
+# and a cancellation between the two would leave the branch without one until the next run.
 concurrency:
   group: dotnet-format-autofix
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -20,8 +22,12 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   AUTOFIX_REVIEWERS: ${{ vars.AUTOFIX_REVIEWERS }}
   FORMAT_BRANCH: automation/dotnet-format-autofix
+  FORMAT_BASE: master
   # A pull request in this repository holds at most 100 changed files.
   FORMAT_BATCH_MAX_FILES: 100
+  # With AUTOFIX_PAT the push and the pull request start the normal workflows, so the required CI Gate
+  # check can run. With the job token GitHub starts none (its safeguard against recursive runs).
+  HAS_PAT: ${{ secrets.AUTOFIX_PAT != '' }}
 
 jobs:
   format:
@@ -30,10 +36,23 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # The batch is formatted from, committed on and compared with master. A manual dispatch on any
+      # other ref would publish that ref's commits under the formatting pull request.
+      - name: Refuse a run from another ref
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::This workflow only runs on master; it was dispatched on $GITHUB_REF."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
+          ref: master
           fetch-depth: 0
+          # checkout persists this token as the credential git sends to github.com; a different token
+          # in a push URL would be overridden by it. So the PAT goes here, and every later git command
+          # talks to plain `origin`: the token is never in a URL or on a command line.
+          token: ${{ secrets.AUTOFIX_PAT || github.token }}
 
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -56,77 +75,48 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Find the open batch pull request
+        id: open
+        env:
+          GH_TOKEN: ${{ secrets.AUTOFIX_PAT || github.token }}
+        shell: bash
+        run: |
+          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$FORMAT_BRANCH" --base "$FORMAT_BASE" --state open \
+            --json number --jq '.[0].number // empty')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "Open batch pull request: ${number:-none}"
+
       # One batch of at most FORMAT_BATCH_MAX_FILES files per run, never the whole backlog: the first
       # run after ten months of drift would otherwise push about 1777 files in one commit. The script
-      # also re-applies the .gitattributes line-ending policy (dotnet format does not), commits the
-      # batch on top of master and leaves the branch alone when it already holds that batch.
+      # also re-applies the .gitattributes line-ending policy (dotnet format does not), leaves out the
+      # paths in .github/format-autofix-skip.txt, keeps an open batch on the same files, and does not
+      # overwrite a branch somebody else has committed to. See its header for the rules.
       - name: Commit and push one batch
         id: batch
         env:
-          # IMPORTANT:
-          # - If AUTOFIX_PAT is set, we can create a PR that triggers normal CI workflows.
-          # - If not set, pushes/PRs created with GITHUB_TOKEN may not trigger other workflows due to GitHub safeguards.
-          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          FORMAT_OPEN_PR: ${{ steps.open.outputs.number != '' }}
         shell: bash
         run: |
-          remote=origin
-          if [ -n "$AUTOFIX_PAT" ]; then
-            remote="https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git"
-          else
-            echo "::warning::AUTOFIX_PAT is not set. The PR may not trigger CI automatically when created by GitHub Actions."
+          if [ "$HAS_PAT" != true ]; then
+            echo "::warning::AUTOFIX_PAT is not set. The batch is pushed and opened with the job token, so GitHub starts no workflows for it and the required CI Gate check will not run."
           fi
-          bash .github/scripts/format-autofix-batch.sh "$FORMAT_BRANCH" "$FORMAT_BATCH_MAX_FILES" "$remote"
+          bash .github/scripts/format-autofix-batch.sh "$FORMAT_BRANCH" "$FORMAT_BATCH_MAX_FILES" origin "origin/$FORMAT_BASE"
 
-      # The PR is opened for review and is never merged from here: no auto-merge, no approval. Merging
-      # a batch is what releases the next one.
+      # The pull request is opened for review and is never merged from here: no auto-merge, no approval.
+      # Merging a batch is what releases the next one.
       - name: Create or update PR
         if: steps.batch.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTOFIX_PAT || github.token }}
+          OPEN_PR_NUMBER: ${{ steps.open.outputs.number }}
+          BRANCH_SHA: ${{ steps.batch.outputs.branch_sha }}
           BATCH_FILES: ${{ steps.batch.outputs.batch_files }}
           REMAINING_FILES: ${{ steps.batch.outputs.remaining_files }}
           TOTAL_FILES: ${{ steps.batch.outputs.total_files }}
+          SKIPPED_FILES: ${{ steps.batch.outputs.skipped_files }}
+          HELD: ${{ steps.batch.outputs.held }}
         shell: bash
-        run: |
-          title='chore: automated dotnet format + line-ending normalization'
-          body="$RUNNER_TEMP/format-autofix-pr-body.md"
-          {
-            echo 'Automated formatting maintenance PR. It is not merged automatically.'
-            echo
-            echo "This batch: **${BATCH_FILES}** file(s), the first in path order of **${TOTAL_FILES}** that"
-            echo "differ from the formatted tree. **${REMAINING_FILES}** file(s) wait for later batches; a batch"
-            echo "holds at most ${FORMAT_BATCH_MAX_FILES} files, and the next one is opened by the first run after"
-            echo 'this one is merged (nightly, or dispatch the workflow by hand).'
-            echo
-            echo '- `dotnet format whitespace . --folder`: whitespace only, from `.editorconfig`.'
-            echo '- `git add --renormalize`: the `.gitattributes` EOL policy (dotnet format does not normalize line endings).'
-            echo
-            echo 'If CI does not run automatically, ensure `AUTOFIX_PAT` is configured as a repository secret with `repo` and `workflow` scopes.'
-          } > "$body"
-
-          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$FORMAT_BRANCH" --base master --state open \
-            --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            echo "Updating existing PR #$number"
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body"
-          else
-            echo 'Creating new PR'
-            url=$(gh pr create --repo "$GITHUB_REPOSITORY" --base master --head "$FORMAT_BRANCH" \
-              --title "$title" --body-file "$body")
-            number=${url##*/}
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --add-label chore --add-label autofix --add-label formatting ||
-              echo "::warning::Could not apply labels to PR #$number."
-          fi
-
-          reviewers=${AUTOFIX_REVIEWERS:-$GITHUB_REPOSITORY_OWNER}
-          reviewers=${reviewers// /}
-          gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --add-reviewer "$reviewers" ||
-            echo "::warning::Could not request review from $reviewers on PR #$number."
-
-          {
-            echo "### Formatting batch"
-            echo "PR #$number: ${BATCH_FILES} file(s) of ${TOTAL_FILES} drifted; ${REMAINING_FILES} left for later batches."
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: bash .github/scripts/format-autofix-pr.sh
 
       - name: No changes
         if: steps.batch.outputs.has_changes == 'false'
