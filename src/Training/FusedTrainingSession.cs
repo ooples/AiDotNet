@@ -111,14 +111,16 @@ internal sealed class FusedTrainingStepRequest<T>
     public ClosureGraphBreakPolicy ClosureGraphBreakPolicy { get; init; }
 
     /// <summary>
-    /// Check, on the plan's first replay with new data, that the compiled plan computes the same loss as the eager
-    /// forward on that data; on disagreement the replay's update is undone and the model stays on the eager tape.
+    /// Check, on the plan's traced step and on its first replay with new data, that the compiled plan computes the
+    /// same loss as the eager forward on that data; on disagreement the plan's updates are undone and the model stays
+    /// on the eager tape.
     /// </summary>
     /// <remarks>
     /// For base classes whose models' training forwards were never audited for replay (a host-side read of a tensor
-    /// value is frozen into the trace; see <see cref="GraphBreakReason"/>). The check costs one extra no-grad forward
-    /// and one copy of the trained tensors, once per plan. A forward with its own randomness (dropout) disagrees by
-    /// construction and conservatively stays eager.
+    /// value is frozen into the trace; see <see cref="GraphBreakReason"/>). The traced step is checked too because a
+    /// plan can be wrong there alone: a recorded node that reads a value the trace has not computed yet is right on
+    /// every replay. The check costs two extra no-grad forwards and one copy of the trained tensors, once per plan. A
+    /// forward with its own randomness (dropout) disagrees by construction and conservatively stays eager.
     /// </remarks>
     public bool VerifyReplayAgreement { get; init; }
 
@@ -522,9 +524,17 @@ internal sealed class FusedTrainingSession<T>
         // objective's signature): keep what it takes to redo it eagerly.
         bool wasCommitted = IsCommitted;
         PendingTrace? trace = null;
+        double? eagerLossOfTracedStep = null;
         if (request.VerifyReplayAgreement && request.ClosureObjective is null && !IsCommitted
             && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> positioned)
         {
+            // The traced step is checked against the eager forward as well. A plan can be wrong on its first step only:
+            // a node that reads a tensor the trace had not computed yet (a gather through indices built by recorded
+            // integer ops read them as zeros) runs correctly on every replay, so the first-replay check below passes
+            // while the traced step has already trained the weights on a different forward. Taken before the weights
+            // are copied, so the copy holds whatever this forward sized.
+            if (!isDistributed)
+                eagerLossOfTracedStep = TryEagerLossForCheck(request);
             trace = new PendingTrace
             {
                 Weights = SnapshotTrainedTensors(request),
@@ -610,6 +620,32 @@ internal sealed class FusedTrainingSession<T>
                 + ")");
         }
 
+        if (trace is not null && eagerLossOfTracedStep is { } eagerTraced
+            && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> tracedPosition)
+        {
+            double tracedLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
+            if (!LossesAgree(eagerTraced, tracedLoss))
+            {
+                // Nothing of this plan is kept: the weights and the optimizer go back to before the step, and the
+                // caller's eager step then runs this step itself (no redo here, unlike a failed first replay).
+                bool restored = SameTensors(trace.Weights, SnapshotTrainedTensors(request));
+                if (restored) RestoreTrainedTensors(trace.Weights);
+                string reason = "the compiled plan's loss on its traced step (" + tracedLoss.ToString("G6")
+                    + ") disagrees with the eager forward (" + eagerTraced.ToString("G6") + "): the plan's first step "
+                    + "does not compute the training forward (a recorded node read a value the trace had not computed, "
+                    + "or the forward has its own randomness), so "
+                    + (restored ? "its update was undone and " : "") + "training continues on the eager tape";
+                Warn(reason);
+                Reset(stickyDisable: true);
+                if (restored)
+                {
+                    tracedPosition.RestoreStepPosition(trace.OptimizerPosition);
+                    InvalidateDerivedWeightCaches();
+                }
+                return Decline(reason);
+            }
+        }
+
         if (checkReplay && isDistributed)
         {
             if (CompiledTapeTrainingStep<T>.WasLastDistributedReplayEvaluated())
@@ -623,10 +659,7 @@ internal sealed class FusedTrainingSession<T>
             // Relative to the losses themselves, with no floor: floored at 1, a loss below 1e-3 (a small-magnitude
             // regression target, a model near convergence) passed whatever the plan had frozen, and the stale plan
             // was committed for the rest of the run.
-            double scale = Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss));
-            bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
-                || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
-            if (!agree)
+            if (!LossesAgree(eagerLoss, replayLoss))
             {
                 return UndoTraceAndDecline(optimizer, snapshot, "the compiled plan's loss on new data ("
                     + replayLoss.ToString("G6") + ") disagrees with the eager forward (" + eagerLoss.ToString("G6")
@@ -766,6 +799,32 @@ internal sealed class FusedTrainingSession<T>
             pending.EagerRedo();
         }
         return Decline(reason);
+    }
+
+    // Relative to the losses themselves, with no floor (see the first-replay check).
+    private static bool LossesAgree(double eager, double compiled)
+        => (double.IsNaN(eager) && double.IsNaN(compiled))
+            || Math.Abs(eager - compiled) <= ReplayAgreementTolerance * Math.Max(Math.Abs(eager), Math.Abs(compiled));
+
+    // The eager loss of the request's step, without recording gradients, drawing per-step randomness or advancing
+    // per-step state. Null when the forward cannot run outside a tape: the traced step then goes unchecked, and the
+    // first replay's check, which runs the same forward, declines the plan.
+    private double? TryEagerLossForCheck(FusedTrainingStepRequest<T> request)
+    {
+        try
+        {
+            using var noGrad = new NoGradScope<T>();
+            using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+            var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+            return eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceWarning("[AiDotNet] The compiled plan's traced step is not checked against the "
+                + "eager forward, which failed outside a tape (" + ex.GetType().Name + "); its first replay is (model: "
+                + _owner.GetType().Name + ").");
+            return null;
+        }
     }
 
     // The step's loss as a scalar: the deferred tensor's value when the step returned one, else the scalar it produced.

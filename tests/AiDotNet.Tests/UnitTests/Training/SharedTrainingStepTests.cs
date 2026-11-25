@@ -151,6 +151,59 @@ public class SharedTrainingStepTests
     }
 
     /// <summary>
+    /// A plan whose traced step already computes something other than the eager forward. The agreement check used to
+    /// look only at the first replay, so the traced step's update went into the weights before anything was compared
+    /// (CLAP's first compiled step gathered through indices the trace had not computed yet, and its replays were
+    /// right, so nothing was ever caught). With the traced step checked, that update is undone and the step itself
+    /// runs eagerly: after one step the weights equal an eager twin's.
+    /// </summary>
+    [Fact]
+    public void TracedStepDisagreementIsUndoneBeforeItTrains()
+    {
+        var (layer, eagerLayer) = TwinLayers();
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var engine = AiDotNetEngine.Current;
+        var input = RandomTensor(data, Batch, Features);
+        var target = RandomTensor(data, Batch, Outputs);
+
+        Tensor<float> WrongWhenTraced(Tensor<float> x)
+        {
+            var output = layer.Forward(x);
+            return AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace
+                ? engine.TensorMultiplyScalar(output, 3f)
+                : output;
+        }
+
+        float loss = stepper.Step(new FusedTrainingStepRequest<float>
+        {
+            Layers = new ITrainableLayer<float>[] { layer },
+            Input = input,
+            Target = target,
+            Forward = WrongWhenTraced,
+            ComputeLoss = MeanSquaredError,
+            Optimizer = Sgd(),
+            VerifyReplayAgreement = true,
+        });
+
+        Assert.False(stepper.LastStepFused);
+        Assert.True(stepper.Session.IsDisabled);
+        Assert.Contains("traced step", stepper.Session.LastMissReason ?? string.Empty);
+
+        float eagerLoss = TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+        {
+            Layers = new ITrainableLayer<float>[] { eagerLayer },
+            Input = input,
+            Target = target,
+            Forward = eagerLayer.Forward,
+            ComputeLoss = MeanSquaredError,
+            Optimizer = Sgd(),
+        });
+        Assert.Equal(eagerLoss, loss);
+        Assert.Equal(eagerLayer.GetParameters().ToArray(), layer.GetParameters().ToArray());
+    }
+
+    /// <summary>
     /// A GAN steps two parameter groups (critic, generator) with two optimizers through one owner. Each group must keep
     /// its own fused plan and optimizer moments: Adam trajectories on the fused path equal two eager Adam trajectories.
     /// With one plan per owner, every switch of optimizer dropped the other group's plan and restarted its moments.
