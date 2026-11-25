@@ -106,8 +106,8 @@ public static class CompiledStepRandom<T>
     public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
 
     /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
-    /// <remarks>With <paramref name="onDevice"/>, <paramref name="fill"/> writes through an engine op (see
-    /// <see cref="RecordedDraw.Create{TData}"/>) and runs outside any graph recording.</remarks>
+    /// <remarks><paramref name="fill"/> always runs outside any graph recording. With <paramref name="onDevice"/> it
+    /// writes the tensor through an engine op (see <see cref="RecordedDraw.Create{TData}"/>).</remarks>
     internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill, bool onDevice = false)
     {
         Guard.NotNull(shape);
@@ -121,13 +121,15 @@ public static class CompiledStepRandom<T>
             previous.AsSpan().CopyTo(tensor.AsWritableSpan());
             t_replayIndex++;
         }
-        else if (onDevice)
+        else
         {
+            // The fill computes this step's values, on the host or through engine ops; none of it belongs to the
+            // graph being traced. Left recording, a fill that builds its values with engine ops and copies them in
+            // (SpecAugment's stripe mask) put those ops in the plan and read their result back on the host inside
+            // the trace, which a closure objective's plan refuses as an unreplayable host read.
             using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
             fill(tensor);
         }
-        else
-            fill(tensor);
         t_captured?.Draws.Add(tensor);
         t_recording?.Add(RecordedDraw.Create(tensor, fill, onDevice));
         return tensor;
