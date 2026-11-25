@@ -32,19 +32,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore
-        run: dotnet restore AiDotNet.sln
+          # global.json pins a 10.0 SDK; `dotnet format` ships in the SDK, so no separate tool.
+          dotnet-version: '10.0.x'
 
       - name: Run dotnet format
         run: |
-          dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet format AiDotNet.sln
+          # Folder mode formats every .cs file against .editorconfig from syntax alone. The
+          # solution mode this replaced loads the MSBuild workspace and compiles every project
+          # for every target framework to run the style and analyzer passes; that never fit
+          # this job (20-minute timeout each night, then a runner shutdown), and the rules
+          # .editorconfig raises to warning or error (CS15xx docs, ADN/AIDN, CA2000) have no
+          # code fix for those passes to apply.
+          dotnet format whitespace . --folder --verbosity minimal
 
       - name: Normalize line endings (.gitattributes)
         shell: bash
@@ -111,7 +113,7 @@ jobs:
             const body = [
               'Automated formatting maintenance PR.',
               '',
-              '- Runs `dotnet format AiDotNet.sln` on a schedule and opens/updates this PR.',
+              '- Runs `dotnet format whitespace . --folder` on a schedule and opens/updates this PR.',
               '- Runs `git add --renormalize .` to enforce the `.gitattributes` EOL policy (dotnet format does not normalize line endings).',
               '- Intended to keep formatting and line-ending drift from accumulating between feature PRs.',
               '',
