@@ -2586,6 +2586,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             var streamingOptions = _streamingTrainingOptions;
             int gradientAccumulationSteps = Math.Max(1, streamingOptions?.GradientAccumulationSteps ?? 1);
+            // The compiled data-parallel update runs one micro-batch per step. Asked for together with accumulation it
+            // would fall back to the eager accumulated step without a word, so the combination is refused up front.
+            if (distCoordinator is { CompiledOptimizerUpdate: true } && gradientAccumulationSteps > 1)
+                throw new NotSupportedException(
+                    $"DataParallelUpdateInCompiledPlan runs one micro-batch per step and cannot be combined with "
+                    + $"GradientAccumulationSteps = {gradientAccumulationSteps}; turn one of them off.");
 
             await InitializeStreamingLazyAndDistributedStateAsync(
                 rawLoader,

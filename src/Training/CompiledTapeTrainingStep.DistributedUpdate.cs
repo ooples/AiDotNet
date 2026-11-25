@@ -30,6 +30,7 @@ public static partial class CompiledTapeTrainingStep<T>
     /// steps) stays the default; this one is opted into per coordinator.
     /// </summary>
     private static long s_compiledUpdateSteps, s_lastExchanges, s_lastUpdateLaunches;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> s_reportedIneligibility = new();
     private static int s_lastSplit;
 
     /// <summary>
@@ -74,7 +75,14 @@ public static partial class CompiledTapeTrainingStep<T>
             : config.UseBf16Moments || config.Int8MomentBlockSize > 0 ? "reduced-precision moments"
             : distNet.GetDistributedOptimizerRegularizer(eagerOptimizer) is not null ? "the optimizer regularizes its gradients"
             : null;
-        if (why is not null) Fd("distributed in-plan update ineligible: " + why);
+        if (why is not null)
+        {
+            Fd("distributed in-plan update ineligible: " + why);
+            // Asked for and declined: the step runs the eager data-parallel update instead, which must not go unseen.
+            if (distCoord.CompiledOptimizerUpdate && s_reportedIneligibility.TryAdd(why, 0))
+                System.Diagnostics.Trace.TraceWarning(
+                    "DataParallelUpdateInCompiledPlan is on, but the data-parallel update runs eagerly: " + why + ".");
+        }
         return why is null;
     }
 
