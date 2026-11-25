@@ -889,48 +889,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
-    {
-        int batchSize = input.Shape[0];
-        int features = input.Shape[2];
-        var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
-
-        int keepLen = _sequenceLength - steps;
-        if (steps >= 0 && keepLen >= 0 && batchSize > 0 && features > 0)
-        {
-            // Window = the last keepLen input steps followed by the first steps predictions (detached).
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var parts = new System.Collections.Generic.List<Tensor<T>>(2);
-            if (keepLen > 0)
-                parts.Add(Engine.TensorSlice(input, new[] { 0, steps, 0 }, new[] { batchSize, keepLen, features }));
-            if (steps > 0)
-                parts.Add(Engine.TensorSlice(predictions, new[] { 0, 0, 0 }, new[] { batchSize, steps, features }));
-            if (parts.Count == 0)
-                return newInput;
-            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
-        }
-
-        // Out-of-range step counts keep the element-wise copy so they fail exactly as before.
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < keepLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, t, f] = input[b, t + steps, f];
-                }
-            }
-
-            for (int t = 0; t < steps; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, keepLen + t, f] = predictions[b, t, f];
-                }
-            }
-        }
-
-        return newInput;
-    }
+        => ForecastWindowOps.ShiftWindow(input, predictions, _sequenceLength, steps);
 
     /// <summary>
     /// Concatenates multiple prediction tensors.
@@ -945,52 +904,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
-    {
-        if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-
-        int batchSize = predictions[0].Shape[0];
-        if (batchSize > 0 && _numFeatures > 0 && totalSteps > 0
-            && predictions.TrueForAll(p => p.Rank == 3 && p.Shape[0] >= batchSize && p.Shape[2] >= _numFeatures))
-        {
-            // The leading steps of each prediction in order, zero-padded to the requested length (detached).
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var parts = new List<Tensor<T>>();
-            int filled = 0;
-            foreach (var pred in predictions)
-            {
-                int take = Math.Min(pred.Shape[1], totalSteps - filled);
-                if (take <= 0)
-                    continue;
-                parts.Add(Engine.TensorSlice(pred, new[] { 0, 0, 0 }, new[] { batchSize, take, _numFeatures }));
-                filled += take;
-            }
-            if (filled < totalSteps)
-                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled, _numFeatures }));
-            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
-        }
-
-        var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
-
-        int currentStep = 0;
-        foreach (var pred in predictions)
-        {
-            int stepsToAdd = Math.Min(pred.Shape[1], totalSteps - currentStep);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < stepsToAdd; t++)
-                {
-                    for (int f = 0; f < _numFeatures; f++)
-                    {
-                        result[b, currentStep + t, f] = pred[b, t, f];
-                    }
-                }
-            }
-            currentStep += stepsToAdd;
-        }
-
-        return result;
-    }
+        => ForecastWindowOps.ConcatenateLeadingSteps(predictions, totalSteps, _numFeatures);
 
     #endregion
 

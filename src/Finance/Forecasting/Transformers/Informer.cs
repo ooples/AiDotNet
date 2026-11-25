@@ -363,37 +363,10 @@ public partial class Informer<T> : ForecastingModelBase<T>
     #region Helper Methods
 
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
-    {
-        int batchSize = input.Shape[0], length = input.Shape[1], features = input.Shape[2];
-        var newInput = new Tensor<T>(new[] { batchSize, length, features });
-        int keepLen = length - steps;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < keepLen; t++)
-                for (int f = 0; f < features; f++) newInput[b, t, f] = input[b, t + steps, f];
-            for (int t = 0; t < steps; t++)
-                for (int f = 0; f < features; f++) newInput[b, keepLen + t, f] = predictions[b, t, f];
-        }
-        return newInput;
-    }
+        => ForecastWindowOps.ShiftWindow(input, predictions, input.Shape[1], steps);
 
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
-    {
-        if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-        int batchSize = predictions[0].Shape[0];
-        var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
-        int currentStep = 0;
-        foreach (var pred in predictions)
-        {
-            int stepsToAdd = Math.Min(pred.Shape[1], totalSteps - currentStep);
-            for (int b = 0; b < batchSize; b++)
-                for (int t = 0; t < stepsToAdd; t++)
-                    for (int f = 0; f < _numFeatures; f++) result[b, currentStep + t, f] = pred[b, t, f];
-            currentStep += stepsToAdd;
-        }
-        return result;
-    }
+        => ForecastWindowOps.ConcatenateLeadingSteps(predictions, totalSteps, _numFeatures);
 
     #endregion
 

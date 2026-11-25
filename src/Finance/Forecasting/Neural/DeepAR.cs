@@ -429,35 +429,10 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     }
 
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> prediction, int stepsUsed)
-    {
-        int batch = input.Shape[0], length = input.Shape[1], series = input.Shape[2];
-        var shifted = new Tensor<T>(new[] { batch, length, series });
-        int keep = length - stepsUsed;
-        for (int b = 0; b < batch; b++)
-            for (int s = 0; s < series; s++)
-            {
-                for (int t = 0; t < keep; t++) shifted[b, t, s] = input[b, t + stepsUsed, s];
-                for (int t = 0; t < stepsUsed; t++) shifted[b, keep + t, s] = prediction[b, t, s];
-            }
-        return shifted;
-    }
+        => ForecastWindowOps.ShiftWindow(input, prediction, input.Shape[1], stepsUsed);
 
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
-    {
-        if (predictions.Count == 0) return new Tensor<T>(new[] { 1, totalSteps, NumFeatures });
-        int batch = predictions[0].Shape[0];
-        var result = new Tensor<T>(new[] { batch, totalSteps, NumFeatures });
-        int step = 0;
-        foreach (var p in predictions)
-        {
-            int add = Math.Min(p.Shape[1], totalSteps - step);
-            for (int b = 0; b < batch; b++)
-                for (int t = 0; t < add; t++)
-                    for (int f = 0; f < NumFeatures; f++) result[b, step + t, f] = p[b, t, f];
-            step += add;
-        }
-        return result;
-    }
+        => ForecastWindowOps.ConcatenateLeadingSteps(predictions, totalSteps, NumFeatures);
 
     protected override void Dispose(bool disposing)
     {
