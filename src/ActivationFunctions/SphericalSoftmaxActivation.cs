@@ -167,15 +167,18 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     public override Matrix<T> Derivative(Vector<T> input)
     {
         var engine = Engine;
-        Vector<T> output = Activate(input);
         var values = Tensor<T>.FromVector(input);
+        // The tensor forward pass, which stabilises the norm; the Jacobian below is of that function
+        var output = Activate(values);
 
-        T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
+        // The stabilised norm of the forward pass, sqrt(||x||^2 + epsilon): the Jacobian of that function, finite
+        // at the zero vector. d(x / norm)/dx is still (I - u u^T) / norm with u = x / norm.
+        T norm = NumOps.Sqrt(NumOps.Add(input.Transform(x => NumOps.Multiply(x, x)).Sum(), NormalizationEpsilon));
 
         // Chain rule through u = x / ||x||: J = S (I - u u^T) / ||x|| = (S - (S u) u^T) / ||x||, with S the
         // softmax Jacobian diag(y) - y y^T evaluated at u
         int n = input.Length;
-        var softmaxJacobian = SoftmaxJacobian(Tensor<T>.FromVector(output));
+        var softmaxJacobian = SoftmaxJacobian(output);
         var unit = engine.TensorDivideScalar(values, norm);
         var alongUnit = engine.TensorMatMul(softmaxJacobian, engine.Reshape(unit, new[] { n, 1 }));
         var projected = engine.TensorMatMul(alongUnit, engine.Reshape(unit, new[] { 1, n }));
