@@ -10,6 +10,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
@@ -325,9 +327,16 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         }
 
         Tensor<T> output = input;
-        foreach (var layer in Layers)
+        if (AiDotNetEngine.Current is DirectGpuTensorEngine gpu && ReleasesLayerOutputsAtLastUse())
         {
-            output = layer.Forward(output);
+            output = ForwardReleasingConsumedOutputs(input, gpu);
+        }
+        else
+        {
+            foreach (var layer in Layers)
+            {
+                output = layer.Forward(output);
+            }
         }
 
         // Strip the added unit-batch on the way out so the caller's
@@ -339,6 +348,45 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
             output = Engine.Reshape(output, squeezed);
         }
         return output;
+    }
+
+    /// <summary>
+    /// Whether this forward is an inference of the generated stack with nothing recording it: no gradient tape, no
+    /// graph trace and no layer observer, each of which reads a layer's output after the next layer has run.
+    /// </summary>
+    private bool ReleasesLayerOutputsAtLastUse() =>
+        !IsTrainingMode
+        && ReleasesInferenceIntermediates
+        && !GradientRecording.IsRecording<T>()
+        && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+        && Graph.LayerForwardObserver<T>.Current is null;
+
+    /// <summary>
+    /// The GPU inference forward. The stack is a chain: a layer's output is read by the next layer only. Each layer runs
+    /// in its own <see cref="TensorScope"/>, which frees what the layer computed on the way to its output, and the
+    /// output a layer consumed is freed once that layer has produced its own. Left to the scope around Predict, every
+    /// layer's output (each stem, block and transition feature map) stayed on the device until the call ended (#2383).
+    /// </summary>
+    private Tensor<T> ForwardReleasingConsumedOutputs(Tensor<T> input, DirectGpuTensorEngine gpu)
+    {
+        long activationsBefore = gpu.ActivationCacheTimestampSnapshot();
+        var current = input;
+        Tensor<T>? consumed = null;
+        foreach (var layer in Layers)
+        {
+            Tensor<T> produced;
+            using (var scope = TensorScope.Begin())
+            {
+                produced = scope.Keep(layer.Forward(current));
+            }
+
+            // Never the input, which is the caller's, and never storage the new output still views (a reshape).
+            if (consumed is not null)
+                DeviceIntermediates.ReleaseConsumed(gpu, consumed, activationsBefore, produced, input);
+            consumed = produced;
+            current = produced;
+        }
+        return current;
     }
 
     /// <inheritdoc />
