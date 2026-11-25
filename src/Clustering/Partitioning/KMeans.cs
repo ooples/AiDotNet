@@ -374,6 +374,14 @@ public partial class KMeans<T> : ClusteringBase<T>
         chosen[0] = _random.Next(rows);
 
         int trials = LocalTrials(_options.NumClusters);
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(double) && data.Euclidean && data.RowNorms is not null && data.Values.IsContiguous
+            && data.RowNorms.IsContiguous)
+        {
+            KMeansPlusPlusOfDoubles(data, chosen, trials);
+            return ClusteringTensorOps.SelectRows(x, chosen);
+        }
+#endif
         Vector<T>? minDistances = null;
         for (int k = 1; k < _options.NumClusters; k++)
         {
@@ -406,6 +414,123 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         return ClusteringTensorOps.SelectRows(x, chosen);
     }
+
+#if NET7_0_OR_GREATER
+    /// <summary>
+    /// <see cref="InitializeKMeansPlusPlus"/> for double Euclidean data, filling <paramref name="chosen"/> after its
+    /// first entry. It keeps one running nearest-distance array, lowered in O(rows) per new center, and draws each
+    /// candidate from the running sum in place.
+    /// </summary>
+    /// <remarks>
+    /// Every value is the engine form's, operation for operation: the engine's cumulative sum, column sums, row norms
+    /// and matrix product all accumulate in index order without fused multiply-adds, its sorted search returns the first
+    /// running sum at or above the threshold, and its arg-min the first minimum. So the draws, the chosen centers and
+    /// the fit are identical to that form's for a given seed. As engine operations (a gather, a transpose, a product,
+    /// broadcasts, a cumulative sum and a search per draw) seeding took a quarter of a k-means fit (#2524).
+    /// </remarks>
+    private void KMeansPlusPlusOfDoubles(KMeansData data, int[] chosen, int trials)
+    {
+        var values = data.Values;
+        var rowNorms = data.RowNorms!;
+        int rows = values.Shape[0];
+        int columns = values.Shape[1];
+        int blocks = (rows + NearestBlockRows - 1) / NearestBlockRows;
+
+        var minDistances = new double[rows];
+        var cumulative = new double[rows];
+        var lowered = new double[rows * trials];
+        var potentials = new double[trials];
+        var candidates = new int[trials];
+        var candidateNorms = new double[trials];
+
+        // [rows, count] of min(current nearest, squared distance to candidate t), or the bare distance on the first
+        // pass, written into lowered; rows are independent, so blocks of them run in parallel.
+        void LowerTo(int count, bool first)
+        {
+            var points = ClusteringTensorOps.AsDoubles(values.AsSpan());
+            for (int t = 0; t < count; t++)
+            {
+                var point = points.Slice(candidates[t] * columns, columns);
+                double norm = 0.0;
+                for (int j = 0; j < columns; j++) norm += point[j] * point[j];
+                candidateNorms[t] = norm;
+            }
+
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)rows * columns * count, block =>
+            {
+                var x = ClusteringTensorOps.AsDoubles(values.AsSpan());
+                var norms = ClusteringTensorOps.AsDoubles(rowNorms.AsSpan());
+                int end = Math.Min(rows, (block + 1) * NearestBlockRows);
+                for (int r = block * NearestBlockRows; r < end; r++)
+                {
+                    var row = x.Slice(r * columns, columns);
+                    for (int t = 0; t < count; t++)
+                    {
+                        var point = x.Slice(candidates[t] * columns, columns);
+                        double dot = 0.0;
+                        for (int j = 0; j < columns; j++) dot += row[j] * point[j];
+
+                        // ||x||^2 + ||c||^2 - 2 x.c, clamped at zero (rounding can leave a coincident row below it).
+                        double distance = Math.Max(norms[r] + candidateNorms[t] - dot * 2.0, 0.0);
+                        lowered[r * count + t] = first ? distance : Math.Min(minDistances[r], distance);
+                    }
+                }
+            });
+        }
+
+        candidates[0] = chosen[0];
+        LowerTo(1, first: true);
+        Array.Copy(lowered, minDistances, rows);
+
+        for (int k = 1; k < chosen.Length; k++)
+        {
+            // Candidates with probability proportional to the squared distance to the nearest chosen center: draw t is
+            // the first row whose running sum reaches u_t * total, or row 0 when none does.
+            double running = 0.0;
+            for (int r = 0; r < rows; r++) cumulative[r] = running += minDistances[r];
+            double total = rows > 0 ? cumulative[rows - 1] : 0.0;
+            for (int t = 0; t < trials; t++)
+            {
+                double threshold = _random.NextDouble() * total;
+                int low = 0, high = rows;
+                while (low < high)
+                {
+                    int middle = (low + high) >> 1;
+                    if (cumulative[middle] < threshold) low = middle + 1;
+                    else high = middle;
+                }
+
+                candidates[t] = low < rows ? low : 0;
+            }
+
+            LowerTo(trials, first: false);
+
+            // The candidate whose potential (the summed lowered distances) is lowest, the first drawn on a tie.
+            int best = 0;
+            if (trials > 1)
+            {
+                Array.Clear(potentials, 0, trials);
+                for (int r = 0; r < rows; r++)
+                    for (int t = 0; t < trials; t++)
+                        potentials[t] += lowered[r * trials + t];
+
+                double bestPotential = double.IsNaN(potentials[0]) ? double.PositiveInfinity : potentials[0];
+                for (int t = 1; t < trials; t++)
+                {
+                    double potential = double.IsNaN(potentials[t]) ? double.PositiveInfinity : potentials[t];
+                    if (potential < bestPotential)
+                    {
+                        bestPotential = potential;
+                        best = t;
+                    }
+                }
+            }
+
+            chosen[k] = candidates[best];
+            for (int r = 0; r < rows; r++) minDistances[r] = lowered[r * trials + best];
+        }
+    }
+#endif
 
     /// <summary>
     /// Squared distance from every row of the data to the data rows at <paramref name="rowIndices"/>, as

@@ -352,31 +352,23 @@ internal static class ClusteringTensorOps
 #if NET7_0_OR_GREATER
             if (typeof(T) == typeof(double) && x.IsContiguous)
             {
-                // Fixed blocks of rows are summed in parallel, each in row order, and the block sums added in block
-                // order: the result does not depend on the thread count. One pass without the scatter-add's per-call
-                // setup, which dominated k-means' update step.
+                // Row by row into the cluster's sum in ascending row order, as the scatter-add below accumulates, so
+                // the sums are bit-identical to it (SIMD runs across columns only, never across rows). One pass
+                // without the scatter-add's per-call setup, which dominated k-means' update step.
                 int d = x.Shape[1];
-                int blocks = (n + SumBlockRows - 1) / SumBlockRows;
-                var partial = new double[blocks * k * d];
-                AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)n * d, block =>
-                {
-                    var source = AsDoubles(x.AsSpan());
-                    var target = partial.AsSpan(block * k * d, k * d);
-                    int end = Math.Min(n, (block + 1) * SumBlockRows);
-                    for (int r = block * SumBlockRows; r < end; r++)
-                    {
-                        var row = source.Slice(r * d, d);
-                        var sum = target.Slice(ids[r] * d, d);
-                        for (int c = 0; c < d; c++) sum[c] += row[c];
-                    }
-                });
-
                 var sums = new Tensor<T>(new[] { k, d });
-                var total = AsWritableDoubles(sums.AsWritableSpan());
-                for (int block = 0; block < blocks; block++)
+                var source = AsDoubles(x.AsSpan());
+                var target = AsWritableDoubles(sums.AsWritableSpan());
+                int width = System.Numerics.Vector<double>.Count;
+                for (int r = 0; r < n; r++)
                 {
-                    var part = partial.AsSpan(block * k * d, k * d);
-                    for (int m = 0; m < total.Length; m++) total[m] += part[m];
+                    var row = source.Slice(r * d, d);
+                    var sum = target.Slice(ids[r] * d, d);
+                    int c = 0;
+                    for (; c + width <= d; c += width)
+                        (new System.Numerics.Vector<double>(sum.Slice(c)) + new System.Numerics.Vector<double>(row.Slice(c)))
+                            .CopyTo(sum.Slice(c));
+                    for (; c < d; c++) sum[c] += row[c];
                 }
 
                 return sums.ToMatrix();
@@ -390,9 +382,6 @@ internal static class ClusteringTensorOps
         var mask = OneHotRows<T>(ids, k);
         return engine.TensorMatMul(engine.TensorTranspose(mask), x).ToMatrix();
     }
-
-    /// <summary>Rows per block of the parallel per-cluster sums.</summary>
-    private const int SumBlockRows = 2048;
 
 #if NET7_0_OR_GREATER
     /// <summary>A span of T as doubles; only valid when T is double.</summary>
