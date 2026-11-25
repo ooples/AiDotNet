@@ -416,6 +416,8 @@ public static class CompiledStepRandom<T>
         internal ReplayScope(CaptureScope captured)
         {
             Guard.NotNull(captured);
+            // Draws a declined step left armed are for a plain eager step; a scoped replay takes over from them.
+            if (t_armedBy is { } armedBy) DisarmReplay(armedBy);
             _previous = t_replay;
             _previousIndex = t_replayIndex;
             _previousCounterIndex = t_replayCounterIndex;

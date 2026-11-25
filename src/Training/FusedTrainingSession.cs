@@ -668,7 +668,7 @@ internal sealed class FusedTrainingSession<T>
                 // Nothing of this plan is kept: the weights, the step state (running statistics, EMA codebooks) and
                 // the optimizer go back to before the step, and the caller's eager step then runs this step itself
                 // (no redo here, unlike a failed first replay) on the draws this step took.
-                bool restored = StillDescribes(trace.Before, request);
+                bool restored = SameLive(trace.Before.Weights, LiveTrainedTensors(request));
                 if (restored) Restore(trace.Before);
                 string reason = "the compiled plan's loss on its traced step (" + tracedLoss.ToString("G6")
                     + ") disagrees with the eager forward (" + eagerTraced.ToString("G6") + "): the plan's first step "
@@ -829,7 +829,7 @@ internal sealed class FusedTrainingSession<T>
         string cause)
     {
         var pending = _pendingTrace;
-        if (pending is not null && (beforeReplay is null || SameTensors(pending.Before, beforeReplay)))
+        if (pending is not null && (beforeReplay is null || SameTensors(pending.Before.Weights, beforeReplay.Weights)))
         {
             Restore(pending.Before);
             string redone = cause + ", so the fused updates were undone, the traced step was redone on the eager tape, "
@@ -1120,14 +1120,10 @@ internal sealed class FusedTrainingSession<T>
         if (snapshot.State.Length > 0) RestoreTrainedTensors(snapshot.State);
     }
 
-    // Whether the snapshot still describes the request: the same tensor instances with the same lengths, compared
-    // against the live lists (no copy is taken to compare).
-    private static bool StillDescribes(StepSnapshot snapshot, FusedTrainingStepRequest<T> request)
-    {
-        var trained = LiveTrainedTensors(request);
-        return SameLive(snapshot.Weights, trained) && SameLive(snapshot.State, LiveStepState(request, trained));
-    }
-
+    // Whether the saved tensors are still the live ones: the same instances with the same lengths, compared against
+    // the live list (no copy is taken to compare). Step state is not part of the question: a buffer a layer first
+    // registered inside the trace has no earlier value to go back to, and that must not keep the weights and the
+    // buffers that do have one from being restored.
     private static bool SameLive((Tensor<T> Live, Tensor<T> Saved)[] saved, Tensor<T>[] live)
     {
         if (saved.Length != live.Length) return false;
@@ -1135,9 +1131,6 @@ internal sealed class FusedTrainingSession<T>
             if (!ReferenceEquals(saved[i].Live, live[i]) || saved[i].Saved.Length != live[i].Length) return false;
         return true;
     }
-
-    private static bool SameTensors(StepSnapshot a, StepSnapshot b)
-        => SameTensors(a.Weights, b.Weights) && SameTensors(a.State, b.State);
 
     private static bool SameTensors((Tensor<T> Live, Tensor<T> Saved)[] a, (Tensor<T> Live, Tensor<T> Saved)[] b)
     {
