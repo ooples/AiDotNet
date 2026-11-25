@@ -317,7 +317,7 @@ if ($serializeShard) {
   # The cap itself is applied below, to every shard.
 }
 
-# EVERY SHARD GETS THE CAP, NOT ONLY THE HEAVY ONES. The scheduled runs of 2026-11-24 and 2026-11-25 lost 13
+# EVERY SHARD GETS THE CAP, NOT ONLY THE HEAVY ONES. The scheduled runs of 2026-11-24 and 2026-11-25 lost 14
 # ordinary (non-heavy) hosted shards to "The hosted runner lost communication with the server", two of them
 # ('Other - Playground', 'ModelFamily - Clustering/GP') on both nights, each 52-53 minutes into a job that
 # takes 16-43 minutes when it passes. Those shards ran with Server GC and no limit, so nothing made the
