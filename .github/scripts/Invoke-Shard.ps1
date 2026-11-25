@@ -313,19 +313,34 @@ if ($serializeShard) {
   # most of that peak was collectable garbage. With the cap the runtime collects before the box runs out, and a
   # test that truly needs more fails with OutOfMemoryException and a stack trace instead of taking the runner
   # down. Tensor storage is managed arrays, which the limit covers.
-  $memTotalLine = if (Test-Path -LiteralPath '/proc/meminfo') {
-    Select-String -LiteralPath '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
-  } else {
-    $null
-  }
-  if ($null -ne $memTotalLine) {
-    $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
-    $heapCapBytes = [long]($memTotalBytes * 0.7)
-    $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
-    Write-Host ("Heavy shard: managed heap cap {0:N0} MB of {1:N0} MB (DOTNET_GCHeapHardLimit)" -f ($heapCapBytes / 1MB), ($memTotalBytes / 1MB))
-  } else {
-    Write-Host "Heavy shard: no /proc/meminfo MemTotal, so no managed heap cap"
-  }
+  #
+  # The cap itself is applied below, to every shard.
+}
+
+# EVERY SHARD GETS THE CAP, NOT ONLY THE HEAVY ONES. The scheduled runs of 2026-11-24 and 2026-11-25 lost 13
+# ordinary (non-heavy) hosted shards to "The hosted runner lost communication with the server", two of them
+# ('Other - Playground', 'ModelFamily - Clustering/GP') on both nights, each 52-53 minutes into a job that
+# takes 16-43 minutes when it passes. Those shards ran with Server GC and no limit, so nothing made the
+# runtime collect before the 16 GB box ran out. What exhausted them was not measured - a lost runner uploads
+# no log past its first block - so this is the known remedy for the known failure shape, applied where it
+# was missing: with the cap, a shard that needs more than 70% of the machine fails with OutOfMemoryException
+# and a stack trace, in a step that is recorded as failed and is never rerun as a "lost runner".
+# A limit a shard sets for itself through its `env` is kept, except on heavy shards, where it never was.
+$memTotalLine = if (Test-Path -LiteralPath '/proc/meminfo') {
+  Select-String -LiteralPath '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
+} else {
+  $null
+}
+$shardKind = if ($heavyShard) { 'Heavy shard' } else { 'Shard' }
+if (-not $heavyShard -and $env:DOTNET_GCHeapHardLimit) {
+  Write-Host "${shardKind}: managed heap cap $($env:DOTNET_GCHeapHardLimit) set by the shard's own env (DOTNET_GCHeapHardLimit)"
+} elseif ($null -ne $memTotalLine) {
+  $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
+  $heapCapBytes = [long]($memTotalBytes * 0.7)
+  $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
+  Write-Host ("${shardKind}: managed heap cap {0:N0} MB of {1:N0} MB (DOTNET_GCHeapHardLimit)" -f ($heapCapBytes / 1MB), ($memTotalBytes / 1MB))
+} else {
+  Write-Host "${shardKind}: no /proc/meminfo MemTotal, so no managed heap cap"
 }
 
 # Stream memory and active-test markers in-process so evidence survives a runner OOM;
