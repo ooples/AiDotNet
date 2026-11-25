@@ -110,6 +110,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
     private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
     private const string FusedPlanStateExtensionMarker = "AiDotNet.FusedPlanOptimizerState.v1";
+    private const string CounterStateExtensionMarker = "AiDotNet.OptimizerCounters.v1";
 
     /// <summary>
     /// The compiled training plan currently running this optimizer's update, when training takes the fused path.
@@ -3768,6 +3769,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             writer.Write(fusedState.Length);
             writer.Write(fusedState);
         }
+
+        // The batch and epoch counters (CurrentStep / CurrentEpoch). Without them a restored optimizer reported step 0
+        // while its scheduler, moments and the data cursor were at the checkpoint's step.
+        writer.Write(CounterStateExtensionMarker);
+        writer.Write(_currentStep);
+        writer.Write(_currentEpoch);
     }
 
     /// <inheritdoc />
@@ -3815,7 +3822,37 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         public PreparedScheduler? Scheduler;
         public SchedulerStepMode? StepMode;
         public byte[]? FusedPlanState;
+        public (int Step, int Epoch)? Counters;
         public bool RestoredEagerMoments;
+    }
+
+    /// <summary>
+    /// Reads the next length-prefixed string and consumes it only when it equals <paramref name="marker"/>; otherwise
+    /// (a different marker, too few bytes for one, or no bytes left) the stream position is restored and false returned.
+    /// </summary>
+    private static bool TryConsumeMarker(BinaryReader reader, string marker)
+    {
+        var stream = reader.BaseStream;
+        if (!stream.CanSeek || stream.Position >= stream.Length)
+        {
+            return false;
+        }
+
+        long start = stream.Position;
+        try
+        {
+            if (string.Equals(reader.ReadString(), marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException or FormatException)
+        {
+            // Not a complete string: not our section.
+        }
+
+        stream.Position = start;
+        return false;
     }
 
     private ParsedExtensionPayload ParseExtensionPayload(BinaryReader reader)
@@ -3914,6 +3951,21 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
+        // Checkpoints written before the counter section carry no counters. Their base payload ends here, but a derived
+        // optimizer's own extension (e.g. AdamW's "AdamWMomentFormat" header) may follow, so "bytes remain" does not
+        // mean a counter section follows: peek the marker and rewind when it is not ours.
+        if (TryConsumeMarker(reader, CounterStateExtensionMarker))
+        {
+            int step = reader.ReadInt32();
+            int epoch = reader.ReadInt32();
+            if (step < 0 || epoch < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint has negative counters (step {step}, epoch {epoch}).");
+            }
+            parsed.Counters = (step, epoch);
+        }
+
         return parsed;
     }
 
@@ -3957,6 +4009,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _pendingFusedPlanState = parsed.FusedPlanState;
 
         _restoredEagerStateAwaitingEagerPath = parsed.RestoredEagerMoments && _pendingFusedPlanState is null;
+
+        if (parsed.Counters is { } counters)
+        {
+            _currentStep = counters.Step;
+            _currentEpoch = counters.Epoch;
+        }
     }
     /// <summary>
     /// A scheduler restored from a checkpoint but not yet installed. A built-in scheduler is fully rebuilt with its
