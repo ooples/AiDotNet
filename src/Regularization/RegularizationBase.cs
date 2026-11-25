@@ -299,7 +299,7 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
     /// and sets values that were already closer to zero than that amount to exactly zero. This is how
     /// L1 regularization produces sparse data.</para>
     /// </remarks>
-    protected Tensor<T> SoftThreshold(Tensor<T> values, T threshold)
+    private protected Tensor<T> SoftThreshold(Tensor<T> values, T threshold)
     {
         var engine = Engine;
         var sign = engine.TensorSubtract(
