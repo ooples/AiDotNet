@@ -53,6 +53,7 @@ public sealed class LlamaOmniResponse<T>
 /// </remarks>
 /// <example>
 /// <code>
+/// var question16kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new LlamaOmni&lt;float&gt;(architecture, new LlamaOmniOptions { TokenizerPath = "Llama-3.1-8B-Omni/tokenizer.json" });
 /// model.LoadReleasedWeights("Llama-3.1-8B-Omni");          // speech encoder, adaptor, LLM and speech decoder

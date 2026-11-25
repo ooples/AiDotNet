@@ -16,11 +16,11 @@ public sealed class AcousticTargets<T>
         Energy = energy;
     }
 
-    /// <summary>Target mel spectrogram, <c>[frames, melChannels]</c>.</summary>
     /// <summary>The log-magnitude linear spectrogram, <c>[frames, fftSize / 2 + 1]</c>, when the sample carries it or
     /// its recording.</summary>
     public Tensor<T>? LinearSpectrogram { get; }
 
+    /// <summary>Target mel spectrogram, <c>[frames, melChannels]</c>.</summary>
     public Tensor<T> Mel { get; }
 
     /// <summary>Number of mel frames.</summary>

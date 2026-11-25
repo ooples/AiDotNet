@@ -140,6 +140,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _network is not null) return;
@@ -412,6 +413,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>
@@ -438,6 +440,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
@@ -459,6 +462,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         return result;
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

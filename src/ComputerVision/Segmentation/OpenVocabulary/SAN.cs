@@ -41,6 +41,10 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <code>
 /// // Create a SAN model for open-vocabulary semantic segmentation
 /// // Any CLIP-style ITextEncoder supplies the text embeddings, e.g. a CLIP model from VisionLanguage.Encoders.
+/// // a CLIP-style model (OpenCLIP implements both ITextEncoder and IVisualEncoder)
+/// var clipModel = new OpenCLIP&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512));
 /// ITextEncoder&lt;double&gt; textEncoder = clipModel;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,

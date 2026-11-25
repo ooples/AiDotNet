@@ -31,6 +31,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
+/// var userSpeech24kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
 ///     inputHeight: 1, inputWidth: 1, inputDepth: 1, outputSize: 1);
 /// var moshi = new Moshi&lt;float&gt;(architecture, MoshiOptions.Release());

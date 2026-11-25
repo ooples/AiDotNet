@@ -97,6 +97,7 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         }
     }
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>The number of residual codebooks.</summary>
@@ -466,6 +467,7 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
 
     Tensor<T> IResidualVectorQuantizer<T>.Forward(Tensor<T> latent) => Forward(latent);
 
+    /// <inheritdoc/>
     public override void ResetState()
     {
     }

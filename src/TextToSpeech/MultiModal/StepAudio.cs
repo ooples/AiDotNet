@@ -25,6 +25,21 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <para><b>For Beginners:</b> Step-Audio listens, thinks in text with a very large language model, and answers aloud
 /// in a voice you give it a sample of; tags like "(高兴1)" or "(RAP)" at the start of the text set the style.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Step-Audio for intelligent voice interaction
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
+///     inputSize: 512,
+///     outputSize: 16000);
+///
+/// var model = new StepAudio&lt;float&gt;(architecture, "step_audio.onnx");
+///
+/// // Synthesize speech with streaming support
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Step-Audio!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -32,6 +32,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;float&gt;.CreateRandom(3, 1024, 1024);
+/// var points = new Tensor&lt;float&gt;(new[] { 1, 2 }, new Vector&lt;float&gt;(new float[] { 410, 220 }));   // one (x, y) click
+/// var labels = new Tensor&lt;float&gt;(new[] { 1 }, new Vector&lt;float&gt;(new float[] { 1 }));             // 1 = foreground
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
@@ -107,6 +110,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
         _ => 3,
     };
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _runtime is not null) return;
@@ -363,6 +367,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     private static IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target, IEngine engine)
@@ -429,6 +434,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

@@ -40,6 +40,9 @@ namespace AiDotNet.Audio.Generation;
 /// </remarks>
 /// <example>
 /// <code>
+/// // a pre-trained w2v-BERT whose semantic tokenizer has been fitted (see W2vBert)
+/// var w2vBert = new W2vBert&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024), new W2vBertOptions());
+/// var threeSecondPrompt = Tensor&lt;float&gt;.CreateRandom(1, 48000);   // 3 s at 16 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
 /// var audioLm = new AudioLM&lt;float&gt;(architecture, new AudioLMOptions(), semanticTokenizer: w2vBert);

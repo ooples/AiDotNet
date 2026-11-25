@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <para><b>For Beginners:</b> Piper is a small, fast VITS voice meant to run on ordinary computers and devices; it turns
 /// phonemes straight into audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Piper model for lightweight edge-optimized TTS
+/// // based on VITS architecture with fast CPU inference
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Piper&lt;double&gt;(architecture, "piper.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Piper&lt;double&gt;(architecture, new PiperOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

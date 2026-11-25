@@ -47,6 +47,25 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// three channels are xyz in metres. <b>Output</b>: class logits <c>[..., points, NumClasses]</c>.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 6, outputSize: 40);
+///
+/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
+/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
+///
+/// // Every tunable is set through the options object; these are the defaults.
+/// var options = new SonataOptions { NumClasses = 40, DropRate = 0.1 };
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Sonata&lt;float&gt;(architecture, options: options))
+///     .Build(trainPoints, trainLabels);
+///
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
+/// Tensor&lt;float&gt; segmentation = result.Predict(pointCloudTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Transformer)]

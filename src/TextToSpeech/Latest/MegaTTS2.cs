@@ -37,6 +37,12 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
+/// var clip1 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// var text1 = "example";
+/// var durations1 = new int[] { 0, 1, 2 };
+/// var clip2 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// var text2 = "example";
+/// var durations2 = new int[] { 0, 1, 2 };
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MegaTTS2&lt;float&gt;(architecture, new MegaTTS2Options());
 /// model.LoadVocoderWeights("generator_v1");   // a HiFi-GAN V1 generator trained on this model's mel spectrograms

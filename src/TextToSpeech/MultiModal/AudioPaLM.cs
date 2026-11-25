@@ -38,6 +38,10 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recordings = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 16000), Tensor&lt;float&gt;.CreateRandom(1, 16000) };
+/// var recording = recordings[0];
+/// var textIds = new Tensor&lt;float&gt;(new[] { 4 }, new Vector&lt;float&gt;(new float[] { 651, 4320, 2185, 1 }));   // Gemma token ids
+/// var voiceRecording = Tensor&lt;float&gt;.CreateRandom(1, 48000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var options = AudioPaLMOptions.Gemma2B();
 /// options.SentencePieceModelPath = "gemma-2b/tokenizer.model";

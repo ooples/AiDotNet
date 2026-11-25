@@ -275,6 +275,7 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => _network is null ? base.ForwardForTraining(input) : States(input, _options.ToRegularization(_random), _options.NumLayers);
 
