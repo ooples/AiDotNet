@@ -186,6 +186,19 @@ try {
         $e.annotations[0].message = 'The runner has received a shutdown signal. This may happen when the runner service is stopped.'
         if (-not (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations)) { throw 'Expected shutdown authorization.' }
     }
+    Assert-Case 'hosted runner-loss annotation in GitHub''s own wording authorizes one alternate' {
+        # Verbatim from run 45538563502 (2026-11-25), where seven hosted shards died this way and none was rerun.
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest')
+        $e.annotations[0].message = 'The hosted runner lost communication with the server. Anything in your workflow that terminates the runner process, starves it for CPU/Memory, or blocks its network access can cause this error.'
+        if (-not (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations)) { throw 'Expected hosted runner-loss authorization.' }
+        $alternate = New-FailoverAlternateShard $e.shard $e.primaryJob $e.runners $true
+        if ((@($alternate.runner) -join '|') -cne 'self-hosted|Linux|X64|aidotnet-cpu') { throw 'Hosted runner loss must rerun on the alternate pool.' }
+    }
+    Assert-Case 'hosted runner-loss wording cannot hide a failed step' {
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.primaryJob.steps[1].conclusion = 'failure'
+        $e.annotations[0].message = 'The hosted runner lost communication with the server. Anything in your workflow that terminates the runner process, starves it for CPU/Memory, or blocks its network access can cause this error.'
+        if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'A failed step was reclassified as runner loss.' }
+    }
     foreach ($conclusion in @('cancelled', 'timed_out', 'startup_failure', 'success', 'neutral', 'unknown')) {
         Assert-Case "hosted job conclusion $conclusion never authorizes alternate" {
             $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.primaryJob.conclusion = $conclusion

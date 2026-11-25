@@ -80,13 +80,15 @@ function Test-FailoverInfrastructureFailure {
         return $conclusion -in @('failure', 'timed_out', 'startup_failure', 'abandoned', 'stale', 'cancelled')
     }
     # Normal GitHub-hosted primary jobs only fail over on explicit server runner-loss annotations.
+    # GitHub words a lost hosted runner "The hosted runner lost communication with the server."; only the
+    # self-hosted wording was recognised, so a nightly's lost hosted shards were reported Missing instead of rerun.
     if ($conclusion -ne 'failure') { return $false }
     $steps = @(Get-FailoverProperty $Job 'steps' @())
     if (@($steps | Where-Object { $_.conclusion -in @('failure', 'timed_out') }).Count -gt 0) { return $false }
     if (@($messages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out' }).Count -gt 0) { return $false }
     return @($Annotations | Where-Object {
         $_.annotation_level -eq 'failure' -and $_.path -eq '.github' -and $_.start_line -eq 1 -and
-        ([string]$_.message -match '^The self-hosted runner lost communication with the server\.' -or
+        ([string]$_.message -match '^The (self-hosted|hosted) runner lost communication with the server\.' -or
          [string]$_.message -match '^The runner has received a shutdown signal\.' -or
          [string]$_.message -match '^The hosted runner encountered an error running your job\.')
     }).Count -gt 0
