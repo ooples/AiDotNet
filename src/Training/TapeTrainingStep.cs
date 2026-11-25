@@ -280,6 +280,16 @@ public static class TapeTrainingStep<T>
     /// Model-owned auxiliary branches use the same recursive traversal as ordinary layers.
     /// The caller's identity set also deduplicates tensors shared across those two routes.
     /// </remarks>
+    /// <summary>
+    /// The base layer a LoRA adapter froze, or <c>null</c>. The adapter keeps that layer in its forward pass, but
+    /// its weights are not trained: handing them (or the layer) to the optimizer would update the very weights the
+    /// adapter exists to leave alone.
+    /// </summary>
+    private static ILayer<T>? FrozenBaseLayerOf(ILayer<T> layer) =>
+        layer is AiDotNet.LoRA.Adapters.LoRAAdapterBase<T> { IsBaseLayerFrozen: true } adapter
+            ? adapter.BaseLayer
+            : null;
+
     internal static void CollectLayerParameters(
         ILayer<T> layer,
         List<Tensor<T>> parameters,
@@ -295,8 +305,12 @@ public static class TapeTrainingStep<T>
             }
         }
 
+        ILayer<T>? frozenBase = FrozenBaseLayerOf(layer);
         foreach (var child in layer.GetSubLayers())
+        {
+            if (ReferenceEquals(child, frozenBase)) continue;
             CollectLayerParameters(child, parameters, seen, materializedOnly);
+        }
     }
 
     /// <summary>
@@ -398,7 +412,13 @@ public static class TapeTrainingStep<T>
 
             var subLayers = layer.GetSubLayers();
             if (subLayers.Count > 0)
-                CollectTrainableRecursive(subLayers, result, seen);
+            {
+                ILayer<T>? frozenBase = FrozenBaseLayerOf(layer);
+                CollectTrainableRecursive(
+                    frozenBase is null ? subLayers : subLayers.Where(child => !ReferenceEquals(child, frozenBase)),
+                    result,
+                    seen);
+            }
         }
     }
 
