@@ -101,10 +101,10 @@ COLUMNS = ("model", "device", "dataset", "launch", "framework", "configuration",
 # A side whose slowest launch's throughput is below its fastest's by more than this factor is flagged unstable: the
 # same rule as run_matrix.py's UNSTABLE_SPREAD for the main matrix.
 UNSTABLE_SPREAD = 1.5
-# Models whose AiDotNet GPU training is not bit-reproducible: identical runs at a locked, verified clock report
-# different losses from the first epoch (README, "Large-data runs"). For them, launches that disagree say nothing about
-# the hardware, so ai-launches-disagree is not raised.
-NONDETERMINISTIC_ON_GPU = frozenset({"gru", "vit"})
+# Models whose AiDotNet training is not bit-reproducible on either device: identical runs report different losses from
+# the first epoch, on the CPU and on the GPU at a locked, verified clock (README). For them, launches that disagree say
+# nothing about the hardware, so ai-launches-disagree is not raised.
+NONDETERMINISTIC = frozenset({"gru", "vit"})
 
 
 def summarize(rows: list[dict]) -> list[dict]:
@@ -138,12 +138,11 @@ def summarize(rows: list[dict]) -> list[dict]:
         ai_rate = [ai[l]["samples"] / ai[l]["seconds"] for l in launches]
         pt_rate = [pt[l]["samples"] / pt[l]["seconds"] for l in launches]
         flags = set().union(*(ai[l]["flags"] | pt[l]["flags"] for l in launches))
-        # AiDotNet's CPU training, and its GPU training outside NONDETERMINISTIC_ON_GPU, is deterministic: every launch
-        # trains on the same data in the same order and must report the same loss and accuracy for every epoch.
-        # Launches that disagree computed different values for identical work, which on a healthy machine does not
-        # happen (a GPU fault, see the README).
-        deterministic = device != "cuda" or model not in NONDETERMINISTIC_ON_GPU
-        if deterministic and len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
+        # AiDotNet's training outside NONDETERMINISTIC is deterministic on both devices: every launch trains on the same
+        # data in the same order and must report the same loss and accuracy for every epoch. Launches that disagree
+        # computed different values for identical work, which on a healthy machine does not happen (a GPU fault, see
+        # the README).
+        if model not in NONDETERMINISTIC and len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
             flags.add("ai-launches-disagree")
         if max(ai_rate) / min(ai_rate) > UNSTABLE_SPREAD or max(pt_rate) / min(pt_rate) > UNSTABLE_SPREAD:
             flags.add("unstable")
