@@ -110,26 +110,9 @@ public class SoftminActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        // J[i, i] = s[i] * (1 - s[i]); J[i, j] = -(s[i] * s[j])
         Vector<T> softmin = Activate(input);
-        int n = softmin.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Multiply(softmin[i], NumOps.Subtract(NumOps.One, softmin[i]));
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Negate(NumOps.Multiply(softmin[i], softmin[j]));
-                }
-            }
-        }
-
-        return jacobian;
+        return SoftmaxJacobian(Tensor<T>.FromVector(softmin)).ToMatrix();
     }
 
 }

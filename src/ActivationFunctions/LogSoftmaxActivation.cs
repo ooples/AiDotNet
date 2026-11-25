@@ -119,25 +119,12 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
         T sum = softmax.Sum();
         softmax = softmax.Transform(x => NumOps.Divide(x, sum));
 
+        // J[i, i] = 1 - s[i]; J[i, j] = -s[j], so every off-diagonal row is the negated softmax
+        var engine = Engine;
         int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Subtract(NumOps.One, softmax[i]);
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Negate(softmax[j]);
-                }
-            }
-        }
-
-        return jacobian;
+        var negated = engine.TensorNegate(Tensor<T>.FromVector(softmax));
+        var offDiagonal = engine.TensorTile(engine.Reshape(negated, new[] { 1, n }), new[] { n, 1 });
+        return ReplaceDiagonal(offDiagonal, engine.TensorAddScalar(negated, NumOps.One)).ToMatrix();
     }
 
 }

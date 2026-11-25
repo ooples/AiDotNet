@@ -95,21 +95,13 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
             throw new ArgumentException("Input vector length must be divisible by the number of pieces.");
         }
 
-        int outputSize = input.Length / _numPieces;
-        Vector<T> output = new Vector<T>(outputSize);
-
-        for (int i = 0; i < outputSize; i++)
+        if (input.Length == 0)
         {
-            T maxValue = input[i * _numPieces];
-            for (int j = 1; j < _numPieces; j++)
-            {
-                maxValue = MathHelper.Max(maxValue, input[i * _numPieces + j]);
-            }
-
-            output[i] = maxValue;
+            return new Vector<T>(0);
         }
 
-        return output;
+        // Same grouping as the tensor overload: [outputSize, numPieces], maximum over the pieces
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
@@ -173,27 +165,24 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
         }
 
         int outputSize = input.Length / _numPieces;
-        Matrix<T> jacobian = new Matrix<T>(outputSize, input.Length);
-
-        for (int i = 0; i < outputSize; i++)
+        if (outputSize == 0)
         {
-            int maxIndex = i * _numPieces;
-            T maxValue = input[maxIndex];
-
-            for (int j = 1; j < _numPieces; j++)
-            {
-                int currentIndex = i * _numPieces + j;
-                if (NumOps.GreaterThan(input[currentIndex], maxValue))
-                {
-                    maxIndex = currentIndex;
-                    maxValue = input[currentIndex];
-                }
-            }
-
-            jacobian[i, maxIndex] = NumOps.One;
+            return new Matrix<T>(0, 0);
         }
 
-        return jacobian;
+        var engine = Engine;
+        var groups = engine.Reshape(Tensor<T>.FromVector(input), new[] { outputSize, _numPieces });
+
+        // winners[i, j] = 1 for the first largest piece j of group i, 0 elsewhere
+        var winners = engine.TensorOneHot<T>(engine.TensorArgMax(groups, 1), _numPieces);
+
+        // J[i, k * numPieces + j] = (i == k) * winners[i, j]: each group's row is non-zero only in its
+        // own block of numPieces columns
+        var ownBlock = engine.Reshape(engine.TensorEye<T>(outputSize), new[] { outputSize, outputSize, 1 });
+        var placed = engine.TensorMultiply(
+            engine.TensorTile(ownBlock, new[] { 1, 1, _numPieces }),
+            engine.TensorTile(engine.Reshape(winners, new[] { outputSize, 1, _numPieces }), new[] { 1, outputSize, 1 }));
+        return engine.Reshape(placed, new[] { outputSize, input.Length }).ToMatrix();
     }
 
 }

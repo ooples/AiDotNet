@@ -103,25 +103,12 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     public override Matrix<T> Derivative(Vector<T> input)
     {
         Vector<T> softmin = Activate(input).Transform(NumOps.Exp);
+        // J[i, i] = s[i] - 1; J[i, j] = s[j], so every off-diagonal row is the softmin
+        var engine = Engine;
         int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Subtract(softmin[i], NumOps.One);
-                }
-                else
-                {
-                    jacobian[i, j] = softmin[j];
-                }
-            }
-        }
-
-        return jacobian;
+        var probabilities = Tensor<T>.FromVector(softmin);
+        var offDiagonal = engine.TensorTile(engine.Reshape(probabilities, new[] { 1, n }), new[] { n, 1 });
+        return ReplaceDiagonal(offDiagonal, engine.TensorSubtractScalar(probabilities, NumOps.One)).ToMatrix();
     }
 
 }

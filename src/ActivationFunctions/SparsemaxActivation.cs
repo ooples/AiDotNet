@@ -79,32 +79,15 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        int d = input.Length;
-        var z = input.OrderByDescending(x => x).ToArray();
-
-        // Find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}
-        T cumulativeSum = NumOps.Zero;
-        int k = 1;
-
-        for (int i = 0; i < d; i++)
+        if (input.Length == 0)
         {
-            cumulativeSum = NumOps.Add(cumulativeSum, z[i]);
-            T lhs = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(i + 1), z[i]));
-            if (NumOps.GreaterThan(lhs, cumulativeSum))
-            {
-                k = i + 1;
-            }
+            return new Vector<T>(0);
         }
 
-        // Compute threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k
-        T sumK = NumOps.Zero;
-        for (int i = 0; i < k; i++)
-        {
-            sumK = NumOps.Add(sumK, z[i]);
-        }
-        T tau = NumOps.Divide(NumOps.Subtract(sumK, NumOps.One), NumOps.FromDouble(k));
-
-        return input.Transform(x => MathHelper.Max(NumOps.Zero, NumOps.Subtract(x, tau)));
+        // Sort descending, find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}, take the
+        // threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k and return max(0, z - tau): the engine's
+        // sparsemax, the same operation the tensor overload uses
+        return Engine.Sparsemax(Tensor<T>.FromVector(input), axis: -1).ToVector();
     }
 
     /// <summary>
@@ -142,33 +125,25 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        var output = Activate(input);
         int d = input.Length;
-        var jacobian = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
+        if (d == 0)
         {
-            for (int j = 0; j < d; j++)
-            {
-                if (NumOps.GreaterThan(output[i], NumOps.Zero))
-                {
-                    if (i == j)
-                    {
-                        jacobian[i, j] = NumOps.One;
-                    }
-                    else
-                    {
-                        jacobian[i, j] = NumOps.Negate(NumOps.Divide(output[j], output[i]));
-                    }
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Zero;
-                }
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return jacobian;
+        var engine = Engine;
+        var output = Tensor<T>.FromVector(Activate(input));
+
+        // byColumn[i, j] = output[j]; byRow[i, j] = output[i]
+        var byColumn = engine.TensorTile(engine.Reshape(output, new[] { 1, d }), new[] { d, 1 });
+        var byRow = engine.TensorTile(engine.Reshape(output, new[] { d, 1 }), new[] { 1, d });
+
+        // Rows whose output is positive: 1 on the diagonal, -(output[j] / output[i]) off it.
+        // Every other row is zero.
+        var supported = ReplaceDiagonal(
+            engine.TensorNegate(engine.TensorDivide(byColumn, byRow)), engine.TensorOnesLike(output));
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(byRow, NumOps.Zero), supported, engine.TensorZerosLike(supported)).ToMatrix();
     }
 
 }

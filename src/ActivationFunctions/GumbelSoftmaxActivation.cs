@@ -121,17 +121,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
         int lastAxis = input.Shape.Length - 1;
 
         // Sample Gumbel noise g = -log(-log(u)) with u ~ U(0, 1).
-        var noise = new Tensor<T>(input._shape);
-        var noiseSpan = noise.Data.Span;
-        for (int i = 0; i < noiseSpan.Length; i++)
-        {
-            T u = NumOps.FromDouble(_random.NextDouble());
-            noiseSpan[i] = NumOps.Multiply(
-                NumOps.Negate(
-                    NumericalStabilityHelper.SafeLog(
-                        NumOps.Negate(NumericalStabilityHelper.SafeLog(u)))),
-                NumOps.One);
-        }
+        var noise = StandardGumbel(input._shape);
 
         var withNoise = Engine.TensorAdd(input, noise);
         var scaled = Engine.TensorMultiplyScalar(withNoise, NumOps.Divide(NumOps.One, _temperature));
@@ -159,28 +149,13 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        // J[i, i] = y[i] * (1 - y[i]); J[i, j] = -y[i] * y[j]
         Vector<T> output = Activate(input);
-        int d = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Multiply(output[i], NumOps.Subtract(NumOps.One, output[i]));
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Multiply(NumOps.Negate(output[i]), output[j]);
-                }
-            }
-        }
+        var jacobian = SoftmaxJacobian(Tensor<T>.FromVector(output));
 
         // Scale the Jacobian by the inverse temperature
         T invTemp = NumOps.Divide(NumOps.One, _temperature);
-        return jacobian.Transform((x, row, col) => NumOps.Multiply(x, invTemp));
+        return Engine.TensorMultiplyScalar(jacobian, invTemp).ToMatrix();
     }
 
     /// <summary>
@@ -205,24 +180,28 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     private Vector<T> SampleGumbel(int size)
     {
-        Vector<T> uniform = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            uniform[i] = NumOps.FromDouble(_random.NextDouble());
+            return new Vector<T>(0);
         }
 
-        return uniform.Transform(u =>
-            NumOps.Multiply(
-                NumOps.Negate(
-                    NumericalStabilityHelper.SafeLog(
-                        NumOps.Negate(
-                            NumericalStabilityHelper.SafeLog(u)
-                        )
-                    )
-                ),
-                _temperature
-            )
-        );
+        return Engine.TensorMultiplyScalar(StandardGumbel(new[] { size }), _temperature).ToVector();
+    }
+
+    /// <summary>
+    /// Draws standard Gumbel noise -log(-log(u)) with u ~ U(0, 1), one draw per element in row-major
+    /// order from this activation's generator.
+    /// </summary>
+    /// <param name="shape">The shape of the noise tensor.</param>
+    /// <returns>The noise tensor.</returns>
+    private Tensor<T> StandardGumbel(int[] shape)
+    {
+        // Both logarithms floor their argument at the stability epsilon, as SafeLog does
+        var engine = Engine;
+        T floor = NumOps.FromDouble(NumericalStabilityHelper.DefaultEpsilon);
+        var uniform = Tensor<T>.CreateRandom(_random, shape);
+        var inner = engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(uniform, floor)));
+        return engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(inner, floor)));
     }
 
     /// <summary>

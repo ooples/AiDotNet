@@ -145,43 +145,71 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        T normSquared = input.DotProduct(input);
-        T norm = NumOps.Sqrt(normSquared);
-        T scale = NumOps.Divide(normSquared, NumOps.Add(NumOps.One, normSquared));
-
         int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        var engine = Engine;
+        var jacobians = SquashJacobians(engine.Reshape(Tensor<T>.FromVector(input), new[] { 1, n }));
+        return engine.Reshape(jacobians, new[] { n, n }).ToMatrix();
+    }
+
+    /// <summary>
+    /// The squash Jacobian of every row of a [batch, n] tensor, as a [batch, n, n] tensor.
+    /// </summary>
+    /// <param name="vectors">The capsule vectors, one per row.</param>
+    /// <returns>For each row x, the matrix dy_i/dx_j of y = squash(x).</returns>
+    private Tensor<T> SquashJacobians(Tensor<T> vectors)
+    {
+        var engine = Engine;
+        int batch = vectors.Shape[0];
+        int n = vectors.Shape[1];
+        int[] full = { batch, n, n };
 
         // Squash: y = a * x/||x|| where a = ||x||^2 / (1 + ||x||^2)
         // Jacobian: dy_i/dx_j = a * (delta_ij - x_i*x_j/||x||^2) / ||x||
         //                     + 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
-        T normInv = NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10))
-            ? NumOps.Divide(NumOps.One, norm) : NumOps.Zero;
-        T normSqPlusOne = NumOps.Add(NumOps.One, normSquared);
-        T normSqPlusOneSq = NumOps.Multiply(normSqPlusOne, normSqPlusOne);
+        // Per-vector scalars are kept as [batch, 1, 1] and repeated over each [n, n] matrix.
+        var normSquared = engine.Reshape(
+            engine.ReduceSum(engine.TensorMultiply(vectors, vectors), new[] { 1 }, keepDims: true),
+            new[] { batch, 1, 1 });
+        var norm = engine.TensorSqrt(normSquared);
+        var normSqPlusOne = engine.TensorAddScalar(normSquared, NumOps.One);
+        var scale = engine.TensorDivide(normSquared, normSqPlusOne);
+        var zeros = engine.TensorZerosLike(normSquared);
+        var ones = engine.TensorOnesLike(normSquared);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                // Term 1: a * (delta_ij - x_i*x_j/||x||^2) / ||x||
-                T delta_ij = i == j ? NumOps.One : NumOps.Zero;
-                T xiXjOverNormSq = NumOps.GreaterThan(normSquared, NumOps.FromDouble(1e-20))
-                    ? NumOps.Divide(NumOps.Multiply(input[i], input[j]), normSquared)
-                    : NumOps.Zero;
-                T normPart = NumOps.Multiply(scale, NumOps.Multiply(
-                    NumOps.Subtract(delta_ij, xiXjOverNormSq), normInv));
+        // 1 / ||x|| where ||x|| > 1e-10, else 0
+        var normInv = engine.TensorWhere(
+            engine.TensorGreaterThan(norm, NumOps.FromDouble(1e-10)), engine.TensorDivide(ones, norm), zeros);
 
-                // Term 2: 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
-                T daPart = NumOps.Multiply(NumOps.FromDouble(2),
-                    NumOps.Divide(NumOps.Multiply(input[i], input[j]),
-                        NumOps.Multiply(normSqPlusOneSq, norm)));
+        // outer[b, i, j] = x_i * x_j
+        var outer = engine.TensorMultiply(
+            engine.TensorTile(engine.Reshape(vectors, new[] { batch, n, 1 }), new[] { 1, 1, n }),
+            engine.TensorTile(engine.Reshape(vectors, new[] { batch, 1, n }), new[] { 1, n, 1 }));
 
-                jacobian[i, j] = NumOps.Add(normPart, daPart);
-            }
-        }
+        // x_i*x_j/||x||^2 where ||x||^2 > 1e-20, else 0
+        var normSquaredFull = engine.TensorTile(normSquared, new[] { 1, n, n });
+        var outerOverNormSq = engine.TensorWhere(
+            engine.TensorGreaterThan(normSquaredFull, NumOps.FromDouble(1e-20)),
+            engine.TensorDivide(outer, normSquaredFull),
+            engine.TensorZerosLike(outer));
 
-        return jacobian;
+        // Term 1: a * (delta_ij - x_i*x_j/||x||^2) / ||x||
+        var identity = engine.TensorTile(engine.Reshape(engine.TensorEye<T>(n), new[] { 1, n, n }), new[] { batch, 1, 1 });
+        var normPart = engine.TensorMultiply(
+            engine.TensorTile(scale, new[] { 1, n, n }),
+            engine.TensorMultiply(
+                engine.TensorSubtract(identity, outerOverNormSq), engine.TensorTile(normInv, new[] { 1, n, n })));
+
+        // Term 2: 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
+        var denominator = engine.TensorMultiply(engine.TensorMultiply(normSqPlusOne, normSqPlusOne), norm);
+        var daPart = engine.TensorMultiplyScalar(
+            engine.TensorDivide(outer, engine.TensorTile(denominator, new[] { 1, n, n })), NumOps.FromDouble(2));
+
+        return engine.Reshape(engine.TensorAdd(normPart, daPart), full);
     }
 
     /// <summary>
@@ -250,27 +278,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         int vectorLength = input.Shape[input.Shape.Length - 1];
         int batchElements = input.Length / vectorLength;
 
-        var flattenedInput = input.Reshape(new[] { batchElements, vectorLength });
-        var flatOutput = new Tensor<T>(new[] { batchElements, vectorLength, vectorLength });
-
-        for (int i = 0; i < batchElements; i++)
-        {
-            Vector<T> vector = new Vector<T>(vectorLength);
-            for (int j = 0; j < vectorLength; j++)
-            {
-                vector[j] = flattenedInput[i, j];
-            }
-
-            Matrix<T> jacobian = Derivative(vector);
-
-            for (int j = 0; j < vectorLength; j++)
-            {
-                for (int k = 0; k < vectorLength; k++)
-                {
-                    flatOutput[i, j, k] = jacobian[j, k];
-                }
-            }
-        }
+        var flatOutput = SquashJacobians(Engine.Reshape(input, new[] { batchElements, vectorLength }));
 
         var outputShape = new int[input.Shape.Length + 1];
         for (int i = 0; i < input.Shape.Length; i++)
@@ -279,7 +287,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         }
         outputShape[outputShape.Length - 1] = vectorLength;
 
-        return flatOutput.Reshape(outputShape);
+        return Engine.Reshape(flatOutput, outputShape);
     }
 
 }

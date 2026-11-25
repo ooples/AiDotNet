@@ -169,32 +169,17 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        var engine = Engine;
         Vector<T> output = Activate(input);
-        int d = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(d, d);
+        var values = Tensor<T>.FromVector(input);
 
         T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
 
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j)
-                {
-                    T term1 = NumOps.Multiply(output[i], NumOps.Subtract(NumOps.One, output[i]));
-                    T term2 = NumOps.Divide(NumOps.Multiply(input[i], input[i]), NumOps.Multiply(norm, norm));
-                    jacobian[i, j] = NumOps.Divide(NumOps.Subtract(term1, term2), norm);
-                }
-                else
-                {
-                    T term1 = NumOps.Multiply(NumOps.Negate(output[i]), output[j]);
-                    T term2 = NumOps.Divide(NumOps.Multiply(input[i], input[j]), NumOps.Multiply(norm, norm));
-                    jacobian[i, j] = NumOps.Divide(NumOps.Subtract(term1, term2), norm);
-                }
-            }
-        }
-
-        return jacobian;
+        // J[i, j] = (term1 - term2) / norm, with term1 the softmax-form entry (output[i] * (1 - output[i])
+        // on the diagonal, -output[i] * output[j] off it) and term2 = input[i] * input[j] / norm^2
+        var term1 = SoftmaxJacobian(Tensor<T>.FromVector(output));
+        var term2 = engine.TensorDivideScalar(engine.TensorOuter(values, values), NumOps.Multiply(norm, norm));
+        return engine.TensorDivideScalar(engine.TensorSubtract(term1, term2), norm).ToMatrix();
     }
 
 }
