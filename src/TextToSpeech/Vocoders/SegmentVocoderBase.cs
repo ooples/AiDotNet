@@ -152,15 +152,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
 
     /// <summary>Standard-normal noise of <paramref name="shape"/>.</summary>
     protected Tensor<T> Gaussian(int[] shape, Random random)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
-        return t;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random);
 
     /// <summary>The mean of every element, as a scalar tensor.</summary>
     protected Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);

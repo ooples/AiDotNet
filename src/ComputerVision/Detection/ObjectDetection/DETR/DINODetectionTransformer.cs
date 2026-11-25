@@ -386,15 +386,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
     }
 
     private Tensor<T> Normal(int[] shape, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = _numOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-        return tensor;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random);
 
     private static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
 
