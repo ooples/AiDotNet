@@ -179,18 +179,41 @@ internal sealed class ClapAudioFrontEnd<T>
         if (batch == 0) return new Tensor<T>(new[] { batch, clip });
         var engine = AiDotNetEngine.Current;
         int samples = waveforms.Shape[1];
-        // One offset per row, drawn in row order. The crop is a gather through per-step indices, so a compiled
-        // training plan redraws the offsets on every replay instead of keeping the traced step's slices.
-        var positions = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { batch * clip }, indices =>
+        // One offset per row, drawn in row order: the only thing this step draws, on the eager tape and in a plan.
+        var offsets = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { batch }, drawn =>
+        {
+            var span = drawn.AsWritableSpan();
+            for (int b = 0; b < batch; b++) span[b] = random.Next(overflow + 1);
+        });
+
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            // Nothing is being recorded, so each row is a slice at its offset and no index is built.
+            var starts = offsets.AsSpan();
+            var crops = new Tensor<T>[batch];
+            for (int b = 0; b < batch; b++)
+                crops[b] = engine.TensorSlice(waveforms, new[] { b, starts[b] }, new[] { 1, clip });
+            return engine.Concat(crops, 0);
+        }
+
+        // A recorded slice keeps the offset it was traced with, and indices computed inside the trace from the
+        // offsets are not something AiDotNet.Tensors 0.152.1 can record a gather through (the plan's first step reads
+        // them as zeros). So a plan takes the samples through one flat index per sample, refilled from this step's
+        // offsets before every replay; with traced index arithmetic this becomes the offsets plus an arange.
+        var positions = new Tensor<int>(new[] { batch * clip });
+        void Fill(Tensor<int> indices)
         {
             var span = indices.AsWritableSpan();
+            var starts = offsets.AsSpan();
             for (int b = 0; b < batch; b++)
             {
-                int first = b * samples + random.Next(overflow + 1), at = b * clip;
+                int first = b * samples + starts[b], at = b * clip;
                 for (int k = 0; k < clip; k++) span[at + k] = first + k;
             }
-        });
-        return engine.Reshape(engine.TensorGather(engine.Reshape(waveforms, new[] { batch * samples }), positions, axis: 0),
+        }
+        Fill(positions);
+        AiDotNet.Training.CompiledStepRandom<T>.RecordDerived(positions, Fill);
+        return engine.Reshape(engine.TensorTake(engine.Reshape(waveforms, new[] { batch * samples }), positions),
             new[] { batch, clip });
     }
 
