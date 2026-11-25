@@ -97,56 +97,120 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         };
     }
 
-    [ThreadStatic]
-    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns)>? t_compactWyMasks;
-
-    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns) GetOrCreateCompactWyMasks(int k)
+    private sealed class CompactWyMaskEntry
     {
-        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns)>();
-        if (cache.TryGetValue(k, out var existing))
+        public CompactWyMaskEntry(
+            Tensor<T> strictUpperTwo,
+            Tensor<T> identity,
+            Tensor<T>[] basisRows,
+            Tensor<T>[] basisColumns,
+            Tensor<T>? wyOffFwd2,
+            Tensor<T>? wyOffTrans2,
+            Tensor<T>? twoIdentity2)
         {
-            return existing;
+            StrictUpperTwo = strictUpperTwo;
+            Identity = identity;
+            BasisRows = basisRows;
+            BasisColumns = basisColumns;
+            WyOffFwd2 = wyOffFwd2;
+            WyOffTrans2 = wyOffTrans2;
+            TwoIdentity2 = twoIdentity2;
         }
 
-        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
-        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        public Tensor<T> StrictUpperTwo { get; }
+        public Tensor<T> Identity { get; }
+        public Tensor<T>[] BasisRows { get; }
+        public Tensor<T>[] BasisColumns { get; }
+        public Tensor<T>? WyOffFwd2 { get; }
+        public Tensor<T>? WyOffTrans2 { get; }
+        public Tensor<T>? TwoIdentity2 { get; }
+        public IEngine? RegisteredEngine { get; set; }
+    }
 
-        var ops = MathHelper.GetNumericOperations<T>();
-        T zero = ops.Zero;
-        T one = ops.One;
-        T twoVal = ops.FromDouble(2.0);
-        var upperData = new T[k * k];
-        var idData = new T[k * k];
-        for (int r = 0; r < k; r++)
+    [ThreadStatic]
+    private static Dictionary<int, CompactWyMaskEntry>? t_compactWyMasks;
+
+    private static CompactWyMaskEntry GetOrCreateCompactWyMasks(IEngine engine, int k)
+    {
+        var cache = t_compactWyMasks ??= new Dictionary<int, CompactWyMaskEntry>();
+        if (!cache.TryGetValue(k, out var entry))
         {
-            for (int c = 0; c < k; c++)
+            using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+            var ops = MathHelper.GetNumericOperations<T>();
+            T zero = ops.Zero;
+            T one = ops.One;
+            T twoVal = ops.FromDouble(2.0);
+            var upperData = new T[k * k];
+            var idData = new T[k * k];
+            for (int r = 0; r < k; r++)
             {
-                int idx = r * k + c;
-                upperData[idx] = r < c ? twoVal : zero;
-                idData[idx] = r == c ? one : zero;
+                for (int c = 0; c < k; c++)
+                {
+                    int idx = r * k + c;
+                    upperData[idx] = r < c ? twoVal : zero;
+                    idData[idx] = r == c ? one : zero;
+                }
             }
-        }
 
-        // BasisRows[r] is e_r^T ([1, k]) and BasisColumns[r] is e_r ([k, 1]): the triangular solve in ApplyChain reads
-        // row r of a matrix as e_r^T * A and writes a row back as the outer product e_r * v, so the cache is O(k^2).
-        var basisRows = new Tensor<T>[k];
-        var basisColumns = new Tensor<T>[k];
-        for (int r = 0; r < k; r++)
-        {
-            var basisData = new T[k];
-            for (int c = 0; c < k; c++)
+            // BasisRows[r] is e_r^T ([1, k]) and BasisColumns[r] is e_r ([k, 1]): the triangular solve in ApplyChain reads
+            // row r of a matrix as e_r^T * A and writes a row back as the outer product e_r * v, so the cache is O(k^2).
+            var basisRows = new Tensor<T>[k];
+            var basisColumns = new Tensor<T>[k];
+            for (int r = 0; r < k; r++)
             {
-                basisData[c] = c == r ? one : zero;
+                var basisData = new T[k];
+                for (int c = 0; c < k; c++)
+                {
+                    basisData[c] = c == r ? one : zero;
+                }
+                basisRows[r] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([1, k], new Vector<T>(basisData)));
+                basisColumns[r] = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([k, 1], new Vector<T>((T[])basisData.Clone())));
             }
-            basisRows[r] = new Tensor<T>([1, k], new Vector<T>(basisData));
-            basisColumns[r] = new Tensor<T>([k, 1], new Vector<T>((T[])basisData.Clone()));
+
+            Tensor<T>? wyOffFwd2 = null;
+            Tensor<T>? wyOffTrans2 = null;
+            Tensor<T>? twoIdentity2 = null;
+            if (k == 2)
+            {
+                T negFour = ops.FromDouble(-4.0);
+                wyOffFwd2 = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([2, 2], new Vector<T>(new[] { zero, negFour, zero, zero })));
+                wyOffTrans2 = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([2, 2], new Vector<T>(new[] { zero, zero, negFour, zero })));
+                twoIdentity2 = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([2, 2], new Vector<T>(new[] { twoVal, zero, zero, twoVal })));
+            }
+
+            entry = new CompactWyMaskEntry(
+                AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([k, k], new Vector<T>(upperData))),
+                AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([k, k], new Vector<T>(idData))),
+                basisRows,
+                basisColumns,
+                wyOffFwd2,
+                wyOffTrans2,
+                twoIdentity2);
+            cache[k] = entry;
         }
 
-        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)),
-            basisRows, basisColumns);
-        cache[k] = masks;
-        return masks;
+        if (!ReferenceEquals(entry.RegisteredEngine, engine))
+        {
+            engine.RegisterPersistentTensor(entry.StrictUpperTwo, PersistentTensorRole.Constant);
+            engine.RegisterPersistentTensor(entry.Identity, PersistentTensorRole.Constant);
+            for (int r = 0; r < entry.BasisRows.Length; r++)
+            {
+                engine.RegisterPersistentTensor(entry.BasisRows[r], PersistentTensorRole.Constant);
+                engine.RegisterPersistentTensor(entry.BasisColumns[r], PersistentTensorRole.Constant);
+            }
+            if (entry.WyOffFwd2 is not null)
+                engine.RegisterPersistentTensor(entry.WyOffFwd2, PersistentTensorRole.Constant);
+            if (entry.WyOffTrans2 is not null)
+                engine.RegisterPersistentTensor(entry.WyOffTrans2, PersistentTensorRole.Constant);
+            if (entry.TwoIdentity2 is not null)
+                engine.RegisterPersistentTensor(entry.TwoIdentity2, PersistentTensorRole.Constant);
+            entry.RegisteredEngine = engine;
+        }
+
+        return entry;
     }
 
     /// <summary>
@@ -200,32 +264,44 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             // Normalize rows by sqrt(max(||u_j||_2^2, normFloor)) so H_j = I - 2 * uHat_j * uHat_j^T holds across
             // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat^T * T * UHat
             // where N = 2 * strict_triu(UHat * UHat^T) is nilpotent (N^k == 0) and T = 2 * (I + N)^-1.
-            var (strictUpperTwo, identityK, basisRows, basisColumns) = GetOrCreateCompactWyMasks(k);
+            var masks = GetOrCreateCompactWyMasks(engine, k);
             Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
             Tensor<T> uHatCol = engine.TensorTranspose(uHat);
             Tensor<T> gram = engine.TensorMatMul(uHat, uHatCol);
-            Tensor<T> nilpotent = engine.TensorMultiply(gram, strictUpperTwo);
-
-            // M = (I + N)^-1 by back substitution, one row per step from the bottom: (I + N) M = I gives
-            // M[i] = e_i - N[i] M, and N[i] is non-zero only right of the diagonal, so it reads only rows below i,
-            // which are already final. Row i of M is still e_i before its step, so subtracting e_i * (N[i] M) sets it
-            // exactly. Each step forms only that row: N[i] = e_i^T N and N[i] M are [1, k] products, and the write-back
-            // is a [k, 1] x [1, k] outer product, so the solve costs O(k^3) rather than k full [k, k] products.
-            // Every intermediate is a finished row of M or an identity row, so nothing grows past the final T. The
-            // truncated Neumann series this replaces formed the partial sums of (-N)^p, which grow like
-            // 2^p * C(k - 1, p - 1) before cancelling and overflow Half at k = 16 for correlated reflectors.
-            Tensor<T> series = identityK;
-            for (int i = k - 2; i >= 0; i--)
+            Tensor<T> tMat;
+            if (k == 2 && masks.WyOffFwd2 is not null && masks.WyOffTrans2 is not null && masks.TwoIdentity2 is not null)
             {
-                Tensor<T> nilpotentRow = engine.TensorMatMul(basisRows[i], nilpotent);
-                Tensor<T> solvedRow = engine.TensorMatMul(nilpotentRow, series);
-                series = engine.TensorSubtract(series, engine.TensorMatMul(basisColumns[i], solvedRow));
+                // Exact closed-form 2x2 nilpotent inverse: N^2 == 0 identically for every 2x2 strictly upper-triangular
+                // matrix, so 2 * (I + N)^-1 = 2 * (I - N) = 2*I - 4*strict_triu(gram), and its transpose uses the
+                // symmetric lower-triangular entry gram[1, 0] == gram[0, 1] directly without extra GEMM/transpose launches.
+                Tensor<T> offMask = transpose ? masks.WyOffTrans2 : masks.WyOffFwd2;
+                tMat = engine.TensorAdd(engine.TensorMultiply(gram, offMask), masks.TwoIdentity2);
             }
-
-            Tensor<T> tMat = engine.TensorMultiplyScalar(series, two);
-            if (transpose)
+            else
             {
-                tMat = engine.TensorTranspose(tMat);
+                Tensor<T> nilpotent = engine.TensorMultiply(gram, masks.StrictUpperTwo);
+
+                // M = (I + N)^-1 by back substitution, one row per step from the bottom: (I + N) M = I gives
+                // M[i] = e_i - N[i] M, and N[i] is non-zero only right of the diagonal, so it reads only rows below i,
+                // which are already final. Row i of M is still e_i before its step, so subtracting e_i * (N[i] M) sets it
+                // exactly. Each step forms only that row: N[i] = e_i^T N and N[i] M are [1, k] products, and the write-back
+                // is a [k, 1] x [1, k] outer product, so the solve costs O(k^3) rather than k full [k, k] products.
+                // Every intermediate is a finished row of M or an identity row, so nothing grows past the final T. The
+                // truncated Neumann series this replaces formed the partial sums of (-N)^p, which grow like
+                // 2^p * C(k - 1, p - 1) before cancelling and overflow Half at k = 16 for correlated reflectors.
+                Tensor<T> series = masks.Identity;
+                for (int i = k - 2; i >= 0; i--)
+                {
+                    Tensor<T> nilpotentRow = engine.TensorMatMul(masks.BasisRows[i], nilpotent);
+                    Tensor<T> solvedRow = engine.TensorMatMul(nilpotentRow, series);
+                    series = engine.TensorSubtract(series, engine.TensorMatMul(masks.BasisColumns[i], solvedRow));
+                }
+
+                tMat = engine.TensorMultiplyScalar(series, two);
+                if (transpose)
+                {
+                    tMat = engine.TensorTranspose(tMat);
+                }
             }
 
             Tensor<T> proj = engine.TensorMatMul(current, uHatCol);
