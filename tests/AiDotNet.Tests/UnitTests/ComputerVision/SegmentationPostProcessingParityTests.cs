@@ -490,13 +490,8 @@ public class SegmentationPostProcessingParityTests
         AssertSame(masks, result.Masks, "masks");
         AssertSame(lowRes, result.LowResLogits, "low-res logits");
         Assert.Equal(stability, result.StabilityScores);
-        Assert.Equal(3, result.Scores.Length);
-        for (int m = 0; m < 3; m++)
-        {
-            // The mean is a whole-tensor sum here and a running sum in the scan: same terms, different
-            // association, so the last bits may differ
-            Assert.True(Math.Abs(scores[m] - result.Scores[m]) <= 1e-13, $"score {m}: expected {scores[m]:R} but was {result.Scores[m]:R}");
-        }
+        // Same probabilities added in the same (row-major) order, so the mean is the same double
+        Assert.Equal(scores, result.Scores);
     }
 
     [Theory]
