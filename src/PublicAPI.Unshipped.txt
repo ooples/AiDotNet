@@ -26667,3 +26667,4 @@ AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.set -> void
 AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.get -> AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype?
 AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.set -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ConfigureWeightStreaming(AiDotNet.Deployment.Configuration.WeightStreamingConfig! config) -> void
+static AiDotNet.ModelLoading.Pretrained.MoEModelBuilder<T>.BuildStreamed(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig! config, AiDotNet.Agentic.Models.Local.INamedTensorSource! weights, AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype weightStore, int warmupSequenceLength = 8) -> AiDotNet.NeuralNetworks.NeuralNetwork<T>!

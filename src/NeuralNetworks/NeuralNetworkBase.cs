@@ -12502,8 +12502,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Registers <paramref name="layer"/>'s own trainable tensors and, recursively, those of its sub-layers. A
     /// layer's trainable view lists only the tensors it owns, so a composite block (a decoder block holding its
     /// attention, norms and a mixture of experts holding its router and experts) registered nothing but its own
-    /// direct tensors: an OLMoE-1B-7B network registered 4 of its tensors (0.41 GB) and kept the rest of its 6.9B
-    /// parameters out of the store.
+    /// direct tensors: a 6.9B-parameter mixture-of-experts network registered 4 of its tensors (0.41 GB) and kept the rest
+    /// out of the store.
     /// </summary>
     private void RegisterLayerTensorsRecursively(LayerBase<T> layer, HashSet<LayerBase<T>> visited)
     {
@@ -12701,6 +12701,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </para>
     /// </remarks>
     internal void DisableAutoStreaming() => _streamingAutoDetectDisabled = true;
+
+    /// <summary>
+    /// Starts streaming for a network whose weights are about to be loaded layer by layer: configures the store with
+    /// <paramref name="storeDtype"/> but registers nothing, so the loader can write each layer's weights and then hand
+    /// that layer to <see cref="RegisterLoadedLayerWeights"/>. Each registered layer's full-precision storage is
+    /// released as soon as it is encoded, so a model loaded this way never holds all of its weights at full precision.
+    /// </summary>
+    internal void BeginIncrementalWeightStreaming(StreamingStoreDtype storeDtype)
+    {
+        WeightRegistry.Configure(new GpuOffloadOptions { StreamingStoreDtype = storeDtype });
+        _weightLifetimeConfigured = true;
+        _registrationLifetime = WeightLifetime.Streaming;
+        SetStreamingExecutionTrainingIfSupported(IsTrainingMode);
+    }
+
+    /// <summary>Registers one loaded layer's tensors (and its sub-layers') with the store started by
+    /// <see cref="BeginIncrementalWeightStreaming"/>.</summary>
+    internal void RegisterLoadedLayerWeights(LayerBase<T> layer)
+    {
+        if (!_weightLifetimeConfigured) throw new InvalidOperationException("BeginIncrementalWeightStreaming was not called.");
+        RegisterLayerTensorsRecursively(layer, new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance));
+    }
+
+    /// <summary>Registers every tensor not yet registered (the end of an incremental load).</summary>
+    internal void FinishIncrementalWeightStreaming() => RegisterTrainableTensorsWithWeightRegistry();
 
     /// <summary>
     /// Forces weight streaming on for this network now, with the weights held in <paramref name="storeDtype"/>

@@ -1220,7 +1220,6 @@
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.Gemma2ModelBuilder<T>.Build(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig, AiDotNet.Agentic.Models.Local.INamedTensorSource, int)
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.LlamaModelBuilder<T>.Build(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig, AiDotNet.Agentic.Models.Local.INamedTensorSource, AiDotNet.ModelLoading.Pretrained.DecoderOptions<T>?, int)
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.LlamaModelBuilder<T>.LoadLmHead(AiDotNet.Interfaces.ILayer<T>, AiDotNet.Agentic.Models.Local.INamedTensorSource, int, int, double)
-1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.MoEModelBuilder<T>.Build(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig, AiDotNet.Agentic.Models.Local.INamedTensorSource, int)
 2	ADNELEM001|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ExtractLastLogitsFromAiTensor(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM001|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>)

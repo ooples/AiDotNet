@@ -37,6 +37,28 @@ public static class MoEModelBuilder<T>
     /// <param name="weights">The tensor source keyed by Hugging Face parameter names.</param>
     /// <param name="warmupSequenceLength">Warmup forward length for lazy-weight materialization (≥ 1).</param>
     public static NeuralNetwork<T> Build(HuggingFaceConfig config, INamedTensorSource weights, int warmupSequenceLength = 8)
+        => BuildCore(config, weights, weightStore: null, warmupSequenceLength);
+
+    /// <summary>
+    /// Builds and weight-loads a Mixtral-style MoE decoder whose weights go straight into a streaming store
+    /// (inference; process-global, like every weight-streaming configuration).
+    /// </summary>
+    /// <param name="config">The parsed <c>config.json</c>.</param>
+    /// <param name="weights">The tensor source keyed by Hugging Face parameter names.</param>
+    /// <param name="weightStore">
+    /// The store encoding. Each decoder
+    /// block's experts are allocated, loaded and encoded in turn, so the load never holds every weight at full
+    /// precision: a bf16 checkpoint peaks near its bf16 size plus one block, where loading at full precision and
+    /// streaming afterwards held the whole fp32 model first (a 6.9B-parameter MoE: 27.6 GB of weights, 48.1 GB peak
+    /// private bytes).
+    /// </param>
+    /// <param name="warmupSequenceLength">Warmup forward length for lazy-weight materialization (≥ 1).</param>
+    public static NeuralNetwork<T> BuildStreamed(HuggingFaceConfig config, INamedTensorSource weights,
+        AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype weightStore, int warmupSequenceLength = 8)
+        => BuildCore(config, weights, weightStore, warmupSequenceLength);
+
+    private static NeuralNetwork<T> BuildCore(HuggingFaceConfig config, INamedTensorSource weights,
+        AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype? weightStore, int warmupSequenceLength)
     {
         Guard.NotNull(config);
         Guard.NotNull(weights);
@@ -87,18 +109,23 @@ public static class MoEModelBuilder<T>
         // Warmup materializes embed/attention/final-norm/lm-head + the router; a warmup forward only routes
         // to the top-k experts, so materialize every expert explicitly before loading their weights.
         var warmup = new Tensor<T>(new[] { 1, warmupSequenceLength });
-        for (int p = 0; p < warmupSequenceLength; p++) warmup[0, p] = NumOps.Zero;
+        warmup.Fill(NumOps.Zero);
         network.Predict(warmup);
-        foreach (var b in blocks) b.Moe.Materialize();
+        bool incremental = weightStore is not null;
+        // Resident: materialize every expert now. Streamed: one block at a time, inside the load loop.
+        if (!incremental) foreach (var b in blocks) b.Moe.Materialize();
+        else network.BeginIncrementalWeightStreaming(weightStore!.Value);
 
         // ---- load pretrained weights ----
         embedding.SetParameters(new Vector<T>(
             LlamaModelBuilder<T>.ReadTensor(weights, LlamaModelBuilder<T>.EmbedName, vocab * hidden)));
+        if (incremental) network.RegisterLoadedLayerWeights(embedding);
 
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
             var block = blocks[i];
             string p = $"model.layers.{i}.";
+            if (incremental) block.Moe.Materialize();
 
             LlamaModelBuilder<T>.LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, addOne: false);
             LlamaModelBuilder<T>.LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, addOne: false);
@@ -115,11 +142,13 @@ public static class MoEModelBuilder<T>
                 LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertUp(e), weights, ep + "w3.weight", outDim: intermediate, inDim: hidden);
                 LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertDown(e), weights, ep + "w2.weight", outDim: hidden, inDim: intermediate);
             }
+            if (incremental) network.RegisterLoadedLayerWeights(block);
         }
 
         LlamaModelBuilder<T>.LoadGamma(finalNorm, weights, "model.norm.weight", hidden, addOne: false);
 
         LlamaModelBuilder<T>.LoadLmHead(lmHead, weights, vocab, hidden);
+        if (incremental) network.FinishIncrementalWeightStreaming();
 
         return network;
     }
