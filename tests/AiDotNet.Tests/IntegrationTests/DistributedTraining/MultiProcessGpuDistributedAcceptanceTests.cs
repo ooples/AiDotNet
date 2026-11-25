@@ -24,6 +24,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Xunit;
 using Xunit.Abstractions;
 #if NET8_0_OR_GREATER
@@ -52,8 +53,79 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         Directory.CreateDirectory(_tempRoot);
     }
 
+    // Every worker process this instance started and has not yet disposed. The CPU tests bound their total running
+    // time with ArmWorkerBudget; when the budget runs out the watchdog kills whatever is still alive. It fires on a
+    // timer thread, so the workers die even when xunit has already abandoned the test task on its own timeout,
+    // which runs none of the test's disposals.
+    private readonly object _startedWorkersLock = new();
+    private readonly List<Process> _startedWorkers = new();
+    private Stopwatch? _workerBudgetClock;
+    private TimeSpan _workerBudget;
+    private Timer? _workerWatchdog;
+
+    private void ArmWorkerBudget(TimeSpan budget)
+    {
+        _workerBudget = budget;
+        _workerBudgetClock = Stopwatch.StartNew();
+        _workerWatchdog = new Timer(
+            _ => KillStartedWorkers(),
+            null,
+            budget + TimeSpan.FromSeconds(10),
+            Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>The time a phase may wait: its own limit, or what is left of the test's budget if that is less.</summary>
+    private TimeSpan PhaseTimeout(TimeSpan phaseLimit)
+    {
+        if (_workerBudgetClock is null)
+        {
+            return phaseLimit;
+        }
+
+        TimeSpan remaining = _workerBudget - _workerBudgetClock.Elapsed;
+        if (remaining <= TimeSpan.Zero)
+        {
+            throw new TimeoutException(
+                $"The test used its whole worker budget of {_workerBudget.TotalSeconds:F0}s before this phase started.");
+        }
+
+        return remaining < phaseLimit ? remaining : phaseLimit;
+    }
+
+    private void KillStartedWorkers()
+    {
+        Process[] workers;
+        lock (_startedWorkersLock)
+        {
+            workers = _startedWorkers.ToArray();
+            _startedWorkers.Clear();
+        }
+
+        foreach (Process worker in workers)
+        {
+            try
+            {
+                if (!worker.HasExited)
+                {
+                    worker.Kill(entireProcessTree: true);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The process exited, or its handle was disposed, between the snapshot and the kill.
+                Trace.TraceInformation($"A worker process was already gone when the test tried to kill it: {ex.Message}");
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Trace.TraceWarning($"A worker process could not be killed: {ex}");
+            }
+        }
+    }
+
     public void Dispose()
     {
+        _workerWatchdog?.Dispose();
+        KillStartedWorkers();
         try
         {
             if (Directory.Exists(_tempRoot))
@@ -91,6 +163,13 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public int InitWeightSeed { get; set; } = 77;
         public bool UseScrambledInit { get; set; }
         public int SampleDelayMs { get; set; }
+
+        /// <summary>
+        /// When set, the worker stops reading samples as soon as a checkpoint is on disk: it writes
+        /// "<c>marker</c>.rank<c>N</c>" and waits until "<c>marker</c>.release" exists. A test uses it to kill a rank
+        /// at a known point of the run instead of racing the run's own speed.
+        /// </summary>
+        public string? HoldAfterFirstCheckpointMarker { get; set; }
         public string? CheckpointDir { get; set; }
         public int SaveFrequency { get; set; }
         public bool ResumeFromCheckpoint { get; set; }
@@ -355,6 +434,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
                     await Task.Delay(spec.SampleDelayMs, ct).ConfigureAwait(false);
                 }
 
+                await HoldAfterFirstCheckpointAsync(spec, ct).ConfigureAwait(false);
                 return (inputs[idx], targets[idx]);
             },
             batchSize: spec.LocalBatchSize,
@@ -829,6 +909,42 @@ public static class Program
         }
     }
 
+    private static bool HasCompletedCheckpoint(string? checkpointDir)
+    {
+        return !string.IsNullOrWhiteSpace(checkpointDir)
+            && Directory.Exists(checkpointDir)
+            && Directory.GetFiles(checkpointDir, "*.json").Any(f => f.IndexOf(".tmp", StringComparison.OrdinalIgnoreCase) < 0);
+    }
+
+    /// <summary>Runs inside the worker: parks the sample reader once the first checkpoint exists (see the spec).</summary>
+    private static async Task HoldAfterFirstCheckpointAsync(WorkerSpec spec, CancellationToken cancellationToken)
+    {
+        string? marker = spec.HoldAfterFirstCheckpointMarker;
+        if (string.IsNullOrWhiteSpace(marker) || !HasCompletedCheckpoint(spec.CheckpointDir))
+        {
+            return;
+        }
+
+        string release = marker + ".release";
+        if (File.Exists(release))
+        {
+            return;
+        }
+
+        File.WriteAllText(marker + ".rank" + spec.Rank.ToString(CultureInfo.InvariantCulture), "holding");
+        long start = Stopwatch.GetTimestamp();
+        while (!File.Exists(release))
+        {
+            double waited = (Stopwatch.GetTimestamp() - start) / (double)Stopwatch.Frequency;
+            if (waited > 180.0)
+            {
+                throw new TimeoutException("The worker was held after its first checkpoint and never released.");
+            }
+
+            await Task.Delay(20, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private sealed class RunningWorker : IDisposable
     {
         public RunningWorker(Process process, string specPath, string resultPath, Task<string> stdoutTask, Task<string> stderrTask)
@@ -846,8 +962,12 @@ public static class Program
         public Task<string> StdoutTask { get; }
         public Task<string> StderrTask { get; }
 
+        /// <summary>Called with the process when the worker is disposed, before the process handle is released.</summary>
+        public Action<Process>? Disposing { get; set; }
+
         public void Dispose()
         {
+            Disposing?.Invoke(Process);
             try
             {
                 if (!Process.HasExited)
@@ -898,7 +1018,21 @@ public static class Program
         var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start child dotnet worker process.");
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
-        return new RunningWorker(proc, specPath, resultPath, stdoutTask, stderrTask);
+        lock (_startedWorkersLock)
+        {
+            _startedWorkers.Add(proc);
+        }
+
+        return new RunningWorker(proc, specPath, resultPath, stdoutTask, stderrTask)
+        {
+            Disposing = disposed =>
+            {
+                lock (_startedWorkersLock)
+                {
+                    _startedWorkers.Remove(disposed);
+                }
+            },
+        };
     }
 
     private static async Task<(int ExitCode, WorkerResult? Result, string Stdout, string Stderr)> WaitForWorkerAsync(
@@ -2020,10 +2154,25 @@ public static class Program
         };
     }
 
+    // Each of these tests runs several phases of up to 90 s. Their sum is held under the 240 s xunit timeout by a
+    // budget for the whole test: a phase waits for what is left of it, and the watchdog kills the workers when it
+    // runs out.
+    private static readonly TimeSpan CpuTestWorkerBudget = TimeSpan.FromSeconds(200);
+    private static readonly TimeSpan CpuPhaseLimit = TimeSpan.FromSeconds(90);
+
+    // Bound on the weight difference between runs that take the same steps but sum the gradient in a different
+    // order (two halves reduced across processes against one batch, or a different world size before and after a
+    // resume). The weights are of order 0.3 and Adam at a learning rate of 0.015 moves each by up to about 0.015 per
+    // step, so 1e-5 is under a thousandth of one step; the measured difference is 2.5e-7 to 7.6e-7 and depends on
+    // the SIMD width of the machine. A rank that dropped or repeated a sample, or a resume that lost its place, is
+    // off by orders of magnitude more, and each test proves that with a control run. Do not widen this to make a
+    // failure pass: a difference above it is a finding.
+    private const double SameStepsDifferentSummationOrderBound = 1e-5;
+
     private async Task<WorkerResult> RunOneCpuProcessAsync(WorkerSpec spec, string context)
     {
         using var worker = StartWorkerProcess(spec);
-        return RequireSucceededResult(await WaitForWorkerAsync(worker, TimeSpan.FromSeconds(90)), context);
+        return RequireSucceededResult(await WaitForWorkerAsync(worker, PhaseTimeout(CpuPhaseLimit)), context);
     }
 
     private async Task<(WorkerResult Rank0, WorkerResult Rank1)> RunTwoCpuProcessesAsync(
@@ -2033,11 +2182,48 @@ public static class Program
     {
         using var rank0 = StartWorkerProcess(rank0Spec);
         using var rank1 = StartWorkerProcess(rank1Spec);
-        var (outcome0, outcome1) = await WaitForWorkerPairAsync(rank0, rank1, TimeSpan.FromSeconds(90));
+        var (outcome0, outcome1) = await WaitForWorkerPairAsync(rank0, rank1, PhaseTimeout(CpuPhaseLimit));
         var result0 = RequireSucceededResult(outcome0, context + " rank 0");
         var result1 = RequireSucceededResult(outcome1, context + " rank 1");
         Assert.NotEqual(result0.ProcessId, result1.ProcessId);
         return (result0, result1);
+    }
+
+    /// <summary>
+    /// Copies a checkpoint directory and sets the named metadata values of every checkpoint in the copy to zero.
+    /// </summary>
+    private static string CopyCheckpointsWithMetadataZeroed(string sourceDir, string targetDir, params string[] metadataKeys)
+    {
+        Directory.CreateDirectory(targetDir);
+        int rewritten = 0;
+        foreach (string file in Directory.GetFiles(sourceDir))
+        {
+            string target = Path.Combine(targetDir, Path.GetFileName(file));
+            if (!file.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(file, target);
+                continue;
+            }
+
+            JToken root = JToken.Parse(File.ReadAllText(file));
+            if (root is JContainer container)
+            {
+                foreach (JProperty property in container.Descendants().OfType<JProperty>().ToList())
+                {
+                    if (metadataKeys.Contains(property.Name, StringComparer.Ordinal))
+                    {
+                        property.Value = new JValue(0);
+                        rewritten++;
+                    }
+                }
+            }
+
+            File.WriteAllText(target, root.ToString(Formatting.Indented));
+        }
+
+        Assert.True(rewritten >= metadataKeys.Length,
+            $"Expected to rewrite {string.Join(", ", metadataKeys)} in the checkpoints under {sourceDir}; rewrote {rewritten} values.");
+        return targetDir;
     }
 
     [Theory(Timeout = 240000)]
@@ -2045,6 +2231,7 @@ public static class Program
     [InlineData("GlooTcp")]
     public async Task TwoProcessCpu_Streaming_ReproducesTheOneProcessRunAtTheSameGlobalBatch(string backendKind)
     {
+        ArmWorkerBudget(CpuTestWorkerBudget);
         const int dataSeed = 2026;
         const int initSeed = 88;
 
@@ -2067,7 +2254,8 @@ public static class Program
         // across processes instead of one batch of 16), so the comparison is to float rounding, not bit-for-bit.
         double diff = MaxAbsDiff(single.FinalWeights, rank0.FinalWeights);
         _output.WriteLine($"{backendKind}: two processes vs one process, max weight difference {diff:E3}.");
-        Assert.True(diff < 1e-5, $"Two CPU processes over {backendKind} differ from one process by {diff:E3}.");
+        Assert.True(diff < SameStepsDifferentSummationOrderBound,
+            $"Two CPU processes over {backendKind} differ from one process by {diff:E3}.");
 
         // Two processes that each trained alone on their own batches of 8 would not land here: the same worker
         // run alone at batch 8 is far from the batch-16 reference.
@@ -2075,7 +2263,7 @@ public static class Program
             CpuSpec(0, 1, backendKind, string.Empty, 0, localBatchSize: 8, maxSteps: 8, dataSeed, initSeed),
             "One-process CPU at the per-rank batch");
         double unsynchronizedDiff = MaxAbsDiff(single.FinalWeights, unsynchronized.FinalWeights);
-        Assert.True(unsynchronizedDiff > 100.0 * Math.Max(diff, 1e-7),
+        Assert.True(unsynchronizedDiff > 100.0 * SameStepsDifferentSummationOrderBound,
             $"A run at the per-rank batch is only {unsynchronizedDiff:E3} from the reference, so this data cannot " +
             "tell synchronized ranks from unsynchronized ones.");
     }
@@ -2083,6 +2271,7 @@ public static class Program
     [Fact(Timeout = 240000)]
     public async Task TwoProcessCpu_CheckpointResumesAcrossWorldSizes_TwoToOneAndOneToTwo()
     {
+        ArmWorkerBudget(CpuTestWorkerBudget);
         const int dataSeed = 9090;
         const int initSeed = 333;
 
@@ -2097,14 +2286,34 @@ public static class Program
             CpuSpec(0, 2, "SharedMemory", session2To1, 0, 8, maxSteps: 4, dataSeed, initSeed, checkpointDir: twoToOne, saveFrequency: 4),
             CpuSpec(1, 2, "SharedMemory", session2To1, 0, 8, maxSteps: 4, dataSeed, initSeed, checkpointDir: twoToOne, saveFrequency: 4),
             "2->1 phase 1");
+
+        // Control, taken before anything resumes in that directory: the same checkpoint with its place in the data
+        // set back to the start. A resume that restored the weights but restarted the stream trains steps 5 to 8 on
+        // the wrong samples and must land far outside the bound, or the bound proves nothing about the cursor.
+        string restartedCursor = CopyCheckpointsWithMetadataZeroed(
+            twoToOne,
+            Path.Combine(_tempRoot, "cpu_ckpt_2to1_restarted_cursor"),
+            "streaming.epoch", "streaming.batch_in_epoch", "streaming.samples_in_epoch");
+
         var resumedOnOne = await RunOneCpuProcessAsync(
             CpuSpec(0, 1, "SharedMemory", string.Empty, 0, 16, maxSteps: 8, dataSeed, initSeed,
                 checkpointDir: twoToOne, saveFrequency: 100, resume: true),
             "2->1 phase 2");
         double diff2To1 = MaxAbsDiff(uninterrupted.FinalWeights, resumedOnOne.FinalWeights);
         _output.WriteLine($"2 ranks -> 1 rank resume, max weight difference vs uninterrupted {diff2To1:E3}.");
-        Assert.True(diff2To1 < 1e-5, $"A 2-rank checkpoint resumed on 1 rank differs from the uninterrupted run by {diff2To1:E3}.");
+        Assert.True(diff2To1 < SameStepsDifferentSummationOrderBound,
+            $"A 2-rank checkpoint resumed on 1 rank differs from the uninterrupted run by {diff2To1:E3}.");
         Assert.Equal(uninterrupted.FinalLearningRate, resumedOnOne.FinalLearningRate, 9);
+
+        var resumedFromRestartedCursor = await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, "SharedMemory", string.Empty, 0, 16, maxSteps: 8, dataSeed, initSeed,
+                checkpointDir: restartedCursor, saveFrequency: 100, resume: true),
+            "2->1 control with the data cursor restarted");
+        double restartedCursorDiff = MaxAbsDiff(uninterrupted.FinalWeights, resumedFromRestartedCursor.FinalWeights);
+        _output.WriteLine($"Control, resume with the data cursor restarted: max weight difference {restartedCursorDiff:E3}.");
+        Assert.True(restartedCursorDiff > 100.0 * SameStepsDifferentSummationOrderBound,
+            $"A resume that restarted the data cursor is only {restartedCursorDiff:E3} from the uninterrupted run, so " +
+            "this data cannot tell a resume that kept its place from one that lost it.");
 
         // One process for 4 steps, then two processes with uneven batches (4 + 12) resume to step 8.
         string oneToTwo = Path.Combine(_tempRoot, "cpu_ckpt_1to2");
@@ -2121,13 +2330,15 @@ public static class Program
         Assert.Equal(0.0, MaxAbsDiff(resumed0.FinalWeights, resumed1.FinalWeights));
         double diff1To2 = MaxAbsDiff(uninterrupted.FinalWeights, resumed0.FinalWeights);
         _output.WriteLine($"1 rank -> 2 ranks resume, max weight difference vs uninterrupted {diff1To2:E3}.");
-        Assert.True(diff1To2 < 1e-5, $"A 1-rank checkpoint resumed on 2 ranks differs from the uninterrupted run by {diff1To2:E3}.");
+        Assert.True(diff1To2 < SameStepsDifferentSummationOrderBound,
+            $"A 1-rank checkpoint resumed on 2 ranks differs from the uninterrupted run by {diff1To2:E3}.");
         Assert.Equal(uninterrupted.FinalLearningRate, resumed0.FinalLearningRate, 9);
     }
 
     [Fact(Timeout = 240000)]
     public async Task TwoProcessCpu_RankKilledMidRun_ResumesFromTheLastCheckpoint()
     {
+        ArmWorkerBudget(CpuTestWorkerBudget);
         const int dataSeed = 7171;
         const int initSeed = 444;
 
@@ -2139,27 +2350,38 @@ public static class Program
 
         string checkpointDir = Path.Combine(_tempRoot, "cpu_kill_ckpt");
         string killSession = "mp_cpu_kill_" + Guid.NewGuid().ToString("N");
+        string holdMarker = Path.Combine(_tempRoot, "cpu_kill_hold");
+        var rank1Spec = CpuSpec(1, 2, "SharedMemory", killSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
+            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2);
+
+        // Rank 1 stops reading samples once the first checkpoint (step 2 of 10) is on disk and stays stopped, so
+        // the run cannot finish and the kill below cannot come too late, however slow this machine is.
+        rank1Spec.HoldAfterFirstCheckpointMarker = holdMarker;
         using (var rank0 = StartWorkerProcess(CpuSpec(0, 2, "SharedMemory", killSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
-            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2, sampleDelayMs: 45)))
-        using (var rank1 = StartWorkerProcess(CpuSpec(1, 2, "SharedMemory", killSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
-            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2, sampleDelayMs: 45)))
+            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2)))
+        using (var rank1 = StartWorkerProcess(rank1Spec))
         {
+            TimeSpan holdLimit = PhaseTimeout(CpuPhaseLimit);
             long waitStart = Stopwatch.GetTimestamp();
-            while (!(Directory.Exists(checkpointDir)
-                && Directory.GetFiles(checkpointDir, "*.json").Any(f => f.IndexOf(".tmp", StringComparison.OrdinalIgnoreCase) < 0)))
+            while (!File.Exists(holdMarker + ".rank1"))
             {
-                Assert.False(rank0.Process.HasExited || rank1.Process.HasExited, "A worker exited before the first checkpoint was saved.");
+                Assert.False(rank0.Process.HasExited || rank1.Process.HasExited, "A worker exited before rank 1 was held at the first checkpoint.");
                 double waited = (Stopwatch.GetTimestamp() - waitStart) / (double)Stopwatch.Frequency;
-                Assert.True(waited < 60.0, "Timed out waiting for the first checkpoint.");
+                Assert.True(waited < holdLimit.TotalSeconds, "Timed out waiting for rank 1 to reach the first checkpoint.");
                 await Task.Delay(25);
             }
 
+            Assert.True(HasCompletedCheckpoint(checkpointDir), "Rank 1 was held although no checkpoint is on disk.");
+            Assert.False(rank0.Process.HasExited, "Rank 0 finished although rank 1 was held before the run's end.");
             rank1.Process.Kill(entireProcessTree: true);
 
-            // The surviving rank must notice its peer is gone and fail, not wait out a collective forever.
-            var (exitCode, survivor, _, _) = await WaitForWorkerAsync(rank0, TimeSpan.FromSeconds(30));
+            // The surviving rank must notice its peer is gone and fail with the peer-loss error, not finish and
+            // not wait out a collective.
+            var (exitCode, survivor, _, _) = await WaitForWorkerAsync(rank0, PhaseTimeout(TimeSpan.FromSeconds(30)));
             Assert.NotEqual(0, exitCode);
-            Assert.False(Assert.IsType<WorkerResult>(survivor).Succeeded);
+            var survivorResult = Assert.IsType<WorkerResult>(survivor);
+            Assert.False(survivorResult.Succeeded);
+            Assert.Contains("System.IO.IOException", survivorResult.ExceptionChainTypes ?? string.Empty, StringComparison.Ordinal);
         }
 
         string resumeSession = "mp_cpu_kill_resume_" + Guid.NewGuid().ToString("N");
@@ -2171,10 +2393,14 @@ public static class Program
             "Resumed two-process CPU");
 
         Assert.Equal(0.0, MaxAbsDiff(recovered0.FinalWeights, recovered1.FinalWeights));
+
+        // Same world size, same per-rank batches and same reduction order before and after the kill, so nothing
+        // reorders a sum: the checkpoint round trip has to be exact.
         double diff = MaxAbsDiff(reference.FinalWeights, recovered0.FinalWeights);
         _output.WriteLine($"Killed rank, resumed from the last checkpoint: max weight difference vs uninterrupted {diff:E3}.");
-        Assert.True(diff < 1e-5, $"The run resumed after a killed rank differs from the uninterrupted run by {diff:E3}.");
+        Assert.Equal(0.0, diff);
     }
+
 
     #endregion
 
