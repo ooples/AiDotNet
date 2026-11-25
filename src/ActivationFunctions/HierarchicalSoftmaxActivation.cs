@@ -127,64 +127,13 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
             InitializeWeights();
         }
 
-        if (_treeDepth == 0)
+        Vector<T> output = new Vector<T>(_numClasses);
+        for (int i = 0; i < _numClasses; i++)
         {
-            // No decision nodes: every class keeps the empty product
-            return Engine.Fill(_numClasses, NumOps.One);
+            output[i] = ComputePathProbability(input, i);
         }
 
-        var engine = Engine;
-        var (right, active) = PathMasks();
-        var sigmoids = NodeSigmoids(input);
-        var oneMinusSigmoids = engine.TensorAddScalar(engine.TensorNegate(sigmoids), NumOps.One);
-
-        // step[c, d] is the factor class c picks up at depth d: the node output when its path goes
-        // right, one minus it when the path goes left, and 1 for depths past the end of its path
-        var step = engine.TensorWhere(
-            active, engine.TensorWhere(right, sigmoids, oneMinusSigmoids), engine.TensorOnesLike(sigmoids));
-
-        // The path probability multiplies the factors in depth order: the last cumulative product
-        return engine.TensorSliceAxis(engine.TensorCumProd(step, 1), 1, _treeDepth - 1).ToVector();
-    }
-
-    /// <summary>
-    /// The sigmoid output of every tree node for <paramref name="input"/>, repeated for each class as a
-    /// [numClasses, treeDepth] tensor.
-    /// </summary>
-    private Tensor<T> NodeSigmoids(Vector<T> input)
-    {
-        var engine = Engine;
-        var nodeOutputs = Tensor<T>.FromVector(engine.Sigmoid(engine.MatrixVectorMultiply(_nodeWeights, input)));
-        return engine.TensorTile(engine.Reshape(nodeOutputs, new[] { 1, _treeDepth }), new[] { _numClasses, 1 });
-    }
-
-    /// <summary>
-    /// Builds the constant [numClasses, treeDepth] path masks: <c>Right[c, d]</c> is 1 when class c takes
-    /// the right branch at depth d, and <c>Active[c, d]</c> is 1 while depth d is still on class c's path
-    /// (the walk stops once the node index reaches the number of classes).
-    /// </summary>
-    private (Tensor<T> Right, Tensor<T> Active) PathMasks()
-    {
-        var right = new Tensor<T>(new[] { _numClasses, _treeDepth });
-        var active = new Tensor<T>(new[] { _numClasses, _treeDepth });
-        var rightSpan = right.Data.Span;
-        var activeSpan = active.Data.Span;
-        for (int classIndex = 0; classIndex < _numClasses; classIndex++)
-        {
-            int node = 1;
-            for (int depth = 0; depth < _treeDepth; depth++)
-            {
-                bool goRight = (classIndex & (1 << (_treeDepth - depth - 1))) != 0;
-                int cell = classIndex * _treeDepth + depth;
-                rightSpan[cell] = goRight ? NumOps.One : NumOps.Zero;
-                activeSpan[cell] = NumOps.One;
-
-                node = node * 2 + (goRight ? 1 : 0);
-                if (node >= _numClasses) break;
-            }
-        }
-
-        return (right, active);
+        return output;
     }
 
     /// <summary>
@@ -279,63 +228,57 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 2. For each class, it calculates how changes to the input affect the probability of that class
     /// 3. These calculations help the neural network learn by adjusting weights in the right direction
     /// 
-    /// A class probability is a product of one factor per tree level, so by the product rule its derivative is a
-    /// sum with one term per level: that level's factor is differentiated and every other level's factor is kept.
-    /// 
     /// The "Jacobian matrix" is simply a collection of all these derivatives organized in rows and columns,
     /// where each row corresponds to an output class and each column to an input dimension.
     /// </para>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        if (_treeDepth == 0)
+        Matrix<T> jacobian = new Matrix<T>(_numClasses, input.Length);
+
+        for (int i = 0; i < _numClasses; i++)
         {
-            return new Matrix<T>(_numClasses, input.Length);
+            Vector<T> pathDerivative = ComputePathDerivative(input, i);
+            jacobian.SetRow(i, pathDerivative);
         }
 
-        var engine = Engine;
-        var (right, active) = PathMasks();
-        var sigmoids = NodeSigmoids(input);
-        var oneMinusSigmoids = engine.TensorAddScalar(engine.TensorNegate(sigmoids), NumOps.One);
-
-        // P[c] is the product over the path of f[c, d] = sigmoid[d] (right) or 1 - sigmoid[d] (left), and
-        // each factor's derivative with respect to its node score z[d] = w[d] . x is +/- sigmoid (1 - sigmoid).
-        // The product rule keeps every other factor of the path:
-        //   dP[c]/dz[d] = (product of f[c, e] for e != d) * (+/-) sigmoid[d] (1 - sigmoid[d])
-        //               = P[c] (1 - sigmoid[d]) going right, -P[c] sigmoid[d] going left,
-        // written through "the other factors" so a factor of exactly zero does not divide.
-        var step = engine.TensorWhere(
-            active, engine.TensorWhere(right, sigmoids, oneMinusSigmoids), engine.TensorOnesLike(sigmoids));
-        var before = ExclusiveCumulativeProduct(step);
-        var after = engine.TensorFlip(
-            ExclusiveCumulativeProduct(engine.TensorFlip(step, new[] { 1 })), new[] { 1 });
-        var others = engine.TensorMultiply(before, after);
-
-        var slope = engine.TensorMultiply(sigmoids, oneMinusSigmoids);
-        var signed = engine.TensorWhere(right, slope, engine.TensorNegate(slope));
-        var coefficients = engine.TensorWhere(
-            active, engine.TensorMultiply(signed, others), engine.TensorZerosLike(signed));
-
-        // Row c of the Jacobian is the coefficient-weighted sum of the node weight rows
-        return engine.TensorMatMul(coefficients, Tensor<T>.FromRowMatrix(_nodeWeights)).ToMatrix();
+        return jacobian;
     }
 
     /// <summary>
-    /// For a [classes, depth] tensor, the product of each row's entries strictly before each position
-    /// (1 at the first position).
+    /// Calculates the derivative of the path probability for a specific class.
     /// </summary>
-    private Tensor<T> ExclusiveCumulativeProduct(Tensor<T> step)
+    /// <param name="input">The input vector.</param>
+    /// <param name="classIndex">The index of the class for which to calculate the derivative.</param>
+    /// <returns>A vector containing the partial derivatives with respect to each input dimension.</returns>
+    private Vector<T> ComputePathDerivative(Vector<T> input, int classIndex)
     {
-        var engine = Engine;
-        if (_treeDepth == 1)
+        Vector<T> derivative = new Vector<T>(input.Length);
+        int node = 1;
+
+        for (int depth = 0; depth < _treeDepth; depth++)
         {
-            return engine.TensorOnesLike(step);
+            Vector<T> nodeWeights = _nodeWeights.GetRow(depth);
+            T nodeOutput = MathHelper.Sigmoid(input.DotProduct(nodeWeights));
+            bool goRight = (classIndex & (1 << (_treeDepth - depth - 1))) != 0;
+
+            T multiplier = goRight ? nodeOutput : NumOps.Subtract(NumOps.One, nodeOutput);
+            T derivativeFactor = NumOps.Multiply(nodeOutput, NumOps.Subtract(NumOps.One, nodeOutput));
+
+            if (goRight)
+            {
+                derivative = derivative.Add(nodeWeights.Multiply(derivativeFactor));
+            }
+            else
+            {
+                derivative = derivative.Subtract(nodeWeights.Multiply(derivativeFactor));
+            }
+
+            node = node * 2 + (goRight ? 1 : 0);
+            if (node >= _numClasses) break;
         }
 
-        var inclusive = engine.TensorCumProd(step, 1);
-        var shifted = engine.TensorSlice(inclusive, new[] { 0, 0 }, new[] { _numClasses, _treeDepth - 1 });
-        var ones = engine.TensorOnesLike(engine.TensorSlice(step, new[] { 0, 0 }, new[] { _numClasses, 1 }));
-        return engine.TensorConcatenate(new[] { ones, shifted }, 1);
+        return derivative;
     }
 
     /// <summary>
@@ -343,16 +286,55 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     private void InitializeWeights()
     {
+        var random = RandomHelper.CreateSecureRandom();
         int cols = _nodeWeights.Columns;
-        if (_treeDepth == 0 || cols == 0)
+        for (int i = 0; i < _treeDepth; i++)
         {
-            return;
+            for (int j = 0; j < cols; j++)
+            {
+                _nodeWeights[i, j] = NumOps.FromDouble(random.NextDouble() - 0.5);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes the probability of a specific class by traversing the binary tree.
+    /// </summary>
+    /// <param name="input">The input vector.</param>
+    /// <param name="classIndex">The index of the class for which to compute the probability.</param>
+    /// <returns>The probability value for the specified class.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method calculates how likely a specific class is, given the input.
+    /// 
+    /// It works by:
+    /// 1. Starting at the root (top) of the tree
+    /// 2. At each node, deciding whether to go left or right based on the class's binary code
+    /// 3. Calculating the probability of taking that path at each step
+    /// 4. Multiplying all these probabilities together to get the final probability
+    /// 
+    /// The binary code of the class index determines the path through the tree:
+    /// - Each bit in the binary representation tells us whether to go left (0) or right (1)
+    /// - For example, class 5 (binary 101) would go right, then left, then right
+    /// 
+    /// This approach is much more efficient than calculating probabilities for all classes
+    /// when you have thousands or millions of possible outputs.
+    /// </para>
+    /// </remarks>
+    private T ComputePathProbability(Vector<T> input, int classIndex)
+    {
+        T probability = NumOps.One;
+        int node = 1;
+        for (int depth = 0; depth < _treeDepth; depth++)
+        {
+            T nodeOutput = MathHelper.Sigmoid(input.DotProduct(_nodeWeights.GetRow(depth)));
+            bool goRight = (classIndex & (1 << (_treeDepth - depth - 1))) != 0;
+            probability = NumOps.Multiply(probability, goRight ? nodeOutput : NumOps.Subtract(NumOps.One, nodeOutput));
+            node = node * 2 + (goRight ? 1 : 0);
+            if (node >= _numClasses) break;
         }
 
-        // One uniform draw per weight in row-major order, shifted to [-0.5, 0.5)
-        var random = RandomHelper.CreateSecureRandom();
-        var uniform = Tensor<T>.CreateRandom(random, _treeDepth, cols);
-        _nodeWeights = Engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)).ToMatrix();
+        return probability;
     }
 
 }
