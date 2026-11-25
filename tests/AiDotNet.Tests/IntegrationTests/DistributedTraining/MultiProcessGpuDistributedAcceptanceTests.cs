@@ -1974,5 +1974,209 @@ public static class Program
 
     #endregion
 
+    #region (e) Two-Process CPU Acceptance (no GPU required, issue #2554)
+
+    // The tests above need two NVIDIA GPUs and skip without them. These run the same acceptance checks with two
+    // real operating-system processes on the CPU, so they execute on any machine and in CI.
+
+    private static WorkerSpec CpuSpec(
+        int rank,
+        int worldSize,
+        string backendKind,
+        string sessionName,
+        int masterPort,
+        int localBatchSize,
+        long maxSteps,
+        int dataSeed,
+        int initWeightSeed,
+        string strategy = "DDP",
+        int sampleCount = 32,
+        string? checkpointDir = null,
+        int saveFrequency = 0,
+        bool resume = false,
+        int sampleDelayMs = 0)
+    {
+        return new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = worldSize == 1 ? "SingleProcess" : backendKind,
+            Strategy = strategy,
+            Rank = rank,
+            WorldSize = worldSize,
+            SessionName = sessionName,
+            MasterPort = masterPort,
+            UseGpu = false,
+            SampleCount = sampleCount,
+            LocalBatchSize = localBatchSize,
+            MaxSteps = maxSteps,
+            DataSeed = dataSeed,
+            InitWeightSeed = initWeightSeed,
+            // A resumed worker starts from scrambled weights, so matching the reference proves the checkpoint was read.
+            UseScrambledInit = resume,
+            CheckpointDir = checkpointDir,
+            SaveFrequency = saveFrequency,
+            ResumeFromCheckpoint = resume,
+            SampleDelayMs = sampleDelayMs,
+        };
+    }
+
+    private async Task<WorkerResult> RunOneCpuProcessAsync(WorkerSpec spec, string context)
+    {
+        using var worker = StartWorkerProcess(spec);
+        return RequireSucceededResult(await WaitForWorkerAsync(worker, TimeSpan.FromSeconds(90)), context);
+    }
+
+    private async Task<(WorkerResult Rank0, WorkerResult Rank1)> RunTwoCpuProcessesAsync(
+        WorkerSpec rank0Spec,
+        WorkerSpec rank1Spec,
+        string context)
+    {
+        using var rank0 = StartWorkerProcess(rank0Spec);
+        using var rank1 = StartWorkerProcess(rank1Spec);
+        var (outcome0, outcome1) = await WaitForWorkerPairAsync(rank0, rank1, TimeSpan.FromSeconds(90));
+        var result0 = RequireSucceededResult(outcome0, context + " rank 0");
+        var result1 = RequireSucceededResult(outcome1, context + " rank 1");
+        Assert.NotEqual(result0.ProcessId, result1.ProcessId);
+        return (result0, result1);
+    }
+
+    [Theory(Timeout = 240000)]
+    [InlineData("SharedMemory")]
+    [InlineData("GlooTcp")]
+    public async Task TwoProcessCpu_Streaming_ReproducesTheOneProcessRunAtTheSameGlobalBatch(string backendKind)
+    {
+        const int dataSeed = 2026;
+        const int initSeed = 88;
+
+        var single = await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, backendKind, string.Empty, 0, localBatchSize: 16, maxSteps: 8, dataSeed, initSeed),
+            "One-process CPU");
+        Assert.True(single.FinalMse < single.InitialMse, "The one-process reference did not train.");
+
+        string session = "mp_cpu_" + Guid.NewGuid().ToString("N");
+        int port = backendKind == "GlooTcp" ? FindFreePortPair() : 0;
+        var (rank0, rank1) = await RunTwoCpuProcessesAsync(
+            CpuSpec(0, 2, backendKind, session, port, localBatchSize: 8, maxSteps: 8, dataSeed, initSeed),
+            CpuSpec(1, 2, backendKind, session, port, localBatchSize: 8, maxSteps: 8, dataSeed, initSeed),
+            "Two-process CPU " + backendKind);
+
+        // Both ranks apply the same reduced gradient, so their weights are bit-identical.
+        Assert.Equal(0.0, MaxAbsDiff(rank0.FinalWeights, rank1.FinalWeights));
+
+        // Against one process the gradient is the same sum taken in a different order (two halves of 8 reduced
+        // across processes instead of one batch of 16), so the comparison is to float rounding, not bit-for-bit.
+        double diff = MaxAbsDiff(single.FinalWeights, rank0.FinalWeights);
+        _output.WriteLine($"{backendKind}: two processes vs one process, max weight difference {diff:E3}.");
+        Assert.True(diff < 1e-5, $"Two CPU processes over {backendKind} differ from one process by {diff:E3}.");
+
+        // Two processes that each trained alone on their own batches of 8 would not land here: the same worker
+        // run alone at batch 8 is far from the batch-16 reference.
+        var unsynchronized = await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, backendKind, string.Empty, 0, localBatchSize: 8, maxSteps: 8, dataSeed, initSeed),
+            "One-process CPU at the per-rank batch");
+        double unsynchronizedDiff = MaxAbsDiff(single.FinalWeights, unsynchronized.FinalWeights);
+        Assert.True(unsynchronizedDiff > 100.0 * Math.Max(diff, 1e-7),
+            $"A run at the per-rank batch is only {unsynchronizedDiff:E3} from the reference, so this data cannot " +
+            "tell synchronized ranks from unsynchronized ones.");
+    }
+
+    [Fact(Timeout = 240000)]
+    public async Task TwoProcessCpu_CheckpointResumesAcrossWorldSizes_TwoToOneAndOneToTwo()
+    {
+        const int dataSeed = 9090;
+        const int initSeed = 333;
+
+        var uninterrupted = await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, "SharedMemory", string.Empty, 0, localBatchSize: 16, maxSteps: 8, dataSeed, initSeed),
+            "Uninterrupted one-process CPU");
+
+        // Two processes for 4 steps, then one process resumes to step 8.
+        string twoToOne = Path.Combine(_tempRoot, "cpu_ckpt_2to1");
+        string session2To1 = "mp_cpu_2to1_" + Guid.NewGuid().ToString("N");
+        await RunTwoCpuProcessesAsync(
+            CpuSpec(0, 2, "SharedMemory", session2To1, 0, 8, maxSteps: 4, dataSeed, initSeed, checkpointDir: twoToOne, saveFrequency: 4),
+            CpuSpec(1, 2, "SharedMemory", session2To1, 0, 8, maxSteps: 4, dataSeed, initSeed, checkpointDir: twoToOne, saveFrequency: 4),
+            "2->1 phase 1");
+        var resumedOnOne = await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, "SharedMemory", string.Empty, 0, 16, maxSteps: 8, dataSeed, initSeed,
+                checkpointDir: twoToOne, saveFrequency: 100, resume: true),
+            "2->1 phase 2");
+        double diff2To1 = MaxAbsDiff(uninterrupted.FinalWeights, resumedOnOne.FinalWeights);
+        _output.WriteLine($"2 ranks -> 1 rank resume, max weight difference vs uninterrupted {diff2To1:E3}.");
+        Assert.True(diff2To1 < 1e-5, $"A 2-rank checkpoint resumed on 1 rank differs from the uninterrupted run by {diff2To1:E3}.");
+        Assert.Equal(uninterrupted.FinalLearningRate, resumedOnOne.FinalLearningRate, 9);
+
+        // One process for 4 steps, then two processes with uneven batches (4 + 12) resume to step 8.
+        string oneToTwo = Path.Combine(_tempRoot, "cpu_ckpt_1to2");
+        await RunOneCpuProcessAsync(
+            CpuSpec(0, 1, "SharedMemory", string.Empty, 0, 16, maxSteps: 4, dataSeed, initSeed, checkpointDir: oneToTwo, saveFrequency: 4),
+            "1->2 phase 1");
+        string session1To2 = "mp_cpu_1to2_" + Guid.NewGuid().ToString("N");
+        var (resumed0, resumed1) = await RunTwoCpuProcessesAsync(
+            CpuSpec(0, 2, "SharedMemory", session1To2, 0, 4, maxSteps: 8, dataSeed, initSeed,
+                checkpointDir: oneToTwo, saveFrequency: 100, resume: true),
+            CpuSpec(1, 2, "SharedMemory", session1To2, 0, 12, maxSteps: 8, dataSeed, initSeed,
+                checkpointDir: oneToTwo, saveFrequency: 100, resume: true),
+            "1->2 phase 2");
+        Assert.Equal(0.0, MaxAbsDiff(resumed0.FinalWeights, resumed1.FinalWeights));
+        double diff1To2 = MaxAbsDiff(uninterrupted.FinalWeights, resumed0.FinalWeights);
+        _output.WriteLine($"1 rank -> 2 ranks resume, max weight difference vs uninterrupted {diff1To2:E3}.");
+        Assert.True(diff1To2 < 1e-5, $"A 1-rank checkpoint resumed on 2 ranks differs from the uninterrupted run by {diff1To2:E3}.");
+        Assert.Equal(uninterrupted.FinalLearningRate, resumed0.FinalLearningRate, 9);
+    }
+
+    [Fact(Timeout = 240000)]
+    public async Task TwoProcessCpu_RankKilledMidRun_ResumesFromTheLastCheckpoint()
+    {
+        const int dataSeed = 7171;
+        const int initSeed = 444;
+
+        string referenceSession = "mp_cpu_kill_ref_" + Guid.NewGuid().ToString("N");
+        var (reference, _) = await RunTwoCpuProcessesAsync(
+            CpuSpec(0, 2, "SharedMemory", referenceSession, 0, 4, maxSteps: 10, dataSeed, initSeed, sampleCount: 40),
+            CpuSpec(1, 2, "SharedMemory", referenceSession, 0, 4, maxSteps: 10, dataSeed, initSeed, sampleCount: 40),
+            "Uninterrupted two-process CPU");
+
+        string checkpointDir = Path.Combine(_tempRoot, "cpu_kill_ckpt");
+        string killSession = "mp_cpu_kill_" + Guid.NewGuid().ToString("N");
+        using (var rank0 = StartWorkerProcess(CpuSpec(0, 2, "SharedMemory", killSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
+            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2, sampleDelayMs: 45)))
+        using (var rank1 = StartWorkerProcess(CpuSpec(1, 2, "SharedMemory", killSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
+            sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 2, sampleDelayMs: 45)))
+        {
+            long waitStart = Stopwatch.GetTimestamp();
+            while (!(Directory.Exists(checkpointDir)
+                && Directory.GetFiles(checkpointDir, "*.json").Any(f => f.IndexOf(".tmp", StringComparison.OrdinalIgnoreCase) < 0)))
+            {
+                Assert.False(rank0.Process.HasExited || rank1.Process.HasExited, "A worker exited before the first checkpoint was saved.");
+                double waited = (Stopwatch.GetTimestamp() - waitStart) / (double)Stopwatch.Frequency;
+                Assert.True(waited < 60.0, "Timed out waiting for the first checkpoint.");
+                await Task.Delay(25);
+            }
+
+            rank1.Process.Kill(entireProcessTree: true);
+
+            // The surviving rank must notice its peer is gone and fail, not wait out a collective forever.
+            var (exitCode, survivor, _, _) = await WaitForWorkerAsync(rank0, TimeSpan.FromSeconds(30));
+            Assert.NotEqual(0, exitCode);
+            Assert.False(Assert.IsType<WorkerResult>(survivor).Succeeded);
+        }
+
+        string resumeSession = "mp_cpu_kill_resume_" + Guid.NewGuid().ToString("N");
+        var (recovered0, recovered1) = await RunTwoCpuProcessesAsync(
+            CpuSpec(0, 2, "SharedMemory", resumeSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
+                sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 100, resume: true),
+            CpuSpec(1, 2, "SharedMemory", resumeSession, 0, 4, maxSteps: 10, dataSeed, initSeed,
+                sampleCount: 40, checkpointDir: checkpointDir, saveFrequency: 100, resume: true),
+            "Resumed two-process CPU");
+
+        Assert.Equal(0.0, MaxAbsDiff(recovered0.FinalWeights, recovered1.FinalWeights));
+        double diff = MaxAbsDiff(reference.FinalWeights, recovered0.FinalWeights);
+        _output.WriteLine($"Killed rank, resumed from the last checkpoint: max weight difference vs uninterrupted {diff:E3}.");
+        Assert.True(diff < 1e-5, $"The run resumed after a killed rank differs from the uninterrupted run by {diff:E3}.");
+    }
+
+    #endregion
+
 #endif
 }

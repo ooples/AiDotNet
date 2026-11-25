@@ -196,6 +196,51 @@ public sealed class StreamingDistributedGradientModelTests
         return mean;
     }
 
+    /// <summary>
+    /// Gradient descent on the mean gradient of each global batch, computed without the builder or any distributed
+    /// code: the batches come from an undistributed loader of <paramref name="globalBatch"/> samples, shuffled with
+    /// the seed the streaming loop gives epoch <c>e</c> (<c>seed + e</c>), and the step uses the 0.01 learning rate
+    /// the loop applies when no optimizer is configured.
+    /// </summary>
+    private static async Task<Vector<double>> GlobalBatchMeanGradientDescentAsync(
+        Matrix<double>[] inputs,
+        Vector<double>[] targets,
+        int globalBatch,
+        long steps,
+        int seed)
+    {
+        const double learningRate = 0.01;
+        var loader = CreateLoader(inputs, targets, globalBatch);
+        await loader.LoadAsync();
+
+        var parameters = new double[FeatureCount + 1];
+        Vector<double> initial = InitialParameters();
+        for (int j = 0; j < parameters.Length; j++)
+        {
+            parameters[j] = initial[j];
+        }
+
+        long taken = 0;
+        for (int epoch = 0; taken < steps; epoch++)
+        {
+            await foreach (var (batchInputs, batchTargets) in loader.GetBatchesAsync(shuffle: true, seed: seed + epoch))
+            {
+                double[] gradient = FullDatasetMeanGradient(batchInputs, batchTargets, new Vector<double>(parameters));
+                for (int j = 0; j < parameters.Length; j++)
+                {
+                    parameters[j] -= learningRate * gradient[j];
+                }
+
+                if (++taken == steps)
+                {
+                    break;
+                }
+            }
+        }
+
+        return new Vector<double>(parameters);
+    }
+
     [Fact(Timeout = 90000)]
     public async Task GradientModel_TwoRanksFullBatch_StepAlongTheWholeDatasetMeanGradient()
     {
@@ -232,27 +277,30 @@ public sealed class StreamingDistributedGradientModelTests
         }
     }
 
+    // The two tests below used a one-rank backend run as their reference. A one-rank backend now trains exactly like
+    // no backend (per-sample updates, see GradientModel_OneRankBackend_TrainsExactlyLikeNoBackend), so the reference
+    // is computed here instead: plain gradient descent on the mean gradient of each global batch, with the batches
+    // read from an undistributed loader.
     [Theory(Timeout = 90000)]
     [InlineData(2, 16, 2)]
     [InlineData(3, 16, 2)]
     [InlineData(3, 7, 2)]
-    public async Task GradientModel_ManyRanks_MatchOneRankAtTheSameGlobalBatch(int worldSize, int sampleCount, int perRankBatch)
+    public async Task GradientModel_ManyRanks_MatchMeanGradientDescentOverEachGlobalBatch(int worldSize, int sampleCount, int perRankBatch)
     {
         var (inputs, targets) = CreateDataset(sampleCount, seed: 23);
         int globalBatch = worldSize * perRankBatch;
         const long steps = 9;
 
-        var single = await TrainRanksAsync(
-            inputs, targets, worldSize: 1, rankBatchSizes: new[] { globalBatch }, maxSteps: steps, seed: 41);
+        var expected = await GlobalBatchMeanGradientDescentAsync(inputs, targets, globalBatch, steps, seed: 41);
         var multi = await TrainRanksAsync(
             inputs, targets, worldSize, Enumerable.Repeat(perRankBatch, worldSize).ToArray(), maxSteps: steps, seed: 41);
 
-        Assert.True(MaxAbsDiff(single[0], InitialParameters()) > 1e-6, "The reference run must have trained.");
+        Assert.True(MaxAbsDiff(expected, InitialParameters()) > 1e-6, "The reference must have moved the parameters.");
         for (int r = 0; r < worldSize; r++)
         {
             Assert.True(MaxAbsDiff(multi[0], multi[r]) == 0.0, $"Rank {r} diverged from rank 0.");
-            double diff = MaxAbsDiff(single[0], multi[r]);
-            Assert.True(diff < 1e-12, $"Rank {r} differs from the one-rank run at the same global batch by {diff:R}.");
+            double diff = MaxAbsDiff(expected, multi[r]);
+            Assert.True(diff < 1e-12, $"Rank {r} differs from mean-gradient descent over the global batches by {diff:R}.");
         }
     }
 
@@ -261,14 +309,47 @@ public sealed class StreamingDistributedGradientModelTests
     {
         var (inputs, targets) = CreateDataset(sampleCount: 18, seed: 31);
 
-        var single = await TrainRanksAsync(
-            inputs, targets, worldSize: 1, rankBatchSizes: new[] { 6 }, maxSteps: 6, seed: 3);
+        var expected = await GlobalBatchMeanGradientDescentAsync(inputs, targets, globalBatch: 6, steps: 6, seed: 3);
         var multi = await TrainRanksAsync(
             inputs, targets, worldSize: 2, rankBatchSizes: new[] { 4, 2 }, maxSteps: 6, seed: 3);
 
         Assert.True(MaxAbsDiff(multi[0], multi[1]) == 0.0, "Ranks diverged.");
-        double diff = MaxAbsDiff(single[0], multi[0]);
-        Assert.True(diff < 1e-12, $"Uneven ranks differ from one rank at the same global batch by {diff:R}.");
+        double diff = MaxAbsDiff(expected, multi[0]);
+        Assert.True(diff < 1e-12, $"Uneven ranks differ from mean-gradient descent over the global batches by {diff:R}.");
+    }
+
+    [Theory(Timeout = 90000)]
+    [InlineData(16, 4, 9)]
+    [InlineData(7, 3, 8)]
+    public async Task GradientModel_OneRankBackend_TrainsExactlyLikeNoBackend(int sampleCount, int batchSize, long steps)
+    {
+        var (inputs, targets) = CreateDataset(sampleCount, seed: 59);
+
+        var withoutBackend = CreateModel();
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(withoutBackend)
+            .ConfigureDataLoader(CreateLoader(inputs, targets, batchSize))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Matrix<double>, Vector<double>>
+            {
+                Seed = 13,
+                MaxSteps = steps,
+            })
+            .BuildAsync();
+
+        var oneRank = await TrainRanksAsync(
+            inputs, targets, worldSize: 1, rankBatchSizes: new[] { batchSize }, maxSteps: steps, seed: 13);
+
+        Vector<double> expected = withoutBackend.GetParameters();
+        Assert.True(MaxAbsDiff(expected, InitialParameters()) > 1e-6, "The run without a backend must have trained.");
+        double diff = MaxAbsDiff(expected, oneRank[0]);
+        Assert.True(diff == 0.0, $"A one-rank backend changed the training result by {diff:R}.");
+
+        // Per-sample updates are not one mean-gradient step per batch, so the equality above would not hold if
+        // the one-rank run had taken the synchronized step that several ranks take.
+        var meanGradientRun = await GlobalBatchMeanGradientDescentAsync(inputs, targets, batchSize, steps, seed: 13);
+        Assert.True(MaxAbsDiff(expected, meanGradientRun) > 1e-6,
+            "This data cannot tell per-sample updates from a mean-gradient step, so the equality above proves nothing.");
     }
 
     [Fact(Timeout = 90000)]
