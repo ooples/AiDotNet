@@ -5,7 +5,8 @@
 .DESCRIPTION
     Only Passed keeps the lane green, and Passed is earned from the result file, not from the exit code:
     the chunk's TRX must exist, parse, say the run completed, list as many results as its own counters
-    claim and at least as many as discovery listed for the chunk, and hold no failure or run-level error.
+    claim and at least as many as discovery listed for the chunk, hold no failure or run-level error, and
+    hold at least one test that passed. A chunk whose tests were all skipped verified nothing and is Failed.
 
     Everything else fails the lane (FailsLane):
 
@@ -50,10 +51,17 @@ enum HeavyChunkOutcome { Passed; ResourceExhausted; HostDied; Failed }
 
 # Exact shapes only: a message that merely mentions OOM somewhere is not evidence the test did nothing else.
 $script:ExhaustionPatterns = @(
-    '^System\.OutOfMemoryException : '
+    # The runtime's two messages for memory that could not be had. Other OutOfMemoryException messages are
+    # defects that merely use the type ("Array dimensions exceeded supported range" from an overflowed length).
+    "^System\.OutOfMemoryException : (Exception of type 'System\.OutOfMemoryException' was thrown\.|Insufficient memory to continue the execution of the program\.)\s*$"
     '^System\.IO\.IOException : No space left on device'
     "^System\.AggregateException : One or more errors occurred\.( \(Exception of type 'System\.OutOfMemoryException' was thrown\.\))+\s*$"
 )
+
+# xUnit's run-level echo of a failed test: "[xUnit.net 00:02:07.32]     <display name> [FAIL]". The display name of
+# a theory row carries its arguments, spaces and all ("Ns.T.Theory(x: 1, name: \"a b\") [FAIL]"), so the name is
+# anything on that one line; a crash or abort message never ends in the [FAIL] marker.
+$script:FailEchoPattern = '^\[xUnit\.net [\d:.]+\]\s+\S[^\r\n]* \[FAIL\]$'
 
 # A "does not throw" test records the exception and asserts it is null, so an out-of-memory error reaches the TRX as
 # an assertion whose Actual value is the exception: SegmentationTrainingRobustnessTests.OpenVocabSAM_MultiStepTrain
@@ -62,7 +70,7 @@ $script:ExhaustionPatterns = @(
 # The assertion's own lines, in order: 'Expected: null' and then an Actual value that IS the exception, so an OOM
 # named inside some other exception's message does not count.
 $script:RecordedExpectedPattern = '^\s*Expected:\s+null\s*$'
-$script:RecordedActualPattern = '^\s*Actual:\s+System\.OutOfMemoryException: '
+$script:RecordedActualPattern = "^\s*Actual:\s+System\.OutOfMemoryException: (Exception of type 'System\.OutOfMemoryException' was thrown\.|Insufficient memory to continue the execution of the program\.)\s*$"
 
 function Test-ResourceExhaustionMessage([string] $Message) {
     $first = ($Message -split "`r?`n")[0].Trim()
@@ -84,6 +92,7 @@ function Get-ExitDescription([string] $ExitCode) {
     if (-not [long]::TryParse($ExitCode, [ref] $code)) { return "exit $ExitCode" }
     switch ($code) {
         134 { return 'exit 134 (SIGABRT)' }
+        135 { return 'exit 135 (SIGBUS: a write through a file mapping the disk could not back)' }
         137 { return 'exit 137 (SIGKILL: kernel OOM killer or timeout escalation)' }
         139 { return 'exit 139 (SIGSEGV: access violation)' }
         143 { return 'exit 143 (SIGTERM)' }
@@ -151,7 +160,7 @@ function Get-HeavyChunkOutcome {
     foreach ($info in @($trx.SelectNodes("//t:RunInfo[@outcome='Error']", $ns))) {
         $textNode = $info.SelectSingleNode('t:Text', $ns)
         $text = if ($null -eq $textNode) { '' } else { $textNode.InnerText.Trim() }
-        if ($text -notmatch '^\[xUnit\.net [\d:.]+\]\s+\S+ \[FAIL\]$') {
+        if ($text -notmatch $script:FailEchoPattern) {
             return & $complete HostDied "run error: $(($text -split "`r?`n")[0])"
         }
     }
@@ -180,6 +189,10 @@ function Get-HeavyChunkOutcome {
         }
         if ($runOutcome -notin @('Completed', 'Passed')) {
             return & $complete Failed "exit 0 but the run ended '$runOutcome'"
+        }
+        $passedResults = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Passed' })
+        if ($passedResults.Count -eq 0) {
+            return & $complete Failed "exit 0 but none of the $($results.Count) test(s) ran: all were skipped"
         }
         return & $complete Passed ''
     }
@@ -215,7 +228,7 @@ function Invoke-SelfTest {
     function New-Trx([string] $Name, [string] $RunOutcome, [object[]] $Results, [string[]] $RunErrors = @(), [int] $Total = -1) {
         $rows = foreach ($r in $Results) {
             $message = [System.Security.SecurityElement]::Escape($r.Message)
-            "<UnitTestResult testName=`"$($r.Name)`" outcome=`"$($r.Outcome)`"><Output><ErrorInfo><Message>$message</Message></ErrorInfo></Output></UnitTestResult>"
+            "<UnitTestResult testName=`"$([System.Security.SecurityElement]::Escape($r.Name))`" outcome=`"$($r.Outcome)`"><Output><ErrorInfo><Message>$message</Message></ErrorInfo></Output></UnitTestResult>"
         }
         $infos = foreach ($e in $RunErrors) {
             "<RunInfo computerName=`"runner`" outcome=`"Error`"><Text>$([System.Security.SecurityElement]::Escape($e))</Text></RunInfo>"
@@ -264,6 +277,9 @@ function Invoke-SelfTest {
         Assert-Outcome 'exit_zero_with_host_crash' HostDied (New-Trx 'zero-crash' 'Completed' @($pass) @(
                 'The active test run was aborted. Reason: Test host process crashed')) '0'
         Assert-Outcome 'exit_zero_aborted_run' HostDied (New-Trx 'zero-aborted' 'Aborted' @($pass)) '0'
+        # Every test skipped: the counts all agree and nothing was verified.
+        Assert-Outcome 'exit_zero_all_skipped' Failed (New-Trx 'all-skipped' 'Completed' @($skip, $skip, $skip, $skip, $skip)) '0' 5
+        Assert-Outcome 'exit_zero_one_pass_among_skips' Passed (New-Trx 'one-pass' 'Completed' @($skip, $pass, $skip)) '0' 3
 
         # A result file cut off mid-write, as a killed host leaves it: a real document minus its tail.
         $truncated = Join-Path $root 'truncated.trx'
@@ -299,6 +315,22 @@ function Invoke-SelfTest {
         Assert-Outcome 'oom_then_host_stopped' HostDied (New-Trx 'oom-short' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) '1' 4
 
+        # A failed theory row is echoed with its arguments. It is a failed test, not a dead host.
+        $theoryEcho = '[xUnit.net 00:00:01.00]     Ns.T.Theory(x: 1, name: "a b") [FAIL]'
+        Assert-Outcome 'assertion_in_theory_row_with_echo' Failed (New-Trx 'theory-echo' 'Failed' @(
+                @{ Name = 'Ns.T.Theory(x: 1, name: "a b")'; Outcome = 'Failed'; Message = 'Assert.Equal() Failure' }) @($theoryEcho)) '1'
+        Assert-Outcome 'oom_in_theory_row_with_echo' ResourceExhausted (New-Trx 'theory-echo-oom' 'Failed' @(
+                @{ Name = 'Ns.T.Theory(x: 1, name: "a b")'; Outcome = 'Failed'; Message = $oom }) @($theoryEcho)) '1'
+        # The echo pattern is one line ending in the marker: a crash message that mentions [FAIL] is still a crash.
+        Assert-Outcome 'crash_message_mentioning_fail' HostDied (New-Trx 'crash-fail' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $oom }) @(
+                "[xUnit.net 00:00:01.00]     Ns.T.A [FAIL]`nThe active test run was aborted. Reason: Test host process crashed")) '1'
+        # An OutOfMemoryException that is a defect, not a shortage: an overflowed length.
+        Assert-Outcome 'oom_typed_defect' Failed (New-Trx 'oom-defect' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = 'System.OutOfMemoryException : Array dimensions exceeded supported range.' })) '1'
+        Assert-Outcome 'insufficient_memory' ResourceExhausted (New-Trx 'insufficient' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = 'System.OutOfMemoryException : Insufficient memory to continue the execution of the program.' })) '1'
+
         Assert-Outcome 'oom_and_assertion' Failed (New-Trx 'mixed' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom },
                 @{ Name = 'B'; Outcome = 'Failed'; Message = 'Training did not reduce loss: initial=1, final=2.' })) '1'
@@ -326,9 +358,10 @@ function Invoke-SelfTest {
         Assert-Outcome 'sigkill_oom_killer' HostDied $threePassed '137'
         Assert-Outcome 'sigsegv_access_violation' HostDied $threePassed '139'
         Assert-Outcome 'sigabrt' HostDied '' '134'
+        Assert-Outcome 'sigbus_full_disk_under_a_mapping' HostDied '' '135'
         Assert-Outcome 'windows_access_violation' HostDied '' '-1073741819'
         Assert-Outcome 'unknown_exit' HostDied $threePassed '2'
-        foreach ($case in @(@('137', 'SIGKILL'), @('139', 'SIGSEGV'), @('-1073741819', 'access violation'))) {
+        foreach ($case in @(@('137', 'SIGKILL'), @('139', 'SIGSEGV'), @('135', 'SIGBUS'), @('-1073741819', 'access violation'))) {
             $reason = (Get-HeavyChunkOutcome -TrxPath '' -ExitCode $case[0]).Reason
             if ($reason -notmatch $case[1]) { [void] $problems.Add("exit $($case[0]) is described as '$reason'") }
         }
