@@ -660,6 +660,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // This CPU step updates the host moments below.
             state.HostDirty = true;
 
+            // BF16 moments on host arrays: one pass that reads the gradient, updates the 2-byte moments where
+            // they are stored and writes the parameter, with no parameter-sized temporary (#2447). The tensor-op
+            // recurrence below needs about ten parameter-sized tensors for the same arithmetic.
+            if (_options.UseBFloat16MomentStorage && TryFusedHostBf16Step(
+                    param, grad, state, lrDouble, beta1Double, beta2Double, bc1Double, bc2Double,
+                    weightDecay, decoupledWeightDecay))
+            {
+                continue;
+            }
+
             if (weightDecay > 0.0)
             {
                 if (decoupledWeightDecay)
@@ -815,6 +825,189 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
+        }
+    }
+
+    /// <summary>
+    /// One Adam step on a host parameter whose moments are stored as BF16, in a single pass over the parameter:
+    /// each element's moments are widened, advanced, rounded back into their 2-byte slots and applied to the
+    /// parameter without materializing a parameter-sized tensor. The same recurrence, in the same order, as the
+    /// tensor-op recurrence in <see cref="StepCore"/>: weight decay (decoupled scales the parameter first, coupled adds
+    /// WeightDecay * parameter to the gradient), m and v, the update from the unrounded moments, then the subtraction.
+    /// Each operation is a plain IEEE one, so a result can differ from an engine kernel in its last bit.
+    /// False (nothing done) for a GPU engine, an element type other than float or double, or a layout without
+    /// zero-copy host arrays; the caller then runs the tensor-op recurrence.
+    /// </summary>
+    private bool TryFusedHostBf16Step(Tensor<T> param, Tensor<T> grad, QuantizedTapeState state,
+        double lr, double beta1, double beta2, double bc1, double bc2, double weightDecay, bool decoupledWeightDecay)
+    {
+        if (Engine.SupportsGpu || param.Length != grad.Length || !param.IsContiguous || !grad.IsContiguous
+            || state.MBf16 is not { } mBf16 || state.VBf16 is not { } vBf16
+            || mBf16.Length < param.Length || vBf16.Length < param.Length)
+        {
+            return false;
+        }
+
+        int length = param.Length;
+        double decoupledFactor = weightDecay > 0.0 && decoupledWeightDecay ? 1.0 - lr * weightDecay : 1.0;
+        double coupledDecay = weightDecay > 0.0 && !decoupledWeightDecay ? weightDecay : 0.0;
+        if (typeof(T) == typeof(float))
+        {
+            float[]? pA = ((Tensor<float>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            float[]? gA = ((Tensor<float>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (pA is null || gA is null) return false;
+            var k = new Bf16AdamCoefficients<float>(
+                (float)lr, (float)beta1, 1f - (float)beta1, (float)beta2, 1f - (float)beta2, (float)_options.Epsilon,
+                (float)bc1, (float)bc2, (float)decoupledFactor, (float)coupledDecay);
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+                Bf16AdamRange(pA, pO, gA, gO, mBf16, vBf16, chunkStart, chunkCount, k));
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            double[]? pA = ((Tensor<double>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            double[]? gA = ((Tensor<double>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (pA is null || gA is null) return false;
+            var k = new Bf16AdamCoefficients<double>(
+                lr, beta1, 1.0 - beta1, beta2, 1.0 - beta2, _options.Epsilon, bc1, bc2, decoupledFactor, coupledDecay);
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+                Bf16AdamRange(pA, pO, gA, gO, mBf16, vBf16, chunkStart, chunkCount, k));
+        }
+        else
+        {
+            return false;
+        }
+
+        param.IncrementVersion();
+        return true;
+    }
+
+    /// <summary>The per-step scalars of the fused BF16 Adam pass, in the element type the pass computes in.</summary>
+    internal readonly struct Bf16AdamCoefficients<TScalar>
+        where TScalar : struct
+    {
+        public Bf16AdamCoefficients(TScalar learningRate, TScalar beta1, TScalar oneMinusBeta1, TScalar beta2,
+            TScalar oneMinusBeta2, TScalar epsilon, TScalar biasCorrection1, TScalar biasCorrection2,
+            TScalar decoupledDecayFactor, TScalar coupledDecay)
+        {
+            LearningRate = learningRate;
+            Beta1 = beta1;
+            OneMinusBeta1 = oneMinusBeta1;
+            Beta2 = beta2;
+            OneMinusBeta2 = oneMinusBeta2;
+            Epsilon = epsilon;
+            BiasCorrection1 = biasCorrection1;
+            BiasCorrection2 = biasCorrection2;
+            DecoupledDecayFactor = decoupledDecayFactor;
+            CoupledDecay = coupledDecay;
+        }
+
+        public TScalar LearningRate { get; }
+        public TScalar Beta1 { get; }
+        public TScalar OneMinusBeta1 { get; }
+        public TScalar Beta2 { get; }
+        public TScalar OneMinusBeta2 { get; }
+        public TScalar Epsilon { get; }
+        public TScalar BiasCorrection1 { get; }
+        public TScalar BiasCorrection2 { get; }
+
+        /// <summary>Multiplies the parameter before the update; 1 when decoupled weight decay is off.</summary>
+        public TScalar DecoupledDecayFactor { get; }
+
+        /// <summary>Times the pre-update parameter, added to the gradient; 0 when coupled weight decay is off.</summary>
+        public TScalar CoupledDecay { get; }
+    }
+
+    /// <summary>
+    /// The fused BF16 Adam pass over elements [start, start + count) of a float parameter. Whole
+    /// <see cref="System.Numerics.Vector{T}"/> blocks run vectorized on NET7+, the rest element by element; both
+    /// perform the same IEEE operations in the same order, so the split point does not change a result.
+    /// </summary>
+    internal static void Bf16AdamRange(float[] p, int pO, float[] g, int gO, ushort[] m, ushort[] v,
+        int start, int count, Bf16AdamCoefficients<float> k)
+    {
+        int i = start;
+        int end = start + count;
+        // The tensor path multiplies by a decay factor, or adds a WeightDecay * parameter tensor, only when that
+        // decay is on. Doing either unconditionally with 1 or 0 would still be exact except for the sign of zero.
+        bool decoupled = k.DecoupledDecayFactor != 1f;
+        bool coupled = k.CoupledDecay != 0f;
+#if NET7_0_OR_GREATER
+        int laneU = System.Numerics.Vector<uint>.Count;
+        int stride = System.Numerics.Vector<ushort>.Count;
+        var c7fff = new System.Numerics.Vector<uint>(0x7FFFu);
+        var cInf = new System.Numerics.Vector<uint>(0x7F800000u);
+        var cAbs = new System.Numerics.Vector<uint>(0x7FFFFFFFu);
+        var cNan = new System.Numerics.Vector<uint>(0x0040u);
+        var cOne = new System.Numerics.Vector<uint>(1u);
+        for (; i + stride <= end; i += stride)
+        {
+            SimdVector.Widen(new System.Numerics.Vector<ushort>(m, i), out System.Numerics.Vector<uint> mLo, out System.Numerics.Vector<uint> mHi);
+            SimdVector.Widen(new System.Numerics.Vector<ushort>(v, i), out System.Numerics.Vector<uint> vLo, out System.Numerics.Vector<uint> vHi);
+            Bf16AdamLane(p, pO + i, g, gO + i, mLo, vLo, k, decoupled, coupled,
+                out System.Numerics.Vector<float> mLoNew, out System.Numerics.Vector<float> vLoNew);
+            Bf16AdamLane(p, pO + i + laneU, g, gO + i + laneU, mHi, vHi, k, decoupled, coupled,
+                out System.Numerics.Vector<float> mHiNew, out System.Numerics.Vector<float> vHiNew);
+            SimdVector.Narrow(
+                FloatLaneToBf16(mLoNew, c7fff, cInf, cAbs, cNan, cOne),
+                FloatLaneToBf16(mHiNew, c7fff, cInf, cAbs, cNan, cOne)).CopyTo(m, i);
+            SimdVector.Narrow(
+                FloatLaneToBf16(vLoNew, c7fff, cInf, cAbs, cNan, cOne),
+                FloatLaneToBf16(vHiNew, c7fff, cInf, cAbs, cNan, cOne)).CopyTo(v, i);
+        }
+#endif
+        for (; i < end; i++)
+        {
+            float pi = p[pO + i];
+            if (decoupled) pi *= k.DecoupledDecayFactor;
+            float gi = g[gO + i];
+            if (coupled) gi += pi * k.CoupledDecay;
+            float mi = BitConverterHelper.Bf16BitsToFloat(m[i]) * k.Beta1 + gi * k.OneMinusBeta1;
+            float vi = BitConverterHelper.Bf16BitsToFloat(v[i]) * k.Beta2 + gi * gi * k.OneMinusBeta2;
+            m[i] = BitConverterHelper.FloatToBf16Bits(mi);
+            v[i] = BitConverterHelper.FloatToBf16Bits(vi);
+            float denom = (float)Math.Sqrt(vi / k.BiasCorrection2) + k.Epsilon;
+            p[pO + i] = pi - mi / k.BiasCorrection1 / denom * k.LearningRate;
+        }
+    }
+
+#if NET7_0_OR_GREATER
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Bf16AdamLane(float[] p, int pIndex, float[] g, int gIndex,
+        System.Numerics.Vector<uint> mBits, System.Numerics.Vector<uint> vBits, Bf16AdamCoefficients<float> k,
+        bool decoupled, bool coupled,
+        out System.Numerics.Vector<float> mNew, out System.Numerics.Vector<float> vNew)
+    {
+        var pv = new System.Numerics.Vector<float>(p, pIndex);
+        if (decoupled) pv *= k.DecoupledDecayFactor;
+        var gv = new System.Numerics.Vector<float>(g, gIndex);
+        if (coupled) gv += pv * k.CoupledDecay;
+        mNew = SimdVector.AsVectorSingle(SimdVector.ShiftLeft(mBits, 16)) * k.Beta1 + gv * k.OneMinusBeta1;
+        vNew = SimdVector.AsVectorSingle(SimdVector.ShiftLeft(vBits, 16)) * k.Beta2 + gv * gv * k.OneMinusBeta2;
+        var denom = SimdVector.SquareRoot(vNew / new System.Numerics.Vector<float>(k.BiasCorrection2))
+            + new System.Numerics.Vector<float>(k.Epsilon);
+        (pv - mNew / new System.Numerics.Vector<float>(k.BiasCorrection1) / denom * k.LearningRate).CopyTo(p, pIndex);
+    }
+#endif
+
+    /// <summary>The fused BF16 Adam pass over elements [start, start + count) of a double parameter.</summary>
+    internal static void Bf16AdamRange(double[] p, int pO, double[] g, int gO, ushort[] m, ushort[] v,
+        int start, int count, Bf16AdamCoefficients<double> k)
+    {
+        int end = start + count;
+        bool decoupled = k.DecoupledDecayFactor != 1.0;
+        bool coupled = k.CoupledDecay != 0.0;
+        for (int i = start; i < end; i++)
+        {
+            double pi = p[pO + i];
+            if (decoupled) pi *= k.DecoupledDecayFactor;
+            double gi = g[gO + i];
+            if (coupled) gi += pi * k.CoupledDecay;
+            double mi = BitConverterHelper.Bf16BitsToFloat(m[i]) * k.Beta1 + gi * k.OneMinusBeta1;
+            double vi = BitConverterHelper.Bf16BitsToFloat(v[i]) * k.Beta2 + gi * gi * k.OneMinusBeta2;
+            m[i] = BitConverterHelper.FloatToBf16Bits((float)mi);
+            v[i] = BitConverterHelper.FloatToBf16Bits((float)vi);
+            double denom = Math.Sqrt(vi / k.BiasCorrection2) + k.Epsilon;
+            p[pO + i] = pi - mi / k.BiasCorrection1 / denom * k.LearningRate;
         }
     }
 
