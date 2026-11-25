@@ -63,6 +63,11 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
+        if (input.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         T minInput = input.Min();
         Vector<T> shiftedExp = input.Transform(x => NumOps.Exp(NumOps.Subtract(minInput, x)));
         T sumExp = shiftedExp.Sum();
@@ -102,13 +107,23 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        if (input.Length == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
         Vector<T> softmin = Activate(input).Transform(NumOps.Exp);
         // J[i, i] = s[i] - 1; J[i, j] = s[j], so every off-diagonal row is the softmin
         var engine = Engine;
-        int n = input.Length;
+        if (UseScalarJacobian(input.Length))
+        {
+            return ScalarLogSoftmaxJacobian(softmin, NumOps.Negate(NumOps.One));
+        }
+
         var probabilities = Tensor<T>.FromVector(softmin);
-        var offDiagonal = engine.TensorTile(engine.Reshape(probabilities, new[] { 1, n }), new[] { n, 1 });
-        return ReplaceDiagonal(offDiagonal, engine.TensorSubtractScalar(probabilities, NumOps.One)).ToMatrix();
+        // Every row is softmin: ones (x) softmin, with softmin - 1 on the diagonal
+        return OuterWithDiagonal(
+            engine.TensorOnesLike(probabilities), probabilities, engine.TensorSubtractScalar(probabilities, NumOps.One));
     }
 
 }

@@ -142,6 +142,12 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     /// <returns>A new tensor containing the derivatives of the Hard Swish function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // x <= -3: 0; x >= 3: 1; otherwise (2x + 3) / 6
         var engine = Engine;
         var middle = engine.TensorMultiplyScalar(

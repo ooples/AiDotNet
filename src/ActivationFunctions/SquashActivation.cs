@@ -151,9 +151,70 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
             return new Matrix<T>(0, 0);
         }
 
+        // One vector: the norm terms are scalars, so the Jacobian is a single outer product plus a multiple of the
+        // identity: J = scale * (I - x x^T / |x|^2) / |x| + 2 x x^T / ((1 + |x|^2)^2 |x|).
+        bool scalar = UseScalarJacobian(n);
         var engine = Engine;
-        var jacobians = SquashJacobians(engine.Reshape(Tensor<T>.FromVector(input), new[] { 1, n }));
-        return engine.Reshape(jacobians, new[] { n, n }).ToMatrix();
+        var x = scalar ? null : Tensor<T>.FromVector(input);
+        T normSquared = x is null ? ScalarSumOfSquares(input) : engine.TensorSum(engine.TensorMultiply(x, x));
+        T norm = NumOps.Sqrt(normSquared);
+        T normSqPlusOne = NumOps.Add(normSquared, NumOps.One);
+        T scale = NumOps.Divide(normSquared, normSqPlusOne);
+        T normInv = NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10)) ? NumOps.Divide(NumOps.One, norm) : NumOps.Zero;
+
+        // J = a I + b x x^T with a = scale / |x| and b = 2 / ((1 + |x|^2)^2 |x|) - a / |x|^2
+        T a = NumOps.Multiply(scale, normInv);
+        T normSqInv = NumOps.GreaterThan(normSquared, NumOps.FromDouble(1e-20))
+            ? NumOps.Divide(NumOps.One, normSquared)
+            : NumOps.Zero;
+        T denominator = NumOps.Multiply(NumOps.Multiply(normSqPlusOne, normSqPlusOne), norm);
+        T b = NumOps.Subtract(NumOps.Divide(NumOps.FromDouble(2), denominator), NumOps.Multiply(a, normSqInv));
+
+        if (x is null)
+        {
+            return ScalarOuterPlusIdentity(input, b, a);
+        }
+
+        var scaled = engine.TensorMultiplyScalar(x, b);
+        return OuterWithDiagonal(scaled, x, engine.TensorAddScalar(engine.TensorMultiply(scaled, x), a));
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private T ScalarSumOfSquares(Vector<T> input)
+    {
+        var x = input.AsSpan();
+        T sum = NumOps.Zero;
+        for (int i = 0; i < x.Length; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Multiply(x[i], x[i]));
+        }
+
+        return sum;
+    }
+
+    /// <summary><c>b x x^T + a I</c> in scalar arithmetic.</summary>
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarOuterPlusIdentity(Vector<T> input, T b, T a)
+    {
+        int n = input.Length;
+        var x = input.AsSpan();
+        var jacobian = new Matrix<T>(n, n);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < n; i++)
+        {
+            T scaled = NumOps.Multiply(x[i], b);
+            int row = i * n;
+            for (int j = 0; j < n; j++)
+            {
+                cells[row + j] = NumOps.Multiply(scaled, x[j]);
+            }
+
+            cells[row + i] = NumOps.Add(NumOps.Multiply(scaled, x[i]), a);
+        }
+
+        return jacobian;
     }
 
     /// <summary>

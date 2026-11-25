@@ -55,6 +55,12 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     private readonly Random _random;
 
     /// <summary>
+    /// The noise drawn by the most recent <see cref="Activate(Vector{T})"/>, so that
+    /// <see cref="Derivative(Vector{T})"/> describes that forward pass instead of a new sample.
+    /// </summary>
+    private Vector<T>? _lastVectorNoise;
+
+    /// <summary>
     /// Initializes a new instance of the GumbelSoftmaxActivation class.
     /// </summary>
     /// <param name="temperature">Controls the sharpness of the distribution. Default is 1.0.</param>
@@ -105,6 +111,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     public override Vector<T> Activate(Vector<T> input)
     {
         Vector<T> gumbel = SampleGumbel(input.Length);
+        _lastVectorNoise = gumbel;
         Vector<T> logits = input.Add(gumbel);
 
         return Softmax(logits);
@@ -118,6 +125,14 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input.Shape.Length == 0)
+        {
+            // One logit: its softmax is 1 whatever the noise. The draw is still taken, so the seeded stream
+            // advances as it does for every other shape.
+            StandardGumbel(input._shape);
+            return Engine.TensorOnesLike(input);
+        }
+
         int lastAxis = input.Shape.Length - 1;
 
         // Sample Gumbel noise g = -log(-log(u)) with u ~ U(0, 1).
@@ -149,13 +164,38 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        // J[i, i] = y[i] * (1 - y[i]); J[i, j] = -y[i] * y[j]
-        Vector<T> output = Activate(input);
-        var jacobian = SoftmaxJacobian(Tensor<T>.FromVector(output));
+        if (input.Length == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
 
-        // Scale the Jacobian by the inverse temperature
+        // The Jacobian of the forward pass that was just run: reuse its noise. Only when there was none of this
+        // length is a sample drawn (and kept).
+        Vector<T> gumbel;
+        if (_lastVectorNoise is { } last && last.Length == input.Length)
+        {
+            gumbel = last;
+        }
+        else
+        {
+            gumbel = SampleGumbel(input.Length);
+            _lastVectorNoise = gumbel;
+        }
+
+        // J = (diag(y) - y y^T) / temperature
+        var engine = Engine;
         T invTemp = NumOps.Divide(NumOps.One, _temperature);
-        return Engine.TensorMultiplyScalar(jacobian, invTemp).ToMatrix();
+        if (UseScalarJacobian(input.Length))
+        {
+            return ScalarSoftmaxJacobian(Softmax(input.Add(gumbel)), invTemp);
+        }
+
+        var output = Tensor<T>.FromVector(Softmax(input.Add(gumbel)));
+        var negated = engine.TensorNegate(output);
+        var oneMinus = engine.TensorAddScalar(negated, NumOps.One);
+        return OuterWithDiagonal(
+            engine.TensorMultiplyScalar(negated, invTemp), output,
+            engine.TensorMultiplyScalar(engine.TensorMultiply(output, oneMinus), invTemp));
     }
 
     /// <summary>
@@ -202,7 +242,10 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
         // Both logarithms floor their argument at the stability epsilon, as SafeLog does
         var engine = Engine;
         T floor = NumOps.FromDouble(NumericalStabilityHelper.DefaultEpsilon);
-        var uniform = Tensor<T>.CreateRandom(_random, shape);
+        // CreateRandom needs at least one dimension; a rank-0 tensor is one draw
+        var uniform = shape.Length == 0
+            ? new Tensor<T>(Tensor<T>.CreateRandom(_random, new[] { 1 }).ToArray(), shape)
+            : Tensor<T>.CreateRandom(_random, shape);
         var inner = engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(uniform, floor)));
         return engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(inner, floor)));
     }

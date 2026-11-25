@@ -138,6 +138,12 @@ public class SwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     /// <returns>A tensor holding sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)) for each element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         var engine = Engine;
         var sigmoid = engine.Sigmoid(input);
         var oneMinusSigmoid = engine.TensorAddScalar(engine.TensorNegate(sigmoid), NumOps.One);

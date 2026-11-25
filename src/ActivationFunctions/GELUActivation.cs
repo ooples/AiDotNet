@@ -159,6 +159,12 @@ public class GELUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// <returns>A new tensor containing the derivatives of the GELU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // d/dx GELU(x) = 0.5 * tanh(0.0356774 * x^3 + 0.797885 * x) +
         //                (0.0535161 * x^3 + 0.398942 * x) * sech^2(0.0356774 * x^3 + 0.797885 * x) + 0.5
         var engine = Engine;

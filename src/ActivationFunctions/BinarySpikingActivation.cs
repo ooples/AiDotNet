@@ -237,6 +237,12 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // Straight-through estimator (STE) per Neftci et al. 2019,
         // "Surrogate Gradient Learning in Spiking Neural Networks":
         //   * Forward value = Heaviside(input - threshold) — true binary spike.
@@ -295,6 +301,12 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // Triangular pulse around the threshold: slope * (1 - |x - threshold| / width) where
         // |x - threshold| < width, 0 elsewhere.
         var engine = Engine;

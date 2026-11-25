@@ -87,7 +87,13 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
         // Sort descending, find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}, take the
         // threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k and return max(0, z - tau): the engine's
         // sparsemax, the same operation the tensor overload uses
-        return Engine.Sparsemax(Tensor<T>.FromVector(input), axis: -1).ToVector();
+        // sparsemax(z) = sparsemax(z - c): taking the maximum off first keeps the support test
+        // 1 + k z_(k) > sum_{j<=k} z_(j) away from magnitudes where the 1 is absorbed (2e7 in float), where the
+        // unshifted projection returned the raw inputs. A NaN input stays NaN instead of becoming 0.
+        var engine = Engine;
+        var z = Tensor<T>.FromVector(input);
+        var shifted = engine.TensorSubtractScalar(z, engine.TensorMaxValue(z));
+        return engine.TensorAdd(engine.Sparsemax(shifted, axis: -1), NaNOrZero(z)).ToVector();
     }
 
     /// <summary>
@@ -137,6 +143,11 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
         }
 
         var engine = Engine;
+        if (UseScalarJacobian(d))
+        {
+            return ScalarJacobian(Activate(input));
+        }
+
         var output = Tensor<T>.FromVector(Activate(input));
 
         // s[i] = 1 where the output is positive (the support), 0 elsewhere
@@ -151,7 +162,55 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
         // On the support the output is input - tau with tau = (sum of the support's inputs - 1) / |S|,
         // so J = diag(s) - s s^T / |S|
         var shared = engine.TensorDivideScalar(engine.TensorOuter(support, support), supportSize);
-        return engine.TensorSubtract(engine.TensorDiag(support), shared).ToMatrix();
+        return Matrix<T>.FromMemory(engine.TensorSubtract(engine.TensorDiag(support), shared).ToArray(), d, d);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarJacobian(Vector<T> output)
+    {
+        int d = output.Length;
+        var o = output.AsSpan();
+        int supportSize = 0;
+        for (int i = 0; i < d; i++)
+        {
+            if (NumOps.GreaterThan(o[i], NumOps.Zero))
+            {
+                supportSize++;
+            }
+        }
+
+        var jacobian = new Matrix<T>(d, d);
+        if (supportSize == 0)
+        {
+            return jacobian;
+        }
+
+        // diag(s) - s s^T / |S| with s the support indicator
+        T shared = NumOps.Divide(NumOps.One, NumOps.FromDouble(supportSize));
+        T offDiagonal = NumOps.Negate(shared);
+        T diagonal = NumOps.Subtract(NumOps.One, shared);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < d; i++)
+        {
+            if (!NumOps.GreaterThan(o[i], NumOps.Zero))
+            {
+                continue;
+            }
+
+            int row = i * d;
+            for (int j = 0; j < d; j++)
+            {
+                if (NumOps.GreaterThan(o[j], NumOps.Zero))
+                {
+                    cells[row + j] = offDiagonal;
+                }
+            }
+
+            cells[row + i] = diagonal;
+        }
+
+        return jacobian;
     }
 
 }

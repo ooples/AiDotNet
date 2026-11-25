@@ -101,7 +101,12 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
         }
 
         // Same grouping as the tensor overload: [outputSize, numPieces], maximum over the pieces
-        return Activate(Tensor<T>.FromVector(input)).ToVector();
+        // ReduceMax skips a NaN that is not the first piece of its group; the scalar fold this replaces returned
+        // NaN for a group that holds one. Each group's NaN-or-zero sum puts it back.
+        var engine = Engine;
+        var values = Tensor<T>.FromVector(input);
+        var groups = engine.Reshape(NaNOrZero(values), new[] { input.Length / _numPieces, _numPieces });
+        return engine.TensorAdd(Activate(values), engine.ReduceSum(groups, new[] { 1 }, keepDims: false)).ToVector();
     }
 
     /// <summary>
@@ -170,19 +175,37 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
             return new Matrix<T>(0, 0);
         }
 
-        var engine = Engine;
-        var groups = engine.Reshape(Tensor<T>.FromVector(input), new[] { outputSize, _numPieces });
+        // d out[g] / d in[g * pieces + k] = 1 for the winning piece k of group g, 0 elsewhere: one engine argmax
+        // per group, then one cell per row.
+        return WinnerJacobian(input, outputSize);
+    }
 
-        // winners[i, j] = 1 for the first largest piece j of group i, 0 elsewhere
-        var winners = engine.TensorOneHot<T>(engine.TensorArgMax(groups, 1), _numPieces);
+    [AiDotNet.Attributes.ScalarKernel("one comparison per input element and one write per group: measured on the CPU engine the reshape "
+        + "and arg-max formulation is slower at every length from 16 to 4096, and a device dispatch costs more still")]
+    private Matrix<T> WinnerJacobian(Vector<T> input, int outputSize)
+    {
+        var x = input.AsSpan();
+        var jacobian = new Matrix<T>(outputSize, input.Length);
+        var cells = jacobian.AsWritableSpan();
+        T one = NumOps.One;
+        for (int g = 0; g < outputSize; g++)
+        {
+            int start = g * _numPieces;
+            int winner = start;
+            T best = x[start];
+            for (int j = 1; j < _numPieces; j++)
+            {
+                if (NumOps.GreaterThan(x[start + j], best))
+                {
+                    winner = start + j;
+                    best = x[winner];
+                }
+            }
 
-        // J[i, k * numPieces + j] = (i == k) * winners[i, j]: each group's row is non-zero only in its
-        // own block of numPieces columns
-        var ownBlock = engine.Reshape(engine.TensorEye<T>(outputSize), new[] { outputSize, outputSize, 1 });
-        var placed = engine.TensorMultiply(
-            engine.TensorTile(ownBlock, new[] { 1, 1, _numPieces }),
-            engine.TensorTile(engine.Reshape(winners, new[] { outputSize, 1, _numPieces }), new[] { 1, outputSize, 1 }));
-        return engine.Reshape(placed, new[] { outputSize, input.Length }).ToMatrix();
+            cells[g * input.Length + winner] = one;
+        }
+
+        return jacobian;
     }
 
 }
