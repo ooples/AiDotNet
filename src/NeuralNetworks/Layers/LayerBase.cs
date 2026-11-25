@@ -9068,6 +9068,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// True when <paramref name="child"/> is a sub-layer of <paramref name="parent"/> frozen with
+    /// <see cref="FreezeSubLayerParameters"/>: the walks that collect what an optimizer updates skip it, as they skip
+    /// it in <see cref="ParameterCount"/>.
+    /// </summary>
+    internal static bool IsFrozenChildOf(ILayer<T> parent, ILayer<T>? child)
+        => parent is LayerBase<T> owner && owner.IsSubLayerParameterFrozen(child);
+
+    /// <summary>
     /// Children whose parameters are excluded from this layer's surface. Null until something is
     /// frozen, which is the overwhelmingly common case -- the parameter walks pay one null check.
     /// </summary>

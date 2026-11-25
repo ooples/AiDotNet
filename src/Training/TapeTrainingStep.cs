@@ -295,8 +295,11 @@ public static class TapeTrainingStep<T>
             }
         }
 
+        // A child frozen with FreezeSubLayerParameters (requires_grad = False: a LoRA adapter's base layer) is out of the
+        // parameter surface; collecting it handed its weights to the optimizer, which updated them every step.
         foreach (var child in layer.GetSubLayers())
-            CollectLayerParameters(child, parameters, seen, materializedOnly);
+            if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child))
+                CollectLayerParameters(child, parameters, seen, materializedOnly);
     }
 
     /// <summary>
@@ -338,7 +341,8 @@ public static class TapeTrainingStep<T>
         }
 
         foreach (var child in layer.GetSubLayers())
-            CollectLayerReferencedParameters(child, parameters, seen, materializedOnly);
+            if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child))
+                CollectLayerReferencedParameters(child, parameters, seen, materializedOnly);
     }
 
     /// <summary>
@@ -398,7 +402,14 @@ public static class TapeTrainingStep<T>
 
             var subLayers = layer.GetSubLayers();
             if (subLayers.Count > 0)
-                CollectTrainableRecursive(subLayers, result, seen);
+            {
+                // Frozen children (FreezeSubLayerParameters) are not trained: the compiled step reads its parameters
+                // from this list.
+                var trained = new List<ILayer<T>>(subLayers.Count);
+                foreach (var child in subLayers)
+                    if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child)) trained.Add(child);
+                CollectTrainableRecursive(trained, result, seen);
+            }
         }
     }
 
