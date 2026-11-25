@@ -886,7 +886,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             {
                 if (maxGradNorm > 0.0)
                 {
-                    ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                    ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                 }
 
                 gradOptBase.ClipTapeGradientsAhead(
@@ -900,7 +900,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 regularizeGradients?.Invoke(trainableParameters, gradients);
                 if (maxGradNorm > 0.0)
                 {
-                    ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                    ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                 }
             }
 
@@ -976,7 +976,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 {
                     if (maxGradNorm > 0.0)
                     {
-                        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                        ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                     }
 
                     if (optClipNorm > 0.0)
@@ -991,7 +991,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                     regularizeGradients?.Invoke(trainableParameters, gradients);
                     if (maxGradNorm > 0.0)
                     {
-                        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                        ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                     }
 
                     if (optClipNorm > 0.0)
@@ -1555,6 +1555,29 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 ScaleTensorInPlace(shardGradTensor, s2);
             }
         }
+    }
+
+    /// <summary>
+    /// The clip a step over full (replicated) reduced gradients applies at the maximum norm, in place of the
+    /// coordinator's own global-norm clip. A network sets it to its own clip, so a data-parallel step clips the reduced
+    /// gradients exactly as the same network's one-process step clips its gradients (the same norm in the same order),
+    /// and the pre-clip norm is recorded for the step's reported gradient norm. It returns false when it does not take
+    /// the clip; the coordinator's own global-norm clip runs then.
+    /// </summary>
+    internal Func<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>, double, bool>? ReducedGradientClip { get; set; }
+
+    private void ClipReducedGradients(
+        IReadOnlyList<Tensor<T>> trainableParameters,
+        Tensor<T>[] uniqueParams,
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        double maxNorm)
+    {
+        if (ReducedGradientClip is { } clip && clip(trainableParameters, gradients, maxNorm))
+        {
+            return;
+        }
+
+        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxNorm);
     }
 
     private static void ClipGradientsByGlobalNorm(

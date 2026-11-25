@@ -904,6 +904,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _distributedCoordinator = value;
             if (value is not null)
             {
+                // The reduced gradients are clipped by this network's own global-norm clip, as its one-process step
+                // clips them: one process accumulating N micro-batches and a data-parallel world of N ranks over the
+                // same micro-batches then take the same step, and the reported norm is the pre-clip norm.
+                value.ReducedGradientClip = ClipReducedGradients;
                 RegisterOwnerForTrainingSurface();
             }
         }
@@ -16835,6 +16839,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (_lastHostGradientNormSq is double sq) return Math.Sqrt(sq);
         if (allowDeviceRead && _lastDeviceGradientNorm is { } deviceNorm) return deviceNorm.TotalNorm;
         return null;
+    }
+
+    /// <summary>
+    /// The distributed coordinator's clip of reduced (all-reduced, full) gradients: this network's global-norm clip over
+    /// its layer-owned parameters, the same call its one-process steps make. A model that clips each component by value
+    /// instead keeps the coordinator's global-norm clip (false), as before.
+    /// </summary>
+    private bool ClipReducedGradients(
+        IReadOnlyList<Tensor<T>> trainableParameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        double maxNorm)
+    {
+        if (UsesElementWiseGradientClipping || maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm))
+            return false;
+        ApplyGradientClipping(gradients, maxNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParameters));
+        return true;
     }
 
     private void ApplyGradientClipping(
