@@ -191,19 +191,177 @@ public class ActivationEngineParityTests
         AssertValues(expectedGradient, gradient.ToArray(), 1e-10, "surrogate gradient");
     }
 
+    private static readonly double[] SmoothPoint = { 0.3, -1.1, 2.0, 0.5 };
+
+    /// <summary>A fresh activation for a key; Gumbel twins share a seed, so each draws the same first sample.</summary>
+    private static ActivationFunctionBase<double> Create(string key) => key switch
+    {
+        "relu" => new ReLUActivation<double>(),
+        "relu6" => new ReLU6Activation<double>(),
+        "leaky-relu" => new LeakyReLUActivation<double>(0.1),
+        "elu" => new ELUActivation<double>(1.3),
+        "hard-swish" => new HardSwishActivation<double>(),
+        "swish" => new SwishActivation<double>(),
+        "gelu" => new GELUActivation<double>(),
+        "softmax" => new SoftmaxActivation<double>(),
+        "softmin" => new SoftminActivation<double>(),
+        "log-softmax" => new LogSoftmaxActivation<double>(),
+        "log-softmin" => new LogSoftminActivation<double>(),
+        "taylor-0" => new TaylorSoftmaxActivation<double>(0),
+        "taylor-1" => new TaylorSoftmaxActivation<double>(1),
+        "taylor-2" => new TaylorSoftmaxActivation<double>(2),
+        "taylor-3" => new TaylorSoftmaxActivation<double>(3),
+        "taylor-6" => new TaylorSoftmaxActivation<double>(6),
+        "sparsemax" => new SparsemaxActivation<double>(),
+        "spherical" => new SphericalSoftmaxActivation<double>(),
+        "squash" => new SquashActivation<double>(),
+        "maxout" => new MaxoutActivation<double>(2),
+        "gumbel-0.5" => new GumbelSoftmaxActivation<double>(0.5, 11),
+        "gumbel-1" => new GumbelSoftmaxActivation<double>(1.0, 11),
+        "gumbel-2" => new GumbelSoftmaxActivation<double>(2.0, 11),
+        _ => throw new ArgumentOutOfRangeException(nameof(key), key, "unknown activation"),
+    };
+
+    // Every vector Jacobian in this file against central differences of its own forward pass: the check does not
+    // know the formula, so a wrong derivative cannot pass by agreeing with itself.
+    // Mutation: drop the negation in SoftminActivation.Derivative, or use the softmax form in TaylorSoftmax.
+    [Theory(Timeout = 120000)]
+    [InlineData("relu")]
+    [InlineData("relu6")]
+    [InlineData("leaky-relu")]
+    [InlineData("elu")]
+    [InlineData("hard-swish")]
+    [InlineData("swish")]
+    [InlineData("gelu")]
+    [InlineData("softmax")]
+    [InlineData("softmin")]
+    [InlineData("log-softmax")]
+    [InlineData("log-softmin")]
+    [InlineData("taylor-0")]
+    [InlineData("taylor-1")]
+    [InlineData("taylor-2")]
+    [InlineData("taylor-3")]
+    [InlineData("taylor-6")]
+    [InlineData("sparsemax")]
+    [InlineData("spherical")]
+    [InlineData("squash")]
+    [InlineData("maxout")]
+    [InlineData("gumbel-0.5")]
+    [InlineData("gumbel-1")]
+    [InlineData("gumbel-2")]
+    public async Task VectorJacobian_MatchesCentralFiniteDifferences(string key)
+    {
+        var numerical = NumericalJacobian(x => Create(key).Activate(new Vector<double>(x)).ToArray(), SmoothPoint);
+
+        var jacobian = Create(key).Derivative(new Vector<double>(SmoothPoint));
+
+        // GELU's derivative is written with six-digit constants (0.797885 for sqrt(2/pi), as on master), so it is
+        // 2.1e-7 away from the derivative of its own forward pass; every other Jacobian agrees to 1e-7.
+        AssertMatrix(numerical, jacobian, key == "gelu" ? 1e-6 : 1e-7, key + " vs finite differences");
+    }
+
+    // 40 elements: longer than ScalarJacobianMaxLength, so this is the engine formulation of each Jacobian, and
+    // VectorJacobian_MatchesCentralFiniteDifferences (4 elements) is the scalar one.
+    private static readonly double[] LongSmoothPoint =
+        Enumerable.Range(0, 40).Select(i => 1.3 * Math.Sin(1.7 * i + 0.3) + 0.011 * i + 0.05).ToArray();
+
+    // Mutation: swap the factors of the outer product in OuterWithDiagonal.
+    [Theory(Timeout = 120000)]
+    [InlineData("relu")]
+    [InlineData("swish")]
+    [InlineData("softmax")]
+    [InlineData("softmin")]
+    [InlineData("log-softmax")]
+    [InlineData("log-softmin")]
+    [InlineData("taylor-0")]
+    [InlineData("taylor-1")]
+    [InlineData("taylor-2")]
+    [InlineData("taylor-3")]
+    [InlineData("taylor-6")]
+    [InlineData("sparsemax")]
+    [InlineData("spherical")]
+    [InlineData("squash")]
+    [InlineData("maxout")]
+    [InlineData("gumbel-0.5")]
+    [InlineData("gumbel-2")]
+    public async Task VectorJacobian_AboveTheScalarLimit_MatchesCentralFiniteDifferences(string key)
+    {
+        Assert.True(LongSmoothPoint.Min(Math.Abs) > 1e-3, "the point must stay clear of the kinks at zero");
+        var numerical = NumericalJacobian(x => Create(key).Activate(new Vector<double>(x)).ToArray(), LongSmoothPoint);
+
+        var jacobian = Create(key).Derivative(new Vector<double>(LongSmoothPoint));
+
+        AssertMatrix(numerical, jacobian, 1e-7, key + " (40 elements) vs finite differences");
+    }
+
     [Fact(Timeout = 120000)]
-    public async Task SoftmaxFamily_Jacobians_MatchSoftmaxForm()
+    public async Task SoftminActivation_Jacobian_HasTheSignOfSoftmaxOfTheNegatedInput()
+    {
+        // softmin(x) = softmax(-x): raising x[i] lowers its own share and raises every other one
+        var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0, 0.7 });
+        var softmin = new SoftminActivation<double>();
+        var s = softmin.Activate(input).ToArray();
+
+        var expected = SoftmaxForm(s);
+        for (int i = 0; i < s.Length; i++)
+        {
+            for (int j = 0; j < s.Length; j++)
+            {
+                expected[i, j] = -expected[i, j];
+            }
+        }
+
+        var jacobian = softmin.Derivative(input);
+        AssertMatrix(expected, jacobian, Tolerance, "softmin");
+        Assert.True(jacobian[1, 1] < 0, "diagonal must be negative");
+        Assert.True(jacobian[1, 2] > 0, "off-diagonal must be positive");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SoftmaxActivation_Jacobian_MatchesSoftmaxForm()
     {
         var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0, 0.7 });
-
         var softmax = new SoftmaxActivation<double>();
+
         AssertMatrix(SoftmaxForm(softmax.Activate(input).ToArray()), softmax.Derivative(input), Tolerance, "softmax");
+    }
 
-        var softmin = new SoftminActivation<double>();
-        AssertMatrix(SoftmaxForm(softmin.Activate(input).ToArray()), softmin.Derivative(input), Tolerance, "softmin");
+    [Theory(Timeout = 120000)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(6)]
+    public async Task TaylorSoftmaxActivation_Jacobian_DifferentiatesThePolynomial(int order)
+    {
+        // y[i] = f(x[i]) / Z, f = sum_{k<=order} x^k / k!, so dy[i]/dx[j] = (delta_ij - y[i]) f'(x[j]) / Z with
+        // f' = sum_{k<order} x^k / k!
+        double[] x = { 0.3, -1.1, 2.0, 0.5 };
+        double Polynomial(double v, int terms)
+        {
+            double sum = 0, term = 1;
+            for (int k = 0; k <= terms; k++)
+            {
+                sum += term;
+                term *= v / (k + 1);
+            }
 
-        var taylor = new TaylorSoftmaxActivation<double>(3);
-        AssertMatrix(SoftmaxForm(taylor.Activate(input).ToArray()), taylor.Derivative(input), Tolerance, "taylor softmax");
+            return terms < 0 ? 0 : sum;
+        }
+
+        double z = x.Sum(v => Polynomial(v, order));
+        var expected = new double[x.Length, x.Length];
+        for (int i = 0; i < x.Length; i++)
+        {
+            for (int j = 0; j < x.Length; j++)
+            {
+                double y = Polynomial(x[i], order) / z;
+                expected[i, j] = ((i == j ? 1.0 : 0.0) - y) * Polynomial(x[j], order - 1) / z;
+            }
+        }
+
+        AssertMatrix(expected, new TaylorSoftmaxActivation<double>(order).Derivative(new Vector<double>(x)), 1e-12,
+            "taylor softmax order " + order);
     }
 
     [Fact(Timeout = 120000)]
@@ -553,7 +711,7 @@ public class ActivationEngineParityTests
         const int seed = 7;
         var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0 });
 
-        // Derivative draws one sample; a twin with the same seed reproduces it
+        // With no forward pass before it, Derivative draws one sample; a twin with the same seed reproduces it
         var sample = new GumbelSoftmaxActivation<double>(temperature, seed).Activate(input).ToArray();
         var expected = SoftmaxForm(sample);
         for (int i = 0; i < 4; i++)
@@ -586,5 +744,270 @@ public class ActivationEngineParityTests
         }
 
         AssertMatrix(expected, jacobian, 1e-3, "spherical jacobian at zero");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GumbelSoftmaxActivation_Jacobian_BelongsToTheForwardPassBeforeIt()
+    {
+        // Mutation: call Activate(input) inside Derivative again: it draws a second sample and the Jacobian no
+        // longer matches the output that was returned.
+        const double temperature = 0.5;
+        var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0 });
+        var gumbel = new GumbelSoftmaxActivation<double>(temperature, 31);
+
+        var sample = gumbel.Activate(input).ToArray();
+        var expected = SoftmaxForm(sample);
+        for (int i = 0; i < 4; i++)
+        {
+            for (int j = 0; j < 4; j++)
+            {
+                expected[i, j] *= 1.0 / temperature;
+            }
+        }
+
+        AssertMatrix(expected, gumbel.Derivative(input), Tolerance, "gumbel jacobian of the sample just drawn");
+        AssertMatrix(expected, gumbel.Derivative(input), Tolerance, "a second call does not draw either");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GumbelSoftmaxActivation_RankZeroTensor_IsOneDrawAndDoesNotThrow()
+    {
+        var scalar = new Tensor<double>(new[] { 0.7 }, Array.Empty<int>());
+
+        var output = new GumbelSoftmaxActivation<double>(1.0, 5).Activate(scalar);
+
+        Assert.Equal(1, output.Length);
+        Assert.Equal(1.0, output.ToArray()[0], 12);
+    }
+
+    // ---- edges: large magnitudes, NaN, empty inputs
+
+    [Fact(Timeout = 120000)]
+    public async Task SparsemaxActivation_Vector_AtLargeMagnitudes_StaysOnTheSimplex()
+    {
+        // Mutation: drop the shift by the maximum: 1 + k z_(k) loses its 1 and the raw inputs come back.
+        Assert.Equal(new[] { 1f, 0f, 0f },
+            new SparsemaxActivation<float>().Activate(new Vector<float>(new[] { 2e7f, 1f, 0f })).ToArray());
+        Assert.Equal(new[] { 0f, 1f, 0f },
+            new SparsemaxActivation<float>().Activate(new Vector<float>(new[] { -1e8f, -1e8f + 16f, -2e8f })).ToArray());
+        Assert.Equal(new[] { 1.0, 0.0, 0.0 },
+            new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { 1e17, 1.0, 0.0 })).ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SparsemaxActivation_Vector_OrdinaryInput_IsUnchangedByTheShift()
+    {
+        // [0.5, 1.5, 0.1]: sorted 1.5, 0.5, 0.1; support {1.5, 0.5}, tau = (2.0 - 1) / 2 = 0.5 -> [0, 1, 0]
+        AssertValues(new[] { 0.0, 1.0, 0.0 },
+            new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { 0.5, 1.5, 0.1 })).ToArray(), Tolerance, "sparsemax");
+        // [0.2, 0.3, 0.1]: all in the support, tau = (0.6 - 1) / 3 -> x - tau
+        double tau = (0.6 - 1.0) / 3.0;
+        AssertValues(new[] { 0.2 - tau, 0.3 - tau, 0.1 - tau },
+            new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { 0.2, 0.3, 0.1 })).ToArray(), Tolerance, "sparsemax");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SparsemaxActivation_Vector_NaNInput_StaysNaN()
+    {
+        // Mutation: drop NaNOrZero: the engine projection turns the NaN into 0.
+        Assert.True(double.IsNaN(
+            new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { double.NaN, 1.0, 0.0 }))[0]));
+        Assert.True(float.IsNaN(
+            new SparsemaxActivation<float>().Activate(new Vector<float>(new[] { float.NaN, 1f, 0f }))[0]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MaxoutActivation_Vector_PropagatesANaNInAnyPieceOfAGroup()
+    {
+        // Mutation: return Activate(tensor).ToVector(): ReduceMax skips a NaN that is not the first piece.
+        var later = new MaxoutActivation<double>(2).Activate(new Vector<double>(new[] { 1.0, double.NaN, 3.0, 2.0 }));
+        Assert.True(double.IsNaN(later[0]));
+        Assert.Equal(3.0, later[1]);
+
+        var first = new MaxoutActivation<double>(2).Activate(new Vector<double>(new[] { double.NaN, 1.0, 3.0, 2.0 }));
+        Assert.True(double.IsNaN(first[0]));
+        Assert.Equal(3.0, first[1]);
+
+        var single = new MaxoutActivation<float>(2).Activate(new Vector<float>(new[] { 1f, float.NaN, 3f, 2f }));
+        Assert.True(float.IsNaN(single[0]));
+        Assert.Equal(3f, single[1]);
+
+        // An infinity is a value, not a NaN
+        var infinite = new MaxoutActivation<double>(2).Activate(
+            new Vector<double>(new[] { double.PositiveInfinity, 1.0, double.NegativeInfinity, 2.0 }));
+        Assert.Equal(new[] { double.PositiveInfinity, 2.0 }, infinite.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmaxActivation_VectorForward_IsTheTensorForward_AndUniformAtZero()
+    {
+        // Mutation: divide by the bare norm in Activate(Vector): the zero vector gives NaN while the Jacobian
+        // above is the finite Jacobian of the stabilised function.
+        var spherical = new SphericalSoftmaxActivation<double>();
+
+        Assert.Equal(new[] { 0.25, 0.25, 0.25, 0.25 }, spherical.Activate(new Vector<double>(new double[4])).ToArray());
+        foreach (var values in new[] { new double[4], new[] { 1e-7, -2e-7, 0.0, 3e-7 }, new[] { 0.3, -1.1, 2.0, 0.5 } })
+        {
+            Assert.Equal(
+                spherical.Activate(new Tensor<double>(values, new[] { values.Length })).ToArray(),
+                spherical.Activate(new Vector<double>(values)).ToArray());
+        }
+    }
+
+    public static IEnumerable<object[]> EveryVectorJacobianKey()
+        => new[]
+        {
+            "relu", "relu6", "leaky-relu", "elu", "hard-swish", "swish", "gelu", "softmax", "softmin", "log-softmax",
+            "log-softmin", "taylor-0", "taylor-3", "sparsemax", "spherical", "squash", "maxout", "gumbel-1",
+        }.Select(k => new object[] { k });
+
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(EveryVectorJacobianKey))]
+    public async Task VectorJacobian_OfAnEmptyVector_IsAnEmptyMatrix(string key)
+    {
+        // Mutation: remove an empty guard: TensorEye(0) / TensorTile throw.
+        var jacobian = Create(key).Derivative(new Vector<double>(0));
+
+        Assert.Equal(0, jacobian.Rows);
+        Assert.Equal(0, jacobian.Columns);
+        Assert.Equal(0, Create(key).Activate(new Vector<double>(0)).Length);
+    }
+
+    // ---- float, and the non-finite values the double probe did not hold
+
+    private static readonly double[] EdgeProbe =
+    {
+        double.NaN, double.PositiveInfinity, double.NegativeInfinity, -0.0, double.Epsilon, -double.Epsilon,
+        1e-310, 1e300, -1e300,
+    };
+
+    private static readonly float[] FloatProbe =
+    {
+        -7.25f, -3.5f, -3.0f, -1.2f, -0.3f, 0.0f, 0.4f, 0.8f, 1.0f, 1.2f, 1.25f, 3.0f, 5.9f, 6.0f, 7.3f,
+        float.NaN, float.PositiveInfinity, float.NegativeInfinity, -0.0f, float.Epsilon, 1e-40f, 1e30f, -1e30f,
+    };
+
+    /// <summary>NaN matches NaN, an infinity matches the same infinity, anything else within the tolerance.</summary>
+    private static void AssertClose(double expected, double actual, double absolute, double relative, string what)
+    {
+        if (double.IsNaN(expected) || double.IsNaN(actual))
+        {
+            Assert.True(double.IsNaN(expected) && double.IsNaN(actual), $"{what}: expected {expected}, got {actual}");
+            return;
+        }
+
+        if (double.IsInfinity(expected) || double.IsInfinity(actual))
+        {
+            Assert.True(expected.Equals(actual), $"{what}: expected {expected}, got {actual}");
+            return;
+        }
+
+        double bound = Math.Max(absolute, relative * Math.Abs(expected));
+        Assert.True(Math.Abs(expected - actual) <= bound, $"{what}: expected {expected:R}, got {actual:R} (bound {bound:R})");
+    }
+
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(ElementwiseActivations))]
+    public async Task ElementwiseActivation_TensorDerivative_AtNonFiniteAndTinyValues_MatchesScalarDerivative(
+        ActivationFunctionBase<double> activation)
+    {
+        // The same NaN / infinity pattern as the scalar definition, and the finite values within 1e-14.
+        var derivative = activation.Derivative(new Tensor<double>(EdgeProbe, new[] { EdgeProbe.Length })).ToArray();
+
+        for (int i = 0; i < EdgeProbe.Length; i++)
+        {
+            AssertClose(activation.Derivative(EdgeProbe[i]), derivative[i], 1e-14, 1e-14,
+                $"{activation.GetType().Name} at {EdgeProbe[i]:R}");
+        }
+    }
+
+    public static IEnumerable<object[]> FloatElementwiseActivations()
+    {
+        yield return new object[] { new ReLUActivation<float>() };
+        yield return new object[] { new ReLU6Activation<float>() };
+        yield return new object[] { new LeakyReLUActivation<float>(0.1) };
+        yield return new object[] { new ELUActivation<float>(1.3) };
+        yield return new object[] { new HardSwishActivation<float>() };
+        yield return new object[] { new SwishActivation<float>() };
+        yield return new object[] { new GELUActivation<float>() };
+        yield return new object[] { new BinarySpikingActivation<float>(1f, 2f, 0.5f) };
+    }
+
+    // The engine paths are not bit-identical to the scalar loop in float (vectorized exp / tanh): the measured gap is
+    // at most 3.9e-6 relative (Swish) and 16 ulps (GELU at 1.25). The bound asserted here is 1e-5 relative, 1e-6
+    // absolute, with the NaN / infinity pattern exact.
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(FloatElementwiseActivations))]
+    public async Task ElementwiseActivation_Float_TensorDerivativeAndJacobian_MatchScalarDerivativeWithinTheStatedBound(
+        ActivationFunctionBase<float> activation)
+    {
+        string name = activation.GetType().Name;
+        var derivative = activation.Derivative(new Tensor<float>(FloatProbe, new[] { FloatProbe.Length })).ToArray();
+        var jacobian = activation.Derivative(new Vector<float>(FloatProbe));
+
+        Assert.Equal(FloatProbe.Length, jacobian.Rows);
+        for (int i = 0; i < FloatProbe.Length; i++)
+        {
+            float expected = activation.Derivative(FloatProbe[i]);
+            AssertClose(expected, derivative[i], 1e-6, 1e-5, $"{name} tensor derivative at {FloatProbe[i]:R}");
+            AssertClose(expected, jacobian[i, i], 1e-6, 1e-5, $"{name} jacobian diagonal at {FloatProbe[i]:R}");
+            Assert.Equal(0f, jacobian[i, (i + 1) % FloatProbe.Length]);
+        }
+    }
+
+    // Short vectors take the scalar route (ScalarJacobianMaxLength = 32); these are long enough for the engine
+    // evaluation, so both routes are pinned to the same scalar derivative.
+    // Mutation: write the tensor derivative to the wrong stride in WriteDiagonal.
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(ElementwiseActivations))]
+    public async Task ElementwiseActivation_VectorJacobian_AboveTheScalarLimit_IsDiagonalOfScalarDerivative(
+        ActivationFunctionBase<double> activation)
+    {
+        var values = Enumerable.Range(0, 5).SelectMany(_ => Probe).ToArray();
+        Assert.True(values.Length > 64);
+
+        var jacobian = activation.Derivative(new Vector<double>(values));
+
+        var expected = new double[values.Length, values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            expected[i, i] = activation.Derivative(values[i]);
+        }
+
+        AssertMatrix(expected, jacobian, Tolerance, activation.GetType().Name);
+    }
+
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(FloatElementwiseActivations))]
+    public async Task ElementwiseActivation_Float_VectorJacobian_AboveTheScalarLimit_MatchesScalarDerivativeWithinTheStatedBound(
+        ActivationFunctionBase<float> activation)
+    {
+        var values = Enumerable.Range(0, 3).SelectMany(_ => FloatProbe).ToArray();
+        Assert.True(values.Length > 64);
+
+        var jacobian = activation.Derivative(new Vector<float>(values));
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            AssertClose(activation.Derivative(values[i]), jacobian[i, i], 1e-6, 1e-5,
+                $"{activation.GetType().Name} jacobian diagonal at {values[i]:R}");
+            Assert.Equal(0f, jacobian[i, (i + 1) % values.Length]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SignActivation_Float_VectorAndTensor_MatchScalarBranches()
+    {
+        var sign = new SignActivation<float>();
+        float[] values = { -2f, -0.0f, 0f, 3f, float.NaN, float.PositiveInfinity, float.NegativeInfinity, float.Epsilon };
+
+        var fromVector = sign.Activate(new Vector<float>(values)).ToArray();
+        var fromTensor = sign.Activate(new Tensor<float>(values, new[] { values.Length })).ToArray();
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            AssertClose(sign.Activate(values[i]), fromVector[i], 0, 0, $"sign vector at {values[i]:R}");
+            AssertClose(sign.Activate(values[i]), fromTensor[i], 0, 0, $"sign tensor at {values[i]:R}");
+        }
     }
 }
