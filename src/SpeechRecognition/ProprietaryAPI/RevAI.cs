@@ -37,6 +37,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -67,6 +68,7 @@ public partial class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     private ConformerAsrNetwork<T>? _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -114,9 +116,12 @@ public partial class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("RevAI does not support streaming.");
 
     // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
@@ -157,8 +162,10 @@ public partial class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         return network.CtcLogits(encoded);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
@@ -190,6 +197,7 @@ public partial class RevAI<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "RevAI-Native" : "RevAI-ONNX", Description = "Rev AI's Reverb ASR: a joint CTC/attention Conformer with a bidirectional decoder", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RevAI<T>)); }

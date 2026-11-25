@@ -34,6 +34,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -65,6 +66,7 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private SeedAsrNetwork<T>? _network;
     internal SeedAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -114,9 +116,13 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Seed-ASR does not support streaming.");
 
     // The context tokens before the speech (none for plain recognition).
@@ -163,10 +169,13 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
         ForwardNativeWaveformBatch(input, _network, (net, wave) =>
             net.FirstLogits(net.Prompt(net.Speech(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds), training), Context)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
 
     private int[] Transcript(SeedAsrNetwork<T> network, Tensor<T> target) =>
@@ -212,6 +221,7 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SeedASR-Native" : "SeedASR-ONNX", Description = "Seed-ASR: LUISE Conformer encoder, frame-splicing converter and LLM (Bai et al. 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SeedASR<T>)); }

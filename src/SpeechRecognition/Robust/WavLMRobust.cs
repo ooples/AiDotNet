@@ -50,6 +50,7 @@ public partial class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Audio.Foundations.WavLmCtcStack<T>? _stack;
     private readonly Random _random;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -88,7 +89,9 @@ public partial class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; T primaryValue = NumOps.FromDouble(primaryProb); T otherValue = NumOps.FromDouble(otherProb); foreach (var lang in SupportedLanguages) result[lang] = lang == detected ? primaryValue : otherValue; return result; }
     /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("WavLMRobust does not support streaming.");
@@ -128,10 +131,13 @@ public partial class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!_options.FreezeFeatureEncoder) return parameters;
@@ -143,6 +149,7 @@ public partial class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     }
 
 
+    /// <inheritdoc/>
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
         => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
             && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
@@ -155,6 +162,7 @@ public partial class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WavLMRobust-Native" : "WavLMRobust-ONNX", Description = "WavLM-Robust: denoising pre-trained + CTC (Microsoft, 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
