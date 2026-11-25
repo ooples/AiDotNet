@@ -195,16 +195,18 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             {
                 // create_position_ids_from_input_ids: count the non-padding tokens of each row.
                 // A token is padding when its id rounds (half to even) to the padding id; NaN never does.
-                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength }).Contiguous().Cast<double>();
-                double pad = _paddingTokenId;
+                // Computed in T as graph ops on the ids. Through a cast to double the ids were read on the host, so
+                // a compiled training plan kept the traced batch's positions: a later batch whose captions were
+                // padded differently was embedded at the first batch's positions. Every value here is a whole
+                // number no larger than the position ids themselves, which are stored in T either way.
+                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength });
+                T pad = NumOps.FromDouble(_paddingTokenId);
                 var isPadding = Engine.TensorEquals(Engine.TensorRound(ids), pad);
-                var ones = new Tensor<double>(new[] { rows, sequenceLength });
-                ones.Fill(1.0);
+                var ones = Tensor<T>.CreateDefault(new[] { rows, sequenceLength }, NumOps.One);
                 var counted = Engine.TensorCumSum(Engine.TensorSubtract(ones, isPadding), 1);
-                var padIds = new Tensor<double>(new[] { rows, sequenceLength });
-                padIds.Fill(pad);
+                var padIds = Tensor<T>.CreateDefault(new[] { rows, sequenceLength }, pad);
                 positionIds = Engine.Reshape(
-                    Engine.TensorWhere(isPadding, padIds, Engine.TensorAddScalar(counted, pad)), inputIds._shape).Cast<T>();
+                    Engine.TensorWhere(isPadding, padIds, Engine.TensorAddScalar(counted, pad)), inputIds._shape);
             }
         }
 
