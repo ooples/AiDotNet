@@ -855,7 +855,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             float[]? pA = ((Tensor<float>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
             float[]? gA = ((Tensor<float>)(object)grad).GetCpuBackingForStridedRead(out int gO);
-            if (pA is null || gA is null) return false;
+            if (!CoversHostRange(pA, pO, length) || !CoversHostRange(gA, gO, length)) return false;
             var k = new Bf16AdamCoefficients<float>(
                 (float)lr, (float)beta1, 1f - (float)beta1, (float)beta2, 1f - (float)beta2, (float)_options.Epsilon,
                 (float)bc1, (float)bc2, (float)decoupledFactor, (float)coupledDecay);
@@ -866,7 +866,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             double[]? pA = ((Tensor<double>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
             double[]? gA = ((Tensor<double>)(object)grad).GetCpuBackingForStridedRead(out int gO);
-            if (pA is null || gA is null) return false;
+            if (!CoversHostRange(pA, pO, length) || !CoversHostRange(gA, gO, length)) return false;
             var k = new Bf16AdamCoefficients<double>(
                 lr, beta1, 1.0 - beta1, beta2, 1.0 - beta2, _options.Epsilon, bc1, bc2, decoupledFactor, coupledDecay);
             CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
@@ -880,6 +880,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         param.IncrementVersion();
         return true;
     }
+
+    /// <summary>
+    /// Whether <paramref name="backing"/> holds all <paramref name="length"/> elements from <paramref name="offset"/>.
+    /// The writable accessor does not materialize a streamed weight, so a parameter that is paged out exposes
+    /// storage shorter than its logical length; the fused pass must leave that one to the tensor-op recurrence, which
+    /// rehydrates it.
+    /// </summary>
+    private static bool CoversHostRange<TElement>(
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] TElement[]? backing, int offset, int length)
+        => backing is not null && offset >= 0 && backing.Length - offset >= length;
 
     /// <summary>The per-step scalars of the fused BF16 Adam pass, in the element type the pass computes in.</summary>
     internal readonly struct Bf16AdamCoefficients<TScalar>

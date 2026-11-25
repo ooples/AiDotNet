@@ -31,7 +31,7 @@ public class Adam8BitBf16FusedHostStepTests
     private const double Beta2 = 0.999;
     private const double Epsilon = 1e-8;
 
-    private static Adam8BitOptimizer<float, Tensor<float>, Tensor<float>> NewOptimizer(double weightDecay, bool decoupled)
+    internal static Adam8BitOptimizer<float, Tensor<float>, Tensor<float>> NewOptimizer(double weightDecay, bool decoupled)
         => new(null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
             UseBFloat16MomentStorage = true,
@@ -51,7 +51,7 @@ public class Adam8BitBf16FusedHostStepTests
     /// (the learning rate). A last-bit difference in an update is ~1e-9 here; the bound has to admit the rare case
     /// where that bit moves a moment across a BF16 rounding boundary (a 2^-8 relative change in that moment).
     /// </summary>
-    private const float EngineTolerance = (float)(LearningRate * 1e-2);
+    internal const float EngineTolerance = (float)(LearningRate * 1e-2);
 
     /// <summary>
     /// 1 - beta^step as the optimizer forms it for a float model: from the float beta it stepped with, widened.
@@ -61,7 +61,7 @@ public class Adam8BitBf16FusedHostStepTests
     // BitConverter.SingleToInt32Bits is not available on net471.
     private static int Bits(float value) => BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
 
-    private static float[] RandomValues(int length, int seed, double scale)
+    internal static float[] RandomValues(int length, int seed, double scale)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
         var values = new float[length];
@@ -132,7 +132,7 @@ public class Adam8BitBf16FusedHostStepTests
     }
 
     /// <summary>Adam with BF16 moments, one element at a time, as the recurrence is written.</summary>
-    private sealed class ScalarReference
+    internal sealed class ScalarReference
     {
         private readonly ushort[] _m;
         private readonly ushort[] _v;
@@ -226,6 +226,72 @@ public class Adam8BitBf16FusedHostStepTests
         }
     }
 
+    /// <summary>
+    /// A double parameter takes the same fused pass in double arithmetic, with the moments still rounded through float
+    /// into their BF16 slots. Bit for bit against the recurrence written out per element.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.0, true)]
+    [InlineData(1003, 0.0, true)]
+    [InlineData(1003, 0.05, true)]
+    [InlineData(1003, 0.05, false)]
+    public void FusedStep_OnADoubleParameter_MatchesTheAdamRecurrence_AcrossSteps(int length, double weightDecay, bool decoupled)
+    {
+        var optimizer = new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                UseBFloat16MomentStorage = true,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                InitialLearningRate = LearningRate,
+                Beta1 = Beta1,
+                Beta2 = Beta2,
+                Epsilon = Epsilon,
+                WeightDecay = weightDecay,
+                UseDecoupledWeightDecay = decoupled,
+            });
+        var initial = RandomValues(length, seed: 2447, scale: 1.0);
+        var param = new Tensor<double>(new[] { length });
+        var expected = new double[length];
+        for (int i = 0; i < length; i++) { param[i] = initial[i]; expected[i] = initial[i]; }
+        var m = new ushort[length];
+        var v = new ushort[length];
+
+        for (int step = 1; step <= 6; step++)
+        {
+            var g = RandomValues(length, seed: 100 + step, scale: Math.Pow(10, step % 3 - 2));
+            var grad = new Tensor<double>(new[] { length });
+            for (int i = 0; i < length; i++) grad[i] = g[i];
+
+            optimizer.Step(new TapeStepContext<double>(
+                parameters: new[] { param },
+                gradients: new Dictionary<Tensor<double>, Tensor<double>> { [param] = grad },
+                loss: 0.0));
+
+            double bc1 = 1.0 - Math.Pow(Beta1, step), bc2 = 1.0 - Math.Pow(Beta2, step);
+            for (int i = 0; i < length; i++)
+            {
+                double p = expected[i];
+                double gi = g[i];
+                if (weightDecay > 0.0)
+                {
+                    if (decoupled) p *= 1.0 - LearningRate * weightDecay;
+                    else gi += p * weightDecay;
+                }
+
+                double mi = BitConverterHelper.Bf16BitsToFloat(m[i]) * Beta1 + gi * (1.0 - Beta1);
+                double vi = BitConverterHelper.Bf16BitsToFloat(v[i]) * Beta2 + gi * gi * (1.0 - Beta2);
+                m[i] = BitConverterHelper.FloatToBf16Bits((float)mi);
+                v[i] = BitConverterHelper.FloatToBf16Bits((float)vi);
+                expected[i] = p - mi / bc1 / (Math.Sqrt(vi / bc2) + Epsilon) * LearningRate;
+
+                Assert.True((double)g[i] == grad[i], $"step {step}: the step modified the tape's gradient at {i}.");
+                Assert.True(BitConverter.DoubleToInt64Bits(expected[i]) == BitConverter.DoubleToInt64Bits(param[i]),
+                    $"step {step}, element {i}: the recurrence gives {expected[i]:R}, the step {param[i]:R}.");
+            }
+        }
+    }
+
 #if NET5_0_OR_GREATER
     // GC.GetTotalAllocatedBytes, the process-wide allocation counter this reads, does not exist on net471.
     [Fact]
@@ -255,4 +321,68 @@ public class Adam8BitBf16FusedHostStepTests
             $"A BF16 Adam step over a {parameterBytes / (1024 * 1024)} MB parameter allocated {allocated / (1024.0 * 1024.0):F1} MB.");
     }
 #endif
+}
+
+/// <summary>
+/// #2447: the fused host pass is for host parameters only. Under a GPU engine the BF16 step stays on the device (the
+/// backend's BF16 Adam kernel, with the moments in device buffers), and the host pass declines so that an engine
+/// without that kernel runs the recurrence through its own tensor operations rather than on the CPU. This drives the
+/// step under a GPU engine and then moves the same optimizer to a CPU engine, where the fused pass has to continue
+/// from the moments the device produced.
+/// </summary>
+[Collection("EngineCurrentGlobalState")]
+public class Adam8BitBf16GpuEngineStepTests
+{
+    [SkippableTheory]
+    [InlineData(0.0, true)]
+    [InlineData(0.05, true)]
+    [InlineData(0.05, false)]
+    public void UnderAGpuEngine_StepsFollowTheRecurrence_AndAHostStepContinuesFromTheDeviceMoments(
+        double weightDecay, bool decoupled)
+    {
+        // A missing backend is reported through IsGpuAvailable; a constructor exception is a real failure.
+        using var gpu = new DirectGpuTensorEngine();
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "GPU engine unavailable.");
+        const int length = 1003;
+        const int deviceSteps = 3;
+        const int steps = 5;
+        var saved = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = gpu;
+            var initial = Adam8BitBf16FusedHostStepTests.RandomValues(length, seed: 2447, scale: 1.0);
+            var parameter = gpu.TensorMultiplyScalar(new Tensor<float>((float[])initial.Clone(), new[] { length }), 1f);
+            var optimizer = Adam8BitBf16FusedHostStepTests.NewOptimizer(weightDecay, decoupled);
+            var scalar = new Adam8BitBf16FusedHostStepTests.ScalarReference(initial, weightDecay, decoupled);
+
+            for (int step = 0; step < steps; step++)
+            {
+                if (step == deviceSteps) AiDotNetEngine.Current = new CpuEngine();
+                var g = Adam8BitBf16FusedHostStepTests.RandomValues(length, seed: 100 + step, scale: 0.1);
+                var gradient = new Tensor<float>((float[])g.Clone(), new[] { length });
+                if (step < deviceSteps) gradient = gpu.TensorMultiplyScalar(gradient, 1f);
+                optimizer.Step(new TapeStepContext<float>(
+                    new[] { parameter },
+                    new Dictionary<Tensor<float>, Tensor<float>> { [parameter] = gradient },
+                    0f));
+                scalar.Step(g);
+
+                // A device kernel may round a moment's last BF16 bit differently, which moves that element's
+                // update by under 1% of a step; a step that read stale host values or restarted its moments is
+                // off by a whole update (the learning rate) or more.
+                float tolerance = (step + 1) * 2 * Adam8BitBf16FusedHostStepTests.EngineTolerance;
+                var actual = parameter.ToArray();
+                for (int i = 0; i < length; i++)
+                {
+                    Assert.True(Math.Abs(actual[i] - scalar.Parameters[i]) <= tolerance,
+                        $"step {step + 1} ({(step < deviceSteps ? "GPU engine" : "CPU engine")}), element {i}: "
+                        + $"the recurrence gives {scalar.Parameters[i]:R}, the step {actual[i]:R}.");
+                }
+            }
+        }
+        finally
+        {
+            AiDotNetEngine.Current = saved;
+        }
+    }
 }
