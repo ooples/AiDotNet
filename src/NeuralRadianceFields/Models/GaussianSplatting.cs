@@ -526,6 +526,13 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         }
     }
 
+    /// <summary>Unit-cube corners at +-0.5 in binary order: corner i has x = bit 2, y = bit 1, z = bit 0 of i.</summary>
+    private static readonly double[] UnitCubeCorners =
+    {
+        -0.5, -0.5, -0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5,
+        0.5, -0.5, -0.5, 0.5, -0.5, 0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5,
+    };
+
     /// <summary>
     /// Seeds a small unit-cube Gaussian cloud (up to 8 corners) so the
     /// parameterless constructor produces a model with non-empty trainable
@@ -546,22 +553,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         // Corners of a unit cube centred on the origin — gives a coarse but
         // varied initial geometry that exercises position / colour / scale /
         // opacity parameter updates symmetrically.
-        // Cube corners at +-0.5 in binary order: corner i has x = bit 2, y = bit 1, z = bit 0 of i.
-        var engine = AiDotNetEngine.Current;
-        var index = engine.TensorArange<T>(0, seedCap, 1);
-        var two = engine.TensorFullLike(index, NumOps.FromDouble(2.0));
-        var xBit = engine.TensorFloor(engine.TensorDivideScalar(index, NumOps.FromDouble(4.0)));
-        var yBit = engine.TensorRemainder(engine.TensorFloor(engine.TensorDivideScalar(index, NumOps.FromDouble(2.0))), two);
-        var zBit = engine.TensorRemainder(index, two);
-        var half = NumOps.FromDouble(0.5);
-        var corners = engine.TensorStack(new[]
-        {
-            engine.TensorSubtractScalar(xBit, half),
-            engine.TensorSubtractScalar(yBit, half),
-            engine.TensorSubtractScalar(zBit, half)
-        }, 1);
-        var pointCloud = corners.ToMatrix();
-        InitializeFromPointCloud(pointCloud, colors: null);
+        // A constant table: deriving eight corners from an arange through ten engine ops JIT-compiled each op (and
+        // its int and T instantiations) at construction.
+        InitializeFromPoints(UnitCubeCorners.AsSpan(0, seedCap * 3).ToArray(), seedCap, colors: null);
     }
 
     /// <summary>
@@ -710,56 +704,84 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentException("Point cloud must have shape [N, 3].", nameof(pointCloud));
         }
 
-        int numPoints = pointCloud.Rows;
+        InitializeFromPoints(PointsAsDoubles(pointCloud), pointCloud.Rows, colors);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Reads a construction-time point cloud once into doubles for the grid hash.")]
+    private static double[] PointsAsDoubles(Matrix<T> pointCloud)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var xyz = new double[pointCloud.Rows * 3];
+        for (int i = 0; i < pointCloud.Rows; i++)
+        {
+            xyz[3 * i] = numOps.ToDouble(pointCloud[i, 0]);
+            xyz[3 * i + 1] = numOps.ToDouble(pointCloud[i, 1]);
+            xyz[3 * i + 2] = numOps.ToDouble(pointCloud[i, 2]);
+        }
+
+        return xyz;
+    }
+
+    /// <summary>
+    /// Appends one Gaussian per point (<paramref name="xyz"/> holds <paramref name="numPoints"/> x, y, z triples):
+    /// identity rotation, isotropic log scale from <see cref="InitialScales"/>, opacity logit 0, colour from
+    /// <paramref name="colors"/> or seeded random draws in the DC coefficient, higher SH coefficients 0.
+    /// </summary>
+    /// <remarks>
+    /// Host code on purpose. This runs once per point cloud at construction. Written as about forty engine ops
+    /// (#2524) it JIT-compiled each op's tensor, storage and engine instantiations on first use: 766 methods instead
+    /// of 173 for the census fixture's first construction (16.8 -> 145.6 ms on the nightly), and its pairwise
+    /// nearest-neighbour search was O(N^2) where this grid hash is O(N).
+    /// </remarks>
+    [AiDotNet.Attributes.ScalarKernel("Construction-time point-cloud initialization; an O(N) grid hash over host doubles.")]
+    private void InitializeFromPoints(double[] xyz, int numPoints, Matrix<T>? colors)
+    {
         if (numPoints == 0)
         {
             return;
         }
 
-        var engine = Engine;
+        var ops = NumOps;
         int basisCount = GetShBasisCount();
-        var points = Tensor<T>.FromMatrix(pointCloud);
+        double colourScale = _useSphericalHarmonics ? 1.0 / 0.282095 : 1.0;
+        var positions = new T[numPoints * 3];
+        var rotations = new T[numPoints * 4];
+        var logScales = new T[numPoints * 3];
+        var sh = new T[numPoints * basisCount * 3];
+        var learningRateScales = new T[numPoints * LearningRateScaleColumns];
+        double[] scales = InitialScales(xyz, numPoints);
+        T zero = ops.Zero;
+        T one = ops.One;
+        ArrayPolyfill.Fill(sh, zero);
+        ArrayPolyfill.Fill(rotations, zero);
+        ArrayPolyfill.Fill(learningRateScales, one);
+        for (int i = 0; i < numPoints; i++)
+        {
+            positions[3 * i] = ops.FromDouble(xyz[3 * i]);
+            positions[3 * i + 1] = ops.FromDouble(xyz[3 * i + 1]);
+            positions[3 * i + 2] = ops.FromDouble(xyz[3 * i + 2]);
+            rotations[4 * i] = one;
+            T logScale = ops.FromDouble(Math.Log(scales[i]));
+            logScales[3 * i] = logScale;
+            logScales[3 * i + 1] = logScale;
+            logScales[3 * i + 2] = logScale;
 
-        Tensor<T> rgb;
-        if (colors != null)
-        {
-            rgb = engine.TensorSlice(Tensor<T>.FromMatrix(colors), new[] { 0, 0 }, new[] { numPoints, 3 });
-        }
-        else
-        {
-            // Seeded colour draws stay in master's order (r, g, b per point); there is no engine op that draws a
-            // tensor from a caller-owned Random.
-            rgb = new Tensor<T>(new[] { numPoints, 3 });
-            for (int i = 0; i < numPoints; i++)
+            // Seeded colour draws stay in master's order (r, g, b per point).
+            int dc = i * basisCount * 3;
+            for (int c = 0; c < 3; c++)
             {
-                rgb[i, 0] = NumOps.FromDouble(ModelRandom.NextDouble());
-                rgb[i, 1] = NumOps.FromDouble(ModelRandom.NextDouble());
-                rgb[i, 2] = NumOps.FromDouble(ModelRandom.NextDouble());
+                double value = colors is not null ? ops.ToDouble(colors[i, c]) : ModelRandom.NextDouble();
+                sh[dc + c] = ops.FromDouble(value * colourScale);
             }
         }
 
-        // The DC coefficient carries the colour (divided by the degree-0 basis constant with spherical harmonics);
-        // the higher-order coefficients start at zero.
-        var dc = _useSphericalHarmonics
-            ? engine.TensorDivideScalar(rgb, NumOps.FromDouble(0.282095))
-            : rgb;
-        var sh = dc.Reshape(numPoints, 1, 3);
-        if (basisCount > 1)
-        {
-            sh = engine.TensorConcatenate(new[] { sh, new Tensor<T>(new[] { numPoints, basisCount - 1, 3 }) }, 1);
-        }
-
-        var rotations = engine.TensorConcatenate(
-            new[] { Full(new[] { numPoints, 1 }, NumOps.One), new Tensor<T>(new[] { numPoints, 3 }) }, 1);
-        var scales = InitialScales(points);
-        var logScales = engine.TensorTile(engine.TensorLog(scales).Reshape(numPoints, 1), new[] { 1, 3 });
-
-        _positions = AppendRows(_positions, points);
-        _rotations = AppendRows(_rotations, rotations);
-        _logScales = AppendRows(_logScales, logScales);
+        _positions = AppendRows(_positions, new Tensor<T>(new[] { numPoints, 3 }, new Vector<T>(positions)));
+        _rotations = AppendRows(_rotations, new Tensor<T>(new[] { numPoints, 4 }, new Vector<T>(rotations)));
+        _logScales = AppendRows(_logScales, new Tensor<T>(new[] { numPoints, 3 }, new Vector<T>(logScales)));
         _opacityLogits = AppendRows(_opacityLogits, new Tensor<T>(new[] { numPoints }));
-        _shCoefficients = AppendRows(_shCoefficients, sh);
-        _learningRateScales = AppendRows(_learningRateScales, Full(new[] { numPoints, LearningRateScaleColumns }, NumOps.One));
+        _shCoefficients = AppendRows(_shCoefficients, new Tensor<T>(new[] { numPoints, basisCount, 3 }, new Vector<T>(sh)));
+        _learningRateScales = AppendRows(_learningRateScales,
+            new Tensor<T>(new[] { numPoints, LearningRateScaleColumns }, new Vector<T>(learningRateScales)));
         InvalidateParameterCountCache();
     }
 
@@ -768,75 +790,94 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// around it (cell size from the cloud's mean spacing) times <see cref="InitialScaleMultiplier"/>, at least
     /// <see cref="MinScale"/>; points without a neighbour use the mean spacing.
     /// </summary>
-    private Tensor<T> InitialScales(Tensor<T> points)
+    private double[] InitialScales(double[] xyz, int n)
     {
-        var engine = Engine;
-        int n = points._shape[0];
-        var ops = NumOps;
-        var lower = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(points), new[] { 0 }, false));
-        var upper = engine.ReduceMax(points, new[] { 0 }, false);
-        var extent = engine.TensorSubtract(upper, lower);
-        T extentX = extent[0];
-        T extentY = extent[1];
-        T extentZ = extent[2];
-        T volume = ops.Multiply(ops.Multiply(extentX, extentY), extentZ);
-        T count = ops.FromDouble(n);
-        T baseSpacing;
-        if (ops.GreaterThan(volume, ops.Zero))
+        double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
+        double maxX = double.NegativeInfinity, maxY = double.NegativeInfinity, maxZ = double.NegativeInfinity;
+        for (int i = 0; i < n; i++)
         {
-            baseSpacing = ops.Power(ops.Divide(volume, count), ops.FromDouble(1.0 / 3.0));
+            minX = Math.Min(minX, xyz[3 * i]);
+            maxX = Math.Max(maxX, xyz[3 * i]);
+            minY = Math.Min(minY, xyz[3 * i + 1]);
+            maxY = Math.Max(maxY, xyz[3 * i + 1]);
+            minZ = Math.Min(minZ, xyz[3 * i + 2]);
+            maxZ = Math.Max(maxZ, xyz[3 * i + 2]);
+        }
+
+        double extentX = maxX - minX;
+        double extentY = maxY - minY;
+        double extentZ = maxZ - minZ;
+        double volume = extentX * extentY * extentZ;
+        double baseSpacing;
+        if (volume > 0.0)
+        {
+            baseSpacing = Math.Pow(volume / n, 1.0 / 3.0);
         }
         else
         {
-            T maxExtent = MaxOf(extentX, MaxOf(extentY, extentZ));
-            baseSpacing = ops.GreaterThan(maxExtent, ops.Zero) ? ops.Divide(maxExtent, ops.Sqrt(count)) : ops.Zero;
+            double maxExtent = Math.Max(extentX, Math.Max(extentY, extentZ));
+            baseSpacing = maxExtent > 0.0 ? maxExtent / Math.Sqrt(n) : 0.0;
         }
 
-        if (!ops.GreaterThan(baseSpacing, ops.Zero))
+        if (!(baseSpacing > 0.0))
         {
-            baseSpacing = ops.FromDouble(DefaultPointSpacing);
+            baseSpacing = DefaultPointSpacing;
         }
 
-        T cellSize = MaxOf(baseSpacing, ops.FromDouble(MinScale * InitialNeighborSearchScale));
-        T invCellSize = ops.GreaterThan(cellSize, ops.Zero) ? ops.Divide(ops.One, cellSize) : ops.Zero;
-        var cells = engine.TensorFloor(engine.TensorMultiplyScalar(Sub(points, lower.Reshape(1, 3)), invCellSize));
-
-        T sentinel = ops.MaxValue;
-        T one = ops.One;
-        T zero = ops.Zero;
-        T minScale = ops.FromDouble(MinScale);
-        T multiplier = ops.FromDouble(InitialScaleMultiplier);
-        // Point indices are compared as int: indices held in T stop being exact above 2048 for Half.
-        var columnIndex = engine.TensorArange<int>(0, n, 1).Reshape(1, n);
-        int chunk = Math.Max(1, PairBudget / Math.Max(1, n * 3));
-        var parts = new List<Tensor<T>>();
-        for (int start = 0; start < n; start += chunk)
+        double cellSize = Math.Max(baseSpacing, MinScale * InitialNeighborSearchScale);
+        double invCellSize = cellSize > 0.0 ? 1.0 / cellSize : 0.0;
+        var cells = new (long X, long Y, long Z)[n];
+        var grid = new Dictionary<(long X, long Y, long Z), List<int>>(n);
+        for (int i = 0; i < n; i++)
         {
-            int rows = Math.Min(chunk, n - start);
-            var shape3 = new[] { rows, n, 3 };
-            var shape2 = new[] { rows, n };
-            var rowPoints = engine.TensorSlice(points, new[] { start, 0 }, new[] { rows, 3 });
-            var rowCells = engine.TensorSlice(cells, new[] { start, 0 }, new[] { rows, 3 });
-            var offset = Sub(Bc(rowPoints.Reshape(rows, 1, 3), shape3), Bc(points.Reshape(1, n, 3), shape3));
-            var distSq = engine.ReduceSum(engine.TensorMultiply(offset, offset), new[] { 2 }, false);
-            var cellGap = engine.ReduceMax(
-                engine.TensorAbs(Sub(Bc(rowCells.Reshape(rows, 1, 3), shape3), Bc(cells.Reshape(1, n, 3), shape3))),
-                new[] { 2 }, false);
-            var rowIndex = engine.TensorArange<int>(start, start + rows, 1).Reshape(rows, 1);
-            var isSelf = engine.TensorEquals(
-                engine.TensorBroadcastTo(rowIndex, shape2), engine.TensorBroadcastTo(columnIndex, shape2)).Cast<T>();
-            var neighbour = Mul(Le(cellGap, one), Not(isSelf));
-            var candidate = engine.TensorWhere(engine.TensorIsNan(distSq), Full(shape2, sentinel), distSq);
-            candidate = Select(neighbour, candidate, Full(shape2, sentinel));
-            var nearestSq = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidate), new[] { 1 }, false));
-            var found = engine.TensorLessThan(nearestSq, sentinel);
-            var spacing = Full(new[] { rows }, baseSpacing);
-            var distance = Select(found, engine.TensorSqrt(nearestSq), spacing);
-            distance = Select(Le(distance, zero), spacing, distance);
-            parts.Add(MaxScalar(engine.TensorMultiplyScalar(distance, multiplier), minScale));
+            var key = ((long)Math.Floor((xyz[3 * i] - minX) * invCellSize),
+                (long)Math.Floor((xyz[3 * i + 1] - minY) * invCellSize),
+                (long)Math.Floor((xyz[3 * i + 2] - minZ) * invCellSize));
+            cells[i] = key;
+            if (!grid.TryGetValue(key, out var list))
+            {
+                list = new List<int>();
+                grid[key] = list;
+            }
+
+            list.Add(i);
         }
 
-        return engine.TensorConcatenate(parts.ToArray(), 0);
+        var scales = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double nearestSq = double.PositiveInfinity;
+            var (cx, cy, cz) = cells[i];
+            for (long dx = -1; dx <= 1; dx++)
+            {
+                for (long dy = -1; dy <= 1; dy++)
+                {
+                    for (long dz = -1; dz <= 1; dz++)
+                    {
+                        if (!grid.TryGetValue((cx + dx, cy + dy, cz + dz), out var list))
+                        {
+                            continue;
+                        }
+
+                        foreach (int j in list)
+                        {
+                            if (j == i) continue;
+                            double ox = xyz[3 * i] - xyz[3 * j];
+                            double oy = xyz[3 * i + 1] - xyz[3 * j + 1];
+                            double oz = xyz[3 * i + 2] - xyz[3 * j + 2];
+                            double distSq = ox * ox + oy * oy + oz * oz;
+                            if (distSq < nearestSq) nearestSq = distSq;
+                        }
+                    }
+                }
+            }
+
+            double distance = nearestSq < double.PositiveInfinity ? Math.Sqrt(nearestSq) : baseSpacing;
+            if (!(distance > 0.0)) distance = baseSpacing;
+            scales[i] = Math.Max(MinScale, distance * InitialScaleMultiplier);
+        }
+
+        return scales;
     }
 
     /// <summary>
