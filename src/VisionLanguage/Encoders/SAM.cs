@@ -147,6 +147,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode || _options is null || _network is not null) return;
@@ -185,8 +186,10 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         return single ? Engine.Reshape(embedding, new[] { embedding.Shape[1], embedding.Shape[2], embedding.Shape[3] }) : embedding;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
 
     /// <summary>
@@ -215,6 +218,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
     /// <summary>SAM normalizes and pads to a square in its network (<see cref="EncodeImage"/>); the image passes

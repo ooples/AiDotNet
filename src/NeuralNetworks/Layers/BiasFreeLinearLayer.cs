@@ -72,6 +72,7 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>The weight matrix <c>[input, output]</c>.</summary>
     internal Tensor<T> Weights => _weights;
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank < 1 || input.Shape[^1] != _inputSize)

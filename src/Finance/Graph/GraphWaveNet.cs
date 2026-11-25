@@ -79,7 +79,7 @@ namespace AiDotNet.Finance.Graph;
 /// var model = new GraphWaveNet&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode: load pre-trained Graph WaveNet model
-/// var onnxModel = new GraphWaveNet&lt;double&gt;(architecture, "graphwavenet.onnx");
+/// var onnxModel = new GraphWaveNet&lt;double&gt;(architecture, "graphwavenet.onnx", options: null, predefinedAdjacency: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]

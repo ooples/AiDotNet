@@ -32,6 +32,7 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var history = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var options = ChronosOptions&lt;double&gt;.FromPretrainedConfig("chronos-t5-small/config.json");
 /// var model = new ChronosFoundationModel&lt;double&gt;(options);
 /// model.LoadPretrainedWeights("chronos-t5-small/model.safetensors");

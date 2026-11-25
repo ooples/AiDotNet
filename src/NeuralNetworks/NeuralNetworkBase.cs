@@ -5802,6 +5802,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc/>
     public virtual Vector<T> GetParameterGradients()
     {
         if (_gradientSurfaceUnavailable)

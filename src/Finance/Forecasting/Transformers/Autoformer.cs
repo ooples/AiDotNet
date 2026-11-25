@@ -90,18 +90,25 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IForecastingModel Properties
 
+    /// <inheritdoc/>
     public override int SequenceLength => _options.LookbackWindow;
 
+    /// <inheritdoc/>
     public override int PredictionHorizon => _options.ForecastHorizon;
 
+    /// <inheritdoc/>
     public override int NumFeatures => _numFeatures;
 
+    /// <inheritdoc/>
     public override int PatchSize => 1;
 
+    /// <inheritdoc/>
     public override int Stride => 1;
 
+    /// <inheritdoc/>
     public override bool IsChannelIndependent => false;
 
+    /// <inheritdoc/>
     public override bool UseNativeMode => _useNativeMode;
 
     #endregion
@@ -213,6 +220,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc />
@@ -221,8 +229,10 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
         => _useNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var o = _options;
@@ -252,6 +262,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IForecastingModel Implementation
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
@@ -259,6 +270,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
@@ -280,6 +292,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return ConcatenatePredictions(allPredictions, steps);
     }
 
+    /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
@@ -307,6 +320,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// statistics before the model sees it, so the input is returned unchanged.</remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
 
+    /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
@@ -334,6 +348,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return _network.Forward(history, null, null, training, _random);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
@@ -341,8 +356,10 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return Forward(input, training: false);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input, training: true);
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
@@ -362,6 +379,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region Helper Methods
 
+    /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
         int batchSize = input.Shape[0], length = input.Shape[1], features = input.Shape[2];
@@ -377,6 +395,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return newInput;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
@@ -399,6 +418,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IDisposable
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (disposing) OnnxSession?.Dispose();
