@@ -173,7 +173,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// Only valid for activations whose <see cref="Derivative(Tensor{T})"/> returns one value per input
     /// element. The derivative and the diagonal placement both run as whole-tensor engine operations.
     /// </remarks>
-    protected Matrix<T> ElementwiseJacobian(Vector<T> input)
+    private protected Matrix<T> ElementwiseJacobian(Vector<T> input)
     {
         if (input.Length == 0)
         {
@@ -189,7 +189,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <param name="offDiagonal">The [n, n] tensor supplying every off-diagonal entry.</param>
     /// <param name="diagonal">The [n] tensor supplying the diagonal entries.</param>
     /// <returns>The combined [n, n] tensor.</returns>
-    protected Tensor<T> ReplaceDiagonal(Tensor<T> offDiagonal, Tensor<T> diagonal)
+    private protected Tensor<T> ReplaceDiagonal(Tensor<T> offDiagonal, Tensor<T> diagonal)
     {
         var engine = Engine;
         return engine.TensorWhere(engine.TensorEye<T>(diagonal.Length), engine.TensorDiag(diagonal), offDiagonal);
@@ -201,7 +201,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// </summary>
     /// <param name="probabilities">The [n] output of the activation.</param>
     /// <returns>The [n, n] Jacobian tensor.</returns>
-    protected Tensor<T> SoftmaxJacobian(Tensor<T> probabilities)
+    private protected Tensor<T> SoftmaxJacobian(Tensor<T> probabilities)
     {
         var engine = Engine;
         var offDiagonal = engine.TensorNegate(engine.TensorOuter(probabilities, probabilities));
