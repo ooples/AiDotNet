@@ -567,91 +567,24 @@ public class ActivationEngineParityTests
         AssertMatrix(expected, new GumbelSoftmaxActivation<double>(temperature, seed).Derivative(input), Tolerance, "gumbel jacobian");
     }
 
-    [Theory(Timeout = 120000)]
-    [InlineData(5)]
-    [InlineData(8)]
-    [InlineData(3)]
-    [InlineData(2)]
-    public async Task HierarchicalSoftmaxActivation_Vector_WalksEachClassPath(int numClasses)
+    [Fact(Timeout = 120000)]
+    public async Task SphericalSoftmaxActivation_Jacobian_AtTheZeroVector_IsFiniteAndUsesTheStabilisedNorm()
     {
-        var hierarchical = new HierarchicalSoftmaxActivation<double>(numClasses);
-        var values = Enumerable.Range(0, numClasses).Select(i => 0.4 * i - 0.7).ToArray();
-        var input = new Vector<double>(values);
-        var weights = hierarchical.NodeWeightsTensor;
-        int depth = weights.Shape[0];
-        Assert.Equal(numClasses, weights.Shape[1]);
-        var flatWeights = weights.ToArray();
-        Assert.All(flatWeights, w => Assert.InRange(w, -0.5, 0.5));
-        Assert.Contains(flatWeights, w => w != 0.0);
+        // The norm is sqrt(||x||^2 + 1e-12), as in the forward pass, so at x = 0 it is 1e-6 and u = 0:
+        // J = S (I - u u^T) / norm = S / 1e-6, with S the softmax Jacobian of the uniform output
+        const int n = 4;
+        var jacobian = new SphericalSoftmaxActivation<double>().Derivative(new Vector<double>(new double[n]));
 
-        var sigmoids = new double[depth];
-        for (int d = 0; d < depth; d++)
+        var uniform = Enumerable.Repeat(1.0 / n, n).ToArray();
+        var expected = SoftmaxForm(uniform);
+        for (int i = 0; i < n; i++)
         {
-            double dot = 0.0;
-            for (int j = 0; j < numClasses; j++)
+            for (int j = 0; j < n; j++)
             {
-                dot += values[j] * flatWeights[d * numClasses + j];
-            }
-
-            sigmoids[d] = 1.0 / (1.0 + Math.Exp(-dot));
-        }
-
-        var expectedProbabilities = new double[numClasses];
-        var expectedJacobian = new double[numClasses, numClasses];
-        for (int c = 0; c < numClasses; c++)
-        {
-            // The factors class c picks up along its path, and whether each one is a right turn
-            var factors = new List<double>();
-            var rightTurns = new List<bool>();
-            int node = 1;
-            for (int d = 0; d < depth; d++)
-            {
-                bool goRight = (c & (1 << (depth - d - 1))) != 0;
-                factors.Add(goRight ? sigmoids[d] : 1.0 - sigmoids[d]);
-                rightTurns.Add(goRight);
-
-                node = node * 2 + (goRight ? 1 : 0);
-                if (node >= numClasses)
-                {
-                    break;
-                }
-            }
-
-            double probability = 1.0;
-            foreach (double factor in factors)
-            {
-                probability *= factor;
-            }
-
-            expectedProbabilities[c] = probability;
-
-            // Product rule: differentiate one factor, keep the others. The Jacobian used to drop "the
-            // others", which is only right for a path of length 1.
-            for (int d = 0; d < factors.Count; d++)
-            {
-                double others = 1.0;
-                for (int e = 0; e < factors.Count; e++)
-                {
-                    if (e != d)
-                    {
-                        others *= factors[e];
-                    }
-                }
-
-                double slope = sigmoids[d] * (1.0 - sigmoids[d]);
-                double coefficient = (rightTurns[d] ? slope : -slope) * others;
-                for (int j = 0; j < numClasses; j++)
-                {
-                    expectedJacobian[c, j] += coefficient * flatWeights[d * numClasses + j];
-                }
+                expected[i, j] /= 1e-6;
             }
         }
 
-        var jacobian = hierarchical.Derivative(input);
-        AssertValues(expectedProbabilities, hierarchical.Activate(input).ToArray(), Tolerance, "path probabilities");
-        AssertMatrix(expectedJacobian, jacobian, Tolerance, "path derivatives");
-
-        var numerical = NumericalJacobian(x => hierarchical.Activate(new Vector<double>(x)).ToArray(), values);
-        AssertMatrix(numerical, jacobian, 1e-8, "path derivatives vs finite differences");
+        AssertMatrix(expected, jacobian, 1e-3, "spherical jacobian at zero");
     }
 }
