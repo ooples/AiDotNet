@@ -58,6 +58,9 @@ public class Adam8BitBf16FusedHostStepTests
     /// </summary>
     private static float BiasCorrection(double beta, int step) => (float)(1.0 - Math.Pow((float)beta, step));
 
+    // BitConverter.SingleToInt32Bits is not available on net471.
+    private static int Bits(float value) => BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
+
     private static float[] RandomValues(int length, int seed, double scale)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
@@ -215,7 +218,7 @@ public class Adam8BitBf16FusedHostStepTests
             {
                 Assert.True(g[i] == grad[i], $"step {step + 1}: the step modified the tape's gradient at {i}.");
                 // Element-wise IEEE arithmetic in a fixed order: vector block or tail, the pass owes the same bits.
-                Assert.True(BitConverter.SingleToInt32Bits(scalar.Parameters[i]) == BitConverter.SingleToInt32Bits(param[i]),
+                Assert.True(Bits(scalar.Parameters[i]) == Bits(param[i]),
                     $"step {step + 1}, element {i}: the scalar recurrence gives {scalar.Parameters[i]:R}, the step {param[i]:R}.");
                 Assert.True(Math.Abs(engineExpected[i] - param[i]) <= EngineTolerance,
                     $"step {step + 1}, element {i}: the engine recurrence gives {engineExpected[i]:R}, the step {param[i]:R}.");
@@ -223,6 +226,8 @@ public class Adam8BitBf16FusedHostStepTests
         }
     }
 
+#if NET5_0_OR_GREATER
+    // GC.GetTotalAllocatedBytes, the process-wide allocation counter this reads, does not exist on net471.
     [Fact]
     public void FusedStep_AllocatesNoParameterSizedTemporaries()
     {
@@ -244,9 +249,10 @@ public class Adam8BitBf16FusedHostStepTests
         optimizer.Step(context);
         long allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
 
-        // The tensor-op recurrence allocated about twelve parameter-sized tensors here (192 MB). The fused pass owes
+        // The tensor-op recurrence built twelve parameter-sized tensors here (192 MB), counting its operations. The fused pass owes
         // none, so even a quarter of ONE is far more than its bookkeeping needs.
         Assert.True(allocated < parameterBytes / 4,
             $"A BF16 Adam step over a {parameterBytes / (1024 * 1024)} MB parameter allocated {allocated / (1024.0 * 1024.0):F1} MB.");
     }
+#endif
 }
