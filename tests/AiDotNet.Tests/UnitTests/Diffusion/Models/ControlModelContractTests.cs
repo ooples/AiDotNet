@@ -275,11 +275,33 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     public async Task ControlNetFluxModel_Clone_CreatesIndependentCopy()
     {
         var model = new ControlNetFluxModel<float>();
+        // The one weight a fresh model holds values in. Marked, so that a clone which shares nothing (and
+        // would report the same count and the same zeros) is told apart from one that carries the source.
+        var sourceConv = model.ControlEncoder.ZeroConvolutions[0];
+        var marked = new Vector<float>(checked((int)sourceConv.ParameterCount));
+        for (int i = 0; i < marked.Length; i++) marked[i] = 0.25f + (i % 251) * 0.003f;
+        sourceConv.SetParameters(marked);
+
         var clone = model.Clone();
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
         Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
+
+        var cloneConv = Assert.IsType<ControlNetFluxModel<float>>(clone).ControlEncoder.ZeroConvolutions[0];
+        Assert.NotSame(sourceConv, cloneConv);
+        Assert.Equal(marked.ToArray(), cloneConv.GetParameters().ToArray());
+
+        // Independent: a write to either side leaves the other as it was.
+        var cloneValues = new Vector<float>(marked.Length);
+        for (int i = 0; i < cloneValues.Length; i++) cloneValues[i] = -0.75f + (i % 251) * 0.003f;
+        cloneConv.SetParameters(cloneValues);
+        Assert.Equal(marked.ToArray(), sourceConv.GetParameters().ToArray());
+
+        var sourceValues = new Vector<float>(marked.Length);
+        for (int i = 0; i < sourceValues.Length; i++) sourceValues[i] = 1.5f + (i % 251) * 0.003f;
+        sourceConv.SetParameters(sourceValues);
+        Assert.Equal(cloneValues.ToArray(), cloneConv.GetParameters().ToArray());
     }
 
     #endregion

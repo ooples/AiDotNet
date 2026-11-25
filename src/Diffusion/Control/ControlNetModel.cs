@@ -715,6 +715,9 @@ public class ControlNetEncoder<T> : IParameterSource<T>, AiDotNet.Models.Paramet
     private readonly List<ConvolutionalLayer<T>> _downBlocks;
     private readonly List<ConvolutionalLayer<T>> _zeroConvs;
 
+    /// <summary>The zero convolutions: the only weights of a fresh encoder that hold values.</summary>
+    internal IReadOnlyList<ConvolutionalLayer<T>> ZeroConvolutions => _zeroConvs;
+
     /// <summary>
     /// Gets the number of parameters in this encoder.
     /// </summary>
