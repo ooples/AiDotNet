@@ -79,8 +79,8 @@ Intel Core i7-13850HX, 8 threads, PyTorch 2.14.1 with `torch.compile`. Nine laun
 | gcn | inference | 1 | 0.019 (0.019–0.02) | 0.062 (0.062–0.14) torch-compile | 3.26 (3.26–7.30) ⚑ | 5,898 / 5,898 |  |
 | gcn | inference | 8 | 0.067 (0.065–0.071) | 0.084 (0.083–0.161) torch-compile-fused | 1.25 (1.24–2.27) ⚑ | 5,898 / 5,898 |  |
 | gcn | inference | 16 | 0.128 (0.075–0.13) | 0.178 (0.101–0.181) torch-compile | 1.39 (1.33–1.44) ⚑ | 5,898 / 5,898 |  |
-| gat | train | 1 | 16.4 (15.9–16.8) | 749 (746–766) torch-compile | 45.54 (44.38–47.11) | 92,373 / 92,373 | 2.148 → 1.922; 1.955 → 1.88 |
-| gat | inference | 1 | 3.4 (3.32–3.46) | 47.7 (47.3–50.1) torch-compile-fused | 14.04 (13.77–14.87) | 92,373 / 92,373 |  |
+| gat | train | 1 | 16 (15.7–16.3) | 11.1 (10.9–11.2) torch-compile-fused | 0.70 (0.68–0.70) ⚑ | 92,373 / 92,373 | 2.154 → 1.922; 1.958 → 1.88 |
+| gat | inference | 1 | 2.54 (2.44–2.85) | 3.9 (3.82–4.36) torch-compile-fused | 1.53 (1.36–1.61) ⚑ | 92,373 / 92,373 |  |
 
 **CPU, classical ML**: fit and predict milliseconds, median (interquartile range) over 9 launches of each launch's median. The ratio is the fastest Python library's fit time ÷ AiDotNet's; above 1 means AiDotNet fit faster. Quality is held-out accuracy, R² or k-means inertia. ⚑ marks a row with a flag in classical_summary.csv.
 
@@ -168,7 +168,7 @@ Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a 
 | `gat` | `GraphAttentionNetwork` | Cora-sized graph: 2,708 nodes, 1,433 features, 8x8 heads, 7 classes | 92,373 |
 | `dcgan` | `DCGAN` | 64x64 images, latent 100, one D + one G update per step | 6,350,852 |
 
-`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Under
+`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Both sides evaluate attention over the graph's 13,540 stored entries: AiDotNet's layer through its CSR kernel, the twin through `EdgeGATLayer` (gather, per-row softmax by scatter, aggregation by `index_add`, as PyG's `GATConv`). `test_gat_twin.py` checks the edge layer's outputs and gradients against the dense masked reference. The first A-6 run used that dense reference as the twin, which computed every one of the 2,708² node pairs (542x the attention work), and reported a 45.5x training ratio that measured dense against sparse. The gat rows above are a re-run on 2026-11-25 with the edge twin (flagged `busy-cpu`: other processes held the CPU during some launches; no CI job ran). Under
 `--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
 compiled training is what gets timed.
 
