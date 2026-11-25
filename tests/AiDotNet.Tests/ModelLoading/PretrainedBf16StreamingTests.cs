@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.ModelLoading.Pretrained;
@@ -88,6 +89,41 @@ public sealed class PretrainedBf16StreamingTests : IDisposable
             }
         }
         return (config, t);
+    }
+
+    /// <summary>Throws at the first read of one block's weights, after the blocks before it were stored.</summary>
+    private sealed class FailingSource : INamedTensorSource
+    {
+        private readonly InMemorySource _inner;
+        private readonly string _failAt;
+        public FailingSource(Dictionary<string, double[]> t, int failingBlock)
+        {
+            _inner = new InMemorySource(t);
+            _failAt = $"model.layers.{failingBlock}.";
+        }
+        public IReadOnlyCollection<string> TensorNames => _inner.TensorNames;
+        public double[] ReadAsDouble(string name)
+            => name.StartsWith(_failAt, StringComparison.Ordinal) ? throw new IOException("truncated shard") : _inner.ReadAsDouble(name);
+        public void Remove(string name) => _inner.Remove(name);
+    }
+
+    /// <summary>
+    /// The streaming store is process-global. A streamed load that fails partway leaves it as it was before the load:
+    /// none of the blocks already loaded stays registered, and the options are the previous ones, so the process can
+    /// configure the store again. Before, the store kept the abandoned network's blocks and its bf16 options, and the
+    /// next Configure threw on the live handles.
+    /// </summary>
+    [Fact]
+    public void A_streamed_load_that_fails_partway_leaves_the_store_as_it_was()
+    {
+        var before = WeightRegistry.CurrentOptions;
+        var (config, t) = Checkpoint(layers: 2);
+        Assert.Throws<IOException>(() =>
+            MoEModelBuilder<double>.BuildStreamed(config, new FailingSource(t, failingBlock: 1), StreamingStoreDtype.Bf16));
+
+        Assert.Equal(0, WeightRegistry.GetStreamingReport().RegisteredEntryCount);
+        Assert.Same(before, WeightRegistry.CurrentOptions);
+        WeightRegistry.Configure(new GpuOffloadOptions());   // threw "live registered handles" before
     }
 
     /// <summary>

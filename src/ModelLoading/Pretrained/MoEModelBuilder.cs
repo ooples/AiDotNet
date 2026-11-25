@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ModelLoading.Pretrained;
 
@@ -113,8 +114,46 @@ public static class MoEModelBuilder<T>
         network.Predict(warmup);
         bool incremental = weightStore is not null;
         // Resident: materialize every expert now. Streamed: one block at a time, inside the load loop.
-        if (!incremental) foreach (var b in blocks) b.Moe.Materialize();
-        else network.BeginIncrementalWeightStreaming(weightStore!.Value);
+        if (!incremental)
+        {
+            foreach (var b in blocks) b.Moe.Materialize();
+            LoadWeights(config, weights, network, embedding, blocks, finalNorm, lmHead, incremental: false);
+            return network;
+        }
+
+        // The store is process-global: a load that throws partway puts it back as it was, without the blocks
+        // already loaded, rather than leaving it configured for a network the caller never received.
+        var previousStore = WeightRegistry.CurrentOptions;
+        network.BeginIncrementalWeightStreaming(weightStore!.Value);
+        try
+        {
+            LoadWeights(config, weights, network, embedding, blocks, finalNorm, lmHead, incremental: true);
+        }
+        catch (Exception loadFailure)
+        {
+            try { network.AbortIncrementalWeightStreaming(previousStore); }
+            catch (Exception restoreFailure)
+            {
+                throw new AggregateException(
+                    "The streamed load failed, and the streaming store could not be restored afterwards.",
+                    loadFailure, restoreFailure);
+            }
+            throw;
+        }
+        return network;
+    }
+
+    private static void LoadWeights(HuggingFaceConfig config, INamedTensorSource weights, NeuralNetwork<T> network,
+        EmbeddingLayer<T> embedding, MoEDecoderBlock<T>[] blocks, RMSNormalizationLayer<T> finalNorm, ILayer<T> lmHead,
+        bool incremental)
+    {
+        int hidden = config.HiddenSize;
+        int numHeads = config.NumAttentionHeads;
+        int numKVHeads = config.NumKeyValueHeads;
+        int headDim = config.HeadDim;
+        int intermediate = config.IntermediateSize;
+        int vocab = config.VocabSize;
+        int numExperts = config.NumLocalExperts;
 
         // ---- load pretrained weights ----
         embedding.SetParameters(new Vector<T>(
@@ -149,7 +188,5 @@ public static class MoEModelBuilder<T>
 
         LlamaModelBuilder<T>.LoadLmHead(lmHead, weights, vocab, hidden);
         if (incremental) network.FinishIncrementalWeightStreaming();
-
-        return network;
     }
 }

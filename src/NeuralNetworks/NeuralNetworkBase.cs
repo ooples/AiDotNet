@@ -12728,6 +12728,36 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal void FinishIncrementalWeightStreaming() => RegisterTrainableTensorsWithWeightRegistry();
 
     /// <summary>
+    /// Undoes <see cref="BeginIncrementalWeightStreaming"/> after a load that failed partway: every tensor of this
+    /// network already in the store is unregistered (freeing its store entry), and the store goes back to
+    /// <paramref name="previous"/>, the options it had before the load began. Without this a failed load left the
+    /// process-global store configured for the abandoned network and holding its loaded blocks, so the next
+    /// <c>WeightRegistry.Configure</c> threw on the live handles.
+    /// </summary>
+    internal void AbortIncrementalWeightStreaming(GpuOffloadOptions previous)
+    {
+        var visited = new HashSet<LayerBase<T>>(TensorReferenceComparer<LayerBase<T>>.Instance);
+        for (int i = 0; i < Layers.Count; i++)
+            if (Layers[i] is LayerBase<T> layer) UnregisterLayerTensorsRecursively(layer, visited);
+        foreach (var extra in GetExtraTrainableLayers())
+            if (extra is not null) UnregisterLayerTensorsRecursively(extra, visited);
+        foreach (var tensor in GetExtraTrainableTensors())
+            if (tensor is not null && tensor.StreamingPoolHandle >= 0) WeightRegistry.UnregisterWeight(tensor);
+        _weightLifetimeConfigured = false;
+        _registrationLifetime = WeightLifetime.Default;
+        WeightRegistry.Configure(previous);
+    }
+
+    private static void UnregisterLayerTensorsRecursively(LayerBase<T> layer, HashSet<LayerBase<T>> visited)
+    {
+        if (!visited.Add(layer)) return;
+        foreach (var tensor in layer.GetTrainableParametersWithoutMaterialization())
+            if (tensor is not null && tensor.StreamingPoolHandle >= 0) WeightRegistry.UnregisterWeight(tensor);
+        foreach (var sub in layer.GetSubLayers())
+            if (sub is LayerBase<T> child) UnregisterLayerTensorsRecursively(child, visited);
+    }
+
+    /// <summary>
     /// Forces weight streaming on for this network now, with the weights held in <paramref name="storeDtype"/>
     /// (<c>null</c>: the store's default), and declares the network's current execution mode to the store.
     /// </summary>
