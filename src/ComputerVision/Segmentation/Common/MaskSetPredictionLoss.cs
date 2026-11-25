@@ -467,8 +467,9 @@ internal static class MaskSetPredictionLoss
     /// <summary>
     /// <c>LSE_j = log sum_k exp(f_k . f_j / tau)</c> for the columns <c>f_j</c> of <paramref name="f"/> <c>[D, S]</c>,
     /// recorded on the tape as one node. Forward and backward walk <see cref="SimilarityColumnBlock"/> columns at a
-    /// time, so the largest tensor either holds is <c>[S, 256]</c>; the backward recomputes each block's softmax
-    /// <c>P</c> and adds <c>(1 / tau) (f_J (P g_J)^T)</c> to every column and <c>(1 / tau) f (P g_J)</c> to the block's own.
+    /// time through one reused <c>[S, 256]</c> block, so a call allocates a few MB however large S is; the backward
+    /// recomputes each block's softmax <c>P</c> and adds <c>(1 / tau) f (P g_J)</c> to the block's own columns and
+    /// <c>(1 / tau) (P g_J) f_J^T</c> to the transposed gradient of every column.
     /// </summary>
     internal static Tensor<T> SimilarityLogSumExp<T>(Tensor<T> f, double temperature)
     {
@@ -480,13 +481,13 @@ internal static class MaskSetPredictionLoss
         Tensor<T> logSumExp;
         using (new NoGradScope<T>())
         {
-            var transposed = engine.TensorTranspose(f);                                                        // [S, D]
+            var rows = engine.TensorTranspose(f).Contiguous();                                                // [S, D]
             var parts = new List<Tensor<T>>();
+            Tensor<T>? block = null;
             for (int start = 0; start < s; start += SimilarityColumnBlock)
             {
                 int n = Math.Min(SimilarityColumnBlock, s - start);
-                var block = engine.TensorMultiplyScalar(
-                    engine.TensorMatMul(transposed, engine.TensorSlice(f, new[] { 0, start }, new[] { d, n })), scale); // [S, n]
+                block = SimilarityBlock(engine, rows, f, start, n, scale, block);                           // [S, n]
                 parts.Add(engine.TensorLogSumExp(block, 0, false));
             }
             logSumExp = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
@@ -495,26 +496,44 @@ internal static class MaskSetPredictionLoss
         DifferentiableOps.RecordUnary("KMaXSimilarityLogSumExp", logSumExp, f, (gradOutput, inputs, _, _, eng, grads) =>
         {
             var x = inputs[0];
-            var xt = eng.TensorTranspose(x);
-            Tensor<T>? everyColumn = null;
+            var rows = eng.TensorTranspose(x).Contiguous();                                                   // [S, D]
+            var transposedGradient = new Tensor<T>(new[] { s, d });                                           // [S, D]
+            var contribution = new Tensor<T>(new[] { s, d });
             var ownColumns = new List<Tensor<T>>();
+            Tensor<T>? block = null;
             for (int start = 0; start < s; start += SimilarityColumnBlock)
             {
                 int n = Math.Min(SimilarityColumnBlock, s - start);
+                block = SimilarityBlock(eng, rows, x, start, n, scale, block);                              // [S, n]
+                eng.SoftmaxInto(block, block, 0);
+                // P g_J / tau: one row of column weights scales every row of the block.
+                var columnWeights = eng.Reshape(
+                    eng.TensorMultiplyScalar(eng.TensorSlice(gradOutput, new[] { start }, new[] { n }), scale), new[] { 1, n });
+                eng.TensorBroadcastMultiplyInto(block, block, columnWeights);
                 var columns = eng.TensorSlice(x, new[] { 0, start }, new[] { d, n });                       // [D, n]
-                var probability = eng.TensorSoftmax(eng.TensorMultiplyScalar(eng.TensorMatMul(xt, columns), scale), 0); // [S, n]
-                var upstream = eng.TensorBroadcastTo(
-                    eng.Reshape(eng.TensorSlice(gradOutput, new[] { start }, new[] { n }), new[] { 1, n }), new[] { s, n });
-                var weighted = eng.TensorMultiplyScalar(eng.TensorMultiply(probability, upstream), scale);  // [S, n]
-                var toRows = eng.TensorMatMul(columns, eng.TensorTranspose(weighted));                       // [D, S]
-                everyColumn = everyColumn is null ? toRows : eng.TensorAdd(everyColumn, toRows);
-                ownColumns.Add(eng.TensorMatMul(x, weighted));                                               // [D, n]
+                eng.MatMulInto(contribution, block, eng.TensorTranspose(columns).Contiguous());             // [S, D]
+                eng.TensorAddInPlace(transposedGradient, contribution);
+                ownColumns.Add(eng.TensorMatMul(x, block));                                                   // [D, n]
             }
 
             var own = ownColumns.Count == 1 ? ownColumns[0] : eng.TensorConcatenate(ownColumns.ToArray(), 1);
-            DifferentiableOps.AccumulateGrad(grads, x, eng.TensorAdd(everyColumn!, own), eng);
+            DifferentiableOps.AccumulateGrad(grads, x, eng.TensorAdd(eng.TensorTranspose(transposedGradient), own), eng);
         });
         return logSumExp;
+    }
+
+    /// <summary>
+    /// The similarity columns <c>[start, start + n)</c> divided by tau, <c>[S, n]</c>, written into
+    /// <paramref name="reuse"/> when it has that shape.
+    /// </summary>
+    private static Tensor<T> SimilarityBlock<T>(
+        AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> rows, Tensor<T> f, int start, int n, T scale, Tensor<T>? reuse)
+    {
+        int s = rows.Shape[0], d = rows.Shape[1];
+        var block = reuse is not null && reuse.Shape[0] == s && reuse.Shape[1] == n ? reuse : new Tensor<T>(new[] { s, n });
+        var columns = engine.TensorMultiplyScalar(engine.TensorSlice(f, new[] { 0, start }, new[] { d, n }), scale); // [D, n]
+        engine.MatMulInto(block, rows, columns);
+        return block;
     }
 
     /// <summary>
