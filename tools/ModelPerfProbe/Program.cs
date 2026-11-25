@@ -87,7 +87,10 @@ internal static class Program
             throw new DirectoryNotFoundException($"Results directory does not exist: {directory}");
 
         var records = new List<CensusRecord>();
-        foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
+        // Ordinal path order: EnumerateFiles follows the file system, and ext4 orders a directory by a per-volume
+        // hash seed, so the same records loaded in a different order on every runner.
+        foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.Ordinal))
         {
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
             JsonElement root = document.RootElement;
@@ -1679,7 +1682,7 @@ internal static class Program
 
             // A fixture the latest run measured on another processor compares with the newest run in the series that
             // measured it on this one, and the regression names that run's commit.
-            string environmentKey = records[0].Environment;
+            string environmentKey = records.First(r => r.Status == "ok").Environment;
             BaselineDocument Measured(string commit, int day, string environment, double peak) => new()
             {
                 SchemaVersion = CurrentBaselineSchemaVersion,
