@@ -267,41 +267,14 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     public override InstanceSegmentationResult<T> DetectInstances(Tensor<T> image)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var logits = Predict(image);
-        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
-        var classMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
-        int h = classMap.Shape[0], w = classMap.Shape[1];
-        var instances = new List<InstanceMask<T>>();
+        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        int h = logits.Shape[1], w = logits.Shape[2];
 
-        for (int cls = 1; cls < _numClasses && instances.Count < 100; cls++)
-        {
-            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(classMap, cls);
-            for (int comp = 1; comp <= count && instances.Count < 100; comp++)
-            {
-                var mask = new Tensor<T>([h, w]);
-                int area = 0;
-                double sumConf = 0;
-                int minX = w, minY = h, maxX = 0, maxY = 0;
-                for (int row = 0; row < h; row++)
-                    for (int col = 0; col < w; col++)
-                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
-                        {
-                            mask[row, col] = NumOps.FromDouble(1.0);
-                            area++;
-                            sumConf += NumOps.ToDouble(probMap[cls, row, col]);
-                            if (col < minX) minX = col; if (col > maxX) maxX = col;
-                            if (row < minY) minY = row; if (row > maxY) maxY = row;
-                        }
-                if (area < 4) continue;
-                double confidence = sumConf / area;
-                if (confidence < ConfidenceThreshold) continue;
-                var box = new BoundingBox<T>(NumOps.FromDouble(minX), NumOps.FromDouble(minY),
-                    NumOps.FromDouble(maxX + 1), NumOps.FromDouble(maxY + 1), BoundingBoxFormat.XYXY, cls);
-                instances.Add(new InstanceMask<T>(box, mask, cls, NumOps.FromDouble(confidence)));
-            }
-        }
+        // Instances are the connected components of each non-background class: at most 100, at least
+        // 4 pixels each, with a mean class probability of at least ConfidenceThreshold, most confident first
+        var instances = Common.SegmentationPostProcessing.ConnectedComponentInstances(
+            logits, _numClasses, maxInstances: 100, minArea: 4, confidenceThreshold: ConfidenceThreshold);
 
-        instances = instances.OrderByDescending(i => NumOps.ToDouble(i.Confidence)).ToList();
         var kept = new List<InstanceMask<T>>();
         while (instances.Count > 0)
         {
