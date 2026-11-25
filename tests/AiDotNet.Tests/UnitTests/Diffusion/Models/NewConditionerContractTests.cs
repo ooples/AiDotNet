@@ -173,6 +173,11 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     {
         var predictor = new SiTPredictor<double>();
 
+        // What this proves at paper scale: a flat read, a flat write and a second flat read fit the lane's
+        // memory, and the second read is bit-for-bit the first. It writes back the vector it just read, so a
+        // SetParameters that did nothing would pass it. That SetParameters stores what it is given is proven
+        // at reduced width, with distinct values, by PredictorParameterIoDiskFootprintTests.
+        // FlatRoundTrip_OfAStreamedSiTPredictor_WritesTheModelToDiskOnce_AndRestoresEveryValue.
         var (length, expected) = ReadFingerprintAndWriteBack(predictor);
         Assert.True(length > 0);
 

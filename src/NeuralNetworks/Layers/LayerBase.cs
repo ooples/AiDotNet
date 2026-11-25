@@ -3675,8 +3675,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // dirty entry is appended on every eviction and its old slice is never reused. Kept, that
             // entry put a second copy of the model on disk (and, through the owner write-back that
             // preceded the mapping, one more per parameter walk): a FLUX round-trip wrote ~5.9x its
-            // 48 GB weight set and filled the CI runner's 76 GB /tmp. Releasing it here, while it is
-            // still resident and has never been written, leaves exactly one on-disk copy of each weight.
+            // 48 GB weight set and filled the CI runner's 76 GB /tmp. Releasing it here leaves exactly one
+            // on-disk copy of a weight that parameter IO is the first to touch: it is mapped while still
+            // resident and its pool entry was never written. A weight that a FORWARD registered and the
+            // pool has already paged out is different: its slice of the append-only pool file is not
+            // reclaimed by unregistering, so forward-then-parameter-IO can hold that weight on disk twice
+            // (once in the pool file, once in the parameter file) until the pool is reset. It no longer
+            // grows with every walk, which was the defect.
             if (releasePoolEntryOnceMapped && tensor.IsWritableMmapAliased && tensor.StreamingPoolHandle >= 0)
                 WeightRegistry.UnregisterWeight(tensor);
         }
