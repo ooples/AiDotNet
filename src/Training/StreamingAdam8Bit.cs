@@ -77,6 +77,108 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         _decoupledWeightDecay = decoupledWeightDecay;
     }
 
+    public override void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+        int count = parameters.Count;
+        if (gradients.Count != count)
+            throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
+        if (count == 0) return;
+
+        var multiFn = _decoupledWeightDecay
+            ? GpuMultiTensorAdamBridge.TryAdamWMultiTensor
+            : GpuMultiTensorAdamBridge.TryAdamMultiTensor;
+
+        if (typeof(T) != typeof(float)
+            || UseBf16Moments
+            || Min8BitSize <= 0
+            || multiFn is null
+            || AiDotNetEngine.Current is not DirectGpuTensorEngine)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Apply(parameters[i], gradients[i]);
+            }
+            return;
+        }
+
+        var mtParams = new List<Tensor<float>>(count);
+        var mtGrads = new List<Tensor<float>>(count);
+        var mtMs = new List<Tensor<float>>(count);
+        var mtVs = new List<Tensor<float>>(count);
+        var mtSourceRefs = new List<Tensor<T>>(count);
+        var mtOrigGrads = new List<Tensor<T>>(count);
+        List<int>? deferredIndices = null;
+
+        for (int i = 0; i < count; i++)
+        {
+            var p = parameters[i];
+            var g = gradients[i];
+            if (p is null) throw new ArgumentNullException(nameof(parameters));
+            if (g is null) throw new ArgumentNullException(nameof(gradients));
+            int len = p.Length;
+            bool eligibleForFp32Batch = len > 0
+                && g.Length == len
+                && len < Min8BitSize
+                && (!_keepsMomentsOnGpu.TryGetValue(p, out bool prevOnGpu) || prevOnGpu);
+
+            if (!eligibleForFp32Batch)
+            {
+                (deferredIndices ??= new List<int>()).Add(i);
+                continue;
+            }
+
+            var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref p);
+            var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref g);
+            if (!_gpuFp32SmallState.TryGetValue(pFloat, out var fp) || fp.M.Length != len)
+            {
+                fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
+                _gpuFp32SmallState[pFloat] = fp;
+            }
+
+            mtParams.Add(pFloat);
+            mtGrads.Add(gFloat);
+            mtMs.Add(fp.M);
+            mtVs.Add(fp.V);
+            mtSourceRefs.Add(p);
+            mtOrigGrads.Add(g);
+        }
+
+        if (mtParams.Count > 0)
+        {
+            float lr = (float)LearningRate;
+            float b1 = (float)_beta1;
+            float b2 = (float)_beta2;
+            float eps = (float)_epsilon;
+            float wd = (float)_weightDecay;
+            int step = Math.Max(1, Step);
+            if (multiFn(mtParams, mtGrads, mtMs, mtVs, lr, b1, b2, eps, wd, step))
+            {
+                for (int i = 0; i < mtSourceRefs.Count; i++)
+                {
+                    _keepsMomentsOnGpu[mtSourceRefs[i]] = true;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < mtSourceRefs.Count; i++)
+                {
+                    Apply(mtSourceRefs[i], mtOrigGrads[i]);
+                }
+            }
+        }
+
+        if (deferredIndices is not null)
+        {
+            for (int i = 0; i < deferredIndices.Count; i++)
+            {
+                int idx = deferredIndices[i];
+                Apply(parameters[idx], gradients[idx]);
+            }
+        }
+    }
+
     public override void Apply(Tensor<T> param, Tensor<T> grad)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));
@@ -210,5 +312,72 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         }
         _gpuFp32SmallState.Clear();
         _keepsMomentsOnGpu.Clear();
+    }
+}
+
+internal static class GpuMultiTensorAdamBridge
+{
+    public delegate bool MultiTensorAdamStepDelegate(
+        IReadOnlyList<Tensor<float>> parameters,
+        IReadOnlyList<Tensor<float>> gradients,
+        IReadOnlyList<Tensor<float>> firstMoments,
+        IReadOnlyList<Tensor<float>> secondMoments,
+        float learningRate, float beta1, float beta2, float epsilon, float weightDecay, int step);
+
+    public delegate bool MultiTensorScaleDelegate(
+        IReadOnlyList<Tensor<float>> gradients,
+        float scale);
+
+    public static readonly MultiTensorAdamStepDelegate? TryAdamMultiTensor = ResolveAdamDelegate("TryAdamStepMultiTensor");
+    public static readonly MultiTensorAdamStepDelegate? TryAdamWMultiTensor = ResolveAdamDelegate("TryAdamWStepMultiTensor");
+    public static readonly MultiTensorScaleDelegate? TryScaleGradientsMultiTensor = ResolveScaleDelegate();
+
+    private static MultiTensorAdamStepDelegate? ResolveAdamDelegate(string methodName)
+    {
+        try
+        {
+            var method = typeof(GpuOptimizer).GetMethod(
+                methodName,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                binder: null,
+                types: new[]
+                {
+                    typeof(IReadOnlyList<Tensor<float>>),
+                    typeof(IReadOnlyList<Tensor<float>>),
+                    typeof(IReadOnlyList<Tensor<float>>),
+                    typeof(IReadOnlyList<Tensor<float>>),
+                    typeof(float), typeof(float), typeof(float), typeof(float), typeof(float), typeof(int)
+                },
+                modifiers: null);
+            if (method is null) return null;
+            return (MultiTensorAdamStepDelegate)Delegate.CreateDelegate(typeof(MultiTensorAdamStepDelegate), method);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static MultiTensorScaleDelegate? ResolveScaleDelegate()
+    {
+        try
+        {
+            var method = typeof(GpuOptimizer).GetMethod(
+                "TryScaleGradientsMultiTensor",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+                binder: null,
+                types: new[]
+                {
+                    typeof(IReadOnlyList<Tensor<float>>),
+                    typeof(float)
+                },
+                modifiers: null);
+            if (method is null) return null;
+            return (MultiTensorScaleDelegate)Delegate.CreateDelegate(typeof(MultiTensorScaleDelegate), method);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
