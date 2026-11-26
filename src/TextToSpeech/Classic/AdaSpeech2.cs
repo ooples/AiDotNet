@@ -52,13 +52,10 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new AdaSpeech2&lt;double&gt;(architecture, "adaspeech2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new AdaSpeech2&lt;double&gt;(architecture, new AdaSpeech2Options());
+/// var model = new AdaSpeech2&lt;double&gt;(architecture, new AdaSpeech2Options());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

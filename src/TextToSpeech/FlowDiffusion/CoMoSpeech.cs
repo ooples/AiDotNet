@@ -55,13 +55,10 @@ public enum CoMoSpeechTrainingPhase
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new CoMoSpeech&lt;double&gt;(architecture, "comospeech.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
+/// var model = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

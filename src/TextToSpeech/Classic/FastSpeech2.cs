@@ -45,13 +45,10 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FastSpeech2&lt;double&gt;(architecture, "fastspeech2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
+/// var model = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

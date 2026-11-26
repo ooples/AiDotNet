@@ -42,12 +42,8 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MatchaTTS&lt;double&gt;(architecture, "matcha_tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MatchaTTS&lt;double&gt;(architecture, new MatchaTTSOptions());
-/// var mel = trainModel.TextToMel("hello world");
+/// var model = new MatchaTTS&lt;double&gt;(architecture, new MatchaTTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

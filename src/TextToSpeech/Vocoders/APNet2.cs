@@ -33,13 +33,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new APNet2&lt;double&gt;(architecture, "apnet2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+/// var model = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+/// // a mel-spectrogram from an acoustic model: [mel bands, frames]
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -35,13 +35,12 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new XTTSv2&lt;double&gt;(architecture, "xttsv2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new XTTSv2&lt;double&gt;(architecture, new XTTSv2Options());
+/// var model = new XTTSv2&lt;double&gt;(architecture, new XTTSv2Options());
+/// // a few seconds of the target speaker, recorded at the model's sample rate
+/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.", "en", referenceAudio);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

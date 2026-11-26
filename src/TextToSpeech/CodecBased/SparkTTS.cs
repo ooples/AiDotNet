@@ -30,13 +30,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SparkTTS&lt;double&gt;(architecture, "sparktts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SparkTTS&lt;double&gt;(architecture, new SparkTTSOptions());
+/// var model = new SparkTTS&lt;double&gt;(architecture, new SparkTTSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

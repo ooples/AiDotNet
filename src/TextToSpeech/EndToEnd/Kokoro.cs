@@ -37,11 +37,8 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Kokoro&lt;double&gt;(architecture, "kokoro.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Kokoro&lt;double&gt;(architecture, new KokoroOptions());
+/// var model = new Kokoro&lt;double&gt;(architecture, new KokoroOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 /// </remarks>

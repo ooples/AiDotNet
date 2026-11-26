@@ -30,11 +30,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FastSpeech&lt;double&gt;(architecture, "fastspeech.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FastSpeech&lt;double&gt;(architecture, new FastSpeechOptions());
+/// var model = new FastSpeech&lt;double&gt;(architecture, new FastSpeechOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 /// </remarks>

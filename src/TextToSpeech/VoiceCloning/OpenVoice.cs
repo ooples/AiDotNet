@@ -20,13 +20,12 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new OpenVoice&lt;double&gt;(architecture, "openvoice.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new OpenVoice&lt;double&gt;(architecture, new OpenVoiceOptions());
+/// var model = new OpenVoice&lt;double&gt;(architecture, new OpenVoiceOptions());
+/// // a few seconds of the target speaker, recorded at the model's sample rate
+/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", referenceAudio);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

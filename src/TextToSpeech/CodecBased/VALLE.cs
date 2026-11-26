@@ -44,7 +44,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// var promptAudio24kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var promptAudio24kHz = Tensor&lt;float&gt;.CreateRandom(1, 3 * 24000);   // 3 s at 24 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var valle = new VALLE&lt;float&gt;(architecture, new VALLEOptions());

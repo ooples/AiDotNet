@@ -38,13 +38,10 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new E2TTS&lt;double&gt;(architecture, "e2tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new E2TTS&lt;double&gt;(architecture, new E2TTSOptions());
+/// var model = new E2TTS&lt;double&gt;(architecture, new E2TTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

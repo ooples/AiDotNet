@@ -43,13 +43,10 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GradTTS&lt;double&gt;(architecture, "gradtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+/// var model = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

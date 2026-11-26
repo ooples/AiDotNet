@@ -30,13 +30,10 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new E3TTS&lt;double&gt;(architecture, "e3tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new E3TTS&lt;double&gt;(architecture, new E3TTSOptions());
+/// var model = new E3TTS&lt;double&gt;(architecture, new E3TTSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -40,8 +40,11 @@ namespace AiDotNet.Audio.Generation;
 /// </remarks>
 /// <example>
 /// <code>
-/// // a pre-trained w2v-BERT whose semantic tokenizer has been fitted (see W2vBert)
+/// // The semantic tokenizer: a w2v-BERT (pre-trained, see W2vBert) whose k-means tokenizer is fitted on speech.
 /// var w2vBert = new W2vBert&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024), new W2vBertOptions());
+/// var speech = new List&lt;Tensor&lt;float&gt;&gt;();
+/// for (int i = 0; i &lt; 32; i++) speech.Add(Tensor&lt;float&gt;.CreateRandom(1, 32000));   // 2 s recordings at 16 kHz
+/// w2vBert.FitSemanticTokenizer(speech);
 /// var threeSecondPrompt = Tensor&lt;float&gt;.CreateRandom(1, 48000);   // 3 s at 16 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);

@@ -32,11 +32,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new AlignTTS&lt;double&gt;(architecture, "aligntts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new AlignTTS&lt;double&gt;(architecture, new AlignTTSOptions());
+/// var model = new AlignTTS&lt;double&gt;(architecture, new AlignTTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 /// </remarks>

@@ -41,13 +41,10 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new EmotiVoice&lt;double&gt;(architecture, "emotivoice.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// var model = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -24,13 +24,12 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VALLEXClone&lt;double&gt;(architecture, "vallex.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VALLEXClone&lt;double&gt;(architecture, new VALLEXCloneOptions());
+/// var model = new VALLEXClone&lt;double&gt;(architecture, new VALLEXCloneOptions());
+/// // a few seconds of the target speaker, recorded at the model's sample rate
+/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", referenceAudio);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
