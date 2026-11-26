@@ -1331,8 +1331,13 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
+        // Eligibility reads only the construction-declared count. ParameterCount is not usable here: when a lazy layer
+        // cannot declare its count, ParameterCount falls back to PrepareParameterSurface, which calls this method
+        // again, and the cycle never ends. Without a declared count this attempt does not engage; a later call made
+        // after the layers have declared their shapes still can.
+        if (!TryGetDeclaredParameterCount(out long parameterCount, out _)) return;
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
-        if (ParameterCount <= threshold) return;
+        if (parameterCount <= threshold) return;
 
         // Memory-aware engagement (S1): even above the parameter-count floor, only
         // stream when the resident weight set would NOT fit comfortably in available
@@ -1350,7 +1355,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             long available = GetAvailableMemoryBytesOrZero();
             if (available > 0)
             {
-                long weightBytes = checked(ParameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
+                long weightBytes = checked(parameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
                 // Half of available RAM leaves headroom for activations, the optimizer
                 // state during training, and other live allocations on the host.
                 if (weightBytes <= available / 2) return;

@@ -432,7 +432,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
                     this,
                     copy,
                     expectedParameterCount,
-                    () => copy.GetParameters().Length);
+                    () => checked((int)copy.ParameterCount));
             }
             copy.Deserialize(state);
             AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
@@ -487,7 +487,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
                     this,
                     copy,
                     expectedParameterCount,
-                    () => copy.GetParameters().Length);
+                    () => checked((int)copy.ParameterCount));
             }
 
             if (declaredState is not null)
@@ -510,7 +510,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     {
         try
         {
-            count = GetParameters().Length;
+            count = checked((int)ParameterCount);
             return true;
         }
         catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)

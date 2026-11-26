@@ -225,15 +225,17 @@ internal static class TensorReductionHelper
     /// the standard deviation infinite and every standardized value 0, although the standard deviation (150) fits.
     /// </para>
     /// <para>
-    /// Each slice is divided by c = (max |x| + 1) * sqrt(count), a detached constant, so every unit value is at most
+    /// Each slice is first centered on its midpoint s = max / 2 + min / 2, and x - s is divided by
+    /// c = (m + 1) * sqrt(count) with m = max |x - s|; both are detached constants. Every unit value is then at most
     /// 1 / sqrt(count), every partial sum of them at most sqrt(count) and the sum of squared deviations at most 4. The
-    /// mean is c * mean(u), the standard deviation (max |x| + 1) * sqrt(count / divisor * sum (u - mean(u))^2 +
-    /// epsilon / (max |x| + 1)^2), and the standardized value sqrt(count) * (u - mean(u)) / that same root. These are
+    /// mean is s + c * mean(u), the standard deviation (m + 1) * sqrt(count / divisor * sum (u - mean(u))^2 +
+    /// epsilon / (m + 1) / (m + 1)) (divided twice, as (m + 1)^2 overflows Half), and the standardized value sqrt(count) * (u - mean(u)) / that same root. These are
     /// the direct formulas with the constant scale factored out, so the values and, on a tape, the gradients are those
     /// of the direct form.
     /// </para>
     /// <para>
-    /// A slice with no spread and no epsilon (a zero standard deviation) standardizes to 0, as its deviations are 0.
+    /// A slice with no spread standardizes to 0, as its deviations are exactly 0 (its midpoint is its value), and its
+    /// standard deviation is sqrt(epsilon), as m = 0 keeps epsilon unscaled: the values of the direct form, also in Half.
     /// </para>
     /// </remarks>
     internal static (Tensor<T> Standardized, Tensor<T> Mean, Tensor<T> Std) StandardizeRescaled<T>(
@@ -249,27 +251,42 @@ internal static class TensorReductionHelper
         foreach (int axis in axes) count *= shape[axis];
         T root = numOps.FromDouble(Math.Sqrt(count));
 
+        Tensor<T> shift;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // The slice's midpoint max / 2 + min / 2, a detached constant. Centering on it makes a constant slice's
+            // deviations exactly 0 (the midpoint of equal values is that value), and halves the largest |x| the
+            // division below sees. Halving each bound first keeps the sum finite.
+            var half = numOps.FromDouble(0.5);
+            var high = engine.ReduceMax(x, axes, true);
+            var low = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(x), axes, true));
+            shift = engine.TensorAdd(engine.TensorMultiplyScalar(high, half), engine.TensorMultiplyScalar(low, half));
+        }
+
+        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(shift, shape));
         Tensor<T> magnitude;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
             // A constant: the standardized values do not depend on it, so it carries no gradient.
-            magnitude = engine.TensorAddScalar(engine.ReduceMax(engine.TensorAbs(x), axes, true), numOps.One);
+            magnitude = engine.TensorAddScalar(engine.ReduceMax(engine.TensorAbs(centered), axes, true), numOps.One);
         }
 
-        var unit = engine.TensorDivideScalar(engine.TensorDivide(x, engine.TensorBroadcastTo(magnitude, shape)), root);
+        var unit = engine.TensorDivideScalar(engine.TensorDivide(centered, engine.TensorBroadcastTo(magnitude, shape)), root);
         var unitMean = engine.TensorDivideScalar(engine.TensorDivideScalar(engine.ReduceSum(unit, axes, true), root), root);
         var deviation = engine.TensorSubtract(unit, engine.TensorBroadcastTo(unitMean, shape));
         var sumSquares = engine.ReduceSum(engine.TensorMultiply(deviation, deviation), axes, true);
         var scaledVariance = engine.TensorMultiplyScalar(sumSquares, numOps.FromDouble(count / divisor));
+        // epsilon / magnitude, then / magnitude again: magnitude^2 itself overflows Half once max |x - shift| >= 255.
+        // A constant slice has magnitude 1, so its epsilon floor is kept exactly.
         var scaledEpsilon = engine.TensorDivide(
-            engine.TensorFullLike(magnitude, numOps.FromDouble(epsilon)), engine.TensorMultiply(magnitude, magnitude));
+            engine.TensorDivide(engine.TensorFullLike(magnitude, numOps.FromDouble(epsilon)), magnitude), magnitude);
         var scaledStd = engine.TensorSqrt(engine.TensorAdd(scaledVariance, scaledEpsilon));
         var safeStd = engine.TensorWhere(
             engine.TensorEquals(scaledStd, numOps.Zero), engine.TensorFullLike(scaledStd, numOps.One), scaledStd);
 
         var standardized = engine.TensorMultiplyScalar(
             engine.TensorDivide(deviation, engine.TensorBroadcastTo(safeStd, shape)), root);
-        var mean = engine.TensorMultiplyScalar(engine.TensorMultiply(unitMean, magnitude), root);
+        var mean = engine.TensorAdd(engine.TensorMultiplyScalar(engine.TensorMultiply(unitMean, magnitude), root), shift);
         var std = engine.TensorMultiply(scaledStd, magnitude);
         return (standardized, mean, std);
     }
