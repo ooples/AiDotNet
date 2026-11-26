@@ -107,4 +107,21 @@ internal abstract class FullPrecisionStreamingOptimizer<T> : IStreamingOptimizer
     /// <summary>Decoupled (AdamW-style) weight decay; no-op when weightDecay == 0.</summary>
     protected double ApplyDecoupledWeightDecay(double parameter, double weightDecay)
         => weightDecay == 0.0 ? parameter : parameter - LearningRate * weightDecay * parameter;
+
+    protected void SetHostMoments(Tensor<T> param, double[][] moments)
+    {
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (moments is null) throw new ArgumentNullException(nameof(moments));
+        _moments[param] = moments;
+    }
+
+    protected bool TryTakeHostMoments(Tensor<T> param, out double[][]? moments)
+    {
+        if (_moments.TryGetValue(param, out moments))
+        {
+            _moments.Remove(param);
+            return true;
+        }
+        return false;
+    }
 }

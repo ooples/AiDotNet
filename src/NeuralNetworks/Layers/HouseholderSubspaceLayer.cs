@@ -244,9 +244,10 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
                     body, engParam, inParam, refParam, transParam, floorParam).Compile();
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Older AiDotNet.Tensors package without IEngine.HouseholderChain falls back to Compact WY below.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] HouseholderSubspaceLayer<{typeof(T).Name}> failed to bind IEngine.HouseholderChain: {ex.GetType().Name}: {ex.Message}");
         }
         return null;
     }

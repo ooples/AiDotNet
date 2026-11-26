@@ -352,8 +352,10 @@ internal static class GpuMultiTensorAdamBridge
             if (method is null) return null;
             return (MultiTensorAdamStepDelegate)Delegate.CreateDelegate(typeof(MultiTensorAdamStepDelegate), method);
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] GpuMultiTensorAdamBridge failed to bind {methodName}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -375,8 +377,10 @@ internal static class GpuMultiTensorAdamBridge
             if (method is null) return null;
             return (MultiTensorScaleDelegate)Delegate.CreateDelegate(typeof(MultiTensorScaleDelegate), method);
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] GpuMultiTensorAdamBridge failed to bind TryScaleGradientsMultiTensor: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }

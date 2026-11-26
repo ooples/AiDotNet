@@ -52,15 +52,19 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
 
         if (_keepsMomentsOnGpu.TryGetValue(param, out bool onGpu))
         {
-            if (!onGpu)
+            if (onGpu)
             {
-                base.Apply(param, grad);
+                if (gpuEligible && TryApplyOnGpu(param, grad))
+                    return;
+                MigrateGpuMomentsToHost(param);
+            }
+            else if (gpuEligible && TryApplyOnGpu(param, grad))
+            {
+                _keepsMomentsOnGpu[param] = true;
                 return;
             }
-            if (gpuEligible && TryApplyOnGpu(param, grad))
-                return;
-            throw new InvalidOperationException(
-                $"{nameof(FullPrecisionStreamingAdam<T>)}: the GPU step failed for a parameter whose optimizer moments are on the GPU from earlier steps.");
+            base.Apply(param, grad);
+            return;
         }
 
         if (gpuEligible && TryApplyOnGpu(param, grad))
@@ -103,9 +107,7 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
             if (p is null) throw new ArgumentNullException(nameof(parameters));
             if (g is null) throw new ArgumentNullException(nameof(gradients));
             int len = p.Length;
-            bool eligible = len > 0
-                && g.Length == len
-                && (!_keepsMomentsOnGpu.TryGetValue(p, out bool prevOnGpu) || prevOnGpu);
+            bool eligible = len > 0 && g.Length == len;
             if (!eligible)
             {
                 (deferredIndices ??= new List<int>()).Add(i);
@@ -114,11 +116,7 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
 
             var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref p);
             var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref g);
-            if (!_gpuState.TryGetValue(pFloat, out var fp) || fp.M.Length != len)
-            {
-                fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
-                _gpuState[pFloat] = fp;
-            }
+            var fp = GetOrCreateGpuMoments(p, pFloat, len);
 
             mtParams.Add(pFloat);
             mtGrads.Add(gFloat);
@@ -153,16 +151,85 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
         }
     }
 
+    private (Tensor<float> M, Tensor<float> V) GetOrCreateGpuMoments(Tensor<T> param, Tensor<float> pFloat, int len)
+    {
+        if (_gpuState.TryGetValue(pFloat, out var fp) && fp.M.Length == len)
+            return fp;
+
+        if (TryTakeHostMoments(param, out var hostMoments)
+            && hostMoments is not null
+            && hostMoments.Length >= 2
+            && hostMoments[0].Length == len
+            && hostMoments[1].Length == len)
+        {
+            var mArr = new float[len];
+            var vArr = new float[len];
+            for (int i = 0; i < len; i++)
+            {
+                mArr[i] = (float)hostMoments[0][i];
+                vArr[i] = (float)hostMoments[1][i];
+            }
+            fp = (
+                new Tensor<float>(pFloat._shape, new Vector<float>(mArr)),
+                new Tensor<float>(pFloat._shape, new Vector<float>(vArr)));
+        }
+        else
+        {
+            fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
+        }
+
+        _gpuState[pFloat] = fp;
+        return fp;
+    }
+
+    private void MigrateGpuMomentsToHost(Tensor<T> param)
+    {
+        var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref param);
+        if (!_gpuState.TryGetValue(pFloat, out var fp))
+        {
+            _keepsMomentsOnGpu[param] = false;
+            return;
+        }
+
+        try
+        {
+            int len = param.Length;
+            var mSpan = fp.M.AsSpan();
+            var vSpan = fp.V.AsSpan();
+            if (mSpan.Length == len && vSpan.Length == len)
+            {
+                var mHost = new double[len];
+                var vHost = new double[len];
+                for (int i = 0; i < len; i++)
+                {
+                    mHost[i] = mSpan[i];
+                    vHost[i] = vSpan[i];
+                }
+                SetHostMoments(param, new[] { mHost, vHost });
+            }
+            _keepsMomentsOnGpu[param] = false;
+        }
+        catch
+        {
+            // If the GPU context is unrecoverably lost and device moments cannot be downloaded,
+            // clear the GPU ownership entry before rethrowing so subsequent CPU steps are not poisoned.
+            _keepsMomentsOnGpu.Remove(param);
+            throw;
+        }
+        finally
+        {
+            _gpuState.Remove(pFloat);
+            try { fp.M.Dispose(); } catch { }
+            try { fp.V.Dispose(); } catch { }
+        }
+    }
+
     private bool TryApplyOnGpu(Tensor<T> param, Tensor<T> grad)
     {
         var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref param);
         var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref grad);
         int len = pFloat.Length;
-        if (!_gpuState.TryGetValue(pFloat, out var fp) || fp.M.Length != len)
-        {
-            fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
-            _gpuState[pFloat] = fp;
-        }
+        var fp = GetOrCreateGpuMoments(param, pFloat, len);
         return GpuOptimizer.TryAdamWStep(
             pFloat, gFloat, fp.M, fp.V,
             (float)LearningRate, (float)_beta1, (float)_beta2, (float)_epsilon, (float)_weightDecay, Math.Max(1, Step));

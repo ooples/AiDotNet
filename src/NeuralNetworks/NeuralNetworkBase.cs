@@ -14827,7 +14827,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             => regularization is null ? grad : RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
 
         const long MaxStreamBatchElements = 4_194_304;
-        bool canBatchCheckpointSegment = s_checkpointSegmentsWithFlushDelegate is not null || s_checkpointSegmentsDelegate is null;
+        // Checkpoint-segment batching activates when paired with AiDotNet.Tensors >= #1841 (CheckpointSegmentsWithFlush);
+        // against older packages without the segment-flush overload, gradients execute per-parameter synchronously.
+        bool canBatchCheckpointSegment = s_checkpointSegmentsWithFlushDelegate is not null;
 
         if (!clip)
         {
