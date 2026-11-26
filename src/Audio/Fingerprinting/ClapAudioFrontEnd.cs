@@ -107,21 +107,32 @@ internal sealed class ClapAudioFrontEnd<T>
         if (batch == 0) return (new Tensor<T>(new[] { batch, 4, chunk, mels }), longer);
         longer = Tensor<T>.CreateDefault(new[] { batch }, NumOps.One);
         var ranges = SplitOffsets(total - chunk + 1);
-        var clipViews = new Tensor<T>[batch];
-        for (int b = 0; b < batch; b++)
+
+        // The global view: every row's whole mel shrunk to the clip's frame count, [B, total, mels] -> [B, chunk, mels].
+        var framesFirst = engine.Reshape(engine.TensorPermute(full, new[] { 1, 0, 2 }), new[] { total, batch * mels });
+        var global = engine.TensorPermute(
+            engine.Reshape(AntialiasedBilinearShrink(framesFirst, chunk), new[] { chunk, batch, mels }), new[] { 1, 0, 2 });
+
+        // The three local views: clip-length crops starting in the front, middle and back thirds of the offsets, one
+        // start per row and third, drawn in that order. The crops are a gather through per-step frame indices, so a
+        // compiled training plan redraws the starts on every replay instead of keeping the traced step's slices.
+        var frames = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { batch * 3 * chunk }, indices =>
         {
-            var row = engine.Reshape(engine.TensorSlice(full, new[] { b, 0, 0 }, new[] { 1, total, mels }), new[] { total, mels });
-            var parts = new Tensor<T>[4];
-            parts[0] = AntialiasedBilinearShrink(row, chunk);
-            for (int part = 0; part < 3; part++)
+            var span = indices.AsWritableSpan();
+            for (int b = 0; b < batch; b++)
             {
-                var range = ranges[part];
-                int start = range[random.Next(range.Length)];
-                parts[part + 1] = engine.TensorSlice(row, new[] { start, 0 }, new[] { chunk, mels });
+                for (int part = 0; part < 3; part++)
+                {
+                    var range = ranges[part];
+                    int first = b * total + range[random.Next(range.Length)], at = (b * 3 + part) * chunk;
+                    for (int k = 0; k < chunk; k++) span[at + k] = first + k;
+                }
             }
-            clipViews[b] = engine.TensorStack(parts, 0);
-        }
-        return (engine.TensorStack(clipViews, 0), longer);
+        });
+        var local = engine.Reshape(
+            engine.TensorGather(engine.Reshape(full, new[] { batch * total, mels }), frames, axis: 0),
+            new[] { batch, 3, chunk, mels });
+        return (engine.TensorConcatenate(new[] { engine.Reshape(global, new[] { batch, 1, chunk, mels }), local }, 1), longer);
     }
 
     private static Tensor<T> FourViews(IEngine engine, Tensor<T> mel)
@@ -167,13 +178,43 @@ internal sealed class ClapAudioFrontEnd<T>
         int batch = waveforms.Shape[0], overflow = waveforms.Shape[1] - clip;
         if (batch == 0) return new Tensor<T>(new[] { batch, clip });
         var engine = AiDotNetEngine.Current;
-        var crops = new Tensor<T>[batch];
-        for (int b = 0; b < batch; b++)
+        int samples = waveforms.Shape[1];
+        // One offset per row, drawn in row order: the only thing this step draws, on the eager tape and in a plan.
+        var offsets = AiDotNet.Training.CompiledStepRandom<T>.DrawData<int>(new[] { batch }, drawn =>
         {
-            int offset = random.Next(overflow + 1);
-            crops[b] = engine.TensorSlice(waveforms, new[] { b, offset }, new[] { 1, clip });
+            var span = drawn.AsWritableSpan();
+            for (int b = 0; b < batch; b++) span[b] = random.Next(overflow + 1);
+        });
+
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            // Nothing is being recorded, so each row is a slice at its offset and no index is built.
+            var starts = offsets.AsSpan();
+            var crops = new Tensor<T>[batch];
+            for (int b = 0; b < batch; b++)
+                crops[b] = engine.TensorSlice(waveforms, new[] { b, starts[b] }, new[] { 1, clip });
+            return engine.Concat(crops, 0);
         }
-        return engine.Concat(crops, 0);
+
+        // A recorded slice keeps the offset it was traced with, and indices computed inside the trace from the
+        // offsets are not something AiDotNet.Tensors 0.152.1 can record a gather through (the plan's first step reads
+        // them as zeros). So a plan takes the samples through one flat index per sample, refilled from this step's
+        // offsets before every replay; with traced index arithmetic this becomes the offsets plus an arange.
+        var positions = new Tensor<int>(new[] { batch * clip });
+        void Fill(Tensor<int> indices)
+        {
+            var span = indices.AsWritableSpan();
+            var starts = offsets.AsSpan();
+            for (int b = 0; b < batch; b++)
+            {
+                int first = b * samples + starts[b], at = b * clip;
+                for (int k = 0; k < clip; k++) span[at + k] = first + k;
+            }
+        }
+        Fill(positions);
+        AiDotNet.Training.CompiledStepRandom<T>.RecordDerived(positions, Fill);
+        return engine.Reshape(engine.TensorTake(engine.Reshape(waveforms, new[] { batch * samples }), positions),
+            new[] { batch, clip });
     }
 
     /// <summary>
@@ -189,14 +230,13 @@ internal sealed class ClapAudioFrontEnd<T>
     /// </remarks>
     internal static Tensor<T> AntialiasedBilinearShrink(Tensor<T> rows, int outputs)
     {
-        if (typeof(T) != typeof(double))
-            return ClapAudioFrontEnd<double>.AntialiasedBilinearShrink(rows.Cast<double>(), outputs).Cast<T>();
         int inputs = rows.Shape[0], mels = rows.Shape[1];
+        if (outputs <= 0 || mels == 0)
+            return new Tensor<T>(new[] { outputs, mels });
+
         double scale = inputs / (double)outputs;
         double support = scale >= 1.0 ? scale : 1.0;
         double invScale = scale >= 1.0 ? 1.0 / scale : 1.0;
-        if (outputs <= 0 || mels == 0)
-            return new Tensor<T>(new[] { outputs, mels });
 
         // Filter window [xmin, xmax) of each output; windows are about scale + 1 rows on each side
         var windowStart = new int[outputs];
@@ -214,47 +254,49 @@ internal sealed class ClapAudioFrontEnd<T>
         if (taps == 0)
             return new Tensor<T>(new[] { outputs, mels });
 
-        // Triangle weights 1 - |(x - center + 0.5) / scale| (clamped at 0) over each window,
-        // normalized per output (all-zero windows stay zero)
-        var engine = AiDotNetEngine.Current;
-        var tapPosition = new int[outputs * taps];
-        var tapValid = new int[outputs * taps];
+        // Triangle weights 1 - |(x - center + 0.5) / scale| (clamped at 0) over each window, normalized per output
+        // (all-zero windows stay zero). The filter depends only on the two sizes, so it is built here on the host,
+        // in double (frame positions past 2048 are not exact in Half), and rounded to T once: a compiled training
+        // trace reads the weights and the row indices as constants instead of recording their arithmetic.
+        var weights = new double[taps][];
+        var sources = new int[taps][];
+        for (int k = 0; k < taps; k++)
+        {
+            weights[k] = new double[outputs];
+            sources[k] = new int[outputs];
+        }
+        int lastRow = Math.Max(0, inputs - 1);
         for (int i = 0; i < outputs; i++)
         {
+            double center = scale * (i + 0.5), total = 0.0;
+            for (int k = 0; k < windowCount[i]; k++)
+            {
+                double arg = Math.Abs((windowStart[i] + k - center + 0.5) * invScale);
+                double weight = arg < 1.0 ? 1.0 - arg : 0.0;
+                weights[k][i] = weight;
+                total += weight;
+            }
             for (int k = 0; k < taps; k++)
             {
-                tapPosition[i * taps + k] = windowStart[i] + k;
-                tapValid[i * taps + k] = k < windowCount[i] ? 1 : 0;
+                weights[k][i] = total > 0.0 ? weights[k][i] / total : 0.0;
+                sources[k][i] = Math.Min(windowStart[i] + k, lastRow);
             }
         }
-        var grid = new[] { outputs, taps };
-        var zeros = new Tensor<T>(grid);
-        var x = new Tensor<int>(tapPosition, grid).Cast<T>();
-        var centers = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorArange<T>(0, outputs, 1), NumOps.FromDouble(0.5)), NumOps.FromDouble(scale)), new[] { outputs, 1 }),
-            grid);
-        var arg = engine.TensorAbs(engine.TensorMultiplyScalar(
-            engine.TensorAddScalar(engine.TensorSubtract(x, centers), NumOps.FromDouble(0.5)), NumOps.FromDouble(invScale)));
-        var weight = engine.TensorWhere(
-            new Tensor<int>(tapValid, grid).Cast<T>(),
-            engine.TensorWhere(engine.TensorLessThan(arg, NumOps.One), engine.TensorAddScalar(engine.TensorNegate(arg), NumOps.One), zeros),
-            zeros);
-        var total = engine.TensorBroadcastTo(engine.ReduceSum(weight, new[] { 1 }, keepDims: true), grid);
-        var normalized = engine.TensorWhere(engine.TensorGreaterThan(total, NumOps.Zero), engine.TensorDivide(weight, total), zeros);
 
         // result[i] = sum over the window taps of weight * row; zero-weight taps are skipped (so a
         // non-finite row they would touch does not leak in)
+        var engine = AiDotNetEngine.Current;
         var shape = new[] { outputs, mels };
         var outputZeros = new Tensor<T>(shape);
         var result = outputZeros;
-        int lastRow = Math.Max(0, inputs - 1);
         T zero = NumOps.Zero;
         for (int k = 0; k < taps; k++)
         {
-            var rowIndex = new int[outputs];
-            for (int i = 0; i < outputs; i++) rowIndex[i] = Math.Min(windowStart[i] + k, lastRow);
-            var tapRows = engine.TensorIndexSelect(rows, new Tensor<int>(rowIndex, new[] { outputs }), 0);
-            var tapWeight = engine.TensorBroadcastTo(engine.TensorSlice(normalized, new[] { 0, k }, new[] { outputs, 1 }), shape);
+            Tensor<T> column;
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                column = new Tensor<double>(weights[k], new[] { outputs, 1 }).Cast<T>();
+            var tapRows = engine.TensorIndexSelect(rows, new Tensor<int>(sources[k], new[] { outputs }), 0);
+            var tapWeight = engine.TensorBroadcastTo(column, shape);
             result = engine.TensorAdd(result, engine.TensorWhere(
                 engine.TensorGreaterThan(tapWeight, zero), engine.TensorMultiply(tapWeight, tapRows), outputZeros));
         }

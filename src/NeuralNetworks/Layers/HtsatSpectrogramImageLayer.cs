@@ -35,6 +35,12 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
     private readonly int _specSize;
     private readonly int _freqRatio;
 
+    // The interpolation matrices of the last input size, per axis. They depend only on the sizes, so they are built
+    // once, outside any graph recording: a compiled training trace reads them as constants.
+    private readonly object _matrixLock = new object();
+    private (int Inputs, Tensor<T> Matrix)? _timeMatrix;
+    private (int Inputs, Tensor<T> Matrix)? _melMatrixTransposed;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => false;
 
@@ -86,14 +92,14 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
         {
             // [B, C, T, F] -> [T, B*C*F], interpolate T, and back.
             var timeFirst = Engine.Reshape(Engine.TensorPermute(x, new[] { 2, 0, 1, 3 }), new[] { frames, batch * channels * mels });
-            var stretched = Engine.TensorMatMul(BicubicMatrix(targetFrames, frames), timeFirst);
+            var stretched = Engine.TensorMatMul(TimeMatrix(frames), timeFirst);
             x = Engine.TensorPermute(Engine.Reshape(stretched, new[] { targetFrames, batch, channels, mels }), new[] { 1, 2, 0, 3 });
             frames = targetFrames;
         }
         if (mels < targetMels)
         {
             var rows = Engine.Reshape(x, new[] { batch * channels * frames, mels });
-            var stretched = Engine.TensorMatMul(rows, Engine.TensorTranspose(BicubicMatrix(targetMels, mels)));
+            var stretched = Engine.TensorMatMul(rows, MelMatrixTransposed(mels));
             x = Engine.Reshape(stretched, new[] { batch, channels, frames, targetMels });
             mels = targetMels;
         }
@@ -104,6 +110,41 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
         var split = Engine.Reshape(freqFirst, new[] { batch, channels, mels, _freqRatio, chunk });
         var stacked = Engine.TensorPermute(split, new[] { 0, 1, 3, 2, 4 });
         return Engine.Reshape(stacked, new[] { batch, channels, _freqRatio * mels, chunk });
+    }
+
+    private Tensor<T> TimeMatrix(int frames)
+    {
+        lock (_matrixLock)
+        {
+            if (_timeMatrix is { } cached && cached.Inputs == frames)
+                return cached.Matrix;
+            var matrix = ConstantOutsideTheStep(() => BicubicMatrix(TargetFrames, frames));
+            _timeMatrix = (frames, matrix);
+            return matrix;
+        }
+    }
+
+    private Tensor<T> MelMatrixTransposed(int mels)
+    {
+        lock (_matrixLock)
+        {
+            if (_melMatrixTransposed is { } cached && cached.Inputs == mels)
+                return cached.Matrix;
+            var matrix = ConstantOutsideTheStep(() => Engine.TensorTranspose(BicubicMatrix(TargetMelBins, mels)).Contiguous());
+            _melMatrixTransposed = (mels, matrix);
+            return matrix;
+        }
+    }
+
+    // A size-only constant the layer keeps across steps: not recorded on a tape or in a compiled trace (the matrix is
+    // built in double with an integer one-hot, which a training trace refuses), and not taken from a step arena,
+    // which would reissue its buffer to the next step's allocations.
+    private static Tensor<T> ConstantOutsideTheStep(Func<Tensor<T>> build)
+    {
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noRecording = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+        return build();
     }
 
     /// <summary>

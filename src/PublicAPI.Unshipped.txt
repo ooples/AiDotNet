@@ -1997,6 +1997,8 @@ override AiDotNet.Audio.Generation.SoundStream<T>.SampleTrainingBandwidth(System
 AiDotNet.Audio.Generation.SoundStream<T>.TrainDenoising(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, bool denoise) -> void
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.get -> int
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.set -> void
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.get -> double
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.set -> void
 static AiDotNet.Audio.Pitch.WorldPitchDetector<T>.GetSamplesForHarvest(int fs, int xLength, double framePeriod) -> int
 override AiDotNet.Audio.Generation.SoundStream<T>.GeneratorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.Generation.SoundStream<T>.DiscriminatorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -26230,7 +26232,6 @@ AiDotNet.Models.Options.TabROptions<T>.NumericEmbeddingDimension.set -> void
 AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.None = 0 -> AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.PeriodicLinearReLU = 1 -> AiDotNet.Enums.TabRNumericEmbedding
-override AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T>.SupportsFusedCompiledTraining.get -> bool
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42) -> void
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<double[,]!>! sketches) -> double[,]!
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.RecoverTopK(double[,]! mergedSketch, int gradientLength) -> T[]!
@@ -26610,7 +26611,6 @@ override AiDotNet.Diffusion.ThreeD.ShapEModel<T>.ImageTo3D(AiDotNet.Tensors.Line
 override AiDotNet.Diffusion.ThreeD.Magic3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.Instant3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.PointEModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
-override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

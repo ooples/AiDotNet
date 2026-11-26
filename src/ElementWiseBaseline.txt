@@ -173,7 +173,6 @@
 2	ADNELEM001|AiDotNet.Audio.Generation.SoundStream<T>.InitializeFilmAsIdentity(int)
 1	ADNELEM001|AiDotNet.Audio.Generation.SpeechTokenizer<T>.GeneratorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int)
 1	ADNELEM001|AiDotNet.Audio.Generation.YuE<T>.EncodeStylePrompt(string)
-2	ADNELEM001|AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T>.ForwardNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM001|AiDotNet.Audio.Localization.SoundLocalizer<T>.ComputeFrameFft(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int, int)
 1	ADNELEM001|AiDotNet.Audio.Multimodal.AudioFlamingo2<T>.EncodePrompt(string)
 1	ADNELEM001|AiDotNet.Audio.Multimodal.MusicFlamingo<T>.EncodePrompt(string)

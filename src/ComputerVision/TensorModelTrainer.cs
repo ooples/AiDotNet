@@ -125,9 +125,12 @@ internal static class TensorModelTrainer<T>
             ComputeLoss = loss,
             Optimizer = optimizer,
             ExtraParameters = parameters,
-            // A vision forward can read host-side state a trace would bake in; the first replay is checked against
-            // the eager forward and a disagreeing update is undone.
+            // A vision forward can read host-side state a trace would bake in; the traced step and the first replay
+            // are checked against the eager forward and a disagreeing update is undone.
             VerifyReplayAgreement = true,
+            // No layers are handed over, so the session cannot find what a step advances besides the weights (batch
+            // norm running statistics): undoing a checked step must put those back too.
+            StepState = () => LiveStepState(model),
         }, out lossValue);
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
@@ -361,6 +364,26 @@ internal static class TensorModelTrainer<T>
         foreach (var chunk in model.GetParameterStateChunks())
         {
             if (chunk.Role == ParameterSlotRole.Trainable && chunk.IsWritableInPlace && seen.Add(chunk.Tensor))
+            {
+                result.Add(chunk.Tensor);
+            }
+        }
+
+        return result.ToArray();
+    }
+
+    /// <summary>
+    /// The model's writable tensors that are not trained: fitted state and buffers a training step may advance
+    /// (running statistics, EMA codebooks).
+    /// </summary>
+    internal static Tensor<T>[] LiveStepState(ModelBase<T, Tensor<T>, Tensor<T>> model)
+    {
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer.Instance);
+        var result = new List<Tensor<T>>();
+        foreach (var chunk in model.GetParameterStateChunks())
+        {
+            if ((chunk.Role == ParameterSlotRole.Buffer || chunk.Role == ParameterSlotRole.LearnedState)
+                && chunk.IsWritableInPlace && seen.Add(chunk.Tensor))
             {
                 result.Add(chunk.Tensor);
             }

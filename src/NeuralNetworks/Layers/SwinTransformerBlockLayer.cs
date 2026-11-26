@@ -512,8 +512,12 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var columnRegion = new int[paddedW];
         for (int j = 0; j < paddedW; j++) columnRegion[j] = Region(j, paddedW, _windowSize, shift);
 
+        // The mask depends only on the grid, so it is computed here and now, outside any graph recording: recorded,
+        // its integer ops became nodes of a training trace and the cast to T read their result back on the host
+        // inside it, which a closure objective's plan refuses as an unreplayable host read.
         Tensor<T> mask;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
         {
             var label = Engine.TensorAdd(
                 new Tensor<int>(rowRegion, [paddedH, 1]),
