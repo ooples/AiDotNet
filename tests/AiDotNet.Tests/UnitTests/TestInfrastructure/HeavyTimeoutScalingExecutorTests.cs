@@ -78,16 +78,18 @@ public class HeavyTimeoutScalingExecutorTests
     }
 }
 
-// Fixtures the executor test builds xUnit cases from. Skipped so they never execute as tests themselves.
+// Fixtures the executor test builds xUnit cases from. They are discovered like any class, so they run as empty
+// tests: a skipped one would leave the heavy lane a chunk in which nothing ran, which that lane reports as a
+// failure (#2447), and the heavy one doubles as a canary that the lane runs what it discovers.
 [Trait("Category", "HeavyTimeout")]
 public class HeavyTimeoutScalingHeavyFixture
 {
-    [Fact(Timeout = 1500, Skip = "Fixture for HeavyTimeoutScalingExecutorTests; never runs.")]
-    public void Heavy() { }
+    [Fact(Timeout = 1500)]
+    public System.Threading.Tasks.Task Heavy() => System.Threading.Tasks.Task.CompletedTask;
 }
 
 public class HeavyTimeoutScalingOrdinaryFixture
 {
-    [Fact(Timeout = 1500, Skip = "Fixture for HeavyTimeoutScalingExecutorTests; never runs.")]
-    public void Ordinary() { }
+    [Fact(Timeout = 1500)]
+    public System.Threading.Tasks.Task Ordinary() => System.Threading.Tasks.Task.CompletedTask;
 }
