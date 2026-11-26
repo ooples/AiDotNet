@@ -21,6 +21,7 @@ internal static class SeededNoiseTensors
     /// <param name="shape">The shape of the tensor.</param>
     /// <param name="random">The generator the uniforms are taken from.</param>
     /// <param name="scale">The standard deviation; 1 for standard normal values.</param>
+    [AiDotNet.Attributes.ScalarKernel("Draws each element from a sequential seeded Random stream; Box-Muller (Log, Sqrt, Cos) dominates, and writing the span directly avoids a staging array and a Cast copy.")]
     internal static Tensor<T> StandardNormal<T>(int[] shape, Random random, double scale = 1.0)
     {
         if (shape is null) throw new ArgumentNullException(nameof(shape));
@@ -31,13 +32,17 @@ internal static class SeededNoiseTensors
             count = checked(count * dimension);
         if (count == 0) return new Tensor<T>(shape);
 
-        var draws = new double[count];
+        // Written straight into the result's span (no double[] staging, no Cast copy), as
+        // CompiledStepRandom<T>.FillStandardNormal does.
+        var result = new Tensor<T>(shape);
+        var span = result.AsWritableSpan();
+        var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < count; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            draws[i] = scale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            span[i] = ops.FromDouble(scale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
 
-        return new Tensor<double>(draws, shape).Cast<T>();
+        return result;
     }
 }
