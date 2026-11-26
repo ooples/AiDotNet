@@ -635,6 +635,70 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// LAPACK DLAHQR's deflation test for the subdiagonal entry a[l, l-1] of the active block ending at row
+    /// <paramref name="nn"/>: true when it can be set to zero without changing the eigenvalues beyond rounding.
+    /// </summary>
+    private static bool IsNegligibleSubdiagonal(double[] a, int n, int l, int nn, double ulp, double smallNum)
+    {
+        double sub = Math.Abs(a[l * n + l - 1]);
+        if (sub <= smallNum) return true;
+        double tst = Math.Abs(a[(l - 1) * n + l - 1]) + Math.Abs(a[l * n + l]);
+        if (tst == 0)
+        {
+            if (l - 2 >= 0) tst += Math.Abs(a[(l - 1) * n + l - 2]);
+            if (l + 1 <= nn) tst += Math.Abs(a[(l + 1) * n + l]);
+        }
+
+        if (sub > ulp * tst) return false;
+
+        // Ahues and Tisseur: the coupling a[l-1, l] * a[l, l-1] must be negligible as well.
+        double super = Math.Abs(a[(l - 1) * n + l]);
+        double ab = Math.Max(sub, super), ba = Math.Min(sub, super);
+        double diagL = Math.Abs(a[l * n + l]);
+        double diagGap = Math.Abs(a[(l - 1) * n + l - 1] - a[l * n + l]);
+        double aa = Math.Max(diagL, diagGap), bb = Math.Min(diagL, diagGap);
+        double s = aa + ab;
+        return ba * (ab / s) <= Math.Max(smallNum, ulp * (bb * (aa / s)));
+    }
+
+    /// <summary>
+    /// The larger eigenvalue modulus of the 2 x 2 block [[a, b], [c, d]] plus <paramref name="shift"/> times the
+    /// identity. The block is scaled to unit size before any products are formed, so tiny entries cannot underflow.
+    /// </summary>
+    private static double BlockSpectralRadius(double a, double b, double c, double d, double shift)
+    {
+        double scale = Math.Max(Math.Max(Math.Abs(a), Math.Abs(b)), Math.Max(Math.Abs(c), Math.Abs(d)));
+        if (scale == 0) return Math.Abs(shift);
+        a /= scale;
+        b /= scale;
+        c /= scale;
+        d /= scale;
+        double w = b * c;
+        double p = 0.5 * (a - d);
+        double q = p * p + w;
+        double z = Math.Sqrt(Math.Abs(q));
+        if (q >= 0)
+        {
+            z = p + (p >= 0 ? z : -z);
+            double radius = Math.Abs(scale * (d + z) + shift);
+            if (z != 0) radius = Math.Max(radius, Math.Abs(scale * (d - w / z) + shift));
+            return radius;
+        }
+
+        return Hypot(scale * (d + p) + shift, scale * z);
+    }
+
+    private static double Hypot(double x, double y)
+    {
+        x = Math.Abs(x);
+        y = Math.Abs(y);
+        double m = Math.Max(x, y);
+        if (m == 0 || double.IsInfinity(m)) return m;
+        double rx = x / m, ry = y / m;
+        return m * Math.Sqrt(rx * rx + ry * ry);
+    }
+
+    /// <summary>
     /// The largest eigenvalue modulus of the row-major <paramref name="n"/> x <paramref name="n"/> matrix
     /// <paramref name="a"/>, which is overwritten; NaN if the QR iteration does not converge.
     /// </summary>
@@ -673,8 +737,10 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
                 {
                     done = false;
                     g = 1 / f;
-                    for (int j = 0; j < n; j++) a[i * n + j] *= g;
-                    for (int j = 0; j < n; j++) a[j * n + i] *= f;
+                    // The row and column factors cancel on the diagonal, so it is left untouched: scaling it down
+                    // first could flush a tiny diagonal entry to zero, and the column scaling cannot restore it.
+                    for (int j = 0; j < n; j++) if (j != i) a[i * n + j] *= g;
+                    for (int j = 0; j < n; j++) if (j != i) a[j * n + i] *= f;
                 }
             }
         }
@@ -708,9 +774,10 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Francis double-shift QR on the Hessenberg matrix, deflating one real eigenvalue or one 2 x 2 block at a time.
-        double anorm = 0;
-        for (int i = 0; i < n; i++)
-            for (int j = Math.Max(i - 1, 0); j < n; j++) anorm += Math.Abs(a[i * n + j]);
+        // Splits use LAPACK DLAHQR's local test (neighbouring entries plus the Ahues-Tisseur coupling check) rather
+        // than a whole-matrix norm, which still includes already-deflated blocks and could split a live pair.
+        const double safeMin = 2.2250738585072014e-308;
+        double smallNum = safeMin * (n / eps);
 
         double radius = 0, shift = 0, p = 0, q = 0, rr = 0, z = 0;
         int nn = n - 1;
@@ -721,9 +788,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
             {
                 for (l = nn; l > 0; l--)
                 {
-                    double sum = Math.Abs(a[(l - 1) * n + l - 1]) + Math.Abs(a[l * n + l]);
-                    if (sum == 0) sum = anorm;
-                    if (Math.Abs(a[l * n + l - 1]) <= eps * sum)
+                    if (IsNegligibleSubdiagonal(a, n, l, nn, eps, smallNum))
                     {
                         a[l * n + l - 1] = 0;
                         break;
@@ -739,27 +804,15 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
                 }
 
                 double y = a[(nn - 1) * n + nn - 1];
-                double w = a[nn * n + nn - 1] * a[(nn - 1) * n + nn];
                 if (l == nn - 1)
                 {
-                    p = 0.5 * (y - x);
-                    q = p * p + w;
-                    z = Math.Sqrt(Math.Abs(q));
-                    x += shift;
-                    if (q >= 0)
-                    {
-                        z = p + (p >= 0 ? z : -z);
-                        radius = Math.Max(radius, Math.Abs(x + z));
-                        if (z != 0) radius = Math.Max(radius, Math.Abs(x - w / z));
-                    }
-                    else
-                    {
-                        radius = Math.Max(radius, Math.Sqrt((x + p) * (x + p) + z * z));
-                    }
-
+                    radius = Math.Max(radius, BlockSpectralRadius(
+                        y, a[(nn - 1) * n + nn], a[nn * n + nn - 1], x, shift));
                     nn -= 2;
                     continue;
                 }
+
+                double w = a[nn * n + nn - 1] * a[(nn - 1) * n + nn];
 
                 if (its == 60) return double.NaN;
                 if (its == 10 || its == 20 || its == 40)
