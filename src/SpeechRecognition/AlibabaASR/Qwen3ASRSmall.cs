@@ -36,6 +36,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -67,6 +68,7 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Qwen3AsrNetwork<T>? _network;
     internal Qwen3AsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -132,12 +134,15 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         return (string.IsNullOrEmpty(named) ? null : named, network.Tokenizer.Decode(tokens.Skip(marker + 1)).Trim());
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     /// <summary>The language the model names before the transcript.</summary>
     public string DetectLanguage(Tensor<T> audio) => Transcribe(audio, "auto").Language;
 
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [DetectLanguage(audio)] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Streaming is not implemented for Qwen3-ASR-0.6B.");
 
     // Each token is its vocabulary entry when a vocabulary is configured, otherwise its Unicode code point.
@@ -184,10 +189,13 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     private Tensor<T> FirstLogits(Tensor<T> input) =>
         ForwardNativeWaveformBatch(input, _network, (net, wave) => net.FirstLogits(PromptOf(net, wave)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
     private int[] Answer(Qwen3AsrNetwork<T> network, Tensor<T> target) =>
@@ -214,6 +222,7 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Qwen3ASRSmall-Native" : "Qwen3ASRSmall-ONNX", Description = "Qwen3-ASR-0.6B: AuT encoder and Qwen3-0.6B (Qwen Team 2026)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Qwen3ASRSmall<T>)); }

@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// to shape noise into the matching stretch of audio; critics looking at spectrograms of several resolutions keep the
 /// result sharp.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UnivNet vocoder with location-variable convolution (LVC)
+/// // for adaptive kernel generation and high-fidelity waveform synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new UnivNet&lt;double&gt;(architecture, "univnet.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new UnivNet&lt;double&gt;(architecture, new UnivNetOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

@@ -1397,6 +1397,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         AiModelResult<T, TInput, TOutput> result;
 
+        // SAMPLE-OBJECTIVE PATH - Build(samples) on a model its paper trains on typed samples
+        // (ISampleObjectiveModel: TTS models on TtsTrainingSample, MusicGen on MusicGenTrainingSample).
+        if (_sampleObjectiveBuild is not null)
+        {
+            result = await _sampleObjectiveBuild(cancellationToken).ConfigureAwait(false);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
+        }
+
         // RL TRAINING PATH - check if RL options are configured with an environment
         if (_rlOptions?.Environment is not null)
         {
@@ -2196,6 +2205,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             postprocessingTrainingInput,
             nameof(BuildSelfSupervisedInternalAsync));
 
+        return CreateOwnObjectiveResult(optimizationResult, preprocessingInfo, quantizationInfo, profilerSession);
+    }
+
+    // The result for a model trained on its own objective (the self-supervised and sample-objective paths): the
+    // trained model with the builder's deployment, inference and safety configuration attached, and no
+    // supervised error statistics, because there is no target to compare a prediction with.
+    private AiModelResult<T, TInput, TOutput> CreateOwnObjectiveResult(
+        OptimizationResult<T, TInput, TOutput> optimizationResult,
+        PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo,
+        QuantizationInfo? quantizationInfo,
+        ProfilerSession? profilerSession,
+        Dictionary<string, List<double>>? trainingMetricsHistory = null,
+        bool earlyStopTriggered = false,
+        string? stopReason = null)
+    {
         var deploymentConfig = DeploymentConfiguration.Create(
             _quantizationConfig,
             _cacheConfig,
@@ -2247,7 +2271,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             PromptCompressor = null,
             ProfilingReport = profilerSession?.GetReport(),
             WeightStreamingReport = BuildWeightStreamingReport(),
-            MemoryConfig = _memoryConfig
+            MemoryConfig = _memoryConfig,
+            TrainingMetricsHistory = trainingMetricsHistory,
+            EarlyStopTriggered = earlyStopTriggered,
+            StopReason = stopReason
         };
 
         var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));

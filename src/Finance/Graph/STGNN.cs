@@ -79,7 +79,7 @@ namespace AiDotNet.Finance.Graph;
 /// var model = new STGNN&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode: load pre-trained ST-GCN model
-/// var onnxModel = new STGNN&lt;double&gt;(architecture, "stgnn_traffic.onnx");
+/// var onnxModel = new STGNN&lt;double&gt;(architecture, "stgnn_traffic.onnx", options: null, adjacencyMatrix: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]

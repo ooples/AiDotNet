@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// CLaM-TTS Mel-VAE/RVQ, and BigVGAN. The authors did not release code or checkpoints; native checkpoint loading therefore
 /// uses the explicit AiDotNet conversion names documented by <see cref="LoadConvertedWeights"/>.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DiTTo-TTS model for efficient zero-shot TTS
+/// // using diffusion transformer architecture for scalable synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DiTToTTS&lt;double&gt;(architecture, "ditto_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DiTToTTS&lt;double&gt;(architecture, new DiTToTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -109,6 +125,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public int MaxTextLength => _options.MaxTextLength;
     public new int HiddenDim => _options.DiTHiddenDim;
     public int NumFlowSteps => _options.InferenceSteps;
+    /// <summary>The stage <c>Train</c> updates: diffusion, length prediction, or Mel-VAE pretraining or semantic finetuning.</summary>
     public DiTToTrainingStage CurrentStage
     {
         get => _options.TrainingStage;
@@ -119,7 +136,9 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (IsCodecStage && HasPaperModel) EnsureCodecTraining();
         }
     }
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => CurrentStage switch
     {
         // CodecObjective checks recording-or-mel itself; pretraining is unsupervised.
@@ -127,9 +146,12 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         DiTToTrainingStage.MelVaeSemanticFinetuning => TtsSupervision.Text,
         _ => TtsSupervision.Text | TtsSupervision.Recording
     };
+    /// <inheritdoc/>
     protected override int TargetFftSize => _options.FftSize;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     protected override ParameterSlotRole ResolveLayerParameterRole(int layerIndex, ParameterSlotRole declared)
     {
         if (IsCodecStage && layerIndex >= 0 && layerIndex < Layers.Count)
@@ -171,8 +193,10 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     internal SentencePieceModel Tokenizer => _tokenizer ??= _options.SentencePieceModelPath is { } path
         ? new SentencePieceModel(File.ReadAllBytes(path)) : CharacterModel.Value;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text) => IndexTtsOps.Ids<T>(TokenizeText(text));
 
+    /// <summary>Tokenizes <paramref name="text"/> for the SpeechT5 text encoder, truncated to the maximum text length and ended with the end-of-sequence id.</summary>
     public int[] TokenizeText(string text)
     {
         Validation.Guard.NotNull(text);
@@ -180,6 +204,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return Tokenizer.Encode(text).Take(Math.Max(0, _options.MaxTextLength - 1)).Concat(new[] { _options.TextEosId }).ToArray();
     }
 
+    /// <summary>Computes the log-mel spectrogram the Mel-VAE encodes, <c>[frames, melChannels]</c>.</summary>
     public Tensor<T> ComputeMel(Tensor<T> audio)
     {
         _mel ??= new CenteredLogMel<T>(Engine, _options.SampleRate, _options.FftSize, _options.HopSize, _options.FftSize,
@@ -210,6 +235,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             .Take(Math.Max(0, _options.MaxTextLength - 1)).Concat(new[] { _options.TextEosId }).ToArray();
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
@@ -311,6 +337,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return result;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -333,6 +360,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (Architecture.Layers is { Count: > 0 } && Layers.Count == 0) Layers.AddRange(Architecture.Layers);
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = _useNativeMode ? "DiTTo-TTS-Native" : "DiTTo-TTS-ONNX",

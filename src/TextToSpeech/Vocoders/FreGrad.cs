@@ -28,6 +28,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> FreGrad splits audio into a low-pitched and a high-pitched half-length signal, which are
 /// simpler to clean up than the full waveform, removes noise from both, and recombines them losslessly.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FreGrad vocoder for frequency-domain diffusion synthesis
+/// // using discrete wavelet transform (DWT) for faster generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FreGrad&lt;double&gt;(architecture, "fregrad.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FreGrad&lt;double&gt;(architecture, new FreGradOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

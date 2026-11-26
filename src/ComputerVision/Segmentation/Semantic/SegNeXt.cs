@@ -285,6 +285,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 
     #region ONNX
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)

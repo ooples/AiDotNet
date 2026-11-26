@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> A fast generator turns a spectrogram into audio while three critics, listening at
 /// different time scales, learn to tell its audio from real speech.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MelGAN vocoder for lightweight non-autoregressive synthesis
+/// // with feature matching loss for fast real-time inference
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MelGAN&lt;double&gt;(architecture, "melgan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MelGAN&lt;double&gt;(architecture, new MelGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

@@ -311,6 +311,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
         }
 
+        /// <inheritdoc/>
         protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
         {
             if (_pdeSpecification is not PDEs.PDESpecificationBase<T>)

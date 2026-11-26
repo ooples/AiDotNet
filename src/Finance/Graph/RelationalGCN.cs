@@ -80,7 +80,7 @@ namespace AiDotNet.Finance.Graph;
 /// var model = new RelationalGCN&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode: load pre-trained Relational GCN model
-/// var onnxModel = new RelationalGCN&lt;double&gt;(architecture, "rgcn_knowledge_graph.onnx");
+/// var onnxModel = new RelationalGCN&lt;double&gt;(architecture, "rgcn_knowledge_graph.onnx", options: null, relationAdjacencies: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]

@@ -161,6 +161,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         return IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(audio) : Predict(audio);
     }
 
+    /// <inheritdoc/>
     public Task<Tensor<T>> ExtractEmbeddingsAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
         => Task.Run(() => ExtractEmbeddings(audio), cancellationToken);
 
@@ -239,6 +240,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     private Tensor<T> Unbatch(Tensor<T> audio, Tensor<T> x)
         => audio.Rank == 1 ? Engine.Reshape(x, new[] { x.Shape[1], x.Shape[2] }) : x;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -327,6 +329,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         return _pretraining.Loss(output, _pretraining.SampleNegatives(mask, random), training: false, random).Total[0];
     }
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;

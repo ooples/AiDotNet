@@ -7,7 +7,9 @@ public partial class OpenVoiceV2<T>
     private OpenVoiceTrainingController<T>? _training;
     private readonly bool _usesDefaultOptimizer;
     internal OpenVoiceTrainingController<T> TrainingForAudit => EnsurePaperTraining();
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => _native is null ? TtsSupervision.None : TtsSupervision.Recording;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => _native is not null;
 
     private OpenVoiceTrainingController<T> EnsurePaperTraining()
@@ -23,6 +25,7 @@ public partial class OpenVoiceV2<T>
         return _training = new OpenVoiceTrainingController<T>(this, graph, _options.Training, _usesDefaultOptimizer ? null : _optimizer);
     }
 
+    /// <inheritdoc/>
     protected override void OnMutableConstructorConfigurationRestored()
     {
         base.OnMutableConstructorConfigurationRestored();
@@ -30,6 +33,7 @@ public partial class OpenVoiceV2<T>
         if (_native is not null && _options.Training.IncludeTrainingComponents) EnsurePaperTraining();
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
         => _training?.SelectParameters(parameters) ?? parameters;
 
@@ -41,12 +45,14 @@ public partial class OpenVoiceV2<T>
         return true;
     }
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         var controller = EnsurePaperTraining(); MaxGradNorm = NumOps.Zero;
         return controller.Train(sample, TrainWithCustomObjective);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         var controller = EnsurePaperTraining(); bool previous = IsTrainingMode; SetTrainingMode(false);

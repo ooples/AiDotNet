@@ -46,10 +46,13 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 ///     InputType.TwoDimensional, NeuralNetworkTaskType.ImageSegmentation,
 ///     inputSize: 9, outputSize: 20);
 /// var options = new PointTransformerV3Options { NumClasses = 20 };
-/// var model = new PointTransformerV3&lt;float&gt;(architecture, options: options);
 ///
-/// var cloud = Tensor&lt;float&gt;.CreateRandom(4096, 9);   // xyz, colour, normal
-/// Tensor&lt;float&gt; logits = model.Predict(cloud);          // [4096, 20]
+/// var cloud = Tensor&lt;float&gt;.CreateRandom(4096, 9);    // xyz, colour, normal
+/// var labels = Tensor&lt;float&gt;.CreateRandom(4096, 20);  // per-point class targets
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new PointTransformerV3&lt;float&gt;(architecture, options: options))
+///     .Build(cloud, labels);
+/// Tensor&lt;float&gt; logits = result.Predict(cloud);       // [4096, 20]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -26634,3 +26634,28 @@ override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.Bu
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.Build<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureSampleObjectiveTraining(AiDotNet.Models.Options.SampleObjectiveTrainingOptions! options) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Audio.MusicGen.MusicGenModel<T>.EvaluateTrainingObjective(AiDotNet.Audio.MusicGen.MusicGenTrainingSample<T>! sample) -> T
+AiDotNet.Configuration.YamlModelConfig.SampleObjectiveTraining.get -> AiDotNet.Models.Options.SampleObjectiveTrainingOptions?
+AiDotNet.Configuration.YamlModelConfig.SampleObjectiveTraining.set -> void
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.Build<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureSampleObjectiveTraining(AiDotNet.Models.Options.SampleObjectiveTrainingOptions! options) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Interfaces.ISampleObjectiveModel<T, TSample>
+AiDotNet.Interfaces.ISampleObjectiveModel<T, TSample>.EvaluateTrainingObjective(TSample sample) -> T
+AiDotNet.Interfaces.ISampleObjectiveModel<T, TSample>.Train(TSample sample) -> T
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.EarlyStoppingPatience.get -> int
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.EarlyStoppingPatience.set -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.Epochs.get -> int
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.Epochs.set -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.SampleObjectiveTrainingOptions() -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.SampleObjectiveTrainingOptions(AiDotNet.Models.Options.SampleObjectiveTrainingOptions! other) -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> bool
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.set -> void

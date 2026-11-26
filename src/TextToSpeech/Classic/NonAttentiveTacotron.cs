@@ -101,6 +101,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     private DenseLayer<T>? _frameProjection;
     private ConvBatchNormStackLayer<T>? _postnet;
 
+    /// <summary>Creates a Non-Attentive Tacotron that runs the exported ONNX model at <paramref name="modelPath"/> for inference.</summary>
     public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, NonAttentiveTacotronOptions? options)
         : base(architecture)
     {
@@ -120,6 +121,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         InitializeLayers();
     }
 
+    /// <summary>Creates a trainable native Non-Attentive Tacotron; the optimizer defaults to the paper's.</summary>
     public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, NonAttentiveTacotronOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
@@ -138,9 +140,13 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc/>
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc/>
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc/>
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc/>
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a mel spectrogram from text (pair it with a vocoder).</summary>
@@ -155,6 +161,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     /// <inheritdoc />
     protected override int TargetWindowSize => _options.WindowSize;
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -484,11 +491,13 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         return Engine.ReduceMean(Engine.TensorAdd(Engine.TensorAbs(e), Engine.TensorMultiply(e, e)), new[] { 0, 1 }, keepDims: false);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -510,6 +519,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
             throw new ObjectDisposedException(GetType().FullName ?? nameof(NonAttentiveTacotron<T>));
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

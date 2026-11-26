@@ -294,6 +294,7 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
         return engine.TensorAddScalar(products, bias);
     }
 
+    /// <inheritdoc/>
     protected override ClassificationTaskType InferTaskType(Vector<T> y)
     {
         return ClassificationTaskType.Ordinal;

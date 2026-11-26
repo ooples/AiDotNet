@@ -36,6 +36,7 @@ public partial class E3TTS<T>
         WaveformUnet!.Load(file, "unet.");
     }
 
+    /// <summary>Loads the BERT text encoder and the converted waveform U-Net from <paramref name="checkpoints"/>.</summary>
     public void LoadCheckpoints(E3TTSCheckpointPaths checkpoints)
     {
         Validation.Guard.NotNull(checkpoints);

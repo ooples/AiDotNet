@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> Instead of generating every audio sample, the network generates four narrow frequency
 /// bands at a quarter of the sample rate and a fixed filter bank merges them, which makes it several times faster.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Multi-band MelGAN vocoder for parallel sub-band synthesis
+/// // decomposing target waveform into sub-bands for faster generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MultiBandMelGAN&lt;double&gt;(architecture, "multibandmelgan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MultiBandMelGAN&lt;double&gt;(architecture, new MultiBandMelGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

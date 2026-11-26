@@ -120,6 +120,7 @@ public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMo
     /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Phonemes(text, false, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);

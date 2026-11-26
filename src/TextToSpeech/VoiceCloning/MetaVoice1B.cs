@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// and EnCodec-conditioned four-band diffusion waveform generator.</summary>
 /// <remarks>The released output includes loudness normalization and DeepFilterNet3 enhancement
 /// at 48 kHz. RawDecoderOutput selects the original 24 kHz neural decoder waveform.</remarks>
+/// <example>
+/// <code>
+/// // Create a MetaVoice-1B model for large-scale voice cloning
+/// // with 1.2B parameters for high-fidelity zero-shot synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MetaVoice1B&lt;double&gt;(architecture, "metavoice1b.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MetaVoice1B&lt;double&gt;(architecture, new MetaVoice1BOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -57,14 +73,20 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     }
 
     int ITtsModel<T>.SampleRate => SampleRate;
+    /// <inheritdoc/>
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc/>
     public new int HiddenDim => _options.FirstStageDim;
+    /// <inheritdoc/>
     public int NumFlowSteps => 0;
+    /// <inheritdoc/>
     public double MinReferenceDuration => _options.MinReferenceDurationSec;
+    /// <inheritdoc/>
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
     /// <summary>Whether the actual native language and speaker graphs are present.</summary>
     public bool HasPaperPipeline => _first is not null && _second is not null && _speaker is not null;
 
+    /// <inheritdoc/>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
@@ -77,6 +99,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return SynthesizeNative(text, ResolveVoice());
     }
 
+    /// <inheritdoc/>
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
         => SynthesizeWithVoice(text, referenceAudio, _options.ReferenceSampleRate);
 
@@ -90,12 +113,14 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return SynthesizeNative(text, ExtractSpeakerEmbedding(referenceAudio, sampleRate));
     }
 
+    /// <inheritdoc/>
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
         => ExtractSpeakerEmbedding(referenceAudio, _options.ReferenceSampleRate);
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -114,14 +139,17 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         return SynthesizeNative(tokenizer.Decode(ids), ResolveVoice(), ids.Concat(new[] { tokenizer.EndToken }).ToArray());
     }
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
         foreach (var layer in ComponentLayers) layer.SetTrainingMode(false);
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

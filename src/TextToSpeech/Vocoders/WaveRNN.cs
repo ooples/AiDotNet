@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> WaveRNN writes audio one sample at a time with a small recurrent network: it first
 /// chooses the sample's rough level (the top 8 bits), then refines it (the bottom 8 bits).</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WaveRNN vocoder for efficient autoregressive synthesis
+/// // with dual softmax output and subscale sample generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WaveRNN&lt;double&gt;(architecture, "wavernn.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WaveRNN&lt;double&gt;(architecture, new WaveRNNOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelTask(ModelTask.Generation)]

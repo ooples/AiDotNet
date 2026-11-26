@@ -15,6 +15,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new WellSaidLabs&lt;float&gt;(new WellSaidLabsOptions { ApiKey = "…" }).Synthesize("Hello")</c>
 /// returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new WellSaidLabs&lt;float&gt;(new WellSaidLabsOptions { ApiKey = "your-api-key" });
+/// Tensor&lt;float&gt; audio = tts.Synthesize("Hello from WellSaid Labs!");
+/// </code>
+/// </example>
 public class WellSaidLabs<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

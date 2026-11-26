@@ -41,6 +41,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// </remarks>
 /// <example>
 /// <code>
+/// var clip = new OpenCLIP&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512));
 /// // Create an ODISE model for open-vocabulary panoptic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,

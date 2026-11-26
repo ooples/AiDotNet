@@ -31,6 +31,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// patterns, one at different time scales — learn to tell its audio from real recordings; competing makes the audio
 /// realistic.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a HiFi-GAN vocoder for high-fidelity parallel waveform generation
+/// // with multi-receptive field fusion and multi-period discriminator
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new HiFiGAN&lt;double&gt;(architecture, "hifigan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new HiFiGAN&lt;double&gt;(architecture, new HiFiGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -78,6 +94,7 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     // (DerivedTensorCache) and private host workspaces (plain arrays). Its GPU route already scopes and releases each
     // stage and returns one kept waveform, so the Predict funnel may free every other GPU result when the call ends.
     // Custom architecture layers and ONNX execution have not made this lifetime declaration.
+    /// <inheritdoc/>
     protected override bool ReleasesInferenceIntermediates => HasPaperLayers && _generator is not null;
 
     /// <inheritdoc />

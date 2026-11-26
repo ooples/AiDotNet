@@ -368,6 +368,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         };
     }
 
+    /// <inheritdoc/>
     public override void ResetEpisode()
     {
         _currentContext = new SequenceContext<T>();
