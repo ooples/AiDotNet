@@ -27,18 +27,13 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Chatterbox model for emotion-controllable zero-shot TTS
-/// // with watermarking and exaggeration control from Resemble AI
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Chatterbox&lt;double&gt;(architecture, "chatterbox.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Chatterbox&lt;double&gt;(architecture, new ChatterboxOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new Chatterbox&lt;double&gt;(architecture, new ChatterboxOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the Chatterbox(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

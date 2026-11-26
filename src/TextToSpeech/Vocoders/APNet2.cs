@@ -28,18 +28,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an APNet2 vocoder with ResNet backbone
-/// // and multi-resolution STFT loss for high-quality waveform reconstruction
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new APNet2&lt;double&gt;(architecture, "apnet2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+///     inputSize: 80, outputSize: 1);
+/// var model = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the APNet2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -51,18 +51,13 @@ public enum ProDiffTrainingPhase
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a ProDiff model for progressive fast diffusion TTS
-/// // with knowledge distillation for high-quality generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ProDiff&lt;double&gt;(architecture, "prodiff.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ProDiff&lt;double&gt;(architecture, new ProDiffOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new ProDiff&lt;double&gt;(architecture, new ProDiffOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the ProDiff(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

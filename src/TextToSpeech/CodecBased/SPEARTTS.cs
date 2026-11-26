@@ -65,8 +65,11 @@ public enum SPEARTTSTrainingStage
 /// </remarks>
 /// <example>
 /// <code>
-/// // a pre-trained w2v-BERT whose semantic tokenizer has been fitted (see W2vBert)
 /// var w2vBert = new W2vBert&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024), new W2vBertOptions());
+/// // Pre-train it (see W2vBert), then fit its semantic tokenizer: k-means needs at least SemanticClusters (1024)
+/// // frames at 25 a second, so about 41 s of speech or more. Noise stands in for the recordings here.
+/// var speech = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 45 * 16000) };   // 16 kHz
+/// w2vBert.FitSemanticTokenizer(speech);
 /// var threeSecondRecording = Tensor&lt;float&gt;.CreateRandom(1, 48000);   // 3 s at 16 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);

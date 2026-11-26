@@ -23,18 +23,14 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a CosyVoice model for scalable zero-shot voice cloning
-/// // using supervised semantic tokens and OT-CFM decoder
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new CosyVoiceClone&lt;double&gt;(architecture, "cosyvoice.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new CosyVoiceClone&lt;double&gt;(architecture, new CosyVoiceCloneOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new CosyVoiceClone&lt;double&gt;(architecture, new CosyVoiceCloneOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", reference);
+/// // Untrained native layers; the CosyVoiceClone(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

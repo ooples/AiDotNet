@@ -41,7 +41,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var characters = new Tensor&lt;float&gt;(new[] { 5 }, new Vector&lt;float&gt;(new float[] { 8, 5, 12, 12, 15 }));   // character ids
 /// var recording = Tensor&lt;float&gt;.CreateRandom(1, 22050);                                                 // 1 s at 22.05 kHz
 /// var tacotron = new Tacotron2&lt;float&gt;(architecture, new Tacotron2Options());
-/// tacotron.Train(new TtsTrainingSample&lt;float&gt; { Tokens = characters, Audio = recording });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(tacotron)
+///     .Build(new List&lt;TtsTrainingSample&lt;float&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;float&gt; { Tokens = characters, Audio = recording }
+///     });
 /// var mel = tacotron.TextToMel("Hello world.");
 /// </code>
 /// </example>

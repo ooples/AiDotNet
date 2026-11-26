@@ -30,18 +30,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Parallel WaveGAN vocoder for non-autoregressive synthesis
-/// // with multi-resolution STFT loss for stable adversarial training
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ParallelWaveGAN&lt;double&gt;(architecture, "parallelwavegan.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ParallelWaveGAN&lt;double&gt;(architecture, new ParallelWaveGANOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new ParallelWaveGAN&lt;double&gt;(architecture, new ParallelWaveGANOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the ParallelWaveGAN(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
