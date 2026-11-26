@@ -309,22 +309,18 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task TrainingMonitor_CheckForIssues_DetectsHighMemoryUsage()
     {
-        var monitor = new TrainingMonitor<double>();
+        // The threshold cases live in TrainingMonitoringDeepMathIntegrationTests; this covers the budget's lifecycle
+        // on one session: an unknown budget never stops a run, and a known one is applied from the next check on.
+        var monitor = new TrainingMonitor<double> { ProcessMemoryBudgetMBOverrideForTest = 0 };
         var sessionId = monitor.StartSession("TestSession");
 
-#if NET5_0_OR_GREATER
-        // LogResourceUsage takes memory in MB; above 90% of the memory available to the process is an issue.
-        double availableMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024.0);
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: availableMb * 0.95);
-
-        var issues = monitor.CheckForIssues(sessionId);
-
-        Assert.Contains(issues, i => i.Contains("memory", StringComparison.OrdinalIgnoreCase));
-#else
-        // net471 exposes no available-memory figure to the runtime, so the check does not run.
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: 512.0);
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: 1_000_000.0);
         Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory", StringComparison.OrdinalIgnoreCase));
-#endif
+
+        monitor.ProcessMemoryBudgetMBOverrideForTest = 2048;
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: 2000.0);
+        var issues = monitor.CheckForIssues(sessionId);
+        Assert.Contains(issues, i => i.Contains("of the 2048 MB process memory budget", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact(Timeout = 120000)]

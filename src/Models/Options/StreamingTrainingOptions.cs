@@ -150,20 +150,37 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// instead of the reference path where the optimizer steps on the reduced gradients.
     /// </summary>
     /// <value><c>true</c> to run the update in the plan; defaults to <c>false</c>.</value>
-    /// <remarks>Every rank must use the same setting, and every rank needs a batch on every step (drop-last
+    /// <remarks>
+    /// <para>Every rank must use the same setting, and every rank needs a batch on every step (drop-last
     /// batching): the ranks agree on that before a step enters the plan's exchange. Accumulated steps
-    /// (<see cref="GradientAccumulationSteps"/> above 1) keep the reference path.</remarks>
+    /// (<see cref="GradientAccumulationSteps"/> above 1) keep the reference path.</para>
+    /// <para><b>For Beginners:</b> when you train one model on several GPUs or machines at once, each one computes
+    /// gradients on its own batch and they are averaged before the weights change. Turning this on does that
+    /// averaging and the weight update inside the fast compiled step instead of in a separate slower pass, which
+    /// usually speeds up multi-device training. Leave it off for single-device training, where it changes
+    /// nothing, or if you want the simplest, reference behavior.</para>
+    /// </remarks>
     public bool DataParallelUpdateInCompiledPlan { get; set; }
 
     /// <summary>
     /// Gets or sets the number of tokens in each training sample, used to report <c>tokens_per_second</c>.
     /// </summary>
     /// <value>Tokens per sample, or <c>null</c> (the default) to not report token throughput.</value>
+    /// <remarks>
+    /// <para>Throughput in tokens is the samples per second multiplied by this value; it changes only what is
+    /// reported to the training monitor, never how the model trains. It must be positive when set.</para>
+    /// <para><b>For Beginners:</b> language models are usually compared by how many tokens (word pieces) they
+    /// process per second. If every sample in your data is, for example, a 512-token sequence, set this to 512 and
+    /// the dashboard shows tokens per second next to samples per second. Leave it unset for data that is not
+    /// made of tokens, such as images or tables.</para>
+    /// </remarks>
     public int? TokensPerSample { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the optimizer reduces the global gradient norm on every step even when its clipping
-    /// options would not, so <c>grad_norm</c> is always reported.
+    /// Gets or sets whether the optimizer computes the global gradient norm for reporting on steps where it would
+    /// not otherwise: an eager step adds the reduction (and, on a GPU, the read of its scalar). A compiled training
+    /// plan is not changed: it reports <c>grad_norm</c> only when it clips by norm, and this option adds neither
+    /// clipping nor a norm reduction to it.
     /// </summary>
     /// <value><c>true</c> to force the reduction; defaults to <c>false</c>.</value>
     /// <remarks>
@@ -175,6 +192,10 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// resident on a GPU, a device reduction plus a device-to-host read of its scalar.</para>
     /// <para>A step taken by a fused compiled training plan reports the pre-clip norm its own clip computed, when the
     /// plan clips (one scalar read from the device on reporting steps only); a plan that does not clip reports none.</para>
+    /// <para><b>For Beginners:</b> the gradient norm is a single number that says how large the latest update was;
+    /// a sudden spike often warns that training is about to diverge. Turn this on when you want that number on your
+    /// dashboard and your setup does not already produce it (for example with gradient clipping turned off). It
+    /// costs a little extra work per step and never changes how the model trains.</para>
     /// </remarks>
     public bool MonitorGradNorm { get; set; }
 
@@ -183,11 +204,17 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// to the training monitor.
     /// </summary>
     /// <value>The interval in seconds; defaults to <c>30</c>. <c>0</c> turns resource reporting off.</value>
-    /// <remarks>Reports process CPU percent (from <see cref="System.Diagnostics.Process.TotalProcessorTime"/>
+    /// <remarks>
+    /// <para>Reports process CPU percent (from <see cref="System.Diagnostics.Process.TotalProcessorTime"/>
     /// deltas, normalized by the processor count) and working set in MB through
     /// <see cref="ITrainingMonitor{T}.LogResourceUsage"/>, and, when a GPU engine is active, the GPU allocator's
     /// allocated and reserved memory and the device's total memory as the metrics <c>gpu_memory_allocated_mb</c>,
-    /// <c>gpu_memory_reserved_mb</c> and <c>gpu_memory_total_mb</c>. Checked on reporting steps only.</remarks>
+    /// <c>gpu_memory_reserved_mb</c> and <c>gpu_memory_total_mb</c>. Checked on reporting steps only. The value
+    /// must be finite.</para>
+    /// <para><b>For Beginners:</b> this controls how often the dashboard's CPU, memory and GPU-memory charts get
+    /// a new point. Lower it (say to 5) to watch memory closely while tuning batch size; raise it, or set 0, when
+    /// you do not need those charts. It never changes how the model trains.</para>
+    /// </remarks>
     public double MonitorResourceIntervalSeconds { get; set; } = 30.0;
     /// <summary>
     /// Validates the option values.
@@ -209,7 +236,10 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
             throw new ArgumentException("MonitorEveryNSteps cannot be negative.", nameof(MonitorEveryNSteps));
         if (TokensPerSample is <= 0)
             throw new ArgumentException("TokensPerSample must be positive when set.", nameof(TokensPerSample));
-        if (MonitorResourceIntervalSeconds < 0 || double.IsNaN(MonitorResourceIntervalSeconds))
-            throw new ArgumentException("MonitorResourceIntervalSeconds cannot be negative.", nameof(MonitorResourceIntervalSeconds));
+        if (MonitorResourceIntervalSeconds < 0 || double.IsNaN(MonitorResourceIntervalSeconds)
+            || double.IsInfinity(MonitorResourceIntervalSeconds))
+            throw new ArgumentException(
+                "MonitorResourceIntervalSeconds must be a finite, non-negative number of seconds (0 turns resource reporting off).",
+                nameof(MonitorResourceIntervalSeconds));
     }
 }

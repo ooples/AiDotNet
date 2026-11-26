@@ -374,8 +374,9 @@ public class TrainingMonitorTests : IDisposable
     public async Task CheckForIssues_NearlyFullGpu_WarnsOncePerSession_WithoutAnIssue()
     {
         await Task.CompletedTask;
-        // The message names this test's own figures (990 of 1000 MB), which no other test traces.
-        var listener = new CountingTraceListener("GPU memory in use on the device: 990 MB (99.0% of 1000 MB)");
+        // The message names this test's own figures (990 of 1000 MB), which no other test traces. The percentage is
+        // not matched, so the count does not depend on how a culture formats decimals.
+        var listener = new CountingTraceListener("GPU memory in use on the device: 990 MB (", "% of 1000 MB).");
         System.Diagnostics.Trace.Listeners.Add(listener);
         try
         {
@@ -384,6 +385,11 @@ public class TrainingMonitorTests : IDisposable
             monitor.LogResourceUsage(sessionId, cpuUsage: 10, memoryUsage: 100, gpuUsage: 50, gpuMemory: 990);
             for (int i = 0; i < 3; i++)
                 Assert.DoesNotContain(monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
+            Assert.Equal(1, listener.Count);
+
+            // Ending the session clears its marker, but inspecting the ended session does not warn again.
+            monitor.EndSession(sessionId);
+            Assert.DoesNotContain(monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
             Assert.Equal(1, listener.Count);
         }
         finally
@@ -394,9 +400,9 @@ public class TrainingMonitorTests : IDisposable
 
     private sealed class CountingTraceListener : System.Diagnostics.TraceListener
     {
-        private readonly string _needle;
+        private readonly string[] _needles;
         private int _count;
-        public CountingTraceListener(string needle) => _needle = needle;
+        public CountingTraceListener(params string[] needles) => _needles = needles;
         public int Count => System.Threading.Volatile.Read(ref _count);
         public override void Write(string? message) => Count1(message);
         public override void WriteLine(string? message) => Count1(message);
@@ -407,7 +413,8 @@ public class TrainingMonitorTests : IDisposable
             => Count1(args is null || format is null ? format : string.Format(format, args));
         private void Count1(string? message)
         {
-            if (message is not null && message.Contains(_needle)) System.Threading.Interlocked.Increment(ref _count);
+            if (message is not null && System.Array.TrueForAll(_needles, message.Contains))
+                System.Threading.Interlocked.Increment(ref _count);
         }
     }
 

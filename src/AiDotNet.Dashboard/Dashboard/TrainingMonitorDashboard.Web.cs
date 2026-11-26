@@ -434,9 +434,28 @@ public partial class TrainingMonitorDashboard<T>
         Respond(context, 200, "application/json; charset=utf-8", JsonConvert.SerializeObject(snapshot, WebJsonSettings));
     }
 
-    private static void Respond(HttpListenerContext context, int status, string contentType, string body)
+    /// <summary>
+    /// How long one response may take to write. A client that stops reading would otherwise hold its request slot
+    /// (or, for a 503, the listener thread) for as long as the socket send blocks, which has no timeout: past this
+    /// deadline the response is aborted, which closes the connection and unblocks the write. Defaults to 10 seconds.
+    /// </summary>
+    internal TimeSpan ResponseWriteTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    private const int ResponseWriting = 0;
+    private const int ResponseCompleted = 1;
+    private const int ResponseAborted = 2;
+
+    private void Respond(HttpListenerContext context, int status, string contentType, string body)
     {
         var response = context.Response;
+        // Exactly one of the writer (completing) and the deadline (aborting) ends the response.
+        int state = ResponseWriting;
+        using var deadline = new Timer(_ =>
+        {
+            if (Interlocked.CompareExchange(ref state, ResponseAborted, ResponseWriting) != ResponseWriting) return;
+            try { response.Abort(); }
+            catch (Exception) { /* the connection is already gone */ }
+        }, null, Timeout.Infinite, Timeout.Infinite);
         try
         {
             var bytes = Encoding.UTF8.GetBytes(body);
@@ -445,12 +464,22 @@ public partial class TrainingMonitorDashboard<T>
             response.Headers["Cache-Control"] = "no-store";
             response.Headers["X-Content-Type-Options"] = "nosniff";
             response.ContentLength64 = bytes.Length;
+            deadline.Change(ResponseWriteTimeout, Timeout.InfiniteTimeSpan);
             if (!string.Equals(context.Request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase))
                 response.OutputStream.Write(bytes, 0, bytes.Length);
         }
         finally
         {
-            response.Close();
+            // Close can block too (it sends the headers of a HEAD or an empty body), so the deadline stays armed
+            // across it; an abort that lands during or after Close is harmless.
+            try
+            {
+                if (Volatile.Read(ref state) == ResponseWriting) response.Close();
+            }
+            finally
+            {
+                Interlocked.CompareExchange(ref state, ResponseCompleted, ResponseWriting);
+            }
         }
     }
 

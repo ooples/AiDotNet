@@ -337,25 +337,22 @@ public class TrainingMonitoringDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CheckForIssues_HighMemory_ReportsIssue()
     {
-        var monitor = new TrainingMonitor<double>();
+        // A fixed 1000 MB process budget, so the threshold does not depend on this machine's memory or GC settings.
+        var monitor = new TrainingMonitor<double> { ProcessMemoryBudgetMBOverrideForTest = 1000 };
         var sessionId = monitor.StartSession("Test");
 
-#if NET5_0_OR_GREATER
-        // LogResourceUsage takes memory in MB; above 90% of the memory available to the process is an issue.
-        double availableMb = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024.0);
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: availableMb * 0.95);
-
+        // LogResourceUsage takes memory in MB; above 90% of the process memory budget is an issue.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 950);
         var issues = monitor.CheckForIssues(sessionId);
-        Assert.Contains(issues, i => i.Contains("memory"));
+        Assert.Contains(issues, i => i.Contains("High memory usage: 950 MB (95.0% of the 1000 MB process memory budget)"));
 
-        // A typical process (well under 90% of available memory) is not an issue, though it is above 90 MB.
+        // Just above the threshold is an issue; just below it is not, though both are far above 90 MB.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 901);
+        Assert.Contains(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 899);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
         monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 512);
         Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
-#else
-        // net471 exposes no available-memory figure to the runtime, so the check does not run.
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 512);
-        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
-#endif
     }
 
     [Fact(Timeout = 120000)]

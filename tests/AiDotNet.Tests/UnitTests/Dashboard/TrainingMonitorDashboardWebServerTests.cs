@@ -210,6 +210,11 @@ public class TrainingMonitorDashboardWebServerTests
         var session = dashboard.StartSession("concurrent");
         var errors = new List<Exception>();
         using var stop = new CancellationTokenSource();
+        // Handshake: after its first batch the writer waits (bounded) until a reader has completed a snapshot, so
+        // at least one HTTP read provably overlaps the writes instead of the writer possibly finishing first.
+        var readCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int readsBeforeRelease = 0;
+        int readsCompleted = 0;
 
         var writer = Task.Run(() =>
         {
@@ -217,6 +222,12 @@ public class TrainingMonitorDashboardWebServerTests
             {
                 for (int step = 1; step <= 20000; step++)
                 {
+                    if (step == 1001)
+                    {
+                        if (!readCompleted.Task.Wait(TimeSpan.FromSeconds(60)))
+                            throw new TimeoutException("No reader completed a snapshot while the writer was pending.");
+                        Volatile.Write(ref readsBeforeRelease, Volatile.Read(ref readsCompleted));
+                    }
                     dashboard.LogMetric(session, "train_loss", 1.0f / step, step);
                     dashboard.LogMetric(session, "metric_" + (step % 7), step, step);
                     if (step % 50 == 0)
@@ -245,6 +256,8 @@ public class TrainingMonitorDashboardWebServerTests
                     await GetJson(url + "api/sessions");
                     var data = await GetJson(url + "api/metrics?session=" + session + (seq >= 0 ? "&seq=" + seq : string.Empty));
                     seq = (long)data["seq"]!;
+                    Interlocked.Increment(ref readsCompleted);
+                    readCompleted.TrySetResult(true);
                 }
                 catch (Exception ex)
                 {
@@ -257,6 +270,7 @@ public class TrainingMonitorDashboardWebServerTests
         await writer;
         await Task.WhenAll(readers);
         Assert.Empty(errors);
+        Assert.True(Volatile.Read(ref readsBeforeRelease) >= 1, "no snapshot request completed while the writer was running");
 
         var final = await GetJson(url + "api/metrics?session=" + session);
         // A full read serves each metric's newest 4096 points (a long run's first poll stays bounded).

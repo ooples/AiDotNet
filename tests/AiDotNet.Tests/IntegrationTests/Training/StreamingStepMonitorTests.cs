@@ -60,10 +60,11 @@ public class StreamingStepMonitorTests
     }
 
     internal static (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer) TinyModel(
-        int epochs, bool eager = false, bool clip = true)
+        int epochs, bool eager = false, bool clip = true, AdamAnomalyGuardMode anomalyGuard = AdamAnomalyGuardMode.Auto)
     {
         var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
+            AnomalyGuardMode = anomalyGuard,
             InitialLearningRate = 0.01,
             MaxIterations = epochs,
             UseAdaptiveLearningRate = false,
@@ -182,6 +183,7 @@ public class StreamingStepMonitorTests
         var monitor = await Train(epochs: 1, maxSteps: null, monitorEvery: 5, tokensPerSample: 128);
         var samples = monitor.Values("samples_per_second");
         var tokens = monitor.Values("tokens_per_second");
+        Assert.Equal(new[] { 5, 10 }, monitor.Steps("samples_per_second"));
         Assert.Equal(new[] { 5, 10 }, monitor.Steps("tokens_per_second"));
         for (int i = 0; i < samples.Length; i++)
             Assert.Equal(samples[i] * 128, tokens[i], 3);
@@ -202,11 +204,35 @@ public class StreamingStepMonitorTests
         });
     }
 
+    [Fact]
+    public void ResourceInterval_PositiveIsNeverOff_ZeroIsOff_AndNonFiniteIsRejected()
+    {
+        // Zero (and anything not positive) is the off switch.
+        Assert.Equal(0L, AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(0));
+        Assert.Equal(0L, AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(-1));
+        Assert.Equal(0L, AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(double.NaN));
+        // A positive interval below one tick is one tick, not off; one past the tick range saturates.
+        Assert.Equal(1L, AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(double.Epsilon));
+        Assert.Equal(long.MaxValue, AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(1e300));
+        Assert.Equal(Stopwatch.Frequency * 2,
+            AiDotNet.TrainingMonitoring.StreamingStepMonitorReporter<float>.ResourceIntervalTicks(2.0));
+
+        foreach (double bad in new[] { double.PositiveInfinity, double.NegativeInfinity, double.NaN, -0.5 })
+        {
+            var options = new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>> { MonitorResourceIntervalSeconds = bad };
+            var ex = Assert.Throws<ArgumentException>(() => options.Validate());
+            Assert.Equal(nameof(options.MonitorResourceIntervalSeconds), ex.ParamName);
+        }
+        new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>> { MonitorResourceIntervalSeconds = 0 }.Validate();
+    }
+
     [Fact(Timeout = 180000)]
     public async Task MonitorGradNorm_WithoutAnyClip_ReportsTheNormFromTheOptimizer()
     {
         await Task.Yield();
-        var (model, optimizer) = TinyModel(epochs: 1, eager: true, clip: false);
+        // The anomaly guard is off, so it cannot supply the norm: what is reported comes from MonitorGradNorm's
+        // reduction alone.
+        var (model, optimizer) = TinyModel(epochs: 1, eager: true, clip: false, anomalyGuard: AdamAnomalyGuardMode.Never);
         var monitor = new RecordingMonitor();
         await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
@@ -301,6 +327,8 @@ public class StreamingStepMonitorTests
         Assert.Equal(new[] { 10, 20 }, monitor.Steps("grad_norm"));
         Assert.All(monitor.Values("grad_norm"), v => Assert.True(v > 0 && !double.IsInfinity(v)));
         Assert.False(optimizer.ComputeGradientNormEveryStep, "the fused path must not add a reduction");
+        // Every step ran in the fused plan: an eager fallback would run the optimizer's tape Step and clip there.
+        Assert.Equal(0L, optimizer.TapeStepCount);
     }
 
     /// <summary>
@@ -351,6 +379,7 @@ public class StreamingStepMonitorTests
         async Task<double> TimedRun(int every)
         {
             var (model, optimizer) = TinyModel(epochs: 1000);
+            var monitor = new RecordingMonitor();
             var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
                 .ConfigureOptimizer(optimizer)
@@ -361,10 +390,27 @@ public class StreamingStepMonitorTests
                     MaxSteps = Steps,
                     MonitorEveryNSteps = every,
                 })
-                .ConfigureTrainingMonitor(new TrainingMonitor<float>());
+                .ConfigureTrainingMonitor(monitor);
             long start = Stopwatch.GetTimestamp();
             await builder.BuildAsync();
-            return (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
+            long end = Stopwatch.GetTimestamp();
+
+            // Each arm ran all of its steps and reported as configured, so the two timings compare like with like.
+            const int StepsPerEpoch = N / BatchSize;
+            Assert.NotEmpty(monitor.Progress);
+            Assert.Equal(Steps / StepsPerEpoch, monitor.Progress[monitor.Progress.Count - 1].Epoch);
+            if (every == 0)
+            {
+                Assert.Empty(monitor.Steps("train_loss"));
+            }
+            else
+            {
+                var reported = monitor.Steps("train_loss");
+                Assert.Equal(Steps / every, reported.Length);
+                Assert.Equal(Steps, reported[reported.Length - 1]);
+                Assert.Contains(monitor.Progress, p => p.Step == Steps && p.TotalSteps == Steps);
+            }
+            return (end - start) * 1000.0 / Stopwatch.Frequency;
         }
     }
 
@@ -468,20 +514,34 @@ public class StreamingStepMonitorGpuTests
         }
     }
 
-    // nvidia-smi's memory.used (MiB) for the device with this UUID, or null where nvidia-smi is not on PATH.
+    // nvidia-smi's memory.used (MiB) for the device with this UUID, or null where nvidia-smi is not on PATH. A probe
+    // that hangs (a wedged driver) is killed and fails the comparison instead of holding the test to its timeout.
     private static double? NvidiaSmiUsedMb(string uuid)
     {
+        const int ProbeTimeoutMs = 30_000;
+        var info = new System.Diagnostics.ProcessStartInfo("nvidia-smi",
+            $"-i {uuid} --query-gpu=memory.used --format=csv,noheader,nounits")
+        { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
+        System.Diagnostics.Process smi;
         try
         {
-            var info = new System.Diagnostics.ProcessStartInfo("nvidia-smi",
-                $"-i {uuid} --query-gpu=memory.used --format=csv,noheader,nounits")
-            { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true };
-            using var smi = System.Diagnostics.Process.Start(info)!;
-            string line = smi.StandardOutput.ReadToEnd().Trim();
-            smi.WaitForExit();
+            smi = System.Diagnostics.Process.Start(info)!;
+        }
+        catch (System.ComponentModel.Win32Exception) { return null; }
+
+        using (smi)
+        {
+            // Read stdout concurrently, so a full pipe cannot block the child's exit, and bound the wait for both.
+            var stdout = smi.StandardOutput.ReadToEndAsync();
+            if (!smi.WaitForExit(ProbeTimeoutMs) || !stdout.Wait(ProbeTimeoutMs))
+            {
+                try { smi.Kill(); }
+                catch (InvalidOperationException) { /* it exited between the wait and the kill */ }
+                Assert.Fail($"nvidia-smi did not finish within {ProbeTimeoutMs} ms; the comparison could not run.");
+            }
+            string line = stdout.Result.Trim();
             return smi.ExitCode == 0 && double.TryParse(line, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double mb) ? mb : null;
         }
-        catch (System.ComponentModel.Win32Exception) { return null; }
     }
 }

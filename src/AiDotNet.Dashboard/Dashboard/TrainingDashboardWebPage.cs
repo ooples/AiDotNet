@@ -85,7 +85,10 @@ internal static class TrainingDashboardWebPage
     if (!isFinite(v)) return String(v);
     var a = Math.abs(v);
     if (a !== 0 && (a < 1e-3 || a >= 1e6)) return v.toExponential(3);
-    return v.toPrecision(5).replace(/\.?0+$/, "");
+    // Trailing zeros are trimmed from a fraction only: 10000 stays 10000, 1.2500 becomes 1.25, 1.0000e+5 1e+5.
+    var parts = v.toPrecision(5).split("e");
+    if (parts[0].indexOf(".") >= 0) parts[0] = parts[0].replace(/0+$/, "").replace(/\.$/, "");
+    return parts.join("e");
   }
   function duration(s) {
     s = Math.max(0, Math.floor(num(s)));

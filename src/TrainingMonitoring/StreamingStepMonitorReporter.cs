@@ -66,12 +66,22 @@ internal sealed class StreamingStepMonitorReporter<T>
         if (everyNSteps <= 0) throw new ArgumentOutOfRangeException(nameof(everyNSteps));
         _everyNSteps = everyNSteps;
         _tokensPerSample = tokensPerSample;
-        _resourceIntervalTicks = resourceIntervalSeconds > 0
-            ? (long)(resourceIntervalSeconds * Stopwatch.Frequency)
-            : 0L;
+        _resourceIntervalTicks = ResourceIntervalTicks(resourceIntervalSeconds);
         _gradNormSource = gradNormSource;
         _windowStartTimestamp = Stopwatch.GetTimestamp();
         _lastResourceTimestamp = _windowStartTimestamp;
+    }
+
+    /// <summary>
+    /// The resource interval in stopwatch ticks: 0 (off) only for zero, negative or NaN seconds. A positive interval
+    /// shorter than one tick is one tick, so it never reads as off, and one beyond the tick range saturates.
+    /// </summary>
+    internal static long ResourceIntervalTicks(double resourceIntervalSeconds)
+    {
+        if (!(resourceIntervalSeconds > 0)) return 0L;
+        double ticks = resourceIntervalSeconds * Stopwatch.Frequency;
+        if (ticks >= long.MaxValue) return long.MaxValue;
+        return Math.Max(1L, (long)ticks);
     }
 
     /// <summary>The planned step count passed to <see cref="ITrainingMonitor{T}.UpdateProgress"/>, or 0 when unknown.</summary>
