@@ -74,6 +74,16 @@ def sides_for(info, device, model):
     configurations could be limited to some models have no configurationModels entry and run every model."""
     limited = info.get("configurationModels", {})
     return ["aidotnet", *(a for a in info["torchConfigurations"][device] if model in (limited.get(a) or (model,)))]
+
+
+def uncovered_pairs(devices, models, configurations):
+    """Each "model on device" pair that no selected PyTorch configuration runs. A configuration limited to some models
+    (the RNN arms) can run on a device yet run none of the selected models there, which would leave that row with no
+    PyTorch side and no comparison, so the check is per pair rather than per device."""
+    return [f"{model} on {device}" for device in devices for model in models
+            if not any(device in ARMS[a]["devices"] and model in ARMS[a].get("models", (model,)) for a in configurations)]
+
+
 # A side whose slowest launch exceeds its fastest by this factor is reported as unstable.
 UNSTABLE_SPREAD = 1.5
 # System CPU use (percent) sampled just before a launch above which that launch is flagged as contended.
@@ -623,8 +633,9 @@ def main():
         if launches < 1 or len(set(args.devices)) != len(args.devices) or len(set(args.models)) != len(args.models):
             parser.error("Select distinct devices/models and a positive launch count.")
         arms = {device: [a for a in args.torch_configurations if device in ARMS[a]["devices"]] for device in args.devices}
-        if not all(arms.values()):
-            parser.error("Every device needs at least one PyTorch configuration that runs on it.")
+        uncovered = uncovered_pairs(args.devices, args.models, args.torch_configurations)
+        if uncovered:
+            parser.error("No selected PyTorch configuration runs " + ", ".join(uncovered) + ".")
         epochs, batches, iters, warm = (2, 2, 3, 1) if args.smoke else (3, 20, 100, 10)
         common = ["--epochs", str(epochs), "--train-batches", str(batches), "--batch-size", "64", "--inference-batches", "1,8,16",
                   "--inference-iterations", str(iters), "--warmup-iterations", str(warm), "--warmup-min-ms", "1000", "--seed", "1234"]

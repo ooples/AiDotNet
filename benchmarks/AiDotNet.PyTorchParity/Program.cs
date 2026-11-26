@@ -322,6 +322,10 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         HifiBenchmarkFixture? sharedFixture = null;
         var factory = new AiDotNetTensorBackend(options.Seed);
         var results = new List<ModelReport>();
+        // ScaleBench.Train applies no autocast, so a bf16 request would train in fp32 while the
+        // report claimed bf16. Refuse it rather than record a precision that did not run.
+        if (options.DataDir is not null && options.Precision != "fp32")
+            throw new ArgumentException("--data supports only --precision fp32: large-data training applies no autocast.");
         using var dataset = options.DataDir is null ? null : new ScaleDataset(options.DataDir);
         foreach (var modelName in options.Models)
         {

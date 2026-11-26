@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -130,6 +131,12 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     private DenseLayer<T>? _classificationHead;
 
     /// <summary>
+    /// True when a custom classification head applies a softmax itself, so its output is already class probabilities.
+    /// The default head emits logits.
+    /// </summary>
+    private bool _headEmitsProbabilities;
+
+    /// <summary>
     /// Indicates whether this network supports training.
     /// </summary>
     public override bool SupportsTraining => true;
@@ -147,7 +154,9 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// <param name="numLayers">The number of transformer encoder layers (default: 12).</param>
     /// <param name="numHeads">The number of attention heads (default: 12).</param>
     /// <param name="mlpDim">The dimension of the feed-forward network (default: 3072).</param>
-    /// <param name="lossFunction">The loss function, applied to the head's logits (defaults to cross-entropy with logits if null).</param>
+    /// <param name="lossFunction">The loss function, applied to the head's output. If null, it is cross-entropy with
+    /// logits for a head that emits logits (the default head, or a custom <see cref="DenseLayer{T}"/> head with no or an
+    /// identity activation), and categorical cross-entropy for a custom head with a softmax activation.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a Vision Transformer with your specifications.
@@ -187,7 +196,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         int numClasses,
         ILossFunction<T>? lossFunction = null,
         VisionTransformerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, lossFunction ?? DefaultLoss(architecture))
     {
         _options = options ?? new VisionTransformerOptions();
         Options = _options;
@@ -241,6 +250,40 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         _positionalEmbeddings = new Tensor<T>(new[] { _numPatches + 1, _hiddenDim });
 
         InitializeLayers();
+
+        // A loss that applies its own softmax would normalize a softmax head's probabilities a second time.
+        if (_headEmitsProbabilities && LossFunction is CrossEntropyWithLogitsLoss<T>)
+            throw new ArgumentException(
+                "The custom classification head applies a softmax, so it cannot be trained with CrossEntropyWithLogitsLoss, " +
+                "which applies its own. Give the head an identity activation, or use CategoricalCrossEntropyLoss.",
+                nameof(lossFunction));
+    }
+
+    /// <summary>
+    /// The loss used when none is given: cross-entropy with logits, unless a custom head emits probabilities.
+    /// </summary>
+    private static ILossFunction<T> DefaultLoss(NeuralNetworkArchitecture<T> architecture)
+        => architecture?.Layers is { Count: > 0 } layers && HeadEmitsProbabilities(layers[^1])
+            ? new CategoricalCrossEntropyLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>();
+
+    /// <summary>
+    /// Whether a classification head's output is class probabilities (a softmax activation) rather than logits (no or
+    /// an identity activation). Any other activation is rejected: neither loss nor <see cref="PredictCore"/> can
+    /// interpret, say, a ReLU head's output as a class distribution.
+    /// </summary>
+    private static bool HeadEmitsProbabilities(ILayer<T> head)
+    {
+        if (head is not LayerBase<T> layer)
+            return false;
+        object? activation = (object?)layer.VectorActivation ?? layer.ScalarActivation;
+        return activation switch
+        {
+            null or IdentityActivation<T> => false,
+            SoftmaxActivation<T> => true,
+            _ => throw new ArgumentException(
+                $"The classification head's activation must be identity (logits) or softmax, not {activation.GetType().Name}.")
+        };
     }
 
     /// <summary>
@@ -263,6 +306,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
         // Last layer is the classification head
         _classificationHead = (DenseLayer<T>)Layers[^1];
+        _headEmitsProbabilities = HeadEmitsProbabilities(_classificationHead);
 
         InitializeClassificationToken();
         InitializePositionalEmbeddings();
@@ -354,7 +398,9 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         // #2384: the same engine-op forward as training. The element-by-element CLS/positional/slice loops this
         // replaced read every activation back to the host one indexer call at a time: half of a GPU b32 Predict.
         // The head emits logits (ForwardForTraining's output, which the loss consumes); Predict returns the class
-        // probabilities documented above.
+        // probabilities documented above. A custom softmax head already emits probabilities, so it is not normalized again.
+        if (_headEmitsProbabilities)
+            return Accelerate(input, () => ForwardFromImages(input, batchSize));
         return Accelerate(input, () => Engine.Softmax(ForwardFromImages(input, batchSize), axis: -1));
     }
 
