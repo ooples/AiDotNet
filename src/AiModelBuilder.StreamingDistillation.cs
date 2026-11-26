@@ -53,11 +53,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var teacherForward = ResolveTeacherForward(kd);
-        var strategy = kd.Strategy is { } configuredStrategy
-            ? configuredStrategy
-            : KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
-                kd.Temperature, kd.Alpha);
-        var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
+        // The default strategy depends on the teacher's output width, known from its first output.
+        KnowledgeDistillation.DistillationLossAdapter<T>? lossAdapterSlot = null;
+        KnowledgeDistillation.DistillationLossAdapter<T> AdapterFor(Tensor<T> teacherOutput)
+            => lossAdapterSlot ??= new KnowledgeDistillation.DistillationLossAdapter<T>(
+                KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(
+                    kd.Strategy, kd.Temperature, kd.Alpha,
+                    outputClasses: teacherOutput.Shape.Length > 0
+                        ? teacherOutput.Shape[teacherOutput.Shape.Length - 1]
+                        : teacherOutput.Length,
+                    kd.SparseTopK, kd.SparseTopKMinimumClasses));
         var numOps = MathHelper.GetNumericOperations<T>();
         T learningRate = numOps.FromDouble(_optimizer?.GetOptions()?.InitialLearningRate ?? 0.01);
 
@@ -78,6 +83,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     ? stacked
                     : sampleInput;
                 Tensor<T> teacherOutput = teacherForward(inputRow);
+                var lossAdapter = AdapterFor(teacherOutput);
                 lossAdapter.CurrentTrueLabel = sampleTarget.ToVector();
 
                 var typedInput = (TInput)(object)inputRow;

@@ -26668,3 +26668,8 @@ AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> b
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.set -> void
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopK.get -> int
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopK.set -> void
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.get -> int
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.set -> void
+static AiDotNet.KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(AiDotNet.Interfaces.IDistillationStrategy<T>? strategy, double temperature, double alpha, int outputClasses, int sparseTopK, int sparseTopKMinimumClasses) -> AiDotNet.Interfaces.IDistillationStrategy<T>!

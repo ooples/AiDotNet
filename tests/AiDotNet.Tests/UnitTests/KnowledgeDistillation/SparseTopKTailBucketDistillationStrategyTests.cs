@@ -224,4 +224,41 @@ public class SparseTopKTailBucketDistillationStrategyTests
         Assert.Equal(4, grad.Rows);
         Assert.Equal(128, grad.Columns);
     }
+
+    [Theory]
+    [InlineData(1024, true)]
+    [InlineData(32000, true)]
+    [InlineData(1023, false)]
+    [InlineData(10, false)]
+    public void DefaultStrategy_FollowsTheTeacherOutputWidth(int outputClasses, bool expectSparse)
+    {
+        var strategy = DistillationStrategyFactory<double>.ResolveStrategyForOutputWidth(
+            null, temperature: 3.0, alpha: 0.3, outputClasses, sparseTopK: 64, sparseTopKMinimumClasses: 1024);
+        if (expectSparse)
+        {
+            var sparse = Assert.IsType<SparseTopKTailBucketDistillationStrategy<double>>(strategy);
+            Assert.Equal(64, sparse.TopK);
+        }
+        else
+        {
+            Assert.IsNotType<SparseTopKTailBucketDistillationStrategy<double>>(strategy);
+        }
+    }
+
+    [Fact]
+    public void DefaultStrategy_IsResponseBasedWhenTopKCoversTheVocabulary()
+    {
+        var strategy = DistillationStrategyFactory<double>.ResolveStrategyForOutputWidth(
+            null, 3.0, 0.3, outputClasses: 2048, sparseTopK: 2048, sparseTopKMinimumClasses: 1024);
+        Assert.IsNotType<SparseTopKTailBucketDistillationStrategy<double>>(strategy);
+    }
+
+    [Fact]
+    public void ConfiguredStrategy_WinsOverTheDefault()
+    {
+        var configured = DistillationStrategyFactory<double>.CreateResponseBasedStrategy(2.0, 0.5);
+        var strategy = DistillationStrategyFactory<double>.ResolveStrategyForOutputWidth(
+            configured, 3.0, 0.3, outputClasses: 50000, sparseTopK: 64, sparseTopKMinimumClasses: 1024);
+        Assert.Same(configured, strategy);
+    }
 }

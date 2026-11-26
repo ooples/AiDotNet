@@ -110,11 +110,31 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}"/> (e.g.
     /// <c>CreateResponseBasedStrategy()</c>, <c>CreateAttentionBasedStrategy()</c>,
     /// <c>CreateHybridStrategy()</c>) or your own <see cref="IDistillationStrategy{T}"/>.</para>
-    /// <para><b>Default:</b> when null, response-based distillation (standard Hinton) is used —
-    /// the industry-standard default (see
-    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}.ResolveStrategy"/>).</para>
+    /// <para><b>Default:</b> when null, the strategy follows the teacher's output width. Below
+    /// <see cref="SparseTopKMinimumClasses"/> classes it is response-based distillation (standard Hinton). From
+    /// that width up (a language model's vocabulary) it is sparse Top-K distillation with an exact remainder tail
+    /// bucket over the teacher's <see cref="SparseTopK"/> most likely classes, which keeps the full tail mass in the
+    /// loss instead of renormalizing it away (see
+    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}.ResolveStrategyForOutputWidth"/>).</para>
     /// </remarks>
     public IDistillationStrategy<T>? Strategy { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many of the teacher's most likely classes the default large-vocabulary strategy matches
+    /// exactly (the rest are one tail bucket). Default 64.
+    /// </summary>
+    /// <remarks>
+    /// <para>Used only when <see cref="Strategy"/> is null and the teacher's output has at least
+    /// <see cref="SparseTopKMinimumClasses"/> classes.</para>
+    /// </remarks>
+    public int SparseTopK { get; set; } = 64;
+
+    /// <summary>
+    /// Gets or sets the output width (number of classes, a vocabulary size) from which the default strategy is sparse
+    /// Top-K tail-bucket distillation rather than response-based distillation. Default 1024. Set
+    /// <see cref="int.MaxValue"/> to always use response-based distillation.
+    /// </summary>
+    public int SparseTopKMinimumClasses { get; set; } = 1024;
 
     /// <summary>
     /// Gets or sets the temperature for softmax scaling.

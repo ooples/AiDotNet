@@ -599,11 +599,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var teacherForward = ResolveTeacherForward((kd ?? throw new InvalidOperationException("kd is null where it is required.")));
-        var strategy = kd.Strategy is { } configuredStrategy
-            ? configuredStrategy
-            : KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
-                kd.Temperature, kd.Alpha);
-        var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
+        // The default strategy depends on the teacher's output width, known from its first output.
+        KnowledgeDistillation.DistillationLossAdapter<T>? lossAdapterSlot = null;
+        KnowledgeDistillation.DistillationLossAdapter<T> AdapterFor(Tensor<T> teacherOutput)
+            => lossAdapterSlot ??= new KnowledgeDistillation.DistillationLossAdapter<T>(
+                KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(
+                    kd.Strategy, kd.Temperature, kd.Alpha,
+                    outputClasses: teacherOutput.Shape.Length > 0
+                        ? teacherOutput.Shape[teacherOutput.Shape.Length - 1]
+                        : teacherOutput.Length,
+                    kd.SparseTopK, kd.SparseTopKMinimumClasses));
 
         var numOps = MathHelper.GetNumericOperations<T>();
         int rows = studentInputs.Shape[0];
@@ -616,6 +621,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 var inputRow = RowTensor(studentInputs, row);
                 var teacherOutput = teacherForward(inputRow);
+                var lossAdapter = AdapterFor(teacherOutput);
 
                 // The hard-label term (when the strategy uses it) reads the true label for this row.
                 lossAdapter.CurrentTrueLabel = RowTensor(studentTargets, row).ToVector();
