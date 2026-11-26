@@ -139,7 +139,10 @@ if ($env:GITHUB_STEP_SUMMARY -and $recovered.Count -gt 0) {
     foreach ($item in $recovered) {
         $lines.Add("| $($item.shard) | $($item.primaryJobId) | $($item.chosenJobId) | $($item.counts.total) | $($item.counts.passed) |")
     }
-    $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+    # The summary is a courtesy copy of the annotations above. The proof and job files are already written, so
+    # a summary file that cannot be appended to must not fail a verified recovery; the gate below still decides.
+    try { $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8 }
+    catch { Write-Host "::warning title=Step summary not written::Could not append the rerun table to the step summary: $($_.Exception.Message)" }
 }
 if (-not $proof.complete -or $matrix.Count -eq 0) { throw "Logical shard evidence gate failed: $($errors.Count) rejected shard job(s)." }
 Write-Host "Verified $($receipts.Count) required logical shard receipt(s); original attempts remain in original-jobs.json."

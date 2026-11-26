@@ -33,7 +33,7 @@ $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $refused = [Collections.Generic.List[object]]::new()
 $repeated = [Collections.Generic.List[object]]::new()
 $selfHostedAuthorized = 0
-$previousLoaded = $false; $previousRun = $null; $previousJobs = @()
+$previousLoaded = $false; $previousRun = $null; $previousJobs = @(); $previousError = $null
 foreach ($shard in $matrix) {
     if (-not $names.Add([string]$shard.name)) { throw "Duplicate matrix shard '$($shard.name)'." }
     $name = "Tests ($($shard.framework)) - $($shard.name)"
@@ -51,15 +51,18 @@ foreach ($shard in $matrix) {
             # a machine that is switched off two nights running says nothing about the shard. If the previous
             # run cannot be read the shard is not rerun either; the history is part of the evidence.
             if (-not (Test-IsSelfHostedFailoverJob $job)) {
+                # The history is looked up once per plan. A lookup that fails (its retry budget spent) is
+                # remembered and given as the refusal for every later hosted shard, rather than retried per shard.
                 if (-not $previousLoaded) {
+                    $previousLoaded = $true
                     try {
                         $previousRun = Get-FailoverPreviousRun $run $Repository
                         $previousJobs = @(if ($null -ne $previousRun) {
                             Invoke-FailoverApi "repos/$Repository/actions/runs/$($previousRun.id)/jobs?filter=all" -Paginate
                         })
-                    } catch { throw "The previous run could not be read, so the shard is not rerun: $($_.Exception.Message)" }
-                    $previousLoaded = $true
+                    } catch { $previousError = "The previous run could not be read, so the shard is not rerun: $($_.Exception.Message)" }
                 }
+                if ($previousError) { throw $previousError }
                 if (Test-FailoverLostOnPreviousRun -JobName $name -PreviousRun $previousRun -PreviousJobs $previousJobs -Repository $Repository) {
                     $repeated.Add([pscustomobject]@{ shard = [string]$shard.name; previousRunId = [string]$previousRun.id })
                     throw "Lost its runner on the previous run ($($previousRun.id)) as well; not rerun. A shard that loses its runner twice running is exhausting it."

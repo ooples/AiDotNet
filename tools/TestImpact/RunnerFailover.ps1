@@ -82,10 +82,25 @@ function Test-FailoverInfrastructureFailure {
     # Normal GitHub-hosted primary jobs only fail over on explicit server runner-loss annotations.
     # GitHub words a lost hosted runner "The hosted runner lost communication with the server."; only the
     # self-hosted wording was recognised, so a nightly's lost hosted shards were reported Missing instead of rerun.
-    if ($conclusion -ne 'failure') { return $false }
+    return Test-FailoverHostedRunnerLoss $Job $Annotations
+}
+
+# The strict rule for a hosted job: it failed, no step failed or timed out, nothing was cancelled or superseded,
+# no failure-level annotation names a product failure, and every failure-level annotation is the server's own
+# runner-loss message. Notices and warnings ("Compiler cache restored.") are not evidence either way. The same
+# rule decides a current hosted primary and a historical loss, so a previous run's product failure is never
+# counted as a previous runner loss.
+function Test-FailoverHostedRunnerLoss {
+    param([Parameter(Mandatory)] $Job, [AllowEmptyCollection()] [object[]] $Annotations = @())
+    if ([string](Get-FailoverProperty $Job 'conclusion' '') -ne 'failure') { return $false }
     $steps = @(Get-FailoverProperty $Job 'steps' @())
-    if (@($steps | Where-Object { $_.conclusion -in @('failure', 'timed_out') }).Count -gt 0) { return $false }
-    if (@($messages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out' }).Count -gt 0) { return $false }
+    if (@($steps | Where-Object { (Get-FailoverProperty $_ 'conclusion' '') -in @('failure', 'timed_out') }).Count -gt 0) { return $false }
+    $messages = @($Annotations | ForEach-Object { [string](Get-FailoverProperty $_ 'message' '') })
+    if (@($messages | Where-Object { $_ -match '(?i)manually cancel|supersed' }).Count -gt 0) { return $false }
+    $failureMessages = @($Annotations | Where-Object {
+        [string](Get-FailoverProperty $_ 'annotation_level' '') -cnotin @('notice', 'warning')
+    } | ForEach-Object { [string](Get-FailoverProperty $_ 'message' '') })
+    if (@($failureMessages | Where-Object { $_ -match '(?i)out.of.memory|\bOOM\b|assert|compil|analy[sz]er|timed.out' }).Count -gt 0) { return $false }
     return Test-FailoverRunnerLossEvidence $Annotations
 }
 
@@ -128,14 +143,28 @@ function Get-FailoverPreviousRun {
     }
     $query = "repos/$Repository/actions/workflows/$workflowId/runs?event=$eventName&status=completed"
     if ($branch) { $query += "&branch=$([uri]::EscapeDataString($branch))" }
-    $response = Invoke-FailoverApi $query
-    $earlier = @(@(Get-FailoverProperty $response 'workflow_runs' @()) | Where-Object {
-        [long]$_.run_number -lt $number -and [string]$_.conclusion -cnotin @('cancelled', 'skipped') -and
-        [string]$_.event -ceq $eventName -and [string](Get-FailoverProperty $_ 'head_branch' '') -ceq $branch
-    } | Sort-Object { [long]$_.run_number } -Descending)
-    if ($earlier.Count -eq 0) { return $null }
+    $isEligible = {
+        param($Candidate)
+        [long]$Candidate.run_number -lt $number -and [string]$Candidate.conclusion -cnotin @('cancelled', 'skipped') -and
+        [string]$Candidate.event -ceq $eventName -and [string](Get-FailoverProperty $Candidate 'head_branch' '') -ceq $branch
+    }
+    # Runs come newest first, so the first page holding an eligible run holds the highest-numbered one; a run of
+    # cancelled or skipped runs can push it onto a later page, so pages are read until one is found or the list ends.
+    $runs = @(Invoke-FailoverApi $query -Paginate -Until {
+        param($ReadSoFar) @($ReadSoFar | Where-Object { & $isEligible $_ }).Count -gt 0
+    })
+    $earlier = @($runs | Where-Object { & $isEligible $_ } | Sort-Object { [long]$_.run_number } -Descending)
+    if ($earlier.Count -eq 0) {
+        # GitHub returns at most 1,000 runs for a filtered search. Reaching that cap without an eligible run does
+        # not prove there is none, so the history counts as unreadable rather than empty.
+        if ($runs.Count -ge $script:FailoverRunSearchCap) {
+            throw "No eligible earlier run among the $($runs.Count) newest completed runs, the most GitHub returns for this search."
+        }
+        return $null
+    }
     return $earlier[0]
 }
+$script:FailoverRunSearchCap = 1000
 
 # True when the job of the same name lost its runner on the previous run too. A shard that dies twice running
 # is not bad luck with a machine: its workload is exhausting the runner, and a third attempt elsewhere would
@@ -144,12 +173,18 @@ function Test-FailoverLostOnPreviousRun {
     param([Parameter(Mandatory)] [string] $JobName, $PreviousRun, [AllowEmptyCollection()] [object[]] $PreviousJobs = @(),
         [Parameter(Mandatory)] [string] $Repository)
     if ($null -eq $PreviousRun) { return $false }
-    foreach ($job in @($PreviousJobs | Where-Object { [string]$_.name -ceq $JobName })) {
-        if ([string](Get-FailoverProperty $job 'conclusion' '') -cne 'failure' -or -not (Get-FailoverProperty $job 'check_run_url' '')) { continue }
-        $annotations = @(Get-FailoverAnnotations $job $Repository ([string]$PreviousRun.head_sha))
-        if (Test-FailoverRunnerLossEvidence $annotations) { return $true }
-    }
-    return $false
+    # `filter=all` lists every attempt's execution of a job. Only the latest execution of this shard is its
+    # result for that run: a loss on attempt 1 that passed on attempt 2 is a recovered run. Selecting per shard
+    # keeps the attempt-1 loss when a partial rerun of the run did not include this shard.
+    $job = @($PreviousJobs | Where-Object { [string]$_.name -ceq $JobName } | Sort-Object `
+        @{ Expression = { [long](Get-FailoverProperty $_ 'run_attempt' 0) }; Descending = $true },
+        @{ Expression = { [long](Get-FailoverProperty $_ 'id' 0) }; Descending = $true }) | Select-Object -First 1
+    if ($null -eq $job) { return $false }
+    if ([string](Get-FailoverProperty $job 'conclusion' '') -cne 'failure' -or -not (Get-FailoverProperty $job 'check_run_url' '')) { return $false }
+    $annotations = @(Get-FailoverAnnotations $job $Repository ([string]$PreviousRun.head_sha))
+    # The strict hosted rule, never the permissive self-hosted fallback: a failed step or a product failure on
+    # the previous run is not a previous runner loss.
+    return Test-FailoverHostedRunnerLoss $job $annotations
 }
 
 function Get-FailoverJobPool {
@@ -222,7 +257,9 @@ function Assert-FailoverReceipt {
 }
 
 function Invoke-FailoverApi {
-    param([string] $Path, [switch] $Paginate, [string] $Token = '')
+    # -Until: with -Paginate, a predicate over the items read so far; reading stops after the first page that
+    # satisfies it, so a search for the newest match does not read the whole list.
+    param([string] $Path, [switch] $Paginate, [string] $Token = '', [scriptblock] $Until = $null)
     $token = if ($Token) { $Token } elseif ($env:GH_TOKEN) { $env:GH_TOKEN } else { $env:GITHUB_TOKEN }
     if (-not $token) { throw 'A GitHub API token is required.' }
     $headers = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
@@ -236,10 +273,11 @@ function Invoke-FailoverApi {
         $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri $uri
         if (-not $Paginate) { return $response }
         $property = if ($null -ne $response -and $response -isnot [System.Collections.IList]) {
-            @('jobs', 'artifacts', 'runners') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
+            @('jobs', 'artifacts', 'runners', 'workflow_runs') | Where-Object { $response.PSObject.Properties[$_] } | Select-Object -First 1
         } else { $null }
         $batch = @(if ($property) { $response.$property } elseif ($null -ne $response) { $response })
         $items += $batch; $page++
+        if ($null -ne $Until -and (& $Until $items)) { break }
     } while ($batch.Count -eq 50)
     return $items
 }

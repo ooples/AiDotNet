@@ -257,6 +257,22 @@ try {
         $e.annotations += [pscustomobject]@{ annotation_level = 'notice'; path = '.github'; start_line = 3; message = 'Cache restored from key nuget-1.' }
         if (-not (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations)) { throw 'A benign warning blocked a proven runner loss.' }
     }
+    Assert-Case 'a warning that mentions the compiler does not veto a proven hosted runner loss' {
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.annotations[0].message = $hostedLoss
+        $e.annotations += [pscustomobject]@{ annotation_level = 'warning'; path = '.github'; start_line = 5; message = 'Compiler cache restored.' }
+        $e.annotations += [pscustomobject]@{ annotation_level = 'notice'; path = '.github'; start_line = 6; message = 'Analyzer cache restored; timed out waiting for nothing.' }
+        if (-not (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations)) { throw 'A non-failure warning vetoed a proven runner loss.' }
+    }
+    Assert-Case 'a failure-level compiler annotation still vetoes the hosted runner loss' {
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.annotations[0].message = $hostedLoss
+        $e.annotations += [pscustomobject]@{ annotation_level = 'failure'; path = 'src/A.cs'; start_line = 5; message = 'Compiler error CS1002' }
+        if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'A compiler failure was hidden.' }
+    }
+    Assert-Case 'a cancellation warning still refuses the rerun' {
+        $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.annotations[0].message = $hostedLoss
+        $e.annotations += [pscustomobject]@{ annotation_level = 'warning'; path = '.github'; start_line = 5; message = 'Workflow manually cancelled' }
+        if (Test-FailoverInfrastructureFailure $e.primaryJob $e.annotations) { throw 'A cancellation was hidden.' }
+    }
     Assert-Case 'an annotation with no fields is failure-level evidence, not a lost runner' {
         $e = New-Evidence; $e.primaryJob.labels = @('ubuntu-latest'); $e.annotations[0].message = $hostedLoss
         $e.annotations += [pscustomobject]@{ title = 'unshaped' }
@@ -1002,6 +1018,54 @@ try {
                 @($result.Calls | Where-Object { $_ -match 'workflows/55' }).Count -ne 0) { throw 'The consecutive-loss rule reached the opportunistic self-hosted pool.' }
             if ($result.Log -notmatch "'Core' did not finish on its self-hosted runner \(job 9001\) and is rerun once on ubuntu-latest\.") { throw 'The hosted fallback is not annotated.' }
         }
+        Assert-Case 'planner: a previous loss of the shard that passed on a rerun attempt does not refuse this rerun' {
+            $scenario = New-E2eScenario 'lost-then-recovered'
+            Add-E2ePreviousRun $scenario 'Tests (net10.0) - Core' $hostedLoss
+            $route = "repos/$e2eRepository/actions/runs/6990/jobs?filter=all"
+            $lost = $scenario.Routes[$route].jobs[0]; $lost | Add-Member -NotePropertyName run_attempt -NotePropertyValue 1
+            $passed = Copy-Evidence $lost; $passed.id = 8951; $passed.run_attempt = 2; $passed.conclusion = 'success'
+            $passed.check_run_url = "https://api.github.com/repos/$e2eRepository/check-runs/98051"
+            $scenario.Routes[$route] = [pscustomobject]@{ jobs = @($lost, $passed) }
+            $result = Invoke-E2ePlan $scenario
+            if (@($result.Plan.alternate).Count -ne 1 -or @($result.Plan.repeatedRunnerLoss).Count -ne 0) { throw 'A superseded attempt-1 loss refused the rerun.' }
+        }
+        Assert-Case 'planner: a previous loss stands when a partial rerun of that run did not include the shard' {
+            $scenario = New-E2eScenario 'lost-other-rerun'
+            Add-E2ePreviousRun $scenario 'Tests (net10.0) - Core' $hostedLoss
+            $route = "repos/$e2eRepository/actions/runs/6990/jobs?filter=all"
+            $lost = $scenario.Routes[$route].jobs[0]; $lost | Add-Member -NotePropertyName run_attempt -NotePropertyValue 1
+            $other = Copy-Evidence $lost; $other.id = 8952; $other.run_attempt = 2; $other.name = 'Tests (net10.0) - Core B'; $other.conclusion = 'success'
+            $scenario.Routes[$route] = [pscustomobject]@{ jobs = @($lost, $other) }
+            $result = Invoke-E2ePlan $scenario
+            if (@($result.Plan.alternate).Count -ne 0 -or @($result.Plan.repeatedRunnerLoss).Count -ne 1) { throw 'A rerun of another shard erased this shard''s loss.' }
+        }
+        Assert-Case 'planner: a previous product failure beside a runner-loss annotation is not a previous runner loss' {
+            $scenario = New-E2eScenario 'previous-failed-step'
+            Add-E2ePreviousRun $scenario 'Tests (net10.0) - Core' $hostedLoss
+            $route = "repos/$e2eRepository/actions/runs/6990/jobs?filter=all"
+            $scenario.Routes[$route].jobs[0].steps[0].conclusion = 'failure'
+            $result = Invoke-E2ePlan $scenario
+            if (@($result.Plan.alternate).Count -ne 1 -or @($result.Plan.repeatedRunnerLoss).Count -ne 0) { throw 'A previous failed step was counted as a previous runner loss.' }
+        }
+        Assert-Case 'planner: the previous run is found past a first page of cancelled runs' {
+            $scenario = New-E2eScenario 'history-page-two'
+            Add-E2ePreviousRun $scenario 'Tests (net10.0) - Core' $hostedLoss
+            $older = @($scenario.Routes[$e2eHistory].workflow_runs | Where-Object { $_.run_number -ne 19 })
+            $scenario.Routes[$e2eHistory] = [pscustomobject]@{ workflow_runs = @(1..50 | ForEach-Object {
+                [pscustomobject]@{ id = 7100 + $_; run_number = 20; conclusion = 'cancelled'; event = 'push'; head_branch = 'master'; head_sha = ('4' * 40) } }) }
+            $scenario.Routes["$e2eHistory&per_page=50&page=2"] = [pscustomobject]@{ workflow_runs = $older }
+            $result = Invoke-E2ePlan $scenario
+            if (@($result.Plan.alternate).Count -ne 0 -or @($result.Plan.repeatedRunnerLoss).Count -ne 1 -or
+                $result.Plan.repeatedRunnerLoss[0].previousRunId -cne '6990') { throw 'The previous run on page two was not found.' }
+        }
+        Assert-Case 'planner: history that cannot be read is looked up once and refuses every hosted shard' {
+            $scenario = New-E2eScenario 'history-unreadable-many' -ShardNames @('Core', 'Core B', 'Core C') -IdleRunners 3
+            $scenario.Routes.Remove($e2eHistory)
+            $result = Invoke-E2ePlan $scenario
+            if (@($result.Calls | Where-Object { $_ -match 'workflows/55/runs' }).Count -ne 1) { throw "History was requested $(@($result.Calls | Where-Object { $_ -match 'workflows/55/runs' }).Count) times." }
+            if (@($result.Plan.alternate).Count -ne 0 -or @($result.Plan.attempts | Where-Object {
+                $_.reason -notmatch '^The previous run could not be read, so the shard is not rerun: ' }).Count -ne 0) { throw 'A shard was not refused with the cached lookup error.' }
+        }
 
         Assert-Case 'reconciler: a hosted primary lost and a self-hosted alternate passed resolve to the alternate, visibly' {
             $scenario = New-E2eScenario 'resolve-hosted-to-self-hosted'
@@ -1051,6 +1115,37 @@ try {
         foreach ($key in $e2ePriorEnvironment.Keys) { [Environment]::SetEnvironmentVariable($key, $e2ePriorEnvironment[$key]) }
     }
 
+    Assert-Case 'previous-run search: the result cap without an eligible run is unreadable history, not empty history' {
+        $run = [pscustomobject]@{ workflow_id = 55; event = 'push'; head_branch = 'master'; run_number = 5000 }
+        $capped = @(1..$script:FailoverRunSearchCap | ForEach-Object {
+            [pscustomobject]@{ id = $_; run_number = 4999; conclusion = 'cancelled'; event = 'push'; head_branch = 'master' } })
+        $priorApi = (Get-Item Function:Invoke-FailoverApi).ScriptBlock
+        try {
+            Set-Item Function:Invoke-FailoverApi -Value { param([string] $Path, [switch] $Paginate, [string] $Token = '', [scriptblock] $Until = $null) $capped }.GetNewClosure()
+            $threw = $false
+            try { $null = Get-FailoverPreviousRun $run 'ooples/AiDotNet' } catch { $threw = $_.Exception.Message -match 'the most GitHub returns' }
+            if (-not $threw) { throw 'A capped search was read as an empty history.' }
+            $short = @($capped | Select-Object -First 10)
+            Set-Item Function:Invoke-FailoverApi -Value { param([string] $Path, [switch] $Paginate, [string] $Token = '', [scriptblock] $Until = $null) $short }.GetNewClosure()
+            if ($null -ne (Get-FailoverPreviousRun $run 'ooples/AiDotNet')) { throw 'A verified empty history must be $null.' }
+        }
+        finally { Set-Item Function:Invoke-FailoverApi -Value $priorApi }
+    }
+    Assert-Case 'paginated Invoke-FailoverApi stops after the page that satisfies -Until and reads workflow_runs' {
+        . "$PSScriptRoot/Invoke-GitHubApiWithRetry.ps1"
+        $priorRetry = (Get-Item Function:Invoke-GitHubApiWithRetry).ScriptBlock
+        try {
+            Set-Item Function:Invoke-GitHubApiWithRetry -Value {
+                param([string] $Uri, [hashtable] $Headers)
+                if ($Uri -match 'page=1$') { return [pscustomobject]@{ total_count = 120; workflow_runs = @(1..50 | ForEach-Object { [pscustomobject]@{ id = $_ } }) } }
+                if ($Uri -match 'page=2$') { return [pscustomobject]@{ total_count = 120; workflow_runs = @(51..100 | ForEach-Object { [pscustomobject]@{ id = $_ } }) } }
+                throw "Unexpected pagination URI '$Uri'."
+            }
+            $paged = @(& $originalApi -Path 'repos/ooples/AiDotNet/actions/workflows/55/runs' -Paginate -Token 'test-token' -Until { param($ReadSoFar) @($ReadSoFar | Where-Object { $_.id -eq 75 }).Count -gt 0 })
+            if ($paged.Count -ne 100 -or $paged[0].id -ne 1 -or $paged[99].id -ne 100) { throw "Expected 100 flat runs; got $($paged.Count)." }
+        }
+        finally { Set-Item Function:Invoke-GitHubApiWithRetry -Value $priorRetry }
+    }
     Assert-Case 'paginated Invoke-FailoverApi returns flat items under @(...) across pages' {
         . "$PSScriptRoot/Invoke-GitHubApiWithRetry.ps1"
         $priorRetry = (Get-Item Function:Invoke-GitHubApiWithRetry).ScriptBlock
