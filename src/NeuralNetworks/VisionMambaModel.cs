@@ -36,8 +36,8 @@ namespace AiDotNet.NeuralNetworks;
 ///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
-/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
-/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(new[] { 8, 3, 224, 224 });   // [images, 3, H, W]
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(8, 10);                       // one row of class targets per image
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
 ///         architecture,
