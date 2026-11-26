@@ -34,6 +34,28 @@ public sealed class SampleObjectiveTokenMelTrainingTests
         Assert.Contains("Train(TtsTrainingSample)", error.Message);
     }
 
+    // Mel-VAE pretraining requires no transcript (RequiredSupervision is None), so the base refusal let a token/mel
+    // pair through to the standard step. Every DiTTo stage must refuse it.
+    [Theory(Timeout = 120000)]
+    [InlineData(DiTToTrainingStage.MelVaePretraining)]
+    [InlineData(DiTToTrainingStage.MelVaeSemanticFinetuning)]
+    [InlineData(DiTToTrainingStage.LengthPredictor)]
+    public async Task TokenMelTrain_OnDiTToInAnyStage_ThrowsNotSupported(DiTToTrainingStage stage)
+    {
+        await Task.Yield();
+        var options = DiTToTTSPaperTests.TinyOptions();
+        options.TrainingStage = stage;
+        var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 16, outputSize: 12);
+        using var model = new DiTToTTS<double>(architecture, options);
+        var tokens = new Tensor<double>(new[] { 4 });
+        for (int i = 0; i < tokens.Length; i++) tokens[i] = i + 1;
+        var mel = new Tensor<double>(new[] { 1, 4, 8 });
+
+        var error = Assert.Throws<NotSupportedException>(() => model.Train(tokens, mel));
+        Assert.Contains("Train(TtsTrainingSample)", error.Message);
+    }
+
     private static TtsModelBase<double> Create(string name)
     {
         var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
