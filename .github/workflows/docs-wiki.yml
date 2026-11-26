@@ -119,16 +119,16 @@ jobs:
       # 1424 -> 1439 (#2389): this step never ran while the markdown pass above failed, so 17 broken examples
       # accumulated unseen (14 clustering examples on an undeclared dataMatrix, three builder examples on undeclared
       # network/optimizer/builder variables). All 17 compile now.
+      #
+      # 1439 -> 1441 (#2390): AiModelBuilder.Build(samples) and ConfigureSampleObjectiveTraining ship with examples.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1439 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1441 --max-fail 0
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,
       # preprocessing and training pipeline it exists to run. The receiver type is resolved through
       # Roslyn semantic analysis rather than matched by name, because a receiver's type is not something
-      # a regex can know. Ratchet the ceiling DOWN as examples are converted. Only calls that bind to the
-      # IModel/IFullModel/IPredictiveModel contract count: a domain overload such as a TTS model's
-      # Train(TtsTrainingSample<T>) has no facade route to take instead.
+      # a regex can know. Ratchet the ceiling DOWN as examples are converted.
       - name: Facade conformance in doc examples (ratchet)
         run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --facade-check --max-facade-violations 0
 
@@ -141,8 +141,9 @@ jobs:
       #
       # 5306 -> 4890 (#2390): the TTS/ASR rewrites (#2294 and after) left 1155 members undocumented, 1043 of
       # them overrides and interface implementations; those now carry <inheritdoc/> and the new public members
-      # have summaries. Three TrainOnSample overrides (DiTToTTS, E3TTS, MetaVoice1B) are still counted: #2641
-      # adds a method on the line their <inheritdoc/> would take.
+      # have summaries. Three TrainOnSample overrides (DiTToTTS, E3TTS, MetaVoice1B) are still counted: #2660
+      # adds a method on the line their <inheritdoc/> would take. The count is exact against master: a change that
+      # lands first and documents or adds a public member moves it, so rerun this step and set the new number.
       - name: XML documentation coverage (ratchet)
         if: ${{ !cancelled() }}
         run: dotnet run --project tools/XmlDocCoverage $TOOL_ARGS -- --max-undocumented 4890
