@@ -3005,6 +3005,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     private protected int[] SampleShapeOf(int[] inputShape)
     {
+        // Only a layer that declares through this rule records the walk's per-sample shape as its declaration; a
+        // layer with its own resolution (a transformer block keeping its sequence axis dynamic) declared something
+        // else, and replacing that with the first input's concrete shape pinned an axis it never fixes.
+        if (ShapeProbeIsSampleShape) _declaredFromSampleShapeProbe = true;
         if (ShapeProbeIsSampleShape || inputShape.Length < 2) return (int[])inputShape.Clone();
         var perSample = new int[inputShape.Length - 1];
         Array.Copy(inputShape, 1, perSample, 0, perSample.Length);
@@ -3023,8 +3027,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private protected bool ShapeProbeIsSampleShape { get; private set; }
 
-    // Set when the rank-agnostic rule declared this layer from a per-sample shape during a shape-only walk. That
-    // shape is the walk's inference, so the first real input replaces it, exactly as if the walk had not run.
+    // Set when the rank-agnostic rule (SampleShapeOf) declared this layer from a per-sample shape during a shape-only
+    // walk. That shape is the walk's inference, so the first real input replaces it, exactly as if the walk had not
+    // run. A layer that resolves itself another way keeps its own declaration.
     private bool _declaredFromSampleShapeProbe;
 
     /// <summary>
@@ -3035,6 +3040,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal void ResolveShapesOnlyFromSampleShape(int[] sampleShape)
     {
         if (IsShapeResolved) return;
+        _declaredFromSampleShapeProbe = false;
         ShapeProbeIsSampleShape = true;
         try
         {
@@ -3045,7 +3051,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             ShapeProbeIsSampleShape = false;
         }
 
-        _declaredFromSampleShapeProbe = IsShapePreserving && IsShapeResolved;
+        _declaredFromSampleShapeProbe &= IsShapeResolved;
     }
 
     /// <summary>

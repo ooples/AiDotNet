@@ -26634,3 +26634,5 @@ AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivileg
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
 override AiDotNet.NeuralNetworks.Layers.SqueezeAndExcitationLayer<T>.OnRandomSeedAssigned() -> void
+override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.OutputShapeRelation.get -> AiDotNet.NeuralNetworks.Layers.ShapeRelationKind
