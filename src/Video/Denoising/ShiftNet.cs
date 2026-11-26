@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Denoising;
 /// </remarks>
 /// <example>
 /// <code>
-/// var noisyFrames = Tensor&lt;double&gt;.CreateRandom(8, 3, 64, 64);
+/// var noisyFrames = Tensor&lt;double&gt;.CreateRandom(8, 3, 64, 64).Multiply(255.0);   // [T, 3, H, W], 0-255
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Generative,

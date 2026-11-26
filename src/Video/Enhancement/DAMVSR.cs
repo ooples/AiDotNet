@@ -50,14 +50,23 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// var lowResClip = Tensor&lt;float&gt;.CreateRandom(14, 3, 64, 64);
+/// var lowResClip = Tensor&lt;float&gt;.CreateRandom(14, 3, 64, 64).Multiply(255f);   // [frames, 3, H, W], 0-255
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 14, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var model = new DAMVSR&lt;float&gt;(arch, new DAMVSROptions());
+///
 /// // The reference frames come from an image super-resolver (the paper uses ResShift, SUPIR or InvSR);
-/// // bicubic upscaling when unset. Plug one in as a [3, h, w] -> [3, 4h, 4w] function:
-/// // model.ReferenceUpscaler = frame =&gt; myImageSuperResolver.Upscale(frame);
-/// var upscaled = model.Upscale(lowResClip);      // [14, 3, 64, 64] -> [14, 3, 256, 256], pixel values 0-255
+/// // bicubic upscaling when unset. Any [3, h, w] -> [3, 4h, 4w] model plugs in, here Real-ESRGAN at 4x:
+/// var imageSuperResolver = new RealESRGAN&lt;float&gt;(
+///     new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.ThreeDimensional,
+///         taskType: NeuralNetworkTaskType.Generative, inputHeight: 64, inputWidth: 64, inputDepth: 3),
+///     new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.ThreeDimensional,
+///         taskType: NeuralNetworkTaskType.Generative, inputHeight: 256, inputWidth: 256, inputDepth: 3),
+///     InputType.ThreeDimensional,
+///     new RealESRGANOptions { ScaleFactor = 4 });
+/// model.ReferenceUpscaler = frame =&gt; imageSuperResolver.Upscale(frame);
+///
+/// var upscaled = model.Upscale(lowResClip);      // [14, 3, 64, 64] -> [14, 3, 256, 256], 0-255
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

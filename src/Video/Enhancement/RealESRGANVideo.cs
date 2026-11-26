@@ -43,8 +43,9 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// var degradedFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 64, 64);     // [frames, 3, H, W], pixel values 0-255
-/// var cleanFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 256, 256);  // the same frames at 4x
+/// // Each frame is upscaled on its own, so frames are independent samples and the builder may split them.
+/// var degradedFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 64, 64).Multiply(255f);   // [frames, 3, H, W], 0-255
+/// var cleanFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 256, 256).Multiply(255f);  // the same frames at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 4, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
