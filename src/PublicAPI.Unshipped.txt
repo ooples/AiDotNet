@@ -26687,3 +26687,8 @@ AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.UsesProjectionNorm.
 AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation, int sharedFfnDim) -> void
 AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, int sharedFfnDim = 0, bool normalizeTopK = true) -> void
 AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.NormalizeTopK.get -> bool
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>.BatchSize.get -> int
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>.Position.get -> int
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.CreateStepState(int batchSize = 1) -> AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>!
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
