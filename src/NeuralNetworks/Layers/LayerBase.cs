@@ -971,6 +971,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         clone._seededRandom = shareRandomState && _seededRandom is not null
             ? LayerCloning.CloneRandom(_seededRandom)
             : null;
+        // A shared-state clone draws the same per-step masks: same stream, same fallback seed. An independent clone
+        // starts on stream 0 with no fallback seed, like a freshly constructed layer.
+        clone.StochasticStream = shareRandomState ? StochasticStream : 0;
+        clone.StochasticFallbackSeed = shareRandomState ? StochasticFallbackSeed : null;
         clone.SetTrainingMode(IsTrainingMode);
     }
 

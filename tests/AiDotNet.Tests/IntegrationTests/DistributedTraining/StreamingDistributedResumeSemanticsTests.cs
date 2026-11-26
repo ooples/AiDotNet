@@ -188,6 +188,40 @@ public sealed partial class StreamingDistributedEnablersTests
         Assert.True(diff < 1e-5, $"{worldSize}-rank dropout resume diverged from the uninterrupted run by {diff}.");
     }
 
+    /// <summary>
+    /// G6: the stream a rank is given is the stream its dropout masks come from. Two layers with the same seed, stream
+    /// and counter draw the same sequence of masks; changing only the stream changes the masks drawn.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public void Dropout_SameSeedStreamAndCounter_DrawsTheSameMasks_AnotherStreamDrawsOthers()
+    {
+        const int Draws = 4;
+        var input = new Tensor<float>(new[] { 1, 64 }, new Vector<float>(Enumerable.Repeat(1.5f, 64).ToArray()));
+
+        float[][] Sample(int stream)
+        {
+            var layer = new DropoutLayer<float>(0.5) { RandomSeed = 4242 };
+            layer.StochasticStream = stream;
+            layer.StochasticDrawCounter = 3;
+            layer.SetTrainingMode(true);
+            return Enumerable.Range(0, Draws).Select(_ => layer.Forward(input).ToArray()).ToArray();
+        }
+
+        var first = Sample(1);
+        var again = Sample(1);
+        var other = Sample(2);
+        for (int d = 0; d < Draws; d++)
+        {
+            Assert.Equal(first[d], again[d]);
+            Assert.Contains(first[d], v => v == 0f);
+            Assert.Contains(first[d], v => v != 0f);
+        }
+
+        // Every draw of the other stream differs from this stream's draw at the same counter.
+        for (int d = 0; d < Draws; d++)
+            Assert.NotEqual(first[d], other[d]);
+    }
+
     /// <summary>G7: rank 0's buffers (batch-norm running statistics) replace every other rank's when training starts.</summary>
     [Fact(Timeout = 120000)]
     public async Task InitialSync_BroadcastsRankZerosBuffers()

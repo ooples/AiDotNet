@@ -18518,9 +18518,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>
     /// The layers (and sub-layers) whose per-step masks come from a seed and a draw counter, in a fixed traversal order
-    /// that is the same on every rank.
+    /// that is the same on every rank: <see cref="Layers"/>, then <see cref="GetExtraTrainableLayers"/> (the roots and
+    /// order <see cref="WireLayerRandomSeeds"/> seeds), so an off-chain branch's dropout gets its per-rank stream and
+    /// has its draw counter checkpointed too.
     /// </summary>
-    internal IReadOnlyList<LayerBase<T>> CollectStochasticLayers()
+    /// <param name="includeExtraRoots">False walks <see cref="Layers"/> only -- the leading entries of the full list,
+    /// in the same order -- which is what checkpoints written before off-chain layers were collected recorded.</param>
+    internal IReadOnlyList<LayerBase<T>> CollectStochasticLayers(bool includeExtraRoots = true)
     {
         var found = new List<LayerBase<T>>();
         var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
@@ -18531,14 +18535,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var sub in layer.GetSubLayers()) Visit(sub);
         }
         foreach (var layer in Layers) Visit(layer);
+        if (includeExtraRoots)
+            foreach (var extra in GetExtraTrainableLayers())
+                if (extra is not null) Visit(extra);
         return found;
     }
 
-    /// <summary>Every registered buffer of this network's layers and their sub-layers, in layer order.</summary>
+    /// <summary>
+    /// Every registered buffer of this network's layers and their sub-layers: <see cref="Layers"/>, then
+    /// <see cref="GetExtraTrainableLayers"/>, so an off-chain branch's running statistics are broadcast as well. A
+    /// layer reachable from both is collected once.
+    /// </summary>
     internal IReadOnlyList<Tensor<T>> CollectRegisteredBuffers()
     {
         var buffers = new List<Tensor<T>>();
-        foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers, seen);
+        foreach (var extra in GetExtraTrainableLayers())
+            if (extra is not null) CollectSnapshotBuffers(extra, buffers, seen);
         return buffers;
     }
 
@@ -18550,6 +18564,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 buffers.Add(buffer);
         }
         foreach (var sub in layer.GetSubLayers()) CollectSnapshotBuffers(sub, buffers);
+    }
+
+    private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers, HashSet<ILayer<T>> seen)
+    {
+        if (!seen.Add(layer)) return;
+        if (layer is LayerBase<T> concrete)
+        {
+            foreach (var (_, buffer) in concrete.GetRegisteredBuffers())
+                buffers.Add(buffer);
+        }
+        foreach (var sub in layer.GetSubLayers()) CollectSnapshotBuffers(sub, buffers, seen);
     }
     /// <summary>
     /// Runs this network's forward on the caller's active gradient tape with the network frozen:
