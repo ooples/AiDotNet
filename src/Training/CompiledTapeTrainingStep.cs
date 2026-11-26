@@ -546,6 +546,11 @@ public static partial class CompiledTapeTrainingStep<T>
     /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
     internal static object? ConfiguredPlanIdentity => _configuredPlan;
 
+    /// <summary>Whether the configured plan's last step skipped its update because its loss scaler found non-finite
+    /// gradients (a routine mixed-precision overflow): the weights legitimately did not move.</summary>
+    internal static bool ConfiguredPlanSkippedLastUpdate
+        => _configuredPlan is CompiledTrainingPlan<T> { LastStepSkippedNonFiniteGradients: true };
+
     internal static bool TryConsumeDistributedReplayDisagreement(
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? reason)
     {
@@ -1290,6 +1295,12 @@ public static partial class CompiledTapeTrainingStep<T>
         CurrentState.distributedGradMap = null;
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
+        // The data-parallel engagement belongs to the dropped lifecycle's plan: detach its exchange and forget it, so
+        // the next DDP step agrees on engagement again and configures a fresh plan instead of continuing the old one.
+        // (A new batch shape does not come through here; it carries the engagement forward to the new plan.)
+        if (CurrentState.distributedCompiledUpdate is DistributedCompiledUpdate engaged)
+            (engaged.Plan as CompiledTrainingPlan<T>)?.SetGradientExchange(null);
+        CurrentState.distributedCompiledUpdate = null;
         _shapeSwitchFrom = null;
         _retiringCache?.Invalidate();
         _retiringCache = null;
@@ -2721,6 +2732,29 @@ public static partial class CompiledTapeTrainingStep<T>
         }
     }
 
+    // The mean reduction each distributed plan's objective traced (null: no loss that leaves targets out of its mean
+    // scored it). A replay does not score again, so the token count reads the plan's own reduction, never what the
+    // same loss instance scored since (another call with another target layout).
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ICompiledTrainingPlan<T>,
+        System.Runtime.CompilerServices.StrongBox<LossFunctions.MeanReductionRecord<T>?>> s_tracedReductions = new();
+
+    private static void RecordTracedReduction(ICompiledTrainingPlan<T> plan, LossFunctions.MeanReductionRecord<T>? traced)
+    {
+        s_tracedReductions.Remove(plan);
+        s_tracedReductions.Add(plan, new System.Runtime.CompilerServices.StrongBox<LossFunctions.MeanReductionRecord<T>?>(traced));
+    }
+
+    /// <summary>
+    /// This rank's token count for a distributed step on <paramref name="plan"/>: the count the mean reduction of the
+    /// loss that formed the plan's gradient divides by, so the rank weight and the gradient share one loss contract.
+    /// A plan traced outside these steps (no recorded reduction) counts with the model's default loss.
+    /// </summary>
+    private static long CountTracedTokens(ICompiledTrainingPlan<T> plan, Tensor<T> target,
+        NeuralNetworks.NeuralNetworkBase<T> distNet)
+        => s_tracedReductions.TryGetValue(plan, out var traced)
+            ? DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, traced.Value)
+            : DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+
     private static T StepDistributedCompiledSgd(
         NeuralNetworks.NeuralNetworkBase<T> distNet,
         DistributedTraining.DistributedTapeCoordinator<T> distCoord,
@@ -2816,6 +2850,7 @@ public static partial class CompiledTapeTrainingStep<T>
             using (FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
             {
                 bool compiledNow = false;
+                LossFunctions.MeanReductionRecord<T>? tracedReduction = null;
                 using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
                 {
                     plan = cache.GetOrCompileTraining(
@@ -2823,12 +2858,18 @@ public static partial class CompiledTapeTrainingStep<T>
                         () =>
                         {
                             compiledNow = true;
+                            using var scoring = LossFunctions.MeanReductionCapture<T>.Begin();
                             var predicted = forward(persistentIn);
-                            return computeLoss(predicted, persistentTgt);
+                            var traced = computeLoss(predicted, persistentTgt);
+                            tracedReduction = scoring.Captured;
+                            return traced;
                         },
                         parameters);
                     if (compiledNow)
+                    {
                         CompiledStepRandom<T>.Attach(plan, stepRandom);
+                        RecordTracedReduction(plan, tracedReduction);
+                    }
                 }
 
                 if (!compiledNow)
@@ -2841,7 +2882,7 @@ public static partial class CompiledTapeTrainingStep<T>
             }
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+            long localTokens = CountTracedTokens(plan, target, distNet);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
@@ -3025,6 +3066,7 @@ public static partial class CompiledTapeTrainingStep<T>
             using (FirstCompiledStepAllocationScope.EnterOnThisThread(_configuredPlan is null || shapeChanged))
             {
                 bool compiledNow = false;
+                LossFunctions.MeanReductionRecord<T>? tracedReduction = null;
                 using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
                 {
                     plan = cache.GetOrCompileTraining(
@@ -3032,12 +3074,18 @@ public static partial class CompiledTapeTrainingStep<T>
                         () =>
                         {
                             compiledNow = true;
+                            using var scoring = LossFunctions.MeanReductionCapture<T>.Begin();
                             var predicted = forward(persistentIn);
-                            return computeLoss(predicted, persistentTgt);
+                            var traced = computeLoss(predicted, persistentTgt);
+                            tracedReduction = scoring.Captured;
+                            return traced;
                         },
                         parameters);
                     if (compiledNow)
+                    {
                         CompiledStepRandom<T>.Attach(plan, stepRandom);
+                        RecordTracedReduction(plan, tracedReduction);
+                    }
                 }
 
                 if (!compiledNow)
@@ -3065,7 +3113,7 @@ public static partial class CompiledTapeTrainingStep<T>
                 if (useInPlanUpdate)
                 {
                     collectivesStarted = true;
-                    long tokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+                    long tokens = CountTracedTokens(plan, target, distNet);
                     lossValue = RunDistributedCompiledUpdate(distNet, distCoord, plan, parameters, eagerOptimizer,
                         fusedConfig, mixedPrecision, maxGradNorm, tokens, verifyDistributedReplay, distributedEagerReplayLoss,
                         distributedReplayTolerance, onGradients);
@@ -3094,7 +3142,7 @@ public static partial class CompiledTapeTrainingStep<T>
                 return false;
             }
 
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+            long localTokens = CountTracedTokens(plan, target, distNet);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             if (s_fusedDebug)
                 Fd($"distributed reference step: eager lr {eagerOptimizer.GetCurrentLearningRate():G9}, global loss {globalLoss:G9}, tokens {localTokens}");

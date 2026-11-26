@@ -1214,14 +1214,22 @@ internal sealed class TapeTrainingStepper<T>
         List<float[]>? mpSnapshots = null;
         List<Tensor<T>>? mpTargets = null;
         bool mpRestored = true;
+        LossFunctions.MeanReductionCapture<T>.Scope? scoring = null;
 
         try
         {
             distNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
 
-            // Counted after the objective has run (the loss learns the target's layout when it scores it); an
+            // Counted after the objective has run, with the reduction of the loss that scored it (reported as it
+            // scored), not the model's default loss: the rank weight must describe the gradient's own denominator. An
             // all-ignored batch counts zero, and SynchronizeStepMetadata gives it zero weight.
-            long CountLocalTokens() => DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, distNet.DefaultLossFunction);
+            var scope = scoring = LossFunctions.MeanReductionCapture<T>.Begin();
+            long CountLocalTokens()
+            {
+                var scored = scope.Captured;
+                scope.Dispose();
+                return DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, scored);
+            }
 
             if (objectiveTerms is not null)
             {
@@ -1354,6 +1362,7 @@ internal sealed class TapeTrainingStepper<T>
         }
         finally
         {
+            scoring?.Dispose();
             NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
         }
     }

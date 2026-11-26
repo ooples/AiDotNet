@@ -60,6 +60,13 @@ public static partial class CompiledTapeTrainingStep<T>
         internal bool SlotStagingFailed;
         internal double? EagerReplayLoss;
         internal double ReplayTolerance;
+        // The optimizer whose eager or restored state the plan imported on engagement. It is marked installed (which
+        // drops the eager copy) only once a step on the plan has succeeded, as the single-process fused step does: a
+        // failed first step must leave the moments exportable for a checkpoint.
+        internal Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? InstalledAwaitingStep;
+        // The plan the optimizer's checkpoint link must point at once its first step succeeds (a new engagement or a
+        // new batch shape's plan); the previous link stays until then.
+        internal ICompiledTrainingPlan<T>? LinkAwaitingStep;
     }
 
     /// <summary>
@@ -392,14 +399,13 @@ public static partial class CompiledTapeTrainingStep<T>
                     plan.SetL2Regularization(config.L2Regularization);
                 // The eager optimizer ran this run's steps until now; its moments and step count move into the plan.
                 var linked = LinkFusedOptimizerState(plan, eagerOptimizer);
-                linked?.MarkPendingFusedOptimizerStateInstalled();
+                state.InstalledAwaitingStep = linked;
                 Fd($"distributed in-plan update engaged: eager optimizer state {(linked is null ? "NOT installed" : "installed")}, "
                     + $"plan optimizer step {concrete.OptimizerStep}, clip {maxGradNorm}, l2 {config.L2Regularization} after clip {config.L2AfterClip}, "
                     + $"type {config.Type}, wd {config.WeightDecay}, eps {config.Epsilon}, mixed precision {mixedPrecision?.Signature ?? "off"}, "
                     + $"engine {AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name}");
-                if (eagerOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> exported)
-                    AttachFusedOptimizerStateLink(plan, exported);
             }
+            state.LinkAwaitingStep = plan;
             AttachDistributedExchange(concrete, state);
             state.Plan = plan;
             state.LayoutChecked = false;
@@ -418,6 +424,15 @@ public static partial class CompiledTapeTrainingStep<T>
         plan.Step();
         if (!state.Exchanged)
             throw new InvalidOperationException("The compiled plan stepped without running its gradient exchange.");
+        // The step succeeded: this plan now holds the optimizer state. Make it the configured plan the checkpoint link
+        // exports from, point the link at it, and only then drop the eager copy the plan imported.
+        _configuredPlan = plan;
+        if (ReferenceEquals(state.LinkAwaitingStep, plan)
+            && eagerOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> exported)
+            AttachFusedOptimizerStateLink(plan, exported);
+        state.LinkAwaitingStep = null;
+        state.InstalledAwaitingStep?.MarkPendingFusedOptimizerStateInstalled();
+        state.InstalledAwaitingStep = null;
         System.Threading.Interlocked.Increment(ref s_compiledUpdateSteps);
         System.Threading.Interlocked.Exchange(ref s_lastExchanges, concrete.GradientExchangeCount);
         System.Threading.Interlocked.Exchange(ref s_lastUpdateLaunches, concrete.UpdateGraphReplayCount);

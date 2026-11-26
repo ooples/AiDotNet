@@ -337,7 +337,11 @@ internal sealed class FusedTrainingSession<T>
                 lossTensor = null;
                 LastFallbackException = null;
                 LastStepRanOutsidePlan = false;
-                return Decline(mpReason ?? "mixed precision has no fused form");
+                // A new optimizer starts a fresh session first (TryStepCore's rule), so it may still fall back safely;
+                // the same optimizer on a committed plan holds its moments in the plan, and an eager step would
+                // continue from the eager optimizer's stale ones, so that is a failure, not a decline.
+                TakeOptimizer(request.Optimizer);
+                return RejectUnsupportedConfiguration(mpReason ?? "mixed precision has no fused form");
             }
         }
         using var autocast = mixedPrecision is not null
@@ -364,12 +368,7 @@ internal sealed class FusedTrainingSession<T>
         // the step; a replacement with the same hyperparameters must not inherit the old plan's moments either.
         // Every caller goes through this, so none tracks the instance itself. A new optimizer is also a fresh
         // chance for a plan that a device fault disabled; an owner that opts out checks before stepping.
-        if (!ReferenceEquals(_lastOptimizer, request.Optimizer))
-        {
-            if (_lastOptimizer is not null)
-                Reset(stickyDisable: false);
-            _lastOptimizer = request.Optimizer;
-        }
+        TakeOptimizer(request.Optimizer);
 
         // A standard objective sharing this session must recheck replay agreement when its identity changes.
         if (request.VerifyReplayAgreement && request.ObjectiveKey is { } objectiveKey)
@@ -701,12 +700,15 @@ internal sealed class FusedTrainingSession<T>
             // No sample means no trained tensor held an element before the step: lazily shaped weights materialize on
             // the first forward, so there was nothing to compare against. That is inconclusive, not a failed update.
             bool sampled = probe is { Length: > 0 };
+            // A loss-scaling skip (non-finite gradients after an overflow) leaves the weights unchanged by design: the
+            // plan reported it, so the step proves nothing about persistence and must not disable the plan.
+            bool skippedUpdate = !persisted && !detached && CompiledTapeTrainingStep<T>.ConfiguredPlanSkippedLastUpdate;
 
             // An all-zero plan gradient reads as "nothing could have moved", which is right for a model at a stationary
             // point and wrong for a plan whose trace lost the path from the loss to the parameters: such a plan stepped
             // a VAE forever without moving a weight. Once per plan, ask the eager tape. The plan moved nothing, so
             // dropping it here loses no update; this step then runs on the eager tape.
-            if (!persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
+            if (!persisted && !detached && !skippedUpdate && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
             {
                 _zeroGradientCrossChecked = true;
                 if (EagerGradientNonZero(request))
@@ -723,10 +725,11 @@ internal sealed class FusedTrainingSession<T>
             }
 
             if (!persisted && !detached
-                && (!sampled || !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true)))
+                && (skippedUpdate || !sampled
+                    || !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true)))
             {
-                // Nothing could have moved (zero gradients, zero learning rate) or nothing was sampled: inconclusive,
-                // check again next step.
+                // Nothing could have moved (a skipped update, zero gradients, zero learning rate) or nothing was
+                // sampled: inconclusive, check again next step.
                 _stepsSincePersistenceCheck = PersistenceRecheckInterval;
             }
             else if (!persisted || detached)
@@ -891,6 +894,16 @@ internal sealed class FusedTrainingSession<T>
 
     // Unsupported settings cannot transfer a committed plan's moments to the eager optimizer. Refuse this step
     // without changing the plan, so restoring supported settings can continue the same optimizer trajectory.
+    // A different optimizer instance than the last step's starts from its own state: the old plan is dropped.
+    private void TakeOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (ReferenceEquals(_lastOptimizer, optimizer))
+            return;
+        if (_lastOptimizer is not null)
+            Reset(stickyDisable: false);
+        _lastOptimizer = optimizer;
+    }
+
     private FusedStepOutcome RejectUnsupportedConfiguration(string reason)
     {
         if (IsCommitted)

@@ -519,6 +519,20 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     }
 
     /// <summary>
+    /// The number of target elements divided by in the mean reduction of the loss that actually scored the step's
+    /// objective: <paramref name="scored"/> is what that loss reported while the objective was scored (or traced, for a
+    /// compiled plan), so the rank weight describes the same reduction as the gradient it scales. With no report the
+    /// objective's loss averages over every target element (no loss that leaves targets out of its mean scored it).
+    /// </summary>
+    internal static long CountValidElements(Tensor<T>? targetBatch, LossFunctions.MeanReductionRecord<T>? scored)
+    {
+        if (targetBatch is null || targetBatch.Length == 0) return 0L;
+        return scored is not null && scored.Loss.CountMeanReductionElements(targetBatch, scored.Layout) is long counted
+            ? counted
+            : targetBatch.Length;
+    }
+
+    /// <summary>
     /// Synchronizes local valid token counts and local unscaled mean losses across all ranks via a single 2-element
     /// <c>AllReduce(Sum)</c>, returning this rank's exact gradient weight <c>localTokenCount / GlobalTokens</c>,
     /// the global token-weighted mean loss, and the global valid token count.

@@ -272,19 +272,30 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     /// and with one only when it names the last axis.
     /// </summary>
     private readonly object _reductionLayoutLock = new();
-    private (int[] TargetShape, bool ClassIndex, int ClassAxis, int Classes) _reductionLayout;
+    private ReductionLayout? _reductionLayout;
 
     /// <summary>
     /// Records how a target of <paramref name="targetShape"/> was scored -- class indices or dense rows along
-    /// <paramref name="classAxis"/> of <paramref name="classes"/> classes -- so <see cref="CountMeanReductionElements"/>
+    /// <paramref name="classAxis"/> of <paramref name="classes"/> classes -- so <see cref="CountMeanReductionElements(Tensor{T})"/>
     /// counts the rows the mean divided by. A compiled step replays the traced loss without calling it again; the layout
     /// is a function of the shapes, which a replay keeps.
     /// </summary>
     internal void RecordReductionLayout(int[] targetShape, bool classIndex, int classAxis, int classes)
     {
+        var layout = new ReductionLayout((int[])targetShape.Clone(), classIndex, classAxis, classes);
         lock (_reductionLayoutLock)
-            _reductionLayout = ((int[])targetShape.Clone(), classIndex, classAxis, classes);
+            _reductionLayout = layout;
+        // The objective being scored (a step's eager objective or a compiled plan's trace) keeps this layout, so its
+        // distributed token count does not depend on what this instance scores later.
+        MeanReductionCapture<T>.Record(this, layout);
     }
+
+    private sealed record ReductionLayout(int[] TargetShape, bool ClassIndex, int ClassAxis, int Classes);
+
+    /// <inheritdoc />
+    internal override long? CountMeanReductionElements(Tensor<T> target, object? reductionLayout)
+        => reductionLayout is ReductionLayout recorded ? CountWithLayout(target, recorded)
+            : CountMeanReductionElements(target);
 
     /// <inheritdoc />
     /// <remarks>The supervised rows: a class index inside <c>[0, classes)</c> after rounding, or a dense row with target
@@ -292,9 +303,15 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     [AiDotNet.Attributes.ScalarKernel("Host count of the supervised targets of one batch, once per step for gradient weighting")]
     internal override long? CountMeanReductionElements(Tensor<T> target)
     {
-        (int[] TargetShape, bool ClassIndex, int ClassAxis, int Classes) layout;
+        ReductionLayout? layout;
         lock (_reductionLayoutLock) layout = _reductionLayout;
-        if (layout.TargetShape is null) return null;   // this loss has scored nothing
+        if (layout is null) return null;   // this loss has scored nothing
+        return CountWithLayout(target, layout);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Host count of the supervised targets of one batch, once per step for gradient weighting")]
+    private long? CountWithLayout(Tensor<T> target, ReductionLayout layout)
+    {
         if (!layout.TargetShape.AsSpan().SequenceEqual(target.Shape.ToArray()))
         {
             // The scored target may be a reshape of the caller's (a [B, 1] batch of indices scored as [B]); the count

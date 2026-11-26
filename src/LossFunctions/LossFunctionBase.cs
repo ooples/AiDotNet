@@ -17,6 +17,13 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     internal virtual long? CountMeanReductionElements(Tensor<T> target) => null;
 
     /// <summary>
+    /// <see cref="CountMeanReductionElements(Tensor{T})"/> for the layout this loss reported to
+    /// <see cref="MeanReductionCapture{T}"/> when it scored an objective, rather than the layout it scored last.
+    /// </summary>
+    internal virtual long? CountMeanReductionElements(Tensor<T> target, object? reductionLayout)
+        => CountMeanReductionElements(target);
+
+    /// <summary>
     /// Provides operations for the numeric type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
